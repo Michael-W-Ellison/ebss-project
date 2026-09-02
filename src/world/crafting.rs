@@ -4,7 +4,7 @@
 //! Handles crafting recipes, material requirements, skill checks, and item creation.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 /// Material requirement for a recipe
@@ -141,13 +141,13 @@ impl CraftingRecipe {
 /// Recipe registry
 #[derive(Debug, Clone)]
 pub struct RecipeRegistry {
-    recipes: HashMap<String, CraftingRecipe>,
+    recipes: BTreeMap<String, CraftingRecipe>,
 }
 
 impl RecipeRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
-            recipes: HashMap::new(),
+            recipes: BTreeMap::new(),
         };
         registry.register_all_recipes();
         registry
@@ -537,8 +537,8 @@ impl CraftingManager {
     pub fn can_craft(
         &self,
         recipe_id: &str,
-        inventory_materials: &HashMap<String, u32>,
-        skills: &HashMap<String, u32>,
+        inventory_materials: &BTreeMap<String, u32>,
+        skills: &BTreeMap<String, u32>,
         available_tools: &[ToolRequirement],
     ) -> CraftingResult {
         let recipe = match self.registry.get(recipe_id) {
@@ -595,7 +595,7 @@ impl CraftingManager {
         let recipe = self.registry.get(&recipe_id)?;
 
         let job = CraftingJob {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             recipe_id,
             crafter_id,
             progress: 0,
@@ -627,20 +627,7 @@ impl CraftingManager {
         self.active_jobs.retain(|job| job.progress < job.total_time);
     }
 
-    /// Collect completed crafts for a specific agent
-    /// Returns and removes all pending completions for this crafter
-    pub fn collect_completed(&mut self, crafter_id: &Uuid) -> Vec<CompletedCraft> {
-        let (for_crafter, remaining): (Vec<_>, Vec<_>) = self.pending_completions
-            .drain(..)
-            .partition(|c| c.crafter_id == *crafter_id);
-        self.pending_completions = remaining;
-        for_crafter
-    }
 
-    /// Check if there are any pending completions for an agent
-    pub fn has_pending_completions(&self, crafter_id: &Uuid) -> bool {
-        self.pending_completions.iter().any(|c| c.crafter_id == *crafter_id)
-    }
 
     /// Get active jobs for a crafter
     pub fn get_crafter_jobs(&self, crafter_id: &Uuid) -> Vec<&CraftingJob> {
@@ -650,13 +637,4 @@ impl CraftingManager {
             .collect()
     }
 
-    /// Cancel a crafting job
-    pub fn cancel_job(&mut self, job_id: &Uuid) -> bool {
-        if let Some(pos) = self.active_jobs.iter().position(|j| j.id == *job_id) {
-            self.active_jobs.remove(pos);
-            true
-        } else {
-            false
-        }
-    }
 }

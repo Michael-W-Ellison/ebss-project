@@ -98,16 +98,7 @@ impl Terrain {
         matches!(self.terrain_type, TerrainType::Farmland)
     }
 
-    /// Check if terrain requires swimming
-    pub fn requires_swimming(&self) -> bool {
-        matches!(self.terrain_type, TerrainType::Water)
-    }
 
-    /// Check if terrain is passable with swimming capability
-    pub fn is_passable_with_swimming(&self) -> bool {
-        // All terrain is passable if you can swim
-        true
-    }
 
     /// Check if this is aquatic terrain (water or wetland)
     pub fn is_aquatic(&self) -> bool {
@@ -134,56 +125,8 @@ impl Terrain {
         }
     }
 
-    /// Get movement cost for an agent with swimming skill
-    /// swimming_skill: 0.0 (can't swim) to 1.0 (expert swimmer)
-    pub fn movement_cost_with_swimming(&self, swimming_skill: f32) -> u32 {
-        match self.terrain_type {
-            TerrainType::Water => {
-                if swimming_skill <= 0.0 {
-                    u32::MAX // Can't swim at all
-                } else {
-                    // Base cost of 5, reduced by swimming skill (min 3)
-                    let skill_reduction = (swimming_skill * 2.0) as u32;
-                    (5 - skill_reduction.min(2)).max(3)
-                }
-            }
-            TerrainType::Wetland => {
-                // Wetland is easier with swimming skill
-                if swimming_skill > 0.3 {
-                    3 // Skilled swimmer moves faster through marsh
-                } else {
-                    4 // Normal slog
-                }
-            }
-            _ => self.movement_cost(),
-        }
-    }
 
-    /// Check if an agent can enter this terrain
-    /// swimming_skill: 0.0 to 1.0, None means no swimming check needed
-    pub fn can_enter(&self, swimming_skill: Option<f32>) -> bool {
-        match self.terrain_type {
-            TerrainType::Water => {
-                // Need at least minimal swimming skill (0.1) to enter water
-                swimming_skill.map(|s| s >= 0.1).unwrap_or(false)
-            }
-            _ => self.is_walkable(),
-        }
-    }
 
-    /// Get stamina cost multiplier for this terrain
-    pub fn stamina_multiplier(&self) -> f32 {
-        match self.terrain_type {
-            TerrainType::Plains | TerrainType::Meadow | TerrainType::Beach => 1.0,
-            TerrainType::Farmland => 1.2, // Worked ground is heavier going
-            TerrainType::Forest | TerrainType::Hills | TerrainType::Riverbank => 1.3,
-            TerrainType::Mountain => 2.0,
-            TerrainType::Desert => 1.8, // Heat makes it tiring
-            TerrainType::Wetland | TerrainType::SaltMarsh => 1.5, // Slogging is tiring
-            TerrainType::SaltFlat => 1.4, // Hot, bright and hard underfoot
-            TerrainType::Water | TerrainType::Sea => 3.0, // Swimming is very tiring
-        }
-    }
 
     /// Get ASCII character for rendering
     pub fn ascii_char(&self) -> char {
@@ -260,38 +203,8 @@ impl Tile {
         self.explored = true;
     }
 
-    /// Mark this tile as seen at a specific tick
-    pub fn mark_seen(&mut self, tick: u32) {
-        self.explored = true;
-        self.last_seen_tick = Some(tick);
-    }
 
-    /// Check if tile is currently visible (seen recently)
-    pub fn is_currently_visible(&self, current_tick: u32, visibility_duration: u32) -> bool {
-        if let Some(last_seen) = self.last_seen_tick {
-            current_tick.saturating_sub(last_seen) <= visibility_duration
-        } else {
-            false
-        }
-    }
 
-    /// Get visibility state for rendering
-    pub fn visibility_state(&self, current_tick: u32) -> TileVisibility {
-        if let Some(last_seen) = self.last_seen_tick {
-            let age = current_tick.saturating_sub(last_seen);
-            if age == 0 {
-                TileVisibility::Visible
-            } else if age <= 100 {
-                TileVisibility::RecentlySeen
-            } else {
-                TileVisibility::Explored
-            }
-        } else if self.explored {
-            TileVisibility::Explored
-        } else {
-            TileVisibility::Unknown
-        }
-    }
 }
 
 /// Visibility states for fog of war rendering
@@ -318,20 +231,7 @@ impl TileVisibility {
         }
     }
 
-    /// Get ANSI color modifier for this visibility state
-    pub fn color_modifier(&self) -> &'static str {
-        match self {
-            TileVisibility::Visible => "",           // Full color
-            TileVisibility::RecentlySeen => "\x1b[2m", // Dim
-            TileVisibility::Explored => "\x1b[90m",    // Gray
-            TileVisibility::Unknown => "\x1b[30m",     // Black (hidden)
-        }
-    }
 
-    /// Should entities on this tile be rendered?
-    pub fn shows_entities(&self) -> bool {
-        matches!(self, TileVisibility::Visible | TileVisibility::RecentlySeen)
-    }
 }
 
 impl Default for Tile {

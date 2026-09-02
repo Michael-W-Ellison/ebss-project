@@ -16,7 +16,6 @@ use ebss::environment::{
     PlantSpecies, FloraRegistry, ClimateZone, GrowthStage, PlantSize,
     Plant, PlantManager,
 };
-use uuid::Uuid;
 
 fn main() {
     println!("=== EBSS Flora (Plant) System Demonstration ===\n");
@@ -298,17 +297,17 @@ fn main() {
     let mut manager = PlantManager::new(1000);
 
     // Spawn various plants
-    manager.spawn_plant("oak_tree".to_string(), (0, 0));
-    manager.spawn_plant("pine_tree".to_string(), (5, 5));
-    manager.spawn_plant("apple_tree".to_string(), (10, 0));
+    manager.spawn_plant("oak_tree".to_string(), (0, 0), 0);
+    manager.spawn_plant("pine_tree".to_string(), (5, 5), 0);
+    manager.spawn_plant("apple_tree".to_string(), (10, 0), 0);
 
     // Spawn a patch of wheat
-    let wheat_ids = manager.spawn_patch("wheat".to_string(), (50, 50), 5, 0.3);
+    let wheat_ids = manager.spawn_patch("wheat".to_string(), (50, 50), 5, 0.3, 0);
     println!("Spawned wheat patch: {} plants", wheat_ids.len());
     println!();
 
     // Spawn a forest
-    let forest_ids = manager.spawn_patch("oak_tree".to_string(), (100, 100), 10, 0.1);
+    let forest_ids = manager.spawn_patch("oak_tree".to_string(), (100, 100), 10, 0.1, 0);
     println!("Spawned oak forest: {} trees", forest_ids.len());
     println!();
 
@@ -318,14 +317,14 @@ fn main() {
     // ===== Part 11: Farming System =====
     println!("--- Part 11: Farming (Cultivated Plants) ---");
 
-    let farmer_id = Uuid::new_v4();
+    let farmer_id = ebss::core::dice::name();
     println!("Farmer {} planting crops...", farmer_id);
 
     // Plant a farm
     let mut farm_plants = Vec::new();
     for x in 0..5 {
         for y in 0..5 {
-            if let Some(id) = manager.plant_crop("wheat".to_string(), (200 + x, 200 + y), farmer_id) {
+            if let Some(id) = manager.plant_crop("wheat".to_string(), (200 + x, 200 + y), farmer_id, 0) {
                 farm_plants.push(id);
             }
         }

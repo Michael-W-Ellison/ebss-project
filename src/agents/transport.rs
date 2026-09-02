@@ -96,40 +96,6 @@ impl TransportType {
         }
     }
 
-    /// Get the weight of the transport itself (empty)
-    pub fn self_weight(&self) -> f32 {
-        match self {
-            // Worn containers
-            TransportType::Pouch => 0.3,
-            TransportType::Satchel => 1.0,
-            TransportType::Backpack => 2.0,
-            TransportType::LargeBackpack => 3.5,
-
-            // Vehicles
-            TransportType::Travois => 6.0,
-            TransportType::Handcart => 15.0,
-            TransportType::Cart => 50.0,
-            TransportType::Wagon => 200.0,
-            TransportType::Sled => 25.0,
-
-            // Pack animals (animal weight, not cargo)
-            TransportType::PackDonkey => 200.0,
-            TransportType::PackHorse => 400.0,
-            TransportType::PackCamel => 600.0,
-            TransportType::PackMule => 350.0,
-            TransportType::OxCart => 800.0, // Ox + cart
-
-            // Rideable mounts (animal weight)
-            TransportType::Horse => 500.0,
-            TransportType::Warhorse => 700.0,
-            TransportType::Pony => 300.0,
-            TransportType::RidingCamel => 650.0,
-            TransportType::RidingDonkey => 220.0,
-            TransportType::RidingMule => 400.0,
-            TransportType::Reindeer => 180.0,
-            TransportType::Elk => 350.0,
-        }
-    }
 
     /// Check if this transport is worn (backpack, pouch, etc.)
     pub fn is_wearable(&self) -> bool {
@@ -393,7 +359,7 @@ impl Transport {
         };
 
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             transport_type,
             current_durability: transport_type.durability(),
             active: false,
@@ -447,12 +413,6 @@ impl Transport {
         }
     }
 
-    /// Heal animal
-    pub fn heal_animal(&mut self, amount: f32) {
-        if let Some(health) = self.animal_health.as_mut() {
-            *health = (*health + amount).min(100.0);
-        }
-    }
 
     /// Get usability (0.0 to 1.0)
     pub fn usability(&self) -> f32 {
@@ -681,13 +641,6 @@ impl TransportSystem {
             .sum()
     }
 
-    /// Get total weight of all active transports themselves
-    pub fn total_transport_weight(&self) -> f32 {
-        self.transports.iter()
-            .filter(|t| t.active)
-            .map(|t| t.transport_type.self_weight())
-            .sum()
-    }
 
     /// Get movement speed modifier from active transports
     pub fn speed_modifier(&self) -> f32 {
@@ -736,18 +689,7 @@ impl TransportSystem {
         }
     }
 
-    /// Count transports of a specific type
-    pub fn count_type(&self, transport_type: TransportType) -> usize {
-        self.transports.iter()
-            .filter(|t| t.transport_type == transport_type)
-            .count()
-    }
 
-    /// Check if has any pack animals
-    pub fn has_pack_animal(&self) -> bool {
-        self.transports.iter()
-            .any(|t| t.transport_type.is_pack_animal() && t.animal_alive())
-    }
 
     // ===== Mount-specific methods =====
 
@@ -783,20 +725,6 @@ impl TransportSystem {
         }
     }
 
-    /// Tick all mounts (update stamina)
-    pub fn tick_mounts(&mut self, is_moving: bool) {
-        for transport in self.transports.iter_mut() {
-            if transport.transport_type.is_rideable() {
-                if transport.is_mounted && is_moving {
-                    // Consume stamina while riding and moving
-                    transport.consume_stamina(1.0);
-                } else {
-                    // Recover stamina when not moving or not mounted
-                    transport.recover_stamina();
-                }
-            }
-        }
-    }
 
     /// Get all available mounts (alive, not exhausted)
     pub fn get_available_mounts(&self) -> Vec<&Transport> {
@@ -836,19 +764,7 @@ impl TransportSystem {
             .unwrap_or(0.0)
     }
 
-    /// Train current mount
-    pub fn train_current_mount(&mut self, amount: f32) {
-        if let Some(mount) = self.get_mounted_mut() {
-            mount.train(amount);
-        }
-    }
 
-    /// Bond with current mount
-    pub fn bond_with_current_mount(&mut self, amount: f32) {
-        if let Some(mount) = self.get_mounted_mut() {
-            mount.bond(amount);
-        }
-    }
 
     /// Check if currently mounted
     pub fn is_mounted(&self) -> bool {

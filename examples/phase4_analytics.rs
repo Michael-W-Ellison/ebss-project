@@ -24,6 +24,7 @@ fn main() {
         abandonment_happiness_threshold: -0.3,
         abandonment_unhappy_duration: 1000,
         abandonment_probability: 0.01,
+        ..PopulationConfig::default()
     };
 
     let mut metrics = SimulationMetrics::new(10, 500); // Sample every 10 ticks, keep 500

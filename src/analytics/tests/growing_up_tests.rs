@@ -1,0 +1,874 @@
+// src/analytics/tests/growing_up_tests.rs
+//! What being young costs, and what it is owed.
+//!
+//! Three things the lifecycle described and nothing read. The age capability
+//! curve was written, hung on nothing, and deleted as dead code in the sweep
+//! of #93 — which left a six-year-old carrying what a grown man carried,
+//! walking as fast, working as hard and hitting as heavily, on a fifth of his
+//! food. The supervision bands have been in `LifeStage`'s own doc comment
+//! since the lifecycle was written and nothing ever consulted them. And a
+//! parent had no way to hand a hungry child anything short of the sacrifice
+//! branch, which waits until somebody is starving.
+
+use crate::agents::{Agent, AgentConfig, InventoryItem, LifeStage, Population};
+use crate::agents::agent::{what_a_body_this_age_can_do, what_a_body_this_age_eats};
+use crate::agents::emotions::{Relationship, RelationshipType};
+use crate::analytics::Simulation;
+use crate::environment::Action;
+use crate::world::{World, WorldConfig};
+
+fn a_world() -> World {
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+    world
+}
+
+fn somebody_of(years: u32, at: (i32, i32, i32)) -> Agent {
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.state.now_this_many_years_old(years);
+    agent.state.position = at;
+    agent.state.health = 100.0;
+    agent.state.energy = 100.0;
+    agent.inventory.get_all_items_mut().clear();
+    agent.inventory.recalculate_weight();
+    agent.take_up_the_cart();
+    agent
+}
+
+// --------------------------------------------------------------------------
+// The capability curve
+// --------------------------------------------------------------------------
+
+/// The specification's table: nothing at one, a fifth at four, all of it from
+/// sixteen, and falling away after forty.
+#[test]
+fn the_curve_is_the_table_the_specification_gives() {
+    assert_eq!(what_a_body_this_age_can_do(1), 0.0);
+    assert_eq!(what_a_body_this_age_can_do(4), 0.2);
+    assert_eq!(what_a_body_this_age_can_do(8), 0.4);
+    assert_eq!(what_a_body_this_age_can_do(16), 1.0);
+    assert_eq!(what_a_body_this_age_can_do(39), 1.0);
+
+    // And it falls away rather than stopping
+    let mut last = 1.0;
+    for years in 40..=70 {
+        let now = what_a_body_this_age_can_do(years);
+        assert!(now <= last, "it should only fall after forty: {years}");
+        assert!(now > 0.0, "an old man is not nothing at {years}");
+        last = now;
+    }
+}
+
+/// A child carries less than a grown man, which is what it was not doing.
+#[test]
+fn a_child_carries_less_than_a_grown_man() {
+    let child = somebody_of(6, (0, 0, 0));
+    let grown = somebody_of(30, (0, 0, 0));
+
+    assert!(
+        child.total_carrying_capacity() < grown.total_carrying_capacity(),
+        "a six-year-old's two hands are not a man's: {:.1} against {:.1}",
+        child.total_carrying_capacity(),
+        grown.total_carrying_capacity()
+    );
+}
+
+/// And walks slower, and hits softer.
+#[test]
+fn a_child_walks_slower_and_hits_softer() {
+    let child = somebody_of(6, (0, 0, 0));
+    let grown = somebody_of(30, (0, 0, 0));
+
+    assert!(
+        child.movement_speed() < grown.movement_speed(),
+        "short legs cover less ground: {:.2} against {:.2}",
+        child.movement_speed(),
+        grown.movement_speed()
+    );
+    assert!(
+        child.own_strength() < grown.own_strength(),
+        "and a child is not his father in a fight: {:.2} against {:.2}",
+        child.own_strength(),
+        grown.own_strength()
+    );
+}
+
+/// An old man is worth less than he was, and the table takes him down to
+/// exactly half and no further.
+///
+/// Which puts a man of sixty-five on the same rung as a ten-year-old - and
+/// that is the specification's table rather than an accident of it. It is
+/// worth writing down rather than asserting away: the curve's floor is where
+/// a boy is on his way up, and the two meet there.
+#[test]
+fn strength_falls_away_after_forty() {
+    let young = somebody_of(30, (0, 0, 0));
+    let older = somebody_of(60, (0, 0, 0));
+    let old = somebody_of(65, (0, 0, 0));
+    let boy = somebody_of(10, (0, 0, 0));
+
+    assert!(older.own_strength() < young.own_strength(), "sixty is not thirty");
+    assert!(old.own_strength() < older.own_strength(), "and sixty-five is not sixty");
+    assert!(older.own_strength() > boy.own_strength(), "sixty still beats ten");
+
+    assert_eq!(what_a_body_this_age_can_do(65), what_a_body_this_age_can_do(10));
+    assert_eq!(what_a_body_this_age_can_do(69), 0.5, "and it stops at half");
+}
+
+/// The two age tables answer different questions and must not be confused: one
+/// is what a body needs, the other is what it can give.
+///
+/// A six-year-old eats about a third of a grown share and can do about three
+/// tenths of a grown day's work, which is roughly a wash. A two-year-old eats
+/// a fifth and can do a tenth, which is not — and that is the shape of a
+/// child: it costs more than it brings in until it is grown.
+#[test]
+fn a_child_costs_more_than_it_brings_in() {
+    for years in [2u32, 4, 6, 8, 10] {
+        let eats = what_a_body_this_age_eats(years);
+        let does = what_a_body_this_age_can_do(years);
+        assert!(
+            does <= eats,
+            "at {years} a body does {does:.2} of a grown day's work and eats \
+             {eats:.2} of a grown share, so it feeds itself and more"
+        );
+    }
+
+    // And by sixteen it is the other way about
+    assert_eq!(what_a_body_this_age_can_do(16), 1.0);
+    assert_eq!(what_a_body_this_age_eats(16), 1.0);
+}
+
+// --------------------------------------------------------------------------
+// The supervision bands
+// --------------------------------------------------------------------------
+
+/// The three bands, and no leash on a grown person.
+#[test]
+fn the_bands_are_the_ones_the_lifecycle_describes() {
+    let leash = Simulation::how_far_from_a_grown_person_this_one_may_be;
+
+    let arms = leash(LifeStage::Infant).expect("under six is kept close");
+    let sight = leash(LifeStage::Child).expect("under eleven is kept in sight");
+    let errand = leash(LifeStage::Adolescent).expect("under sixteen is kept within a walk");
+
+    assert!(arms < sight, "with a parent is closer than within sight");
+    assert!(sight < errand, "within sight is closer than an hour's walk");
+
+    assert!(leash(LifeStage::Adult).is_none(), "a grown person goes where they like");
+    assert!(leash(LifeStage::Elderly).is_none());
+}
+
+/// A child too far from anybody grown, and out of sight of the camp, heads
+/// back.
+#[test]
+fn a_child_on_its_own_goes_back_to_somebody_grown() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (10, 10, 0)));
+    population.agents.push(somebody_of(7, (0, 45, 0)));
+
+    let simulation = Simulation::new(a_world(), population);
+    let child = &simulation.population.agents[1];
+
+    // The rule is eyesight of an adult *or* of the camp, so the fixture has to
+    // put him out of both - the first cut of this stood him at (40, 40), which
+    // is within sight of a longhouse at the middle of the world.
+    let leash = Simulation::how_far_from_a_grown_person_this_one_may_be(LifeStage::Child).unwrap();
+    assert!(
+        !simulation.world.buildings.iter().any(|roof| Simulation::within(
+            (child.state.position.0, child.state.position.1),
+            (roof.position.x, roof.position.y),
+            leash
+        )),
+        "he has to be out of sight of any roof too"
+    );
+
+    let answer = simulation
+        .keeping_close_to_somebody_grown(child, child.state.position)
+        .expect("he is out of sight of the camp and of anybody grown");
+
+    match answer {
+        Action::Move { target } => assert_eq!((target.0, target.1), (10, 10)),
+        other => panic!("he should be walking back: {other:?}"),
+    }
+}
+
+/// And one already beside an adult carries on with its day.
+#[test]
+fn a_child_beside_an_adult_is_left_alone() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (10, 10, 0)));
+    population.agents.push(somebody_of(7, (11, 10, 0)));
+
+    let simulation = Simulation::new(a_world(), population);
+    let child = &simulation.population.agents[1];
+
+    assert!(
+        simulation
+            .keeping_close_to_somebody_grown(child, child.state.position)
+            .is_none(),
+        "he is standing next to his father"
+    );
+}
+
+/// A child with no adult left alive is not marched across the map to a corpse.
+#[test]
+fn a_child_with_nobody_left_is_on_its_own() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(7, (40, 40, 0)));
+    population.agents.push(somebody_of(9, (10, 10, 0)));
+
+    let simulation = Simulation::new(a_world(), population);
+    let child = &simulation.population.agents[0];
+
+    assert!(
+        simulation
+            .keeping_close_to_somebody_grown(child, child.state.position)
+            .is_none(),
+        "there is nobody grown to go to"
+    );
+}
+
+// --------------------------------------------------------------------------
+// Feeding a child from a parent's stores
+// --------------------------------------------------------------------------
+
+fn a_parent_and_a_hungry_child() -> Simulation {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (10, 10, 0)));
+    population.agents.push(somebody_of(7, (11, 10, 0)));
+
+    let parent = population.agents[0].id;
+    let child = population.agents[1].id;
+
+    // A pack with food to spare in it
+    let database = crate::world::nutrition::FoodDatabase::new();
+    let mut supper = InventoryItem::new_with_weight("food".to_string(), 20, 0.5);
+    supper.food_data = database.create_food_data(&crate::world::ItemType::Food, 0);
+    let _ = population.agents[0].inventory.add_item(supper);
+
+    // Who they are to one another
+    population.agents[0]
+        .relationships
+        .add_relationship(Relationship::new(child, RelationshipType::Child));
+    population.agents[1]
+        .relationships
+        .add_relationship(Relationship::new(parent, RelationshipType::Parent));
+
+    // And the child is hungry
+    population.agents[1]
+        .drives
+        .get_mut(crate::core::DriveType::Hunger)
+        .unwrap()
+        .value = 0.9;
+
+    Simulation::new(a_world(), population)
+}
+
+/// A parent with food to spare feeds a hungry child of their own.
+#[test]
+fn a_parent_feeds_a_hungry_child() {
+    let simulation = a_parent_and_a_hungry_child();
+    let parent = &simulation.population.agents[0];
+
+    let fed = simulation
+        .a_child_of_mine_to_feed(parent, parent.state.position)
+        .expect("his own child is hungry and he has twenty in his pack");
+
+    assert_eq!(fed, simulation.population.agents[1].id);
+}
+
+/// And it reaches the turn: the decision layer hands over rather than
+/// carrying on with the day.
+#[test]
+fn feeding_a_child_reaches_the_turn() {
+    let simulation = a_parent_and_a_hungry_child();
+    let parent = &simulation.population.agents[0];
+
+    let (action, _) = simulation.generate_non_emotional_action(parent, parent.state.position);
+
+    assert!(
+        matches!(action, Action::GiveTo { to } if to == simulation.population.agents[1].id),
+        "he should be handing his child something: {action:?}"
+    );
+}
+
+/// A hungry child that is nothing to this agent gets nothing. A gift is one
+/// thing and feeding your own is another.
+#[test]
+fn somebody_elses_hungry_child_is_not_this_ones_business() {
+    let mut simulation = a_parent_and_a_hungry_child();
+    simulation.population.agents[0].relationships = Default::default();
+
+    let parent = &simulation.population.agents[0];
+    assert!(
+        simulation
+            .a_child_of_mine_to_feed(parent, parent.state.position)
+            .is_none(),
+        "this branch is about a parent and a child, not about charity"
+    );
+}
+
+/// And a parent with nothing to spare does not hand over what they have not
+/// got. The sacrifice branch is where that decision belongs.
+#[test]
+fn a_parent_with_an_empty_pack_gives_nothing() {
+    let mut simulation = a_parent_and_a_hungry_child();
+    simulation.population.agents[0]
+        .inventory
+        .get_all_items_mut()
+        .clear();
+    simulation.population.agents[0].inventory.recalculate_weight();
+
+    let parent = &simulation.population.agents[0];
+    assert!(
+        simulation
+            .a_child_of_mine_to_feed(parent, parent.state.position)
+            .is_none()
+    );
+}
+
+// --------------------------------------------------------------------------
+// Against the specification, clause by clause
+// --------------------------------------------------------------------------
+
+/// The capability table, read straight off the specification.
+#[test]
+fn the_capability_table_is_the_specification_verbatim() {
+    for (years, out_of_ten) in [
+        (2u32, 1),
+        (4, 2),
+        (6, 3),
+        (8, 4),
+        (10, 5),
+        (12, 6),
+        (13, 7),
+        (14, 8),
+        (15, 9),
+        (16, 10),
+        (40, 9),
+        (50, 8),
+        (55, 7),
+        (60, 6),
+        (65, 5),
+    ] {
+        assert_eq!(
+            what_a_body_this_age_can_do(years),
+            out_of_ten as f32 / 10.0,
+            "age {years} should be {out_of_ten} out of ten"
+        );
+    }
+}
+
+/// And the food table, likewise - including the fifteenth year, which the
+/// specification leaves between "14-15: 90%" and "16+: 100%".
+#[test]
+fn the_food_table_is_the_specification_verbatim() {
+    for (years, share) in [
+        (0u32, 0.20),
+        (3, 0.20),
+        (4, 0.25),
+        (5, 0.30),
+        (6, 0.35),
+        (7, 0.40),
+        (8, 0.45),
+        (9, 0.50),
+        (10, 0.55),
+        (11, 0.60),
+        (12, 0.70),
+        (13, 0.80),
+        (14, 0.90),
+        (16, 1.00),
+        (30, 1.00),
+    ] {
+        assert!(
+            (what_a_body_this_age_eats(years) - share).abs() < 1e-6,
+            "age {years} should eat {share} of a grown share, not {}",
+            what_a_body_this_age_eats(years)
+        );
+    }
+
+    // The gap: the last child band runs to the adult boundary rather than a
+    // fifteen-year-old eating a full share while doing nine tenths of the work
+    assert!((what_a_body_this_age_eats(15) - 0.90).abs() < 1e-6);
+}
+
+/// A whole life is 36,288,000 of the specification's ticks, and a year is
+/// 518,400 - which are this model's *minutes*, because a turn is a decision
+/// and not a minute.
+#[test]
+fn a_life_is_the_length_the_specification_gives() {
+    use crate::environment::seasons::{MINUTES_IN_A_WHOLE_LIFE, MINUTES_PER_YEAR};
+
+    assert_eq!(MINUTES_PER_YEAR, 518_400);
+    assert_eq!(MINUTES_IN_A_WHOLE_LIFE, 36_288_000);
+    assert_eq!(MINUTES_IN_A_WHOLE_LIFE / MINUTES_PER_YEAR, 70);
+}
+
+/// A child in sight of the camp is where it is supposed to be, with every
+/// adult out foraging.
+#[test]
+fn a_child_by_the_camp_is_left_alone() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (45, 45, 0)));
+    population.agents.push(somebody_of(7, (25, 25, 0)));
+
+    let simulation = Simulation::new(a_world(), population);
+    let child = &simulation.population.agents[1];
+
+    let leash = Simulation::how_far_from_a_grown_person_this_one_may_be(LifeStage::Child).unwrap();
+    assert!(
+        simulation.world.buildings.iter().any(|roof| Simulation::within(
+            (child.state.position.0, child.state.position.1),
+            (roof.position.x, roof.position.y),
+            leash
+        )),
+        "the fixture should put him in sight of the longhouse at the world's centre"
+    );
+
+    assert!(
+        simulation
+            .keeping_close_to_somebody_grown(child, child.state.position)
+            .is_none(),
+        "in eyesight of camp *or* of an adult, and he has the first"
+    );
+}
+
+/// But a child under six is kept with a parent, and a camp is not a parent.
+#[test]
+fn the_camp_is_not_a_parent_for_the_very_young() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (45, 45, 0)));
+    population.agents.push(somebody_of(3, (25, 25, 0)));
+
+    let simulation = Simulation::new(a_world(), population);
+    let infant = &simulation.population.agents[1];
+
+    assert!(
+        simulation
+            .keeping_close_to_somebody_grown(infant, infant.state.position)
+            .is_some(),
+        "under six the rule is to be *with* a parent, not near a building"
+    );
+}
+
+/// A parent carrying somebody under two has one hand occupied and carries half
+/// of what two hands hold.
+#[test]
+fn a_child_in_arms_takes_up_a_hand() {
+    let mut free = somebody_of(30, (0, 0, 0));
+    let mut carrying = somebody_of(30, (0, 0, 0));
+
+    carrying.hands_full_of_child = true;
+    carrying.take_up_the_cart();
+    free.take_up_the_cart();
+
+    assert!(
+        carrying.total_carrying_capacity() < free.total_carrying_capacity(),
+        "one hand is not two: {:.1} against {:.1}",
+        carrying.total_carrying_capacity(),
+        free.total_carrying_capacity()
+    );
+}
+
+/// The feeding bands, read straight off the specification.
+#[test]
+fn a_small_child_gets_what_its_parent_can_spare() {
+    let share = Simulation::what_share_a_small_child_gets;
+
+    assert_eq!(share(0.9), 1.0, "a parent four fifths full feeds it fully");
+    assert_eq!(share(0.7), 0.75);
+    assert_eq!(share(0.5), 0.5);
+    assert_eq!(share(0.3), 0.25);
+    assert_eq!(share(0.1), 0.0, "and below a fifth there is nothing to give");
+
+    // Monotone, and never more than the child asked for
+    let mut last = 0.0;
+    for step in 0..=20 {
+        let now = share(step as f32 / 20.0);
+        assert!(now >= last, "it should not go down as the parent fills up");
+        assert!(now <= 1.0);
+        last = now;
+    }
+}
+
+/// And it actually reaches the child, out of the parent.
+#[test]
+fn feeding_a_small_child_comes_out_of_the_parent() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (25, 25, 0)));
+    let parent = population.agents[0].id;
+
+    let mut child = somebody_of(3, (25, 25, 0));
+    child.parent_ids = vec![parent];
+    child.state.physiology.reserve = 0.0;
+    population.agents.push(child);
+
+    let mut simulation = Simulation::new(a_world(), population);
+    let was = simulation.population.agents[0].state.physiology.reserve;
+
+    simulation.feed_the_small_children();
+
+    assert!(
+        simulation.population.agents[1].state.physiology.reserve > 0.0,
+        "a three-year-old beside a full parent should have been fed"
+    );
+    assert!(
+        simulation.population.agents[0].state.physiology.reserve < was,
+        "and it came out of the parent: {was:.1} to {:.1}",
+        simulation.population.agents[0].state.physiology.reserve
+    );
+}
+
+/// A parent with almost nothing inside them feeds nobody, and both of them are
+/// still standing.
+#[test]
+fn a_parent_below_a_fifth_has_nothing_to_give() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (25, 25, 0)));
+    let parent = population.agents[0].id;
+
+    let mut child = somebody_of(3, (25, 25, 0));
+    child.parent_ids = vec![parent];
+    child.state.physiology.reserve = 0.0;
+    population.agents.push(child);
+
+    let mut simulation = Simulation::new(a_world(), population);
+    let capacity = simulation.population.agents[0].state.physiology.reserve_capacity;
+    simulation.population.agents[0].state.physiology.reserve = capacity * 0.1;
+
+    simulation.feed_the_small_children();
+
+    assert_eq!(
+        simulation.population.agents[1].state.physiology.reserve, 0.0,
+        "below a fifth the child receives nothing"
+    );
+    assert!(simulation.population.agents[0].state.is_alive);
+    assert!(simulation.population.agents[1].state.is_alive);
+}
+
+/// Nobody under ten puts anything on a fire.
+#[test]
+fn a_child_under_ten_cannot_cook() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(7, (25, 25, 0)));
+    let mut simulation = Simulation::new(a_world(), population);
+
+    let mut rng = crate::core::dice::roll();
+    let refused = simulation.cooking(&"generic".to_string(), 0, &mut rng);
+
+    assert!(!refused.success, "seven is too young for a fire");
+    assert!(
+        refused.message.as_deref().is_some_and(|m| m.contains("young")),
+        "and it should say why: {:?}",
+        refused.message
+    );
+}
+
+/// There are no male or female agents, merely child and adult ones.
+///
+/// The type is gone, so this asserts on the *consequence*: two grown people
+/// with nothing to distinguish them but their ids can pair. The gendered rule
+/// refused about half of all such pairs, and measured over thirty-two worlds
+/// that refusal was costing a settlement roughly half its births.
+#[test]
+fn there_is_no_gender_left_to_refuse_anybody() {
+    use crate::agents::{can_mate, MateSelectionCriteria};
+
+    let criteria = MateSelectionCriteria::default();
+
+    // Fertility forced, so that the only thing left that could refuse them is
+    // who they are. The first cut of this ran ten random pairs and got nine:
+    // the tenth was refused on a low fertility draw, which is a perfectly good
+    // reason and not the one under test.
+    let mut one = somebody_of(30, (0, 0, 0));
+    let mut two = somebody_of(30, (2, 0, 0));
+    for agent in [&mut one, &mut two] {
+        agent.traits = Default::default();
+        agent.reproduction_drive_modifier = 1.5;
+        agent.developmental_nutrition.finalized = true;
+        agent.developmental_nutrition.stat_modifiers.fertility = 1.0;
+
+        // And a stocked larder, for the same reason the fertility is forced:
+        // breeding now waits on a real surplus, and a settlement with nothing
+        // put by refuses everybody. That is a perfectly good reason to refuse
+        // a pair and it is not the one under test here - see
+        // `a_child_waits_on_a_surplus_and_not_on_a_full_stomach`.
+        let a_day = agent.state.physiology.what_i_burn_in_a_day;
+        let gap = crate::agents::provision::how_long_the_land_gives_nothing() as f32;
+        agent.state.what_the_larder_says = Some(crate::agents::provision::WhatIsPutBy::reckon(
+            a_day * 2.0 * gap,
+            a_day,
+            90.0,
+            0,
+        ));
+    }
+
+    assert!(
+        can_mate(&one, &two, &criteria),
+        "two grown people, and nothing else to say about them: {:.2} and {:.2} \
+         against a bar of {:.2}",
+        one.fertility(),
+        two.fertility(),
+        criteria.min_fertility
+    );
+
+    // And it is not that everything passes: a child is still refused.
+    let child = somebody_of(7, (2, 0, 0));
+    assert!(!can_mate(&one, &child, &criteria));
+}
+
+
+// ---------------------------------------------------------------------------
+// Breeding on a surplus, and taking old age off the board
+// ---------------------------------------------------------------------------
+
+/// The hungry gap is derived from the bearing windows, not picked, and the
+/// store and the breeding gate get it from the same place.
+#[test]
+fn the_hungry_gap_is_derived_once() {
+    use crate::agents::provision::{
+        how_long_the_land_gives_nothing, is_anything_bearing_on,
+        what_one_mouth_this_age_wants_put_by, WHAT_A_BODY_EATS_IN_A_DAY,
+    };
+    use crate::environment::seasons::DAYS_PER_YEAR;
+
+    let gap = how_long_the_land_gives_nothing();
+    assert!(gap > 0 && gap < DAYS_PER_YEAR, "a gap of {gap} days is not a year");
+
+    // It has to be a real run of days with nothing bearing on any of them.
+    let mut longest = 0;
+    let mut running = 0;
+    for day in 0..(DAYS_PER_YEAR * 2) {
+        running = if is_anything_bearing_on(day % DAYS_PER_YEAR) { 0 } else { running + 1 };
+        if day >= DAYS_PER_YEAR {
+            longest = longest.max(running.min(DAYS_PER_YEAR));
+        }
+    }
+    assert_eq!(gap, longest);
+
+    // And what one mouth wants put by is that stretch times what it eats.
+    let grown = what_one_mouth_this_age_wants_put_by(30);
+    assert_eq!(grown, (WHAT_A_BODY_EATS_IN_A_DAY * gap as f32).ceil() as u32);
+
+    // A newborn is a fifth of a grown appetite on the specification's table,
+    // so it wants about a fifth as much.
+    let newborn = what_one_mouth_this_age_wants_put_by(0);
+    assert!(
+        newborn * 4 < grown && newborn * 6 > grown,
+        "a newborn wants about a fifth of a grown mouth: {newborn} against {grown}"
+    );
+}
+
+/// What is in the stomach is not what is put by.
+#[test]
+fn a_swallowed_meal_is_not_a_store() {
+    use crate::agents::provision::WhatIsPutBy;
+
+    let reckoning = WhatIsPutBy::reckon(1000.0, 1440.0, 90.0, 0);
+    assert_eq!(reckoning.units_put_by(), 1000.0, "nothing said to be in the body");
+
+    let half_eaten = WhatIsPutBy::reckon(1000.0, 1440.0, 90.0, 0).of_which_in_the_body(400.0);
+    assert_eq!(half_eaten.units_put_by(), 600.0);
+
+    // And it cannot go negative or exceed what there is.
+    let all_of_it = WhatIsPutBy::reckon(1000.0, 1440.0, 90.0, 0).of_which_in_the_body(9999.0);
+    assert_eq!(all_of_it.units_put_by(), 0.0);
+}
+
+/// Old age takes you at seventy, and can be taken off the board for a run that
+/// is measuring something else.
+#[test]
+fn old_age_can_be_taken_off_the_board() {
+    use crate::agents::{AgentConfig, Population};
+
+    let mut ordinary = Population::new();
+    ordinary.spawn_agent(AgentConfig::default());
+    let takes_you = ordinary.agents[0].state.max_age;
+    assert!(
+        takes_you < u32::MAX,
+        "an ordinary run keeps the seventieth year"
+    );
+    assert_eq!(
+        takes_you,
+        crate::environment::seasons::YEARS_BEFORE_OLD_AGE_TAKES_YOU
+            * crate::environment::TICKS_PER_YEAR,
+        "and it is the specification's seventy years"
+    );
+
+    let mut deathless = Population::new();
+    deathless.config.nobody_dies_of_old_age = true;
+    deathless.spawn_agent(AgentConfig::default());
+    assert_eq!(deathless.agents[0].state.max_age, u32::MAX);
+
+    // And it holds: a body past seventy is still alive.
+    let agent = &mut deathless.agents[0];
+    agent.state.age = crate::environment::seasons::YEARS_BEFORE_OLD_AGE_TAKES_YOU
+        * crate::environment::TICKS_PER_YEAR
+        + 1;
+    agent.state.health = 100.0;
+    agent.state.age_tick_with_modifier(agent.state.age, 1.0);
+    assert!(
+        agent.state.is_alive,
+        "nobody in this population dies of old age"
+    );
+}
+
+
+// ---------------------------------------------------------------------------
+// One answer to what is food, and food that survives changing hands
+// ---------------------------------------------------------------------------
+
+/// What an agent counts as put by is what it can actually eat.
+///
+/// These two disagreed for every untracked stack in the model. Measured before
+/// the fix, with no `food_data` on the stack: grain, fish and bread each
+/// counted 5 towards `food_put_by` and answered *false* to `has_edible_food`,
+/// so an agent carrying them read as provisioned and never ate one; greens and
+/// roots counted 0, being absent from a six-word substring list, though they
+/// are the whole of what a hedgerow gives for half the year.
+#[test]
+fn what_is_put_by_is_what_can_be_eaten() {
+    use crate::agents::{Agent, AgentConfig, InventoryItem};
+
+    for id in ["food", "grain", "greens", "roots", "fishportions", "bread"] {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.now_this_many_years_old(30);
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight(id.to_string(), 5, 0.1));
+
+        assert_eq!(agent.food_put_by(), 5, "{id} should count as put by");
+        assert!(
+            agent.has_edible_food(),
+            "{id} counts as put by, so it has to be something this one can eat"
+        );
+        assert_eq!(
+            agent.find_best_food_to_eat().as_deref(),
+            Some(id),
+            "and the search has to find it"
+        );
+    }
+
+    // One thing that is food and is not supper, which is a distinction this
+    // model draws on purpose and the unifying above must not flatten: a whole
+    // fish or an uncut haunch is food somebody has, and nobody can eat it
+    // until it has been taken apart. See `Piece` and `how_many_meals_i_have`.
+    for whole in ["fish", "meat"] {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.now_this_many_years_old(30);
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight(whole.to_string(), 5, 1.0));
+
+        assert_eq!(agent.food_put_by(), 5, "an uncut {whole} is still food");
+        assert!(
+            !agent.has_edible_food(),
+            "but nobody can eat a whole {whole} until it is cut up"
+        );
+    }
+
+    // And the other way: a thing that is not food counts for neither.
+    for id in ["wood", "stone", "clay", "flax"] {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.now_this_many_years_old(30);
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight(id.to_string(), 5, 0.1));
+
+        assert_eq!(agent.food_put_by(), 0, "{id} is not food");
+        assert!(!agent.has_edible_food(), "{id} is not a meal");
+    }
+}
+
+/// The verb refuses what is not food, rather than trusting whoever called it.
+///
+/// `eat_food_item` guarded only on `Piece::can_it_be_eaten`, which asks
+/// whether a thing is an uncut carcass and nothing else. Called with wood,
+/// stone, clay or a bowl it returned Success, credited twenty energy, fed the
+/// nutritional state and dropped the hunger drive. Nothing reached it that way
+/// in a live run - the callers all filtered first - which is exactly the point:
+/// the rule was in the callers and not in the verb.
+#[test]
+fn a_body_will_not_swallow_a_stone() {
+    use crate::agents::{Agent, AgentConfig, InventoryItem};
+    use crate::world::EatResult;
+
+    for id in ["wood", "stone", "clay", "bowl", "basket", "flax", "iron"] {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.now_this_many_years_old(30);
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight(id.to_string(), 5, 0.1));
+
+        assert!(
+            matches!(agent.eat_food_item(id, 0), EatResult::NoFood),
+            "a body should refuse {id}"
+        );
+        assert_eq!(
+            agent.inventory.get_item(id).map(|i| i.quantity),
+            Some(5),
+            "and not have swallowed any of it"
+        );
+    }
+
+    // A whole carcass is still refused, on the older rule, and for a different
+    // reason: it is food, and somebody has to take a knife to it first.
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.state.now_this_many_years_old(30);
+    agent
+        .inventory
+        .add_item(InventoryItem::new_with_weight("meat".to_string(), 1, 1.0));
+    assert!(matches!(agent.eat_food_item("meat", 0), EatResult::NoFood));
+}
+
+/// Food keeps what it knows about itself when it changes hands.
+#[test]
+fn a_gift_of_food_is_still_food() {
+    use crate::agents::{AgentConfig, InventoryItem, Population};
+    use crate::analytics::Simulation;
+    use crate::world::nutrition::FoodDatabase;
+    use crate::world::{ItemType, World, WorldConfig};
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
+
+    // A dried stack, which is the most a settlement can do to keep something.
+    let database = FoodDatabase::new();
+    let mut stack = InventoryItem::new_with_weight("fish".to_string(), 6, 0.5);
+    stack.food_data = database.create_food_data(&ItemType::Fish, 0);
+    stack.food_data.as_mut().unwrap().preparation =
+        crate::world::nutrition::PreparationState::Dried;
+    let kept = stack.food_data.clone().unwrap();
+    simulation.population.agents[0].inventory.add_item(stack);
+
+    let went = simulation.hand_over_for_test(0, 1, "fish", 4);
+    assert_eq!(went, 4, "four of the six went across");
+
+    let arrived = simulation.population.agents[1]
+        .inventory
+        .get_item("fish")
+        .expect("it should be in their pack");
+    assert_eq!(arrived.quantity, 4);
+    assert_eq!(
+        arrived.weight_per_unit, 0.5,
+        "and weigh what it weighed, not a flat one"
+    );
+    let data = arrived
+        .food_data
+        .as_ref()
+        .expect("food that changed hands is still food");
+    assert_eq!(data.preparation, kept.preparation, "still dried");
+    assert_eq!(data.base_nutrition.energy, kept.base_nutrition.energy);
+
+    // And the giver is down by exactly what went.
+    assert_eq!(
+        simulation.population.agents[0]
+            .inventory
+            .get_item("fish")
+            .map(|i| i.quantity),
+        Some(2)
+    );
+}

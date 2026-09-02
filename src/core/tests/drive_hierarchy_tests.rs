@@ -123,9 +123,13 @@ fn no_amount_of_wanting_a_fine_thing_outranks_being_thirsty() {
 /// that down anywhere.
 #[test]
 fn a_child_and_an_adult_do_not_rank_the_same_needs_the_same_way() {
-    fn how_long_hunger_leaves(stage: LifeStage, empty_for: u32) -> f32 {
+    fn how_long_hunger_leaves(years: u32, empty_for: u32) -> f32 {
         let mut agent = somebody_comfortable();
-        agent.state.life_stage = stage;
+        // Years, not `life_stage`. Setting the stored stage and leaving the
+        // age alone gave two identical answers - 47 against 47 - because both
+        // bodies were the same age underneath. See
+        // `AgentState::now_this_many_years_old`.
+        agent.state.now_this_many_years_old(years);
         agent.state.gone_without_food_for(empty_for);
         agent
             .state
@@ -133,8 +137,8 @@ fn a_child_and_an_adult_do_not_rank_the_same_needs_the_same_way() {
             .expect("hunger kills")
     }
 
-    let child = how_long_hunger_leaves(LifeStage::Child, 2_000);
-    let adult = how_long_hunger_leaves(LifeStage::Adult, 2_000);
+    let child = how_long_hunger_leaves(8, 2_000);
+    let adult = how_long_hunger_leaves(30, 2_000);
 
     assert!(
         child < adult,
@@ -145,13 +149,13 @@ fn a_child_and_an_adult_do_not_rank_the_same_needs_the_same_way() {
     // food and water: the adult's water is the nearer problem, the child's
     // food has already caught up.
     let mut small = somebody_comfortable();
-    small.state.life_stage = LifeStage::Child;
+    small.state.now_this_many_years_old(8);
     small.state.gone_without_food_for(3_000);
     small.state.gone_without_water_for(1_000);
     small.drives.get_mut(DriveType::Hunger).unwrap().value = 0.9;
 
     let mut grown = somebody_comfortable();
-    grown.state.life_stage = LifeStage::Adult;
+    grown.state.now_this_many_years_old(30);
     grown.state.gone_without_food_for(3_000);
     grown.state.gone_without_water_for(1_000);
     grown.drives.get_mut(DriveType::Hunger).unwrap().value = 0.9;

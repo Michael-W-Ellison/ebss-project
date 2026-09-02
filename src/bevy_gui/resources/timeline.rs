@@ -2,7 +2,7 @@
 //! Timeline panel state resource.
 
 use bevy::prelude::*;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use crate::gui::events::{EventFilterType, SimulationEvent};
 
 /// Timeline panel data and UI state
@@ -13,7 +13,7 @@ pub struct TimelineData {
     /// Maximum number of events to store
     pub max_events: usize,
     /// Active filter types (empty = show all)
-    pub filter_types: HashSet<EventFilterType>,
+    pub filter_types: BTreeSet<EventFilterType>,
     /// Search query for filtering events
     pub search_query: String,
     /// Sort order (true = newest first)
@@ -31,7 +31,7 @@ impl Default for TimelineData {
         Self {
             event_log: Vec::with_capacity(1000),
             max_events: 1000,
-            filter_types: HashSet::new(),
+            filter_types: BTreeSet::new(),
             search_query: String::new(),
             newest_first: true,
             events_per_page: 50,

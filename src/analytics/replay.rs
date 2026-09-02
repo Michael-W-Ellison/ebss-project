@@ -9,7 +9,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::BufReader;
 use std::path::Path;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
@@ -26,7 +26,7 @@ pub struct StateSnapshot {
     /// World state summary
     pub world_state: WorldSnapshot,
     /// Custom metadata
-    pub metadata: std::collections::HashMap<String, String>,
+    pub metadata: std::collections::BTreeMap<String, String>,
 }
 
 /// Snapshot of a single agent
@@ -39,7 +39,7 @@ pub struct AgentSnapshot {
     pub age: u32,
     pub is_alive: bool,
     /// Drive values (name -> value)
-    pub drives: std::collections::HashMap<String, f32>,
+    pub drives: std::collections::BTreeMap<String, f32>,
     /// Inventory item counts
     pub inventory_items: u32,
     /// Number of relationships
@@ -56,7 +56,7 @@ pub struct WorldSnapshot {
     /// Number of buildings
     pub building_count: usize,
     /// Resource counts by type
-    pub resources: std::collections::HashMap<String, u32>,
+    pub resources: std::collections::BTreeMap<String, u32>,
     /// Weather/season info
     pub environment: EnvironmentSnapshot,
 }
@@ -87,7 +87,7 @@ impl Default for WorldSnapshot {
             width: 100,
             height: 100,
             building_count: 0,
-            resources: std::collections::HashMap::new(),
+            resources: std::collections::BTreeMap::new(),
             environment: EnvironmentSnapshot::default(),
         }
     }
@@ -158,7 +158,7 @@ impl SessionRecorder {
             snapshots: VecDeque::new(),
             recording: false,
             last_snapshot_tick: 0,
-            session_id: Uuid::new_v4(),
+            session_id: crate::core::dice::name(),
             session_name: "Unnamed Session".to_string(),
             start_tick: 0,
         }
@@ -169,7 +169,7 @@ impl SessionRecorder {
         self.recording = true;
         self.start_tick = tick;
         self.last_snapshot_tick = tick;
-        self.session_id = Uuid::new_v4();
+        self.session_id = crate::core::dice::name();
         self.session_name = name.unwrap_or_else(|| format!("Session_{}", tick));
         self.snapshots.clear();
     }
@@ -205,22 +205,8 @@ impl SessionRecorder {
         self.snapshots.push_back(snapshot);
     }
 
-    /// Get all recorded snapshots
-    pub fn get_snapshots(&self) -> &VecDeque<StateSnapshot> {
-        &self.snapshots
-    }
 
-    /// Get snapshot at specific index
-    pub fn get_snapshot(&self, index: usize) -> Option<&StateSnapshot> {
-        self.snapshots.get(index)
-    }
 
-    /// Get snapshot closest to a specific tick
-    pub fn get_snapshot_at_tick(&self, tick: u64) -> Option<&StateSnapshot> {
-        self.snapshots
-            .iter()
-            .min_by_key(|s| (s.tick as i64 - tick as i64).abs() as u64)
-    }
 
     /// Get number of recorded snapshots
     pub fn snapshot_count(&self) -> usize {
@@ -239,30 +225,6 @@ impl SessionRecorder {
         }
     }
 
-    /// Save session to file
-    pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
-        let session = RecordedSession {
-            id: self.session_id,
-            name: self.session_name.clone(),
-            start_tick: self.start_tick,
-            config: self.config.clone(),
-            snapshots: self.snapshots.iter().cloned().collect(),
-        };
-
-        let file = File::create(path)?;
-        let writer = BufWriter::new(file);
-
-        if self.config.compress {
-            // Use MessagePack for compressed format
-            rmp_serde::encode::write(&mut std::io::BufWriter::new(writer), &session)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        } else {
-            // Use JSON for readable format
-            serde_json::to_writer_pretty(writer, &session)?;
-        }
-
-        Ok(())
-    }
 
     /// Load session from file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
@@ -396,10 +358,6 @@ impl SessionPlayer {
         self.playback_speed = speed.clamp(0.1, 10.0);
     }
 
-    /// Enable/disable loop playback
-    pub fn set_loop(&mut self, loop_playback: bool) {
-        self.loop_playback = loop_playback;
-    }
 
     /// Advance to next frame (returns snapshot if available)
     pub fn next_frame(&mut self) -> Option<&StateSnapshot> {
@@ -437,21 +395,6 @@ impl SessionPlayer {
         None
     }
 
-    /// Jump to specific tick (finds closest snapshot)
-    pub fn goto_tick(&mut self, tick: u64) -> Option<&StateSnapshot> {
-        if let Some(session) = &self.session {
-            if let Some((index, _)) = session
-                .snapshots
-                .iter()
-                .enumerate()
-                .min_by_key(|(_, s)| (s.tick as i64 - tick as i64).abs() as u64)
-            {
-                self.current_index = index;
-                return session.snapshots.get(self.current_index);
-            }
-        }
-        None
-    }
 
     /// Get current snapshot without advancing
     pub fn current_snapshot(&self) -> Option<&StateSnapshot> {
@@ -460,10 +403,6 @@ impl SessionPlayer {
             .and_then(|s| s.snapshots.get(self.current_index))
     }
 
-    /// Get current frame index
-    pub fn current_frame(&self) -> usize {
-        self.current_index
-    }
 
     /// Get total number of frames
     pub fn total_frames(&self) -> usize {
@@ -528,7 +467,7 @@ impl AgentSnapshot {
             energy,
             age,
             is_alive,
-            drives: std::collections::HashMap::new(),
+            drives: std::collections::BTreeMap::new(),
             inventory_items: 0,
             relationship_count: 0,
             current_action: None,
@@ -545,15 +484,7 @@ impl AgentSnapshot {
         self
     }
 
-    pub fn with_relationships(mut self, count: usize) -> Self {
-        self.relationship_count = count;
-        self
-    }
 
-    pub fn with_action(mut self, action: String) -> Self {
-        self.current_action = Some(action);
-        self
-    }
 }
 
 /// Helper to create state snapshot
@@ -567,7 +498,7 @@ impl StateSnapshot {
                 .unwrap_or(0),
             population_state: Vec::new(),
             world_state: WorldSnapshot::default(),
-            metadata: std::collections::HashMap::new(),
+            metadata: std::collections::BTreeMap::new(),
         }
     }
 
@@ -576,10 +507,6 @@ impl StateSnapshot {
         self
     }
 
-    pub fn with_world(mut self, world: WorldSnapshot) -> Self {
-        self.world_state = world;
-        self
-    }
 
     pub fn with_metadata(mut self, key: &str, value: &str) -> Self {
         self.metadata.insert(key.to_string(), value.to_string());
@@ -661,7 +588,7 @@ mod tests {
     #[test]
     fn test_agent_snapshot() {
         let agent = AgentSnapshot::new(
-            Uuid::new_v4(),
+            crate::core::dice::name(),
             (10, 20, 0),
             80.0,
             90.0,
@@ -747,9 +674,9 @@ mod tests {
     #[test]
     fn test_snapshot_stats() {
         let agents = vec![
-            AgentSnapshot::new(Uuid::new_v4(), (0, 0, 0), 100.0, 100.0, 100, true),
-            AgentSnapshot::new(Uuid::new_v4(), (1, 1, 0), 50.0, 80.0, 200, true),
-            AgentSnapshot::new(Uuid::new_v4(), (2, 2, 0), 0.0, 0.0, 300, false),
+            AgentSnapshot::new(crate::core::dice::name(), (0, 0, 0), 100.0, 100.0, 100, true),
+            AgentSnapshot::new(crate::core::dice::name(), (1, 1, 0), 50.0, 80.0, 200, true),
+            AgentSnapshot::new(crate::core::dice::name(), (2, 2, 0), 0.0, 0.0, 300, false),
         ];
 
         let snapshot = StateSnapshot::new(100).with_agents(agents);

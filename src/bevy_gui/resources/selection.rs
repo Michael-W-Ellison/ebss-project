@@ -27,9 +27,6 @@ impl EntitySelection {
         matches!(self, EntitySelection::None)
     }
 
-    pub fn is_agent(&self) -> bool {
-        matches!(self, EntitySelection::Agent(_))
-    }
 
     pub fn agent_id(&self) -> Option<Uuid> {
         match self {

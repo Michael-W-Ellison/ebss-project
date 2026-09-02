@@ -309,10 +309,6 @@ impl BehaviorContext {
         self
     }
 
-    pub fn with_activity(mut self, activity: String) -> Self {
-        self.current_activity = Some(activity);
-        self
-    }
 }
 
 /// Check if an action type is relevant to the current context
@@ -332,7 +328,7 @@ pub fn get_learning_stats(agent: &Agent) -> LearningStats {
     let adopted_behaviors = agent.get_adopted_behaviors();
     let opportunities = agent.check_learning_opportunities();
 
-    let mut teachers = std::collections::HashSet::new();
+    let mut teachers = std::collections::BTreeSet::new();
     for (teacher_id, _, _) in &adopted_behaviors {
         teachers.insert(*teacher_id);
     }
@@ -366,7 +362,7 @@ mod tests {
     #[test]
     fn test_broadcast_action_visibility() {
         let action = BroadcastAction::new(
-            Uuid::new_v4(),
+            crate::core::dice::name(),
             (0, 0, 0),
             ActionType::Mining,
             true,
@@ -462,7 +458,7 @@ mod tests {
         let mut agent = Agent::new(AgentConfig::default());
         agent.set_learning_rate(1.5);
 
-        let teacher_id = Uuid::new_v4();
+        let teacher_id = crate::core::dice::name();
         agent.senses.vision.visible_agents.insert(teacher_id);
         agent.state.position = (0, 0, 0);
 

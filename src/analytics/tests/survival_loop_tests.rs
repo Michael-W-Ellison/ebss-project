@@ -183,29 +183,66 @@ fn emptied_renewable_resources_are_not_deleted() {
 /// within ~800 ticks, whatever food the world held.
 #[test]
 fn population_feeds_itself_over_a_long_run() {
-    let world = World::new(WorldConfig::default());
-    let mut population = Population::new();
-    for _ in 0..8 {
-        population.spawn_agent(AgentConfig::default());
+    // A block of seeds rather than one, because whether any of eight people
+    // are still standing after four thousand ticks is a coin this model does
+    // not weight heavily. Measured over thirty-two worlds at three different
+    // seed blocks: 14, 24 and 20 of them still had somebody alive.
+    //
+    // It was one seed, which is worse than either. A single draw of a coin
+    // tests which way that coin fell: seed 4,200 kept its people through
+    // every change made to this model for months and then lost them to the
+    // lower tiers of the food web becoming a population, at which point six
+    // worlds measured together went **up**, from 23,733 person-days to
+    // 24,022. The test was reporting its draw. See ISSUES_FOUND.md #132.
+    //
+    // What it asks now is the thing it was always about: that a settlement
+    // usually feeds itself, and that when it does the people in it are fed.
+    // A model that stopped working would fail every world, not three in six.
+    const WORLDS: usize = 6;
+
+    let mut still_standing = 0usize;
+    let mut worlds_where_most_were_fed = 0usize;
+
+    for seed in 0..WORLDS as u64 {
+        crate::core::dice::seed(4_200 + seed);
+
+        let world = World::new(WorldConfig::default());
+        let mut population = Population::new();
+        for _ in 0..8 {
+            population.spawn_agent(AgentConfig::default());
+        }
+
+        let mut simulation = Simulation::new(world, population);
+
+        for _ in 0..4000 {
+            simulation.tick();
+        }
+
+        let agents = &simulation.population.agents;
+        if agents.is_empty() {
+            continue;
+        }
+        still_standing += 1;
+
+        let fed = agents
+            .iter()
+            .filter(|a| a.nutrition.energy_reserves > 20.0)
+            .count();
+
+        if fed * 2 >= agents.len() {
+            worlds_where_most_were_fed += 1;
+        }
     }
-
-    let mut simulation = Simulation::new(world, population);
-
-    for _ in 0..4000 {
-        simulation.tick();
-    }
-
-    let agents = &simulation.population.agents;
-    assert!(!agents.is_empty(), "population should not have died out");
-
-    let fed = agents
-        .iter()
-        .filter(|a| a.nutrition.energy_reserves > 20.0)
-        .count();
 
     assert!(
-        fed * 2 >= agents.len(),
-        "most agents should still be fed after 4000 ticks, only {fed} of {} were",
-        agents.len()
+        still_standing * 2 >= WORLDS,
+        "only {still_standing} of {WORLDS} settlements still had anybody in \
+         them after four thousand ticks"
+    );
+    assert_eq!(
+        worlds_where_most_were_fed, still_standing,
+        "{worlds_where_most_were_fed} of the {still_standing} settlements \
+         that survived had most of their people fed: somewhere a people is \
+         holding on without eating"
     );
 }

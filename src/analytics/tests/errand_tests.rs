@@ -57,14 +57,17 @@ fn a_walk_is_finished_rather_than_re_decided_at_every_step() {
     );
 }
 
-/// What ends an errand is a change in what the agent needs, not the clock.
+/// An errand ends by arriving, and giving up on it is a backstop.
 #[test]
-fn an_errand_ends_when_the_need_changes_and_not_before() {
+fn an_errand_ends_by_arriving_rather_than_by_running_out_of_patience() {
     let simulation = a_settlement(12, 600);
 
     let got_there = how_often(&simulation, "errand: got there");
-    let something_else = how_often(&simulation, "errand: something else came first");
     let gave_up = how_often(&simulation, "errand: gave up on it");
+    let waited_too_long = how_often(
+        &simulation,
+        "errand: waited too long to be worth going back to",
+    );
 
     // Giving up on an unreachable place is a backstop, not the usual way an
     // errand ends: if it is the commonest ending, agents are setting out for
@@ -74,9 +77,63 @@ fn an_errand_ends_when_the_need_changes_and_not_before() {
         "more errands were given up on ({gave_up}) than finished ({got_there})"
     );
     assert!(
-        gave_up < something_else.max(1),
-        "the backstop is doing the work the drives should be doing"
+        waited_too_long < got_there,
+        "more errands went stale waiting ({waited_too_long}) than finished ({got_there})"
     );
+}
+
+/// A need that will not wait puts an errand down; it does not throw it away.
+///
+/// The errand used to be destroyed the moment another drive took the turn, and
+/// that was **1,717 of the 3,047** a settlement set out on over six worlds.
+/// 1,401 of them were a primary need taking the turn from a secondary one -
+/// 1,062 a Preparedness errand cut short by hunger or thirst, which is every
+/// attempt at putting anything by, every time. See ISSUES_FOUND.md #122.
+#[test]
+fn going_for_a_drink_is_not_a_change_of_mind() {
+    let simulation = a_settlement(12, 600);
+
+    let set_out = how_often(&simulation, "errand: set out");
+    let set_aside = how_often(
+        &simulation,
+        "errand: set aside for something that would not wait",
+    );
+    let got_there = how_often(&simulation, "errand: got there");
+
+    assert!(set_out > 0, "nobody ever set out anywhere");
+    assert!(
+        set_aside > 0,
+        "nothing ever took the turn off an errand, which cannot be right"
+    );
+
+    // And the point of putting it down rather than throwing it away: most of
+    // what is begun is finished.
+    assert!(
+        got_there * 2 > set_out,
+        "fewer than half the errands set out on arrived: {got_there} of {set_out}"
+    );
+}
+
+/// But an errand left standing long enough is not worth going back to.
+#[test]
+fn an_errand_left_too_long_is_let_go() {
+    use crate::agents::Errand;
+
+    let waiting = Errand {
+        going_to: (20, 0, 0),
+        to_make: None,
+        for_drive: crate::core::DriveType::Preparedness,
+        pressed_this_hard: 1.0,
+        turns_on_it: 3,
+        set_aside: Errand::HOW_LONG_AN_ERRAND_KEEPS,
+    };
+    assert!(!waiting.stale(), "still worth going back to");
+
+    let forgotten = Errand {
+        set_aside: Errand::HOW_LONG_AN_ERRAND_KEEPS + 1,
+        ..waiting
+    };
+    assert!(forgotten.stale(), "the world has moved on");
 }
 
 /// A short walk is not abandoned on its first step.
@@ -88,6 +145,7 @@ fn even_the_shortest_errand_gets_a_few_turns() {
         for_drive: crate::core::DriveType::Thirst,
         pressed_this_hard: 1.0,
         turns_on_it: 0,
+        set_aside: 0,
     };
 
     // Standing on the spot it is going to, the walk is nothing at all, and
@@ -117,6 +175,7 @@ fn a_walk_nearly_finished_is_harder_to_abandon_than_one_just_begun() {
         for_drive: crate::core::DriveType::Hunger,
         pressed_this_hard: 1.0,
         turns_on_it: 1,
+        set_aside: 0,
     };
     // The same errand, nineteen turns later and one pace short of the patch
     let nearly_there = Errand {
@@ -125,6 +184,7 @@ fn a_walk_nearly_finished_is_harder_to_abandon_than_one_just_begun() {
         for_drive: crate::core::DriveType::Hunger,
         pressed_this_hard: 1.0,
         turns_on_it: 19,
+        set_aside: 0,
     };
 
     let at_the_start = Simulation::what_it_takes_to_turn_me_round(&just_set_out, (0, 0, 0));

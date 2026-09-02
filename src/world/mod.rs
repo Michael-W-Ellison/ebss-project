@@ -2,7 +2,7 @@
 //! Complete world simulation system with terrain, resources, buildings, and spatial management.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use rand::Rng;
 
 /// World size presets for common use cases
@@ -75,7 +75,7 @@ pub mod soil;
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
 pub use soil::Soil;
-pub use resources::{Resource, ResourceType, ResourceNode};
+pub use resources::{Bearing, Resource, ResourceType, ResourceNode};
 pub use buildings::{Building, BuildingType, BuildingState};
 pub use inventory::{Inventory, Item, ItemType};
 pub use actions::{Action, ActionResult};
@@ -94,7 +94,24 @@ pub use nutrition::{
     FoodTemplate, FoodDatabase, NutritionalState, EatResult,
 };
 
-use crate::environment::{HeatSourceRegistry, AnimalManager, PlantManager, AnimalSpawnConfig};
+use crate::environment::{
+    AnimalManager, AnimalSize, AnimalSpawnConfig, HeatSourceRegistry, PlantManager, TrophicRole,
+};
+
+/// How one stage of a country coming up went - see
+/// [`World::let_the_country_come_up`].
+#[derive(Debug, Clone)]
+pub struct HowATierCameUp {
+    /// What was admitted at this stage.
+    pub tiers: Vec<TrophicRole>,
+    /// And what band of grazers went with it.
+    pub grazers: (AnimalSize, AnimalSize),
+    /// How much of it was actually put down.
+    pub put_down: usize,
+    /// And what the whole country came to by the end of the stage, which is
+    /// the number that says whether it held.
+    pub standing_after: usize,
+}
 
 /// Status of a heat source for smelting
 #[derive(Debug, Clone)]
@@ -125,7 +142,7 @@ pub struct World {
     pub crafting_manager: crafting::CraftingManager, // Crafting system (not serialized)
     pub tick: u32,
     pub config: WorldConfig, // Store configuration for spatial planning
-    pub resource_nodes: std::collections::HashMap<String, Vec<(i32, i32, i32)>>, // Resource locations by type (as tuples)
+    pub resource_nodes: std::collections::BTreeMap<String, Vec<(i32, i32, i32)>>, // Resource locations by type (as tuples)
     pub zone_manager: zoning::ZoneManager, // Spatial zoning for settlement planning
     pub road_network: path_planning::RoadNetwork, // Road and path network
     pub territory_manager: territory::TerritoryManager, // Territory claiming and ownership
@@ -139,6 +156,14 @@ pub struct World {
     /// morning after the man who made them drowned.
     #[serde(default)]
     pub dropped: Vec<Dropped>,
+
+    /// Snares set in the ground, and what has gone into them.
+    ///
+    /// The only way anybody reaches the lower tiers of the food web now that
+    /// those are a population rather than records - see
+    /// [`crate::environment::SmallLife`]. You cannot stalk a number.
+    #[serde(default)]
+    pub snares: Vec<crate::environment::small_life::Snare>,
 
     /// Pits dug in the ground, and what is keeping in them.
     ///
@@ -168,7 +193,7 @@ pub struct World {
     /// Ground that has been worked looks worked. This is the world
     /// remembering that.
     #[serde(default)]
-    pub where_it_was_worked_out: std::collections::HashSet<Position>,
+    pub where_it_was_worked_out: std::collections::BTreeSet<Position>,
 
     /// What has dried out in the sun since anybody last looked, and where.
     ///
@@ -300,8 +325,12 @@ impl Pit {
 
     /// Whether a thing in the pit is something to eat rather than the vessel
     /// it is kept in.
+    ///
+    /// This was the blocklist "anything that is not a bowl or a basket", which
+    /// counted a spear buried by mistake as a winter's eating. It asks the
+    /// same question as everything else now - see `ItemType::is_it_food`.
     fn is_it_food(item: &crate::agents::InventoryItem) -> bool {
-        item.quantity > 0 && !matches!(item.item_id.as_str(), "bowl" | "basket")
+        item.quantity > 0 && crate::world::nutrition::is_this_food(&item.item_id)
     }
 
     /// What is in there to eat, by name.
@@ -342,6 +371,55 @@ impl Pit {
         self.holds
             .iter()
             .any(|item| matches!(item.item_id.as_str(), "bowl" | "basket"))
+    }
+
+    /// One tick in this many is the only one that tells on what is buried
+    /// here.
+    ///
+    /// Bare earth is twice as long as a pack, which is what cool and dark are
+    /// worth on their own. Earth with a vessel between the food and the
+    /// ground is four times: what actually gets at buried food is the ground
+    /// itself, and a bowl or a basket in the way of it is the difference
+    /// between a store and a hole full of rot.
+    ///
+    /// The same number that ages what is in the pit and that answers how long
+    /// a thing would keep if it went in - see `how_long_this_would_keep`. Two
+    /// spellings of that would drift, and the second would be the one the
+    /// decision to bury was made on.
+    pub fn how_much_slower_things_age(&self) -> u32 {
+        if self.is_lined() {
+            Self::EARTH_WITH_SOMETHING_BETWEEN
+        } else {
+            Self::BARE_EARTH
+        }
+    }
+
+    const BARE_EARTH: u32 = 2;
+    const EARTH_WITH_SOMETHING_BETWEEN: u32 = 4;
+
+    /// How many days this would still be food for, if it went in here now.
+    ///
+    /// What is left of its own clock, at the pace this hole lets it run. The
+    /// question nobody was asking: **a settlement buried 512 units a year and
+    /// ate four of them**, because raw greens keep six days in bare earth and
+    /// the land gives nothing for seventy-five. See ISSUES_FOUND.md #124.
+    ///
+    /// `None` for a thing with no clock on it at all, which keeps for ever.
+    pub fn how_long_this_would_keep(
+        &self,
+        item: &crate::agents::InventoryItem,
+        now: u32,
+    ) -> Option<f32> {
+        use crate::environment::seasons::TICKS_PER_DAY;
+
+        let food = item.food_data.as_ref()?;
+        let _ = now;
+
+        // What is left of its own clock - see `FoodData::how_long_this_has_left`
+        // - at the pace this hole lets it run.
+        let left = food.how_long_this_has_left();
+
+        Some(left * self.how_much_slower_things_age() as f32 / TICKS_PER_DAY as f32)
     }
 
     /// Take some of a thing out.
@@ -475,7 +553,60 @@ impl Default for ResourceConfig {
     }
 }
 
+impl ResourceConfig {
+    /// The map these counts were written for.
+    ///
+    /// Every number in this config is a number for a map of this many tiles.
+    /// What makes a country liveable is how much wood there is within a walk
+    /// of you, not how much wood there is in it altogether, so a map sixteen
+    /// times the size gets sixteen times as many of everything. Without this
+    /// a hundred square kilometres came out with the same three hundred and
+    /// sixty-odd nodes a quarter of a square kilometre had, spread over four
+    /// hundred times the ground, and a man could walk all day between bushes.
+    pub const THE_MAP_THESE_WERE_WRITTEN_FOR: usize = 50 * 50;
+
+    /// This config as it applies to a map of the given size.
+    ///
+    /// Rounds up rather than down, so that a small map still gets one of each
+    /// thing rather than none: a map with no water on it is not a small map,
+    /// it is a dead one.
+    pub fn spread_over(&self, tiles: usize) -> Self {
+        let over = |count: usize| -> usize {
+            if count == 0 {
+                return 0;
+            }
+            let scaled =
+                (count * tiles).div_ceil(Self::THE_MAP_THESE_WERE_WRITTEN_FOR);
+            scaled.max(1)
+        };
+
+        Self {
+            wood_nodes: over(self.wood_nodes),
+            stone_nodes: over(self.stone_nodes),
+            iron_nodes: over(self.iron_nodes),
+            food_nodes: over(self.food_nodes),
+            water_sources: over(self.water_sources),
+            clay_clusters: over(self.clay_clusters),
+            sand_clusters: over(self.sand_clusters),
+            coal_clusters: over(self.coal_clusters),
+            grain_patches: over(self.grain_patches),
+            flax_patches: over(self.flax_patches),
+            herb_patches: over(self.herb_patches),
+            cotton_patches: over(self.cotton_patches),
+            honey_locations: over(self.honey_locations),
+            fish_areas: over(self.fish_areas),
+            use_naturalistic_spawning: self.use_naturalistic_spawning,
+        }
+    }
+}
+
 impl Default for WorldConfig {
+    /// A corner of a country: a quarter of a square kilometre.
+    ///
+    /// Small on purpose. This is the map a test builds, and a test that has to
+    /// tick a hundred square kilometres to find out whether one man ate is a
+    /// test nobody runs. For the map an ecology actually needs, see
+    /// [`WorldConfig::big_enough_for_an_ecology`].
     fn default() -> Self {
         Self {
             size: (50, 50),
@@ -485,6 +616,28 @@ impl Default for WorldConfig {
 }
 
 impl WorldConfig {
+    /// A map big enough for the ecology on it to stand up on its own.
+    ///
+    /// A hundred square kilometres, which is [`Grid::METRES_PER_CELL`] into a
+    /// thousand cells each way. That is the size at which a wolf pack, the
+    /// deer it lives on and the grass the deer live on can each hold a
+    /// population without any of them being one bad winter from gone - a
+    /// quarter of a square kilometre cannot, however carefully it is tuned.
+    ///
+    /// A square metre a cell was the other way of getting there and does not
+    /// fit: a hundred million tiles at forty bytes apiece is four gigabytes
+    /// before anything happens in them. Ten metres is also the unit the rest
+    /// of the model already thinks in - a forage radius of 25 cells is a
+    /// quarter-kilometre walk, which is about right for a morning's gathering
+    /// and nonsense as 25 metres.
+    pub fn big_enough_for_an_ecology() -> Self {
+        let side = Grid::HOW_MANY_CELLS_ACROSS_A_COUNTRY;
+        Self {
+            size: (side, side),
+            initial_resources: ResourceConfig::default(),
+        }
+    }
+
     /// Set world size
     pub fn with_size(mut self, width: usize, height: usize) -> Self {
         self.size = (width, height);
@@ -613,13 +766,7 @@ impl World {
             // damp, and everything that lives in it - and a bowl or a basket
             // between the two is the difference between a store and a hole
             // full of rot.
-            let every = if pit.is_lined() {
-                Self::HOW_OFTEN_A_LINED_PIT_LETS_IT_AGE
-            } else {
-                Self::HOW_OFTEN_BARE_EARTH_LETS_IT_AGE
-            };
-
-            let ageing = now % every == 0;
+            let ageing = now % pit.how_much_slower_things_age() == 0;
 
             for item in pit.holds.iter_mut() {
                 if let Some(food) = item.food_data.as_mut() {
@@ -648,20 +795,6 @@ impl World {
         self.food_that_rotted_in_the_ground =
             self.food_that_rotted_in_the_ground.saturating_add(buried_and_lost);
     }
-
-    /// One tick in this many is the only one that tells on food buried in
-    /// bare earth.
-    ///
-    /// Twice as long as a pack, which is what cool and dark are worth on
-    /// their own.
-    const HOW_OFTEN_BARE_EARTH_LETS_IT_AGE: u32 = 2;
-
-    /// And in earth with a vessel between the food and the ground.
-    ///
-    /// Four times a pack. What gets at buried food is the ground itself, and
-    /// a bowl or a basket in the way of it is the difference between a store
-    /// and a hole full of rot.
-    const HOW_OFTEN_A_LINED_PIT_LETS_IT_AGE: u32 = 4;
 
     /// Whether a thing laid out will dry through before it turns.
     ///
@@ -806,7 +939,7 @@ impl World {
         // thing was lying. It is a question now, and it cuts both ways - a
         // thing under a roof does not rot in the rain and does not dry in the
         // sun either.
-        let under_a_roof: std::collections::HashSet<Position> = self
+        let under_a_roof: std::collections::BTreeSet<Position> = self
             .buildings
             .iter()
             .map(|building| building.position)
@@ -948,6 +1081,15 @@ impl World {
     }
 
     pub fn new(config: WorldConfig) -> Self {
+        Self::made_with(config, Some(AnimalSpawnConfig::default()))
+    }
+
+    /// A world, and what fauna it opens with.
+    ///
+    /// `None` means a country with its foliage and its assumed lower tiers
+    /// and nothing standing on it, which is what
+    /// [`World::let_the_country_come_up`] starts from.
+    fn made_with(config: WorldConfig, fauna: Option<AnimalSpawnConfig>) -> Self {
         let mut grid = Grid::new(config.size.0, config.size.1);
         grid.generate_terrain();
 
@@ -960,20 +1102,32 @@ impl World {
             tech_tree: TechnologyTree::new(),
             climate: ClimateManager::default(),
             heat_sources: HeatSourceRegistry::new(),
-            animals: AnimalManager::new(1000), // Max 1000 animals
-            plants: PlantManager::new(5000), // Max 5000 plants
+            // What a map will hold at the very outside. These are not the
+            // carrying capacity - what a country will feed is a question for
+            // the grass on it - they are the point past which the vectors
+            // stop growing, and so they have to be a question about area
+            // rather than a number somebody picked for a fifty by fifty map.
+            animals: AnimalManager::new(Grid::at_the_very_outside(
+                config.size.0 * config.size.1,
+                Self::MOST_ANIMALS_A_SMALL_MAP_HOLDS,
+            )),
+            plants: PlantManager::new(Grid::at_the_very_outside(
+                config.size.0 * config.size.1,
+                Self::MOST_PLANTS_A_SMALL_MAP_HOLDS,
+            )),
             combat_manager: combat::CombatManager::new(),
             crafting_manager: crafting::CraftingManager::new(),
             tick: 0,
             config: config.clone(),
-            resource_nodes: std::collections::HashMap::new(),
+            resource_nodes: std::collections::BTreeMap::new(),
             zone_manager: zoning::ZoneManager::new(),
             road_network: path_planning::RoadNetwork::new(),
             territory_manager: territory::TerritoryManager::new(),
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
             dropped: Vec::new(),
+            snares: Vec::new(),
             pits: Vec::new(),
-            where_it_was_worked_out: std::collections::HashSet::new(),
+            where_it_was_worked_out: std::collections::BTreeSet::new(),
             what_dried_in_the_sun: Vec::new(),
             food_that_rotted_where_it_lay: 0,
             food_that_rotted_in_the_ground: 0,
@@ -982,8 +1136,14 @@ impl World {
         // The ground under the terrain that was just generated
         world.grid.settle_soil();
 
-        // Place initial resources
-        world.generate_resources(&config.initial_resources);
+
+        // Place initial resources, as many of them as this much ground
+        // should carry rather than as many as the config names - see
+        // `ResourceConfig::spread_over`.
+        let for_this_map = config
+            .initial_resources
+            .spread_over(config.size.0 * config.size.1);
+        world.generate_resources(&for_this_map);
 
         // Build initial longhouse at center
         let center = (config.size.0 / 2, config.size.1 / 2);
@@ -998,11 +1158,140 @@ impl World {
         world.plants.spawn_naturalistic(&world.grid);
 
         // Spawn initial wildlife based on terrain
-        let spawn_config = AnimalSpawnConfig::default();
-        world.animals.spawn_naturalistic(&world.grid, &spawn_config);
+        if let Some(spawn_config) = fauna {
+            world.animals.spawn_naturalistic(&world.grid, &spawn_config);
+        } else {
+            // A country with nothing on it still has to know how big it is,
+            // which is otherwise `spawn_naturalistic`'s doing.
+            world.animals.knows_how_big_the_world_is(&world.grid);
+        }
+
+        // And stock the lower tiers, which are a population rather than
+        // records - see `SmallLife`. A country is not empty of rabbits on the
+        // morning it is made, and until this ran a world had none until its
+        // first tick: anything that asked what was living on a piece of
+        // ground before then was told nothing was.
+        world
+            .animals
+            .stock_the_small_life(&world.grid, world.climate.current_season());
 
         world
     }
+
+    /// The order a country comes up in: what goes on the map at each stage,
+    /// and what band of grazers goes with it.
+    ///
+    /// The chain from the bottom, each tier admitted onto ground that will
+    /// already feed it. The small predators go on first because what they
+    /// live on - the assumed grazers and rodents - is a population on every
+    /// hunting ground from the morning the world is made, so they need
+    /// nothing put down for them. The medium browsers and the middle
+    /// predators go on together, then the large herbivores, and the wolves
+    /// and the lions last, onto a country that has herds in it.
+    /// The size band only bites on a stage that admits `PrimaryConsumer`;
+    /// the other two carry the whole band and are decided by their tier list
+    /// alone, which is clearer than an inverted range doing the work
+    /// silently.
+    pub const THE_ORDER_A_COUNTRY_COMES_UP_IN: [(&'static [TrophicRole], (AnimalSize, AnimalSize)); 4] = [
+        // The small predators, onto the assumed layers and nothing else.
+        (
+            &[TrophicRole::SmallPredator],
+            (AnimalSize::Tiny, AnimalSize::Huge),
+        ),
+        // The browsers up to a deer, and what lives off them and off the
+        // small life.
+        (
+            &[TrophicRole::PrimaryConsumer, TrophicRole::MidPredator],
+            (AnimalSize::Tiny, AnimalSize::Medium),
+        ),
+        // Then the cattle, the elk and the mammoth.
+        (
+            &[TrophicRole::PrimaryConsumer],
+            (AnimalSize::Large, AnimalSize::Huge),
+        ),
+        // And the wolves and the lions, onto a country with herds in it.
+        (
+            &[TrophicRole::TopPredator],
+            (AnimalSize::Tiny, AnimalSize::Huge),
+        ),
+    ];
+
+    /// Let a country come up in the order a country comes up in, instead of
+    /// arriving whole on one morning.
+    ///
+    /// The specification: "start with the foliage and let it spread out,
+    /// colonizing the map. Once it is established, add the assumed small
+    /// creatures and small predators until they get established. Then add
+    /// the medium assumed creatures and predators and let them get
+    /// established before introducing the large herbivores and eventually
+    /// the large predators."
+    ///
+    /// **What this buys is a legible failure, and that is worth more here
+    /// than the realism.** A world stocked all at once and left alone for two
+    /// years tells you that its kestrels are gone; it does not tell you
+    /// whether they starved because the layer under them was too thin,
+    /// because they were put on ground that never suited them, or because
+    /// something ate them first. A tier that arrives on its own, onto a
+    /// country that is already standing still, fails visibly and alone.
+    ///
+    /// It also gives the model a definition of *settled*, which it has never
+    /// had: each stage is admitted onto ground that held its numbers through
+    /// the last one, and the report says which stages did.
+    ///
+    /// It is not a fix for a country that will not carry a tier. If the
+    /// steady state cannot feed a kestrel, this reaches nought kestrels more
+    /// slowly and more legibly, and the arithmetic of what a kestrel eats is
+    /// still where the answer is.
+    pub fn let_the_country_come_up(
+        config: WorldConfig,
+        days_a_tier_gets: usize,
+    ) -> (Self, Vec<HowATierCameUp>) {
+        // The foliage and the assumed layers, and nothing standing on them.
+        let mut world = Self::made_with(config, None);
+        world.let_it_stand(days_a_tier_gets);
+
+        let mut how_it_went = Vec::new();
+        for (tiers, grazers) in Self::THE_ORDER_A_COUNTRY_COMES_UP_IN {
+            let before = world.animals.how_many_are_alive();
+            world
+                .animals
+                .spawn_naturalistic(&world.grid, &AnimalSpawnConfig::only(tiers, grazers));
+            let put_down = world.animals.how_many_are_alive().saturating_sub(before);
+
+            world.let_it_stand(days_a_tier_gets);
+
+            how_it_went.push(HowATierCameUp {
+                tiers: tiers.to_vec(),
+                grazers,
+                put_down,
+                standing_after: world.animals.how_many_are_alive(),
+            });
+        }
+
+        (world, how_it_went)
+    }
+
+    /// Leave the country to itself for a while.
+    fn let_it_stand(&mut self, days: usize) {
+        for _ in 0..days * crate::environment::seasons::TICKS_PER_DAY as usize {
+            self.tick();
+        }
+    }
+
+    /// The most animals a fifty by fifty map will hold, scaled up from there.
+    ///
+    /// Room, not carrying capacity. A thousand animals on a quarter of a
+    /// square kilometre is already far more than the ground would feed; what
+    /// this stops is a vector growing without bound if something upstream
+    /// goes wrong.
+    const MOST_ANIMALS_A_SMALL_MAP_HOLDS: usize = 1000;
+
+    /// The most plants a fifty by fifty map will hold, scaled up from there.
+    ///
+    /// A `Plant` here is the standing growth on its cell rather than one
+    /// stem - a hundred square metres of hazel is one of these - so two per
+    /// cell is generous.
+    const MOST_PLANTS_A_SMALL_MAP_HOLDS: usize = 5000;
 
     /// How many patches of each unknown plant a world carries.
     const PATCHES_OF_EACH_STRANGE_PLANT: u32 = 4;
@@ -1016,7 +1305,11 @@ impl World {
     /// clustered: the point is that a people walking about its own country
     /// keeps coming across them, and has to decide each time whether today is
     /// the day somebody tries one.
-    fn scatter_the_strange_plants(&mut self) {
+    fn scatter_the_strange_plants(
+        &mut self,
+        today: u32,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) {
         use rand::Rng;
 
         let mut rng = crate::core::dice::roll();
@@ -1045,20 +1338,34 @@ impl World {
                     continue;
                 }
 
-                if self
-                    .resources
-                    .iter()
-                    .any(|resource| resource.position == where_it_is)
-                {
+                // This had a fourth spelling of "is anything standing here"
+                // and walked the whole resource list to answer it, four
+                // hundred times per kind of plant. It asks the register the
+                // other spawners use now.
+                if taken.contains(&(where_it_is.x, where_it_is.y)) {
                     continue;
                 }
+                taken.insert((where_it_is.x, where_it_is.y));
 
-                self.resources.push(ResourceNode::of_kind(
+                let mut patch = ResourceNode::of_kind(
                     ResourceType::StrangePlant,
                     where_it_is,
                     Self::WHAT_A_STRANGE_PATCH_CARRIES,
                     kind,
-                ));
+                );
+
+                // Nobody knows what these do, including when they bear - but
+                // they do bear, and out of season there is nothing on them.
+                // This is the *third* spawner in this project and it had its
+                // own vocabulary too: it does not go through
+                // `what_this_ground_carries`, so the seeding fix reached the
+                // hedgerows and not these. A test written for the fix is what
+                // found it.
+                if !ResourceType::StrangePlant.is_it_bearing(today) {
+                    patch.amount = 0;
+                }
+
+                self.resources.push(patch);
                 placed += 1;
             }
         }
@@ -1067,26 +1374,41 @@ impl World {
     fn generate_resources(&mut self, config: &ResourceConfig) {
         let mut rng = crate::core::dice::roll();
 
+        // What is standing on the plants depends on the date the world opens,
+        // not only on the ground - see `what_this_ground_carries`.
+        let today = self.climate.calendar.day_of_year;
+
+        // The ground already spoken for, asked once and carried through all
+        // three spawners rather than re-derived per node - see
+        // `World::what_ground_is_taken`.
+        let mut taken = self.what_ground_is_taken();
+
         // Generate basic resources (legacy method for backward compatibility)
-        self.generate_basic_resources(config, &mut rng);
+        self.generate_basic_resources(config, today, &mut rng, &mut taken);
 
         // Generate additional resources using naturalistic spawning
         if config.use_naturalistic_spawning {
-            self.generate_naturalistic_resources(config);
+            self.generate_naturalistic_resources(config, today, &mut taken);
         }
 
         // And the things nobody has tried
-        self.scatter_the_strange_plants();
+        self.scatter_the_strange_plants(today, &mut taken);
 
         // Update resource_nodes map for spatial queries
         self.update_resource_node_map();
     }
 
     /// Generate basic resources (wood, stone, iron, food)
-    fn generate_basic_resources(&mut self, config: &ResourceConfig, rng: &mut impl Rng) {
+    fn generate_basic_resources(
+        &mut self,
+        config: &ResourceConfig,
+        today: u32,
+        rng: &mut impl Rng,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) {
         // Generate wood nodes (in forest areas)
         for _ in 0..config.wood_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Forest);
+            let pos = self.find_random_terrain_position(TerrainType::Forest, taken);
             self.resources.push(ResourceNode::new(
                 ResourceType::Wood,
                 pos,
@@ -1101,7 +1423,7 @@ impl World {
             } else {
                 TerrainType::Hills
             };
-            let pos = self.find_random_terrain_position(terrain);
+            let pos = self.find_random_terrain_position(terrain, taken);
             self.resources.push(ResourceNode::new(
                 ResourceType::Stone,
                 pos,
@@ -1111,7 +1433,7 @@ impl World {
 
         // Generate iron nodes (rare, in mountains)
         for _ in 0..config.iron_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Mountain);
+            let pos = self.find_random_terrain_position(TerrainType::Mountain, taken);
             self.resources.push(ResourceNode::new(
                 ResourceType::Iron,
                 pos,
@@ -1133,7 +1455,7 @@ impl World {
             } else {
                 TerrainType::Meadow
             };
-            let pos = self.find_random_terrain_position(terrain);
+            let pos = self.find_random_terrain_position(terrain, taken);
             let (thin, heavy) =
                 resource_spawning::TerrainResourceMapper::amount_range(ResourceType::Food);
             self.resources
@@ -1142,6 +1464,7 @@ impl World {
                     ResourceType::Food,
                     pos,
                     rng.gen_range(thin..=heavy),
+                    today,
                 ));
         }
 
@@ -1162,13 +1485,14 @@ impl World {
                 } else {
                     TerrainType::Plains
                 };
-                let pos = self.find_random_terrain_position(terrain);
+                let pos = self.find_random_terrain_position(terrain, taken);
                 self.resources
                     .push(resource_spawning::what_this_ground_carries(
                         &self.grid,
                         what,
                         pos,
                         rng.gen_range(thin..=heavy),
+                        today,
                     ));
             }
         }
@@ -1191,7 +1515,7 @@ impl World {
                 if !self.is_there_any_of_this_terrain(terrain) {
                     continue;
                 }
-                let pos = self.find_random_terrain_position(terrain);
+                let pos = self.find_random_terrain_position(terrain, taken);
                 self.resources.push(ResourceNode::new(
                     ResourceType::Salt,
                     pos,
@@ -1210,7 +1534,7 @@ impl World {
                 2 => TerrainType::Forest,   // Spring in forest
                 _ => TerrainType::Hills,    // Well in hills
             };
-            let pos = self.find_random_terrain_position(terrain);
+            let pos = self.find_random_terrain_position(terrain, taken);
             // Water sources are renewable and have high capacity
             self.resources.push(ResourceNode::new(
                 ResourceType::Water,
@@ -1232,7 +1556,7 @@ impl World {
                 continue;
             }
             for _ in 0..Self::HOW_MANY_PLACES_THE_SEA_CAN_BE_REACHED {
-                let pos = self.find_random_terrain_position(terrain);
+                let pos = self.find_random_terrain_position(terrain, taken);
                 self.resources.push(ResourceNode::new(
                     ResourceType::Water,
                     pos,
@@ -1277,7 +1601,12 @@ impl World {
     }
 
     /// Generate naturalistic resources for technology progression
-    fn generate_naturalistic_resources(&mut self, config: &ResourceConfig) {
+    fn generate_naturalistic_resources(
+        &mut self,
+        config: &ResourceConfig,
+        today: u32,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) {
         use resource_spawning::{NaturalisticResourceConfig, NaturalisticSpawner};
 
         // Convert ResourceConfig to NaturalisticResourceConfig
@@ -1296,10 +1625,15 @@ impl World {
         };
 
         // Use naturalistic spawner
-        let mut spawner = NaturalisticSpawner::new(&self.grid);
+        let mut spawner = NaturalisticSpawner::new(&self.grid, today);
         let new_resources = spawner.spawn_all(&nat_config);
 
-        // Add spawned resources
+        // Add spawned resources. The spawner chooses its own ground and does
+        // not ask about what is already there, so the register hears about
+        // what it put down rather than the other way about.
+        for resource in &new_resources {
+            taken.insert((resource.position.x, resource.position.y));
+        }
         self.resources.extend(new_resources);
 
         log::info!(
@@ -1347,9 +1681,49 @@ impl World {
     /// And how many seams there are in the hills, for a people with no coast.
     const HOW_MANY_SEAMS_IN_THE_HILLS: u32 = 2;
 
-    fn find_random_terrain_position(&self, terrain_type: TerrainType) -> Position {
+    /// The ground that already has something standing on it.
+    ///
+    /// The same question [`World::is_position_occupied`] answers, asked once
+    /// for the whole map instead of once for every node placed on it.
+    ///
+    /// Stocking a map places about one node per seven tiles and each placement
+    /// walked the whole resource list to find out whether its spot was taken,
+    /// so the cost of building a world was the square of the world. A quarter
+    /// of a square kilometre took a millisecond; twenty-five square kilometres
+    /// took five and a half seconds; a hundred would not finish.
+    pub fn what_ground_is_taken(&self) -> std::collections::BTreeSet<(i32, i32)> {
+        self.buildings
+            .iter()
+            .map(|building| (building.position.x, building.position.y))
+            .chain(
+                self.resources
+                    .iter()
+                    .map(|resource| (resource.position.x, resource.position.y)),
+            )
+            .collect()
+    }
+
+    /// Somewhere with this ground on it that nothing is standing on yet.
+    ///
+    /// `taken` is the ground already spoken for, and this adds to it before
+    /// returning, so a caller placing a great many things in a row asks the
+    /// map once rather than once a thing. It has to give the same answers as
+    /// asking `is_position_occupied` afresh every time, which means every
+    /// caller that puts something down at a position this did not choose has
+    /// to say so - see `land_tests::stocking_a_map_leaves_no_two_things_on_a
+    /// _tile`.
+    fn find_random_terrain_position(
+        &self,
+        terrain_type: TerrainType,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) -> Position {
         use rand::seq::SliceRandom;
         let mut rng = crate::core::dice::roll();
+
+        let mut claim = |pos: Position, taken: &mut std::collections::BTreeSet<(i32, i32)>| {
+            taken.insert((pos.x, pos.y));
+            pos
+        };
 
         // First, try random sampling (efficient for common terrain types)
         for _ in 0..100 {
@@ -1360,8 +1734,8 @@ impl World {
             if let Some(tile) = self.grid.get_tile(&pos) {
                 if tile.terrain.terrain_type == terrain_type {
                     // Check if position is not occupied
-                    if !self.is_position_occupied(&pos) {
-                        return pos;
+                    if !taken.contains(&(pos.x, pos.y)) {
+                        return claim(pos, taken);
                     }
                 }
             }
@@ -1373,7 +1747,8 @@ impl World {
             .flat_map(|x| (0..self.grid.height).map(move |y| Position::new(x as i32, y as i32)))
             .filter(|pos| {
                 if let Some(tile) = self.grid.get_tile(pos) {
-                    tile.terrain.terrain_type == terrain_type && !self.is_position_occupied(pos)
+                    tile.terrain.terrain_type == terrain_type
+                        && !taken.contains(&(pos.x, pos.y))
                 } else {
                     false
                 }
@@ -1381,7 +1756,7 @@ impl World {
             .collect();
 
         if let Some(pos) = valid_positions.choose(&mut rng) {
-            return *pos;
+            return claim(*pos, taken);
         }
 
         // Last resort: if no valid terrain exists, find ANY unoccupied position
@@ -1398,7 +1773,7 @@ impl World {
             .collect();
 
         if let Some(pos) = any_matching.choose(&mut rng) {
-            return *pos;
+            return claim(*pos, taken);
         }
 
         // Absolute last resort: return center position (should never happen in a valid world)
@@ -1406,7 +1781,10 @@ impl World {
             "Could not find any {:?} terrain in world, placing resource at center",
             terrain_type
         );
-        Position::new(self.grid.width as i32 / 2, self.grid.height as i32 / 2)
+        claim(
+            Position::new(self.grid.width as i32 / 2, self.grid.height as i32 / 2),
+            taken,
+        )
     }
 
     pub fn is_position_occupied(&self, pos: &Position) -> bool {
@@ -1635,10 +2013,6 @@ impl World {
         self.animals.get_in_radius(center, radius)
     }
 
-    /// Get animals at a specific position
-    pub fn get_animals_at(&self, position: (i32, i32)) -> Vec<&crate::environment::Animal> {
-        self.animals.get_at_position(position)
-    }
 
     /// Tame an animal (increase tame level)
     pub fn tame_animal(&mut self, animal_id: &uuid::Uuid, amount: f32) -> Result<(), String> {
@@ -1703,7 +2077,7 @@ impl World {
             return Err("Position out of bounds".to_string());
         }
 
-        self.plants.plant_crop(species_id, position, planter_id)
+        self.plants.plant_crop(species_id, position, planter_id, self.tick)
             .ok_or_else(|| "Failed to plant crop (max population reached or invalid species)".to_string())
     }
 
@@ -1719,7 +2093,7 @@ impl World {
             return Err("Position out of bounds".to_string());
         }
 
-        self.plants.spawn_plant(species_id, position)
+        self.plants.spawn_plant(species_id, position, self.tick)
             .ok_or_else(|| "Failed to spawn plant (max population reached or invalid species)".to_string())
     }
 
@@ -1731,7 +2105,7 @@ impl World {
         radius: u32,
         density: f32,
     ) -> Vec<uuid::Uuid> {
-        self.plants.spawn_patch(species_id, center, radius, density)
+        self.plants.spawn_patch(species_id, center, radius, density, self.tick)
     }
 
     /// Harvest a plant
@@ -1761,10 +2135,6 @@ impl World {
         self.plants.get_in_radius(center, radius)
     }
 
-    /// Get plants at a specific position
-    pub fn get_plants_at(&self, position: (i32, i32)) -> Vec<&crate::environment::Plant> {
-        self.plants.get_at_position(position)
-    }
 
     /// Get all plants of a specific species
     pub fn get_plants_by_species(&self, species_id: &str) -> Vec<&crate::environment::Plant> {
@@ -1784,187 +2154,9 @@ impl World {
 
     // ===== Combat System =====
 
-    /// Attack an animal (agent vs animal combat)
-    pub fn agent_attack_animal(
-        &mut self,
-        agent_id: uuid::Uuid,
-        agent_weapon_damage: f32,
-        agent_mounted_bonus: f32,
-        animal_id: &uuid::Uuid,
-    ) -> Result<combat::CombatResult, String> {
-        // Get animal stats
-        let animal = self.animals.get(animal_id)
-            .ok_or_else(|| "Animal not found".to_string())?;
 
-        let animal_uuid = animal.id;
-        // Use stamina-based defense approximation (higher stamina = better defense)
-        let animal_armor = (animal.stamina / animal.max_stamina) * 0.2; // 0-20% defense
 
-        // Create attacker stats (agent)
-        let attacker_stats = combat::CombatStats {
-            base_damage: 5.0,
-            weapon_damage: agent_weapon_damage,
-            mounted_bonus: agent_mounted_bonus,
-            ..Default::default()
-        };
 
-        // Create defender stats (animal)
-        let defender_stats = combat::CombatStats {
-            base_damage: 0.0, // Not attacking
-            armor_rating: animal_armor, // Natural armor
-            ..Default::default()
-        };
-
-        // Execute combat
-        let mut result = self.combat_manager.execute_combat(
-            agent_id,
-            animal_uuid,
-            &attacker_stats,
-            &defender_stats,
-            Some("weapon".to_string()),
-        );
-
-        // Apply damage to animal
-        let is_dead = self.damage_animal(&animal_uuid, result.damage_dealt)?;
-        result.defender_killed = is_dead;
-
-        Ok(result)
-    }
-
-    /// Animal attacks agent
-    pub fn animal_attack_agent(
-        &mut self,
-        animal_id: &uuid::Uuid,
-        agent_id: uuid::Uuid,
-        agent_armor: f32,
-    ) -> Result<combat::CombatResult, String> {
-        // Get animal stats
-        let animal = self.animals.get(animal_id)
-            .ok_or_else(|| "Animal not found".to_string())?;
-
-        // Base attack based on animal max health (larger animals hit harder)
-        let animal_damage = (animal.max_health / 20.0).min(20.0); // 5-20 damage range
-        let animal_uuid = animal.id;
-        let species_name = animal.species_id.clone();
-
-        // Create attacker stats (animal)
-        let attacker_stats = combat::CombatStats {
-            base_damage: animal_damage,
-            weapon_damage: 0.0,
-            ..Default::default()
-        };
-
-        // Create defender stats (agent)
-        let defender_stats = combat::CombatStats {
-            base_damage: 0.0,
-            armor_rating: agent_armor,
-            ..Default::default()
-        };
-
-        // Execute combat
-        let result = self.combat_manager.execute_combat(
-            animal_uuid,
-            agent_id,
-            &attacker_stats,
-            &defender_stats,
-            Some(format!("{} attack", species_name)),
-        );
-
-        // Note: Damage to agent must be applied by caller
-        Ok(result)
-    }
-
-    /// Agent vs agent combat
-    pub fn agent_attack_agent(
-        &mut self,
-        attacker_id: uuid::Uuid,
-        defender_id: uuid::Uuid,
-        attacker_weapon_damage: f32,
-        attacker_armor: f32,
-        attacker_mounted_bonus: f32,
-        defender_weapon_damage: f32,
-        defender_armor: f32,
-        defender_mounted_bonus: f32,
-    ) -> Result<combat::CombatResult, String> {
-        // Create attacker stats
-        let attacker_stats = combat::CombatStats {
-            base_damage: 5.0,
-            weapon_damage: attacker_weapon_damage,
-            armor_rating: attacker_armor,
-            mounted_bonus: attacker_mounted_bonus,
-            ..Default::default()
-        };
-
-        // Create defender stats
-        let defender_stats = combat::CombatStats {
-            base_damage: 5.0,
-            weapon_damage: defender_weapon_damage,
-            armor_rating: defender_armor,
-            mounted_bonus: defender_mounted_bonus,
-            ..Default::default()
-        };
-
-        // Execute combat
-        let result = self.combat_manager.execute_combat(
-            attacker_id,
-            defender_id,
-            &attacker_stats,
-            &defender_stats,
-            Some("weapon".to_string()),
-        );
-
-        // Note: Damage must be applied by caller to both agents
-        Ok(result)
-    }
-
-    /// Animal vs animal combat
-    pub fn animal_attack_animal(
-        &mut self,
-        attacker_id: &uuid::Uuid,
-        defender_id: &uuid::Uuid,
-    ) -> Result<combat::CombatResult, String> {
-        // Get both animals
-        let attacker = self.animals.get(attacker_id)
-            .ok_or_else(|| "Attacker animal not found".to_string())?;
-        let defender = self.animals.get(defender_id)
-            .ok_or_else(|| "Defender animal not found".to_string())?;
-
-        let attacker_uuid = attacker.id;
-        let attacker_damage = (attacker.max_health / 20.0).min(20.0); // Based on size
-        let attacker_defense = (attacker.stamina / attacker.max_stamina) * 0.2;
-
-        let defender_uuid = defender.id;
-        let defender_damage = (defender.max_health / 20.0).min(20.0);
-        let defender_defense = (defender.stamina / defender.max_stamina) * 0.2;
-
-        // Create stats
-        let attacker_stats = combat::CombatStats {
-            base_damage: attacker_damage,
-            armor_rating: attacker_defense,
-            ..Default::default()
-        };
-
-        let defender_stats = combat::CombatStats {
-            base_damage: defender_damage,
-            armor_rating: defender_defense,
-            ..Default::default()
-        };
-
-        // Execute combat
-        let mut result = self.combat_manager.execute_combat(
-            attacker_uuid,
-            defender_uuid,
-            &attacker_stats,
-            &defender_stats,
-            None,
-        );
-
-        // Apply damage to defender
-        let is_dead = self.damage_animal(&defender_uuid, result.damage_dealt)?;
-        result.defender_killed = is_dead;
-
-        Ok(result)
-    }
 
     /// Get combat statistics for an entity
     pub fn get_combat_stats(&self, entity_id: &uuid::Uuid) -> combat::CombatStatistics {
@@ -1988,88 +2180,14 @@ impl World {
         self.crafting_manager.get_recipes_by_category(category)
     }
 
-    /// Get all available recipes
-    pub fn get_all_recipes(&self) -> Vec<&crafting::CraftingRecipe> {
-        self.crafting_manager.all_recipes()
-    }
 
-    /// Attempt to craft an item (checks materials, skills, tools)
-    pub fn attempt_craft(
-        &mut self,
-        recipe_id: &str,
-        crafter_id: uuid::Uuid,
-        inventory: &mut super::agents::agent::Inventory,
-        skills: &HashMap<String, u32>,
-        available_tools: &[crafting::ToolRequirement],
-    ) -> crafting::CraftingResult {
-        // Get inventory materials as HashMap
-        let mut inventory_materials = HashMap::new();
-        for (item_id, item) in inventory.get_all_items() {
-            inventory_materials.insert(item_id.clone(), item.quantity);
-        }
 
-        // Check if can craft
-        let check_result = self.crafting_manager.can_craft(
-            recipe_id,
-            &inventory_materials,
-            skills,
-            available_tools,
-        );
-
-        match check_result {
-            crafting::CraftingResult::Success { item_id, quantity } => {
-                // Get the recipe to consume materials
-                if let Some(recipe) = self.crafting_manager.get_recipe(recipe_id) {
-                    // Consume materials from inventory
-                    for material in &recipe.materials {
-                        inventory.remove_item(&material.material_id, material.quantity);
-                    }
-
-                    // Start crafting job
-                    if let Some(_job_id) = self.crafting_manager.start_crafting(recipe_id.to_string(), crafter_id) {
-                        crafting::CraftingResult::Success { item_id, quantity }
-                    } else {
-                        crafting::CraftingResult::RecipeNotFound
-                    }
-                } else {
-                    crafting::CraftingResult::RecipeNotFound
-                }
-            }
-            other => other,
-        }
-    }
-
-    /// Check if an agent can craft a recipe (without consuming materials)
-    pub fn can_craft_recipe(
-        &self,
-        recipe_id: &str,
-        inventory: &super::agents::agent::Inventory,
-        skills: &HashMap<String, u32>,
-        available_tools: &[crafting::ToolRequirement],
-    ) -> crafting::CraftingResult {
-        // Get inventory materials as HashMap
-        let mut inventory_materials = HashMap::new();
-        for (item_id, item) in inventory.get_all_items() {
-            inventory_materials.insert(item_id.clone(), item.quantity);
-        }
-
-        self.crafting_manager.can_craft(
-            recipe_id,
-            &inventory_materials,
-            skills,
-            available_tools,
-        )
-    }
 
     /// Get active crafting jobs for a crafter
     pub fn get_crafter_jobs(&self, crafter_id: &uuid::Uuid) -> Vec<&crafting::CraftingJob> {
         self.crafting_manager.get_crafter_jobs(crafter_id)
     }
 
-    /// Cancel a crafting job
-    pub fn cancel_crafting_job(&mut self, job_id: &uuid::Uuid) -> bool {
-        self.crafting_manager.cancel_job(job_id)
-    }
 
     // ===== Smelting System =====
 
@@ -2083,24 +2201,6 @@ impl World {
         self.heat_sources.can_smelt_material(material_id)
     }
 
-    /// Get detailed status of smelting in a heat source
-    pub fn get_smelting_status(&self, heat_source_id: &uuid::Uuid) -> Option<HeatSourceStatus> {
-        if let Some(heat_source) = self.heat_sources.get(heat_source_id) {
-            Some(HeatSourceStatus {
-                is_lit: heat_source.is_lit,
-                current_temperature: heat_source.current_temperature,
-                fuel_remaining: heat_source.fuel.iter().map(|f| f.amount).sum(),
-                contents: heat_source.contents.iter().map(|c| (
-                    c.material_id.clone(),
-                    c.quantity,
-                    c.heating_time,
-                    c.current_temp,
-                )).collect(),
-            })
-        } else {
-            None
-        }
-    }
 
     pub fn tick(&mut self) {
         self.tick += 1;
@@ -2124,17 +2224,64 @@ impl World {
         // What is under the earth keeps
         self.what_is_buried_keeps();
 
-        // Update animals (AI, movement, aging)
-        self.animals.tick();
+        // Update animals (AI, movement, aging), and what they take off the
+        // ground and put back onto it. Grazing runs on the vegetation's own
+        // ten-tick cadence - see `AnimalManager::tick_in_world` - so a
+        // grazing pass stands for ten ticks of feeding.
+        let grazing_ticks = if self.tick % 10 == 0 { 10.0 } else { 0.0 };
+        let weather = crate::environment::GrazingWeather {
+            precipitation: self.climate.weather.wetness_per_tick() * 100.0,
+            now: self.tick,
+            season: self.climate.current_season(),
+        };
+        self.animals.tick_in_world(
+            &mut self.grid,
+            &mut self.plants,
+            grazing_ticks,
+            weather,
+        );
+
+        // And what has gone into the snares, and what has come out of them
+        // again. Taken and put back because the snares are the world's and
+        // the small life is the fauna's, and the pass needs both.
+        if !self.snares.is_empty() {
+            let mut snares = std::mem::take(&mut self.snares);
+            let mut rng = crate::core::dice::roll();
+            self.animals.small_life.tick_the_snares(
+                &mut snares,
+                self.tick,
+                crate::environment::fauna::AnimalManager::whose_ground,
+                &mut rng,
+            );
+            self.snares = snares;
+        }
 
         // Update plants: growth on what the ground and sky give them, and the
-        // leaf fall that in time becomes more of it. Every ten ticks, because
-        // plants take thousands to grow and a world holds hundreds of them.
-        if self.tick % 10 == 0 {
+        // leaf fall that in time becomes more of it.
+        //
+        // One zone of the map in twenty-four, one of them every sixty ticks,
+        // so any given plant is worked out once in fourteen hundred and forty
+        // ticks - four months - and no single tick carries more than a
+        // twenty-fourth of the map. This is the most expensive thing in a tick
+        // and the one that least needs doing often: a hundred square
+        // kilometres carries a quarter of a million plants and nothing a plant
+        // does on its own happens inside four months.
+        //
+        // Ground something is standing on does not wait for its zone.
+        // `AnimalManager` brings a plant up to date before it takes a bite out
+        // of it - see `PlantManager::catch_up_one` - because a grazed plant
+        // would otherwise lose condition a hundred and forty-four times for
+        // every time it gained any.
+        const HOW_OFTEN_A_ZONE_COMES_ROUND: u32 = 60;
+
+        if self.tick % HOW_OFTEN_A_ZONE_COMES_ROUND == 0 {
             let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
             let season = self.climate.current_season();
+            let zone = (self.tick / HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
+                % crate::environment::PlantManager::HOW_MANY_ZONES;
+
             self.plants
-                .tick_in_world(&mut self.grid, precipitation, 10.0, season);
+                .grow_a_zone(&mut self.grid, precipitation, self.tick, season, zone);
         }
 
         // Regenerate resources based on climate conditions (every 10 ticks to reduce overhead)
@@ -2150,6 +2297,12 @@ impl World {
 
         // Remove depleted resources
         self.remove_depleted_resources();
+
+        // And drop the ground that has gone bare again off the visiting list.
+        // Once a tick rather than on every read, so a reader may see a tile
+        // that has just finished - which is why every reader asks its own
+        // question of the tile as well.
+        self.grid.forget_bare_ground();
     }
 
     /// Regenerate renewable resources based on climate and weather conditions
@@ -2168,6 +2321,13 @@ impl World {
         // One pass every ten ticks, so each pass stands for ten ticks of rot
         const TICKS_PER_PASS: f32 = 10.0;
 
+        // Every tile in the world, because every tile in the world has litter
+        // on it - `Soil::for_terrain` gives a forest floor 1.5 and a desert
+        // 0.02, and rot never quite takes the last of it. There is nothing to
+        // narrow here and the register would hold the whole map. One pass in
+        // ten ticks over a million tiles is about half a millisecond, which is
+        // a twentieth of what the two sweeps that *could* be narrowed were
+        // costing. See ISSUES_FOUND.md #128.
         for row in &mut self.grid.tiles {
             for tile in row.iter_mut() {
                 if tile.soil.litter() <= 0.0 {
@@ -2182,6 +2342,7 @@ impl World {
 
     fn regenerate_resources(&mut self) {
         let current_season = self.climate.current_season();
+        let today = self.climate.calendar.day_of_year;
         let season_modifier = current_season.plant_growth_modifier();
         let precipitation = self.climate.weather.wetness_per_tick() * 100.0; // Scale to 0-1 range
 
@@ -2250,8 +2411,8 @@ impl World {
             // had no reason to put anything by, no lean season to be lean in,
             // and no use for a store. What is on the plant now falls off it
             // outside the weeks it bears, which is what fruit does.
-            if !resource.resource_type.is_it_bearing(current_season) {
-                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TICK);
+            if !resource.resource_type.is_it_bearing(today) {
+                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TICK, soil);
                 continue;
             }
 
@@ -2487,24 +2648,6 @@ impl World {
 
     // ===== Building Production and Maintenance =====
 
-    /// Collect all pending production from buildings and return as a map of position -> resources
-    /// This allows agents to pick up resources from production buildings
-    pub fn collect_all_building_production(&mut self) -> HashMap<Position, Vec<resources::Resource>> {
-        let mut production_by_position = HashMap::new();
-
-        for building in &mut self.buildings {
-            if !building.is_completed() {
-                continue;
-            }
-
-            let resources = building.collect_production();
-            if !resources.is_empty() {
-                production_by_position.insert(building.position, resources);
-            }
-        }
-
-        production_by_position
-    }
 
     /// Collect production from a specific building at a position
     /// Returns the resources collected, or empty vec if no building or no production
@@ -2537,22 +2680,11 @@ impl World {
             .collect()
     }
 
-    /// Perform maintenance on a building at a specific position
-    /// Returns true if maintenance was performed
-    pub fn maintain_building_at(&mut self, position: Position, repair_amount: f32) -> bool {
-        for building in &mut self.buildings {
-            if building.position == position {
-                building.maintain(repair_amount);
-                return true;
-            }
-        }
-        false
-    }
 
     /// Get pending production info for display (without collecting)
     /// Returns map of position -> (building_type, resource_count)
-    pub fn get_pending_production_info(&self) -> HashMap<Position, (BuildingType, usize)> {
-        let mut info = HashMap::new();
+    pub fn get_pending_production_info(&self) -> BTreeMap<Position, (BuildingType, usize)> {
+        let mut info = BTreeMap::new();
 
         for building in &self.buildings {
             if building.is_completed() && !building.pending_production.is_empty() {

@@ -24,6 +24,10 @@ pub const DAYS_IN_A_SHORT_WEEK: u32 = 7;
 pub const DAYS_IN_A_LONG_WEEK: u32 = 8;
 pub const WEEKS_PER_MONTH: u32 = 4;
 
+/// A short week and a long one, which is the unit the calendar actually
+/// repeats on: fifteen days.
+pub const A_PAIR_OF_WEEKS: u32 = DAYS_IN_A_SHORT_WEEK + DAYS_IN_A_LONG_WEEK;
+
 /// Days in a month.
 pub const DAYS_PER_MONTH: u32 =
     (DAYS_IN_A_SHORT_WEEK + DAYS_IN_A_LONG_WEEK) * (WEEKS_PER_MONTH / 2);
@@ -102,6 +106,46 @@ impl PartOfSeason {
             PartOfSeason::Late => "late",
         }
     }
+
+    /// The first day of the season that falls in this part of it.
+    pub fn first_day_of_season(&self) -> u32 {
+        match self {
+            PartOfSeason::Early => 0,
+            PartOfSeason::Deep => first_day_of_the_week(2),
+            PartOfSeason::Late => first_day_of_the_week(WEEKS_PER_SEASON - 2),
+        }
+    }
+
+    /// The last day of the season that falls in this part of it.
+    pub fn last_day_of_season(&self) -> u32 {
+        match self {
+            PartOfSeason::Early => PartOfSeason::Deep.first_day_of_season() - 1,
+            PartOfSeason::Deep => PartOfSeason::Late.first_day_of_season() - 1,
+            PartOfSeason::Late => DAYS_PER_SEASON - 1,
+        }
+    }
+}
+
+/// The first day of the season that a given week of it starts on.
+///
+/// Weeks alternate seven days and eight, so this is not a multiplication. A
+/// pair of weeks is fifteen days; the short week opens the pair and the long
+/// one closes it.
+pub fn first_day_of_the_week(week: u32) -> u32 {
+    (week / 2) * A_PAIR_OF_WEEKS + (week % 2) * DAYS_IN_A_SHORT_WEEK
+}
+
+/// The first day of the *year* that falls in this part of this season.
+///
+/// The two of these are what a bearing window is written in: a hedgerow opens
+/// in late spring and closes in deep autumn, and those are the days it means.
+pub fn first_day_of(season: Season, part: PartOfSeason) -> u32 {
+    season.first_day() + part.first_day_of_season()
+}
+
+/// The last day of the year that falls in this part of this season.
+pub fn last_day_of(season: Season, part: PartOfSeason) -> u32 {
+    season.first_day() + part.last_day_of_season()
 }
 
 /// Which week of a season a day falls in, counted from nought.
@@ -110,7 +154,6 @@ impl PartOfSeason {
 /// weeks is fifteen days; within the pair the first seven are the short week
 /// and the next eight the long one.
 pub fn week_of_the_season(day_of_season: u32) -> u32 {
-    const A_PAIR_OF_WEEKS: u32 = DAYS_IN_A_SHORT_WEEK + DAYS_IN_A_LONG_WEEK;
     let pairs = day_of_season / A_PAIR_OF_WEEKS;
     let into_the_pair = day_of_season % A_PAIR_OF_WEEKS;
     pairs * 2 + u32::from(into_the_pair >= DAYS_IN_A_SHORT_WEEK)
@@ -131,7 +174,7 @@ pub fn month_of_the_year(day_of_year: u32) -> u32 {
 }
 
 /// Season of the year
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum Season {
     Spring,
     Summer,
@@ -288,10 +331,6 @@ impl SeasonalCalendar {
         self.ticks_per_day
     }
 
-    /// How many ticks a year lasts on this calendar.
-    pub fn ticks_per_year(&self) -> u32 {
-        self.ticks_per_day * DAYS_PER_YEAR
-    }
 
     /// How many whole days have passed since the world began.
     pub fn days_elapsed(&self) -> u32 {

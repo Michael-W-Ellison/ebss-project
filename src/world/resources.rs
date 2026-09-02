@@ -6,7 +6,7 @@ use crate::environment::seasons::Season;
 use crate::world::{Position, Soil, TerrainType};
 
 /// Types of resources
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum ResourceType {
     // === Basic Resources (Existing) ===
     Wood,
@@ -90,6 +90,61 @@ pub enum ResourceType {
     Jewelry,    // Iron/Gold → Goldsmith → Jewelry
 }
 
+/// The stretch of the year a thing carries something worth taking.
+///
+/// Days of the year rather than seasons, because a season is ninety days and
+/// a hedgerow is not in fruit for ninety days.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bearing {
+    /// Not a growing thing, so it has no season: a river does not stop being
+    /// a river in February, and nor does a rock stop being a rock.
+    NeverStops,
+
+    /// Carries from one day of the year to another, both included, and
+    /// nothing the rest of the year. A window that closes before it opens has
+    /// run round the turn of the year, which is legal and is why this is not
+    /// a range.
+    Between { opens: u32, closes: u32 },
+}
+
+impl Bearing {
+    /// A window written the way the calendar talks: from one part of a season
+    /// to another.
+    pub fn from(
+        opens: (crate::environment::seasons::Season, crate::environment::seasons::PartOfSeason),
+        closes: (crate::environment::seasons::Season, crate::environment::seasons::PartOfSeason),
+    ) -> Self {
+        use crate::environment::seasons::{first_day_of, last_day_of};
+        Bearing::Between {
+            opens: first_day_of(opens.0, opens.1),
+            closes: last_day_of(closes.0, closes.1),
+        }
+    }
+
+    /// Whether this day of the year falls inside the window.
+    pub fn covers(&self, day_of_year: u32) -> bool {
+        let day = day_of_year % crate::environment::seasons::DAYS_PER_YEAR;
+        match *self {
+            Bearing::NeverStops => true,
+            Bearing::Between { opens, closes } if opens <= closes => {
+                day >= opens && day <= closes
+            }
+            // Round the turn of the year
+            Bearing::Between { opens, closes } => day >= opens || day <= closes,
+        }
+    }
+
+    /// How many days of the year this window covers.
+    pub fn how_many_days(&self) -> u32 {
+        use crate::environment::seasons::DAYS_PER_YEAR;
+        match *self {
+            Bearing::NeverStops => DAYS_PER_YEAR,
+            Bearing::Between { opens, closes } if opens <= closes => closes - opens + 1,
+            Bearing::Between { opens, closes } => DAYS_PER_YEAR - opens + closes + 1,
+        }
+    }
+}
+
 impl ResourceType {
     /// How well this crop repays being sown rather than found.
     ///
@@ -139,19 +194,38 @@ impl ResourceType {
     /// looking, not by sniffing. Flesh carries further. Nothing raw on the
     /// ground competes with cooking or with rot, which are what a nose is
     /// actually good for.
+    ///
+    /// The list this was written as had drifted off the list of what food is,
+    /// and the world only has one smell for a thing to eat: everything with a
+    /// scent that is not water is given off as `ScentType::Food`. So it named
+    /// **herbs**, which nobody in this model can eat, and did not name
+    /// **greens or roots**, which are most of what anybody eats. A starving
+    /// agent smelling herbs walks to them and gathers nothing, over and over,
+    /// and never gets as far as deciding the country is finished with - which
+    /// is ISSUES #229. Herbs no doubt smell of something; they do not smell of
+    /// dinner, and until there is a scent for what they are they are better
+    /// off smelling of nothing than of food that is not there.
+    ///
+    /// So this asks `is_it_food` rather than keeping a second list. What is
+    /// left here is only how far a thing carries.
     pub fn raw_scent_strength(&self) -> f32 {
-        match self {
-            // Barely detectable: you have to be standing among them
-            ResourceType::Food | ResourceType::Grain | ResourceType::Herbs => 0.08,
+        // Damp ground and vegetation, faintly. Not food, and the one other
+        // thing a nose is for in this world.
+        if *self == ResourceType::Water {
+            return 0.12;
+        }
 
+        // Wood, stone and ore have no smell worth the name
+        if !self.is_it_food() {
+            return 0.0;
+        }
+
+        match self {
             // Flesh gives itself away from further off
             ResourceType::Meat | ResourceType::Fish => 0.24,
 
-            // Damp ground and vegetation, faintly
-            ResourceType::Water => 0.12,
-
-            // Wood, stone and ore have no smell worth the name
-            _ => 0.0,
+            // Barely detectable: you have to be standing among them
+            _ => 0.08,
         }
     }
     /// When this thing bears something a person can eat.
@@ -162,68 +236,246 @@ impl ResourceType {
     /// nothing at all for most of the year and then, for a few weeks,
     /// everything at once.
     ///
+    /// That last sentence was written when a season was twenty-four days
+    /// long, and the code under it never said it: bearing was a set of
+    /// seasons, so a thing came on for the first day of a season and went
+    /// over on the last. At ninety days to a season that is a three-month
+    /// flat step, and it made a year of four long uniform blocks - three
+    /// months of leaf, three months of leaf, three months of harvest, three
+    /// months of nothing - which is not a year anybody has ever foraged in.
+    ///
+    /// A window is written in the vocabulary the calendar already keeps:
+    /// early, deep and late, two weeks at each end of a season and eight in
+    /// the middle. So a thing opens in late spring and closes in deep autumn
+    /// and those are real dates, and a season can hold the end of one food
+    /// and the beginning of another.
+    ///
     /// The year, as this world keeps it:
     ///
-    /// - **Spring** gives leaf and shoot, and almost no energy in any of it
-    /// - **Summer** gives the first roots and pods, which is not a harvest
-    /// - **Autumn** is when everything else comes on at once
-    /// - **Winter** gives nothing, and that is the whole point of a store
+    /// - **Greens** run the whole growing year, and are the thinnest thing
+    ///   in it. There is always leaf while anything grows.
+    /// - **Roots** open with the greens and run past them into early winter.
+    ///   Last year's root in the hungry gap, this year's swollen root in
+    ///   autumn, and the winter dig out of cold ground - which is what a
+    ///   root is *for*, and why it is the food that ends the year.
+    /// - **Fruit** comes on at midsummer, not in September. Three months of
+    ///   high summer with nothing ripe on any bush was the plainest thing
+    ///   wrong with the old table.
+    /// - **Grain** is a harvest: late summer into deep autumn, and weeks
+    ///   rather than a season.
+    /// - **Winter**, past its first fortnight, gives nothing whatever. That
+    ///   is the whole point of a store and it does not move.
     ///
-    /// Anything that is not a growing thing - stone, clay, water - bears all
-    /// year, because it is not bearing at all.
-    pub fn when_it_bears(&self) -> &'static [crate::environment::seasons::Season] {
-        use crate::environment::seasons::Season;
-
-        const SPRING: &[Season] = &[Season::Spring];
-        const SUMMER: &[Season] = &[Season::Summer];
-        const AUTUMN: &[Season] = &[Season::Fall];
-        const THE_GROWING_HALF: &[Season] = &[Season::Spring, Season::Summer];
-        const ALL_YEAR: &[Season] = &[
-            Season::Spring,
-            Season::Summer,
-            Season::Fall,
-            Season::Winter,
-        ];
+    /// Anything that is not a growing thing - stone, clay, water - never
+    /// bears, so it never stops.
+    pub fn bearing_window(&self) -> Bearing {
+        use crate::environment::seasons::PartOfSeason::{Deep, Early, Late};
+        use crate::environment::seasons::Season::{Fall, Spring, Summer, Winter};
 
         match self {
-            // Leaf and shoot come first and keep coming while the ground is
-            // growing. Spring does not stop giving greens the day summer
-            // starts.
-            ResourceType::Greens => THE_GROWING_HALF,
+            // Leaf and shoot come with the first warmth and go over with the
+            // frosts. The longest window in the year and the thinnest food in
+            // it: a body living on greens alone is eating four times the
+            // volume for the same energy.
+            ResourceType::Greens => Bearing::from((Spring, Early), (Fall, Deep)),
 
-            // Roots are a spring food as much as a summer one. Cattail and
-            // dandelion are dug when the top growth is young and the root
-            // still has last year's store in it - which is exactly what makes
-            // them worth digging in spring, before anything has ripened. What
-            // they ask for is legs: a root patch is dug out and does not come
-            // back this year, so a people living on them moves on.
-            ResourceType::Roots => THE_GROWING_HALF,
+            // Cattail and dandelion are dug when the top growth is young and
+            // the root still holds last year's store - which is exactly what
+            // makes them worth digging before anything has ripened - and they
+            // are dug again out of hard ground when there is nothing else.
+            // What they ask for is legs: a root patch is dug out and does not
+            // come back this year, so a people living on them moves on.
+            ResourceType::Roots => Bearing::from((Spring, Early), (Winter, Early)),
 
-            // What ripens, and when everybody knows it ripens
-            ResourceType::Food | ResourceType::Grain | ResourceType::Honey => AUTUMN,
+            // Wild fruit: strawberry and the first soft fruit at midsummer,
+            // then the autumn glut of bramble, elder, sloe and haw.
+            ResourceType::Food => Bearing::from((Summer, Deep), (Fall, Late)),
 
-            // Fibre and physic are cut green
-            ResourceType::Flax | ResourceType::Cotton | ResourceType::Herbs => THE_GROWING_HALF,
+            // A harvest, and everybody knows when it is
+            ResourceType::Grain => Bearing::from((Summer, Late), (Fall, Deep)),
+
+            // A colony has built something worth robbing by midsummer, and by
+            // late autumn it is defended and dwindling
+            ResourceType::Honey => Bearing::from((Summer, Deep), (Fall, Early)),
+
+            // Fibre and physic are cut green, before the stem goes woody
+            ResourceType::Flax | ResourceType::Cotton | ResourceType::Herbs => {
+                Bearing::from((Spring, Deep), (Summer, Late))
+            }
 
             // Nobody has any idea what these do, including when they bear
-            ResourceType::StrangePlant => AUTUMN,
+            ResourceType::StrangePlant => Bearing::from((Fall, Early), (Fall, Late)),
 
             // Everything that is not a growing thing. Wood off a standing
-            // tree, stone out of the ground, water in a river: none of it
-            // bears, so none of it stops.
-            _ => ALL_YEAR,
+            // tree, stone out of the ground, water in a river, fish coming up
+            // it: none of it bears, so none of it stops.
+            _ => Bearing::NeverStops,
         }
     }
 
-    /// Whether there is anything on it to take, this time of year.
-    pub fn is_it_bearing(&self, now: crate::environment::seasons::Season) -> bool {
-        self.when_it_bears().contains(&now)
+    /// Whether there is anything on it to take, on this day of the year.
+    pub fn is_it_bearing(&self, day_of_year: u32) -> bool {
+        self.bearing_window().covers(day_of_year)
     }
-
 
     /// Whether this is a thing that grows out of the ground, and so a thing
     /// the ground's condition has a say in.
     ///
+    /// Every kind of resource there is.
+    ///
+    /// Wanted by anything that has to ask a question of the whole set - which
+    /// day of the year anything is bearing, for one. The exhaustive match in
+    /// `every_resource_is_listed` below fails to compile if a variant is added
+    /// and not put here, so this cannot quietly fall behind the enum.
+    pub fn all() -> [ResourceType; 43] {
+        [
+        ResourceType::Wood,
+        ResourceType::Stone,
+        ResourceType::Iron,
+        ResourceType::Food,
+        ResourceType::Water,
+        ResourceType::StrangePlant,
+        ResourceType::Greens,
+        ResourceType::Roots,
+        ResourceType::Grain,
+        ResourceType::Flax,
+        ResourceType::Herbs,
+        ResourceType::Cotton,
+        ResourceType::Hides,
+        ResourceType::Wool,
+        ResourceType::Meat,
+        ResourceType::Milk,
+        ResourceType::Fish,
+        ResourceType::Honey,
+        ResourceType::Clay,
+        ResourceType::Sand,
+        ResourceType::Coal,
+        ResourceType::Salt,
+        ResourceType::Flour,
+        ResourceType::Leather,
+        ResourceType::Cloth,
+        ResourceType::Linen,
+        ResourceType::Glass,
+        ResourceType::Bricks,
+        ResourceType::Charcoal,
+        ResourceType::Rope,
+        ResourceType::Paper,
+        ResourceType::Dye,
+        ResourceType::Bread,
+        ResourceType::Ale,
+        ResourceType::Cheese,
+        ResourceType::Clothing,
+        ResourceType::Shoes,
+        ResourceType::Tools,
+        ResourceType::Weapons,
+        ResourceType::Armor,
+        ResourceType::Pottery,
+        ResourceType::Furniture,
+        ResourceType::Jewelry,
+        ]
+    }
+
+    /// How fast a patch of this comes back once something has been taken off
+    /// it, in units per growing pass before the weather and the ground have
+    /// their say. Nought means it does not come back at all.
+    ///
+    /// **This is the one owner of what renews.** `is_renewable` used to keep
+    /// its own list of the same question and `remove_depleted_resources`
+    /// leaned on it to decide what to delete off the map when it was emptied -
+    /// and both lists had the same hole. Greens and Roots came in with the
+    /// rebuilt bearing year and neither list learned about them, so **63.6% of
+    /// the food on a map** - 3,308 units of greens and 1,550 of roots against
+    /// 2,784 of fish, with no berries and no grain standing at the turn of the
+    /// year - grew at nought a day *and was deleted from the world the moment
+    /// somebody finished a patch*. The comment on
+    /// `World::remove_depleted_resources` states the case against exactly what
+    /// it was doing: "deleting it would make berry patches and fish runs
+    /// single-use and drain the world of food permanently."
+    ///
+    /// Measured before: an empty map produced three units a day where a person
+    /// eats 11.5, twelve founders ate the country from 7,641 units down to 886
+    /// in a hundred days, and nine of the twelve were dead by the end of
+    /// spring. It was never a winter problem.
+    pub fn how_fast_it_comes_back(&self) -> f32 {
+        match self {
+            // Renewable resources
+            ResourceType::Wood => 0.01,       // Trees grow slowly
+            ResourceType::Food => 0.025,      // Berries and fruit, in their own time
+
+            // Leaf, which is the quickest thing there is and the reason
+            // there is anything to eat in April.
+            //
+            // This and `Roots` below were **not in this table at all**, and
+            // fell through to `_ => 0.0` with the minerals. They are 63% of
+            // the food on a map - 3,308 units of greens and 1,550 of roots
+            // against 2,784 of fish and, at the turn of the year, no berries
+            // and no grain standing at all - so nearly two thirds of what a
+            // settlement lives on was a **stock that never came back**. Eaten
+            // once and gone for good.
+            //
+            // Measured: a map with nobody on it produced 3 units a day where a
+            // person eats 11.5, and twelve founders ate the country from 7,641
+            // units down to 886 in a hundred days and went from twelve people
+            // to two and a half doing it. That is not a winter problem and
+            // never was; the ground simply did not grow anything.
+            //
+            // The cause is the one this project keeps finding: a hand-written
+            // list that did not learn about a variant added elsewhere. Greens
+            // and Roots came in with the bearing year - see
+            // `ResourceType::bearing_window` - and this match was written
+            // before them. `raw_scent_strength` had the same hole in the same
+            // week. The guard is below in `every_food_grows_back`.
+            ResourceType::Greens => 0.04,
+
+            // And a root is a season's work, so slower than a berry.
+            ResourceType::Roots => 0.02,
+
+            ResourceType::StrangePlant => 0.025, // Whatever they are, they grow
+            ResourceType::Grain => 0.015,     // Wild grain is thin stuff
+            ResourceType::Herbs => 0.04,      // Herbs grow quickly
+            ResourceType::Flax => 0.03,
+            ResourceType::Cotton => 0.03,
+            ResourceType::Honey => 0.02,      // Bees produce honey steadily
+
+            // Slow renewable
+            ResourceType::Fish => 0.02,       // Fish populations regenerate
+
+            // Water is fed by what carries it, which is worked out from the
+            // ground it sits on rather than from a flat rate - see
+            // `water_inflow`.
+            ResourceType::Water => 0.0,
+
+            // Non-renewable (mineral resources don't regenerate)
+            ResourceType::Stone |
+            ResourceType::Iron |
+            ResourceType::Clay |
+            ResourceType::Sand |
+            ResourceType::Coal => 0.0,
+
+            // Processed/finished goods don't regenerate naturally
+            _ => 0.0,
+        }
+    }
+
+    /// Whether a person can eat this.
+    ///
+    /// The same six the decision layer forages for. It lived there as
+    /// `edible_resources`, which is analytics-private, so anything outside
+    /// that layer wanting to know what counts as food had to write its own
+    /// list - and a second list is a list that drifts. What is edible is a
+    /// fact about a resource, so it lives on the resource.
+    pub fn is_it_food(&self) -> bool {
+        matches!(
+            self,
+            ResourceType::Food
+                | ResourceType::Grain
+                | ResourceType::Greens
+                | ResourceType::Roots
+                | ResourceType::Fish
+                | ResourceType::Meat
+        )
+    }
+
     /// A seam of clay does not care how rich the topsoil over it is; a
     /// hedgerow does.
     pub fn is_it_grown(&self) -> bool {
@@ -243,18 +495,12 @@ impl ResourceType {
 
     /// Whether an agent can eat this straight from the land.
     ///
-    /// The single answer to "is this food", used by foraging, by what an agent
-    /// remembers seeing, and by the scents the world gives off.
+    /// Which is [`ResourceType::is_it_food`] under another name. Both claimed
+    /// to be the single answer to "is this food" and both wrote the six out by
+    /// hand, so the promise was kept by nothing but the two of them happening
+    /// to agree. Now one of them asks the other.
     pub fn is_edible(&self) -> bool {
-        matches!(
-            self,
-            ResourceType::Food
-                | ResourceType::Grain
-                | ResourceType::Greens
-                | ResourceType::Roots
-                | ResourceType::Fish
-                | ResourceType::Meat
-        )
+        self.is_it_food()
     }
 
     /// Get ASCII character for rendering
@@ -384,72 +630,6 @@ impl ResourceType {
         }
     }
 
-    /// Get gather time per unit (in ticks)
-    /// For raw materials: time to harvest/gather
-    /// For processed/finished: time to craft (base time, modified by skill)
-    pub fn gather_time(&self) -> u32 {
-        match self {
-            ResourceType::StrangePlant => 25,
-            // Picking leaves is quicker than anything else anybody does
-            ResourceType::Greens => 8,
-            ResourceType::Roots => 18,
-            // Scraping a crust off a flat, or breaking it out of a seam
-            ResourceType::Salt => 25,
-
-            // Basic - gathering
-            ResourceType::Wood => 20,
-            ResourceType::Stone => 30,
-            ResourceType::Iron => 40,
-            ResourceType::Food => 15,
-            ResourceType::Water => 5, // Very quick to drink/fill containers
-
-            // Agricultural - farming/harvesting
-            ResourceType::Grain => 25,
-            ResourceType::Flax => 25,
-            ResourceType::Herbs => 15,
-            ResourceType::Cotton => 25,
-
-            // Animal - from animals/butchering
-            ResourceType::Hides => 30,
-            ResourceType::Wool => 20,
-            ResourceType::Meat => 25,
-            ResourceType::Milk => 10,
-            ResourceType::Fish => 30,
-            ResourceType::Honey => 20,
-
-            // Mineral - mining/gathering
-            ResourceType::Clay => 20,
-            ResourceType::Sand => 15,
-            ResourceType::Coal => 35,
-
-            // Processed - crafting time
-            ResourceType::Flour => 10,      // Milling
-            ResourceType::Leather => 40,    // Tanning (slow process)
-            ResourceType::Cloth => 30,      // Weaving
-            ResourceType::Linen => 30,      // Weaving
-            ResourceType::Glass => 50,      // Glassblowing (difficult)
-            ResourceType::Bricks => 25,     // Brick making
-            ResourceType::Charcoal => 35,   // Charcoal burning
-            ResourceType::Rope => 20,       // Rope making
-            ResourceType::Paper => 30,      // Paper making
-            ResourceType::Dye => 15,        // Dye making
-
-            // Finished Food - preparation time
-            ResourceType::Bread => 20,      // Baking
-            ResourceType::Ale => 30,        // Brewing
-            ResourceType::Cheese => 25,     // Cheese making
-
-            // Finished Items - crafting time
-            ResourceType::Clothing => 40,   // Tailoring
-            ResourceType::Shoes => 35,      // Cobbling
-            ResourceType::Tools => 45,      // Tool making
-            ResourceType::Weapons => 60,    // Weapon crafting
-            ResourceType::Armor => 70,      // Armor crafting
-            ResourceType::Pottery => 30,    // Pottery making
-            ResourceType::Furniture => 50,  // Furniture making
-            ResourceType::Jewelry => 55,    // Jewelry crafting
-        }
-    }
 
     /// Check if this is a raw/harvestable resource (found in world)
     pub fn is_harvestable(&self) -> bool {
@@ -478,34 +658,8 @@ impl ResourceType {
         matches!(self, ResourceType::Fish)
     }
 
-    /// Check if this is an animal product (requires animals)
-    pub fn is_animal_product(&self) -> bool {
-        matches!(
-            self,
-            ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk
-        )
-    }
 
-    /// Check if this is a processed material (requires crafting)
-    pub fn is_processed(&self) -> bool {
-        matches!(
-            self,
-            ResourceType::Flour | ResourceType::Leather | ResourceType::Cloth |
-            ResourceType::Linen | ResourceType::Glass | ResourceType::Bricks |
-            ResourceType::Charcoal | ResourceType::Rope | ResourceType::Paper | ResourceType::Dye
-        )
-    }
 
-    /// Check if this is a finished good (final product)
-    pub fn is_finished_good(&self) -> bool {
-        matches!(
-            self,
-            ResourceType::Bread | ResourceType::Ale | ResourceType::Cheese |
-            ResourceType::Clothing | ResourceType::Shoes | ResourceType::Tools |
-            ResourceType::Weapons | ResourceType::Armor | ResourceType::Pottery |
-            ResourceType::Furniture | ResourceType::Jewelry
-        )
-    }
 
     /// Check if this is food/consumable
     pub fn is_consumable(&self) -> bool {
@@ -696,13 +850,39 @@ impl ResourceNode {
     /// Fruit falls, leaf goes over, and a seed head that nobody cut shatters.
     /// Always takes at least one, so a patch actually empties rather than
     /// creeping down by fractions for ever.
-    pub fn what_it_carries_falls_off(&mut self, share: f32) {
+    ///
+    /// And what falls goes into the ground it fell on. This was the hole in
+    /// the whole ecology: a crop nobody picked was simply **deleted**, so
+    /// every growing tile on the map was mined out by its own plants with
+    /// nobody near it. Measured on a world with no people in it at all, the
+    /// ground under the greens went from 0.60 fertility to 0.35 in nine
+    /// years, and because standing capacity follows fertility the map's
+    /// standing greens fell from 3,516 units to 2,260 - **five per cent a
+    /// year, compounding, for ever**. See ISSUES_FOUND.md #127.
+    ///
+    /// The arithmetic closes exactly, and it has to be `RESIDUE_PER_UNIT_GROWN`
+    /// for it to. Growing a unit draws `NUTRIENT_PER_UNIT_GROWN` and puts back
+    /// half of it at once as root and stalk; the other half is in the part
+    /// somebody carries away. Nobody carried this away, so the other half
+    /// falls here too, and the two halves are the same plant and the same
+    /// number. A patch nobody touches breaks even. A patch that is picked
+    /// still loses, which is what picking a patch means.
+    pub fn what_it_carries_falls_off(&mut self, share: f32, soil: &mut Soil) {
         if self.amount == 0 {
             return;
         }
 
-        let falling = ((self.amount as f32) * share).ceil() as u32;
-        self.amount = self.amount.saturating_sub(falling.max(1));
+        let falling = (((self.amount as f32) * share).ceil() as u32)
+            .max(1)
+            .min(self.amount);
+        self.amount -= falling;
+
+        // What grew in the water fell in the water, and the bank is none the
+        // richer for it - the same exception `regenerate_in_ground` makes when
+        // it draws.
+        if !self.resource_type.grows_in_water() {
+            soil.add_leaf_litter(falling as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
+        }
     }
 
     /// Check if node is depleted
@@ -720,19 +900,11 @@ impl ResourceNode {
 
     /// Whether this resource regrows on its own once harvested
     pub fn is_renewable(&self) -> bool {
-        matches!(
-            self.resource_type,
-            ResourceType::Wood
-                | ResourceType::Food
-                | ResourceType::Grain
-                | ResourceType::Herbs
-                | ResourceType::Flax
-                | ResourceType::Cotton
-                | ResourceType::Honey
-                | ResourceType::Fish
-                // A river is not used up by the people drinking from it
-                | ResourceType::Water
-        )
+        // A river is not used up by the people drinking from it, and it is
+        // fed by `water_inflow` rather than by growing, so it is the one
+        // thing that renews without a growth rate.
+        self.resource_type == ResourceType::Water
+            || self.resource_type.how_fast_it_comes_back() > 0.0
     }
 
     /// Take in a fractional amount of water, carrying the remainder over.
@@ -1037,35 +1209,7 @@ impl ResourceNode {
         // careful, it made it range further and hoard worse. The waste in this
         // model is a behaviour and not a supply artefact, and starving people
         // does not fix a behaviour. See ISSUES_FOUND #57.
-        let base_rate = match self.resource_type {
-            // Renewable resources
-            ResourceType::Wood => 0.01,       // Trees grow slowly
-            ResourceType::Food => 0.025,      // Berries and fruit, in their own time
-            ResourceType::StrangePlant => 0.025, // Whatever they are, they grow
-            ResourceType::Grain => 0.015,     // Wild grain is thin stuff
-            ResourceType::Herbs => 0.04,      // Herbs grow quickly
-            ResourceType::Flax => 0.03,
-            ResourceType::Cotton => 0.03,
-            ResourceType::Honey => 0.02,      // Bees produce honey steadily
-
-            // Slow renewable
-            ResourceType::Fish => 0.02,       // Fish populations regenerate
-
-            // Water is fed by what carries it, which is worked out from the
-            // ground it sits on rather than from a flat rate - see
-            // `water_inflow`.
-            ResourceType::Water => 0.0,
-
-            // Non-renewable (mineral resources don't regenerate)
-            ResourceType::Stone |
-            ResourceType::Iron |
-            ResourceType::Clay |
-            ResourceType::Sand |
-            ResourceType::Coal => 0.0,
-
-            // Processed/finished goods don't regenerate naturally
-            _ => 0.0,
-        };
+        let base_rate = self.resource_type.how_fast_it_comes_back();
 
         if base_rate == 0.0 {
             return 0;
@@ -1075,6 +1219,8 @@ impl ResourceNode {
         let temp_modifier = match self.resource_type {
             ResourceType::Food
             | ResourceType::Grain
+            | ResourceType::Greens
+            | ResourceType::Roots
             | ResourceType::Herbs
             | ResourceType::StrangePlant => {
                 // Plants prefer 15-25°C
@@ -1111,7 +1257,12 @@ impl ResourceNode {
 
         // Apply precipitation modifier (water availability)
         let precip_modifier = match self.resource_type {
-            ResourceType::Food | ResourceType::Grain | ResourceType::Herbs | ResourceType::Flax => {
+            ResourceType::Food
+            | ResourceType::Grain
+            | ResourceType::Greens
+            | ResourceType::Roots
+            | ResourceType::Herbs
+            | ResourceType::Flax => {
                 // Most crops need moderate precipitation
                 if precipitation >= 0.4 && precipitation <= 0.8 {
                     1.5 // Good rainfall
@@ -1260,5 +1411,74 @@ mod tests {
 
         node.harvest(50);
         assert!((node.percentage_remaining() - 0.0).abs() < 0.1);
+    }
+}
+
+#[cfg(test)]
+mod all_resources_tests {
+    use super::ResourceType;
+
+    /// `ResourceType::all()` has to list every variant, and nothing but a
+    /// match the compiler checks can promise that. Adding a variant to the
+    /// enum without adding it to `all()` fails to compile here.
+    #[test]
+    fn every_resource_is_listed() {
+        fn exhaustive(what: ResourceType) {
+            match what {
+            ResourceType::Wood => {}
+            ResourceType::Stone => {}
+            ResourceType::Iron => {}
+            ResourceType::Food => {}
+            ResourceType::Water => {}
+            ResourceType::StrangePlant => {}
+            ResourceType::Greens => {}
+            ResourceType::Roots => {}
+            ResourceType::Grain => {}
+            ResourceType::Flax => {}
+            ResourceType::Herbs => {}
+            ResourceType::Cotton => {}
+            ResourceType::Hides => {}
+            ResourceType::Wool => {}
+            ResourceType::Meat => {}
+            ResourceType::Milk => {}
+            ResourceType::Fish => {}
+            ResourceType::Honey => {}
+            ResourceType::Clay => {}
+            ResourceType::Sand => {}
+            ResourceType::Coal => {}
+            ResourceType::Salt => {}
+            ResourceType::Flour => {}
+            ResourceType::Leather => {}
+            ResourceType::Cloth => {}
+            ResourceType::Linen => {}
+            ResourceType::Glass => {}
+            ResourceType::Bricks => {}
+            ResourceType::Charcoal => {}
+            ResourceType::Rope => {}
+            ResourceType::Paper => {}
+            ResourceType::Dye => {}
+            ResourceType::Bread => {}
+            ResourceType::Ale => {}
+            ResourceType::Cheese => {}
+            ResourceType::Clothing => {}
+            ResourceType::Shoes => {}
+            ResourceType::Tools => {}
+            ResourceType::Weapons => {}
+            ResourceType::Armor => {}
+            ResourceType::Pottery => {}
+            ResourceType::Furniture => {}
+            ResourceType::Jewelry => {}
+            }
+        }
+
+        let all = ResourceType::all();
+        for what in all {
+            exhaustive(what);
+        }
+
+        let mut seen = all.to_vec();
+        seen.sort_by_key(|what| format!("{what:?}"));
+        seen.dedup();
+        assert_eq!(seen.len(), all.len(), "a resource is listed twice in all()");
     }
 }

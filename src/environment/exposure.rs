@@ -30,17 +30,6 @@ pub enum ExposureType {
 }
 
 impl ExposureType {
-    /// Get severity threshold (body temperature deviation from ideal)
-    pub fn severity_threshold(&self) -> f32 {
-        match self {
-            ExposureType::Hypothermia => 2.0, // Starts at 2°C below ideal
-            ExposureType::Hyperthermia => 2.0, // Starts at 2°C above ideal
-            ExposureType::Frostbite => 3.0,
-            ExposureType::Sunburn => 0.0, // No temperature threshold
-            ExposureType::Dehydration => 1.0,
-            ExposureType::Windburn => 0.0,
-        }
-    }
 
     /// Get damage multiplier per tick
     pub fn damage_multiplier(&self) -> f32 {
@@ -191,10 +180,6 @@ impl ExposureStatus {
         damage_this_tick
     }
 
-    /// Get total severity (0.0 to 1.0)
-    pub fn total_severity(&self) -> f32 {
-        (self.exposure_damage / 10.0).min(1.0)
-    }
 
     /// Is the agent in critical condition from exposure?
     pub fn is_critical(&self) -> bool {

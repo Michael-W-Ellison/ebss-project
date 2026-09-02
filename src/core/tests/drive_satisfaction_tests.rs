@@ -173,8 +173,7 @@ fn test_satisfying_one_drive_doesnt_affect_others() {
 fn test_drive_state_initialization() {
     let drive_state = DriveState::new();
 
-    // Should have all 14 drives
-    assert_eq!(drive_state.drives.len(), 15);
+    assert_eq!(drive_state.drives.len(), DriveType::all().len());
 
     // All should start at zero
     for drive in &drive_state.drives {
@@ -361,8 +360,11 @@ fn test_all_drive_types_have_valid_defaults() {
         // Threshold should be between 0 and 1
         assert!(drive.threshold >= 0.0 && drive.threshold <= 1.0);
 
-        // Accumulation rate should be positive
-        assert!(drive_type.base_accumulation_rate() > 0.0);
+        // Accumulation rate is never negative, and for one drive it is
+        // nought: `Aggression` keeps no reservoir at all. Nobody grows
+        // angrier for time passing quietly, and having nothing banked is
+        // what lets the demand leave the moment the thing does.
+        assert!(drive_type.base_accumulation_rate() >= 0.0);
 
         // Should have a satisfaction description
         assert!(!drive_type.satisfaction_description().is_empty());

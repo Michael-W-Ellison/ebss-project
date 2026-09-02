@@ -2,7 +2,7 @@
 //! Material property system for environment plugins.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::agents::Quality;
 
 /// Tool tier required to harvest a material
@@ -146,7 +146,7 @@ pub struct Material {
     pub ore_yield: f32,
 
     // Custom properties for plugin-specific data
-    pub properties: HashMap<String, String>,
+    pub properties: BTreeMap<String, String>,
 }
 
 impl Material {
@@ -179,24 +179,11 @@ impl Material {
             is_ore: false,
             ore_metal_id: None,
             ore_yield: 0.0,
-            properties: HashMap::new(),
+            properties: BTreeMap::new(),
         }
     }
 
-    /// Set quality level
-    pub fn with_quality(mut self, quality: Quality) -> Self {
-        self.quality = quality;
-        self
-    }
 
-    /// Get effective durability based on quality
-    pub fn effective_durability(&self) -> u32 {
-        if self.durability == 0 {
-            0  // Infinite durability
-        } else {
-            ((self.durability as f32) * self.quality.tool_durability_modifier()) as u32
-        }
-    }
 
     /// Builder pattern methods
     pub fn with_description(mut self, desc: String) -> Self {
@@ -267,10 +254,6 @@ impl Material {
         self
     }
 
-    pub fn with_light_level(mut self, level: u8) -> Self {
-        self.light_level = level.min(15);
-        self
-    }
 
     // Metallurgy builder methods
     pub fn with_melting_point(mut self, temp: f32) -> Self {

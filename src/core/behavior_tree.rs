@@ -46,9 +46,9 @@ pub trait BehaviorContext {
 #[derive(Debug, Default)]
 pub struct DefaultBehaviorContext {
     /// Cached condition states that can be set externally
-    pub condition_states: std::collections::HashMap<String, bool>,
+    pub condition_states: std::collections::BTreeMap<String, bool>,
     /// Cached action results for testing
-    pub action_results: std::collections::HashMap<String, ExecutionResult>,
+    pub action_results: std::collections::BTreeMap<String, ExecutionResult>,
 }
 
 impl DefaultBehaviorContext {
@@ -158,7 +158,7 @@ impl BehaviorNode {
     /// Create a new behavior node
     pub fn new(node_type: NodeType) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             node_type,
             weight: 1.0,
             children: Vec::new(),
@@ -172,7 +172,7 @@ impl BehaviorNode {
     /// Create a new learned behavior node (discovered through observation or experimentation)
     pub fn new_learned(node_type: NodeType, source: String) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             node_type,
             weight: 0.5, // Start with lower weight until proven effective
             children: Vec::new(),
@@ -296,7 +296,7 @@ impl BehaviorTree {
     /// Create a new behavior tree
     pub fn new(name: String, root: BehaviorNode) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             root,
             name,
             total_executions: 0,
@@ -388,7 +388,7 @@ impl BehaviorTree {
     /// Clone with weight threshold (genetic inheritance)
     pub fn clone_with_pruning(&self, min_weight: f32) -> Self {
         let mut cloned = self.clone();
-        cloned.id = Uuid::new_v4(); // New ID for offspring
+        cloned.id = crate::core::dice::name(); // New ID for offspring
         cloned.prune(min_weight);
         cloned
     }
@@ -414,10 +414,6 @@ impl BehaviorTree {
         self.root.learned_count()
     }
 
-    /// Sort all nodes by weight for optimal execution order
-    pub fn optimize_weights(&mut self) {
-        self.root.sort_children_by_weight();
-    }
 
     /// Reinforce a specific action (increase its weight)
     pub fn reinforce_action(&mut self, action_name: &str, amount: f32) {

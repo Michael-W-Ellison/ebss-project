@@ -479,3 +479,111 @@ fn a_practice_spreads_by_being_seen() {
         "a practice everybody around you follows becomes what you do too"
     );
 }
+
+// --- how much country there is -----------------------------------------------
+
+/// A map four times the size carries four times as much.
+///
+/// Every count in `ResourceConfig` is written for a fifty by fifty map and
+/// spread over whatever map is actually being built. Without that a hundred
+/// square kilometres came out with the same three hundred and sixty-odd nodes
+/// a quarter of a square kilometre had, spread over four hundred times the
+/// ground: a country with a berry bush every half-mile, which is not country
+/// anybody could live in.
+#[test]
+fn a_bigger_map_carries_more() {
+    crate::core::dice::seed(31);
+    let small = World::new(WorldConfig::default().with_size(60, 60));
+    crate::core::dice::seed(31);
+    let large = World::new(WorldConfig::default().with_size(120, 120));
+
+    let per_tile = |world: &World| {
+        world.resources.len() as f32 / (world.grid.width * world.grid.height) as f32
+    };
+
+    let thin = per_tile(&small);
+    let thick = per_tile(&large);
+
+    assert!(
+        large.resources.len() > small.resources.len() * 3,
+        "four times the ground carried {} against {}",
+        large.resources.len(),
+        small.resources.len()
+    );
+
+    // And it is the same country, not a richer one: density within a tenth.
+    assert!(
+        (thick - thin).abs() < thin * 0.1,
+        "{thin:.4} nodes a tile on the small map, {thick:.4} on the large"
+    );
+}
+
+/// Stocking a map leaves no two things standing on one tile.
+///
+/// Placement used to ask `is_position_occupied`, which walks the whole
+/// resource list, once for every node it put down - the square of the map,
+/// which a hundred square kilometres would not finish. The scan is hoisted
+/// into a register carried through the three spawners now, and a register is
+/// a second representation of something the map already says. This is what
+/// says the two still agree.
+#[test]
+fn stocking_a_map_leaves_no_two_things_on_a_tile() {
+    use std::collections::BTreeSet;
+
+    crate::core::dice::seed(17);
+    let world = World::new(WorldConfig::default().with_size(80, 80));
+
+    // What the register covers is the ground the two spawners that consult it
+    // put things on. The naturalistic spawner works off its own list and has
+    // never asked, so its clusters land on top of each other and on top of
+    // everything else - see ISSUES_FOUND.md #130. Held out here rather than
+    // quietly folded in, because a test that passes by lowering its sights is
+    // worse than no test.
+    let cluster_kinds = [
+        ResourceType::Clay,
+        ResourceType::Sand,
+        ResourceType::Coal,
+        ResourceType::Grain,
+        ResourceType::Flax,
+        ResourceType::Herbs,
+        ResourceType::Cotton,
+        ResourceType::Honey,
+        ResourceType::Fish,
+    ];
+
+    let mut seen: BTreeSet<(i32, i32)> = BTreeSet::new();
+    let mut doubled = Vec::new();
+
+    for resource in &world.resources {
+        if cluster_kinds.contains(&resource.resource_type) {
+            continue;
+        }
+        if !seen.insert((resource.position.x, resource.position.y)) {
+            doubled.push((resource.position.x, resource.position.y, resource.resource_type));
+        }
+    }
+
+    assert!(
+        doubled.is_empty(),
+        "{} tiles have two things on them: {:?}",
+        doubled.len(),
+        &doubled[..doubled.len().min(5)]
+    );
+}
+
+/// A cell is ten metres, and a hundred square kilometres is what it says.
+#[test]
+fn the_map_an_ecology_needs_is_a_hundred_square_kilometres() {
+    use crate::world::Grid;
+
+    let config = WorldConfig::big_enough_for_an_ecology();
+    let (width, height) = config.size;
+    let metres = Grid::METRES_PER_CELL * Grid::METRES_PER_CELL;
+    let square_kilometres = (width * height) as f32 * metres / 1_000_000.0;
+
+    assert!(
+        (square_kilometres - 100.0).abs() < 0.001,
+        "{width}x{height} at {} metres a cell is {square_kilometres} km2",
+        Grid::METRES_PER_CELL
+    );
+}

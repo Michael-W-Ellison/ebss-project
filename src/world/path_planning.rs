@@ -8,7 +8,7 @@
 //! - Road types and upgrades
 
 use serde::{Serialize, Deserialize};
-use std::collections::{HashMap, HashSet, BinaryHeap};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 use std::cmp::Ordering;
 
 pub type Position = (i32, i32, i32);
@@ -37,15 +37,6 @@ impl RoadType {
         }
     }
 
-    /// Get construction cost multiplier
-    pub fn cost_multiplier(&self) -> f32 {
-        match self {
-            RoadType::DirtPath => 1.0,
-            RoadType::GravelRoad => 2.0,
-            RoadType::StoneRoad => 4.0,
-            RoadType::PavedRoad => 8.0,
-        }
-    }
 }
 
 /// A node in a path
@@ -110,14 +101,14 @@ impl Road {
 pub struct RoadNetwork {
     roads: Vec<Road>,
     // Cache of positions that have roads for quick lookup
-    road_positions: HashSet<Position>,
+    road_positions: BTreeSet<Position>,
 }
 
 impl RoadNetwork {
     pub fn new() -> Self {
         Self {
             roads: Vec::new(),
-            road_positions: HashSet::new(),
+            road_positions: BTreeSet::new(),
         }
     }
 
@@ -140,7 +131,7 @@ impl RoadNetwork {
     /// Check if two positions are connected through the road network
     pub fn are_connected(&self, pos1: Position, pos2: Position) -> bool {
         // Simple BFS through road network
-        let mut visited = HashSet::new();
+        let mut visited = BTreeSet::new();
         let mut queue = vec![pos1];
         visited.insert(pos1);
 
@@ -169,7 +160,7 @@ impl RoadNetwork {
     /// Find intersection points between roads
     pub fn find_intersections(&self) -> Vec<Position> {
         let mut intersections = Vec::new();
-        let mut position_count: HashMap<Position, usize> = HashMap::new();
+        let mut position_count: BTreeMap<Position, usize> = BTreeMap::new();
 
         // Count how many roads pass through each position
         for road in &self.roads {
@@ -241,8 +232,8 @@ impl<'a> PathPlanner<'a> {
     /// Find a path between two positions using A* algorithm
     pub fn find_path(&self, start: Position, goal: Position) -> Option<Vec<PathNode>> {
         let mut open_set = BinaryHeap::new();
-        let mut came_from: HashMap<Position, Position> = HashMap::new();
-        let mut g_scores: HashMap<Position, f32> = HashMap::new();
+        let mut came_from: BTreeMap<Position, Position> = BTreeMap::new();
+        let mut g_scores: BTreeMap<Position, f32> = BTreeMap::new();
 
         g_scores.insert(start, 0.0);
         open_set.push(AStarNode {
@@ -284,7 +275,7 @@ impl<'a> PathPlanner<'a> {
         None // No path found
     }
 
-    fn reconstruct_path(&self, came_from: &HashMap<Position, Position>, goal: Position) -> Vec<PathNode> {
+    fn reconstruct_path(&self, came_from: &BTreeMap<Position, Position>, goal: Position) -> Vec<PathNode> {
         let mut path = vec![PathNode::new(goal)];
         let mut current = goal;
 
@@ -318,7 +309,7 @@ impl<'a> PathPlanner<'a> {
         }
 
         let mut roads = Vec::new();
-        let mut connected = HashSet::new();
+        let mut connected = BTreeSet::new();
         connected.insert(positions[0]);
 
         // Prim's algorithm for MST

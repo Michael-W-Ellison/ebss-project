@@ -91,20 +91,8 @@ impl SimulationController {
         &self.population
     }
 
-    /// Get mutable reference to population
-    pub fn get_population_mut(&mut self) -> &mut Population {
-        &mut self.population
-    }
 
-    /// Get reference to world
-    pub fn get_world(&self) -> &World {
-        &self.world
-    }
 
-    /// Get mutable reference to world
-    pub fn get_world_mut(&mut self) -> &mut World {
-        &mut self.world
-    }
 
     /// Check if simulation is running
     pub fn is_running(&self) -> bool {

@@ -429,7 +429,7 @@ fn render_resources_tab(ui: &mut Ui, state: &GuiState) {
     ui.heading("Resource Breakdown");
 
     // Count resources by type
-    let mut resource_counts: std::collections::HashMap<String, (u32, u32)> = std::collections::HashMap::new();
+    let mut resource_counts: std::collections::BTreeMap<String, (u32, u32)> = std::collections::BTreeMap::new();
     for resource in &world.resources {
         let key = format!("{:?}", resource.resource_type);
         let entry = resource_counts.entry(key).or_insert((0, 0));
@@ -546,7 +546,7 @@ fn render_buildings_tab(ui: &mut Ui, state: &GuiState) {
 
     // Buildings by type
     ui.heading("By Type");
-    let mut building_counts: std::collections::HashMap<String, (usize, usize)> = std::collections::HashMap::new();
+    let mut building_counts: std::collections::BTreeMap<String, (usize, usize)> = std::collections::BTreeMap::new();
     for building in &world.buildings {
         let key = format!("{:?}", building.building_type);
         let entry = building_counts.entry(key).or_insert((0, 0));

@@ -797,6 +797,482 @@ original specifications.
   climbing. One thing is deliberately unfinished: a bare hand should hold about a
   dozen so a basket is the whole difference, and at twelve forty fixtures fall
   over. That sweep is its own commit. See ISSUES_FOUND.md #88, #89, #90, #91
+- ✅ No run of this model was ever repeatable, and the threat tree was deciding
+  on a coin. Eighty `thread_rng()` calls across twenty-six files, each its own
+  unseedable stream, so the same world run twice gave different answers and a
+  regression could not be told from noise. There is one randomness vocabulary
+  now, `core::dice`: a thread-local stream, seeded from entropy in a live run
+  and from a fixed constant under `cfg(test)`.
+
+  Seeding it left five tests still coming and going, which named the other half
+  of the problem: `HashMap` iteration order, which Rust seeds *per process*.
+  `worst_threat` and `worst_creature` take a `max_by` over the emotion tables,
+  so **when two things frightened an agent equally, which one it feared — and
+  so whether it ran, stood or froze — was decided by the process's hash seed**.
+  Five collections in the decision path are ordered now.
+
+  Flaky tests **fifteen to seven**, over three runs. Not finished: a settlement
+  is still not reproducible, because there are eighty-three choose-operations
+  in `analytics/mod.rs` alone and every one is a place an unordered collection
+  can decide something. See ISSUES_FOUND.md #92
+- ✅ Fourteen per cent of the public surface had no caller. A sweep for `pub fn`
+  definitions whose name appears **nowhere else** in the tree — not "no call
+  site", no mention at all — found 326. Cutting them exposed a second wave of
+  24 that only the first wave had called, and a third of private helpers,
+  statics and one struct behind those. Three passes to a fixpoint: **357 items,
+  3,838 lines**, and the sweep now reports zero. One false positive in the whole
+  set, named by the compiler.
+
+  Some of it was clutter — accessors, `with_*` builders, trend getters for an
+  analytics UI that reads its numbers another way. Some of it was the recurring
+  defect: a whole **equipment durability model** (`tick_all_equipment`,
+  `apply_tool_wear`, `unequip_broken` and nine more) that nothing ticked, beside
+  a working tool-wear system on a different vocabulary; **twenty-one item
+  constructors** for a materials ladder the world does not run on; a
+  **precipitation accumulator** of snow depth, standing water and ground
+  wetness, ticked by weather type and read by three consumers, whose field
+  nothing read — snow has never lain in this world; a **second gossip pipeline**
+  beside the live one; the **global plugin registry**; and the age capability
+  curve, written and never hung on anything.
+
+  Deleting an uncalled function cannot change what a program does, and in
+  aggregate the suite agreed: 25 deterministic failures and 7 flaky before, 24
+  and 7 after, with the five names that moved between the lists each flipping
+  on their own between runs of the same tree. See ISSUES_FOUND.md #93
+- ✅ The sweep finished: the same seed is now the same world, to the last berry.
+  The entry above it halved the flakiness and left a guess about where the rest
+  was — eighty-three choose-operations in one file. The guess was wrong, and
+  what was actually missing was an **instrument**: Rust seeds hash iteration per
+  *process*, so no test inside one process could ever have seen this. A harness
+  that prints a fingerprint of the whole world per tick, run as two processes
+  and diffed, put the first divergence at tick **-1** — before anything had
+  happened.
+
+  Four faults, none of them in the eighty-three. **Names came from the operating
+  system**: 270 `Uuid::new_v4()` sites, and an id here is a map key, a sort key
+  and a tie-break, so two runs of one seed disagreed about who was who before
+  the first tick. **`all_species()` handed back a `HashMap`'s values**, so world
+  generation picked a different species, rolled a different herd size, and spent
+  a *different number of rolls* — putting every later draw out of step. **Every
+  `HashMap` in the model** — 439 uses across 87 files, now `BTreeMap`, which
+  moves the property from something to remember at each new `.iter()` to
+  something the type system holds. And **`rand::random()`**, ten sites in the
+  fauna and flora: the same function as `thread_rng` under a friendlier name,
+  which is why the previous sweep walked past it. Those ten alone were enough —
+  with everything else fixed the beasts still moved differently in every run,
+  and by tick 49 it had reached the people, through the Safety drive of a man
+  who could see one.
+
+  **Flaky tests 7 → 0**: the same 28 failures in each of three runs of the whole
+  suite. Five of the seven that used to come and go now fail every time and two
+  pass every time, which is the point — each of them now has an answer. And a
+  measurement is a fact: the survival harness gave 2,586 and 2,350 on two runs
+  of the *same code and seeds* before this, and gives 2,418 twice now. The cost
+  is stated plainly: the model runs about **20% slower** (39.6s → 47.5s for 32
+  worlds × 4,000 ticks). Held by two behavioural tests and two source-level
+  guards that fail on any `thread_rng`, `rand::random`, `Uuid::new_v4`,
+  `HashMap` or `HashSet` in `src/`. See ISSUES_FOUND.md #94
+- ✅ The five-thousand-line function, and the first thing it hid. `execute_action`
+  was 5,723 lines — a third of `analytics/mod.rs` — and one `match` of fifty-two
+  arms: every arm reachable only by scrolling, no two readable side by side, and
+  a change to one producing a diff nobody could review against the other
+  fifty-one. It is a dispatcher now, in `analytics/doing/`, with the arms
+  grouped by what they are about rather than by the order somebody added them —
+  **eating**, **getting**, **making**, **ground**, **keeping**, **meeting**,
+  **fighting**, **moving**, **looking**. `analytics/mod.rs` goes **16,779 →
+  11,060**; the largest of the nine new files is 1,129 lines.
+
+  A refactor this size is normally an act of faith. This one is not: **three
+  seeds run six hundred ticks give byte-identical worlds either side of the
+  move** — every agent, beast, resource and pit, tick by tick — and the suite
+  gives the same 28 failures, stable across runs. That check exists only because
+  of the entry above it, and it arrived one commit later.
+
+  **And the split immediately found something.** `Action::Fight` never reads its
+  `weapon`: a man standing his ground against a wolf fights it the same with a
+  flint spear in his hand as with nothing, while `hunting` two modules away is
+  careful about exactly that. Presumably true since `Fight` was added, and
+  invisible at line 12,003 of a sixteen-thousand-line file. Left as it is here —
+  this change is behaviour-neutral by contract — and filed. See ISSUES_FOUND.md
+  #95
+- ✅ The tick, and a flag that would have been dropped silently. With
+  `execute_action` gone, `tick` was the largest function left at 852 lines — and
+  its actual shape, a run of world phases then everybody taking a turn then a
+  second run of world phases, was buried under 670 lines of per-agent decision
+  code sitting in the middle. That order is argued over in the comments and
+  several of the arguments were bought with a measurement (the beasts look
+  before they move, the world is ticked once not twice, waste goes back on the
+  ground before anybody smells it) — none of it readable while the middle of the
+  function was longer than anything else in the file.
+
+  `analytics/turn/` holds it now. `tick` is 179 lines and reads as the sequence
+  it is; `turn/each_one.rs` holds one person's turn with the five stages named —
+  **keep the goals and the plan current**, **choose what to do**, **and what it
+  takes**, execute, **what came of it**, then looking in at the storehouse on
+  its own clock. `analytics/mod.rs` goes 11,060 → 10,213: **16,779 → 10,213
+  across the two splits, down 39%**, with the largest function left at 378
+  lines.
+
+  **And it caught a flag that would have gone silently.** Cutting the choosing
+  block out gave it a `ran_for_it` parameter — fleeing comes out as an ordinary
+  `Move`, so the tally and the errand both need to know it was one — but the
+  block already declared `let mut running_away = false;` of its own, so the
+  parameter was *shadowed*: the caller's flag would have stayed false and
+  `stick_to_the_errand` would have held a fleeing man to whatever errand he was
+  on. Shadowing a parameter is not an error; the compiler said "unused variable"
+  and nothing more. The fingerprint harness would have caught it on the next run
+  — that is what it is for — but the warning caught it first, and only because
+  the block had been given a signature to shadow. Second find in two commits,
+  both from giving code a name. See ISSUES_FOUND.md #96
+- ✅ The decision layer had no boundary at all — and that was the original
+  argument. The determinism entry above ended by naming what was missing as a
+  *property* rather than a bug list: *the decision layer's inputs must have a
+  stable order; a layer with a boundary can be made to hold that property once.*
+  There was no such layer. What answers **given a drive, what would answer it?**
+  was 2,900 lines scattered the length of the file — the ladder in one place,
+  what hunger asks for eight hundred lines below it, what the errand machinery
+  does with the answer three thousand lines after that, and the constants each
+  turns on wherever they happened to be written.
+
+  `analytics/wanting/` is that layer now: the ladder in `mod.rs`, and below it
+  one module per question, named for what it is about rather than for the drive
+  that happens to ask — **food** (hunger and thirst), **quarry**, **ground**,
+  **store**, **shelter**, **camp**, **errands**. 88 functions and 56 constants
+  moved, the constants going with the functions they belong to for the first
+  time. `analytics/mod.rs` goes 10,213 → **5,276**.
+
+  The boundary earns its keep by what it forbids: **nothing in `wanting/` does
+  anything.** Every function answers a question and hands the answer back; the
+  doing is in `doing/` and the order of a turn is in `turn/`. A change to what
+  hunger *asks for* can no longer quietly change what eating *does* — and that
+  rule is now checkable from a directory listing.
+
+  **Across the three splits: 16,779 → 5,276 lines, down 69%**, largest remaining
+  function 170 lines against 5,723. Byte-identical worlds at every step, and the
+  same 28 failures throughout. That the check passed three times running is the
+  point: a refactor this size is normally argued about rather than verified.
+  See ISSUES_FOUND.md #97
+- ✅ The third layer, and the parts of it that had never been next to each other.
+  What happens whether or not anybody decides anything — the ground coming up,
+  the weather on a body, the beasts, birth and nursing, what a person finds out
+  by being somewhere at the time. It was the hardest of the three to see,
+  because **its parts were never next to each other**: the ground coming up in
+  berries sat two thousand lines from the weather that made it wet, and the
+  beasts deciding what to make of us sat a thousand lines from the beasts acting
+  on it. Nothing in the layout said these were one subject; only the order they
+  were called in did, and that was buried in `tick`.
+
+  `analytics/happening/` — **soil**, **weather**, **beasts**, **kin**,
+  **noticing**, **senses**, **situation**, **buildings**: 8 modules, 36
+  functions. `analytics/mod.rs` goes 5,276 → **2,491**.
+
+  **The three layers are finished.** `wanting` decides, `doing` acts,
+  `happening` happens, and `turn` says what order they run in and holds the
+  arguments about that order. What that buys beyond tidiness is that each layer
+  has a *different rule about what it may touch* — `wanting` may not change the
+  world, `doing` may not decide, `happening` runs on the world's clock and not
+  on anybody's drive — and those rules are now checkable from a directory
+  listing. Before this they were true only by the discipline of whoever last
+  edited line 9,412.
+
+  **Across four commits: `analytics/mod.rs` 16,779 → 2,491 lines, down 85%.**
+  Largest function 5,723 → 121; 176 functions in it → 57. Byte-identical worlds
+  at every step, the same 28 failures throughout, four configurations clean at
+  each step. See ISSUES_FOUND.md #98
+- ✅ What one agent makes of another — which is not a layer but a seam. The last
+  big cluster, and the one that would not sit in any of the three: being afraid
+  of somebody, angry at somebody, willing to trade with them, willing to give to
+  them, worth asking. `analytics/between_us/` — **threat**, **seeing**,
+  **exchange**, **asking**, 22 functions. A beast counts as another here: what
+  these have in common is not that the other party is a person, but that there
+  *is* another party and what this one does next depends on what it makes of
+  them.
+
+  It gets its own directory because forcing it into the three-layer shape would
+  have been worse than leaving it. `wanting` consults it when a drive needs
+  somebody else to answer it; `turn` runs part of it as a phase, because what
+  somebody feels has to be settled before they can act on it. Splitting it
+  between the two would have put `what_this_threat_comes_to` in one place and
+  `how_this_one_answers_a_threat` in another — the exact fault the last four
+  commits have been undoing.
+
+  **`analytics/mod.rs` is 1,208 lines and 35 functions, largest 86.** It was
+  **16,779 lines, 176 functions, largest 5,723** five commits ago — **down 93%**.
+  What is left is what belongs in a file of that name: configuration, builders,
+  save and load, two tallies, and a few gather helpers that could go either way.
+  Byte-identical worlds at every step across all five, the same 28 failures
+  throughout.
+
+  **And a finding that shrank on inspection.** Three methods are now visible as
+  used only by tests, and one looked alarming: `how_this_one_answers_a_threat`,
+  which the choosing code names in a comment as where "the whole tree lives" —
+  and nothing calls. Reading it took a minute: it is a one-line wrapper over
+  `what_this_threat_comes_to`, which *is* called. The tree runs. What is
+  actually wrong is two names for one question and a comment pointing at the
+  wrong one — both now fixed. Worth recording as the shape of the win: that
+  check would have meant holding two places four thousand lines apart in your
+  head, and took ten seconds once they were forty lines apart.
+  See ISSUES_FOUND.md #99
+- ✅ A man with a spear fought a wolf exactly as he would have fought it
+  empty-handed. The finding the `execute_action` split turned up, and worse than
+  it looked: not one oversight but **three places reading a vocabulary the model
+  does not stock**. The action's `weapon` field came from
+  `agent.equipment.get_weapon()`; `own_strength`, which decides the odds, adds
+  0.3 for the same thing; and the fight read neither. **Nothing in this model
+  has ever called `equipment.equip`** — the only `equip` calls in `src/` are
+  clothing — so the field was `None` in every fight ever run and the strength
+  bonus has never once fired. Instrumented over sixteen worlds: eight fights, no
+  weapon flag set in any of them, and *two of the eight fought by somebody
+  carrying a spear worth 1.87*.
+
+  Fixed by reading the spear the way `hunting` reads it two modules away, so it
+  tells twice, as the specification asks in two separate sentences: on **whether
+  the blow lands** (the same term `hunting` uses) and on **how many blows it
+  takes** (the tool's own worth, floored at one). Measured: **2.17 blows to put
+  a wolf down bare-handed, 1.73 with a spear.** Bare hands are arithmetically
+  unchanged, and there is deliberately no size gate — refusing to hunt an ox
+  empty-handed sends you home hungry, refusing to fight a wolf already on you
+  sends you home dead.
+
+  **And the honest part: it changes nothing a settlement can feel.** Survival is
+  unmoved to the tick — 32 worlds, mean last-alive 2,418 before and after. It
+  could not be otherwise: eight fights in sixteen worlds is a path that fires
+  about once per four thousand agent-ticks. The reason is already on the list as
+  **#188** — anger at an animal can never pass the gate that lets an agent turn
+  on it. The ladder now works on a branch almost nobody reaches; opening the
+  gate is what will show in a number. See ISSUES_FOUND.md #100
+- ✅ The gate asked for more than the feeling behind it could give — and opening
+  it is the first thing in a long while to move the survival number.
+  `should_attack` was `anger > 0.5`, and anger at one thing is capped at exactly
+  `0.5`, so **a man at the very worst rage one animal can produce sat on the gate
+  and did not pass it**. Worse, the gate read the *sum* of every source while the
+  branch behind it acts on the strongest one — so it fired only when two grudges
+  added past a half: an agent turning on the wolf in front of it partly because
+  it also resented a boar. Before: **29.7% of every turn had a creature on the
+  mind, 28.7% went under the gate, 0.12% got through.**
+
+  **The threshold was taken from the data, not chosen.** Bucketing what anger
+  actually reaches: it stops dead at 0.50, with 6.1% of angry moments sitting
+  exactly on the ceiling the gate excluded. The *fear* gate was 0.6 against a
+  ceiling of 0.7 — six sevenths — so applying that fraction to anger's ceiling
+  gives 0.4286 and hands the fear gate back the number it already had. The two
+  gates are now one demand on two scales, with a test that fails the moment
+  either drifts from its ceiling.
+
+  Mechanism: **"angry enough to act" 0.12% → 1.52%**, twelve times as often.
+  Survival, paired on the same seeds across three blocks of 32 worlds:
+  **2,418→2,662, 2,306→2,399, 2,505→2,506** — positive in all three, **mean +113
+  turns (+4.7%)**. The spread between blocks is larger than the effect, so the
+  mean is the headline and +244 is not.
+
+  Two things worth stating rather than burying. **`Attack` went 37 → 0**: that is
+  a removed false positive, not a lost behaviour — anger at a *person* never
+  exceeded 0.35, so those 37 were being enabled by summing in anger at an animal,
+  a man hitting his neighbour partly because a wolf had annoyed him. And **one
+  test flipped to failing**, `thirst_tests::agents_keep_themselves_watered`;
+  traced before writing it down, that world has zero fights and zero flights in
+  the entire run and its people die of hunger, illness and weather. The draw
+  sequence shifted and a world already on the line fell the other side of it. Left
+  failing rather than weakened. See ISSUES_FOUND.md #101
+- ✅ A six-year-old who carried what his father carried. Three things the
+  lifecycle described and nothing read — and two defects underneath them worth
+  more than any of the three.
+
+  **The curve.** `what_a_body_this_age_can_do` was written, hung on nothing,
+  and deleted as dead code in #93 — leaving **age deciding nothing but
+  appetite**. A six-year-old carried what a grown man carried, walked as fast,
+  worked as hard and hit as heavily, on a third of his food. Restored and hung
+  on what two hands hold, how fast a body walks, what a trip brings back and
+  what a blow is worth. **The bands.** `LifeStage`'s doc comment has carried
+  the supervision rules as prose since the lifecycle was written and nothing
+  consulted them; a five-year-old walked to the far side of the map like
+  anybody else. **Feeding.** A parent had no way to hand a child anything short
+  of the sacrifice branch, which waits for starvation.
+
+  **Underneath: `Agent::new` made newborns.** Hanging the curve on carrying
+  broke **87 tests and hung one** — every fixture that says `Agent::new` and
+  means "a person" was carrying a twentieth of a pack. This is #74 one layer
+  down: that entry fixed founders spawned at nought in `spawn_agent`, and the
+  constructor underneath went on making newborns for everybody else.
+
+  **And a body that burned at a grown rate on a child's reserve.**
+  `now_a_body_of` resized the reserve and the stomach and left the burn alone.
+  Measured: a body of nought years, fifteen days without food, read **14.4
+  turns from death against a grown body's 72.0** — five times, exactly the
+  ratio of the bodies. The model held both answers at once, four hundred lines
+  apart, and nothing ever compared them.
+
+  **And two vocabularies for one age.** `life_stage` is a stored field a dozen
+  places set without touching `age`. The status report listed **"a child and an
+  adult come out identical" as one of three blocking failures** — one of those
+  tests was one line in a fixture setting the stage and not the years, and got
+  47 against 47 because both bodies were the same age.
+
+  **Measured: nothing, and that is the honest answer.** Three blocks of 32
+  worlds: last-alive 3478→3564, person-days 920→916. A wash — and it could not
+  have been otherwise. Founders are 20–40 where the curve is at its full ten;
+  nobody reaches 40 in a year; and **two children are born in 308,000 turns**.
+  Correct, tested and idle, waiting on reproduction exactly as #109's larder
+  waits on somebody being alive in autumn to fill it.
+
+  Failing tests **25 → 29**: two cleared, and four are one question — *does a
+  child starve sooner than an adult?* The model now says no consistently (which
+  is what #74 decided); three tests say yes, and the physiology is on their
+  side. That is a specification question needing its own measurement, filed
+  rather than decided as a rider on a change this size.
+  See ISSUES_FOUND.md #110
+- ✅ Seven items for a winter, and a larder anybody could open in July. Two
+  faults, and the second is the one the entry is named after.
+
+  **The target was 165× too small.** `WHAT_ONE_MOUTH_WANTS_PUT_BY` — what one
+  person wants put by for the whole lean season — was **seven items**, which is
+  half a day's food, and behind it sat every branch of the store: burying,
+  walking to a pit, digging another, and going out to gather for the store at
+  all. Twelve people wanted eighty-four items, a settlement reached that in its
+  first autumn, and the chain shut down for the rest of the year. It had been
+  reasoned carefully from a figure true of the body this model had *before* the
+  starvation clock was corrected in #203. The right arithmetic was already
+  written down in the right place — `UNITS_IN_ONE_STORED_ITEM` carries the
+  comment "Eleven and a half of them is a day" — and nothing joined it up.
+
+  Measured, sixteen worlds over a year: the pits never held more than **14
+  items** at any point, which is 0.9 person-days, while **7,794 food items were
+  dropped back on the bush for want of pack room** against 1,472 carried home.
+  Five thrown away for every one kept.
+
+  Derived now from what a body eats in a day (11.52 items, measured 15.4) and
+  how many days the land gives it nothing — read off the bearing year of #107
+  rather than named, so retuning the year retunes the store. Seventy-five days,
+  so **864 items a mouth**. Two coupled constants moved with it, and the test
+  suite is what said so.
+
+  **And nothing ever asked what month it was.** `something_out_of_the_store`
+  had no season condition: a pit within reach was simply the nearest food, so a
+  settlement drew on its winter store in July. That is what "laid down and eaten
+  at the same rate" means. A store is opened when the land gives nothing now,
+  and a starving man still opens it in any month.
+
+  The store has a winter's shape it did not have: pits at end of autumn
+  **12 → 33**, then eaten down through the winter. Measured over five blocks of
+  32 worlds: **mean last-alive 3,397 → 3,601, up 6% in four blocks of five;
+  person-days alive flat.** Settlements last longer and hold the same people,
+  which is what a winter store does and is not what a food supply does.
+
+  **What is now binding, and was not before:** a pit takes 300 and a mouth's
+  winter is 864, so twelve people want **thirty-five holes** and dig under
+  three. Room in the ground was never the binding question while the target was
+  seven; it is now. Filed, with a test that says it rather than a comment that
+  will drift. Nor does any of this touch the spring die-off — sixteen worlds
+  average **1.6 people** through the autumn the store is filled in, and a
+  larder for a settlement that no longer exists is still the right larder.
+  See ISSUES_FOUND.md #109
+- ✅ Every bush in full fruit, whatever the date. A world was made with
+  everything standing at what its ground would carry and never asked what day
+  of the year it was. The year opens in spring, so every settlement ever run in
+  this project began with berries, standing grain and full hives on the hedges
+  around it — measured over sixteen worlds, **216 units of fruit, 254 of grain
+  and 34 of honey** on day nought, which the shedding rule then took off over
+  ten days. A world is seeded on its opening day now, and the bearing check is
+  asked *before* `is_it_grown`, because honey is not a growing thing and has a
+  season all the same.
+
+  **A third spawner, found by the test rather than by reading.**
+  `what_this_ground_carries` was written to be the one vocabulary after two
+  spawners were found to have had two. There were three:
+  `scatter_the_strange_plants` builds its nodes directly and never went near
+  it. The end-to-end assertion written for this entry is what caught it — not
+  a grep for the vocabulary, but asserting the property over the whole world
+  and letting it find the path nobody had touched.
+
+  Measured, five blocks of 32 worlds over a full year: **person-days alive fall
+  about five per cent**, down in four blocks of five; mean last-alive falls
+  3.4%. Landed as a correctness fix that **costs** survival, not as a win.
+
+  What is interesting is the size. Those 504 units are a day and a third of
+  food for twelve people — half a per cent of a run — and they measure ten
+  times that, because the ten days they are handed over are exactly the ten in
+  which the founders eat down the reserve they arrive with and half of them
+  die. **A day's food at the crisis is worth ten days of it anywhere else.**
+  Anything meaning to move this model's survival has to land in that fortnight.
+
+  And one guess that measured the other way: the seeding comment first said a
+  patch seeded short would be full again in a day or two. Stripped bare and
+  timed, **a fruit node is back to full in one day and greens and roots are
+  still short after thirty** — true for a third of the foods it was written
+  about. Corrected, and worth carrying forward: a settlement that strips its
+  greens in early spring has no greens for a month, and nothing has yet asked
+  whether that is happening. See ISSUES_FOUND.md #108
+- ✅ The bearing year was written for a twenty-four-day season. `when_it_bears`
+  returned a *set of seasons*, so a thing came on for the first day of a season
+  and went over on the last — fine at twenty-four days, and at ninety a year of
+  four uniform blocks: three months of leaf, three more of leaf, three months of
+  harvest, three months of nothing. Its own doc comment already said what it
+  should have been doing — "it carries nothing at all for most of the year and
+  then, for a few weeks, everything at once" — and the code under it did the
+  opposite.
+
+  Two things needed no measurement to see: **`Food`, the fruit node and the
+  world's staple, bore in autumn and in no other season** — three months of high
+  summer with nothing ripe on any bush — and **greens and roots stopped dead on
+  the last day of summer**, so autumn had no leaf and no roots in it at all.
+
+  A `Bearing` is now a window written in the calendar's own vocabulary —
+  `from((Summer, Deep), (Fall, Late))`, two weeks at each end of a season and
+  eight in the middle — and `is_it_bearing` takes a day rather than a season,
+  which is what all three call sites already had to hand. Roots run longest and
+  end the year, which is what a root is for. Deep winter still gives nothing,
+  and that does not move.
+
+  Measured, three independent blocks of 32 worlds over a full year each: mean
+  last-alive **3028→3088, 2391→3607, 2841→3559**; person-days alive
+  **816→879, 717→995, 807→1005**; worlds standing empty at a year **60%→47%**.
+  Every figure improves in every block. Four failing tests cleared, 29 to 25.
+
+  **And it does not fix spring, which is what kills everybody**: 323 of 372
+  deaths in a year are in spring and 223 of those are hunger, against fifteen in
+  winter. Instrumented, the founders eat their reserve down over the first month
+  because the mean richness of what they eat starts at **14.9** — greens are
+  30.6% of every unit eaten and 10.7% of the energy. Nobody is short of *food*;
+  they are short of density, and the food is standing there. That is what a
+  world is seeded with (#208) and how a forager weighs a thin food underfoot
+  against a dense one across the meadow — filed there rather than fixed here,
+  because fixing it by moving numbers in this table would have been tuning
+  rather than a year. See ISSUES_FOUND.md #107
+- ✅ Nobody retaliates because nobody is wronged — and a settlement's whole
+  social life was conducted at arbitrary range. The entry above left `Attack` at
+  zero and asked whether that was right. Traced end to end, the answer is **yes
+  for now, and the retaliation gate is not the thing to change**: retaliation
+  needs anger at a person, that comes from being lied to or robbed, and over 32
+  worlds `TakeFrom` is chosen **0** times, `Trade` **0** times, and 29 things
+  are told in total. Lowering the gate would put the false positive back — a man
+  hitting his neighbour over a grudge he does not have.
+
+  **Why nobody steals**, instrumented rather than guessed: the theft branch sits
+  at the tail of an `or_else` chain and is reached 142 times in 120,000
+  agent-turns; on those 142 occasions somebody was within arm's reach **3**
+  times; and none of the 3 had anything worth taking. The surprise is that
+  people are *not* spread out — the nearest other person is on the **same tile
+  31.6% of the time** and within reach 64% of it. The branch is reached almost
+  only on the turns when somebody is off alone, which is exactly the turn on
+  which every other option has run out. So the defect is the branch's *position*,
+  not its threshold, and moving it is its own job — the comment above it records
+  that the last attempt to move a refusable branch up cost a settlement half its
+  winter store.
+
+  **What the tracing did find:** `find_nearest_social_target` returned the
+  nearest person **on the map**, with no distance limit at all, and neither
+  `socialising` nor `sharing_information` looked at where that person was. Two
+  men twelve tiles apart, each alone in a different wood, greeted one another,
+  exchanged news and gave one another presents. Fixed with one named reach,
+  `WITHIN_TALKING_DISTANCE`, tied to the reach at which you can see somebody
+  pick a thing up.
+
+  Measured, paired: **2,662→2,881, 2,399→2,285, 2,506→2,691** — mean +97 turns
+  but **one block of 32 worlds goes the other way**, so this is landed as a
+  correctness fix with the survival effect recorded as inconclusive, not claimed
+  as a win. `TakeFrom` and `Attack` are both still 0; #225 is *answered* rather
+  than fixed, and making theft reachable is filed on its own.
+  See ISSUES_FOUND.md #102
 - ✅ A man in a meadow with no stone, who knows how to knap a knife. The second
   link of the preparation cascade, and the residue the first one left. Turning a
   refused turn into *making* the tool only works while a step can be taken; past

@@ -5,11 +5,11 @@
 
 use serde::{Deserialize, Serialize};
 use crate::environment::{
-    seasons, Biome, BiomeType, Weather, WeatherGenerator, WeatherType, Season, SeasonalCalendar,
+    seasons, Biome, BiomeType, Weather, WeatherGenerator, Season, SeasonalCalendar,
 };
 use crate::agents::temperature::{Climate, Temperature};
 use crate::world::{Position, TerrainType};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Maps terrain types to biome types
 pub fn terrain_to_biome(terrain: TerrainType) -> BiomeType {
@@ -40,79 +40,6 @@ pub struct LightningStrike {
     pub caused_fire: bool,
 }
 
-/// Precipitation accumulation at a position
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PrecipitationAccumulation {
-    /// Snow depth in cm
-    pub snow_depth: f32,
-    /// Water accumulation (rain pooling)
-    pub water_level: f32,
-    /// Ground wetness (0.0-1.0)
-    pub ground_wetness: f32,
-}
-
-impl PrecipitationAccumulation {
-    /// Tick precipitation accumulation based on weather
-    pub fn tick(&mut self, weather: &Weather, temperature: f32) {
-        let intensity = weather.weather_type.precipitation_intensity();
-
-        match weather.weather_type {
-            WeatherType::LightSnow | WeatherType::Snow | WeatherType::Blizzard => {
-                // Snow accumulates if cold enough
-                if temperature < 0.0 {
-                    self.snow_depth += intensity * 0.5;
-                } else {
-                    // Snow melts
-                    self.snow_depth = (self.snow_depth - 0.1).max(0.0);
-                    self.water_level += self.snow_depth.min(0.1) * 0.5;
-                }
-            }
-            WeatherType::LightRain | WeatherType::Rain | WeatherType::HeavyRain
-            | WeatherType::Thunderstorm | WeatherType::Sleet => {
-                // Rain increases water and wetness
-                self.water_level += intensity * 0.2;
-                self.ground_wetness = (self.ground_wetness + intensity * 0.1).min(1.0);
-
-                // Rain melts snow faster
-                if self.snow_depth > 0.0 {
-                    self.snow_depth = (self.snow_depth - intensity * 0.3).max(0.0);
-                }
-            }
-            WeatherType::Hail => {
-                // Hail adds water but less than rain
-                self.water_level += intensity * 0.1;
-            }
-            _ => {
-                // Non-precipitation weather: evaporation and drying
-                self.water_level = (self.water_level - 0.02).max(0.0);
-                self.ground_wetness = (self.ground_wetness - 0.01).max(0.0);
-
-                // Snow sublimation in dry conditions
-                if temperature > 5.0 {
-                    self.snow_depth = (self.snow_depth - 0.05).max(0.0);
-                }
-            }
-        }
-
-        // Cap accumulation
-        self.snow_depth = self.snow_depth.min(200.0); // 2 meters max
-        self.water_level = self.water_level.min(50.0); // Prevent infinite flooding
-    }
-
-    /// Check if area is flooded
-    pub fn is_flooded(&self) -> bool {
-        self.water_level > 10.0
-    }
-
-    /// Get movement penalty from accumulation
-    pub fn movement_penalty(&self) -> f32 {
-        let snow_penalty = (self.snow_depth / 50.0).min(0.3);
-        let water_penalty = (self.water_level / 20.0).min(0.2);
-        let mud_penalty = self.ground_wetness * 0.1;
-
-        (1.0 - snow_penalty - water_penalty - mud_penalty).max(0.3)
-    }
-}
 
 /// Climate manager for the world
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,13 +56,29 @@ pub struct ClimateManager {
     /// Base climate for the world (influences all biomes)
     pub base_climate: Climate,
 
-    /// Biome data per position (cached for performance)
+    /// The biome under each kind of ground, as it stands today.
+    ///
+    /// A biome is a question about what kind of ground this is and what the
+    /// calendar says, and about nothing else - the position never entered the
+    /// calculation. Keying it by position meant one entry for every tile
+    /// anything had ever asked about, which on a hundred square kilometres is
+    /// a hundred and thirty thousand of them and a lookup per resource per
+    /// pass; and, worse, it meant the answer was frozen at the hour and the
+    /// day it was first asked, because nothing has ever called
+    /// `clear_biome_cache`. A wood in a world a year old still had the
+    /// temperature of the first morning in it. Only the weather modifier laid
+    /// over the top of it moved at all.
     #[serde(skip)]
-    biome_cache: HashMap<Position, Biome>,
+    biome_today: BTreeMap<BiomeType, Biome>,
 
-    /// Precipitation accumulation per region (chunked for performance)
+    /// What the calendar said when `biome_today` was worked out.
+    ///
+    /// Two representations of one fact, so they are checked against each
+    /// other on every read rather than trusted: when the hour or the day has
+    /// moved on, what is cached is thrown away and worked out again.
     #[serde(skip)]
-    precipitation_map: HashMap<(i32, i32), PrecipitationAccumulation>,
+    biome_as_of: Option<(f32, u32)>,
+
 
     /// Recent lightning strikes
     pub lightning_strikes: Vec<LightningStrike>,
@@ -169,8 +112,8 @@ impl ClimateManager {
             weather,
             weather_gen,
             base_climate: Climate::temperate(), // Default temperate
-            biome_cache: HashMap::new(),
-            precipitation_map: HashMap::new(),
+            biome_today: BTreeMap::new(),
+            biome_as_of: None,
             lightning_strikes: Vec::new(),
             current_tick: 0,
             cold_climate,
@@ -196,8 +139,8 @@ impl ClimateManager {
             weather,
             weather_gen,
             base_climate: Climate::temperate(),
-            biome_cache: HashMap::new(),
-            precipitation_map: HashMap::new(),
+            biome_today: BTreeMap::new(),
+            biome_as_of: None,
             lightning_strikes: Vec::new(),
             current_tick: 0,
             cold_climate,
@@ -206,11 +149,6 @@ impl ClimateManager {
         }
     }
 
-    /// Set dominant biome for weather generation
-    pub fn set_dominant_biome(&mut self, biome: BiomeType) {
-        self.dominant_biome = Some(biome);
-        self.weather_gen.set_biome(biome);
-    }
 
     /// Tick the climate system
     pub fn tick(&mut self) {
@@ -286,42 +224,29 @@ impl ClimateManager {
         }
     }
 
-    /// Get precipitation accumulation at a position (chunked by 10x10 regions)
-    pub fn get_precipitation_at(&mut self, pos: Position) -> &PrecipitationAccumulation {
-        let chunk = (pos.x / 10, pos.y / 10);
-        self.precipitation_map.entry(chunk).or_default()
-    }
 
-    /// Update precipitation accumulation at a position
-    pub fn update_precipitation_at(&mut self, pos: Position, temperature: f32) {
-        let chunk = (pos.x / 10, pos.y / 10);
-        let accumulation = self.precipitation_map.entry(chunk).or_default();
-        accumulation.tick(&self.weather, temperature);
-    }
 
-    /// Get weather forecast
-    pub fn get_forecast(&self, hours_ahead: u32) -> (WeatherType, f32) {
-        self.weather_gen.forecast(hours_ahead)
-    }
 
-    /// Check if there was a recent lightning strike near a position
-    pub fn recent_lightning_near(&self, pos: Position, radius: i32) -> Option<&LightningStrike> {
-        self.lightning_strikes.iter().find(|strike| {
-            let dx = (strike.position.x - pos.x).abs();
-            let dy = (strike.position.y - pos.y).abs();
-            dx <= radius && dy <= radius
-        })
-    }
 
     /// Get biome for a specific position
-    pub fn get_biome(&mut self, pos: Position, terrain: TerrainType) -> &Biome {
-        if !self.biome_cache.contains_key(&pos) {
-            let biome_type = terrain_to_biome(terrain);
+    ///
+    /// The position is what kind of ground it is and nothing else, so what
+    /// comes back is shared by every tile of that kind - see `biome_today`.
+    pub fn get_biome(&mut self, _pos: Position, terrain: TerrainType) -> &Biome {
+        let now = (self.calendar.time_of_day, self.calendar.day_of_year);
+        if self.biome_as_of != Some(now) {
+            self.biome_today.clear();
+            self.biome_as_of = Some(now);
+        }
+
+        let biome_type = terrain_to_biome(terrain);
+
+        if !self.biome_today.contains_key(&biome_type) {
             let mut biome = Biome::new(biome_type);
 
             // Update biome with current time and season
             biome.time_of_day = self.calendar.time_of_day;
-            biome.season = self.calendar.day_of_year as f32 / seasons::DAYS_PER_YEAR as f32;
+            biome.season = self.calendar.current_season();
             biome.update_climate(0.0); // Initial update
 
             // Apply climate modifiers AFTER update_climate (which overwrites temperature)
@@ -334,10 +259,10 @@ impl ClimateManager {
                 biome.current_climate.humidity = (biome.current_climate.humidity + 0.3).min(1.0);
             }
 
-            self.biome_cache.insert(pos, biome);
+            self.biome_today.insert(biome_type, biome);
         }
 
-        self.biome_cache.get(&pos).unwrap()
+        self.biome_today.get(&biome_type).unwrap()
     }
 
     /// Get effective temperature at a position
@@ -406,41 +331,15 @@ impl ClimateManager {
         self.weather.movement_modifier()
     }
 
-    /// Check if shelter is available at a position
-    ///
-    /// Shelter can be provided by:
-    /// - Forest: Dense tree cover provides moderate protection from elements
-    /// - Mountain: Natural cave formations and rocky overhangs
-    /// - Hills: Rocky outcrops can provide limited shelter
-    /// - Buildings at the position (checked by caller via World)
-    pub fn has_shelter_at(&self, _pos: Position, terrain: TerrainType) -> bool {
-        match terrain {
-            TerrainType::Forest => true,   // Dense tree cover provides good shelter
-            TerrainType::Mountain => true, // Caves and overhangs in mountainous terrain
-            TerrainType::Hills => true,    // Rocky outcrops provide some shelter
-            _ => false,                    // Other terrains need constructed shelter
-        }
-    }
 
-    /// Get the shelter quality at a position (0.0 = no shelter, 1.0 = full shelter)
-    ///
-    /// This affects how well the agent is protected from weather effects.
-    pub fn shelter_quality(&self, terrain: TerrainType, has_building: bool) -> f32 {
-        if has_building {
-            return 1.0; // Buildings provide full shelter
-        }
-
-        match terrain {
-            TerrainType::Mountain => 0.8, // Caves provide excellent natural shelter
-            TerrainType::Forest => 0.6,   // Trees provide moderate shelter
-            TerrainType::Hills => 0.4,    // Outcrops provide limited shelter
-            _ => 0.0,                     // No natural shelter
-        }
-    }
 
     /// Clear biome cache (call when world terrain changes)
+    ///
+    /// The calendar clears it of its own accord every time the hour moves,
+    /// so this is only for a change to the ground itself.
     pub fn clear_biome_cache(&mut self) {
-        self.biome_cache.clear();
+        self.biome_today.clear();
+        self.biome_as_of = None;
     }
 }
 
@@ -539,11 +438,52 @@ mod tests {
 
         // First access creates cache entry
         let _ = manager.get_biome(pos, TerrainType::Forest);
-        assert!(manager.biome_cache.contains_key(&pos));
+        assert!(manager.biome_today.contains_key(&BiomeType::TemperateForest));
 
         // Clear cache
         manager.clear_biome_cache();
-        assert!(manager.biome_cache.is_empty());
+        assert!(manager.biome_today.is_empty());
+    }
+
+    /// Two woods a mile apart are the same wood as far as this is concerned.
+    ///
+    /// What is cached is one entry for each kind of ground, not one for each
+    /// tile anybody has ever stood on: asking about a thousand different
+    /// patches of forest leaves one thing in the cache.
+    #[test]
+    fn the_biome_is_a_question_about_ground_not_about_a_coordinate() {
+        let mut manager = ClimateManager::new(false, false);
+
+        for x in 0..1000 {
+            let _ = manager.get_biome(Position::new(x, 0), TerrainType::Forest);
+        }
+
+        assert_eq!(manager.biome_today.len(), 1);
+    }
+
+    /// And it is not still the first morning of the world at midwinter.
+    ///
+    /// Nothing ever called `clear_biome_cache`, so what was worked out on the
+    /// first tick anything asked was the answer for ever after - a wood in a
+    /// world a year old still had the temperature of the day it was made in.
+    #[test]
+    fn the_ground_gets_colder_as_the_year_turns() {
+        let mut spring = ClimateManager::new(false, false);
+        let here = Position::new(5, 5);
+        let in_spring = spring.get_temperature(here, TerrainType::Plains);
+
+        // Ask now, so that anything cached is cached; then run on to winter
+        // and ask again.
+        let mut winter = spring.clone();
+        while winter.calendar.current_season() != Season::Winter {
+            winter.tick();
+        }
+        let in_winter = winter.get_temperature(here, TerrainType::Plains);
+
+        assert!(
+            in_winter < in_spring,
+            "spring {in_spring:.1}, winter {in_winter:.1} - the year turned and the ground did not"
+        );
     }
 
     #[test]

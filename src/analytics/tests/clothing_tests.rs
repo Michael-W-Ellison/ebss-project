@@ -265,6 +265,14 @@ fn a_cold_agent_ends_up_dressed() {
     let mut simulation = Simulation::new(world, population);
     simulation.population.agents[0].inventory.max_weight = 500.0;
 
+    // Seeded here rather than at the top, because building the world and the
+    // agent draws: seeding first and then constructing them means the run
+    // still moves whenever anything upstream changes how many numbers the
+    // fixture takes. Whether a beginner ruins his first four bundles of flax
+    // is a coin, and this test is about whether a cold man dresses himself.
+    // See ISSUES_FOUND.md #132.
+    crate::core::dice::seed(9_140);
+
     // Flax both in the pack and growing next door. A random world does not
     // always let an agent reach the patch it can see - it may be across water
     // - and this test is about what an agent does with material, not about
@@ -280,6 +288,12 @@ fn a_cold_agent_ends_up_dressed() {
     // which recomputes it from the climate before anyone decides anything.
     simulation.population.agents[0].body_temperature.ideal = 45.0;
 
+    // Fifty days, and it has to stay fifty: a lone man kept permanently
+    // freezing does not live two hundred, so widening the window trades a
+    // coin-flip on whether he dresses for a certainty that he dies. This
+    // test is marginal by construction and is one of the standing failures -
+    // it is about whether the clothing chain can be reached at all, and what
+    // it actually measures is how many other errands a world gives a man.
     for _ in 0..600 {
         simulation.tick();
 

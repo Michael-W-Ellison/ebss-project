@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::world::{Position, Resource, ResourceType};
 
 /// Types of buildings
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum BuildingType {
     // Shelter progression
     /// Hides over a frame of poles. The first thing a people who have just
@@ -426,19 +426,6 @@ impl BuildingType {
         }
     }
 
-    /// Check if this is a production building
-    pub fn is_production(&self) -> bool {
-        matches!(
-            self,
-            BuildingType::Workshop | BuildingType::Forge | BuildingType::Smithy |
-            BuildingType::Bakery | BuildingType::WeaverHut | BuildingType::PotteryKiln |
-            BuildingType::Tannery | BuildingType::Mill | BuildingType::Butchery |
-            BuildingType::Brewery | BuildingType::Dairy | BuildingType::Glassworks |
-            BuildingType::Dyeworks | BuildingType::Ropewalk | BuildingType::Brickyard |
-            BuildingType::PaperMill | BuildingType::TailorShop | BuildingType::CobblerShop |
-            BuildingType::BarberShop | BuildingType::Scriptorium
-        )
-    }
 
     /// Check if this is a resource building
     pub fn is_resource(&self) -> bool {
@@ -527,10 +514,6 @@ impl BuildingType {
         matches!(self, BuildingType::Shrine | BuildingType::Temple)
     }
 
-    /// Check if this is a civic building
-    pub fn is_civic(&self) -> bool {
-        matches!(self, BuildingType::TownCenter | BuildingType::TownStorage | BuildingType::GuardPost)
-    }
 
     /// Get the description of what this building enables
     pub fn functionality_description(&self) -> &'static str {
@@ -711,10 +694,6 @@ impl BuildingType {
         }
     }
 
-    /// Check if this is a defensive building (provides protection)
-    pub fn is_defensive(&self) -> bool {
-        matches!(self, BuildingType::GuardPost)
-    }
 
     /// Get the defense bonus this building provides to nearby agents
     /// Returns a multiplier (1.0 = no bonus, 1.2 = 20% defense bonus)
@@ -735,10 +714,6 @@ impl BuildingType {
         }
     }
 
-    /// Check if this is a medical building (provides healing)
-    pub fn is_medical(&self) -> bool {
-        matches!(self, BuildingType::MedicalBuilding | BuildingType::BarberShop)
-    }
 
     /// Get the healing rate bonus this building provides
     /// Returns a multiplier (1.0 = normal healing, 2.0 = double healing)
@@ -759,38 +734,6 @@ impl BuildingType {
         }
     }
 
-    /// Get the productivity bonus for working in this building
-    /// Returns a multiplier for crafting/production speed
-    pub fn productivity_bonus(&self) -> f32 {
-        match self {
-            // Advanced production buildings give significant bonuses
-            BuildingType::Smithy => 1.4, // 40% faster metalworking
-            BuildingType::Forge => 1.25, // 25% faster smelting
-            BuildingType::Workshop => 1.2, // 20% faster crafting
-            // Specialized buildings give moderate bonuses for their specialty
-            BuildingType::Bakery => 1.3, // 30% faster cooking
-            BuildingType::Butchery => 1.25,
-            BuildingType::Mill => 1.3,
-            BuildingType::Brewery => 1.25,
-            BuildingType::Dairy => 1.25,
-            BuildingType::WeaverHut => 1.3, // 30% faster textile work
-            BuildingType::TailorShop => 1.35,
-            BuildingType::Tannery => 1.3,
-            BuildingType::PotteryKiln => 1.25,
-            BuildingType::Brickyard => 1.25,
-            BuildingType::Glassworks => 1.3,
-            BuildingType::Dyeworks => 1.2,
-            BuildingType::Ropewalk => 1.2,
-            BuildingType::PaperMill => 1.25,
-            BuildingType::CobblerShop => 1.3,
-            BuildingType::Scriptorium => 1.3,
-            // Farms give gathering bonus
-            BuildingType::Farm => 1.2,
-            BuildingType::AnimalPen => 1.15,
-            // No bonus for non-production buildings
-            _ => 1.0,
-        }
-    }
 
     /// Get the morale/happiness bonus for being near this building
     /// Returns happiness amount added per tick when nearby
@@ -827,15 +770,6 @@ impl BuildingType {
         }
     }
 
-    /// Get the storage capacity bonus this building provides
-    pub fn storage_capacity(&self) -> u32 {
-        match self {
-            BuildingType::TownStorage => 1000,
-            BuildingType::Storehouse => 500,
-            BuildingType::TownCenter => 200, // Some storage
-            _ => 0,
-        }
-    }
 }
 
 /// Building construction state
@@ -966,32 +900,8 @@ impl Building {
         }
     }
 
-    /// Assign a worker to this building
-    pub fn assign_worker(&mut self, worker_id: uuid::Uuid) -> bool {
-        if let BuildingState::UnderConstruction { workers, .. } = &mut self.state {
-            if !workers.contains(&worker_id) {
-                workers.push(worker_id);
-                return true;
-            }
-        }
-        false
-    }
 
-    /// Remove a worker from this building
-    pub fn remove_worker(&mut self, worker_id: uuid::Uuid) {
-        if let BuildingState::UnderConstruction { workers, .. } = &mut self.state {
-            workers.retain(|id| id != &worker_id);
-        }
-    }
 
-    /// Get current workers
-    pub fn get_workers(&self) -> Vec<uuid::Uuid> {
-        if let BuildingState::UnderConstruction { workers, .. } = &self.state {
-            workers.clone()
-        } else {
-            Vec::new()
-        }
-    }
 
     /// Advance construction progress (worker performs work)
     /// Returns true if construction completed
@@ -1031,36 +941,6 @@ impl Building {
         }
     }
 
-    /// Get resource delivery progress (0.0 to 1.0)
-    pub fn resource_progress(&self) -> f32 {
-        if let BuildingState::UnderConstruction { resources_delivered, .. } = &self.state {
-            let requirements = self.building_type.requirements();
-            if requirements.is_empty() {
-                return 1.0;
-            }
-
-            let mut total_required = 0;
-            let mut total_delivered = 0;
-
-            for req in requirements {
-                total_required += req.amount;
-                let delivered = resources_delivered
-                    .iter()
-                    .filter(|r| r.resource_type == req.resource_type)
-                    .map(|r| r.amount)
-                    .sum::<u32>();
-                total_delivered += delivered;
-            }
-
-            if total_required == 0 {
-                1.0
-            } else {
-                (total_delivered as f32 / total_required as f32).min(1.0)
-            }
-        } else {
-            1.0
-        }
-    }
 
     pub fn is_completed(&self) -> bool {
         matches!(self.state, BuildingState::Completed)
@@ -1099,37 +979,7 @@ impl Building {
         self.is_completed() && self.building_type.can_upgrade_to().is_some()
     }
 
-    /// Start upgrading this building to the next tier
-    /// Returns the upgraded building type if successful
-    pub fn start_upgrade(&mut self) -> Option<BuildingType> {
-        if !self.can_upgrade() {
-            return None;
-        }
 
-        if let Some(upgraded_type) = self.building_type.can_upgrade_to() {
-            // Convert to under construction with the upgraded type
-            self.building_type = upgraded_type;
-            self.state = BuildingState::UnderConstruction {
-                progress: 0,
-                resources_delivered: Vec::new(),
-                workers: Vec::new(),
-            };
-            Some(upgraded_type)
-        } else {
-            None
-        }
-    }
-
-    /// Get upgrade information
-    pub fn upgrade_info(&self) -> Option<(BuildingType, Vec<Resource>, u32)> {
-        if let Some(upgraded_type) = self.building_type.can_upgrade_to() {
-            let cost = self.building_type.upgrade_cost();
-            let time = upgraded_type.construction_time();
-            Some((upgraded_type, cost, time))
-        } else {
-            None
-        }
-    }
 
     /// Process building tick: decay and production
     pub fn tick(&mut self) {
@@ -1239,9 +1089,9 @@ mod tests {
         assert!(building.can_house_agent());
         assert_eq!(building.building_type.capacity(), 2);
 
-        let agent1 = uuid::Uuid::new_v4();
-        let agent2 = uuid::Uuid::new_v4();
-        let agent3 = uuid::Uuid::new_v4();
+        let agent1 = crate::core::dice::name();
+        let agent2 = crate::core::dice::name();
+        let agent3 = crate::core::dice::name();
 
         assert!(building.add_occupant(agent1));
         assert!(building.add_occupant(agent2));

@@ -5,7 +5,7 @@
 //! functionality like storage, crafting stations, or shelter.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Types of structures that can be built
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -89,7 +89,7 @@ pub struct Structure {
     pub is_complete: bool,
 
     // Custom properties
-    pub properties: HashMap<String, String>,
+    pub properties: BTreeMap<String, String>,
 }
 
 impl Structure {
@@ -117,7 +117,7 @@ impl Structure {
             max_health,
             build_progress: 0.0,
             is_complete: false,
-            properties: HashMap::new(),
+            properties: BTreeMap::new(),
         }
     }
 
@@ -204,8 +204,8 @@ impl Structure {
     }
 
     /// Get required materials for building
-    pub fn build_requirements(&self) -> HashMap<String, u32> {
-        let mut requirements = HashMap::new();
+    pub fn build_requirements(&self) -> BTreeMap<String, u32> {
+        let mut requirements = BTreeMap::new();
 
         let material_multiplier = self.level.as_u8() as u32;
 
@@ -244,31 +244,20 @@ impl Structure {
         requirements
     }
 
-    /// Get upgrade requirements
-    pub fn upgrade_requirements(&self) -> HashMap<String, u32> {
-        if let Some(next_level) = self.level.next_level() {
-            // Create a temporary structure at next level to get its requirements
-            let mut temp = self.clone();
-            temp.level = next_level;
-            temp.build_requirements()
-        } else {
-            HashMap::new()
-        }
-    }
 }
 
 /// Manager for all structures in the world
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructureRegistry {
-    structures: HashMap<String, Structure>,
-    position_index: HashMap<(i32, i32, i32), String>,
+    structures: BTreeMap<String, Structure>,
+    position_index: BTreeMap<(i32, i32, i32), String>,
 }
 
 impl StructureRegistry {
     pub fn new() -> Self {
         Self {
-            structures: HashMap::new(),
-            position_index: HashMap::new(),
+            structures: BTreeMap::new(),
+            position_index: BTreeMap::new(),
         }
     }
 
@@ -286,25 +275,12 @@ impl StructureRegistry {
         true
     }
 
-    /// Remove a structure
-    pub fn remove_structure(&mut self, id: &str) -> Option<Structure> {
-        if let Some(structure) = self.structures.remove(id) {
-            self.position_index.remove(&structure.position);
-            Some(structure)
-        } else {
-            None
-        }
-    }
 
     /// Get structure by ID
     pub fn get_structure(&self, id: &str) -> Option<&Structure> {
         self.structures.get(id)
     }
 
-    /// Get mutable structure by ID
-    pub fn get_structure_mut(&mut self, id: &str) -> Option<&mut Structure> {
-        self.structures.get_mut(id)
-    }
 
     /// Get structure at position
     pub fn get_structure_at(&self, position: (i32, i32, i32)) -> Option<&Structure> {
@@ -312,21 +288,7 @@ impl StructureRegistry {
             .and_then(|id| self.structures.get(id))
     }
 
-    /// Get mutable structure at position
-    pub fn get_structure_at_mut(&mut self, position: (i32, i32, i32)) -> Option<&mut Structure> {
-        if let Some(id) = self.position_index.get(&position).cloned() {
-            self.structures.get_mut(&id)
-        } else {
-            None
-        }
-    }
 
-    /// Get all structures of a type
-    pub fn get_structures_by_type(&self, structure_type: StructureType) -> Vec<&Structure> {
-        self.structures.values()
-            .filter(|s| s.structure_type == structure_type)
-            .collect()
-    }
 
     /// Get all water storage structures
     pub fn get_water_storage_structures(&self) -> Vec<&Structure> {
@@ -335,23 +297,7 @@ impl StructureRegistry {
             .collect()
     }
 
-    /// Get all structures within range of position
-    pub fn get_structures_in_range(&self, position: (i32, i32, i32), range: f32) -> Vec<&Structure> {
-        self.structures.values()
-            .filter(|s| {
-                let dx = (s.position.0 - position.0) as f32;
-                let dy = (s.position.1 - position.1) as f32;
-                let dz = (s.position.2 - position.2) as f32;
-                let distance = (dx * dx + dy * dy + dz * dz).sqrt();
-                distance <= range
-            })
-            .collect()
-    }
 
-    /// Get all structures
-    pub fn get_all_structures(&self) -> &HashMap<String, Structure> {
-        &self.structures
-    }
 
     /// Get total water stored in all structures
     pub fn get_total_water(&self) -> f32 {

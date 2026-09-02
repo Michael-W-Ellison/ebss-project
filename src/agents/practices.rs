@@ -13,12 +13,12 @@
 //! something too, though less than doing it yourself - which is the difference
 //! between being told a thing works and finding out.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
 /// A way of working that has to be discovered rather than known
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum Practice {
     /// Carrying spoiled food, bones and refuse onto a field, on the theory
     /// that it does the ground good
@@ -38,9 +38,9 @@ pub enum Practice {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Practices {
     /// How sure the agent is that a practice is worth the trouble, 0.0 to 1.0
-    confidence: HashMap<Practice, f32>,
+    confidence: BTreeMap<Practice, f32>,
     /// How many times it has tried it
-    attempts: HashMap<Practice, u32>,
+    attempts: BTreeMap<Practice, u32>,
 }
 
 impl Practices {
@@ -146,12 +146,20 @@ impl Practices {
 /// rabbit got away" but "going after animals does not work out for me". The
 /// grain has to be coarse or nothing ever accumulates enough instances to be
 /// a pattern.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum Undertaking {
     /// Going after an animal
     Hunting,
     /// Standing in a river after fish
     Fishing,
+    /// Setting a line of snares and going round it.
+    ///
+    /// Kept apart from `Hunting` on purpose, and it is the same argument that
+    /// keeps `Fleeing` apart from `Fighting`: they are not the same lesson. A
+    /// man who cannot get within a spear's throw of a deer may still be the
+    /// best trapper in the settlement, and folding the two together would
+    /// teach him he cannot feed himself.
+    Trapping,
     /// Standing your ground against something
     Fighting,
     /// Getting away from something. Not the same thing as fighting it, and
@@ -188,29 +196,29 @@ pub enum Undertaking {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Lessons {
     /// Running belief that this kind of thing works out, 0.0 to 1.0
-    belief: HashMap<Undertaking, f32>,
+    belief: BTreeMap<Undertaking, f32>,
     /// How many times it has been tried
-    attempts: HashMap<Undertaking, u32>,
+    attempts: BTreeMap<Undertaking, u32>,
     /// How many of those went well
-    successes: HashMap<Undertaking, u32>,
+    successes: BTreeMap<Undertaking, u32>,
     /// And the same record kept on each particular thing attempted, which is
     /// what an agent actually decides on - see `record_particular`
     #[serde(default)]
-    particular: HashMap<String, f32>,
+    particular: BTreeMap<String, f32>,
     #[serde(default)]
-    particular_attempts: HashMap<String, u32>,
+    particular_attempts: BTreeMap<String, u32>,
     /// How many of those went well. The running belief above is an opinion,
     /// slow to move and asymmetric on purpose; this is the plain count, and a
     /// plain count is what one circumstance has to be compared against
     /// another with.
     #[serde(default)]
-    particular_successes: HashMap<String, u32>,
+    particular_successes: BTreeMap<String, u32>,
     /// And the same count kept separately for each circumstance the thing was
     /// attempted under - see `Circumstance`. Nested rather than keyed by a
     /// pair so that it survives a round trip through a format whose map keys
     /// are strings.
     #[serde(default)]
-    under: HashMap<String, HashMap<Circumstance, Tally>>,
+    under: BTreeMap<String, BTreeMap<Circumstance, Tally>>,
 }
 
 impl Lessons {
@@ -318,21 +326,7 @@ impl Lessons {
     /// because the first few goes at anything are spent getting into position.
     const A_FAIR_GO: u32 = 12;
 
-    pub fn how_likely_to_try(&self, undertaking: Undertaking) -> f32 {
-        // The benefit of the doubt, until there is a record worth reading
-        if self.attempts(undertaking) < Self::ENOUGH_TO_JUDGE {
-            return Self::NEVER_QUITE_CERTAIN;
-        }
 
-        self.belief(undertaking)
-            .clamp(Self::NEVER_QUITE_GIVES_UP, Self::NEVER_QUITE_CERTAIN)
-    }
-
-    /// Whether this agent will try it this time.
-    pub fn will_try_again(&self, undertaking: Undertaking) -> bool {
-        use rand::Rng;
-        crate::core::dice::roll().gen_bool(self.how_likely_to_try(undertaking) as f64)
-    }
 
 
     /// What an agent has found out about one particular thing it does.
@@ -576,7 +570,7 @@ impl Lessons {
 /// failing. Deliberately few and deliberately coarse: a finer set would be a
 /// truer description of the afternoon and no agent would ever gather enough
 /// instances of any one of them to notice anything.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum Circumstance {
     /// Nothing coming out of the sky and the sun on it
     ClearSky,

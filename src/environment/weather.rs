@@ -439,10 +439,6 @@ impl WeatherGenerator {
         }
     }
 
-    /// Set current season
-    pub fn set_season(&mut self, season: Season) {
-        self.season = season;
-    }
 
     /// Predict upcoming weather (returns likely next weather and confidence)
     pub fn forecast(&self, hours_ahead: u32) -> (WeatherType, f32) {

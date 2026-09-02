@@ -246,7 +246,7 @@ fn render_agent_drives(ui: &mut Ui, drives: &[DriveData]) {
     }
 }
 
-fn render_agent_skills(ui: &mut Ui, skills: &std::collections::HashMap<String, SkillData>) {
+fn render_agent_skills(ui: &mut Ui, skills: &std::collections::BTreeMap<String, SkillData>) {
     ui.heading("Skills");
     ui.add_space(5.0);
 

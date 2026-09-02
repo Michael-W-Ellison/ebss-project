@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::core::traits::Trait;
 
 /// Type of information being shared
@@ -102,7 +102,7 @@ pub struct Information {
 impl Information {
     pub fn new(info_type: InformationType, source: Uuid, ground_truth: bool, timestamp: u64) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             info_type,
             original_source: source,
             reliability: if ground_truth { 1.0 } else { 0.5 },
@@ -152,7 +152,7 @@ impl Information {
         };
 
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             info_type: new_info_type,
             original_source: self.original_source,
             reliability: self.reliability * 0.7, // Distorted info is less reliable
@@ -241,37 +241,6 @@ impl Information {
         }
     }
 
-    /// Distort information based on trait with neighbor context
-    ///
-    /// This allows more realistic manipulative distortions that can
-    /// blame specific known individuals.
-    pub fn distort_by_trait_with_neighbors(
-        &self,
-        trait_type: Trait,
-        distorter: Uuid,
-        neighbors: &[Uuid],
-    ) -> Self {
-        let (new_info_type, distortion_type) = match trait_type {
-            Trait::Manipulative | Trait::Manipulator => {
-                self.apply_manipulative_distortion_with_neighbors(neighbors)
-            }
-            _ => return self.distort(trait_type, distorter),
-        };
-
-        Self {
-            id: Uuid::new_v4(),
-            info_type: new_info_type,
-            original_source: self.original_source,
-            reliability: self.reliability * 0.5, // Fabrications are very unreliable
-            ground_truth: false,
-            distortion: Some(InformationDistortion {
-                distortion_type,
-                distorter,
-                original_info: self.id,
-            }),
-            timestamp: self.timestamp,
-        }
-    }
 
     /// Apply gossip distortion (dramatization for entertainment)
     fn apply_gossip_distortion(&self) -> (InformationType, DistortionType) {
@@ -723,19 +692,19 @@ impl TrustRating {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnowledgeBase {
     /// All information this agent has heard
-    pub known_information: HashMap<Uuid, Information>,
+    pub known_information: BTreeMap<Uuid, Information>,
     /// What this agent believes
     pub beliefs: Vec<Belief>,
     /// Trust ratings for other agents
-    pub trust_ratings: HashMap<Uuid, TrustRating>,
+    pub trust_ratings: BTreeMap<Uuid, TrustRating>,
 }
 
 impl KnowledgeBase {
     pub fn new() -> Self {
         Self {
-            known_information: HashMap::new(),
+            known_information: BTreeMap::new(),
             beliefs: Vec::new(),
-            trust_ratings: HashMap::new(),
+            trust_ratings: BTreeMap::new(),
         }
     }
 
@@ -1051,7 +1020,7 @@ mod tests {
 
     #[test]
     fn test_information_creation() {
-        let source = Uuid::new_v4();
+        let source = crate::core::dice::name();
         let info = Information::new(
             InformationType::ResourceLocation {
                 resource: "wood".to_string(),
@@ -1069,8 +1038,8 @@ mod tests {
 
     #[test]
     fn test_imaginative_distortion() {
-        let source = Uuid::new_v4();
-        let observer = Uuid::new_v4();
+        let source = crate::core::dice::name();
+        let observer = crate::core::dice::name();
         let info = Information::new(
             InformationType::Observation {
                 observer,
@@ -1082,7 +1051,7 @@ mod tests {
             0,
         );
 
-        let distorter = Uuid::new_v4();
+        let distorter = crate::core::dice::name();
         let distorted = info.distort(Trait::Imaginative, distorter);
 
         assert!(!distorted.ground_truth);
@@ -1096,8 +1065,8 @@ mod tests {
 
     #[test]
     fn test_trust_rating_update() {
-        let truster = Uuid::new_v4();
-        let trustee = Uuid::new_v4();
+        let truster = crate::core::dice::name();
+        let trustee = crate::core::dice::name();
         let mut trust = TrustRating::new(truster, trustee);
 
         assert_eq!(trust.trust, 0.5);
@@ -1114,8 +1083,8 @@ mod tests {
     #[test]
     fn test_knowledge_base_receive() {
         let mut kb = KnowledgeBase::new();
-        let source = Uuid::new_v4();
-        let receiver = Uuid::new_v4();
+        let source = crate::core::dice::name();
+        let receiver = crate::core::dice::name();
         let traits = super::super::TraitSet::new();
 
         let info = Information::new(
@@ -1138,15 +1107,15 @@ mod tests {
     #[test]
     fn test_belief_confidence() {
         let mut kb = KnowledgeBase::new();
-        let source = Uuid::new_v4();
-        let receiver = Uuid::new_v4();
+        let source = crate::core::dice::name();
+        let receiver = crate::core::dice::name();
 
         let mut traits = super::super::TraitSet::new();
         traits.add_trait(Trait::Trusting); // +0.3 trust modifier
 
         let info = Information::new(
             InformationType::Death {
-                agent: Uuid::new_v4(),
+                agent: crate::core::dice::name(),
                 cause: "bear".to_string(),
             },
             source,
@@ -1164,8 +1133,8 @@ mod tests {
     #[test]
     fn test_trust_affects_belief() {
         let mut kb = KnowledgeBase::new();
-        let source = Uuid::new_v4();
-        let receiver = Uuid::new_v4();
+        let source = crate::core::dice::name();
+        let receiver = crate::core::dice::name();
         let traits = super::super::TraitSet::new();
 
         // Establish low trust
@@ -1176,7 +1145,7 @@ mod tests {
         let info = Information::new(
             InformationType::Accusation {
                 accuser: source,
-                accused: Uuid::new_v4(),
+                accused: crate::core::dice::name(),
                 crime: "theft".to_string(),
             },
             source,
@@ -1194,8 +1163,8 @@ mod tests {
     #[test]
     fn test_verify_information() {
         let mut kb = KnowledgeBase::new();
-        let source = Uuid::new_v4();
-        let receiver = Uuid::new_v4();
+        let source = crate::core::dice::name();
+        let receiver = crate::core::dice::name();
         let traits = super::super::TraitSet::new();
 
         let info = Information::new(

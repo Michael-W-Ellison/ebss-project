@@ -7,7 +7,7 @@ use crate::gui::events::{SimulationEvent, SimulationEventType, DeathCause};
 #[cfg(not(feature = "gui"))]
 use crate::agents::population::gui_stubs::{SimulationEvent, SimulationEventType, DeathCause};
 use uuid::Uuid;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[cfg(not(feature = "gui"))]
 mod gui_stubs {
@@ -61,7 +61,7 @@ mod gui_stubs {
     impl SimulationEvent {
         pub fn new(tick: u32, event_type: SimulationEventType, position: Option<(i32, i32)>) -> Self {
             Self {
-                id: Uuid::new_v4(),
+                id: crate::core::dice::name(),
                 tick,
                 event_type,
                 position,
@@ -97,7 +97,7 @@ pub struct PopulationStats {
     /// causes of death were classified for a GUI timeline and then thrown
     /// away. A count of the dead by cause, and of the living who could not
     /// breed and why, is one hash lookup on paths that run rarely.
-    pub how_it_went: std::collections::HashMap<String, u64>,
+    pub how_it_went: std::collections::BTreeMap<String, u64>,
 }
 
 /// Configuration for population behavior
@@ -109,6 +109,21 @@ pub struct PopulationConfig {
     pub abandonment_unhappy_duration: u32,
     /// Probability per tick that an unhappy agent will leave
     pub abandonment_probability: f32,
+    /// Whether anybody in this population ever dies of old age.
+    ///
+    /// True in an ordinary run: the specification says "Age 70: Death from old
+    /// age" and the model obeys it. Set false to take the seventieth year off
+    /// the board entirely, so that a long run measures the food economy and
+    /// nothing else - a settlement that empties has then emptied for a reason
+    /// worth reading.
+    ///
+    /// It is worth saying plainly that at present this changes nothing: over
+    /// sixteen worlds of a full year, every death in the model was hunger or
+    /// thirst and **not one was old age**, because founders are twenty to
+    /// forty and nobody has ever lived long enough to reach seventy. This is
+    /// insurance against a confound in multi-year runs, not a fix for
+    /// anything. See ISSUES #113.
+    pub nobody_dies_of_old_age: bool,
 }
 
 impl Default for PopulationConfig {
@@ -117,6 +132,7 @@ impl Default for PopulationConfig {
             abandonment_happiness_threshold: -0.3, // Leave if happiness below -0.3
             abandonment_unhappy_duration: 1000,    // Must be unhappy for 1000 ticks
             abandonment_probability: 0.01,         // 1% chance per tick when eligible
+            nobody_dies_of_old_age: false,
         }
     }
 }
@@ -125,9 +141,9 @@ pub struct Population {
     pub agents: Vec<Agent>,
     pub stats: PopulationStats,
     pub mate_criteria: MateSelectionCriteria,
-    pub reproduction_cooldown: HashMap<Uuid, u32>,
+    pub reproduction_cooldown: BTreeMap<Uuid, u32>,
     pub config: PopulationConfig,
-    pub unhappiness_tracker: HashMap<Uuid, u32>, // Track how long agents have been unhappy
+    pub unhappiness_tracker: BTreeMap<Uuid, u32>, // Track how long agents have been unhappy
     pub current_tick: u32, // Current simulation tick for survival mechanics
     pub shared_knowledge: SharedKnowledge, // Shared resource/world information between agents
     pub technology_registry: TechnologyRegistry, // Global technology discovery tracking
@@ -151,9 +167,9 @@ impl Population {
             agents: Vec::new(),
             stats: PopulationStats::default(),
             mate_criteria: MateSelectionCriteria::default(),
-            reproduction_cooldown: HashMap::new(),
+            reproduction_cooldown: BTreeMap::new(),
             config: PopulationConfig::default(),
-            unhappiness_tracker: HashMap::new(),
+            unhappiness_tracker: BTreeMap::new(),
             current_tick: 0,
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
@@ -172,9 +188,9 @@ impl Population {
             agents: Vec::new(),
             stats: PopulationStats::default(),
             mate_criteria: MateSelectionCriteria::default(),
-            reproduction_cooldown: HashMap::new(),
+            reproduction_cooldown: BTreeMap::new(),
             config,
-            unhappiness_tracker: HashMap::new(),
+            unhappiness_tracker: BTreeMap::new(),
             current_tick: 0,
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
@@ -323,8 +339,23 @@ impl Population {
         // everything else - an agent that cannot make an axe stops trying to
         // quite so often.
 
+        self.let_this_one_live_forever_if_asked(&mut agent);
+
         self.agents.push(agent);
         self.stats.current_population = self.agents.len();
+    }
+
+    /// Take the seventieth year off the board for this one, if the population
+    /// was configured that way.
+    ///
+    /// Applied at both ends of the only two ways into a population - spawned
+    /// as a founder, and born - because a switch honoured in one of them is a
+    /// switch that works until the first birth. See
+    /// `PopulationConfig::nobody_dies_of_old_age`.
+    fn let_this_one_live_forever_if_asked(&self, agent: &mut Agent) {
+        if self.config.nobody_dies_of_old_age {
+            agent.state.max_age = u32::MAX;
+        }
     }
 
     /// Get current population size (alive agents only)
@@ -543,7 +574,7 @@ impl Population {
     /// Relationships fade over time if agents don't spend time together.
     fn decay_relationships(&mut self) {
         // First, collect agent positions to avoid borrowing issues
-        let agent_positions: std::collections::HashMap<Uuid, (i32, i32, i32)> =
+        let agent_positions: std::collections::BTreeMap<Uuid, (i32, i32, i32)> =
             self.agents.iter()
                 .map(|a| (a.id, a.state.position))
                 .collect();
@@ -1084,19 +1115,33 @@ impl Population {
                         .unwrap_or(false);
 
                     if drive1 && drive2 {
-                        // Determine male/female for impregnation
-                        use crate::agents::gender::Gender;
-                        let (male_idx, female_idx) = match (agent1.gender, agent2.gender) {
-                            (Gender::Male, Gender::Female) => (idx1, idx2),
-                            (Gender::Female, Gender::Male) => (idx2, idx1),
-                            _ => continue, // Same-sex pairs can't reproduce
+                        // Which of the two carries it.
+                        //
+                        // There is no gender in this model - "agents are
+                        // gender neutral; there are no male/female agents,
+                        // merely child and adult agents" - so this is not a
+                        // property of either of them and something has to
+                        // decide. The lower id, which is a coin that always
+                        // lands the same way for the same pair: a settlement
+                        // that fails to conceive on a Tuesday does not get a
+                        // second roll on the Wednesday by swapping who is
+                        // carrying.
+                        //
+                        // What this replaces refused the pair outright unless
+                        // one was male and one female, which threw away about
+                        // half of every candidate pairing in a model that
+                        // manages two births in 308,000 turns of action.
+                        let (carrier_idx, other_idx) = if agent1.id <= agent2.id {
+                            (idx1, idx2)
+                        } else {
+                            (idx2, idx1)
                         };
 
-                        let male = &self.agents[male_idx];
-                        let female = &self.agents[female_idx];
+                        let carrier = &self.agents[carrier_idx];
+                        let other = &self.agents[other_idx];
 
                         // Try to impregnate - this uses proper pregnancy system
-                        let got = attempt_impregnation(male, female, self.current_tick);
+                        let got = attempt_impregnation(carrier, other, self.current_tick);
                         *self
                             .stats
                             .how_it_went
@@ -1107,12 +1152,12 @@ impl Population {
                             .or_insert(0) += 1;
 
                         if let Some(pregnancy) = got {
-                            let mother_id = female.id;
-                            let father_id = male.id;
-                            let pos = (female.state.position.0, female.state.position.1);
+                            let mother_id = carrier.id;
+                            let father_id = other.id;
+                            let pos = (carrier.state.position.0, carrier.state.position.1);
 
                             // Store pregnancy info to apply after iteration
-                            new_offspring.push((female_idx, pregnancy, mother_id, father_id, pos));
+                            new_offspring.push((carrier_idx, pregnancy, mother_id, father_id, pos));
 
                             // Add cooldown (prevent immediate re-reproduction)
                             self.reproduction_cooldown.insert(mother_id, 800); // Full pregnancy duration
@@ -1188,6 +1233,9 @@ impl Population {
                 let mother = &self.agents[mother_idx];
                 reproduce(mother, mother, self.current_tick)
             };
+
+            let mut offspring = offspring;
+            self.let_this_one_live_forever_if_asked(&mut offspring);
 
             let child_id = offspring.id;
             let mother_id = self.agents[mother_idx].id;
@@ -1297,25 +1345,7 @@ impl Population {
         self.agents.iter().find(|a| a.id == id)
     }
 
-    /// Get mutable agent by ID
-    pub fn get_agent_mut(&mut self, id: Uuid) -> Option<&mut Agent> {
-        self.agents.iter_mut().find(|a| a.id == id)
-    }
 
-    /// Get all agents within a certain distance of a position
-    pub fn agents_near(&self, position: (i32, i32, i32), radius: f32) -> Vec<&Agent> {
-        self.agents
-            .iter()
-            .filter(|a| a.state.is_alive)
-            .filter(|a| {
-                let dx = (a.state.position.0 - position.0) as f32;
-                let dy = (a.state.position.1 - position.1) as f32;
-                let dz = (a.state.position.2 - position.2) as f32;
-                let distance = (dx * dx + dy * dy + dz * dz).sqrt();
-                distance <= radius
-            })
-            .collect()
-    }
 
     /// Process social interactions between nearby agents
     ///
@@ -2927,10 +2957,6 @@ impl Population {
         std::mem::take(&mut self.pending_events)
     }
 
-    /// Get pending events without draining (for read-only access)
-    pub fn get_pending_events(&self) -> &[SimulationEvent] {
-        &self.pending_events
-    }
 }
 
 /// Statistics about observational learning in the population
@@ -2981,10 +3007,6 @@ fn calculate_social_range_squared(traits: &[Trait]) -> f32 {
     range * range
 }
 
-/// Get the base social range for a set of traits (in tiles, not squared)
-pub fn get_social_range(traits: &[Trait]) -> f32 {
-    calculate_social_range_squared(traits).sqrt()
-}
 
 impl Default for Population {
     fn default() -> Self {

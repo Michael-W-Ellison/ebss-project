@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences, GoalWorldState};
 use crate::core::planning::{ActionPlan, PlanActionType, Planner, PlanStep, ActionOutcome};
 use crate::environment::{Action, ActionResult};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use super::senses::Senses;
 use super::body::Body;
@@ -17,7 +17,7 @@ use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
 use super::transport::TransportSystem;
 use crate::environment::TechnologyKnowledge;
-use crate::world::nutrition::{FoodData, NutritionalState, NutritionalContent, EatResult};
+use crate::world::nutrition::{FoodData, NutritionalState, EatResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
@@ -186,8 +186,14 @@ impl InventoryItem {
         };
     }
 
+    /// Whether this is something to eat.
+    ///
+    /// Asked of what the thing *is*, not of whether anybody happened to record
+    /// its freshness. This was `food_data.is_some()`, which made a traded
+    /// stack of grain - rebuilt without its nutrition, see #232 - not food,
+    /// while the pack count beside it said it was.
     pub fn is_food(&self) -> bool {
-        self.food_data.is_some()
+        crate::world::nutrition::is_this_food(&self.item_id)
     }
 
     /// Check if food is spoiled
@@ -256,13 +262,6 @@ impl InventoryItem {
         }
     }
 
-    /// Check if item can be repaired (not broken, has durability < max)
-    pub fn can_be_repaired(&self) -> bool {
-        match (self.current_durability, self.max_durability) {
-            (Some(current), Some(max)) => current > 0.0 && current < max,
-            _ => false,
-        }
-    }
 
     /// Repair item to full durability
     pub fn repair(&mut self) {
@@ -319,11 +318,11 @@ pub struct Inventory {
     /// Items stored by item_id
     /// What is in it, in a stable order.
     ///
-    /// A `BTreeMap` rather than a `HashMap`, and not for speed. Twenty-two
+    /// A `BTreeMap` rather than a `BTreeMap`, and not for speed. Twenty-two
     /// places iterate this map and several of them pick a *best* - the best
     /// food to eat, the tool that helps most, what can be spared - so when two
     /// candidates tie, the winner is whichever the iterator reached first. A
-    /// `HashMap` orders by a hash seeded per process, so that answer changed
+    /// `BTreeMap` orders by a hash seeded per process, so that answer changed
     /// between runs of the same binary on the same seed.
     ///
     /// Measured: with the dice seeded, five tests still came and went across
@@ -546,32 +545,27 @@ impl Inventory {
     /// A person carries what their arms hold. A person with a basket carries
     /// what their arms hold and what the basket holds, which is most of the
     /// reason anybody ever wove one - see `making::WEAVE_A_BASKET`.
+    /// What a basket holds is counted once, in `max_weight`.
+    ///
+    /// This used to add baskets and leather bags *again*, on top of what
+    /// `Agent::take_up_the_cart` had already put into `max_weight` through the
+    /// transport system - which maps a basket to `TransportType::Backpack` at
+    /// thirty. So one basket was worth thirty as a thing on your back and
+    /// another twenty as a thing in your pack: fifty from one basket, and two
+    /// owners for the question "what does a container add".
+    ///
+    /// Measured across six worlds, agents carried 43.5 kg against a stated
+    /// capacity of 34.7 - permanently over their own limit - because
+    /// `add_item` gated on this figure while `weight_percentage` and every
+    /// report read `max_weight`. Two answers, and the looser one held the
+    /// door.
+    ///
+    /// `Transport` owns it now: it has the whole table - capacity, speed,
+    /// durability, twenty-odd kinds of carrier - and `take_up_the_cart` puts
+    /// what is in the pack onto the back each turn.
     pub fn effective_max_weight(&self) -> f32 {
-        // And a leather bag holds a good deal more than a flax basket, which
-        // is what being a leatherworker is worth: carrying capacity is the
-        // thing this people is shortest of - see `making::SEW_A_BAG`.
-        let bags = self
-            .items
-            .get("leatherbag")
-            .map(|item| item.quantity)
-            .unwrap_or(0);
-
-        let baskets = self
-            .items
-            .get("basket")
-            .map(|item| item.quantity)
-            .unwrap_or(0);
-
         self.max_weight
-            + baskets as f32 * Self::WHAT_A_BASKET_HOLDS
-            + bags as f32 * Self::WHAT_A_LEATHER_BAG_HOLDS
     }
-
-    /// What one basket adds, in the units a pack is weighed in.
-    pub const WHAT_A_BASKET_HOLDS: f32 = 20.0;
-
-    /// And what a leather bag adds, which is rather more.
-    pub const WHAT_A_LEATHER_BAG_HOLDS: f32 = 35.0;
 
     /// Get weight capacity remaining
     pub fn weight_capacity_remaining(&self) -> f32 {
@@ -587,10 +581,6 @@ impl Inventory {
         }
     }
 
-    /// Increase max weight capacity (from backpack, etc.)
-    pub fn add_capacity(&mut self, additional_weight: f32) {
-        self.max_weight += additional_weight;
-    }
 }
 
 impl Default for Inventory {
@@ -631,16 +621,32 @@ pub fn what_a_body_this_age_eats(years: u32) -> f32 {
         11 => 0.60,
         12 => 0.70,
         13 => 0.80,
-        14 => 0.90,
+        // "Age 14-15: 90%" and then "Age 16+: 100%", so fifteen falls in a gap
+        // between the last child band and the first adult one. The last child
+        // band runs to the adult boundary: a fifteen-year-old is nine tenths
+        // of a grown worker on the capability table and is fed as one.
+        14..=15 => 0.90,
         _ => 1.00,
     }
 }
+
 
 /// What a body of this many years can bring to moving, carrying and working.
 ///
 /// The specification's table, as a share of a grown adult's ten: one at two
 /// years, climbing to ten at sixteen, holding until forty and falling away
 /// after. At seventy it is over.
+///
+/// This was written once and hung on nothing, and was then deleted as dead
+/// code in the sweep of #93 - which was the right call for the code and left
+/// the model with a six-year-old who carried what a grown man carried, walked
+/// as fast, worked as hard and hit as heavily. The *only* thing age decided
+/// was appetite, and a body that eats a fifth as much while doing a full day's
+/// work is not a child, it is a bargain.
+///
+/// It is hung on four things now, which are the three the sentence above names
+/// and the one it implies: what two hands hold, how fast a body walks, what a
+/// trip brings back, and what a blow is worth.
 pub fn what_a_body_this_age_can_do(years: u32) -> f32 {
     let out_of_ten = match years {
         0..=1 => 0,
@@ -1165,6 +1171,43 @@ impl AgentState {
         what_a_body_this_age_eats(self.years_old()).max(0.05)
     }
 
+    /// Make this body this many years old, in both of the places that say so.
+    ///
+    /// Age and life stage are two spellings of one fact, and the stage is a
+    /// *stored* field: a dozen places set `life_stage` directly and leave
+    /// `age` where it was, which makes a body whose stage and years disagree.
+    /// Everything that actually reads a body's age reads the years -
+    /// `what_i_eat_for_my_age` and `what_i_can_do_for_my_age` both count them
+    /// - so such a body is an adult wearing a child's label.
+    ///
+    /// That is not a hypothetical. `a_child_and_an_adult_do_not_rank_the_same
+    /// _needs_the_same_way` set `life_stage = Child`, asked how long hunger
+    /// left the body, and got **47 against 47** - the same answer twice,
+    /// because both bodies were the same age. Two more tests in two other
+    /// modules reported the same thing, and the project status report listed
+    /// "a child and an adult come out identical" as one of three blocking
+    /// failures on the strength of them. It was one line in a fixture.
+    ///
+    /// Sizes the body as well as setting the number, because that is what a
+    /// body of a given age *is*: `what_a_body_this_age_eats` decides the
+    /// reserve, the stomach and the burn.
+    pub fn now_this_many_years_old(&mut self, years: u32) {
+        self.age = years * crate::environment::seasons::TICKS_PER_YEAR;
+        self.life_stage = LifeStage::from_age(self.age);
+        self.physiology.now_a_body_of(self.what_i_eat_for_my_age());
+    }
+
+    /// And what it can bring to moving, carrying, working and fighting.
+    ///
+    /// Floored a little above nothing rather than at nothing: an infant is
+    /// worth nought out of ten on the specification's table, and a zero here
+    /// would divide the pack capacity to nothing and make every arithmetic
+    /// downstream of it a special case. Somebody in arms carries what an
+    /// infant carries, which is not nothing and is not much.
+    pub fn what_i_can_do_for_my_age(&self) -> f32 {
+        what_a_body_this_age_can_do(self.years_old()).max(0.05)
+    }
+
     /// Put this body where it would be after this long without food.
     ///
     /// Minutes, which is the scale the old `ticks_without_food` figures were
@@ -1206,6 +1249,20 @@ impl AgentState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
     pub id: Uuid,
+
+    /// Whether one of this agent's hands has a child in it.
+    ///
+    /// "Age 0-2: must remain with a parent agent at all times. Parent agent
+    /// has one *hand* occupied with the child." Worked out once a turn in the
+    /// kin phase, which is where the caregivers and their charges are already
+    /// walked, and read by `update_inventory_capacity_from_transport`.
+    ///
+    /// A field rather than a question, because an agent cannot see the rest of
+    /// the population from inside itself and what it can carry is asked of it
+    /// alone, every turn, from four places.
+    #[serde(default)]
+    pub hands_full_of_child: bool,
+
     pub state: AgentState,
     pub drives: DriveState,
     pub behavior_trees: Vec<BehaviorTree>,
@@ -1236,11 +1293,11 @@ pub struct Agent {
     /// for ever. Equilibrium there sits at a 37 per cent illness rate, which
     /// is poison rather than a gamble.
     #[serde(default)]
-    pub times_laid_up: std::collections::HashMap<String, u32>,
+    pub times_laid_up: std::collections::BTreeMap<String, u32>,
     /// The steps this agent has found out how to do that it was not born
     /// knowing - see `environment::making::Making::obvious`.
     #[serde(default)]
-    found_out: std::collections::HashSet<String>,
+    found_out: std::collections::BTreeSet<String>,
     /// What has answered which need, and where it answered it.
     #[serde(default)]
     pub patterns: super::patterns::Patterns,
@@ -1320,9 +1377,7 @@ pub struct Agent {
     pub learning_exposure: crate::core::learning::LearningExposure,
     /// Nutritional state (energy, protein, micronutrients)
     pub nutrition: NutritionalState,
-    /// Biological gender
-    pub gender: super::gender::Gender,
-    /// Pregnancy state (for females)
+    /// Pregnancy state, on whichever of the pair is carrying
     pub pregnancy: Option<super::pregnancy::PregnancyState>,
     /// Nursing state (for infants)
     pub nursing: Option<super::childcare::NursingState>,
@@ -1341,7 +1396,8 @@ pub struct Agent {
 impl Agent {
     pub fn new(config: AgentConfig) -> Self {
         let mut agent = Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
+            hands_full_of_child: false,
             state: AgentState::new(),
             drives: if config.random_weights {
                 DriveState::with_random_weights()
@@ -1365,8 +1421,8 @@ impl Agent {
             transport: TransportSystem::default(),
             technology_knowledge: TechnologyKnowledge::default(),
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
-            times_laid_up: std::collections::HashMap::new(),
-            found_out: std::collections::HashSet::new(),
+            times_laid_up: std::collections::BTreeMap::new(),
+            found_out: Self::what_anybody_is_born_knowing(),
             wonderings: Vec::new(),
             food_i_ate: 0,
             food_that_rotted_on_me: 0,
@@ -1387,7 +1443,6 @@ impl Agent {
             plan_step_ticks: 0,
             learning_exposure: crate::core::learning::LearningExposure::new(),
             nutrition: NutritionalState::new(),
-            gender: super::gender::Gender::random(),
             pregnancy: None,
             nursing: None,
             developmental_nutrition: super::childcare::DevelopmentalNutrition::default(),
@@ -1412,6 +1467,26 @@ impl Agent {
         // this - it had no callers at all.
         agent.apply_trait_sensory_modifications();
 
+        // A bare `Agent::new` is a grown person.
+        //
+        // It was a body of age nought, which `LifeStage::from_age` calls an
+        // infant - and nothing minded while nothing read a body's age for
+        // anything but its appetite. The moment the age capability curve was
+        // hung on what two hands hold, every fixture in the project that says
+        // `Agent::new` and means "a person" was carrying a twentieth of a
+        // pack: **eighty-seven tests failed and one hung**, across carrying,
+        // bartering, portioning, the larder and tool wear.
+        //
+        // This is defect #74 one layer down. That entry found founders
+        // spawned at nought - "every world began with twelve newborns and
+        // nobody to feed them" - and fixed it in `spawn_agent`, which
+        // overrides this. The constructor underneath still made newborns, and
+        // every caller that was not `spawn_agent` got one.
+        //
+        // A newborn now says so: `with_parents` is the birth path and sets the
+        // age back to nought itself.
+        agent.state.now_this_many_years_old(Self::WHAT_AGE_A_PERSON_IS_UNLESS_TOLD);
+
         // And what this body can actually carry, which is what two hands hold
         // until it has something to put things in. A bare `Inventory` has no
         // body and no basket and cannot work this out for itself; an agent
@@ -1420,6 +1495,14 @@ impl Agent {
 
         agent
     }
+
+    /// What age a body is when nobody has said.
+    ///
+    /// Grown, and old enough that the capability curve is at its full ten out
+    /// of ten, so that a fixture which does not care about age gets a person
+    /// rather than a baby. `spawn_agent` rolls a real age over the top of it
+    /// and `with_parents` sets it back to nought.
+    pub const WHAT_AGE_A_PERSON_IS_UNLESS_TOLD: u32 = 25;
 
     /// Generate a personality-based reproduction drive modifier
     fn generate_reproduction_modifier() -> f32 {
@@ -1440,8 +1523,11 @@ impl Agent {
         agent.parent_ids = parent_ids.clone();
         agent.state.last_ate_tick = current_tick;
 
-        // Set up infant as newborn
-        agent.state.life_stage = LifeStage::Infant;
+        // Set up infant as newborn.
+        //
+        // In years as well as in the stored stage: `Agent::new` makes a grown
+        // person now, so a birth has to say that this one is not.
+        agent.state.now_this_many_years_old(0);
         agent.state.age = 0;
 
         // A newborn has just been fed and watered by being born.
@@ -1566,6 +1652,10 @@ impl Agent {
             .filter(|item| item.equipment_type.is_tool())
             .count() as u32;
 
+        // What this agent is afraid of that has nothing to round on, and
+        // which need it is about. See `what_i_dread`.
+        let (dread, dread_of) = self.what_i_dread();
+
         DriveContext {
             around: self.surroundings.clone(),
             food_put_by: self.food_put_by(),
@@ -1579,6 +1669,8 @@ impl Agent {
             chilly: self.body_temperature.current
                 < self.body_temperature.ideal - self.body_temperature.tolerance * 0.4,
             shelter_pressing: 0.0,
+            dread,
+            dread_of,
             at_leisure: false,
         }
     }
@@ -1625,6 +1717,93 @@ impl Agent {
             .map(|(name, item)| (name.clone(), item.quantity - Self::ENOUGH_TO_HAND))
     }
 
+    /// How much more weight this pack is holding than its owner can carry.
+    ///
+    /// Not `weight_capacity_remaining`, which is clamped at nought and so says
+    /// the same thing about a pack that is exactly full and one that is half
+    /// as much again over its limit. Both happen: a body that weakens carries
+    /// less than it did, and until now nothing took the load off it when it
+    /// did.
+    ///
+    /// Down to the limit and not a pound further. The first cut shed down to
+    /// the limit *less a day's food*, on the reasoning that a forager loaded
+    /// to the last ounce cannot pick anything up - which is true, and cost
+    /// **five per cent of the settlement's person-days** against shedding to
+    /// the limit alone, measured over 160 worlds. What a person is willing to
+    /// walk about carrying is a decision, and dressing one up as a law made it
+    /// worse. This is only the law: what cannot be carried is not carried.
+    pub fn how_much_too_much_i_am_carrying(&self) -> f32 {
+        (self.inventory.current_weight - self.inventory.effective_max_weight()).max(0.0)
+    }
+
+    /// What a person sets down when the pack will not take any more food.
+    ///
+    /// Nothing in this model ever put a load down. An agent picked up wood
+    /// for a fire, iron because it glittered and stone out of a hole it dug,
+    /// and carried all of it for the rest of its life - so measured across
+    /// eight worlds an autumn pack held **38.9 units against a capacity of
+    /// 26.0**, half as much again as it could take, and **97% of autumn
+    /// agent-ticks had not room in it for a single handful of food**. Twenty
+    /// eight thousand units of food a year went back on the bush for want of
+    /// anywhere to put them, against two and a half thousand carried home.
+    ///
+    /// What goes down is the heaviest thing that is none of: food, a tool
+    /// this one works with, or the thing it carries its load in. Weight
+    /// rather than count, because the question is room and a stack of forty
+    /// berries is not a stack of forty logs. The first cut of this filtered
+    /// on `ENOUGH_TO_HAND`, which is a count, and it never fired once: wood
+    /// weighs two a stick, so the ten units of firewood filling every pack in
+    /// the world were five sticks and five is not more than six. A reserve
+    /// counted in things cannot answer a question asked in weight.
+    pub fn what_i_would_set_down(&self) -> Option<String> {
+        use crate::environment::making;
+
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(_, item)| item.quantity > 0)
+            .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
+            .filter(|(name, _)| {
+                !making::EVERY_TOOL.iter().any(|tool| tool.called == name.as_str())
+            })
+            .filter(|(name, _)| {
+                !Self::WHAT_CARRIES.iter().any(|(called, _)| *called == name.as_str())
+            })
+            .max_by(|a, b| {
+                let load = |item: &InventoryItem| item.quantity as f32 * item.weight_per_unit;
+                load(a.1)
+                    .partial_cmp(&load(b.1))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(name, _)| name.clone())
+    }
+
+    /// How much of this one goes on the grass, once it has been decided that
+    /// some of it should.
+    ///
+    /// Enough to bring the load back inside the limit and not a stick more. A
+    /// man who tips his whole bundle of firewood on the grass because he is
+    /// carrying three sticks too many has to go and cut more tomorrow.
+    ///
+    /// Derived from the shortfall rather than from a reserve, so it answers
+    /// the question that was actually asked. Where one stack is not enough -
+    /// a pack half as much again over its limit is not emptied by three
+    /// sticks - what is left is still short, and the next turn sets down the
+    /// next heaviest thing.
+    pub fn how_much_of_this_i_would_set_down(&self, what: &str) -> u32 {
+        let Some(item) = self.inventory.get_item(what) else {
+            return 0;
+        };
+
+        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        if each <= 0.0 {
+            return item.quantity;
+        }
+
+        let wanted = (self.how_much_too_much_i_am_carrying() / each).ceil() as u32;
+        wanted.clamp(1, item.quantity)
+    }
+
     /// Food this agent has more of than it is going to eat.
     ///
     /// Deliberately separate from `what_i_can_spare`, which excludes anything
@@ -1636,8 +1815,7 @@ impl Agent {
             .get_all_items()
             .iter()
             .filter(|(name, item)| {
-                item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP
-                    && (item.is_food() || name.contains("food") || name.contains("grain"))
+                item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP && item.is_food()
             })
             // What keeps worst is what most wants burying
             .max_by_key(|(_, item)| item.quantity)
@@ -1994,9 +2172,9 @@ impl Agent {
     /// is short of.
     pub fn what_i_am_short_of(&self) -> Vec<&'static str> {
         use crate::environment::making;
-        use std::collections::HashSet;
+        use std::collections::BTreeSet;
 
-        let mut wanted: HashSet<&'static str> = HashSet::new();
+        let mut wanted: BTreeSet<&'static str> = BTreeSet::new();
 
         for step in making::EVERY_STEP {
             for (what, _) in step.needs {
@@ -2224,18 +2402,6 @@ impl Agent {
         None
     }
 
-    /// And what asking about a *meal* would teach, which is a different
-    /// question: dried meat is not a thing anybody makes, it is meat that has
-    /// been somewhere.
-    pub fn what_asking_about_this_meal_would_teach(item: &InventoryItem) -> Option<&'static str> {
-        use crate::world::nutrition::PreparationState;
-
-        let how = item.food_data.as_ref()?.preparation;
-
-        matches!(how, PreparationState::Dried | PreparationState::Smoked)
-            .then_some(Self::THAT_LAYING_IT_OUT_KEEPS_IT)
-    }
-
     /// Whether leaving this somewhere could come to anything.
     ///
     /// Food, because the weather and the ground get at it. And clay, because
@@ -2266,8 +2432,29 @@ impl Agent {
     }
 
     /// Everything this agent has found out that it was not born knowing.
-    pub fn what_i_found_out(&self) -> &std::collections::HashSet<String> {
+    pub fn what_i_found_out(&self) -> &std::collections::BTreeSet<String> {
         &self.found_out
+    }
+
+    /// What a person does not have to be shown.
+    ///
+    /// **Laying food out to keep it.** It had to be watched happening before
+    /// anybody would do it on purpose, and the only route to watching it was a
+    /// branch that fired when somebody happened to put food down on a clear
+    /// day. That made preserving a thing a settlement stumbled into rather
+    /// than a thing it did, and it is why 86% of what went into the ground
+    /// went in raw and 98.4% of it rotted - see ISSUES_FOUND.md #124.
+    ///
+    /// Drying is not a discovery on the scale of smelting. Every people that
+    /// has ever had a summer has known that a thing left in the sun goes hard
+    /// rather than green, and a model in which a settlement can fail to work
+    /// it out for a generation is not modelling ignorance, it is modelling an
+    /// accident of where the branch sat. What is still discovered is
+    /// everything the making chain calls `Making::obvious == false`.
+    pub fn what_anybody_is_born_knowing() -> std::collections::BTreeSet<String> {
+        [Self::THAT_LAYING_IT_OUT_KEEPS_IT.to_string()]
+            .into_iter()
+            .collect()
     }
 
     /// How an opinion about one of the strange plants is written down
@@ -2299,13 +2486,6 @@ impl Agent {
             .insert(Self::what_i_call_that_plant(kind, good));
     }
 
-    /// How many of the strange plants this agent has an opinion about
-    pub fn how_many_plants_i_know(&self) -> usize {
-        self.found_out
-            .iter()
-            .filter(|what| what.starts_with("plant:"))
-            .count()
-    }
 
     /// The work a pair of hands wants to be equipped for, in the order it
     /// wants them.
@@ -3453,91 +3633,9 @@ impl Agent {
         self.cached_defense_bonus = defense_multiplier;
     }
 
-    /// Get the current healing multiplier from nearby buildings
-    pub fn get_healing_bonus(&self) -> f32 {
-        self.cached_healing_bonus
-    }
 
-    /// Get the current defense multiplier from nearby buildings
-    pub fn get_defense_bonus(&self) -> f32 {
-        self.cached_defense_bonus
-    }
 
-    /// Get the productivity bonus for crafting/working based on nearby buildings
-    /// This considers the agent's current position and the buildings they're at
-    /// Returns the best productivity bonus from buildings within working distance (3 tiles)
-    pub fn get_productivity_bonus(&self) -> f32 {
-        const WORKING_DISTANCE_SQ: f32 = 9.0; // 3 tiles
 
-        let pos = self.state.position;
-        let mut best_bonus: f32 = 1.0;
-
-        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
-            let dx = (pos.0 - building_pos.x) as f32;
-            let dy = (pos.1 - building_pos.y) as f32;
-            let dist_sq = dx * dx + dy * dy;
-
-            // Only consider buildings within working distance
-            if dist_sq <= WORKING_DISTANCE_SQ {
-                let bonus = building_type.productivity_bonus();
-                if bonus > best_bonus {
-                    best_bonus = bonus;
-                }
-            }
-        }
-
-        best_bonus
-    }
-
-    /// Get the productivity bonus for a specific skill type based on nearby buildings
-    /// Different buildings give bonuses for different types of work
-    pub fn get_productivity_bonus_for_skill(&self, skill_type: super::SkillType) -> f32 {
-        use crate::world::BuildingType;
-        use super::SkillType;
-
-        const WORKING_DISTANCE_SQ: f32 = 9.0;
-
-        let pos = self.state.position;
-        let mut best_bonus: f32 = 1.0;
-
-        for (building_pos, building_type) in &self.exploration_knowledge.known_buildings {
-            let dx = (pos.0 - building_pos.x) as f32;
-            let dy = (pos.1 - building_pos.y) as f32;
-            let dist_sq = dx * dx + dy * dy;
-
-            if dist_sq <= WORKING_DISTANCE_SQ {
-                // Check if this building provides bonus for this skill type
-                let provides_bonus = match (building_type, skill_type) {
-                    // Metalworking buildings
-                    (BuildingType::Smithy, SkillType::Metalworking | SkillType::Smelting) => true,
-                    (BuildingType::Forge, SkillType::Smelting) => true,
-                    // Crafting buildings
-                    (BuildingType::Workshop, SkillType::Crafting | SkillType::Carpentry) => true,
-                    // Cooking buildings
-                    (BuildingType::Bakery | BuildingType::Mill | BuildingType::Butchery |
-                     BuildingType::Brewery | BuildingType::Dairy, SkillType::Cooking) => true,
-                    // Textile buildings
-                    (BuildingType::WeaverHut | BuildingType::TailorShop, SkillType::Crafting) => true,
-                    // Leather buildings
-                    (BuildingType::Tannery | BuildingType::CobblerShop, SkillType::Leatherworking) => true,
-                    // Masonry buildings
-                    (BuildingType::PotteryKiln | BuildingType::Brickyard, SkillType::Masonry) => true,
-                    // Farming buildings
-                    (BuildingType::Farm | BuildingType::AnimalPen, SkillType::Farming) => true,
-                    _ => false,
-                };
-
-                if provides_bonus {
-                    let bonus = building_type.productivity_bonus();
-                    if bonus > best_bonus {
-                        best_bonus = bonus;
-                    }
-                }
-            }
-        }
-
-        best_bonus
-    }
 
     /// Update agent state (tick senses, body, emotions, memory, and drives)
     pub fn tick(&mut self) {
@@ -3769,6 +3867,89 @@ impl Agent {
     /// clocks rather than by how much anybody happens to want the thing.
     const SOONER_IS_WORSE: f32 = 10.0;
 
+    /// How many turns before this need starts asking.
+    ///
+    /// The only forward-looking question in the model, and every term in it is
+    /// a figure the drive already keeps: how far it is below its threshold,
+    /// how fast it builds, and how much the weight of having been ignored is
+    /// making it build faster. Nothing here is invented and nothing is shared
+    /// between agents - two people standing in the same field get two
+    /// different answers, because they are carrying different values, have
+    /// been denied for different lengths of time, and their bodies burn at
+    /// different rates.
+    ///
+    /// `Some(0)` for a need already asking. `None` for one that cannot ask at
+    /// all yet, because nothing before it in its chain has been answered.
+    pub fn how_long_before_this_asks(&self, drive_type: crate::core::DriveType) -> Option<u32> {
+        let drive = self.drives.get(drive_type)?;
+
+        if !self.drives.is_unlocked(drive_type) {
+            return None;
+        }
+
+        if drive.is_active() {
+            return Some(0);
+        }
+
+        let climbing = drive_type.base_accumulation_rate() * drive.pressure();
+        if climbing <= 0.0 {
+            return None;
+        }
+
+        Some(((drive.threshold - drive.value) / climbing).ceil().max(0.0) as u32)
+    }
+
+    /// The need that will take the turn off this one before it is finished,
+    /// and how long there is before it does.
+    ///
+    /// "The planner should attempt to anticipate drive demand increase so that
+    /// actions can be efficiently executed, reducing the odds of tasks being
+    /// dropped mid-completion." This is the question that asks: I am about to
+    /// spend `turns` on something - is there a need that outranks it and is
+    /// going to start asking before I am done?
+    ///
+    /// Rank decides what may interrupt what, which is the model's own answer
+    /// and not a second one: a primary need takes the turn from a secondary
+    /// one, and no amount of wanting a coat takes it from being thirsty. A
+    /// need in the same band as the one being served does not count, because
+    /// two needs of a kind trading places is the ordinary business of a day
+    /// and turning round for it is how an agent gets nothing done at all -
+    /// see `what_it_takes_to_turn_me_round`.
+    ///
+    /// **What counts as not waiting is the body's clock, not the threshold.**
+    /// Written against `how_long_before_this_asks` it fired on nearly every
+    /// job anybody ever started: hunger is a few turns off its threshold most
+    /// of the time and outranks everything that is not itself primary, so a
+    /// settlement stopped provisioning, stopped building and stopped making
+    /// tools, and did nothing but eat. Measured over 160 worlds that cost
+    /// between four and fifteen per cent of every block. A need being about to
+    /// *ask* is ordinary; a need that will have killed you before the job is
+    /// done is the one worth turning round for, and
+    /// `ticks_before_this_kills_me` is what the model already reckons the
+    /// primaries by.
+    pub fn what_will_not_wait_for(
+        &self,
+        this: crate::core::DriveType,
+        turns: u32,
+    ) -> Option<crate::core::DriveType> {
+        let mine = this.rank().precedence();
+
+        crate::core::DriveType::all()
+            .into_iter()
+            .filter(|other| *other != this)
+            .filter(|other| other.rank().precedence() > mine)
+            .filter(|other| {
+                self.state
+                    .ticks_before_this_kills_me(*other)
+                    .is_some_and(|left| left < turns as f32)
+            })
+            // Of the needs the job would outlast, the one that starts asking
+            // first, which is what an agent would deal with first anyway.
+            .filter_map(|other| Some((other, self.how_long_before_this_asks(other)?)))
+            .min_by_key(|(_, soon)| *soon)
+            .map(|(other, _)| other)
+    }
+
     /// What this agent most needs to do something about.
     ///
     /// `DriveState::most_urgent` compares drives against each other as though
@@ -3948,13 +4129,6 @@ impl Agent {
         }
     }
 
-    /// Update body temperature based on environmental conditions
-    ///
-    /// # Arguments
-    /// * `climate` - Environmental climate conditions
-    pub fn update_temperature(&mut self, climate: &super::Climate) {
-        self.update_temperature_with_shelter(climate, false);
-    }
 
     /// Update body temperature, accounting for whether the agent is under cover
     ///
@@ -4016,16 +4190,6 @@ impl Agent {
         !self.exposure_status.active_exposures.is_empty()
     }
 
-    /// Get recommended shelter-seeking priority (0.0 to 1.0)
-    pub fn shelter_priority(&self) -> f32 {
-        if self.exposure_status.is_critical() {
-            1.0 // Critical - seek shelter immediately
-        } else if !self.exposure_status.active_exposures.is_empty() {
-            0.5 + (self.exposure_status.total_severity() * 0.5) // Moderate priority
-        } else {
-            0.0 // No exposure risk
-        }
-    }
 
     /// Respond emotionally to a threat
     ///
@@ -4177,7 +4341,10 @@ impl Agent {
             1.0
         };
 
-        let base_strength = health_factor * body_factor;
+        // And the years. `LifeStage::can_fight` already keeps the very young
+        // out of a fight altogether; this is what separates a thirteen-year-old
+        // from his father, and his father from his grandfather.
+        let base_strength = health_factor * body_factor * self.state.what_i_can_do_for_my_age();
         let equipment_bonus = armor_bonus * 0.3 + weapon_bonus;
         let built = (base_strength + equipment_bonus + skill_bonus * 0.2) * bravery_modifier;
 
@@ -4279,38 +4446,6 @@ impl Agent {
         emotion_type
     }
 
-    /// Respond emotionally to harm to a loved one
-    ///
-    /// # Arguments
-    /// * `loved_one_id` - UUID of the loved one
-    /// * `harm_severity` - How severe the harm was (0.0 to 1.0)
-    /// * `source` - Source of the harm
-    pub fn respond_to_loved_one_harm(&mut self, loved_one_id: &Uuid, harm_severity: f32, source: super::EmotionSource) {
-        // Check if this is actually a loved one
-        if let Some(relationship) = self.relationships.get_relationship(loved_one_id) {
-            if relationship.is_loved_one() {
-                // Sadness scales with bond strength and harm severity
-                let sadness_amount = relationship.bond_strength * harm_severity * 0.8;
-                self.emotions.add_sadness_with_traits(source.clone(), sadness_amount, &self.traits);
-
-                // Also potentially add fear or anger based on agent's ability to protect
-                // Parents protecting children might feel anger if they can fight back
-                if relationship.relationship_type == super::RelationshipType::Child {
-                    // Calculate if agent is strong enough to retaliate
-                    let agent_strength = self.state.health / 100.0;
-
-                    // Assume medium threat strength for the source
-                    let assessment = super::ThreatAssessment::assess(agent_strength, 0.7, source.clone());
-
-                    if assessment.can_overcome {
-                        self.emotions.add_anger_with_traits(source, 0.5, &self.traits);
-                    } else {
-                        self.emotions.add_fear_with_traits(source, 0.3, &self.traits);
-                    }
-                }
-            }
-        }
-    }
 
     /// Respond emotionally to death of a loved one
     ///
@@ -4330,60 +4465,20 @@ impl Agent {
         }
     }
 
-    /// Check if agent would flee from current emotional state
-    pub fn would_flee(&self) -> bool {
-        self.emotions.should_flee()
-    }
 
-    /// Check if agent would attack from current emotional state
-    pub fn would_attack(&self) -> bool {
-        self.emotions.should_attack()
-    }
 
     /// Get agent's dominant emotion
     pub fn dominant_emotion(&self) -> Option<super::EmotionType> {
         self.emotions.dominant_emotion()
     }
 
-    /// Share information with another agent
-    ///
-    /// # Arguments
-    /// * `info` - The information to share
-    /// * `recipient` - The agent receiving the information
-    /// * `timestamp` - Current simulation time
-    pub fn share_information(&self, mut info: super::Information, recipient: &mut Agent, timestamp: u64) {
-        // Check if this agent would distort the information
-        if let Some(distortion_trait) = self.traits.would_distort_info() {
-            // Apply distortion based on trait
-            info = info.distort(distortion_trait, self.id);
 
-            // Gain happiness from distortion
-            // This would integrate with a happiness/mood system
-        }
-
-        // Recipient receives information
-        recipient.knowledge.receive_information(info, self.id, recipient.id, &recipient.traits, timestamp);
-    }
-
-    /// Learn information directly (observed firsthand)
-    ///
-    /// # Arguments
-    /// * `info` - The information learned
-    /// * `timestamp` - Current simulation time
-    pub fn learn_information(&mut self, info: super::Information, timestamp: u64) {
-        // When learning firsthand, source is self
-        self.knowledge.receive_information(info, self.id, self.id, &self.traits, timestamp);
-    }
 
     /// Check if agent believes specific information
     pub fn believes(&self, info_id: &Uuid) -> bool {
         self.knowledge.believes(info_id)
     }
 
-    /// Get trust level for another agent
-    pub fn get_trust_in(&self, other_agent: &Uuid) -> f32 {
-        self.knowledge.get_trust(other_agent)
-    }
 
     /// Observe a resource at a position
     /// Note: Resource knowledge is tracked separately from gossip knowledge
@@ -4397,50 +4492,8 @@ impl Agent {
         // This method exists for API compatibility
     }
 
-    /// Record that information from another agent was verified as correct
-    pub fn verify_information_from(&mut self, source_id: uuid::Uuid, _info_age: u32, current_tick: u32) {
-        if let Some(rel) = self.relationships.get_relationship_mut(&source_id) {
-            rel.positive_interaction(2, current_tick);
-        }
-    }
 
-    /// Record that information from another agent was incorrect
-    pub fn information_was_wrong_from(&mut self, source_id: uuid::Uuid, _info_age: u32, current_tick: u32) {
-        if let Some(rel) = self.relationships.get_relationship_mut(&source_id) {
-            rel.negative_interaction(3, current_tick);
-        }
-    }
 
-    /// React to learning about another agent's trait
-    ///
-    /// # Arguments
-    /// * `other_agent` - The other agent's UUID
-    /// * `other_trait` - The trait learned about
-    ///
-    /// Example: Believer learns Atheist has Atheist trait → relationship weakens
-    pub fn react_to_trait_info(&mut self, other_agent: &Uuid, other_trait: super::Trait) {
-        // Check for trait conflicts
-        if self.traits.has_trait(&super::Trait::Believer) && other_trait == super::Trait::Atheist {
-            // Believer dislikes Atheist
-            if let Some(relationship) = self.relationships.get_relationship_mut(other_agent) {
-                relationship.weaken(0.2);
-            } else {
-                // Create negative relationship
-                let mut new_rel = super::Relationship::new(*other_agent, super::RelationshipType::Acquaintance);
-                new_rel.bond_strength = -0.2;
-                self.relationships.add_relationship(new_rel);
-            }
-        } else if self.traits.has_trait(&super::Trait::Atheist) && other_trait == super::Trait::Believer {
-            // Atheist may dislike Believer
-            if let Some(relationship) = self.relationships.get_relationship_mut(other_agent) {
-                relationship.weaken(0.1);
-            } else {
-                let mut new_rel = super::Relationship::new(*other_agent, super::RelationshipType::Acquaintance);
-                new_rel.bond_strength = -0.1;
-                self.relationships.add_relationship(new_rel);
-            }
-        }
-    }
 
     /// Regenerate preferences based on current traits
     ///
@@ -4514,8 +4567,8 @@ impl Agent {
             DriveType::Preparedness => Some(JobCategory::Labor),
             // Survival drives don't map to happiness-influenced jobs
             DriveType::Hunger | DriveType::Thirst | DriveType::Rest |
-            DriveType::Safety | DriveType::Shelter | DriveType::Reproduction |
-            DriveType::Protection | DriveType::Luxury => None,
+            DriveType::Safety | DriveType::Aggression | DriveType::Shelter |
+            DriveType::Reproduction | DriveType::Protection | DriveType::Luxury => None,
         }
     }
 
@@ -4760,20 +4813,8 @@ impl Agent {
         self.observational_learning.learning_rate() * self.fatigue.learning_modifier()
     }
 
-    /// Get effective skill modifier (affected by fatigue)
-    pub fn skill_effectiveness(&self) -> f32 {
-        self.fatigue.skill_modifier()
-    }
 
-    /// Get decision quality modifier (affected by fatigue)
-    pub fn decision_quality(&self) -> f32 {
-        self.fatigue.decision_modifier()
-    }
 
-    /// Get injury chance modifier (affected by fatigue)
-    pub fn injury_risk_modifier(&self) -> f32 {
-        self.fatigue.injury_chance_modifier()
-    }
 
     /// Equip a transport (activate it)
     /// Updates inventory capacity automatically
@@ -4816,17 +4857,28 @@ impl Agent {
     /// This is the largest waste in the model at the far end of it. Measured,
     /// nearly nine thousand items of gathered food went back on the bush in one
     /// run because packs were full.
+    /// The things a person carries other things in, best first.
+    ///
+    /// Nobody drags a travois while pushing a cart. Read by
+    /// `take_up_the_cart`, which puts the best of them on the back, and by
+    /// `how_many_of_this_i_should_keep`, which will not have somebody set down
+    /// the thing everything else is in.
+    pub const WHAT_CARRIES: [(&'static str, super::transport::TransportType); 4] = [
+        ("handcart", super::transport::TransportType::Handcart),
+        ("travois", super::transport::TransportType::Travois),
+        // A leather bag holds a good deal more than a flax basket, which is
+        // what being a leatherworker is worth - see `making::SEW_A_BAG`. It
+        // reached carrying capacity through `effective_max_weight` and not
+        // through here, so it was a second way of holding things that the
+        // transport system knew nothing about. See ISSUES #116.
+        ("leatherbag", super::transport::TransportType::LargeBackpack),
+        ("basket", super::transport::TransportType::Backpack),
+    ];
+
     pub fn take_up_the_cart(&mut self) {
-        use super::transport::{Transport, TransportType};
+        use super::transport::Transport;
 
-        // Best first: nobody drags a travois while pushing a cart.
-        const WHAT_CARRIES: [(&str, TransportType); 3] = [
-            ("handcart", TransportType::Handcart),
-            ("travois", TransportType::Travois),
-            ("basket", TransportType::Backpack),
-        ];
-
-        let best = WHAT_CARRIES
+        let best = Self::WHAT_CARRIES
             .iter()
             .find(|(called, _)| self.how_many_i_have(called) > 0)
             .map(|(_, kind)| *kind);
@@ -4874,6 +4926,27 @@ impl Agent {
     /// unattributable. Filed as #216. What is here now is the *shape* -
     /// carrying is hands plus containers, and containers are things you make -
     /// on the old number.
+    ///
+    /// **And the old number turns out to be right, which is not luck but is
+    /// not reasoning either - it was measured.** Swept against survival over
+    /// three blocks of thirty-two seeded worlds, person-days total:
+    ///
+    /// | what two hands hold | person-days |
+    /// |---|---|
+    /// | 6 | 97,217 |
+    /// | **12** | **95,371** |
+    /// | 120 | 75,081 |
+    ///
+    /// Flat from six to twelve - the difference is inside the block-to-block
+    /// noise of ten per cent - and **twenty-one per cent worse at ten times**.
+    /// A bigger pack is not a kindness. What it buys is turns: at 120 the
+    /// share of the settlement's turns spent on `Work` rises by twenty-seven
+    /// per cent and the share spent on `Eat` falls, because a person with
+    /// materials in hand has something to make and making competes with
+    /// eating.
+    ///
+    /// So carrying is not what limits this settlement, at this figure or any
+    /// figure near it. See ISSUES #119, which closes #236 on that evidence.
     pub const WHAT_TWO_HANDS_HOLD: f32 = 12.0;
 
     /// Update inventory max_weight from what this one has to carry things in.
@@ -4889,7 +4962,24 @@ impl Agent {
     /// there is to put things in.
     fn update_inventory_capacity_from_transport(&mut self) {
         let how_strong = self.body.how_much_this_body_can_lift();
-        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong;
+
+        // And how old it is. A six-year-old's two hands are not a grown man's
+        // two hands, and until now they were: this is the carrying half of
+        // `what_a_body_this_age_can_do`. What goes in a basket is not scaled
+        // - a travois drags the same load whoever is pulling it, and what
+        // stops a child using one is the pulling, which is the movement half.
+        let years = self.state.what_i_can_do_for_my_age();
+
+        // And whether one of those hands has a child in it.
+        //
+        // "Age 0-2: must remain with a parent agent at all times. Parent agent
+        // has one *hand* occupied with the child, limiting the types of work
+        // the parent agent can accomplish." One hand, so half of what two of
+        // them hold; the basket on the back is unaffected, which is exactly
+        // why somebody carrying a baby wants one.
+        let hands = if self.hands_full_of_child { 0.5 } else { 1.0 };
+
+        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong * years * hands;
         let in_something = self.transport.total_additional_capacity();
 
         self.inventory.max_weight = in_hand + in_something;
@@ -4914,7 +5004,15 @@ impl Agent {
             .map(|p| p.speed_modifier(current_tick))
             .unwrap_or(1.0);
 
-        body_speed * transport_speed * weight_penalty * fatigue_penalty * pregnancy_penalty
+        // A short pair of legs covers less ground. The movement half of
+        // `what_a_body_this_age_can_do`, and the reason a five-year-old is not
+        // simply a small adult who eats less.
+        body_speed
+            * self.state.what_i_can_do_for_my_age()
+            * transport_speed
+            * weight_penalty
+            * fatigue_penalty
+            * pregnancy_penalty
     }
 
     /// Check if agent can carry additional weight
@@ -4938,8 +5036,8 @@ impl Agent {
             return false;
         }
 
-        // Females cannot reproduce while pregnant
-        if self.gender.can_become_pregnant() && self.pregnancy.is_some() {
+        // Nobody already carrying a child starts another
+        if self.pregnancy.is_some() {
             return false;
         }
 
@@ -4951,14 +5049,15 @@ impl Agent {
         self.traits.has(crate::core::traits::Trait::Infertile)
     }
 
-    /// Check if female agent can become pregnant
-    pub fn can_become_pregnant(&self) -> bool {
-        self.can_reproduce() && self.gender.can_become_pregnant() && self.pregnancy.is_none()
-    }
-
-    /// Check if male agent can impregnate
-    pub fn can_impregnate(&self) -> bool {
-        self.can_reproduce() && self.gender.can_impregnate()
+    /// Whether this agent could carry a child.
+    ///
+    /// Anybody grown who is not already carrying one. There is no gender in
+    /// this model - "agents are gender neutral; there are no male/female
+    /// agents, merely child and adult agents" - so this replaces both
+    /// `can_become_pregnant`, which asked whether somebody was female, and
+    /// `can_impregnate`, which asked whether they were not.
+    pub fn can_carry_a_child(&self) -> bool {
+        self.can_reproduce() && self.pregnancy.is_none()
     }
 
     /// Check if this agent is currently pregnant
@@ -4966,31 +5065,7 @@ impl Agent {
         self.pregnancy.is_some()
     }
 
-    /// How much food an agent has to be carrying, over and above its own
-    /// needs, before it will consider a child.
-    ///
-    /// A few days' eating for two. Not a stockpile - just enough that the
-    /// answer to "could this child be fed next week" is something other than
-    /// "I had a meal this morning".
-    pub const FOOD_TO_RAISE_A_CHILD: u32 = 4;
 
-    /// How full a body's reserve has to be for feeding itself to count as
-    /// having been easy.
-    ///
-    /// The reserve is three weeks of food, so this is a body that has lost
-    /// less than three days of it - one that has been eating enough to stay
-    /// topped up rather than scraping.
-    ///
-    /// This was `SETTLED_ENOUGH_TO_GROW`, twenty days of the Hunger drive
-    /// never once crossing its threshold. That was a fair reading when hunger
-    /// accumulated at a rate somebody chose. It is not one now: hunger is read
-    /// off the stomach, and a well-fed body crosses that threshold three times
-    /// a day because that is what three meals a day *is*. The counter reset
-    /// every few hours and could never reach twenty days for anybody, ever - so
-    /// this clause of the breeding gate failed 24,229 times out of 24,260
-    /// adult-turns, and a settlement could only breed on a full pack. See
-    /// ISSUES #76.
-    pub const WELL_FED: f32 = 0.85;
 
     /// How much of a stretch of going short counts against it.
     ///
@@ -5008,11 +5083,6 @@ impl Agent {
             .unwrap_or(true)
     }
 
-    /// How long hunger has not had to ask at all
-    pub fn food_has_been_easy(&self) -> bool {
-        self.state.physiology.reserve
-            >= self.state.physiology.reserve_capacity * Self::WELL_FED
-    }
 
     /// What the agent is carrying that it or a child could eat.
     ///
@@ -5020,23 +5090,39 @@ impl Agent {
     /// most of what an agent picks up off the land arrives as a plain "food"
     /// stack with no freshness attached, and a count that ignored those would
     /// report an empty pack for an agent carrying a fortnight's eating.
+    ///
+    /// What counts is `nutrition::is_this_food`, the same question
+    /// `find_best_food_to_eat` asks, so that "I am provisioned" and "I can eat
+    /// this" cannot disagree. They did: this used to match substrings from a
+    /// list of six - `LOOKS_EDIBLE` - which counted an untracked stack of
+    /// grain that nothing could eat, and counted untracked greens and roots as
+    /// nothing at all, those being the whole of what a hedgerow gives for half
+    /// the year and neither word being on the list.
     pub fn food_put_by(&self) -> u32 {
         self.inventory
             .get_all_items()
             .values()
             .filter(|item| item.quantity > 0)
-            .filter(|item| match &item.food_data {
-                Some(food) => !food.is_spoiled() && !food.is_harmful(),
-                None => Self::LOOKS_EDIBLE
-                    .iter()
-                    .any(|edible| item.item_id.contains(edible)),
-            })
+            .filter(|item| Self::is_this_worth_eating(item))
             .map(|item| item.quantity)
             .sum()
     }
 
-    /// Item names that mean food when there is no nutrition data to go on
-    const LOOKS_EDIBLE: [&'static str; 6] = ["food", "grain", "meat", "fish", "berr", "bread"];
+    /// Whether this stack is food, and food that would not do harm.
+    ///
+    /// One place, because everything that asks about a pack asks this: what is
+    /// put by, what there is to eat, and what the verb will accept.
+    pub fn is_this_worth_eating(item: &InventoryItem) -> bool {
+        if !crate::world::nutrition::is_this_food(&item.item_id) {
+            return false;
+        }
+        match &item.food_data {
+            Some(food) => !food.is_spoiled() && !food.is_harmful(),
+            // Nothing known about it beyond what it is. An untracked stack has
+            // no freshness to be suspicious of, so it is taken at face value.
+            None => true,
+        }
+    }
 
     /// Whether this agent has any reason to think a child could be fed.
     ///
@@ -5054,13 +5140,52 @@ impl Agent {
             return false;
         }
 
-        // Either there is food in hand for two, or feeding themselves has
-        // simply not been a problem for a long stretch. The second matters as
-        // much as the first: an agent living beside a full field eats as it
-        // goes and carries nothing, and it is in a far better position to
-        // raise a child than one with a full pack on ground that has stopped
-        // giving.
-        self.food_put_by() >= Self::FOOD_TO_RAISE_A_CHILD || self.food_has_been_easy()
+        // There has to be food actually put by. Not "and also, alternatively,
+        // a full belly" - which is what the second half of this used to say,
+        // and which made the first half dead letter.
+        //
+        // `food_has_been_easy` reads the body's reserve, so it is true of
+        // every healthy agent in the model: measured, a fed agent sits at
+        // eighty-five to ninety-nine per cent of reserve, and the threshold is
+        // eighty-five. Behind an `||` that meant the pack was never once the
+        // binding question, and a settlement bred on the strength of having
+        // eaten that morning - the exact reading the paragraph above this one
+        // says is not good enough, written into the line underneath it.
+        //
+        // A full belly is not a surplus. A surplus is food that is still there
+        // tomorrow.
+        self.enough_put_by_for_a_child()
+    }
+
+    /// Whether there is enough put by to see this agent and a newborn through
+    /// the stretch of the year the land gives nothing.
+    ///
+    /// What is put by, not what has been eaten: the pack and this agent's
+    /// share of the camp's stores, with the stomach and the gut taken back off
+    /// - see `WhatIsPutBy::units_put_by`. Against what the two of them would
+    /// get through in that stretch, a newborn counting for a fifth of a grown
+    /// appetite on the specification's own table.
+    ///
+    /// This is the whole of "do not breed until there is a surplus", and it is
+    /// deliberately a hard number rather than a feeling. The settlement store
+    /// is sized at exactly this stretch for one mouth (see the store's
+    /// `what_one_mouth_wants_put_by`), so the gate says: breed when you have
+    /// more put by than you need for yourself.
+    ///
+    /// Falls back to the pack alone before the first reckoning of the year has
+    /// run, which is the only time `what_the_larder_says` is empty for a live
+    /// agent.
+    pub fn enough_put_by_for_a_child(&self) -> bool {
+        let gap = super::provision::how_long_the_land_gives_nothing() as f32;
+        let for_the_two_of_them = self.state.physiology.what_i_burn_in_a_day
+            * (1.0 + what_a_body_this_age_eats(0));
+
+        let put_by = match self.state.what_the_larder_says.as_ref() {
+            Some(larder) => larder.units_put_by(),
+            None => self.food_put_by() as f32 * super::provision::UNITS_IN_ONE_STORED_ITEM,
+        };
+
+        put_by >= for_the_two_of_them * gap
     }
 
     /// Check if agent should attempt reproduction given current survival state
@@ -5124,13 +5249,6 @@ impl Agent {
         fertility.clamp(0.0, 1.0)
     }
 
-    /// Get effective reproduction drive (base drive * personal modifier)
-    pub fn effective_reproduction_drive(&self) -> f32 {
-        let base_drive = self.drives.get(DriveType::Reproduction)
-            .map(|d| d.value)
-            .unwrap_or(0.0);
-        (base_drive * self.reproduction_drive_modifier).clamp(0.0, 1.0)
-    }
 
     /// Create a default behavior tree for a specific drive
     fn create_default_tree_for_drive(drive_type: DriveType) -> BehaviorTree {
@@ -5205,10 +5323,19 @@ impl Agent {
                 selector.add_child(BehaviorNode::new(NodeType::Action("harvest".to_string())));
                 selector
             }
+            // The fear drive: get away from it, get behind something, or
+            // failing both arm yourself against the next time.
             DriveType::Safety => {
                 let mut selector = BehaviorNode::new(NodeType::Selector);
+                selector.add_child(BehaviorNode::new(NodeType::Action("flee".to_string())));
                 selector.add_child(BehaviorNode::new(NodeType::Action("seek_shelter".to_string())));
                 selector.add_child(BehaviorNode::new(NodeType::Action("craft_weapon".to_string())));
+                selector
+            }
+            // And the anger drive, which has one answer.
+            DriveType::Aggression => {
+                let mut selector = BehaviorNode::new(NodeType::Selector);
+                selector.add_child(BehaviorNode::new(NodeType::Action("attack".to_string())));
                 selector
             }
             DriveType::Reproduction => {
@@ -5240,28 +5367,6 @@ impl Agent {
             .find(|tree| tree.name.starts_with(&format!("{:?}", most_urgent_drive.drive_type)))
     }
 
-    /// Convert a behavior tree action into an actual environment action
-    pub fn action_from_tree_result(&self, action_name: &str) -> Action {
-        match action_name {
-            "eat_stored_food" | "gather_food" | "hunt" => Action::Eat { food_type: "generic".to_string() },
-            "sleep" => Action::Sleep { duration: 10 },
-            "find_shelter" | "seek_shelter" => Action::Move { target: self.find_nearest_shelter() },
-            "build_shelter" | "build_structure" => Action::Build {
-                structure_type: "shelter".to_string(),
-                position: self.state.position
-            },
-            "mine_resources" | "gather_resources" => Action::Gather { resource_type: "generic".to_string() },
-            "process_materials" => Action::Craft { item_type: "processed_material".to_string() },
-            "explore" | "experiment" => Action::Explore { direction: self.random_direction() },
-            "find_agents" | "socialize" => Action::Socialize { target_agent_id: Uuid::nil() },
-            "craft_tools" | "craft_weapon" => Action::Craft { item_type: "tool".to_string() },
-            "store_resources" => Action::Store { item_type: "resource".to_string(), amount: 1 },
-            "plant_crops" | "harvest" => Action::Gather { resource_type: "food".to_string() },
-            "reproduce" => Action::Wait, // Special handling needed
-            "seek_luxury" | "decorate" => Action::Gather { resource_type: "luxury".to_string() },
-            _ => Action::Wait,
-        }
-    }
 
     /// Note how an attempt turned out, so the agent can stop doing what does
     /// not work and do more of what does.
@@ -5288,6 +5393,8 @@ impl Agent {
             Action::Eat { food_type } => format!("eat:{food_type}"),
             Action::Mate { .. } => "mate".to_string(),
             Action::Fish => "fish".to_string(),
+            Action::SetSnare => "setsnare".to_string(),
+            Action::CheckSnares => "checksnares".to_string(),
             Action::Hunt { .. } => "hunt".to_string(),
             Action::MakeClothing { garment } => format!("makeclothing:{garment}"),
             Action::Cook { .. } => "cook".to_string(),
@@ -5374,6 +5481,7 @@ impl Agent {
             // agent that lived through it did not do so by freezing well
             Action::Freeze => return,
             Action::Fish => Undertaking::Fishing,
+            Action::SetSnare | Action::CheckSnares => Undertaking::Trapping,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
             | Action::SpreadMuck
@@ -5787,15 +5895,6 @@ impl Agent {
         nearest_shelter.unwrap_or(current_pos)
     }
 
-    fn random_direction(&self) -> (i32, i32, i32) {
-        use rand::Rng;
-        let mut rng = crate::core::dice::roll();
-        (
-            rng.gen_range(-1..=1),
-            rng.gen_range(-1..=1),
-            0
-        )
-    }
 
     // ===== Sensory Processing Integration =====
 
@@ -5872,237 +5971,9 @@ impl Agent {
 
     // ===== Equipment Management =====
 
-    /// Equip an item from inventory into a specific slot
-    pub fn equip_from_inventory(&mut self, item_id: &str, slot: super::equipment::EquipmentSlot) -> Result<(), String> {
-        // Check if item exists in inventory
-        if !self.inventory.has_item(item_id, 1) {
-            return Err(format!("Item '{}' not found in inventory", item_id));
-        }
 
-        // Item registry: maps item_id to (equipment_type, material, quality)
-        let (equipment_type, material, quality) = Self::lookup_item_properties(item_id, slot);
 
-        let equipment_item = super::equipment::EquipmentItem::new(
-            item_id.to_string(),
-            equipment_type,
-            slot,
-            material,
-            quality,
-        );
 
-        // Equip the item (this returns the previously equipped item if any)
-        match self.equipment.equip(equipment_item) {
-            Ok(old_item) => {
-                // Remove from inventory
-                self.inventory.remove_item(item_id, 1);
-
-                // If there was an old item, add it back to inventory
-                if let Some(old) = old_item {
-                    self.inventory.add_item(InventoryItem::new(old.name, 1));
-                }
-
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Lookup equipment properties from item registry
-    /// Returns (equipment_type, material, quality) for the given item
-    fn lookup_item_properties(
-        item_id: &str,
-        slot: super::equipment::EquipmentSlot,
-    ) -> (super::equipment::EquipmentType, super::equipment::EquipmentMaterial, super::skills::Quality) {
-        use super::equipment::{EquipmentType, EquipmentMaterial, WoodMaterial, MetalMaterial, ClothingMaterial};
-        use super::skills::Quality;
-
-        // Normalize item_id for matching
-        let item_lower = item_id.to_lowercase();
-
-        // Match based on item name patterns
-        // Tools
-        if item_lower.contains("pickaxe") || item_lower.contains("pick") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Pickaxe, mat, qual);
-        }
-        if item_lower.contains("axe") && !item_lower.contains("pick") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Hatchet, mat, qual);
-        }
-        if item_lower.contains("shovel") || item_lower.contains("spade") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Shovel, mat, qual);
-        }
-        if item_lower.contains("hammer") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Hammer, mat, qual);
-        }
-        if item_lower.contains("sickle") || item_lower.contains("scythe") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Sickle, mat, qual);
-        }
-        if item_lower.contains("fishing") || item_lower.contains("rod") {
-            return (EquipmentType::FishingRod, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
-        }
-
-        // Weapons
-        if item_lower.contains("sword") || item_lower.contains("blade") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Sword, mat, qual);
-        }
-        if item_lower.contains("spear") || item_lower.contains("lance") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Spear, mat, qual);
-        }
-        if item_lower.contains("mace") || item_lower.contains("club") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Mace, mat, qual);
-        }
-        if item_lower.contains("dagger") || item_lower.contains("knife") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Dagger, mat, qual);
-        }
-        if item_lower.contains("bow") && !item_lower.contains("cross") {
-            return (EquipmentType::Bow, EquipmentMaterial::Wood(WoodMaterial::Yew), Quality::Basic);
-        }
-        if item_lower.contains("crossbow") {
-            return (EquipmentType::Crossbow, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
-        }
-        if item_lower.contains("shield") {
-            let (mat, qual) = Self::parse_material_quality(&item_lower, true);
-            return (EquipmentType::Shield, mat, qual);
-        }
-
-        // Armor
-        if item_lower.contains("plate") || item_lower.contains("heavy armor") {
-            return (EquipmentType::HeavyArmor, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
-        }
-        if item_lower.contains("chain") || item_lower.contains("mail") {
-            return (EquipmentType::MediumArmor, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
-        }
-        if item_lower.contains("leather armor") || item_lower.contains("hide armor") {
-            return (EquipmentType::LightArmor, EquipmentMaterial::Cloth(ClothingMaterial::Leather), Quality::Basic);
-        }
-
-        // Clothing
-        if item_lower.contains("fur") {
-            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Fur), Quality::Basic);
-        }
-        if item_lower.contains("wool") {
-            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Wool), Quality::Basic);
-        }
-        if item_lower.contains("leather") {
-            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Leather), Quality::Basic);
-        }
-        if item_lower.contains("linen") {
-            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Linen), Quality::Basic);
-        }
-        if item_lower.contains("cotton") {
-            return (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Cotton), Quality::Basic);
-        }
-
-        // Utility
-        if item_lower.contains("torch") {
-            return (EquipmentType::Torch, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic);
-        }
-        if item_lower.contains("lantern") || item_lower.contains("lamp") {
-            return (EquipmentType::Lantern, EquipmentMaterial::Metal(MetalMaterial::Iron), Quality::Basic);
-        }
-
-        // Default based on slot type
-        match slot {
-            super::equipment::EquipmentSlot::MainHand | super::equipment::EquipmentSlot::OffHand => {
-                (EquipmentType::Pickaxe, EquipmentMaterial::Wood(WoodMaterial::Oak), Quality::Basic)
-            }
-            _ => (EquipmentType::Clothing, EquipmentMaterial::Cloth(ClothingMaterial::Linen), Quality::Basic)
-        }
-    }
-
-    /// Parse material and quality from item name
-    fn parse_material_quality(item_name: &str, is_tool_or_weapon: bool) -> (super::equipment::EquipmentMaterial, super::skills::Quality) {
-        use super::equipment::{EquipmentMaterial, WoodMaterial, MetalMaterial, ClothingMaterial, StoneMaterial};
-        use super::skills::Quality;
-
-        // Parse quality (using Quality enum variants: Pathetic, Crude, Basic, Moderate, Advanced, Expert)
-        let quality = if item_name.contains("masterwork") || item_name.contains("master") || item_name.contains("expert") {
-            Quality::Expert
-        } else if item_name.contains("excellent") || item_name.contains("fine") || item_name.contains("advanced") {
-            Quality::Advanced
-        } else if item_name.contains("good") || item_name.contains("quality") || item_name.contains("moderate") {
-            Quality::Moderate
-        } else if item_name.contains("poor") || item_name.contains("crude") {
-            Quality::Crude
-        } else if item_name.contains("pathetic") || item_name.contains("terrible") {
-            Quality::Pathetic
-        } else {
-            Quality::Basic
-        };
-
-        // Parse material
-        let material = if is_tool_or_weapon {
-            // Tools and weapons use metal or wood
-            if item_name.contains("steel") {
-                EquipmentMaterial::Metal(MetalMaterial::Steel)
-            } else if item_name.contains("iron") {
-                EquipmentMaterial::Metal(MetalMaterial::Iron)
-            } else if item_name.contains("bronze") {
-                EquipmentMaterial::Metal(MetalMaterial::Bronze)
-            } else if item_name.contains("copper") {
-                EquipmentMaterial::Metal(MetalMaterial::Copper)
-            } else if item_name.contains("stone") {
-                EquipmentMaterial::Stone(StoneMaterial::Flint)
-            } else if item_name.contains("oak") {
-                EquipmentMaterial::Wood(WoodMaterial::Oak)
-            } else if item_name.contains("birch") {
-                EquipmentMaterial::Wood(WoodMaterial::Birch)
-            } else if item_name.contains("pine") {
-                EquipmentMaterial::Wood(WoodMaterial::Pine)
-            } else if item_name.contains("yew") {
-                EquipmentMaterial::Wood(WoodMaterial::Yew)
-            } else if item_name.contains("wood") {
-                EquipmentMaterial::Wood(WoodMaterial::Oak)
-            } else {
-                // Default to wood for basic tools
-                EquipmentMaterial::Wood(WoodMaterial::Oak)
-            }
-        } else {
-            // Armor and clothing
-            if item_name.contains("leather") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Leather)
-            } else if item_name.contains("fur") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Fur)
-            } else if item_name.contains("wool") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Wool)
-            } else if item_name.contains("linen") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Linen)
-            } else if item_name.contains("cotton") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Cotton)
-            } else if item_name.contains("hide") {
-                EquipmentMaterial::Cloth(ClothingMaterial::Hide)
-            } else {
-                EquipmentMaterial::Cloth(ClothingMaterial::Linen)
-            }
-        };
-
-        (material, quality)
-    }
-
-    /// Unequip an item from a slot and put it in inventory
-    pub fn unequip_to_inventory(&mut self, slot: super::equipment::EquipmentSlot) -> Result<(), String> {
-        match self.equipment.unequip(slot) {
-            Some(item) => {
-                // Add to inventory
-                if self.inventory.add_item(InventoryItem::new(item.name.clone(), 1)) {
-                    Ok(())
-                } else {
-                    // Inventory full, re-equip the item
-                    self.equipment.equip(item).ok();
-                    Err("Inventory full, cannot unequip".to_string())
-                }
-            }
-            None => Err(format!("No item equipped in slot {:?}", slot)),
-        }
-    }
 
     /// Get reference to currently equipped item in a slot
     pub fn get_equipped(&self, slot: super::equipment::EquipmentSlot) -> Option<&super::equipment::EquipmentItem> {
@@ -6114,25 +5985,9 @@ impl Agent {
         self.equipment.get_equipped(slot).is_some()
     }
 
-    /// Get total armor rating from all equipped armor
-    pub fn get_total_armor(&self) -> f32 {
-        self.equipment.total_armor()
-    }
 
-    /// Get total cold insulation from all equipped clothing
-    pub fn get_total_cold_insulation(&self) -> f32 {
-        self.equipment.total_cold_insulation()
-    }
 
-    /// Get total heat resistance from all equipped clothing
-    pub fn get_total_heat_resistance(&self) -> f32 {
-        self.equipment.total_heat_resistance()
-    }
 
-    /// Get attack damage bonus from equipped weapons
-    pub fn get_weapon_damage(&self) -> f32 {
-        self.equipment.weapon_damage()
-    }
 
     /// Get tool efficiency bonus from equipped tools
     pub fn get_tool_efficiency(&self, tool_type: &str) -> f32 {
@@ -6178,25 +6033,13 @@ impl Agent {
         self.equipment.is_encumbered()
     }
 
-    /// Get encumbrance penalty (0.0 = no penalty, 1.0 = fully encumbered)
-    pub fn get_encumbrance_penalty(&self) -> f32 {
-        self.equipment.encumbrance_penalty()
-    }
 
-    /// Get movement speed multiplier based on equipment weight
-    pub fn get_movement_speed_multiplier(&self) -> f32 {
-        self.equipment.movement_speed_multiplier()
-    }
 
     /// Get all equipped items
     pub fn get_all_equipped(&self) -> Vec<&super::equipment::EquipmentItem> {
         self.equipment.get_all_equipped()
     }
 
-    /// Get mining speed bonus from equipped tools
-    pub fn get_mining_speed_bonus(&self) -> f32 {
-        self.equipment.mining_speed_bonus()
-    }
 
     /// Get harvesting speed bonus from equipped tools
     pub fn get_harvesting_speed_bonus(&self) -> f32 {
@@ -6347,10 +6190,22 @@ impl Agent {
             return EatResult::NoFood;
         }
 
-        // You cannot eat a deer. The decision layer knows this and cuts one up
-        // first, but the executor is the place it has to be true: an agent
-        // handed a carcass by any other route would otherwise swallow two
-        // kilos of raw beast in a tick.
+        // You cannot eat a stone. The callers all filter for food before they
+        // get here, and that was the whole of the guard: `Piece::can_it_be_eaten`
+        // asks only whether a thing is an uncut carcass, so anything that was
+        // not a carcass passed. Called with "wood", "stone", "clay", "bowl" or
+        // "flax" this returned Success, credited twenty energy, fed
+        // `nutrition.consume` and dropped the hunger drive. Nothing reached it
+        // that way in a live run - but the rule lived in the callers and not
+        // in the verb, which is the shape every defect in this file has had.
+        if !crate::world::nutrition::is_this_food(item_id) {
+            return EatResult::NoFood;
+        }
+
+        // You cannot eat a deer either. The decision layer knows this and cuts
+        // one up first, but the executor is the place it has to be true: an
+        // agent handed a carcass by any other route would otherwise swallow
+        // two kilos of raw beast in a tick.
         if !crate::world::nutrition::Piece::of(item_id).can_it_be_eaten() {
             return EatResult::NoFood;
         }
@@ -6361,7 +6216,8 @@ impl Agent {
                 // Not a tracked food item - consume 1 with flat nutrition
                 self.inventory.remove_item(item_id, 1);
                 self.food_i_ate = self.food_i_ate.saturating_add(1);
-                let flat_nutrition = NutritionalContent::new(20.0, 5.0, 5.0, 0.3);
+                let flat_nutrition =
+                    crate::world::nutrition::what_an_untracked_mouthful_is_worth();
                 self.nutrition.consume(&flat_nutrition);
                 self.state.took_a_meal(
                     current_tick,
@@ -6456,16 +6312,17 @@ impl Agent {
     }
 
     /// Whether the agent is carrying anything it can safely eat
+    /// Whether there is anything in the pack this one could make a meal of.
+    ///
+    /// Exactly what `find_best_food_to_eat` would return, and nothing else.
+    /// There used to be a second clause here reaching for the literal item id
+    /// `"food"`, because the search above could not see untracked stacks - so
+    /// a pack of untracked grain, berries or fish answered *false* to this
+    /// while `food_put_by` counted every one of them. The decision layer asks
+    /// this before it chooses to eat, so those agents read as provisioned and
+    /// never once ate what they were carrying. The search sees them now.
     pub fn has_edible_food(&self) -> bool {
-        if self.find_best_food_to_eat().is_some() {
-            return true;
-        }
-
-        // Untracked stacks have no freshness to judge, so they are always safe
-        self.inventory
-            .get_item("food")
-            .map(|item| item.quantity > 0 && item.food_data.is_none())
-            .unwrap_or(false)
+        self.find_best_food_to_eat().is_some()
     }
 
     /// Find the best food item to eat based on nutritional needs and freshness
@@ -6544,7 +6401,8 @@ impl Agent {
     pub fn find_best_food_to_eat(&self) -> Option<String> {
         let needed = self.nutrition.most_needed_nutrient();
 
-        let mut best_item: Option<(String, f32)> = None;
+        // What it is, how many whole days it has left, and what it is worth.
+        let mut best_item: Option<(String, u32, f32)> = None;
 
         for (item_id, item) in &self.inventory.items {
             // Skip emptied stacks - an exhausted entry lingering in the
@@ -6560,7 +6418,45 @@ impl Agent {
                 continue;
             }
 
-            if let Some(ref food_data) = item.food_data {
+            // Something that is not food at all is not a candidate, whatever
+            // else is true of it. This used to be left to the `if let` below -
+            // no nutrition data meant "skip" - which quietly also skipped
+            // every untracked stack of real food, so a pack of traded grain
+            // was invisible here and counted in `food_put_by` at the same
+            // time.
+            if !crate::world::nutrition::is_this_food(item_id) {
+                continue;
+            }
+
+            let Some(ref food_data) = item.food_data else {
+                // Food with nothing known about it beyond its name. It is
+                // scored on what `eat_food_item` will actually credit it with,
+                // so the search and the verb agree about what it is worth, and
+                // at full freshness because there is nothing to say otherwise.
+                let flat = crate::world::nutrition::what_an_untracked_mouthful_is_worth();
+                let score = match needed {
+                    crate::world::NutrientType::Energy => flat.energy,
+                    crate::world::NutrientType::Protein => flat.protein,
+                    crate::world::NutrientType::Micronutrients => flat.micronutrients,
+                };
+
+                // Nothing is known about how long it has, so it is not urgent
+                // and not stale: it sits with the things that will keep.
+                let days_left = u32::MAX;
+                let better = match best_item.as_ref() {
+                    None => true,
+                    Some((_, best_days, best_score)) => {
+                        days_left < *best_days
+                            || (days_left == *best_days && score > *best_score)
+                    }
+                };
+                if better {
+                    best_item = Some((item_id.clone(), days_left, score));
+                }
+                continue;
+            };
+
+            {
                 // Skip anything that would make the agent sick. Raw food turns
                 // harmful before it counts as spoiled, so checking spoilage
                 // alone leaves agents eating rot: ten health a bite, one bite
@@ -6594,41 +6490,51 @@ impl Agent {
                     crate::world::NutrientType::Micronutrients => nutrition.micronutrients,
                 };
 
-                // Prefer fresher food, and prefer food that will not keep.
+                // Eat what will be lost first.
                 //
-                // Freshness alone was exactly backwards for a people with a
-                // store. A person eats the thing that is about to be lost and
-                // saves the thing that will last, which is the whole reason
-                // for preserving anything - and until now nothing did that.
-                // Agents spent three turns drying a lot of fish and then ate
-                // it the same afternoon, so a settlement held 0.56 units of
-                // preserved food through a whole winter.
+                // The rule was `score * freshness * spoilage_multiplier`, and
+                // `score` is `effective_nutrition`, which multiplies by
+                // freshness already - so freshness went in **twice** and the
+                // preference for the fresher of two identical things was
+                // squared. A settlement ate this morning's berries and let
+                // last week's rot beside them.
                 //
-                // `spoilage_multiplier` is how fast a thing goes off, so it
-                // is already the number wanted: raw is 1.0 and dried is 0.05,
-                // which makes a dried strip a twentieth as attractive as
-                // today's supper and exactly as attractive in February, when
-                // there is nothing else.
+                // What matters is not how fresh a thing is but how long it
+                // has left, which is one number - see
+                // `FoodData::how_long_this_has_left`. It carries what the old
+                // expression was reaching for with both its terms: a dried
+                // strip has hundreds of days in it and goes to the back, which
+                // is what saves a winter store from being eaten in October;
+                // and a raw thing three days off turning goes to the front,
+                // ahead of the same thing picked this morning.
                 //
-                // Freshness stays in, so that "eat what will be lost first"
-                // does not become "eat the rot first": a raw thing at 0.35
-                // still scores below a raw thing at 1.0.
-                let adjusted_score =
-                    score * food_data.freshness * food_data.preparation.spoilage_multiplier();
+                // Reckoned in whole days rather than ticks, so that what is
+                // *worth* eating still decides between two things that will be
+                // lost at about the same time. A strict ordering on the clock
+                // alone has somebody eat a crumb with an hour left in front of
+                // a good meal with a day, and a turn spent on a crumb is a
+                // turn.
+                let days_left = (food_data.how_long_this_has_left()
+                    / crate::environment::seasons::TICKS_PER_DAY as f32)
+                    .floor() as u32;
 
-                if best_item.is_none() || adjusted_score > best_item.as_ref().unwrap().1 {
-                    best_item = Some((item_id.clone(), adjusted_score));
+                let better = match best_item.as_ref() {
+                    None => true,
+                    Some((_, best_days, best_score)) => {
+                        days_left < *best_days
+                            || (days_left == *best_days && score > *best_score)
+                    }
+                };
+
+                if better {
+                    best_item = Some((item_id.clone(), days_left, score));
                 }
             }
         }
 
-        best_item.map(|(id, _)| id)
+        best_item.map(|(id, _, _)| id)
     }
 
-    /// Get summary of nutritional status
-    pub fn nutrition_status(&self) -> String {
-        self.nutrition.status_string()
-    }
 
     /// Drink water from inventory and satisfy thirst drive
     /// Returns true if water was consumed
@@ -6721,15 +6627,7 @@ impl Agent {
         self.fatigue.should_collapse()
     }
 
-    /// Get current fatigue level (0.0 to 1.0)
-    pub fn fatigue_level(&self) -> f32 {
-        self.fatigue.level
-    }
 
-    /// Get fatigue severity description
-    pub fn fatigue_description(&self) -> &'static str {
-        self.fatigue.description()
-    }
 
     /// Consume energy from activity
     pub fn consume_energy(&mut self, amount: f32) {
@@ -6889,27 +6787,6 @@ impl Agent {
         }
     }
 
-    /// Refresh storage knowledge (called when agent inspects/accesses storage)
-    /// Satisfies curiosity and grants happiness to Curious trait holders
-    pub fn refresh_storage_knowledge(&mut self, storage_position: (i32, i32, i32), _current_tick: u32) {
-        use super::EmotionSource;
-        use crate::core::memory::SpatialMemoryType;
-
-        // Update the memory
-        self.memory.remember_location(SpatialMemoryType::Storage, storage_position);
-
-        // Satisfy curiosity about this location
-        self.emotions.set_curiosity(EmotionSource::Location(storage_position), 0.0);
-
-        // Curious trait holders gain happiness from learning/discovering
-        if self.traits.has(crate::core::Trait::Curious) {
-            self.emotions.add_happiness_with_traits(
-                EmotionSource::Event("satisfied curiosity".to_string()),
-                0.15, // Moderate happiness boost
-                &self.traits
-            );
-        }
-    }
 
     /// Update emotions based on current drive states
     /// High unsatisfied drives trigger appropriate negative emotions
@@ -6941,6 +6818,23 @@ impl Agent {
     /// A missed meal is not frightening. Days of missed meals are.
     const LONG_ENOUGH_TO_FRIGHTEN: f32 = 48.0;
 
+    /// How far ahead dread looks.
+    ///
+    /// Three days. Not the same horizon as `A_LONG_WAY_OFF`, which is half a
+    /// day and is the *urgency* clock - how hard a need should press on what
+    /// an agent does this turn. These are two different questions and they
+    /// were sharing one number: read at half a day, a man fifteen days without
+    /// food and six days from dying of it came out **eight per cent
+    /// frightened**, because six days is twelve times half a day.
+    ///
+    /// Urgency wants a tight horizon or everything is always an emergency -
+    /// that is what the comment on `A_LONG_WAY_OFF` is about. Dread wants a
+    /// long one, because being a week from starving is frightening and is
+    /// meant to be: it is the specification's "I do not have enough food"
+    /// raising fear, and fear is what sends somebody looking further afield
+    /// than the ground they are standing on.
+    const WHAT_DREAD_LOOKS_AHEAD: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 * 3.0;
+
     /// Fear from a need that something has been preventing this agent from
     /// answering.
     ///
@@ -6956,7 +6850,28 @@ impl Agent {
     /// is not being prevented from anything. `denied_ticks` counts only the
     /// ticks it asked and got nothing.
     fn calculate_survival_drive_emotion(&self) -> f32 {
+        self.what_i_dread().0
+    }
+
+    /// The same reading, and *which need* it is about.
+    ///
+    /// The name matters as much as the number. "I do not have enough food"
+    /// raising fear is only half of what the specification asks for; the
+    /// other half is that the fear then helps motivate the drive that would
+    /// answer it, and a bare magnitude cannot say which drive that is. So
+    /// this returns both, and `DriveType::Safety` carries them: the fear
+    /// drive rises on the dread, and when there is nothing in the field to
+    /// run from, what it offers to do about it is whatever the dreaded need
+    /// offers - which is going for food when the dread is hunger and going
+    /// for water when it is thirst. Fear does not displace the need it is
+    /// about; it pushes in the same direction.
+    ///
+    /// Only the needs with a death clock can be dreaded, and
+    /// `ticks_before_this_kills_me` answers `None` for Safety itself, so the
+    /// fear drive can never end up pointed at its own tail.
+    pub fn what_i_dread(&self) -> (f32, Option<crate::core::DriveType>) {
         let mut worst: f32 = 0.0;
+        let mut about = None;
 
         for drive_type in crate::core::DriveType::all() {
             let Some(drive) = self.drives.get(drive_type) else {
@@ -6971,17 +6886,22 @@ impl Agent {
             // cannot kill is a disappointment; one that can is a danger, and
             // the nearer it is the worse.
             let stakes = match self.state.ticks_before_this_kills_me(drive_type) {
-                Some(left) => (Self::A_LONG_WAY_OFF / left.max(1.0)).clamp(0.0, 1.0),
+                Some(left) => (Self::WHAT_DREAD_LOOKS_AHEAD / left.max(1.0)).clamp(0.0, 1.0),
                 None => continue,
             };
 
             let how_long = (drive.denied_ticks() as f32 / Self::LONG_ENOUGH_TO_FRIGHTEN)
                 .clamp(0.0, 1.0);
 
-            worst = worst.max(stakes * how_long);
+            let this_one = stakes * how_long;
+
+            if this_one > worst {
+                worst = this_one;
+                about = Some(drive_type);
+            }
         }
 
-        worst.min(1.0)
+        (worst.min(1.0), about)
     }
 
     /// Calculate sadness from social drive deprivation
@@ -7381,20 +7301,6 @@ impl Agent {
         self.convert_plan_step_to_action(step, &[])
     }
 
-    /// Get the next action from the current plan, resolving social targets
-    ///
-    /// Like get_plan_action but resolves nil UUIDs in social actions to actual
-    /// nearby agents. The nearby_agents list should contain (id, position) pairs
-    /// for all agents that could be interacted with.
-    pub fn get_plan_action_with_nearby(
-        &self,
-        nearby_agents: &[(uuid::Uuid, (i32, i32, i32))],
-    ) -> Option<Action> {
-        let plan = self.current_plan.as_ref()?;
-        let step = plan.current_step()?;
-
-        self.convert_plan_step_to_action(step, nearby_agents)
-    }
 
     /// Find the nearest agent from a list of candidates
     fn find_nearest_agent(&self, candidates: &[(uuid::Uuid, (i32, i32, i32))]) -> Option<uuid::Uuid> {
@@ -8450,120 +8356,8 @@ impl Agent {
         }
     }
 
-    /// Handle receiving information from another agent with lie detection
-    /// This wraps the knowledge base receive and adds immediate verification
-    pub fn receive_information_with_verification(
-        &mut self,
-        info: super::gossip::Information,
-        source: uuid::Uuid,
-        current_tick: u32,
-    ) {
-        use super::gossip::InformationType;
 
-        let info_id = info.id;
-        let info_type = info.info_type.clone();
-        let _ground_truth = info.ground_truth;
 
-        // Receive the information normally
-        self.knowledge.receive_information(
-            info,
-            source,
-            self.id,
-            &self.traits,
-            current_tick as u64,
-        );
-
-        // Immediate verification attempt for resource claims
-        if let InformationType::ResourceLocation { resource, location } = &info_type {
-            if let Some(is_correct) = self.verify_resource_claim(resource, *location) {
-                // We can immediately verify this claim
-                let _detection_bonus = self.get_lie_detection_bonus();
-
-                if !is_correct {
-                    // They lied about a resource location we know about!
-                    self.on_lie_detected(source, &info_id, current_tick);
-                } else {
-                    // Verified correct
-                    self.on_truth_verified(source, &info_id, current_tick);
-                }
-            } else if self.traits.has(crate::core::traits::Trait::Suspicious) {
-                // Suspicious agents are wary of unverifiable claims
-                // Slightly reduce confidence in the belief
-                if let Some(belief) = self.knowledge.beliefs.iter_mut().find(|b| b.info_id == info_id) {
-                    belief.confidence *= 0.9;
-                }
-            }
-        }
-    }
-
-    /// Called when a lie is detected from a source
-    fn on_lie_detected(&mut self, source: uuid::Uuid, info_id: &uuid::Uuid, current_tick: u32) {
-        use super::EmotionSource;
-
-        // Update knowledge trust
-        self.knowledge.verify_information(info_id, false);
-
-        // Get relationship and apply penalty
-        let rel = self.relationships.get_or_create_relationship(source, current_tick);
-
-        // Calculate penalty based on relationship
-        let base_penalty = 0.15;
-        let penalty = if rel.bond_strength > 0.5 {
-            // Betrayal by a friend hurts more
-            base_penalty * 1.5
-        } else if rel.bond_strength < -0.3 {
-            // Expected from an enemy - less emotional impact
-            base_penalty * 0.7
-        } else {
-            base_penalty
-        };
-
-        rel.weaken(penalty);
-        rel.total_interactions += 1;
-        rel.last_interaction_tick = current_tick;
-
-        // Emotional response
-        self.emotions.add_anger(
-            EmotionSource::Agent(source),
-            0.15
-        );
-
-        // Paranoid agents become extra suspicious
-        if self.traits.has(crate::core::traits::Trait::Paranoid) {
-            self.emotions.add_fear(
-                EmotionSource::Agent(source),
-                0.1 // Fear of further deception
-            );
-        }
-
-        // Trusting agents feel hurt/sad when lied to
-        if self.traits.has(crate::core::traits::Trait::Trusting) {
-            self.emotions.add_sadness(
-                EmotionSource::Agent(source),
-                0.1
-            );
-        }
-    }
-
-    /// Called when truth is verified from a source
-    fn on_truth_verified(&mut self, source: uuid::Uuid, info_id: &uuid::Uuid, current_tick: u32) {
-        use super::EmotionSource;
-
-        // Update knowledge trust
-        self.knowledge.verify_information(info_id, true);
-
-        // Strengthen relationship slightly
-        let rel = self.relationships.get_or_create_relationship(source, current_tick);
-        rel.strengthen(0.03);
-        rel.total_interactions += 1;
-        rel.last_interaction_tick = current_tick;
-
-        // Small happiness from accurate information
-        self.emotions.add_happiness(
-            EmotionSource::Agent(source),
-            0.01
-        );
-    }
 
 
 
@@ -8817,6 +8611,7 @@ impl Agent {
         what: &str,
         how_many: u32,
         current_tick: u32,
+        how_strong_they_are: f32,
     ) {
         use super::EmotionSource;
 
@@ -8827,7 +8622,25 @@ impl Agent {
         let share = (how_many as f32 / had as f32).clamp(0.0, 1.0);
         let cost = Self::WHAT_BEING_ROBBED_COSTS_THEM * (0.4 + 0.6 * share);
 
-        self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+        // Anger at somebody who can be faced, and fear of somebody who cannot.
+        //
+        // This was anger every time, whoever took it - so a man robbed by
+        // somebody twice his size came away resolved to do something about it,
+        // which is not what being robbed by somebody twice your size feels
+        // like. It is the same appraisal the wolves get, pointed at a person:
+        // see `ThreatAssessment` and `DriveType::Aggression`. What was taken
+        // decides how much, and who took it decides which.
+        let judged = super::ThreatAssessment::assess(
+            self.own_strength(),
+            how_strong_they_are,
+            EmotionSource::Agent(thief),
+        );
+
+        if judged.can_overcome {
+            self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+        } else {
+            self.emotions.add_fear(EmotionSource::Agent(thief), cost);
+        }
 
         let bond = self
             .relationships
@@ -9226,52 +9039,7 @@ impl Agent {
         roll < lie_chance.clamp(0.0, 0.8) // Max 80% chance to lie
     }
 
-    /// Create information to share, potentially distorting based on traits
-    /// Returns the information (possibly distorted) and whether it's a lie
-    pub fn prepare_information_to_share(
-        &self,
-        info: super::gossip::Information,
-        target_id: uuid::Uuid,
-        current_tick: u32,
-    ) -> (super::gossip::Information, bool) {
-        // Check if we would lie to this target
-        if self.would_lie_to(target_id, current_tick) {
-            // Apply distortion based on traits
-            if let Some(distortion_trait) = self.traits.would_distort_info() {
-                let distorted = info.distort(distortion_trait, self.id);
-                return (distorted, true);
-            }
-        }
 
-        // No lying - share truthfully
-        (info, false)
-    }
-
-    /// Spread reputation damage when caught lying (gossip about the liar)
-    /// Other agents who witnessed or heard about the lie will also lose trust
-    pub fn spread_liar_reputation(
-        &mut self,
-        liar_id: uuid::Uuid,
-        _witness_ids: &[uuid::Uuid],
-        current_tick: u32,
-    ) {
-        // Create gossip information about the lie
-        let gossip_info = super::gossip::Information::new(
-            super::gossip::InformationType::AgentTrait {
-                agent: liar_id,
-                trait_name: "dishonest".to_string(),
-            },
-            self.id,
-            true, // This is true - they did lie
-            current_tick as u64,
-        );
-
-        // Store this information in our knowledge
-        self.knowledge.known_information.insert(gossip_info.id, gossip_info);
-
-        // Witnesses also get reputation update (handled by population system)
-        // This method just marks that we're spreading the word
-    }
 }
 /// An errand: somewhere to be, something to do there, and the drive it answers.
 ///
@@ -9315,6 +9083,20 @@ pub struct Errand {
     pub pressed_this_hard: f32,
     /// How many turns it has been walking
     pub turns_on_it: u32,
+    /// And how many turns it has been standing waiting while its owner dealt
+    /// with something that would not wait.
+    ///
+    /// An errand used to be **destroyed** the moment another need took the
+    /// turn. Measured over six worlds, 1,717 of 3,047 errands a settlement set
+    /// out on ended that way - 56% - and 1,401 of those were a primary need
+    /// taking the turn from a secondary one, most often a Preparedness errand
+    /// cut short by thirst or hunger. Since a primary drive outranks a
+    /// secondary one whatever its clock says, that happened to every single
+    /// attempt at putting food by, over and over, and nothing was ever stocked.
+    ///
+    /// Going for a drink is not a change of mind. The errand waits.
+    #[serde(default)]
+    pub set_aside: u32,
 }
 
 impl Errand {
@@ -9330,6 +9112,21 @@ impl Errand {
     /// abandoned on its first step.
     pub const AT_LEAST_THIS_MANY_TURNS: u32 = 4;
 
+    /// How long an errand keeps while its owner is doing something else.
+    ///
+    /// Two days of the world's calendar. Long enough to outlast a drink, a
+    /// meal, a night's sleep and the walk to each; short enough that a patch
+    /// remembered two days ago is not still being walked to a season later,
+    /// which is the failure the old behaviour was avoiding by throwing the
+    /// errand away.
+    pub const HOW_LONG_AN_ERRAND_KEEPS: u32 =
+        2 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// Whether this one has been waiting too long to still be worth resuming.
+    pub fn stale(&self) -> bool {
+        self.set_aside > Self::HOW_LONG_AN_ERRAND_KEEPS
+    }
+
     /// How far off it was set out from
     pub fn how_far_it_was(&self, from: (i32, i32, i32)) -> u32 {
         (self.going_to.0 - from.0).abs().max((self.going_to.1 - from.1).abs()) as u32
@@ -9340,9 +9137,5 @@ impl Errand {
         self.going_to.0 == at.0 && self.going_to.1 == at.1
     }
 
-    /// A job rather than a journey.
-    pub fn is_a_making(&self) -> bool {
-        self.to_make.is_some()
-    }
 }
 

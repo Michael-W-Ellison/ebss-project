@@ -67,13 +67,64 @@ pub struct Grid {
     pub width: usize,
     pub height: usize,
     pub tiles: Vec<Vec<Tile>>,
+
+    /// The ground somebody has left something on.
+    ///
+    /// Muck, and the seed in it. Two phases of the tick used to look for
+    /// these by walking every tile in the world, which made a tick cost what
+    /// the map *is* rather than what is happening on it. See
+    /// `Soil::has_somebody_left_something_here` and ISSUES_FOUND.md #128.
+    ///
+    /// A superset on purpose. Anything that puts something on the ground says
+    /// so, and may say so when nothing came of it; the pruning pass drops what
+    /// turns out to be bare. Over-noting costs one visit and under-noting
+    /// would leave litter lying for ever, so the sites err towards noting.
+    /// Held as (row, column) so that walking it in order walks the map the
+    /// same way the old sweeps did - top to bottom, left to right. Anything
+    /// downstream that depends on the order things are visited in then sees
+    /// exactly what it saw before.
+    #[serde(default)]
+    ground_with_something_on_it: std::collections::BTreeSet<(usize, usize)>,
 }
 
 impl Grid {
+    /// How much ground one cell of this map stands for, in metres a side.
+    ///
+    /// A cell is a hundred square metres. This is the unit the rest of the
+    /// model has always quietly been using: a forage radius of 25 cells is a
+    /// quarter-kilometre walk and a sight radius of 8 is eighty metres, both
+    /// of which are sensible for a person, and both of which are nonsense at
+    /// a metre a cell. It is also the coarsest cell an ecology still reads
+    /// properly on - one of these holds a stand of hazel or a good deal of
+    /// grass, which is the scale the grazing and the seeding work at.
+    pub const METRES_PER_CELL: f32 = 10.0;
+
+    /// A thousand cells is ten kilometres is a hundred square kilometres.
+    pub const HOW_MANY_CELLS_ACROSS_A_COUNTRY: usize = 1000;
+
+    /// How much ground this map is, in square kilometres.
+    pub fn how_much_ground(&self) -> f32 {
+        let metres = Self::METRES_PER_CELL * Self::METRES_PER_CELL;
+        (self.width * self.height) as f32 * metres / 1_000_000.0
+    }
+
+    /// The most of something a map of this many tiles should ever hold, given
+    /// what a fifty by fifty map holds.
+    ///
+    /// A ceiling, not a carrying capacity: what a country will actually feed
+    /// is a question for the grass on it. This is only the point past which a
+    /// vector stops growing, and the one thing it must not be is a number
+    /// somebody chose for a small map and then never revisited.
+    pub fn at_the_very_outside(tiles: usize, on_a_small_map: usize) -> usize {
+        let reference = 50 * 50;
+        (on_a_small_map * tiles).div_ceil(reference).max(on_a_small_map)
+    }
+
     pub fn new(width: usize, height: usize) -> Self {
         let tiles = vec![vec![Tile::default(); width]; height];
 
         Self {
+            ground_with_something_on_it: std::collections::BTreeSet::new(),
             width,
             height,
             tiles,
@@ -248,7 +299,7 @@ impl Grid {
     fn ensure_terrain_diversity(&mut self, rng: &mut impl Rng) {
 
         // Count terrain types
-        let mut terrain_counts: std::collections::HashMap<TerrainType, usize> = std::collections::HashMap::new();
+        let mut terrain_counts: std::collections::BTreeMap<TerrainType, usize> = std::collections::BTreeMap::new();
         for row in &self.tiles {
             for tile in row {
                 *terrain_counts.entry(tile.terrain.terrain_type).or_insert(0) += 1;
@@ -325,6 +376,74 @@ impl Grid {
         (value + 1.0) / 2.0 // Normalize to 0-1
     }
 
+    /// Somebody has left muck on this ground, so it is worth visiting.
+    ///
+    /// The register answers `Soil::has_somebody_left_something_here`, which is
+    /// fouling and dropped seed and nothing else. Litter is deliberately not
+    /// in it: every tile in the world is born with leaf litter on it, so a
+    /// register of tiles-with-litter is a register of every tile, which costs
+    /// a million set inserts a tick and saves nothing. What rots litter still
+    /// sweeps the whole grid.
+    ///
+    /// Cheap and deliberately generous: it costs a set insert, and a tile that
+    /// turns out to have gained nothing is dropped again by
+    /// `forget_bare_ground`. The expensive mistake is the other one - a tile
+    /// left off the list sits there for ever.
+    /// Somebody has left muck on this ground.
+    ///
+    /// The one way to foul a tile. `Soil::somebody_voided_here` is the low
+    /// level of it and knows nothing about the map it sits in, so reaching
+    /// through `get_tile_mut` to call it leaves the tile off the register and
+    /// it sits there smelling of nothing for ever. Anything that has a grid in
+    /// its hand calls this instead.
+    pub fn somebody_voided_on(&mut self, at: &Position, how_much: f32) {
+        self.note_something_on(at);
+        if let Some(tile) = self.get_tile_mut(at) {
+            tile.soil.somebody_voided_here(how_much);
+        }
+    }
+
+    pub fn note_something_on(&mut self, at: &Position) {
+        if at.x < 0 || at.y < 0 {
+            return;
+        }
+        let (x, y) = (at.x as usize, at.y as usize);
+        if x < self.width && y < self.height {
+            self.ground_with_something_on_it.insert((y, x));
+        }
+    }
+
+    /// The ground somebody has left something on, in a fixed order.
+    ///
+    /// May carry a tile that has just gone bare - the pruning happens once a
+    /// tick rather than on every read - so anything walking this still asks
+    /// its own question of each tile.
+    pub fn where_the_ground_is_doing_something(&self) -> Vec<Position> {
+        self.ground_with_something_on_it
+            .iter()
+            .map(|(y, x)| Position::new(*x as i32, *y as i32))
+            .collect()
+    }
+
+    /// Drop the tiles that have nothing on them any more.
+    pub fn forget_bare_ground(&mut self) {
+        let noted = std::mem::take(&mut self.ground_with_something_on_it);
+        self.ground_with_something_on_it = noted
+            .into_iter()
+            .filter(|(y, x)| {
+                self.tiles
+                    .get(*y)
+                    .and_then(|row| row.get(*x))
+                    .is_some_and(|tile| tile.soil.has_somebody_left_something_here())
+            })
+            .collect();
+    }
+
+    /// How much ground is worth visiting, which is what a tick costs.
+    pub fn how_much_ground_is_doing_something(&self) -> usize {
+        self.ground_with_something_on_it.len()
+    }
+
     pub fn get_tile(&self, pos: &Position) -> Option<&Tile> {
         if self.is_valid_position(pos) {
             Some(&self.tiles[pos.y as usize][pos.x as usize])
@@ -360,7 +479,7 @@ impl Grid {
 
     /// Find path from start to end (simple breadth-first search)
     pub fn find_path(&self, start: &Position, end: &Position) -> Option<Vec<Position>> {
-        use std::collections::{HashMap, VecDeque};
+        use std::collections::{BTreeMap, VecDeque};
 
         if !self.is_valid_position(start) || !self.is_valid_position(end) {
             return None;
@@ -371,8 +490,8 @@ impl Grid {
         }
 
         let mut queue = VecDeque::new();
-        let mut came_from: HashMap<Position, Position> = HashMap::new();
-        let mut visited = HashMap::new();
+        let mut came_from: BTreeMap<Position, Position> = BTreeMap::new();
+        let mut visited = BTreeMap::new();
 
         queue.push_back(*start);
         visited.insert(*start, true);
@@ -418,7 +537,7 @@ impl Grid {
     /// Find path avoiding both terrain obstacles and occupied positions
     /// Returns the next position to move to (first step of path), not the full path
     pub fn find_path_with_agents(&self, start: &Position, end: &Position, occupied_positions: &[Position]) -> Option<Position> {
-        use std::collections::{HashMap, VecDeque};
+        use std::collections::{BTreeMap, VecDeque};
 
         if !self.is_valid_position(start) || !self.is_valid_position(end) {
             return None;
@@ -436,8 +555,8 @@ impl Grid {
         }
 
         let mut queue = VecDeque::new();
-        let mut came_from: HashMap<Position, Position> = HashMap::new();
-        let mut visited = HashMap::new();
+        let mut came_from: BTreeMap<Position, Position> = BTreeMap::new();
+        let mut visited = BTreeMap::new();
 
         queue.push_back(*start);
         visited.insert(*start, true);

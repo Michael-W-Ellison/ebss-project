@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** August 2026, against commit `0d11751` and the work since.
+**Last verified:** September 2026, against commit `6e2eb70` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -5386,21 +5386,652 @@ everything an agent remembers about a place.
 
 Flaky tests: **fifteen to seven**, measured the same way over three runs.
 
-#### What is left, and why it is the argument for modularising
+#### What was left, and what it turned out to be
 
-Not finished, and the shape of what is left matters. A settlement is still not
-reproducible run to run - eight worlds gave 1102, 1199, 1104 - because there are
-**eighty-three choose-operations in `analytics/mod.rs` alone**, and every one of
-them is a place where an unordered collection can decide something.
+Not finished at this point. A settlement was still not reproducible run to run
+- eight worlds gave 1102, 1199, 1104 - and the reading taken here was that the
+remainder lay in the **eighty-three choose-operations in `analytics/mod.rs`**,
+each a place where an unordered collection could decide something.
 
-Chasing them one at a time is how the last three rounds went, and each round
-found another. That is not a bug list, it is a missing property: *the decision
-layer's inputs must have a stable order*. A layer with a boundary can be made
-to hold that property once. A sixteen-thousand-line file cannot.
+That reading was half right and half wrong, and the wrong half is worth
+keeping. Right: it is a missing property, not a bug list - *the decision
+layer's inputs must have a stable order* - and chasing call sites one at a time
+is how three rounds had already gone. Wrong: the remaining faults were not in
+those eighty-three at all. Two of the four were randomness taken outside the
+stream, one was a `HashMap` in the *fauna registry* four modules away, and the
+last was `rand::random()` in the animals. See #94, which finished it - and note
+what actually finished it: not more diligence over the same file, but an
+instrument that could see across two processes, and then holding the property
+with the type system rather than by hand.
 
 ## Housekeeping
 
-### 93. The other thirteen drive rates were never derived either
+### 93. Fourteen per cent of the public surface had no caller
+
+A sweep for `pub fn` definitions whose identifier appears nowhere else in
+`src`, `plugins`, `examples`, `benches` or `tests` - not "no call site", *no
+mention at all* - turned up **326 of them**. Cutting those exposed a second
+wave of 24 that only the first wave had called, and a third of private
+helpers, statics and one struct that only those had used. Three fixpoint
+passes, **357 items and 3,838 lines gone**, and the sweep now reports zero.
+
+The compiler named exactly one false positive in the whole set,
+`Action::primary_drive`, used from `tests/environment_plugin_tests.rs` - a
+directory the first scan had not been pointed at. Nothing else broke: the four
+configurations (default, `gui`, `bevy_gui`, `--workspace --all-targets`) build
+clean, and the warning set is byte-identical to what it was before, 55 either
+way.
+
+Deleting an uncalled function cannot change what a program does, so the test
+suite should have been untouched, and in aggregate it was: 25 deterministic
+failures and 7 flaky before, 24 and 7 after. The five names that moved between
+the two lists - the winter, thirst, clothing, distrust and survival-pressure
+settlements - each flip on their own between runs of the *same* tree
+(FAILED/FAILED/ok/FAILED, FAILED/ok/FAILED/ok, and so on). They are #92's
+unfinished business, not casualties of this.
+
+#### What was actually in there
+
+Not all of it was clutter, and that is the finding. Some of it was recurring
+defect #1 again - a subsystem built, tested, and wired to nothing:
+
+- **Equipment wear.** `tick_all_equipment`, `apply_tool_wear`,
+  `apply_combat_wear`, `unequip_broken`, `can_be_repaired`,
+  `get_broken_equipment`, `condition_description`, `sharpness_retention`,
+  `flexibility`, `mining_speed_with_traits`, `harvesting_speed_with_traits`.
+  A complete durability model that nothing ticked. Tools do wear in this
+  simulation - through `environment::making`, on a different vocabulary.
+  Defect #3 as well as #1.
+- **Twenty-one item constructors** in the same file: `iron_dagger`,
+  `steel_axe`, `bronze_sickle`, `yew_bow`, `obsidian_dagger` and the rest. A
+  second, richer materials ladder than the one the world actually runs on.
+- **Precipitation accumulation.** `world/climate.rs` carried a
+  `HashMap<(i32,i32), PrecipitationAccumulation>` of snow depth, standing
+  water and ground wetness, ticked by weather type, read by `is_flooded`,
+  `movement_penalty` and `shelter_quality`. Nothing read the field, so nothing
+  ever called any of them. Snow has never lain in this world.
+- **Information verification.** `verify_information_from`,
+  `receive_information_with_verification`, `prepare_information_to_share`,
+  `spread_liar_reputation`, `react_to_trait_info`,
+  `process_information_verification`. A second gossip pipeline beside the live
+  one from #93-#101.
+- **The global plugin registry.** `global_registry`, `has_plugin`,
+  `plugin_ids` and the `static mut GLOBAL_REGISTRY` behind them.
+- **`physiology::pass_waste`**, which drained a `waste` accumulator nothing
+  drained, and `agent::what_a_body_this_age_can_do`, the age capability curve
+  that was written and never hung on anything.
+
+The code is in git history where it can be read; what is gone is the
+impression that any of it was running. The rest was accessors, `with_*`
+builders, and trend-series getters for an analytics UI that reads its numbers
+another way.
+
+Two of these are worth wiring rather than rewriting: the age capability curve,
+which already has an open task against it, and the equipment durability model,
+which should either replace the `making` vocabulary or come out of the design
+as well as out of the code.
+
+### 94. The sweep finished: the same seed is now the same world, to the berry
+
+#92 halved the flakiness and named what was left as *eighty-three
+choose-operations in `analytics/mod.rs`* - somewhere in there, it assumed, an
+unordered table was still deciding something. That guess was wrong in an
+instructive way. The instrument was the thing that had been missing, not the
+diligence: a harness that runs one seed, prints a fingerprint of the whole
+world per tick, and is run **as two separate processes** and diffed. Rust seeds
+hash iteration per *process*, so no test inside one process could ever have
+seen this.
+
+The first diff put the divergence at tick **-1** - before a single tick had
+run. From there it was four faults, each found by the same loop of fingerprint,
+diff, narrow.
+
+**One: names came from the operating system.** `Uuid::new_v4()`, 270 call
+sites. An id is not a label in this model - it is a map key, a sort key and a
+tie-break - so two runs of one seed disagreed about who was who before anything
+had happened, and every ordering downstream of an id disagreed with them.
+`dice::name()` draws the sixteen bytes from the seeded stream and sets the same
+version bits, so nothing that reads a `Uuid` can tell.
+
+**Two: `all_species()` handed back a `HashMap`'s values.** With the ids fixed,
+world generation still spent a different number of rolls each time - 480, 464,
+544. A draw counter on the stream put it in `spawn_naturalistic`: the herbivore
+list came out in a different order, so a different species was picked, so a
+different `herd_size` was rolled, so a different number of animals were spawned.
+Not a tie being broken by a coin - a *variable amount of randomness consumed*,
+which puts every later draw in the run out of step.
+
+**Three, and the reason to stop chasing call sites: every `HashMap` in the
+model.** 439 uses across 87 files. Converting them all to `BTreeMap`/`BTreeSet`
+took a script, fifteen `#[derive(PartialOrd, Ord)]`s and about an hour, and it
+turns the property from a thing that must be remembered at each new
+`.iter()` into a thing the type system holds. Two guard tests now keep it that
+way. There is a real cost, stated plainly: **the model runs about 20% slower**
+(32 worlds x 4,000 ticks, 39.6s to 47.5s). For a project where the binding
+constraint has been the trustworthiness of a measurement, that is a good trade.
+
+**Four: `rand::random()`.** Ten sites in the fauna and flora, missed by #92's
+sweep because that one looked for `thread_rng()` and this is the same function
+under a friendlier name. Every wander an animal takes, and whether it grazes,
+rests or hunts. These ten were enough on their own: with everything else fixed,
+the beasts still moved differently in every run, and **by tick 49 it had
+reached the people** - `Safety` at 0.020 in one run and 0.034 in the other, for
+a man who could see one, with every other number about him identical.
+
+#### What it buys
+
+- **One seed, three runs, 4,000 ticks: byte-identical.** Three seeds tried;
+  different seeds still give different worlds.
+- **Flaky tests 7 to 0.** Same 28 failures in each of three runs of the whole
+  suite. Five of the seven that came and went now fail every time and two pass
+  every time - which is the point: each of them now has an answer.
+- **A measurement is a fact.** The survival harness gave 2,586 and 2,350 on two
+  runs of the *same code and the same seeds* before this; it gives 2,418 twice
+  now. The old published means, spread ~120 turns, were reading a sample where
+  they claimed to read a number. Nothing here changes what the model does - the
+  new figure sits inside the old band - but every figure after it can be
+  compared with one run instead of thirty-two.
+
+#### What holds it
+
+`analytics/tests/repeatable_tests.rs`. Two behavioural tests - the same seed is
+the same world, a different seed is not - and two source-level guards, which are
+unusual and deliberate: `every_roll_comes_from_the_one_stream` fails on any
+`thread_rng`, `rand::random` or `Uuid::new_v4` in `src/`, and
+`nothing_decides_anything_by_walking_an_unordered_table` fails on any `HashMap`
+or `HashSet`. A behavioural test catches a stray roll only if the branch
+carrying it happens to run in the test's hundred and twenty ticks; the fourth
+fault above sat in exactly such a branch through the whole of #92. This class of
+defect has now recurred three times, and the guard is cheap.
+
+### 95. The five-thousand-line function, and the first thing it hid
+
+`execute_action` was 5,723 lines - a third of `analytics/mod.rs` - and one
+`match` of fifty-two arms. Every arm was reachable only by scrolling, no two
+could be read side by side, and a change to one produced a diff nobody could
+review against the other fifty-one.
+
+It is a dispatcher now, in `analytics/doing/`, and the arms are methods grouped
+by what they are about rather than by the order somebody happened to add them:
+**eating** (food into a body, and the keeping of it), **getting** (taking what
+the country has), **making**, **ground**, **keeping** (carrying and putting by),
+**meeting** (what passes between two people), **fighting**, **moving**,
+**looking**. `analytics/mod.rs` goes 16,779 to 11,060; the largest of the nine
+new files is 1,129 lines and the smallest is 195.
+
+Two things stayed in the dispatcher on purpose, because they belong to *doing
+something* rather than to any one verb: the single roll, drawn once and lent to
+whichever verb needs it - so that how many draws a turn takes does not depend
+on which arm is chosen - and the one check against the verb matrix for what
+these hands are short of.
+
+#### The proof, which is the point
+
+A refactor of five thousand lines is normally an act of faith. This one is not:
+**three seeds run six hundred ticks give byte-identical worlds either side of
+the move** - every agent, beast, resource and pit, tick by tick - and the suite
+gives the same 28 failures it gave before, stable over two runs. That check
+exists only because of #94. It is the first return on that work, and it arrived
+one commit later.
+
+#### And the first thing the split found
+
+`Action::Fight` never reads its `weapon`. Two hundred lines from the top of
+`fighting.rs`, in a signature that now fits on one line, the compiler pointed at
+an unused parameter: **a man standing his ground against a wolf fights it the
+same with a flint spear in his hand as with nothing.** `hunting`, two modules
+away, is careful about exactly this. The specification is explicit - *"Hunting
+any larger animal requires at least a spear... A flint spear should reduce the
+number of attacks"* - and standing your ground is the same problem from the
+other side.
+
+It has presumably been true since `Fight` was added. Nothing found it while it
+sat at line 12,003 of a sixteen-thousand-line file, because nothing could see
+it. Left as it is here, because this change is behaviour-neutral by contract,
+and filed as its own piece of work.
+
+### 96. The tick, and a flag that would have been dropped silently
+
+With `execute_action` gone, `tick` was the largest function left: 852 lines. Its
+actual shape - a run of world phases, then everybody taking a turn, then a
+second run of world phases - was buried under six hundred and seventy lines of
+per-agent decision code sitting in the middle of it. That order is argued over
+in the comments, and several of the arguments were bought with a measurement:
+the beasts look before they move rather than after, the world is ticked once
+rather than twice, what a body has to pass goes back on the ground before
+anybody smells it. None of it could be read while the middle of the function was
+longer than the whole of anything else in the file.
+
+`analytics/turn/` now holds it. `tick` is 179 lines and reads as the sequence it
+is. `turn/each_one.rs` holds one person's turn in the order a person takes it,
+with the five stages named:
+
+1. `keep_the_goals_and_the_plan_current` - the standing intentions, refreshed on
+   their own clock rather than every turn.
+2. `choose_what_to_do` - the priority ladder, from starving down through fear,
+   shelter, what can be seen, the plan, the goals and the drives; and the note
+   of *why*, which is the only thing that makes the threat tally mean anything.
+3. `and_what_it_takes` - a real target rather than a nil id, an errand held
+   rather than re-decided, a reachable place, a free hand, the tool out of the
+   bag, the parts fetched, and whether a better tool would pay for itself.
+4. `execute_action` - the previous entry.
+5. `what_came_of_it` - the body's bill, the tally, the lesson, the plan.
+
+Then, on its own clock rather than on a drive, `look_in_at_the_storehouse`.
+
+`analytics/mod.rs` goes 11,060 to 10,213 - **16,779 to 10,213 over the two
+entries, a drop of 39 per cent** - and the largest function left in it is 378
+lines.
+
+#### The flag
+
+Cutting the choosing block out gave it a parameter, `ran_for_it`, because
+fleeing comes out as an ordinary `Move` and both the tally and the errand need
+to know it was one. The block already declared `let mut running_away = false;`
+of its own, so the parameter was **shadowed**: every assignment inside went to
+the local, the caller's flag stayed false, and `stick_to_the_errand` would have
+held a fleeing man to whatever errand he was on.
+
+The compiler said "unused variable" and nothing else. It is not an error to
+shadow a parameter, and a reader skimming a 225-line body would not have caught
+it; a test would only have caught it in a world where somebody had to run. The
+fingerprint harness would have caught it on the next run - which is the point of
+having one - but the warning caught it first, and only because the block had
+been given a signature to shadow. That is the second thing this split has found
+in two commits, and both were found by giving code a name.
+
+### 97. The decision layer had no boundary at all, and that was the original argument
+
+#92 ended by naming what was missing as a *property* rather than a bug list:
+"the decision layer's inputs must have a stable order... a layer with a boundary
+can be made to hold that property once." There was no such layer. What answers
+*given a drive, what would answer it?* was 2,900 lines scattered the length of
+the file: the ladder in one place, what hunger asks for eight hundred lines
+below it, what the errand machinery does with the answer three thousand lines
+after that, and the constants each of them turns on wherever they happened to be
+written.
+
+`analytics/wanting/` is that layer now. The ladder is in `mod.rs`; below it,
+one module per question, named for what it is about rather than for the drive
+that happens to ask - because more than one drive asks most of them:
+
+| | |
+|---|---|
+| `food` | hunger and thirst, the two that kill |
+| `quarry` | hunting and fishing |
+| `ground` | working the soil before there is anything on it to take |
+| `store` | putting by, and taking out again |
+| `shelter` | keeping warm and dry |
+| `camp` | whether to stay, and where to go instead |
+| `errands` | turning a want into a step somebody can actually take |
+
+Eighty-eight functions and fifty-six constants moved; the constants went with
+the functions they belong to, which is the first time most of them have been
+anywhere near their use. `analytics/mod.rs` goes 10,213 to **5,276**.
+
+#### What the boundary is actually for
+
+**Nothing in `wanting/` does anything.** Every function in it answers a question
+and hands the answer back; the doing is in `doing/`, and the order of a turn is
+in `turn/`. That is the whole point of the boundary, and it is a rule that can
+now be checked by reading a directory listing rather than by reading sixteen
+thousand lines. A change to what hunger *asks for* can no longer quietly change
+what eating *does*.
+
+It also makes #92's property tractable. "The decision layer's inputs must have a
+stable order" is a sentence about `wanting/`. Before this it was a sentence about
+a file.
+
+#### Across the three splits
+
+`analytics/mod.rs` was **16,779 lines** four commits ago and is **5,276** now -
+down 69 per cent - and the largest function left in it is 170 lines against
+5,723. Nothing about the model changed in any of the three: three seeds run six
+hundred ticks give byte-identical worlds at every step, and the suite gives the
+same 28 failures throughout.
+
+That the same check passed three times running is worth stating plainly. A
+refactor of this size is normally argued about rather than verified. This one was
+verified, at each step, in about ninety seconds - and the reason is #94, four
+commits back, which at the time looked like housekeeping.
+
+### 98. The third layer, and the parts of it that had never been next to each other
+
+What happens whether or not anybody decides anything: the ground coming up, the
+weather on a body, the beasts, birth and nursing, what a person finds out by
+being somewhere at the time. It was the last big cluster in `analytics/mod.rs`
+and the hardest of the three to see, because **its parts were never next to each
+other**. The ground coming up in berries sat two thousand lines from the weather
+that made it wet. The beasts deciding what to make of us sat a thousand lines
+from the beasts acting on it. Nothing in the file's layout said these were one
+subject; only the order they are called in did, and that was buried in `tick`.
+
+`analytics/happening/`, eight modules and 36 functions:
+
+| | |
+|---|---|
+| `soil` | what the ground does, and what goes back into it |
+| `weather` | the weather on a body, and what a clear day dries |
+| `beasts` | what they make of us, and what they do about it |
+| `kin` | carrying, bearing, and feeding what cannot feed itself |
+| `noticing` | what a person finds out by being somewhere at the time |
+| `senses` | what can be smelled, and what stops being worth remembering |
+| `situation` | reading the world, so a drive rises on a condition |
+| `buildings` | buildings, and what standing in one does to somebody |
+
+`analytics/mod.rs` goes 5,276 to **2,491**.
+
+#### The three layers, finished
+
+- [`wanting`] decides - given a drive, what would answer it
+- [`doing`] acts - fifty-two verbs, grouped by what they are about
+- [`happening`] happens - whether or not anybody decided anything
+- [`turn`] says what order they run in, and holds the arguments about that order
+
+That is the shape the modularisation was for. It is worth saying what it buys
+beyond tidiness: **each of the three has a different rule about what it may
+touch**, and those rules are now checkable by looking at a directory rather than
+by reading a file. `wanting` may not change the world. `doing` may not decide.
+`happening` runs on the world's clock, not on anybody's drive. Before this, all
+three rules were true only by the discipline of whoever last edited line 9,412.
+
+#### Across four commits
+
+`analytics/mod.rs`: **16,779 to 2,491 lines, down 85 per cent.** Largest function
+5,723 to 121. Fifty-seven functions left in it, against 176.
+
+Nothing about the model changed in any of the four. Three seeds run six hundred
+ticks give byte-identical worlds at every step, and the suite gives the same 28
+failures throughout, stable across runs. Four configurations build clean at each
+step.
+
+#### One orphan left behind
+
+`process_information_verification` stayed in `analytics/mod.rs`, and it is the
+only thing in there that looks like a world process. It is not one: the compiler
+has it as never used, and it is the last remnant of the second gossip pipeline
+that #93 deleted the rest of. It is left where it is rather than given a home in
+`happening/`, because giving dead code a good address is how it survives the next
+sweep.
+
+### 99. What one agent makes of another, which is not a layer but a seam
+
+The last big cluster, and the one that would not sit in any of the three:
+being afraid of somebody, angry at somebody, willing to trade with them,
+willing to give to them, worth asking. `analytics/between_us/`, 22 functions:
+
+| | |
+|---|---|
+| `threat` | fear, anger, and the four answers to a thing in the way |
+| `seeing` | what everybody saw, and what they made of it |
+| `exchange` | trading, taking, and giving |
+| `asking` | putting a question to somebody who might know |
+
+A beast counts as another here. What these have in common is not that the other
+party is a person: it is that there *is* another party, and that what this one
+does next depends on what it makes of them.
+
+#### Why it is its own directory
+
+It does not fit the three-layer shape, and forcing it would have been worse than
+leaving it. `wanting` consults it - a drive that needs somebody else to answer it
+asks who. `turn` runs part of it as a phase - what somebody feels has to be
+worked out before they can act on it. Splitting it between the two would put
+`what_this_threat_comes_to` in one place and `how_this_one_answers_a_threat` in
+another, which is the exact fault the last four entries have been undoing.
+
+So it is a seam rather than a layer, and saying so in the module note is worth
+more than a tidier diagram would be.
+
+#### The end of it
+
+`analytics/mod.rs` is **1,208 lines** and 35 functions, the largest of them 86.
+It was **16,779 lines and 176 functions, the largest 5,723**, five commits ago -
+**down 93 per cent**. What is left in it is what belongs in a file called
+`analytics/mod.rs`: the configuration, the builders, save and load, the two
+tallies, and a handful of gather helpers that could go either way.
+
+Across all five: three seeds run six hundred ticks give byte-identical worlds at
+every step, the suite gives the same 28 failures throughout, and four
+configurations build clean at each step. Nothing about the model changed in any
+of them.
+
+#### The three orphans, and one that looked worse than it is
+
+Three methods are now visible as never used outside the tests, one in each of
+three directories:
+
+- `process_information_verification` (`analytics/mod.rs`) - the last remnant of
+  the second gossip pipeline #93 deleted the rest of.
+- `nearest_edible_this_one_would_go_to` (`wanting/food.rs`).
+- `how_this_one_answers_a_threat` (`between_us/threat.rs`).
+
+The third looked alarming for about a minute - the choosing code names it in a
+comment as where "the whole tree lives", and nothing calls it - so it was worth
+reading before writing down. It is **a one-line wrapper**:
+`self.what_this_threat_comes_to(agent, position).1`, dropping the branch name.
+`what_this_threat_comes_to` is the tree, and the live path calls it. The tree
+runs.
+
+What is actually wrong is smaller and worth fixing anyway: two names for one
+question, one of them used only by tests, and a comment pointing at the wrong
+one. That is defect #3 in miniature, and it survived precisely because a reader
+who wanted to check would have had to hold two places four thousand lines apart
+in their head. It took ten seconds once they were forty lines apart.
+
+### 100. A man with a spear fought a wolf exactly as he would have fought it empty-handed
+
+`Action::Fight` carried a `weapon` and never read it. That was the finding the
+`execute_action` split turned up (#95), and it was worse than it looked: not one
+oversight but **three places reading a vocabulary the model does not stock**.
+
+- The action's own field was filled from `agent.equipment.get_weapon()`.
+- `Agent::own_strength`, which decides the odds, adds `0.3` if
+  `equipment.get_weapon().is_some()`.
+- The fight itself read neither.
+
+Nothing in this model has ever called `equipment.equip`. The only `equip` calls
+in `src/` are `body.equip`, which is clothing. So the field was `None` in every
+fight this model has ever run, and `own_strength`'s weapon bonus has never once
+fired. This is the same dead vocabulary #93 deleted the rest of and #219 is
+about; the live one is `environment::making`, reached through
+`how_much_my_tools_help`.
+
+Measured before the fix, instrumenting every fight over sixteen worlds of two
+thousand ticks: **eight fights, none with the action's weapon flag set, none
+with an equipped weapon - and two of the eight fought by somebody carrying a
+spear worth 1.87.** It counted for nothing in both.
+
+#### The fix
+
+Read the spear the way `hunting` reads it two modules away, because standing
+your ground is that problem from the other side. It tells twice, which is what
+the specification asks for in two separate sentences:
+
+- **whether the blow lands** - `(spear - 1.0) * 0.25` onto the agent's side of
+  the odds, exactly the term `hunting` uses;
+- **how many blows it takes** - the tool's own worth as a multiplier on the
+  damage, floored at one. *"A wooden spear is enough, but should take several
+  attacks to kill the animal... A flint spear should reduce the number of
+  attacks."*
+
+Measured over forty fights a side: **2.17 blows to put a wolf down bare-handed,
+1.73 with a spear.** Bare hands are arithmetically unchanged - the floor sees to
+that - because refusing to hunt an ox empty-handed sends somebody home hungry,
+while refusing to fight a wolf that is already on you sends them home dead.
+There is deliberately no size gate of the kind `hunting` has: whether to be here
+at all is the threat tree's question and it has already answered it.
+
+The two construction sites now fill the field from the live vocabulary too, so
+the action carries the truth about what is in the hand.
+
+#### And the honest part: it changes nothing a settlement can feel
+
+**Survival is unmoved to the tick** - 32 worlds, 4,000 ticks, mean last-alive
+2,418 before and 2,418 after. It could not be otherwise: eight fights in
+sixteen worlds of two thousand ticks is a path that fires roughly once per four
+thousand agent-ticks.
+
+So this is a correctness fix with no measurable consequence, and the reason is
+already on the list. **#188 - anger at one animal can never pass the gate that
+lets an agent turn on it.** The tool ladder now works properly on a branch
+almost nobody reaches. That is the right order to do the two in - a gate opened
+onto a broken fight would have been worse - but the second half is what will
+show in a number.
+
+### 101. The gate asked for more than the feeling behind it could give
+
+`EmotionState::should_attack` was `anger > 0.5 && fear < 0.3`.
+`ThreatAssessment::emotion_amount` returns `threat_level * 0.5` for anger, and
+`threat_level` is bounded at one. **A man at the very worst rage one animal can
+produce sat exactly on the gate and did not pass it.**
+
+And the gate read the *sum* of every source while the branch behind it acts on
+the strongest single one - `what_angers_me_most` for a creature,
+`who_angers_me_most` for a person. So the branch fired only when two separate
+grudges added past a half: an agent turned on the wolf in front of it partly
+because it also resented a boar.
+
+Measured before the change, 32 worlds of 4,000 ticks:
+
+| | |
+|---|---|
+| a creature on the mind, resented | **29.7%** of every turn |
+| on the mind, but under the gate | **28.7%** |
+| felt: angry enough to act | **0.12%** |
+
+#### The threshold, taken from the data rather than chosen
+
+Bucketing the worst single thing angering anybody, over twelve worlds: anger
+stops dead at `0.50`, with **6.1% of angry moments sitting exactly on the
+ceiling** - every one of them excluded by a gate wanting strictly more.
+
+The fear gate was `0.6` against a ceiling of `0.7`: **six sevenths**. Applying
+that same fraction to anger's ceiling of `0.5` gives `0.4286`, and gives the
+fear gate back exactly the number it already had. So the two gates are now one
+demand expressed on two scales, and neither can drift from its ceiling again -
+there is a test that fails the moment one does.
+
+Both gates now read the strongest single source, because that is what the
+branches behind them act on. `TOO_FRIGHTENED_TO_STAND` stays on the total on
+purpose: the other two ask about the thing in front of you, this asks whether
+you are in any state to face it.
+
+#### What it did
+
+Mechanism, 32 worlds: **"angry enough to act" 0.12% to 1.52%**, twelve times as
+often. "Stands its ground" 0.030% to 0.090%. `Fight` 18 to 27.
+
+Survival, paired on the same seeds, three separate blocks of 32 worlds:
+
+| seeds | before | after | |
+|---|---|---|---|
+| 1000 | 2,418 | 2,662 | +244 |
+| 2000 | 2,306 | 2,399 | +93 |
+| 3000 | 2,505 | 2,506 | +1 |
+
+**Positive in all three, mean +113 turns (+4.7%) over 96 worlds** - and the
+spread between blocks is larger than the effect, so +244 is not the headline and
+the mean is. Splitting the change in half: the anger gate alone gives 2,593 on
+the first block, so roughly three quarters of the gain is the half this issue
+was actually about.
+
+#### Two things worth stating rather than burying
+
+**`Attack` went from 37 to 0.** Agent-to-agent retaliation stopped entirely, and
+that is a *removed false positive*, not a lost behaviour: anger at a person
+never exceeded `0.35` in twelve worlds, so those 37 attacks were being enabled by
+summing in anger at an *animal*. A man was hitting his neighbour partly because a
+wolf had annoyed him. Person-anger has no ceiling of its own - it accumulates
+from lies and theft and can in principle reach one - so the branch is reachable
+by somebody robbed repeatedly, just not by somebody robbed once. That it now
+reads zero over 32 worlds is worth its own look, and is not this issue.
+
+**One test flipped from pass to fail**: `thirst_tests::agents_keep_themselves_watered`,
+which asserts a six-person settlement is still standing after 3,000 ticks in one
+seeded world. Traced before writing it down: that world has **zero fights and
+zero flights** in the whole run, and its people die of hunger (5), illness (1)
+and weather (1). Nothing about combat touched it. What changed is the draw
+sequence - a gate answering differently on one turn shifts every roll after it -
+and this world fell the other side of a line it was already sitting on. It is
+left failing rather than weakened, because the assertion it makes is the standing
+problem #206 is about, and rewriting a test to suit a change is how a suite stops
+meaning anything.
+
+### 102. Nobody retaliates because nobody is wronged - and a settlement's whole social life was conducted at arbitrary range
+
+#101 left `Action::Attack` at zero and asked whether that was right. The answer,
+traced end to end, is **yes for now, and the retaliation gate is not the thing to
+change.** Retaliation needs anger at a person; anger at a person comes from being
+lied to or robbed; and neither happens.
+
+| | over 32 worlds of 4,000 ticks |
+|---|---|
+| `TakeFrom` chosen | **0** |
+| `Trade` chosen | **0** |
+| things anybody was told | **29** (over 8 worlds) |
+
+Lowering the gate would have put the false positive #101 removed straight back:
+a man hitting his neighbour over a grudge he does not have.
+
+#### Why nobody steals
+
+Instrumented rather than guessed. `somebody_to_take_from` sits at the tail of an
+`or_else` chain, and:
+
+- the branch is **reached 142 times in 120,000 agent-turns** - 0.12% - because
+  everything ahead of it has to decline first;
+- on those 142 occasions there was somebody within arm's reach **3 times**;
+- and on all 3 that person had nothing the thief wanted.
+
+The 3-in-142 is the surprise, because people are not spread out at all: the
+nearest other person is on the **same tile 31.6% of the time** and within the
+three-tile reach **64%** of it. So the branch is not blocked by distance in
+general - it is reached almost only on the turns when somebody is off alone,
+which is exactly the turn on which every other option has run out. The defect is
+the branch's *position*, not its threshold, and moving it is its own piece of
+work: the comment above it records that an earlier attempt to put a refusable
+branch ahead of unrefusable ones cost a settlement half its winter store.
+
+#### What the tracing did find
+
+`find_nearest_social_target` returned the nearest person **on the map**, with no
+distance limit at all - and neither `socialising` nor `sharing_information`
+looked at where that person was. So two men twelve tiles apart, each alone in a
+different wood, greeted one another, exchanged news and gave one another
+presents. A settlement of a dozen people conducted its entire social life at
+arbitrary range, and the Social drive was answerable without anybody ever being
+in the same place.
+
+Fixed: one named reach, `WITHIN_TALKING_DISTANCE`, tied to
+`CLOSE_ENOUGH_TO_SEE_IT_COME_UP` - if you can see a man pick a thing up, you can
+call across to him. The choosing no longer names somebody out of earshot, and
+both verbs refuse if asked anyway.
+
+Measured, paired on the same seeds against #101:
+
+| seeds | before | after | |
+|---|---|---|---|
+| 1000 | 2,662 | 2,881 | +219 |
+| 2000 | 2,399 | 2,285 | **-114** |
+| 3000 | 2,506 | 2,691 | +185 |
+
+**Mean +97 turns, but one block of thirty-two worlds goes the other way**, so
+this is weaker evidence than #101's and is not being claimed as a survival win.
+It is landed as a correctness fix - people should not befriend across a valley -
+with the survival effect recorded as inconclusive. Socialising did not become
+rarer (1,051 to 1,093): three quarters of it was already within earshot, and the
+limit mostly removed the long-range quarter.
+
+#### What is still true
+
+`TakeFrom` is still 0 and `Attack` is still 0. The reach fix did not open that
+path and was not expected to. **#225 is answered rather than fixed**: zero is
+correct while nobody is wronged, and the work that would change it is making
+theft reachable - filed separately, because it is a change to the decision ladder
+and wants its own measured cycle rather than a ride on this one.
+
+### 103. The other thirteen drive rates were never derived either
 
 Hunger's is derived now, off the stomach's own emptying schedule - see #80 -
 and Thirst is read straight off the body. The other thirteen are still numbers
@@ -5409,26 +6040,3725 @@ sits behind them, and nothing does: none of them kills, so none has a clock to
 be sized against, and all of them were picked against a calendar that no longer
 exists.
 
-### 94. The clock is spelled out in the interface too
+### 104. The clock is spelled out in the interface too
 
 `gui/panels/controls.rs`, `gui/panels/statistics.rs`, `bevy_gui/ui/mod.rs` and
 `bevy_gui/ui/panels/statistics.rs` all compute the date as `tick / 1440` and the
 hour as `(tick % 1440) / 60`. Display only, but every one of them shows the
 wrong day.
 
-### 95. Committed backup file
-
-`src/analytics/mod.rs.backup` is checked into the repository.
-
-### 96. Build warnings
+### 105. Build warnings
 
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
-### 97. Placeholder package metadata
+### 106. Placeholder package metadata
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
+### 107. The bearing year was written for a twenty-four-day season
+
+`when_it_bears` returned a *set of seasons*, so a thing came on for the first
+day of a season and went over on the last. That was fine when a season was
+twenty-four days. On the real calendar a season is ninety, and the same table
+made a year of four uniform blocks: three months of leaf, three more of leaf,
+three months of harvest, three months of nothing. Its own doc comment already
+said what it should have been doing - "it carries nothing at all for most of
+the year and then, for a few weeks, everything at once" - and the code under
+it did the opposite.
+
+Two things in it were plainly wrong against a ninety-day year, and neither
+needed any measurement to see:
+
+- **`Food` - the fruit node, and the world's staple at energy twenty - bore
+  in autumn and in no other season.** Three months of high summer with nothing
+  ripe on any bush. Wild fruit in a temperate zone runs from midsummer.
+- **Greens and roots stopped dead on the last day of summer**, so autumn had
+  no leaf and no roots in it at all. Leaf runs to the frosts, and autumn is
+  when a root is worth digging.
+
+#### A window instead of a set
+
+The calendar already keeps the vocabulary this wants: `PartOfSeason`, two
+weeks at each end of a season and eight in the middle. A `Bearing` is now
+written in it - `from((Summer, Deep), (Fall, Late))` - and resolves to two
+days of the year. `is_it_bearing` takes a day rather than a season, which is
+what all three of its call sites already had to hand.
+
+| | opens | closes | days |
+|---|---|---|---|
+| Greens | early spring | deep autumn | 255 |
+| Roots | early spring | early winter | 285 |
+| Food | deep summer | late autumn | 165 |
+| Grain | late summer | deep autumn | 90 |
+| Honey | deep summer | early autumn | 90 |
+| Flax, cotton, herbs | deep spring | late summer | 165 |
+
+Roots run longest and end the year, which is what a root is *for*: last
+year's root in the hungry gap, this year's swollen root in autumn, and the
+winter dig out of hard ground. Deep winter still gives nothing whatever, and
+that does not move - it is the whole point of a store.
+
+#### Measured
+
+Three independent blocks of thirty-two worlds, a full year each:
+
+| seeds | mean last alive | person-days alive | alive at autumn | worlds emptied |
+|---|---|---|---|---|
+| 1000 before | 3028 | 816 | 0.75 | 18/32 |
+| 1000 **after** | **3088** | **879** | **1.12** | **15/32** |
+| 2000 before | 2391 | 717 | 0.50 | 22/32 |
+| 2000 **after** | **3607** | **995** | **1.88** | **17/32** |
+| 3000 before | 2841 | 807 | 0.66 | 18/32 |
+| 3000 **after** | **3559** | **1005** | **1.66** | **13/32** |
+
+Every figure improves in every block. Mean last-alive **2,753 to 3,418
+(+24%)**, person-days **780 to 960 (+23%)**, alive at autumn **0.64 to 1.55**,
+and the share of worlds standing empty at a year **60% to 47%**. Standing
+edible stock mid-summer went 2,097 to 3,372 and mid-autumn 3,007 to 4,455,
+which is where the gain comes from and is exactly where the table was wrong.
+
+Four failing tests cleared: a suspicious settlement feeding itself, agents not
+staying frozen over a long run, two thousand turns leaving a record of having
+been lived, and agents keeping themselves watered. 29 failures to 25.
+
+#### What it does *not* fix, and this is the more useful finding
+
+**Spring is untouched, and spring is what kills everybody.** Of 372 deaths in
+a full year, 323 are in spring and 223 of those are hunger; winter takes
+fifteen. A settlement goes from twelve alive to 5.6 between day thirty and day
+forty-five and never recovers. Measured with `examples/_debug_hungrygap.rs`,
+what happens in that window is:
+
+| day | alive | reserve | units/day | richness | energy/day | burn/day |
+|---|---|---|---|---|---|---|
+| 15 | 10.9 | 0.72 | 57 | 14.9 | 848 | 1264 |
+| 30 | 10.5 | 0.47 | 57 | 20.6 | 1183 | 1374 |
+| 45 | 5.4 | 0.47 | 61 | 22.6 | 1382 | 1427 |
+| 60 | 3.4 | 0.62 | 67 | 20.5 | 1373 | 1505 |
+| 75 | 2.8 | 0.74 | 70 | 23.6 | 1643 | 1518 |
+
+Nobody is short of food by day sixty - intake passes burn and the survivors'
+reserves climb back. The founders arrive with a full reserve and eat it down
+over the first month at about four hundred energy a day, because **the mean
+richness of what they eat starts at 14.9**. Greens are 30.6% of every unit
+eaten and 10.7% of the energy: a stomach of leaf displaces a stomach of
+something a body could live on. Half the settlement is dead before richness
+reaches the twenty-two the survivors then hold.
+
+That is not a bearing-year fault - the food is standing there, 3,549 units of
+it per world in mid-spring - and widening the table does not touch it. It is
+what a world is *seeded* with against what an early spring should hold, which
+is #208, and how a forager weighs a thin food underfoot against a dense one
+across the meadow. Filed there rather than fixed here, because fixing it by
+moving numbers in this table would have been tuning rather than a year.
+
+#### And one flaky test made honest
+
+`a_settlement_lives_through_a_winter` ran one world and did not seed it, in a
+model where about half of all settlements are empty by the end of a year. It
+had been passing on the draw it happened to get and it flipped on this change
+- while every count underneath it improved: settlements reaching winter with
+somebody alive 18/32 and 12/32 to 20/32 and 25/32, and alive a year on 14 and
+10 to 15 and 15. It now runs eight seeded worlds.
+
+It deliberately asserts no *rate*. The share that reach winter and come out of
+it measures 40%, 60% and 85% on three different blocks, so at eight worlds any
+bar for it would have been fitted to the block rather than to the model.
+
+### 108. Every bush in full fruit, whatever the date
+
+A world was made with everything standing at what its ground would carry,
+without ever asking what day of the year it was. The year opens in spring, so
+every settlement ever run in this project began with berries, standing grain
+and full hives on the hedges around it. Measured over sixteen worlds with no
+agents in them, day nought:
+
+| | Fish | Food | Grain | Greens | Honey | Roots |
+|---|---|---|---|---|---|---|
+| day 0 | 2881 | **216** | **254** | 3202 | **34** | 1576 |
+| day 5 | 2881 | 8 | 21 | 3202 | 1 | 1576 |
+| day 10 | 2881 | 0 | 0 | 3202 | 0 | 1576 |
+
+**504 units of food that had no business being there**, which the shedding
+rule then took off over ten days. Greens, roots and fish are right and do not
+move; the three that are wrong are the three that do not bear in spring.
+
+A world is seeded on its opening day now: `what_this_ground_carries` takes the
+day of the year, and anything outside its bearing window starts bare. The
+check is asked *before* `is_it_grown`, because honey is not a growing thing
+and has a season all the same - a hive worth robbing in autumn is not one in
+March, and it used to spawn full in March.
+
+#### And a third spawner, found by the test rather than by reading
+
+`what_this_ground_carries` was written to be the one vocabulary after two
+spawners were found to have had two. There were three.
+`scatter_the_strange_plants` builds its nodes directly and never went near it,
+so the fix reached the hedgerows and not the strange plants, and a spring
+world still opened with thirty units of something-or-other standing in it.
+The end-to-end assertion written for this entry is what caught it. That is
+defect number three in this document's list for the eleventh time, and the
+useful part is *how* it surfaced: not by grepping for the vocabulary, but by
+asserting the property over the whole world and letting the assertion find the
+path that had not been touched.
+
+#### Measured, and it costs
+
+Five independent blocks of thirty-two worlds, a full year each, against the
+commit before:
+
+| seeds | mean last alive | person-days alive | worlds emptied |
+|---|---|---|---|
+| 1000 | 3088 → 3617 | 879 → 899 | 15 → 11 |
+| 2000 | 3607 → 3227 | 995 → 909 | 17 → 16 |
+| 3000 | 3559 → 3281 | 1005 → 960 | 12 → 12 |
+| 4000 | 3576 → 3679 | 1015 → 1010 | 15 → 12 |
+| 5000 | 3760 → 3179 | 1074 → 948 | 11 → 22 |
+
+**Person-days alive fall about five per cent**, down in four blocks of five;
+mean last-alive falls 3.4%, down in three of five; worlds standing empty at a
+year go 44% to 46%. This is landed as a correctness fix that **costs**
+survival, not as a win, and the honest reading of the block-to-block spread is
+that everything except the person-days figure is inside the noise.
+
+What is interesting is the size of it. Those 504 units are about 22,300
+energy, or a day and a third of food for twelve people. Against a run whose
+mean is some 280 days that is half a per cent, and it measures ten times that
+- because the ten days it is handed over are exactly the ten days in which the
+founders eat down the reserve they arrive with, and half of them die. **A
+day's food at the crisis is worth ten days of it anywhere else.** Anything
+that means to move this model's survival has to land in that fortnight; a
+change that adds food to the year at large, as #107 did, does not.
+
+#### A measurement that came out the other way from the guess
+
+The doc comment on the seeding was first written saying that a patch seeded
+short would be full again within a day or two, so the exact opening amount did
+not matter. Measured by stripping a patch bare and waiting: **a fruit node is
+back to full in one day, and greens and roots are still short after thirty.**
+The claim was true for a third of the foods it was written about. Corrected in
+place, and worth carrying forward on its own account - a settlement that
+strips its greens in early spring has no greens for a month, and nothing in
+this document has yet asked whether that is happening.
+
+#### Three tests that indexed a corpse
+
+Harder springs took the lone agent out of three single-agent tests, and
+`population.agents[0]` panics rather than reporting a death, because the dead
+are removed from the vector. `an_agent_ages_by_the_calendar` had a comment
+saying in as many words that one person alone often does not get through the
+year, directly above the line that assumed he had. All three now ask whether
+he is there before asking how he is.
+
+### 109. Seven items for a winter, and a larder anybody could open in July
+
+Two things, and the second is the one in the title.
+
+#### The target was a hundred and sixty-five times too small
+
+`WHAT_ONE_MOUTH_WANTS_PUT_BY` was **seven items** - what one person wants put
+by to see them through the whole lean season - and behind it sat every branch
+of the store: burying what is in the pack, walking to a pit, digging another,
+and going out to gather for the store at all. Twelve people wanted eighty-four
+items. A settlement reached that in its first autumn and the entire chain shut
+down for the rest of the year.
+
+Seven items is **half a day's food**. It was reasoned carefully from "a person
+gets through about a hundred units in ten thousand ticks", which was true of
+the body this model had before the starvation clock was corrected in #203 -
+the entry that found that clock a hundred and twenty times too slow. The store
+was sized against the slow body and never resized.
+
+The arithmetic was already written down, in the right place, with the right
+answer. `provision::UNITS_IN_ONE_STORED_ITEM` carries the comment **"Eleven and
+a half of them is a day"**. Nothing joined it up.
+
+Measured over sixteen worlds and a full year, before:
+
+| | |
+|---|---|
+| most the pits ever held, at any point in the year | **14 items** |
+| which in days of food for one person is | **0.9** |
+| food items carried home over the year | 1,472 |
+| food items dropped back on the bush, packs full | **7,794** |
+
+Five items thrown away for every one kept, and a settlement's entire larder
+under one person-day.
+
+Derived now, from the two things it is actually about:
+
+- `provision::WHAT_A_BODY_EATS_IN_A_DAY` = `UNITS_BURNED_IN_AN_ORDINARY_DAY /
+  UNITS_IN_ONE_STORED_ITEM` = **11.52 items**, and measured at 15.4 because a
+  settlement lives on food thinner than ordinary forage.
+- `how_long_the_hedgerows_give_nothing()`, read off the bearing year of #107
+  rather than named, so retuning the year retunes the store with it: the
+  longest run of days on which no growing thing a person can eat is carrying
+  anything. **Seventy-five days**, from the last root out of the cold ground to
+  the first leaf. Fish and meat are deliberately left out - they never stop,
+  and sizing a winter store on the assumption that everybody will be fishing is
+  the optimism this entry is about, with `Fish` refused ninety-three times in a
+  hundred.
+
+Which is **864 items a mouth** where it was seven.
+
+Two more constants in the same cluster had to move with it, and the test suite
+is what said so: `the_cap_is_a_load_rather_than_a_meal_or_a_cartload` asserts
+that somebody who would not open the store must not also be barred from
+foraging, and that ordering broke the moment the store gate was corrected.
+`ENOUGH_NOT_TO_OPEN_THE_STORE` said "two days' worth" and was four items, which
+is a third of a day. `WHAT_A_PERSON_GETS_THROUGH` said "well above what anybody
+needs for a day" and was eight, which is under it - an anti-hoarding cap that
+fired on a man with supper in his bag. Both are counted in days now, and the
+second is built off the first so the ordering holds by construction rather than
+being a relation between two picked numbers that has to be tested for.
+
+#### And nothing ever asked what month it was
+
+The larger fault, and the one the title names. `something_out_of_the_store` had
+no season condition at all: a pit within reach was simply the nearest food, so
+a settlement drew on its winter store in July. That is what "laid down and
+eaten at the same rate" means - the pits held between seven and fourteen items
+from one end of a year to the other and never accumulated, because everything
+put in came straight back out.
+
+A store is opened when the land gives nothing now, and the same
+`are_the_hedgerows_bearing` that sizes it answers that. Somebody genuinely
+starving still opens it in any month: a rule that let a man starve beside a
+full pit would be a worse fault than the one it fixed, and there is a test for
+each half.
+
+The store now has a winter's shape, which it did not have at all:
+
+| pits hold, mean of 16 worlds | before | after |
+|---|---|---|
+| midsummer | 7 | 24 |
+| deep autumn | 14 | 27 |
+| end of autumn | 12 | **33** |
+| a fortnight into winter | 11 | 9 |
+| deep winter | 4 | 4 |
+
+It fills through the autumn and is eaten through the winter. Before, it was
+flat.
+
+#### Measured: settlements last six per cent longer and hold the same people
+
+Five independent blocks of thirty-two worlds, a full year each:
+
+| seeds | mean last alive | person-days alive | worlds emptied |
+|---|---|---|---|
+| 1000 | 3617 → **3804** | 899 → **969** | 11 → **7** |
+| 2000 | 3227 → **3380** | 909 → 903 | 16 → 18 |
+| 3000 | 3281 → 3250 | 960 → 887 | 12 → 16 |
+| 4000 | 3679 → **3737** | 1010 → 947 | 12 → **11** |
+| 5000 | 3179 → **3833** | 948 → **1035** | 22 → **17** |
+
+**Mean last-alive 3,397 to 3,601, up six per cent and up in four blocks of
+five. Person-days alive flat** (945 to 948), worlds standing empty at a year
+46% to 43%.
+
+Settlements last longer and hold the same number of people, which is exactly
+what a winter store does and is not what a food supply does: it carries the
+survivors across the lean stretch rather than feeding more of them. Two
+long-run population tests flipped back to failing on it, which is inside the
+noise those two have shown all session.
+
+#### What is now the binding constraint, and it was not before
+
+`Pit::WHAT_A_PIT_TAKES` is three hundred. A winter for one mouth is 864, so a
+settlement of twelve wants **thirty-five holes** and digs, measured, under
+three. Room in the ground was never once the binding question while the target
+was seven items a mouth - the doc comment on
+`does_the_store_still_want_filling` says so in as many words - and it is the
+binding question now. There is a test that says it out loud rather than a
+comment that will drift. Digging thirty-five holes is a different piece of work
+from knowing how many you need, and it is filed rather than done here.
+
+Nor does this touch the spring die-off, which remains what kills everybody: a
+store fills in autumn and nobody is alive by then. Sixteen worlds average
+**1.6 people** through the autumn the store is filled in. A larder for a
+settlement that no longer exists is still the right larder.
+
+### 110. A six-year-old who carried what his father carried
+
+Three things the lifecycle described and nothing read, and two defects found
+underneath them that were worth more than any of the three.
+
+#### The curve
+
+`what_a_body_this_age_can_do` - the specification's table of what a body of
+each age brings to moving, carrying and working - was written, hung on
+nothing, and deleted as dead code in the sweep of #93. That was the right call
+for the code and it left the model with **age deciding nothing but appetite**:
+a six-year-old carried what a grown man carried, walked as fast, worked as
+hard and hit as heavily, on a third of his food. A child was a bargain.
+
+It is restored and hung on the four things the sentence names and implies:
+what two hands hold (`update_inventory_capacity_from_transport`), how fast a
+body walks (`movement_speed_at_tick`), what a trip brings back (the hand term
+in `gathering`), and what a blow is worth (`own_strength`).
+
+#### The bands
+
+`LifeStage`'s own doc comment has carried the supervision rules since the
+lifecycle was written - "0-5 must be with a parent at all times; 6-10 must
+stay within sight of the camp or of some adult; 11-15 must stay within an
+hour's walk" - as prose, on a stage nothing consulted for the purpose. A
+five-year-old walked to the far side of the map like anybody else. The three
+bands are written in reaches this project already keeps rather than in new
+numbers, and sit below fear (a frightened child runs first) and above every
+want.
+
+#### Feeding a child
+
+There was no way for a parent to hand a child anything short of
+`somebody_of_mine_who_needs_it_more`, which waits until a loved one is
+*starving* and hands over food the giver needs itself. A child in this model
+foraged for itself from the day it could walk or went without. There is an
+ordinary branch now: a child of one's own, within reach, hungry, with nothing
+of its own, and food to spare in the pack.
+
+#### And underneath: `Agent::new` made newborns
+
+Hanging the curve on carrying broke **eighty-seven tests and hung one**.
+
+`Agent::new` leaves the age at nought, and `LifeStage::from_age` calls
+anything under six an infant. Nothing minded while nothing read a body's age
+for anything but its appetite; the moment two hands were scaled by it, every
+fixture in the project that says `Agent::new` and means "a person" was
+carrying a twentieth of a pack, and the tool-wear test spun for ever waiting
+for a tool that could not be picked up to wear out.
+
+This is **#74 one layer down**. That entry found founders spawned at nought -
+"every world began with twelve newborns and nobody to feed them" - and fixed
+it in `spawn_agent`, which overrides the constructor. The constructor
+underneath went on making newborns, and every caller that was not
+`spawn_agent` got one. A bare `Agent::new` is a grown person now and
+`with_parents`, which is the birth path, sets the age back to nought itself.
+Eighty-seven failures to four.
+
+#### And a body that burned at a grown man's rate on a child's reserve
+
+`Physiology::now_a_body_of` resized the reserve and the stomach and **left the
+burn alone**. `for_a_body_of` sets all four together; this set three. So a body
+resized down to a child carried a fifth of the reserve and went on burning
+what a grown man burns.
+
+Measured with a probe: a body of nought years, fifteen days without food, read
+**14.4 turns from death against a grown body's 72.0** on the same
+going-without - five times, which is exactly the ratio of the two bodies.
+
+The model held both answers at once. `Physiology::starved` has a small body
+and a grown one going at the same three weeks, which is deliberate and
+documented in #74; `minutes_before_hunger_kills_me` had the child dying five
+times sooner. Four hundred lines apart, and nothing ever compared them,
+because nothing had reason to ask both. That function also returned the
+reserve *in energy* and called it minutes, which is the same number only for a
+grown body; it divides by what this body actually burns now.
+
+#### Two vocabularies for one age, and what that cost the status report
+
+`life_stage` is a *stored* field and a dozen places set it directly, leaving
+`age` where it was. Everything that reads a body's age reads the years, so
+such a body is an adult wearing a child's label.
+
+`a_child_and_an_adult_do_not_rank_the_same_needs_the_same_way` set
+`life_stage = Child`, asked how long hunger left the body, and got **47
+against 47** - the same answer twice, because both bodies were the same age.
+`a_hungry_year_takes_the_children_first` passed **900 and 4000 ticks** for "a
+child" and "an adult", figures from the calendar where a year was eleven
+hundred ticks; a year is 4,320 now, so both fixtures were nought years old and
+the test compared an infant with an infant.
+
+The project status report listed **"a child and an adult come out identical"
+as one of three blocking failures** on the strength of three tests like these.
+One of them was one line in a fixture. There is a single
+`now_this_many_years_old` now that sets the years, the stage and the body
+together.
+
+#### Measured: nothing, and that is the honest answer
+
+Three blocks of thirty-two worlds, a full year: mean last-alive 3478 to 3564,
+person-days alive 920 to 916, worlds emptied 41 to 47 of 96. A wash, inside
+the block-to-block spread this session has shown throughout.
+
+**It could not have been anything else, and that is the point.** Founders are
+spawned between twenty and forty, where the curve is at its full ten out of
+ten; a year is 4,320 ticks, so nobody reaches the forty where it starts
+falling; and **two children are born in 308,000 turns of action**. None of the
+three rules can fire in a run of this model as it stands. They are correct,
+tested, and idle - which is this document's defect number one, entered
+deliberately this time and with the gate named: they wait on reproduction,
+exactly as the larder of #109 waits on a settlement being alive in autumn to
+fill it.
+
+#### What this did to the failing-test count, and why it is not a regression
+
+**25 to 29.** Two cleared (the child-and-adult ranking, and a specialisation
+fixture that indexed a corpse) and six appeared, of which four are one
+question: **does a child starve sooner than an adult?**
+
+The model now answers *no*, consistently, everywhere - which is what #74
+decided deliberately ("everybody still starves in three weeks, whatever size
+they are; a small body simply has less to go without") and what the burn fix
+above made true in the one place that disagreed. Three tests say *yes*, and
+the real-world argument is on their side: a small body's stores scale with its
+mass while its burn scales nearer the three-quarter power, so a child
+genuinely has fewer days than its father.
+
+That is a specification question and not a bug, it needs its own measurement,
+and answering it at the end of a change this size would be exactly the sort of
+thing that gets landed and regretted. Filed as its own task rather than
+decided here. The four tests are left failing and now fail for the true reason
+- `a_hungry_year_takes_the_children_first` ran for a hundred and sixty-seven
+days, by which point both bodies are long dead and both read nought, so it
+could not have come out either way; it measures at three weeks now and reports
+the actual disagreement.
+
+### 111. The lifecycle against the specification, clause by clause
+
+The specification was handed over. Read against the model, the two tables were
+already right and five clauses were not.
+
+**Right, and now asserted verbatim rather than by resemblance:** the
+capability table (1 at two years, 10 at sixteen, 9 at forty, 5 at sixty-five)
+matches exactly; a year is 518,400 of the specification's ticks and a life
+36,288,000 of them, which are this model's *minutes* - a turn is a decision
+and not a minute, and the calendar has been written in minutes since #73 for
+exactly this reason; and the food table matches year for year.
+
+**Wrong, and fixed:**
+
+- **The fifteenth year fell in a gap.** "Age 14-15: 90%" then "Age 16+: 100%",
+  and the bands are half-open elsewhere ("Age 0-4: 20%" is ages nought to
+  three), so fifteen was unnamed and the model gave it a full grown share. A
+  fifteen-year-old was fed as an adult while doing nine tenths of an adult's
+  work. The last child band runs to the adult boundary now.
+
+- **A child in arms occupied no hands.** "Age 0-2: ... Parent agent has one
+  *hand* occupied with the child, limiting the types of work the parent agent
+  can accomplish." Nothing anywhere. A parent carrying somebody under two now
+  has half of what two hands hold; what is on their back is untouched, which
+  is exactly why somebody carrying a baby wants a basket.
+
+- **The supervision bands had no camp in them.** "Within eyesight of
+  camp/tent/town **or** within eyesight of any adult agent", and the same *or*
+  for the hour's walk. The first cut of this read only the second half and
+  marched a child by the fire across the map after the nearest adult. Read as
+  a *building* rather than as `where_the_camp_is`, which answers "the nearest
+  roof to wherever you happen to be standing" when there are too few people
+  about - its own doc comment says that is the wrong answer for somebody out
+  on the moor, and it would have excused a child that had wandered to a cave
+  on the far side of the world. Not an alternative under six: a roof is not a
+  parent.
+
+- **Small children were fed on demand rather than on what their parent had.**
+  The nursing machinery gave an infant a mouthful whenever somebody was
+  standing near and there was room in its belly, and charged the mother
+  whatever it came to however little she had. The specification is a band
+  table on the *parent's internal store*, and it covers water, and it runs to
+  five years rather than to the end of a nursing period:
+
+  | parent's store | child receives |
+  |---|---|
+  | above four fifths | all of it |
+  | above three fifths | three quarters |
+  | above two fifths | half |
+  | above a fifth | a quarter |
+  | below a fifth | nothing |
+
+  Which is a settlement's hunger reaching its children a step behind itself,
+  and stopping while the parents are still alive - a parent a fifth full is a
+  parent whose child gets nothing, and both of them are still standing.
+
+- **A three-year-old could cook.** "Age 5-10: ... eat any wild food found. Age
+  10-15: ... **and cook raw food into cooked food**", so under ten they cannot.
+  Refused in the executor as well as in the decision, on the same reasoning as
+  `is_ground_a_pit_will_go_in`: a rule that lives only in the wanting layer is
+  a rule anything reaching the verb another way walks straight past.
+
+**Measured: a wash, and it could not have been otherwise.** Two blocks of
+thirty-two worlds: last-alive 3619/3462 to 3578/3413, person-days 929/896 to
+926/878. Founders are twenty to forty and two children are born in 308,000
+turns, so none of the five clauses can fire in a run of this model as it
+stands. Failing tests unchanged at 29.
+
+**And one clause not done here.** "Agents are gender neutral. There are no
+male/female agents, merely child and adult agents." The model has a `Gender`
+enum, `can_mate` requires one of each, pregnancy lives on the female and
+`give_birth` reads the mother's position: forty-four references across ten
+files. That is its own change with its own measurement, and it bears directly
+on the largest failure in the model - a rule that only pairs opposite genders
+throws away about half of all candidate pairs in a settlement that manages two
+births in 308,000 turns. Filed and done next rather than tacked on here.
+
+---
+
+### 112. Half of every candidate pairing was refused on a distinction the specification does not have
+
+"Agents are gender neutral. There are no male/female agents, merely child and
+adult agents." The model had a `Gender` enum on every agent, and forty-four
+references to it across ten files. `can_mate` opened with a match that took
+`(Male, Female)` or `(Female, Male)` and returned false for anything else;
+pregnancy could only be started on the female and only be read off her; and
+`give_birth` placed the newborn at `parent1.state.position` if parent1 was
+female and at parent2's otherwise, with a silent default of 0.8 prenatal
+nutrition when neither was - which nothing could reach, and which is the shape
+a rule takes when it is written around a field rather than around a fact.
+
+**What it cost.** Gender was rolled at spawn on an even coin. A settlement of
+twelve therefore has about half of its 66 possible pairs refused before
+fertility, distance, trust, or food put by is asked about at all - in a model
+whose largest single failure is that nobody is born.
+
+**What replaced it.** `can_mate` now asks three things: two different people,
+neither already carrying, both fertile. `attempt_impregnation(male, female)`
+became `attempt_impregnation(carrier, other)`, and which of a pair carries is
+the *caller's* decision rather than a property of either of them. Both callers
+- the population pairing pass and the `Mate` executor - choose the carrier by
+the lower of the two ids: a coin that always lands the same way for the same
+pair, which keeps the run repeatable without putting the distinction back on
+the agent. Prenatal nutrition and the newborn's position are read off whoever
+actually holds the pregnancy, so there is no default left to be silently
+wrong. `can_become_pregnant` and `can_impregnate` collapsed into
+`can_carry_a_child`. `src/agents/gender.rs` is deleted, along with the field,
+the four GUI call sites that displayed it, and the map colouring that used it.
+
+**Measured, and it is a genuine trade.** Two blocks of thirty-two worlds,
+4,320 ticks each, paired seeds before and after:
+
+| | before | after |
+|---|---|---|
+| pairings attempted | 40, 23 | 92, 102 |
+| births | 13, 10 | 19, 25 |
+| alive at the end (96 worlds) | 3534 | 3160 |
+| worlds emptied | 49 / 96 | 59 / 96 |
+
+Pairings roughly quadrupled and births roughly doubled, which is the change
+doing exactly what the arithmetic said it would. **Survival fell about eleven
+per cent**, and that is not a defect in this change: a settlement that could
+not feed twelve now cannot feed twelve plus infants, so the extra children are
+being born into the food shortage that #109, #208 and #213 have each moved and
+none has closed. The model is specification-conformant and harder, and the
+births are now real enough to make the shortage the thing that shows.
+
+**A correction to the status report.** It gave `Mate` two firings and read that
+as the reproduction path being all but dead. Two was measured before this
+session's food-year work; re-measured on the current head the baseline is 13
+and 10 births per thirty-two worlds. The path was not dead, it was halved.
+
+Failing tests 29 to 26, taken as a set difference against a worktree at the
+previous head rather than by counting. Five cleared:
+`being_told_lets_you_try_it_rather_than_making_you_believe_it`,
+`a_settlement_of_the_suspicious_still_feeds_itself`,
+`agents_do_not_stay_frozen_over_a_long_run`,
+`population_feeds_itself_over_a_long_run`, and
+`what_agents_do_in_a_run_becomes_something_they_know`. Two new:
+`a_cold_agent_ends_up_dressed` and
+`the_young_are_kept_warm_by_the_adults_around_them`.
+
+Neither of the two new ones is about clothing or warmth. Read the panics: the
+first is `index out of bounds: the len is 0 but the index is 0` reaching for
+`agents[0]`, and the second compares 37.0 against `inf`, which is a mean taken
+over an empty set. Both worlds emptied. That is the eleven per cent arriving
+in the two tests whose settlements were closest to the edge, and it also says
+something about the tests - a settlement test that indexes `agents[0]` without
+asking whether anybody is left reports a wiped-out world as an index panic, and
+one that averages without a count reports it as `inf`. Filed as #228: a run
+that ends with nobody alive should fail saying so.
+
+`a_pair_with_nothing_put_by_do_not_have_a_child` fails, and was failing before
+this change too - a fresh agent's reserve is full, `food_has_been_easy` reads a
+full reserve as food having been easy, and so an agent carrying nothing passes
+the gate that the test says it should not. That is #227's question and it is
+not this change's to answer.
+
+The four gender tests were rewritten rather than deleted:
+`any_two_grown_people_can_pair` (which was `test_cannot_mate_same_gender`, and
+asserted the opposite), `nobody_pairs_with_themselves`,
+`nobody_already_carrying_starts_another`, and
+`there_is_no_gender_left_to_refuse_anybody`, which pairs ten agents and
+requires that every grown pair be allowed and every child pair refused.
+
+---
+
+### 113. Why they still starve: a trickle that never fails, and a pack that holds two days
+
+The food year was rebalanced (#107), the world stopped being seeded with
+summer fruit in winter (#108), and the store was given a real target (#109).
+Settlements still empty. This is what is actually killing them, measured
+rather than guessed.
+
+**It is not that there is no food.** Over four worlds of half a year, taking
+every living agent every tick and splitting them by how full their reserve is:
+
+| | starving (reserve under 15%) | fed (reserve over 60%) |
+|---|---|---|
+| food units within 25 paces | **20** | **618** |
+| patches within 25 paces | 3.9 | 25.9 |
+| biggest patch within 25 paces | **7.4** | 64.6 |
+| food in own pack | 0.5 items | - |
+
+A body burns 1,440 units a day. **The best patch within reach of a starving
+agent holds seven and a half units** - half a per cent of one day's food - and
+there are four such patches. The fed are standing in thirty times as much. The
+two groups are in the same world on the same day.
+
+**And `Eat` never fails.** Over eight worlds of a full year: 24,861 `Eat`
+actions, **nought failures**. Not one. The executor has three ways to refuse -
+too full, the patch was empty, nothing within the forage radius - and in a year
+of twelve settlements starving to death none of them fired, because a patch
+holding seven units is not an empty patch. An agent in stripped ground
+successfully eats a trickle, every turn, until it dies.
+
+That is the mechanism, and it is why none of the food-year work reached it.
+Every signal that could tell an agent to leave ground that will not feed it is
+driven by something *failing*, and nothing fails. The settlement's own
+`Gather` refuses 500 times for "No food sources nearby"; `Eat`, which is the
+verb that would notice, refuses nought times. A rule that fires on failure
+cannot see a slow death.
+
+**The second half: a pack holds twelve weight.** *(Wrong, and corrected in
+#116: twelve is what a pair of bare hands holds. A live agent almost always
+carries a basket and holds forty-two. The figure below was measured on a fresh
+`Agent::new` in a unit test rather than on anybody in a running world, and the
+rest of this paragraph is right about the waste and wrong about the cause.)*
+`Inventory::max_weight` is
+12.0 and food weighs 0.5, so a pack holds **twenty-four items of food, which is
+two days' eating** against the 11.52 a body gets through in a day. Measured
+over the same eight worlds, 11,656 items of food went into packs and **56,020
+would not fit** - five dropped for every one kept. So nobody can carry a store,
+nobody can provision a walk to better ground, and a settlement is obliged to
+live where it stands and eat what is underfoot. This is #215 and #216 arriving
+from the other direction: they were filed as a wrong constant, and they are
+also the reason the larder never fills.
+
+**What the numbers rule out.** Density is not the whole story: a lone agent on
+an empty world survives its first year 62% of the time and starves nought
+times, while at twelve founders 77% of everybody dies of hunger. But it is not
+simple crowding either - the survivors of a collapsed settlement sit at
+85-99% of reserve for the rest of the year, comfortable, on the same map. What
+the land supports is not twelve people; it is however many happen to be
+standing somewhere that bears.
+
+**A correction to my own first reading.** I ran the food ledger, saw 474 items
+eaten against the ~50,000 twelve people need in a year, and drafted the
+conclusion that nobody eats at all. That was wrong: `food_i_ate` is incremented
+only in `eat_food_item`, and the forage branch of the `Eat` executor feeds the
+body directly through `physiology::eat` without going near it. The counter
+measures eating *out of the pack* and always has. Worth writing down twice
+over - once because the number is misleading to anybody who finds it, and once
+because it is the same defect as everything else in this entry: a measurement
+that only sees one of two paths.
+
+Filed as #229 (leave ground that will not feed you, on a signal that is not a
+failure) and #230 (a pack that holds two days cannot provision anything).
+
+---
+
+### 114. Breeding on a full belly, and one derivation spelled two ways
+
+"Agents should not be reproducing until there is surplus food." They were, and
+the reason is one `||`.
+
+`expects_to_be_able_to_feed_a_child` read:
+
+```rust
+self.food_put_by() >= Self::FOOD_TO_RAISE_A_CHILD || self.food_has_been_easy()
+```
+
+with a careful paragraph above it explaining that "am I hungry this minute" is
+not the question, that it says nothing about the next meal, and that a person
+who ate today but has nothing put by is in no position to raise a child. And
+then `food_has_been_easy` is `reserve >= reserve_capacity * 0.85` - which is
+"am I full this minute" - and it is behind an `||`, so it is sufficient on its
+own. Measured, a fed agent in this model sits between 85% and 99% of reserve.
+The clause was true of every healthy adult alive, the pack was **never once**
+the binding question, and the reasoning written directly above the line was
+contradicted by the line.
+
+`FOOD_TO_RAISE_A_CHILD` was four items - about eight hours' eating for a grown
+body - so even when it did bind it was asking "could you feed this child until
+Tuesday".
+
+**What it is now.** A surplus is food that is still there tomorrow, so the gate
+asks for what is *put by*: the pack and this agent's share of the camp's
+stores, with the stomach and the gut taken back off, against what the parent
+and a newborn would eat between now and the land bearing again.
+
+- The stretch is `how_long_the_land_gives_nothing()` - derived from the bearing
+  windows, 75 days, not picked.
+- The newborn is a fifth of a grown appetite, off the specification's own food
+  table.
+- `WhatIsPutBy` gained `units_in_the_body`, because the reckoning counts what
+  is in the stomach (rightly - somebody who has just eaten is not short of
+  supper) and a breeding gate has to be able to take it off again.
+
+Which puts the gate at exactly the store's own target and a fifth: **breed when
+you have more put by than you need for yourself.**
+
+It also settles what a surplus can and cannot be. A pack holds forty-two
+weight with a basket on the back - about seven days' food, and #113 said two
+because it measured a fresh agent rather than a live one; see #116 - which is
+still nowhere near a lean season. A surplus worth breeding on was never
+something a person could be *carrying*. It is the camp's stores or it is
+nothing.
+
+**One derivation, one answer.** The hungry gap was derived inside the decision
+layer's store code, where nothing outside that layer could reach it, so the
+breeding gate had to derive it again - and the two spellings of the same sum
+came out 864 and 865 through float ordering alone. Both now come to
+`provision::how_long_the_land_gives_nothing`, which is where the file's own doc
+comment already said this kind of figure belongs ("so that anything sizing a
+store against a stretch of days has one place to get it from and cannot pick
+its own"). `ResourceType` gained `is_it_food` and `all`, so "what counts as
+food" is a fact about a resource rather than a list private to analytics;
+`all()` is guarded by an exhaustive match that fails to compile if a variant is
+added and not listed.
+
+**Measured, paired over thirty-two seeds:**
+
+| | before | after |
+|---|---|---|
+| births | 20 | **0** |
+| alive at the end | 18 | 21 |
+| person-days | 31,718 | 32,257 |
+| worlds emptied | 14 / 32 | 12 / 32 |
+| hunger deaths | 299 | 301 |
+
+Births to nought, which is the point: no settlement in this model has a lean
+season's eating in the ground, so no settlement can afford a child, and it
+should not be having one. Survival is marginally *better* for it. Births come
+back when the larder does, and the gate is the thing that will say so.
+
+**And old age, taken off the board.** `PopulationConfig::nobody_dies_of_old_age`
+sets `max_age` past reach, honoured at both ways into a population - spawned as
+a founder and born - because a switch honoured in one of them works until the
+first birth. Default false, and it is worth being plain about why that costs
+nothing: over sixteen worlds of a full year **every death in the model was
+hunger or thirst and not one was old age**, because founders are twenty to
+forty and nobody has ever lived to seventy. It is insurance against a confound
+in a multi-year run, not a fix for anything, and turning it on today would
+change no number in this document.
+
+**Tests: 26 failing to 24, none new.** Two cleared, and they are the two that
+had been asserting this all along - `a_pair_with_nothing_put_by_do_not_have_a_child`
+and `a_child_waits_on_a_surplus_and_not_on_a_full_stomach`. The model had been
+failing its own stated rule and the tests had been right about it.
+
+Three fixtures were wrong in the same way and are corrected here:
+`fed_adult` set `state.age = 4000` - *ticks*, from the calendar where a year
+was about eleven hundred of them - so "a fed adult" was a body in its first
+year. The same slip as the one `a_hungry_year_takes_the_children_first` found
+and wrote down. And `a_settlement_lives_through_a_winter` went from eight
+seeded worlds to thirty-two: at eight it flipped to zero survivors on a change
+that improved every count underneath it, which is the failure mode its own doc
+comment predicted for asserting a *rate* and is just as true of asserting "at
+least one". Seeds 0..32 have eleven settlements alive at the end. The suite
+costs 45 seconds more for it.
+
+---
+
+### 115. Eight answers to "is this food", and food that stopped being food when it changed hands
+
+Asked how the eating code decides what to eat, when to eat and what counts as
+food, and the third question had no single answer.
+
+**The one part that was well built.** `physiology::how_fast_hunger_rises` reads
+three tables off the body - share of reserve, energy in the stomach, food in
+the gut - and multiplies them, as a *rate* rather than a level, with the
+reasoning for that written down and measured. What to eat is scored by the
+nutrient most needed, times freshness, times how fast the thing goes off, so a
+dried strip scores a twentieth of today's supper and gets kept for February.
+Neither needed touching.
+
+**The eight answers.** `InventoryItem::is_food` (has nutrition data attached);
+`Agent::LOOKS_EDIBLE` (substring match on six words); `Piece::can_it_be_eaten`
+(only asks whether a thing is an uncut carcass); `FoodDatabase::is_food`;
+`ResourceType::is_it_food`; `edible_item_for`; `Pit::is_it_food` ("not a bowl
+or a basket"); and an inline `is_food() || name.contains("food") ||
+name.contains("grain")`. Measured against each other with an untracked stack -
+`food_put_by` / `has_edible_food` / `find_best_food_to_eat`:
+
+| item | put by | can eat | search finds |
+|---|---|---|---|
+| food | 5 | yes | no |
+| grain | 5 | no | no |
+| fish | 5 | no | no |
+| bread | 5 | no | no |
+| greens | **0** | no | no |
+| roots | **0** | no | no |
+
+So a pack of untracked grain, fish or bread **counted as provisions and could
+not be eaten by anything**: `has_edible_food` reached for the literal item id
+`"food"` and no other, and `find_best_food_to_eat` skipped every stack without
+nutrition data. Untracked greens and roots counted as *nothing at all*, neither
+word being among the six - and they are the whole of what a hedgerow gives for
+half the year.
+
+**And the verb trusted its callers.** `eat_food_item` guarded only on
+`Piece::can_it_be_eaten`. Called with "wood", "stone", "clay", "bowl" or
+"flax" it returned Success, credited twenty energy, fed `nutrition.consume` and
+dropped the hunger drive. Nothing reached it that way in a live run, because
+every caller filtered first - which is the point. The rule lived in the callers
+and not in the verb, which is the shape of every defect in this file.
+
+**Where the untracked stacks came from.** Bartering, gifts and going-without
+all rebuilt the receiving stack from scratch - `new_with_weight(name, how_many,
+1.0)` - so what arrived had the right name and nothing else: no nutrition, no
+freshness, no preparation state, and a flat weight of one against food's real
+half, so a traded meal weighed double against a pack that holds forty-two (#113
+says twelve; see the correction in #116). With no
+freshness it then never spoiled, so it sat in the pack for ever as food that
+read as food and was not. Animal products - milk, eggs - were built the same
+way and had never carried nutrition at all. Measured, 17 of 213 edible-looking
+stacks in packs were untracked.
+
+**And a fourth drift in the name table.** `PlantDrop` names sixty-two things a
+plant can give - apples, berries, potatoes, wheat, mushrooms - and
+`id_to_item_type` knew four of them. Everything else the flora system produced
+arrived as a name nothing could resolve: no nutrition, no price, no place in a
+store. The edible ones are mapped onto the types that already exist now; petals,
+fibre, bark, straw, seeds and poison mushrooms deliberately are not.
+
+**What replaced it.** `ItemType::is_it_food` is the one answer for types and
+`nutrition::is_this_food` is that question asked of a name, through
+`id_to_item_type`, so a cooked joint and a cut portion resolve to what they
+were cut off. `food_put_by`, `find_best_food_to_eat`, `has_edible_food`,
+`InventoryItem::is_food`, the pit and the verb all ask it. `eat_food_item`
+refuses anything that is not food. `Simulation::hand_over` moves a stack out of
+one pack and into another whole - same weight, same food data, same quality -
+and returns nought if the receiving pack will not take it, so a one-sided
+bargain is refused rather than half-completed.
+
+One distinction is deliberately kept: a whole fish or an uncut haunch **is**
+food and is **not** supper. `food_put_by` counts it and `has_edible_food` does
+not, which is what `Piece` and `how_many_meals_i_have` have always said.
+
+**Measured.** Untracked edible stacks in packs **17 to nought**. Food eaten out
+of the pack over eight worlds of a year **474 to 920**, which is the direct
+effect: the search can see what the agent is carrying now. Person-ticks alive
+90,272 to 96,956. Wood, stone, clay, a bowl and flax are all refused. Survival
+across three blocks of thirty-two seeds is a wash - alive 21/12/18 to 22/12/18,
+worlds emptied 12/21/14 to 12/20/15 - which is what to expect when the paths
+being repaired are eight per cent of stacks and a rare verb.
+
+**Tests 24, unchanged, none new.** Seven broke on the way and all seven were
+fixtures naming food the model has never produced - "meal", "fruit",
+"raw_meat", "spoiled_meat" - which a predicate that resolves names refuses as
+firmly as it refuses a stone. They say what the model actually makes.
+
+The drift guard `every_food_type_has_a_template` holds the static list to the
+runtime database. It earned its keep immediately: this entry was first written
+asserting that nothing in the model is ever called "berries", on the strength
+of the word appearing only in prose in the decision layer. `PlantDrop` drops
+"berries". The guard failed the moment the name table was taught the drops, and
+the claim was wrong. A guard that only ever agrees with you is not a guard.
+
+---
+
+### 116. A basket was worth fifty and held thirty, so everybody walked at half speed
+
+Set out to make a pack big enough to provision a journey, on the strength of
+#113's "a pack holds twelve weight, which is two days' eating". **That figure
+was wrong, and the way it was wrong is worth writing down**: twelve is
+`WHAT_TWO_HANDS_HOLD`, what a pair of *bare* hands carries, and it was measured
+off a fresh `Agent::new` in a unit test. Measured on agents in a running world,
+**87% carry a basket and hold forty-two**. The premise of the task did not
+survive its first measurement.
+
+What was actually there is better.
+
+**One basket, two owners, fifty kilos.** `take_up_the_cart` maps the item
+`"basket"` onto `TransportType::Backpack`, whose capacity is thirty, and
+`total_additional_capacity` puts that into `Inventory::max_weight`. Then
+`effective_max_weight` counted **the same basket again**, at twenty, off the
+inventory:
+
+```rust
+self.max_weight
+    + baskets as f32 * Self::WHAT_A_BASKET_HOLDS   // 20
+    + bags as f32 * Self::WHAT_A_LEATHER_BAG_HOLDS // 35
+```
+
+So one basket was worth thirty as a thing on your back and another twenty as a
+thing in your pack. Two subsystems answering "what does a container add", which
+is this project's oldest defect in its plainest form.
+
+**What it cost, which is not what it looks like.** `add_item` gates on
+`effective_max_weight` and every report reads `max_weight`, so agents loaded
+themselves against the loose figure and were measured against the tight one:
+over six worlds, **43.5 kg carried against a stated 34.7 - a hundred and
+twenty-five per cent full, permanently.** And `movement_speed_at_tick` takes
+`1.0 - weight_percentage() * 0.3`, with `is_overweight` halving it on top. A
+settlement of people who could never get under their own limit walked at
+between a half and five eighths of their speed for the whole of every run. The
+double count was not a bookkeeping error; it was a permanent movement penalty
+on everybody.
+
+**Fixed by giving it one owner.** `Transport` has the whole table - capacity,
+speed, durability, twenty-odd kinds of carrier - and `take_up_the_cart` puts
+what is in the pack onto the back every turn from `tick_with_percepts`. So
+`effective_max_weight` is now `self.max_weight` and nothing else, and
+`WHAT_A_BASKET_HOLDS` and `WHAT_A_LEATHER_BAG_HOLDS` are gone. The leather bag
+had reached capacity only through those constants, so it goes into
+`take_up_the_cart` as `LargeBackpack` - fifty, ahead of the basket's thirty,
+which is what being a leatherworker is worth.
+
+**Measured, paired over three blocks of thirty-two seeds:**
+
+| | before | after |
+|---|---|---|
+| mean pack | 43.5 kg of 34.7 (**125% full**) | 30.3 kg of 36.4 (**83%**) |
+| person-days | 32,885 / 27,095 / 30,320 | **36,826 / 27,330 / 33,674** |
+| worlds emptied | 12 / 20 / 14 | 14 / 21 / 16 |
+
+Person-days up twelve, one and eleven per cent - people live longer because
+they can walk again. Worlds emptied is up by one or two in each block, which is
+the same thin tail as everywhere else in this model and not worth reading much
+into at thirty-two.
+
+**And the real reason nothing gets provisioned, which is not capacity at all.**
+With the count corrected, the pack is 83% full and **food is six per cent of
+it**. What fills a pack, by weight over six worlds:
+
+| | share of everything carried |
+|---|---|
+| wood | **23.1%** |
+| iron | 4.7% |
+| handaxes | 4.4% |
+| tinder | 3.5% |
+| stone | 2.9% |
+| all food | **~6%** |
+
+*(The reading of this table was wrong, and #117 corrects it: those counts are
+totals over seven hundred agent-samples, not what one person carries. Per
+agent it is five logs, one handaxe and one knife - a sensible kit, not a
+hoard. The shares are right; the story told about them was not.)* Filed as
+#236, and see #117 for what came of it.
+
+---
+
+### 117. Nobody was hoarding anything, and the rule written for it made things worse
+
+#236 said agents carry six hundred and sixty-six handaxes and never put
+anything down. **They carry about one each.** The figure was a total over seven
+hundred and nineteen agent-samples, and I read it as a per-agent count and
+wrote it into #116, into the task, and into a rule built on top of it. Second
+misread in two entries, and the same shape both times: a number measured across
+a population and reported as a number about a person.
+
+What one agent actually carries, per sample over six worlds:
+
+| | per agent | kg |
+|---|---|---|
+| wood | 4.98 | **9.96** |
+| handaxe | 0.93 | 1.86 |
+| fishportions | 1.47 | 1.47 |
+| basket | 0.77 | 0.77 |
+| stoneknife | 1.00 | 0.50 |
+
+One axe, one knife, a basket, some fish and five logs. That is a kit, not a
+hoard. The only thing on it that looks heavy for a forager is the wood, at a
+third of the pack.
+
+**What was tried.** A rule that a person keeps one of each tool, one carrier,
+all their food and a bounded amount of any material - the bound taken from the
+room a trip's load needs, so five logs at two kilos came down to three. Wired
+three ways: a decision branch above everything but eating, a refusal in the
+`Gather` verb so what was set down could not be fetched straight back, and
+`PutDown` setting down the surplus rather than the whole stack.
+
+It worked, in the sense that it did what it said: wood fell from 4.98 to 3.23
+per agent, and **food went from eight per cent of what is carried to eleven**.
+
+**And it made survival worse.** Paired over three blocks of thirty-two seeds,
+person-days against the same seeds before it:
+
+| | person-days | against baseline |
+|---|---|---|
+| baseline | 36,826 / 27,330 / 33,674 | - |
+| everything | 35,394 / 28,838 / 29,516 | **-4.2%** |
+| without the `Gather` refusal | 32,937 / 30,485 / 29,521 | **-5.0%** |
+| surplus-only `PutDown` alone | 34,821 / 28,377 / 29,552 | **-5.2%** |
+
+Every arrangement of it costs more than it gains. A turn spent setting
+something down is a turn not spent eating, and the extra armful it buys does
+not pay for the turn. So it is not shipped. What is left is the part that
+cannot be wrong either way:
+
+- `provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS`, which was the literal `0.5`
+  written in the Gather executor's weight table and again in the forage branch
+  of `Eat`.
+- `provision::AS_MUCH_AS_ONE_TRIP_TAKES`, moved out of the decision layer,
+  where nothing outside it could reach the one figure that says how much a trip
+  brings back.
+- `Agent::WHAT_CARRIES` as an associated constant rather than a local inside
+  `take_up_the_cart`, so what a person carries things in is a list somebody
+  else can read.
+
+Those three are ownership moves with live callers and no behaviour in them, and
+the run bears that out: over the same ninety-six seeded worlds the counts come
+back **bit for bit identical** - 36,826 / 27,330 / 33,674, sixteen and fourteen
+and twenty-one worlds emptied, the same to the person.
+
+**What this leaves.** The waste is real - 77,514 items of food went back on the
+bush against 7,537 carried home - and it is not hoarding and not a rule about
+tidiness. A pack holds thirty-five kilos, a kit weighs thirty, and an armful is
+seven: the trip brings back more than there is room for, and the shortfall is
+about one armful. Whether the answer is a bigger pack, a lighter kit, a smaller
+armful or a second trip is a question for measurement rather than for
+reasoning, and reasoning is what produced both wrong premises in this entry and
+the last. #236 is reopened with the corrected figures.
+
+---
+
+### 118. The waste was two counters in a trenchcoat, and behind it an armful refused for being one lump
+
+"Seventy-seven thousand items of food went back on the bush against seven
+thousand carried home" has been in three entries and every answer given about
+this model's food economy. **There is no such waste.** Split the counter and
+the number that means food actually lost is **nought**.
+
+`what_would_not_fit_in_the_pack` was being added to from two places that mean
+opposite things:
+
+- `into_the_pack_or_on_the_ground` calls `somebody_left_this`. A carcass too
+  big to carry is **left on the ground**, where it rots and is gone. That is
+  the waste #165 is about, and measured over eight world-years it is **zero
+  items of food**.
+- The forage branch of `Eat` calls `put_it_back`. An armful that will not go in
+  the pack goes **back on the bush**, and nothing is lost at all: the patch is
+  exactly as it was, and the same berries are counted again on the next trip,
+  and the trip after that. That is all 87,667 of them.
+
+One counter, two meanings, and the meaning that would have been alarming is the
+one that never fired. They are `what_would_not_fit_in_the_pack` and
+`what_went_back_on_the_bush` now.
+
+**But the put-backs are still telling us something, and it is not what I
+thought.** Two candidate causes, both checked and both wrong:
+
+- *The slot limit.* Agents use 5.4 of 20 slots and are at the limit **0.0%** of
+  the time.
+- *A full pack.* The agents putting food back had, on average, **12.55 kg of
+  room - twenty-five items' worth** - while refusing an armful of fourteen.
+
+The actual cause: **`Inventory::add_item` is all or nothing.** Offered twenty
+items when there is room for ten it takes none of them. That is right for a
+tool, which is one thing or no thing, and wrong for an armful of berries, which
+is twenty separate berries. So a forager with room for ten and fourteen in his
+hands walked home empty.
+
+Butchering had already worked this out - it computes `fits` and takes that much
+- and the two paths that bring food home never learned it. Third time in this
+file that one path solved something and its siblings went on without it. There
+is one `take_what_fits` now and all three go through it.
+
+**Measured.** Food into packs **9,691 to 11,107, up fifteen per cent**; food
+put back 87,667 to 80,728. And survival is **unchanged**: paired over five
+blocks of thirty-two seeds, person-days go -6.3%, +9.6%, -8.2%, +0.2%, +3.2%,
+which is **-0.9% over a hundred and sixty worlds** against block-to-block
+swings of ten. Worlds emptied, fifty-one against fifty-one.
+
+That last is worth saying plainly rather than dressing up. **Carrying half as
+much food home again makes no difference to whether anybody lives.** The food
+economy is not short of food that got home; agents are fed on the spot by the
+forage branch and the pack is a store they rarely draw on - 621 items eaten out
+of the pack against tens of thousands foraged. What decides a settlement is
+where its people are standing, which is #229, and this changes nothing about
+that. It is shipped because the model now says a true thing where it said a
+false one, not because it made anybody live longer.
+
+**A note on the three wrong numbers.** #113 said the pack held two days of food
+(measured on a fresh `Agent::new`, corrected in #116). #116 said agents carried
+666 handaxes (a total over 719 samples, corrected in #117). #113, #116 and #117
+all said food was being thrown away ten to one (two counters pooled, corrected
+here). Every one of the three was a real measurement read the wrong way round,
+and every one of them survived several entries and several answers before
+anything checked it. The fix that holds is not "be careful" - it is that a
+number worth acting on is worth a probe that isolates it first.
+
+---
+
+### 119. Carrying is not what limits this settlement, and a bigger pack makes it worse
+
+#236 has now been wrong three times about the same thing. It began as "a pack
+holds two days of food" (#116: it holds seven, and the two-day figure came off
+a unit-test fixture). It became "nobody puts anything down, six hundred and
+sixty-six handaxes" (#117: about one each, and the rule written for it cost
+five per cent of survival). It became "seventy-seven thousand items of food
+thrown away" (#118: nought thrown away, two counters pooled). Each time the
+premise was replaced rather than the question.
+
+So this time the question was put to the model directly rather than reasoned
+about: **does carrying capacity matter at all?**
+
+Swept over three blocks of thirty-two seeded worlds, total person-days:
+
+| what two hands hold | person-days | against twelve |
+|---|---|---|
+| 6 | 97,217 | +1.9% |
+| **12** (as shipped) | **95,371** | - |
+| 120 | 75,081 | **-21.3%** |
+
+**Flat from six to twelve** - within the block-to-block noise of ten per cent -
+and **a fifth worse at ten times**. Halving the pack costs nothing measurable.
+Making it enormous is the single largest survival regression measured in this
+model since the starvation clock was corrected.
+
+**Why a bigger pack is worse**, which is worth having rather than guessing at.
+Comparing the settlement's action mix at 120 against 12, per person-tick:
+
+| | at 12 | at 120 |
+|---|---|---|
+| `Gather` | 0.347 | 0.345 |
+| `Eat` | 0.289 | **0.276** |
+| `Work` | 0.063 | **0.080** |
+| `Sleep` | 0.051 | 0.041 |
+
+Gathering is unchanged. `Work` is up twenty-seven per cent and `Eat` is down.
+A person with materials in hand has something to make, and making competes with
+eating for the same turn. Capacity is not a bottleneck on food; it is a
+*licence* for other work, and the other work is what kills them. Food into
+packs doubles and food eaten out of packs doubles with it - and it does not
+help, because the settlement was never short of food it had carried home.
+
+**That closes #236.** The four candidates it was reopened with were a bigger
+pack, a lighter kit, a smaller armful and a second trip. The first is refuted
+with the sign reversed. The other three are all ways of moving food from the
+patch to the pack, and #118 already measured what that is worth: fifteen per
+cent more food carried home changed survival by -0.9% over a hundred and sixty
+worlds. There is no version of "carry it better" that this model is waiting
+for.
+
+**What it leaves.** Agents are fed on the spot by the forage branch - 505 items
+eaten out of packs against tens of thousands foraged - and the pack is not a
+larder. A settlement lives or dies on whether the ground its people are
+standing on bears anything, which is #229: a starving agent's best patch within
+twenty-five paces holds seven units against a daily burn of fourteen hundred,
+while the well-fed stand in six hundred, and nothing moves anybody because
+`Eat` never fails. Four entries of carrying work have between them ruled out
+the pack, the kit, the counters and the verb, and every one of them points at
+the same place.
+
+`WHAT_TWO_HANDS_HOLD` now carries this sweep in its doc comment, so the next
+person to think twelve looks arbitrary finds out that it is not.
+
+---
+
+### 120. The signal to leave fired, and a bare patch a pace away outbid it
+
+#229 said a starving settlement never picks itself up and moves. The obvious
+reading is that the signal never reaches its threshold, and that reading is
+wrong. Measured over six worlds and 45,732 agent-ticks, hunger's `denied_ticks`
+stands at 120 or more - `HUNGRY_ENOUGH_TO_LEAVE`, ten days of being hungry and
+not being fed - in **3.06% of them**, and reaches 254 at its worst against a
+threshold of 120. Starving agents average 86.8. The signal fires.
+
+**What happens to the tick instead.** Instrumenting every branch of
+`food_action`, counting only the ticks where the agent had already been hungry
+long enough to leave:
+
+| what the tick did | ticks | share |
+|---|---:|---:|
+| walk to a source it knows | 768 | 69.0% |
+| forage where it stands | 323 | 29.0% |
+| hunt something near | 10 | 0.9% |
+| cut up a carcass, eat what is carried, cook | 7 | 0.6% |
+| **reached the branches that leave** | **5** | **0.4%** |
+
+Sixty-nine per cent of them went to one line: `known_source_position` names the
+nearest food the agent can smell or remember, and the branch returns before the
+leaving branches are reached. So the question is what it was naming.
+
+**It was naming nothing.** Of those 768 targets, **765 - 99.6% - had no food
+standing on them at all**, and the mean walk to one was 1.3 paces: the agent
+was standing on the bare patch it was being sent to. The `Gather` that came out
+of it was refused by `could_this_gather_come_to_anything` **every single time**
+(0 of 768 would have survived that gate). A settlement was spending two turns
+in three walking to ground it was already on, being refused, and never getting
+as far as the question of whether to live there.
+
+**Where the phantom sources came from.** Two places, in roughly equal measure -
+434 memories and 334 scents.
+
+The scents are a plain defect. `collect_scent_sources` gives everything a
+smell that is not water as `ScentType::Food`, and reads the strength off
+`ResourceType::raw_scent_strength`, which kept its own hand-written list:
+
+```rust
+ResourceType::Food | ResourceType::Grain | ResourceType::Herbs => 0.08,
+ResourceType::Meat | ResourceType::Fish => 0.24,
+ResourceType::Water => 0.12,
+_ => 0.0,
+```
+
+That list had drifted off `is_it_food`. **Herbs**, which nobody in this model
+can eat, smelled of dinner. **Greens and roots** - which are what a hedgerow
+gives for two seasons out of four and most of what anybody ever eats - smelled
+of nothing at all. A starving agent smells the herbs, walks to them, gathers
+nothing, and does it again next tick, forever.
+
+That is the third time this document has recorded the same shape: a question
+with two answers written out by hand, kept true only by the two of them
+happening to agree. `is_edible` was a fourth copy of the same six variants,
+with a doc comment claiming to be the single answer.
+
+**The fix, in three parts.** `raw_scent_strength` asks `is_it_food` and keeps
+only how far a thing carries; `is_edible` calls `is_it_food`; and the branch
+that walks to a known source now refuses one the settlement's own gate says is
+spent - which is the check the executor was going to apply a moment later
+anyway. A source further off than foraging reach is outside what that gate
+looked at, so it still stands. Two guard tests hold the scent table to the food
+list in both directions.
+
+**What it did.** The same probe, after:
+
+| what the tick did | before | after |
+|---|---:|---:|
+| ticks spent hungry enough to leave | 1,113 | **439** |
+| walk to a source it knows | 768 (69.0%) | 1 (0.2%) |
+| eat what is carried | 4 (0.4%) | 24 (5.5%) |
+| hunt something near | 10 (0.9%) | 41 (9.3%) |
+| **reached the branches that leave** | **5 (0.4%)** | **136 (31.0%)** |
+
+The one remaining walk to a known source is a real one: 39 units standing, 33
+paces off, outside foraging reach. And there are 60% fewer ticks in this state
+to begin with, because agents in it are now doing things that feed them.
+
+Person-days alive over 160 worlds of a full year, five paired seed blocks:
+
+| seeds | before | after |
+|---|---:|---:|
+| 7000 | 1074 | 1161 |
+| 0 | 930 | 1070 |
+| 64 | 961 | 1016 |
+| 128 | 1016 | 1009 |
+| 192 | 977 | 1044 |
+| **total** | **4958** | **5300 (+6.9%)** |
+
+Worlds emptied inside the year: 86 of 160 down to 75. Split three blocks
+apart, the scent fix alone is worth +3.9% and the branch gate a further +5.4%,
+so both halves pay.
+
+**What it does not fix.** Thirty-one per cent of these ticks now reach the
+leaving branches and all of them take `migration_action`;
+`go_and_live_where_it_is` still fires zero times, because it asks its question
+once a day and wants a resource of the right kind within sixty tiles. Whether
+moving house is reachable at all is worth its own measurement.
+
+**Filed in passing.** `is_it_food` counts six resources and excludes **honey**
+and **milk**, both of which the world generates and neither of which anybody
+can eat. Not touched here - changing what food is, is a change to the food
+supply and wants measuring on its own.
+
+---
+
+### 121. Three spellings of "armed", and a planner that looks one job ahead
+
+"The planner should attempt to anticipate drive demand increase so that
+actions can be efficiently executed, reducing the odds of tasks being dropped
+mid-completion. Each agent should be slightly different due to varying drive
+demands and personality traits. It should also allow for the proper
+preparation of actions such as hunting requiring a weapon."
+
+Three things. Two of them worked, one did not, and the measurements say which
+is which.
+
+**Where hunting was actually dying.** Over six worlds and a year, 599 hunts
+were attempted and **589 failed with "No spear in hand for that"** - 98.3%. No
+surviving agent anywhere held anything to hunt with. Instrumenting the rescue
+path, `make_what_this_wants` was offered 643 hunts, 633 of which wanted a
+spear, and in 613 of those **no step in the spear chain could be taken from
+where the agent was standing** - which was next to a deer, in whatever wood or
+meadow the deer happened to be in, with no stone and no wood in reach. The
+preparation was being attempted one tick before the throw.
+
+**And the requirement was written three times.** `worth_hunting` asked
+`agent.equipment.get_weapon()`, which is the equipment slot and which nothing
+in this model has ever filled. The executor asked
+`what_i_have_to_work_with(SkillType::Hunting)`, which is the pack. And the
+verb matrix asked `Wants::ThisInHand("spear")` - one item, by name. So a man
+carrying a **sharpened stick, a sling or a bow** was refused before the
+executor was reached, and so was a man going after a rabbit, which the
+specification says a thrown stone will kill.
+
+Changing the `HUNT` verb alone changed **nothing at all**, and the reason was
+in a comment on the lookup that had been there since it was written: *"a hunt
+is a throwing and a hunting and both want the spear"*.
+`what_this_action_cannot_do_without` gathers every verb sharing a `done_by`,
+so `THROW` went on asking for the spear after `HUNT` had stopped. A
+requirement written twice is still written once you have removed it from one
+of the two places.
+
+**The fix, in three parts.**
+
+1. `Simulation::could_bring_it_down` is the one owner of whether a kill is
+   possible - the size rule the executor has always had, now asked by
+   `worth_hunting` before anybody sets out.
+2. The verb matrix stops claiming an unconditional requirement it does not
+   have. What a hunt needs depends on the quarry, which that table cannot see.
+3. `what_a_hunt_wants_first`: wanting to hunt with nothing in hand is a reason
+   to go and get something, taken **where the want is formed** rather than at
+   the animal. It walks the hunting ladder from the bottom - `how_much_better`
+   ascending - because `what_i_would_rather_have` answers the *upgrade*
+   question and names the bow, and a man who cannot come by a bow this
+   afternoon then does nothing when a sharpened stick was three turns away.
+   Asked for the best: 1,881 wants and 340 that came to anything. Asked from
+   the bottom: 1,391 and 311, and the difference goes on.
+
+`how_i_would_come_by` is the making step or, failing that, the raw thing the
+chain is short of - the pair of questions that had been written out three
+times over. And `make_what_this_wants` now takes the making on as an errand,
+which `would_a_better_tool_pay` has done since `Errand::to_make` was written
+and this one never did: twenty turns went on the first step of a hunting tool
+in six worlds and not one was ever followed up.
+
+**What it did.** "No spear in hand for that": **589 to nought**. The only
+hunts that fail now fail for reasons a hunt should fail for - deer escaped 26,
+rabbit escaped 16.
+
+**The anticipation, and a negative result inside it.** The first cut asked
+`how_long_before_this_asks` - how many turns until a need crosses its
+threshold - and deferred any job a higher-ranked need would interrupt. It
+fired on nearly everything. Hunger sits a few turns off its threshold most of
+the time and outranks every secondary need, so a settlement stopped
+provisioning, stopped building and stopped making tools and did nothing but
+eat. Measured over 160 worlds against the same five seed blocks: **4,931
+person-days against 5,300**, -7.0%, every block down.
+
+Rewritten on the body's own clock - `ticks_before_this_kills_me`, which is
+what `how_hard_it_presses` already reckons the primaries by - it fires 149
+times in 2,870 multi-turn jobs and costs nothing measurable. A need being
+about to *ask* is ordinary. A need that will have killed you before the job is
+done is worth turning round for.
+
+**Per agent, and honestly so.** Every term in `how_long_before_this_asks` is a
+number the individual already carries: how far its drive is below threshold,
+how fast that drive builds, and how much the weight of having been ignored
+(`Drive::pressure`) is making it build faster. Two people standing in the same
+field get two different answers. Which needs may interrupt which is
+`DriveRank::precedence`, and personality reaches it through `weight` and
+`lean` on the ranking above.
+
+**What it did not do, which was the point of asking for it.** Errands dropped
+for "something else came first" went from 1,818 of 3,445 (52.8%) to 1,661 of
+3,059 (54.3%). **It did not reduce the drop rate at all.** The reason is in
+the rule: the anticipation only defers to needs of a *higher band*, and what
+actually ends errands is `stick_to_the_errand`'s turn-round test, which two
+needs of the *same* band trip constantly as one is nibbled at and the other
+builds. Fixing that means looking ahead inside a band, which needs a way to
+say how hard a drive will press at a future tick rather than only when it will
+start asking. Filed.
+
+**Survival, five paired seed blocks, 160 worlds:**
+
+| | person-days | against HEAD |
+|---|---:|---:|
+| before | 5300 | |
+| preparation only | 5298 | -0.04% |
+| + anticipation on the threshold | 4931 | **-7.0%** (rejected) |
+| + anticipation on the body's clock | 5276 | -0.45% |
+| + the verb matrix fixed | **5205** | **-1.8%** |
+
+Worlds emptied inside the year: 73 of 160, against 75 before. The last 1.3%
+is hunting actually happening where it used to be refused, and a hunt costs
+turns; on a measure whose block-to-block noise is ten per cent, none of this
+is a change in survival either way.
+
+**The guard.** `no_verb_asks_for_one_rung_of_a_tool_ladder_by_name` fails if
+any verb states its precondition by naming a tool, and
+`a_hunt_asks_for_nothing_this_table_cannot_see` pins the hunt in particular.
+The defect they catch cost 589 hunts in 599 and was invisible for as long as
+the two lists happened to agree.
+
+---
+
+### 122. Going for a drink was a change of mind, and it emptied the larder
+
+#239 was filed on the reading that undertakings are dropped because two needs
+of the same standing trade places, which is the case
+`what_it_takes_to_turn_me_round` was written for and the case the anticipation
+rule deliberately excludes. **That was wrong, and the measurement says so.**
+
+Tallying every drop by the band of the need that took the turn, over six
+worlds and a year:
+
+| the need that took the turn | drops | share |
+|---|---:|---:|
+| a **higher** band | 1,401 | **84.0%** |
+| the same band | 264 | 15.8% |
+| a lower band | 4 | 0.2% |
+
+And the pairs are not scattered. **1,062 of the 1,669 - 64% - are a
+Preparedness errand cut short by thirst or hunger**: 611 by thirst, 451 by
+hunger. Curiosity and Social lose another 220 the same way.
+
+So it is not two needs of a kind swapping places. It is a primary need
+interrupting a secondary one, which is what primary needs are *for* - a
+primary drive outranks a secondary one whatever its clock says, because
+`DriveRank::precedence` is 100 against 10. Thirst does not have to be
+dangerous to take the turn; it only has to be asking.
+
+**And the anticipation rule could not have helped.** It defers when
+`ticks_before_this_kills_me` runs out inside the job, and thirst's clock is a
+day and a half where the errand is twenty turns. The clock says there is
+plenty of time. The ranking takes the turn anyway. Both are right; they are
+answering different questions.
+
+**What was actually wrong.** `stick_to_the_errand` did not interrupt the
+errand - it **destroyed** it. `self.population.agents[agent_index].errand =
+None`, and the next turn the whole decision was made again from nothing. So
+every attempt at putting food by ended the first time somebody got thirsty,
+which on this map is every attempt, every time; the settlement started an
+errand it never once finished and started it again the next day.
+
+A man who stops for a drink has not changed his mind about the pit he was
+digging. The errand is put down and picked up again: `Errand::set_aside`
+counts the turns it spends waiting, `set_the_errand_aside` books it, and
+resuming resets the count. What still ends an errand is arriving, giving up on
+an unreachable place, being frightened off it, or leaving it standing for two
+days - `HOW_LONG_AN_ERRAND_KEEPS`, long enough to outlast a drink, a meal and
+a night's sleep, short enough that a patch remembered on Tuesday is not still
+being walked to in the spring.
+
+**What it did.** Errand outcomes over the same six worlds:
+
+| | before | after |
+|---|---:|---:|
+| set out on | 3,047 | 1,868 |
+| got there | 1,206 (39.6%) | **1,313 (70.3%)** |
+| dropped for something else | 1,717 (56.3%) | **0** |
+| set aside and picked up again | - | 18,108 turns |
+| left standing too long | - | 130 |
+| gave up on an unreachable place | 98 | 311 |
+
+Fewer errands are begun because the ones already begun are still going. The
+arrival rate goes from two in five to seven in ten.
+
+**Survival, five paired seed blocks, 160 worlds of a full year:**
+
+| seeds | before | after |
+|---|---:|---:|
+| 7000 | 1109 | 1164 |
+| 0 | 1014 | 1079 |
+| 64 | 1047 | 1155 |
+| 128 | 1033 | 1206 |
+| 192 | 1002 | 1109 |
+| **total** | **5205** | **5713 (+9.8%)** |
+
+Every block up, and the largest single gain recorded in this document. Alive
+at midsummer goes from 12.24 a block to 15.85, **+29.5%**; alive at autumn
++10.1%.
+
+**And what it costs, which is real.** Alive at the end of the year falls from
+3.13 a block to 2.59, and worlds emptied inside the year goes from 73 of 160
+to 84. A settlement that carries a third more people through the summer has a
+third more mouths to feed in February, and the winter takes them. That is not
+an argument against the change - the people are alive for most of a year
+rather than dead in the spring - but it does say where the next constraint
+is, and it is the same one every entry in this document has ended at: what a
+settlement has in for the winter.
+
+**A dormant field found in passing.** `Errand::pressed_this_hard` is written
+at all three construction sites and read nowhere. Its doc comment describes a
+rule - "so that a drive going quiet, because somebody handed this one a meal,
+say, ends the errand" - which nothing implements.
+
+---
+
+### 123. Two thirds of the food on a map never grew back, and was deleted when eaten
+
+Asked to work on the winter food problem, and the first measurement said there
+was no winter food problem - there was barely a winter. Deaths by season over
+twelve worlds of twelve founders:
+
+| season | deaths a world | alive at the end of it |
+|---|---:|---:|
+| **Spring** | **9.0** | 3.00 |
+| Summer | 0.9 | 2.08 |
+| Autumn | 0.0 | 2.08 |
+| Winter | 1.8 | 0.33 |
+
+**Three quarters of everybody died in the first season.** Of the deaths with a
+cause on them, 80% were hunger or starvation. Winter was not killing
+settlements; it was finishing off the two or three people a settlement had left
+by the time it arrived.
+
+**Where the food went.** Day by day over sixteen worlds, the food standing on
+the whole map fell from 7,360 units on day one to **886 by day 101** - an 88%
+drawdown - while the population fell from twelve to two and a half. The ground
+only recovered once there was almost nobody left on it. So the question is what
+the ground produces, and the answer is best asked of a map with nobody on it at
+all:
+
+| a map nobody is standing on | |
+|---|---:|
+| food standing on day one | 7,641 |
+| most it ever holds, in autumn | 8,155 |
+| grown over a whole year | **514 units** |
+| what one person eats in a year | 4,147 |
+
+**The map grows enough food in a year to feed one person for forty-five days.**
+Stripped bare and left alone for a year it comes back to 3,038 units - 37% of
+what it started with - and stalls there.
+
+**Why.** Tracking each kind separately on ground stripped bare, only **Fish**
+ever came back. Greens, Roots, Food and Grain all sat at nought. And the
+composition of a map's food at the turn of the year is:
+
+| kind | units | share | grew back? |
+|---|---:|---:|---|
+| Greens | 3,308 | 43.3% | **no** |
+| Fish | 2,784 | 36.4% | yes |
+| Roots | 1,550 | 20.3% | **no** |
+| Food (berries) | 0 | - | yes, out of season |
+| Grain | 0 | - | yes, out of season |
+
+**Two thirds of everything a settlement eats was a stock that never came back**,
+and berries and grain - the two that do grow - have nothing standing at the
+turn of the year because their bearing windows open in summer and autumn.
+
+**And it was worse than not growing.** Instrumenting the growth pass, greens
+were never offered to it at all - not once in twenty days. The reason is at the
+end of every world tick: `World::remove_depleted_resources` keeps an emptied
+node only if `ResourceNode::is_renewable` says so, and that function kept **its
+own hand-written list** of what renews, with the same hole. So a patch of
+greens picked bare was **deleted off the map**, permanently, and could not have
+grown back if it had wanted to. The comment on that function states the case
+against precisely what it was doing:
+
+> A renewable node stays on the map when emptied so it can regrow; deleting it
+> would make berry patches and fish runs single-use and drain the world of food
+> permanently.
+
+Three hand-written lists asked what a resource is - `how_fast_it_comes_back`
+(then a local inside the growth function), `is_renewable`, and `is_it_grown` -
+and two of them had never learned about Greens and Roots, which came in with
+the rebuilt bearing year. It is the third time this month: `raw_scent_strength`
+had the same hole (#120), and so did the three spellings of "armed" (#121).
+
+**The fix.** The rate table is lifted onto the type as
+`ResourceType::how_fast_it_comes_back`, and `is_renewable` now *asks* it rather
+than answering for itself - water excepted, which is fed by `water_inflow` and
+is the one thing that renews without growing. Greens are given 0.04, the rate
+of herbs, because leaf is the quickest thing there is and the reason there is
+anything to eat in April; roots 0.02, because a root is a season's work.
+
+Two guards: everything that grows in the ground and can be eaten must have a
+rate, and nothing with a rate may be deleted off the map when it is emptied.
+
+**What it did.** Ground stripped bare now recovers its greens in eleven days
+and its roots in a fortnight. And over five paired seed blocks, 160 worlds of a
+full year:
+
+| seeds | before | after |
+|---|---:|---:|
+| 7000 | 1164 | 2694 |
+| 0 | 1079 | 2032 |
+| 64 | 1155 | 2098 |
+| 128 | 1206 | 2213 |
+| 192 | 1109 | 2285 |
+| **person-days** | **5713** | **11322 (+98%)** |
+
+Alive at midsummer 15.85 a block to **40.04**; alive at autumn 9.88 to
+**32.81**. Every block up, and a settlement of twelve now reaches midsummer
+with eight or nine people rather than three.
+
+**And now there is a winter problem.** Alive at the end of the year falls from
+2.59 a block to **1.82**, and worlds emptied inside the year goes from 84 of
+160 to **112**. A full settlement now arrives at winter with nothing put by -
+the pits held between half a unit and seven all year, against the 300 one
+holds - and the bearing year gives nothing between Fall-Deep and Spring-Early
+by design. Before this, everybody was dead by autumn and the store was never
+the question. It is the question now, and it is the first time it has been one.
+Filed.
+
+---
+
+### 124. A settlement buried five hundred units a year and ate four of them
+
+#240 asked why a full settlement reaches winter with nothing put by. It does
+put things by. Accounting for every unit that goes into the ground over a year,
+eight worlds:
+
+| | units a world |
+|---|---:|
+| buried | 512.2 |
+| taken back out and eaten | **4.0** |
+| **rotted in the ground** | **503.9 (98.4%)** |
+
+And of what was buried, **438.9 of 512.2 - 86% - went in raw**.
+
+**Why raw does not keep.** Measured directly, burying a stack and waiting for
+it to go:
+
+| food | raw, bare earth | raw, lined pit | dried |
+|---|---:|---:|---:|
+| greens | **6 days** | 12 | 240 |
+| fish | 12 | 24 | forever |
+| meat | 20 | 40 | forever |
+| berries | 24 | 48 | forever |
+| roots | 28 | 56 | forever |
+
+**The land gives nothing for seventy-five days running.** Nothing raw survives
+that, and greens - 43% of the food on a map - last six days in the ground. A
+hole full of leaf is a hole full of rot in a fortnight.
+
+**Where it came from, and it is written down.** `putting_food_by` has:
+
+> If there is a hole right here with room in it, use it. This goes first,
+> ahead of every way of preserving a thing, and the ordering is the whole
+> lesson of this batch. Burying is one turn and it is what actually gets food
+> through to February.
+
+The reasoning is right about the cost and wrong about what is bought. Burying
+*is* one turn, and one turn spent burying leaf buys nothing at all. The
+measurement behind that comment - that preservation-first cost a settlement two
+thousand turns and put a third as much in the ground - was taken on a
+settlement that was starving from the first week, where any turn not spent
+eating was fatal.
+
+**The fix.** Not "preserve before burying", which was tried and was worse:
+**bury what will keep, and preserve what will not.** `Pit::how_long_this_would_keep`
+answers how many days a thing would still be food for if it went in - what is
+left of its own clock at the pace that hole lets it run - and
+`is_it_worth_burying` holds that against the bare stretch. Where the answer is
+no, the turn falls through to the drying and salting branches that were always
+underneath.
+
+`Pit::how_much_slower_things_age` is the one owner of what a hole is worth: the
+same number ages what is in the pit and answers what would keep in it, so the
+two cannot drift.
+
+**What it did to the store.**
+
+| | before | after |
+|---|---:|---:|
+| buried a year | 512.2 | 69.4 |
+| of which raw | 438.9 (86%) | **1.1 (1.6%)** |
+| of which preserved | 73.4 | **68.2 (98%)** |
+| eaten out of it | 4.0 | **23.6** |
+| rotted in it | 503.9 (98.4%) | **27.9 (40%)** |
+| standing in the pits at year end | 4.4 | **17.9** |
+
+The larder is no longer a rot pit. Six times as much of what goes in is
+actually eaten.
+
+**And it did not save anybody.** Five paired seed blocks, 160 worlds:
+**11,322 to 11,551 person-days, +2.0%** - inside the noise on a measure whose
+block-to-block spread is ten per cent. Alive at the end of the year fell from
+1.82 a block to 1.30 and worlds emptied rose from 112 of 160 to 129, both on
+numbers small enough (three to sixteen survivors a block) to be scatter; a
+variant with one of the three branches removed came back 2670/2113 against
+2672/2112, which is what noise at this scale looks like.
+
+**Because the volume is nowhere near a winter.** Sixty-nine units go into the
+ground a year. `what_one_mouth_wants_put_by` is 864, and a settlement that
+reaches autumn with seven people wants about six thousand. What limits it is
+not the decision to bury - that fires 886 times an autumn - but how much a
+settlement can *preserve*: drying wants the agent to have watched food dry
+before it will do it on purpose, wants a clear sky, wants the food cut rather
+than whole, and works one stack at a time out of a pack that holds forty-odd.
+Eighty-six per cent of what used to go in the ground went in raw because raw
+was all there was.
+
+So this entry fixes the arithmetic and names the constraint rather than
+lifting it. The next question is preservation throughput, and it is filed.
+
+---
+
+### 125. Everybody is born knowing what the sun does, and nobody ate what was about to go
+
+Two things the model got wrong about food, both raised in the same breath.
+
+**Drying was a discovery, and it should never have been one.** Laying a thing
+out in the sun so it goes hard rather than green is not an invention. It is
+what happens to anything left out, and a person who has ever seen a dead
+animal in a dry summer has seen it. The model made it a thing an agent had to
+*watch happen* before it would do it on purpose: `is_it_worth_drying` gated on
+`found_out.contains(THAT_LAYING_IT_OUT_KEEPS_IT)`, and the only two ways to
+get that flag were standing over food while the weather dried it, or asking a
+neighbour who already had it.
+
+That is the throughput constraint named at the end of #124, and it is a
+constraint the world invented rather than one it modelled. Removing it:
+`Agent::found_out` is now seeded from `Agent::what_anybody_is_born_knowing()`,
+which is the one owner of the short list of things nobody has to be taught.
+Everything that used to hand the flag out is gone with it - the discovery
+branch in `who_saw_that_dry`, the `PutDown` branch in `store.rs` that could
+never fire anyway, and `what_asking_about_this_meal_would_teach`, because a
+dried strip has nothing left to tell anybody. What is still worth asking a
+neighbour about is a *making* nobody has worked out, which is what that
+machinery was built for.
+
+Watching food dry still teaches something - it is still recorded as a lesson,
+which is what it was worth all along. It is no longer the difference between
+being able to do it and not.
+
+**And the eating rule preferred the food that would keep.** `find_best_food_to_eat`
+scored every stack and took the highest, where the score was
+
+> `effective_nutrition(...) * freshness`
+
+`effective_nutrition` already folds freshness in. So freshness was applied
+**twice**, and the rule read: eat the freshest thing you own. A settlement
+with a week-old fish and a fresh one ate the fresh one and threw the week-old
+one away four days later. Anybody who has ever kept a larder does the
+opposite.
+
+The fix is a straight reordering, and it needed one owner to make it sayable:
+`FoodData::how_long_this_has_left()` answers how many ticks of edible life a
+stack has, from its own clock and what has been done to it.
+`Pit::how_long_this_would_keep` asks it too, so the pit and the plate cannot
+disagree about what is nearly gone. `find_best_food_to_eat` then ranks by
+**fewest whole days left first**, with nutrition as the tie-break inside a
+day - whole days, because ranking on the raw float makes an agent eat a
+mouthful of each of forty stacks in strict order of decay, which is not eating,
+it is grazing. Food the model does not track a clock for sorts last.
+
+**What it did.** Five paired seed blocks, 160 worlds, against #124:
+
+| | before | after |
+|---|---:|---:|
+| person-days | 11,551 | **11,778** |
+| worlds emptied of 160 | 129 | 124 |
+| alive at year end, a block | 1.30 | 1.34 |
+
+**+2.0%**, four of five blocks up - which is inside the noise, the same as
+#124 was. The number that is not noise is what is standing in the pits:
+
+| | spring | summer | autumn | winter |
+|---|---:|---:|---:|---:|
+| units in the ground | 62.4 | 83.3 | 66.8 | **31.4** |
+
+Against **4.2** in winter at the commit before #124. The larder now carries
+something through the bare stretch. It is still nowhere near
+`what_one_mouth_wants_put_by` at 864, and #241 is still the open question:
+what caps it now is the clear sky drying wants, one stack at a time, out of a
+pack that holds forty-odd.
+
+---
+
+### 126. Every pack in the world was half as much again over its own limit, so no food would go in one
+
+#241 asked what caps the winter store, and named drying as the suspect: it was
+a discovery an agent had to watch, it wants a clear sky, it wants the food cut
+rather than whole, and it works one stack at a time. #125 removed the first of
+those. This entry measures the rest and finds that none of them was the
+constraint.
+
+**Where an autumn goes.** Eight worlds, 7,568 agent-ticks of autumn a world:
+
+| | a world |
+|---|---:|
+| Gather | 2,743 |
+| Eat | 2,331 |
+| Excavate | 206 (of which **205 refused**) |
+| **Dry** | **4.5** |
+| **Cover** | **2.2** |
+
+So a settlement buries twice an autumn. It is not the drive: Preparedness is
+the most urgent thing on 26.6% of autumn agent-ticks, more than any need but
+Reproduction. It is not the land: **6,004 units of food stand ripe on the
+ground** in autumn across 248 live patches. It is not the decision, which says
+yes 886 times an autumn.
+
+**It is that nobody is carrying anything.** Of autumn agent-ticks:
+
+| | |
+|---|---:|
+| had food to spare | 1.91% |
+| had something worth drying | 0.48% |
+| **carrying no food at all** | **96.99%** |
+| mean food in the pack | **0.10 units** |
+
+Against `WHAT_A_BODY_EATS_IN_A_DAY` of 11.52. There is nothing to dry because
+there is nothing in the pack.
+
+**And the pack is over its own limit.**
+
+| | a world |
+|---|---:|
+| pack capacity | 26.01 |
+| weight carried | **38.86** |
+| room left | 0.22 |
+| **no room for one handful** | **97.29%** |
+
+Half as much again as it can hold. What fills it is **firewood 10.3, iron 3.7,
+handaxe 2.0, tinder 1.0, stone 0.8** - a tenth of it is supper and the rest is
+ballast.
+
+**How a load gets over the limit, when `add_item` refuses what will not fit.**
+It cannot be *put* there. It gets there the other way round: `max_weight` is
+worked out fresh every turn by `update_inventory_capacity_from_transport`, off
+what the body can lift and what it has to carry things in, and both fall. A man
+loads up in his strong summer, goes hungry, weakens, and wakes in November
+carrying more than he can hold. And because a pack already over its limit
+refuses *everything*, the load is frozen there for the rest of his life. He can
+never pick up food again.
+
+Nothing in this model had ever put a load down. `Agent::what_i_would_put_away`
+looks only at what is in the hands and fires only when a job wants one free;
+the single `PutDown` in the decision layer is a curiosity experiment.
+
+**What it costs.** Counting every unit of food a trip brings back:
+
+| | a world a year |
+|---|---:|
+| into packs | 2,543 |
+| **back on the bush** | **27,968** |
+
+Eleven thrown back for every one kept, with six thousand standing ripe.
+
+**The fix is an invariant, not a decision.** `what_nobody_can_carry_any_more`
+runs before each turn: what a person cannot carry is not carried, and it is not
+destroyed either - it stays where they were standing, for them or anybody else
+to pick up. `Agent::what_i_would_set_down` is the one owner of what goes: the
+heaviest thing that is none of food, a tool this one works with, or the pack
+itself. `how_much_of_this_i_would_set_down` is the one owner of how much, taken
+off `how_much_too_much_i_am_carrying` so the decision and the amount cannot
+drift.
+
+**Weight, not count.** The first cut filtered on `ENOUGH_TO_HAND`, and never
+fired once: wood weighs two a stick, so the ten units of firewood filling every
+pack in the world were five sticks, and five is not more than six. A reserve
+counted in things cannot answer a question asked in weight.
+
+**What it did to the pack and the store.** Eight worlds:
+
+| | before | after |
+|---|---:|---:|
+| weight carried | 38.86 | **30.99** |
+| firewood in the pack | 10.30 | **5.30** |
+| no room for a handful | 97.3% | **88.7%** |
+| meals in the pack | 0.03 | **0.31** |
+| `Dry` an autumn | 4.5 | **29.4** |
+| `Cover` an autumn | 2.2 | **9.9** |
+| units in the ground, winter | 101.0 | **127.9** |
+| dried in the ground, year end | 26.5 | **36.8** |
+
+Six times as much drying, four times as much burying, and a store a quarter
+deeper through the stretch the land gives nothing.
+
+**And it did not save anybody.** Five paired seed blocks, 160 worlds:
+**11,660 to 11,646 person-days**, which is flat. Worlds emptied went the wrong
+way, **118 of 160 to 129**, and that one is not scatter: three separate
+variants of this change all came back at exactly 129 against the control's 118.
+The likely mechanism is the obvious one - firewood is the heaviest thing in
+every pack, so it is the first thing set down, and a man with no wood does not
+light a fire in February. Filed.
+
+**Two negative results, both worth keeping.**
+
+*A decision to make room, on top of the invariant.* `make_room_for` rewrote a
+trip out for food into a `PutDown` when the pack could not take the load, on
+the `free_a_hand_for` pattern. It fired 41.6 times an autumn and moved nothing:
+**11,652 person-days with it against 11,657 without**. Removed. The invariant
+already covers it, and two places deciding to set a load down is the drift this
+document keeps naming.
+
+*Shedding down to the limit less a day's food.* A forager loaded to the last
+ounce cannot pick anything up, so shedding to exactly the limit looks like it
+buys nothing - and shedding further buys a bigger store: winter 235.5 against
+127.9, dried at year end 67.4 against 36.8. It also cost **five per cent of the
+settlement's person-days**, 11,076 against 11,646. What a person is willing to
+walk about carrying is a decision, and dressing one up as a law made it worse.
+The invariant sheds to the limit and no further.
+
+**What is still in the way.** `Excavate` is refused **205 times of 206** an
+autumn, every one of them "Nothing in hand that is any use for Mining": the
+verb matrix says `AToolFor(SkillType::Mining)` and the executor is written to
+let a man dig with his fingers at a cost, with a comment saying in as many
+words that "a settlement that cannot dig cheaply cannot keep a larder". Two
+owners of one precondition, disagreeing, and the matrix wins - so a settlement
+has 3.5 pits a year and burns two hundred turns an autumn failing to dig more.
+That is the same defect `HUNT` had, and it is filed.
+
+---
+
+### 127. A map with nobody on it starved its own soil and buried its own animals
+
+The ask was that the ecology should stand up on its own: a world with no
+people in it should still be there in thirty years. Run empty, it was not.
+Two defects, both of the kind this document keeps naming - a thing that left
+the world without going anywhere, and a number that meant two things.
+
+**The vegetation was in terminal decline with nobody touching it.** Midsummer
+standing crop, eight worlds, no agents at all:
+
+| | y1 | y10 |
+|---|---:|---:|
+| Greens | 3,516 | **2,260** |
+| Roots | 1,681 | 1,277 |
+| Flax | 245 | 183 |
+| Cotton | 127 | 95 |
+
+Five per cent a year, compounding, for ever. Not a boom settling to a floor -
+the ratio between successive years is flat at 0.95, which is a geometric decay
+to nothing.
+
+**And it was the ground, not the growth.** Sampled every fifteen days, greens
+sit *exactly* at `how_heavy_a_crop_it_carries` on all 75 patches, all year.
+The standing crop was tracking a falling capacity, and capacity follows
+fertility. On the tiles that grow greens, fertility went **0.60 to 0.35** in
+nine years - while the map-wide mean *rose* to 0.38, which is why nothing had
+noticed: the tiles that grow nothing were quietly getting richer while the
+tiles that grow food were being mined out.
+
+**By their own plants.** `regenerate_in_ground` draws
+`NUTRIENT_PER_UNIT_GROWN` per unit and puts half of it straight back as root
+and stalk. The other half is in the part somebody carries away - and nobody
+carried it away. What nobody picked went over in its own time through
+`what_it_carries_falls_off`, which **deleted it**. Every growing tile on the
+map was a one-way drain with no one near it.
+
+The fix closes the arithmetic exactly: what falls goes into the ground it fell
+on, at `RESIDUE_PER_UNIT_GROWN`, because the two halves are the same plant and
+the same number. A patch nobody touches breaks even; a patch that is picked
+still loses, which is what picking a patch means.
+
+| | before | after |
+|---|---:|---:|
+| Greens, y1 → y10 | 3,516 → 2,260 | 3,516 → **3,338** |
+| Roots | 1,681 → 1,277 | 1,681 → **1,692** |
+| Flax | 245 → 183 | 245 → **221** |
+| Herbs | 406 → 375 | 406 → **408** |
+
+Every growing thing settles inside five to eight years and holds.
+
+**Then the animals.** With the hedgerows fixed, an empty world was still empty
+of animals inside twenty years: **seventeen of twenty species extinct in every
+one of eight worlds**. Rabbits went 1.6 → 233 → 45.8 → 1.2 → 85 → 0. Sheep,
+goat, squirrel, goose, reindeer, elk, boar, fox, owl, eagle, snake, wolf,
+polar bear: gone.
+
+**Nothing ever took a dead animal out of the list.** There is no `retain` and
+no sweep anywhere in `AnimalManager`, and `self.animals.len()` is what all
+seven of the "is there room in this world for another animal" checks ask.
+Twenty years in, an empty world held:
+
+| | y7 | y12 | y20 |
+|---|---:|---:|---:|
+| animal records | 889 | 897 | 918 |
+| **of them alive** | **374** | **9.8** | **15.9** |
+
+The corpses reach `max_population` by year seven and hold every slot for
+ever. Nothing can be born; the immigration pass breaks out on its first line;
+the boom cohort ages out together on a one-to-three-year lifespan; and the
+world empties. Ninety-nine per cent of the animal table was carrion.
+
+Three things, all one shape:
+
+- `AnimalManager::how_many_are_alive` is the one owner of "how many animals
+  this world holds", and every cap check asks it.
+- `bury_the_dead` takes the fallen off the map at the end of the animal pass.
+  A body is read exactly once, in the tick it falls - a predator feeds off it
+  there and then, a hunter butchers it there and then - and nothing wants it
+  afterwards.
+- `spawn_group` no longer asks the cap on its own account. Whether there is
+  room is the caller's question and each of the three callers already asks it,
+  meaning something slightly different each time; asking again here quietly
+  overrode the one caller with a reason to say yes.
+
+**And what is gone comes back.** `process_immigration` now lets a species that
+is *absent* into a full map. The cap is a rough statement of how much life
+this country carries, and a country carrying its whole weight in rabbits is
+exactly the country a fox should walk into; refusing him for want of room is
+the cap deciding which species exist. A merely thin species still waits.
+
+It also records the peak at spawn rather than only for something alive at a
+migration moment - anything that died inside its first two thousand ticks was
+otherwise forgotten and could never return, which is what happened to the owl.
+
+**Thirty years, eight worlds, nobody in any of them.** Worlds still holding
+each species at year thirty, against the same run before:
+
+| | before | after |
+|---|---:|---:|
+| sheep | 0/8 | **4/8** |
+| squirrel | 0/8 | **6/8** |
+| rabbit | 0/8 | **3/8** |
+| goat | 0/8 | **3/8** |
+| elk | 0/8 | **3/8** |
+| deer | 1/8 | **6/8** |
+| camel | 1/8 | **4/8** |
+| boar | 0/8 | **4/8** |
+| wolf | 0/8 | 3/8 |
+| fox | 0/8 | 1/8 |
+| reindeer, goose, cow, polar bear | 0/8 | present |
+
+Nothing is permanently lost. The wolf, fox, eagle and owl still flicker in and
+out - a solitary predator in a world that only ever held one or two of them
+genuinely can die out, and immigration is deliberately slow - but they return
+rather than being gone for good.
+
+**What this did not fix, and it is worth being plain about it.** The total
+head of animals still pins at `max_population` - 880 to 995 living, sat on the
+ceiling from year seven onwards. It is an array length, not a carrying
+capacity. Grazing takes **nothing at all** off the map: `process_grazing`
+feeds an animal from thin air, and the comment above `process_breeding` has
+said so in as many words since it was written - "grazing feeds every animal
+nearly a hundred times what it burns, so hunger never becomes the limit". The
+breeding crowding term is a headcount per patch standing in for the food that
+should be doing the work. The ecology is now self-sufficient; what sets the
+size of its fauna is still a constant rather than the land. Filed.
+
+### 128. A tick that cost what the map was, not what was happening on it
+
+The next thing asked for is a hundred square kilometres of country. A `Tile`
+is forty bytes, so a square metre a cell puts a hundred million tiles and four
+gigabytes on the heap before anything happens in it; ten metres a cell is a
+thousand by a thousand, forty megabytes, and is the right unit anyway - the
+model's own distances are in tens of metres, and `FORAGE_RADIUS` of 25 is a
+quarter-kilometre walk.
+
+A thousand by a thousand was not affordable. Two of the sweeps in a tick
+walked every tile in the world to find the handful with anything on them:
+the sprouting pass looking for seed, and the scent pass looking for muck.
+Measured, per tick:
+
+| map | world | simulation |
+|---|---:|---:|
+| 50x50 | 0.012 ms | 0.045 ms |
+| 1000x1000, before | 9.270 ms | **47.233 ms** |
+| 1000x1000, after | 0.461 ms | **1.259 ms** |
+
+A world-year is 4,320 ticks: three and a half minutes before, five and a half
+seconds after.
+
+`Grid` now keeps a register of the ground somebody has left something on, and
+those two sweeps walk the register instead of the map. What counts is what
+`Soil::has_somebody_left_something_here` says: fouling and dropped seed, which
+only ever arrive through one door. Litter deliberately is **not** in it -
+`Soil::for_terrain` gives every tile in the world some leaf litter to begin
+with, so a register of tiles-with-litter is a register of the whole map, which
+costs a million inserts a tick and saves nothing. What rots litter still
+sweeps, once in ten ticks, for about half a millisecond.
+
+The interesting part is the guard. A register is a second representation of
+something the map already says, and this document has a standing entry about
+two representations that drift. The first cut let any caller reach through
+`get_tile_mut` and foul a tile directly; three tests went red, all of them
+fixtures that built a midden that way, and the failure mode in a live run
+would have been a midden that never smells, never comes up in food and never
+breaks down - nothing that shows as a crash. So `Grid::somebody_voided_on` is
+now the only door onto fouling for anything holding a grid, and
+`ecology_tests::the_ground_register_and_the_map_agree` walks the whole map
+after thirty days of a live settlement and asks the register about every tile
+it finds muck on, in both directions.
+
+Fingerprints over five seeds and 1,200 ticks are identical to before the
+change.
+
+---
+
+### 129. A hundred square kilometres, and a country frozen on its first morning
+
+The map is now `Grid::METRES_PER_CELL` (ten) into a thousand cells each way:
+a hundred square kilometres, reached by `WorldConfig::big_enough_for_an_ecology`.
+`WorldConfig::default` stays at fifty by fifty and says in its own doc why - it
+is the map a test builds, and a test that ticks a hundred square kilometres to
+find out whether one man ate is a test nobody runs.
+
+Making it that big turned up four things, three of them cost and one of them
+plain wrong.
+
+**The counts were counts, not densities.** Every number in `ResourceConfig` was
+an absolute. A hundred square kilometres came out with the same 361 nodes a
+quarter of a square kilometre had, spread over four hundred times the ground.
+`ResourceConfig::spread_over` scales them against the map they were written for
+(`THE_MAP_THESE_WERE_WRITTEN_FOR`, fifty by fifty), and the animal and plant
+ceilings go through `Grid::at_the_very_outside` for the same reason. 133,246
+nodes and 78,078 plants now, which is the same country only more of it -
+`land_tests::a_bigger_map_carries_more` holds the density to within a tenth.
+
+**Placement was the square of the map.** Each node placed asked
+`is_position_occupied`, which walks the whole resource list. Stocking a map
+places about one node per seven tiles, so building a world cost n². A quarter
+of a square kilometre took a millisecond, twenty-five square kilometres took
+5,320 ms, and a hundred would not finish. The scan is hoisted into a register
+carried through the three spawners (`World::what_ground_is_taken`), and
+`spawn_naturalistic` no longer looks up the plant it just planted by id -
+`Vec::last_mut` is the one on the end.
+
+**The biome cache was keyed by a coordinate and never cleared.** A biome is a
+question about what kind of ground this is and what the calendar says; the
+position never entered the calculation. Keying it by position meant one entry
+per tile anything had ever asked about - 133,000 of them, one BTreeMap lookup
+per node per pass - and, because nothing has ever called `clear_biome_cache`,
+**the answer was frozen at the hour and the day it was first asked**. A wood in
+a world a year old still carried the temperature of the first morning of it.
+Only the weather modifier laid over the top moved at all.
+
+**And the season was a float pretending to be one of four things.**
+`Biome::season` was an `f32` documented "0.0 to 4.0, representing
+spring/summer/fall/winter", read back as `self.season as u32` and matched
+against 0..3. Both tests that set it wrote 1.0 and 3.0 and got what they asked
+for. The one live caller wrote `day_of_year / DAYS_PER_YEAR`, which is a
+fraction under one, which casts to zero, which is spring. **No world has ever
+had a winter as far as its biomes were concerned.** It is a `Season` now.
+
+What a tick costs, at a thousand by a thousand:
+
+| | world | simulation | a world-year |
+|---|---:|---:|---:|
+| before any of this | 9.270 ms | 47.233 ms | 204 s |
+| ground register (#128) | 14.489 | 15.843 | 68.4 s |
+| biome by ground, not coordinate | 10.021 | 10.737 | 46.4 s |
+| canopy flat, not a tree map | 5.047 | **5.693** | **24.6 s** |
+
+(The register's own row is higher than #128's because the map now carries four
+hundred times the nodes and plants; per node it is far cheaper.)
+
+The canopy was the last of it: `tick_in_world` gathered what stands over each
+tile into a `BTreeMap` keyed by position, five entries per plant, 390,000
+tree inserts a pass. Four megabytes of floats indexed flat is an order of
+magnitude cheaper, and the map was never sparse.
+
+Building the big world once still costs about six seconds, most of it the
+fallback full-map scan in `find_random_terrain_position` when a hundred random
+tries fail to hit rare ground. One-off, and left alone.
+
+Thirty-two worlds, 4,320 ticks, against the same code without the climate fix:
+mean last-alive tick 3,772 -> 3,876, mean peak store 112.2 -> 122.3, headcount
+at tick 1,000 8.31 -> 7.69. Winter costs something now and more is put by
+against it. No test failed that was not already failing;
+`news_reaches_everybody_within_earshot` started passing.
+
+### 130. The naturalistic spawner puts two clusters on one tile
+
+`NaturalisticSpawner::spawn_all` builds its own list and never asks what is
+already standing where it is putting things, so its clusters land on top of
+each other and on top of what the basic spawner placed: eighty by eighty gives
+71 doubled tiles, all of them clay, sand, coal, grain, flax, herbs, cotton,
+honey or fish. Whichever of the two a tile lookup finds first is the one that
+exists as far as anything asking about that tile is concerned; the other is
+inventory nobody can reach.
+
+Found by `land_tests::stocking_a_map_leaves_no_two_things_on_a_tile`, which
+holds those nine kinds out by name rather than lowering its sights, so the day
+this is fixed the exclusion list comes out. Filed.
+
+---
+
+### 131. Plants that never grew old, never seeded, and never died
+
+Vegetation was a fixture. A plant had an `age_ticks` and nothing read it, so
+a hedgerow put down when the world was made was the same hedgerow three
+hundred years later; the only way anything ever left the map was somebody
+harvesting it, and nothing new ever came up. Trees in particular had no life
+cycle at all, which is the thing that decides what a wood is.
+
+Now:
+
+- **Lifespans, worked out rather than written down.** `lives_for_years` comes
+  off `size` and `is_tree` rather than being a fifty-second field on each of
+  fifty-one hand-written species - fifty-one numbers is fifty-one numbers to
+  drift, which this document has a standing entry about. A grass or a herb is
+  two years, a bush thirty, a birch eighty, an oak two hundred and fifty, the
+  largest trees eight hundred.
+- **A founding wood has an age in it.** `spawn_naturalistic` gave everything
+  it planted `age_ticks` of nought, so a wood laid down all at once would come
+  down all at once; the founding cohort is scattered across a lifetime now.
+- **Aging happens whether or not a plant grows.** It sat below two early
+  returns and below the `share <= 0.0` gate, so a plant on ground too poor to
+  grow on did not get any older.
+- **Seed.** A bearing plant drops seed within four cells - forty metres, which
+  is where nearly all seed goes. On ground of a kind its species can live on it
+  gets one throw, and takes or fails; on ground its kind cannot live on it lies
+  there and rots on its own clock, a season for a tree's seed and two for small
+  dry seed.
+- **Two ways to die.** Old age, and a plant that could not make a living where
+  it stood: `growth_share` below `WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN` takes
+  condition off it, and at nothing it goes over. Both put the plant back into
+  the ground it was standing in, woody litter for a tree and leaf for a herb.
+- **Something bigger comes up through something smaller.** A sapling in a
+  sward shades the sward out; no amount of grass seed displaces a sapling.
+
+Four of those came out of measurement rather than design, and each was a case
+of the ecology settling somewhere obviously wrong.
+
+**The light gate did nothing.** Germination was a fresh throw every pass and a
+seed keeps for hundreds of them, so every seed that ever landed on free ground
+took in the end however dark it was. A hundred and twenty by a hundred and
+twenty went from a thousand plants to ten thousand in twenty years, still
+climbing, with every grass and herb crowded out by year thirteen. One throw
+fixed it.
+
+**Seeds per lifetime had to be the same for everything.** At a flat chance per
+pass, a plant's seed output over its life is proportional to its lifetime, so
+an oak seeded a hundred times over and a grass a fraction of once. `seeds_per_pass`
+is now the reciprocal of the lifetime, and the two come out even over a life.
+
+**A flat count is not enough on its own.** Counted over twenty years: two seed
+in five landed on country of a kind their species cannot live on, and of the
+three that could, about one in twenty got a root down. So a seed is worth
+about three hundredths of a plant, and twenty-five seed a lifetime is
+two-thirds of a successor - every class on the map on its way out. The bushes
+went first, being neither long-lived enough to wait it out like a tree nor
+quick enough to flood the ground like a grass: 145 at the start and none at
+all by year 150. A hundred a lifetime leaves about three, and what brings
+three back to one is ground that is already taken.
+
+**The seed bank was deciding the ecology.** While the bank is full nothing
+seeds at all, so which species held the ground came down to who was earliest
+in the list. At a quarter of the plant ceiling it was full from year three
+onwards.
+
+A hundred and twenty by a hundred and twenty, nobody on it, one hundred and
+twenty years:
+
+| year | trees | bushes | small |
+|---:|---:|---:|---:|
+| 0 | 326 | 145 | 607 |
+| 20 | 365 | 340 | 9,601 |
+| 60 | 484 | 1,460 | 8,351 |
+| 120 | 696 | 3,099 | 6,096 |
+
+Which is succession: the open ground goes to grass, the grass goes to scrub,
+and the scrub is going to wood. Nothing is lost.
+
+**What it costs, and what should pay for it.** The map goes from seven per
+cent vegetated to about sixty-eight, which is nine times the plants, and a
+year at a hundred and twenty by a hundred and twenty went from 0.2 s to 2.4 s.
+Sixty-eight per cent vegetated temperate country is right; what holds it back
+in the world is something eating it, and nothing in this model eats a plant
+yet. That is the next entry.
+
+Thirty-two worlds, 4,320 ticks: mean alive is up a little at every mark after
+the first two (7.69 -> 7.91 at tick 1,000, 5.53 -> 5.97 at 3,000), mean peak
+store 122.3 -> 125.8, mean last-alive tick 3,876 -> 3,783.
+
+One test moved: `survival_loop_tests::population_feeds_itself_over_a_long_run`.
+It builds its world without seeding `dice`, so its outcome shifts with any
+change to how much randomness anything upstream draws, and this change draws
+two rolls a pass that were not there before. A test that cannot survive a new
+`rng.gen` somewhere else in the model is not holding a line; it should take a
+seed like the rest. Filed as #132.
+
+### 132. A test that fails when anything else draws a random number
+
+`survival_loop_tests::population_feeds_itself_over_a_long_run` runs 4,000
+ticks of a twelve-person settlement on an unseeded world and asserts that
+somebody is still alive. Roughly a third of worlds are empty by tick 4,000 on
+any version of this code, so what the test actually depends on is which world
+the shared `dice` stream happens to hand it - and that moves whenever
+anything anywhere else in a tick draws a roll it did not draw before. It went
+red on the plant-seeding change for that reason and for no other. It wants a
+seed, and an assertion about a block of worlds rather than about one. Filed.
+
+---
+
+### 133. Grazing that took nothing, and a herd size that was a number in a field
+
+`process_grazing` fed an animal out of thin air. The comment above the
+breeding pass had said so in as many words since it was written - "grazing
+feeds every animal nearly a hundred times what it burns, so hunger never
+becomes the limit" - and what stopped a herd growing instead was a headcount
+of mouths per six-by-six patch with a ceiling of eight on it. Nothing on the
+map got any smaller for being eaten and nothing went back onto it.
+
+Now `AnimalManager::tick_in_world` takes the ground and the growing things.
+A mouthful comes off a plant standing within a step, and the plant is that
+much less of a plant for it. What the animal cannot use lands behind it as
+muck. A plant cropped to nothing dies on the vegetation's own pass. An animal
+that feeds by digging - a big omnivore - takes the whole plant rather than
+cropping it, so a bear that digs up a root kills it; that is decided by how
+the animal feeds and not by a hand-written list of which plants are roots.
+`PATCH_CARRYING_CAPACITY` and `GRAZING_PATCH` are gone: `can_breed` already
+asks whether an animal is fed, and now that being fed depends on the grass,
+carrying capacity comes out of the grass.
+
+Five things had to be found by measuring, and every one of them was the
+ecology settling somewhere plainly wrong.
+
+**The first calibration preserved the number the module calls out as wrong.**
+Setting the appetites so a mouthful came out worth what the old flat rates
+gave kept the hundredfold. Five thousand seven hundred head on a hundred and
+forty-four hectares with a mean hunger of 0.30: the grass was still infinite,
+by arithmetic instead of by omission. What an animal reaches for is its own
+`hunger_rate` and a margin now, and a point of plant condition answers a point
+of hunger, so the two ends of the exchange are both real things.
+
+**A hungry animal stood still.** It either did nothing or shuffled a cell or
+two at random when its `state_timer` ran out. Twelve sheep cropped their own
+few tiles bare by tick 2,800 and then took **not one further mouthful in
+three thousand ticks**, with six hundred plants and thirty-eight thousand of
+standing growth on the map around them. An animal that finds nothing in reach
+walks towards the nearest ground with something on it.
+
+**A grown tree is browse, not nothing.** Excluding standing timber outright is
+right about trunks and wrong about a wooded map, where most of what is growing
+is timber. A grown tree gives a flat small amount - the shoots something on
+four legs can reach - whatever its size, and cropping it does not touch it.
+
+**A fresh map could not feed the fauna it spawned.** `spawn_naturalistic` put
+212 plants on 2,500 tiles, from when a `Plant` was a fixture nothing ate. Left
+alone the same country settles at about two-fifths covered, so those figures
+were not a sparser world, they were the same world before it had filled in - 
+and in the meantime a dozen sheep on twenty-five hectares, light stocking for
+real ground, starved. A world opens near where it settles now.
+
+**A plant took more out of its tile than it put back.** An appetite that took
+no notice of what kind of plant it was, and a leaf fall by size that took no
+notice of what the plant had drawn: two unrelated tables for the same physics,
+and the third accounting of it in this model. A small plant took two and a
+half times what it returned, and a meadow nobody walked on lost a tenth of its
+fertility in a year. A plant that has finished growing gives back everything
+it takes; one still building itself keeps half, which comes back when it dies.
+
+What a hundred and twenty by a hundred and twenty does with nobody on it, over
+a hundred and fifty years:
+
+| year | trees | bushes | small | animals |
+|---:|---:|---:|---:|---:|
+| 0 | 326 | 145 | 607 | 174 |
+| 15 | 318 | 154 | 4,998 | 31 |
+| 60 | 338 | 151 | 5,683 | 63 |
+| 150 | 365 | 130 | 5,673 | 55 |
+
+The animals overshoot, eat their ground back, fall, and settle into a cycle
+between twenty and a hundred head - which is the shape of a forage cycle and
+not a number in a field. Nothing goes extinct.
+
+**Speed.** A tick at a thousand by a thousand, over the whole of this work:
+
+| | simulation | a world-year |
+|---|---:|---:|
+| before any of it | 47.233 ms | 204 s |
+| after the ground register and the map (#128, #129) | 5.693 | 24.6 s |
+| plants that live and die (#131) | 8.067 | 34.8 s |
+| grazing, and a map stocked to feed it | 16.088 | 69.5 s |
+| the growing worked out once in twenty ticks | **11.353** | **49.0 s** |
+
+Two things paid for most of it: the grazing lookup was rebuilt over every
+plant every tick, which was three-quarters of a tick on its own, and now runs
+on the ten-tick cadence with a flat index; and the vegetation pass, which is
+the single most expensive thing in a tick and the one that least needs doing
+often, runs once in twenty ticks and stands for twenty. Twenty ticks is under
+two days and nothing a plant does happens faster than that.
+
+So a living ecology on a hundred square kilometres - a quarter of a million
+plants growing, seeding and dying, and the fauna that eats them - costs about
+twice what a dead one did, and a quarter of what the same map cost at the
+start of this work.
+
+Thirty-two worlds, 4,320 ticks, against the same code without grazing: mean
+alive up at five of the seven marks, mean last-alive tick **3,783 -> 4,062**,
+mean peak store 125.8 -> 101.1. Settlements last longer and put by less, which
+is what you would expect from a country where the game has to eat too.
+
+`predator_prey_tests::predators_hold_a_herd_down` was rewritten rather than
+made to pass. It asserted that a herd nothing eats grows without limit and
+that wolves are what stops it - true of the model it was written for, where
+grazing was free and predation was the only brake. Now the grass is the brake,
+a herd nobody hunts overshoots and crashes, and a herd wolves keep under
+carrying capacity is *better* fed: over six seeds, twelve sheep ended at
+fourteen unmolested against thirty-three with six wolves in with them. What it
+holds now is what is still true - wolves eat sheep, and neither herd runs away
+to the ceiling - measured over a block of seeds, because one run of a system
+that oscillates says nothing.
+
+`bearing_tests::ground_nobody_harvests_is_no_poorer_a_year_later` now measures
+from the fifth year rather than the first. That is a change to when the
+question is asked and not to the question: a world opens with less standing
+growth than it settles at, so a tile genuinely and rightly loses ground in
+year one, into the plants standing on it. What has to break even is the steady
+state.
+
+Two tests moved and both are of the kind #132 names: `clothing_tests::a_cold_agent_ends_up_dressed`
+and `situation_tests::a_settlement_works_things_out_that_nobody_wrote_down`
+build unseeded worlds and assert on the outcome of one settlement, so they
+turn over whenever anything upstream draws a roll it did not draw before. The
+clothing one fails as an index panic on an empty population rather than as an
+assertion, which is #228.
+
+---
+
+### 134. A quarter of a million plants, all of them asked every pass
+
+Vegetation was worked out for the whole map at once. It had been every ten
+ticks, then every twenty, and at a hundred square kilometres carrying 247,419
+plants it was still the most expensive thing in a tick by a wide margin - four
+milliseconds of eleven, and every one of those plants asked whether anything
+had happened to it, three-quarters of the time to be told no.
+
+The map is cut into twenty-four bands of rows and one band is grown every
+sixty ticks, so a plant is worked out once in 1,440 ticks - four months - and
+no single tick carries more than a twenty-fourth of the map. Ground something
+is standing on does not wait: `AnimalManager` calls `PlantManager::catch_up_one`
+on a plant before it takes a bite out of it, which is what "unless there is
+something within interaction range" comes to.
+
+| | simulation | a world-year |
+|---|---:|---:|
+| every twenty ticks, whole map | 11.353 ms | 49.0 s |
+| one band in twenty-four, every sixty | **3.705 ms** | **16.0 s** |
+
+The vegetation went from 4.02 ms a tick to 0.518. A living hundred square
+kilometres now costs less per tick than the same map cost when nothing on it
+was alive (5.693 ms, #129), and a fifteenth of what it cost at the start of
+this work.
+
+**The thing that made it safe was giving every plant one clock.** Two paths
+can now grow the same plant - its band's turn, and something standing on it -
+and neither is told how many ticks to stand for. Each subtracts
+`Plant::grown_up_to` from the tick it is asked about and writes the new one
+back, so a plant grows exactly once for every tick that has passed however it
+is reached. A `Seed` carries `dropped_at` for the same reason: how old it is,
+is now less when it fell, rather than a second counter something has to
+remember to wind.
+
+**Three things were only ever right because a pass was short.**
+
+- Growth advanced one stage per call and threw the remainder away. Ten ticks
+  could never carry a plant through more than one stage; 1,440 is several for
+  anything quick, so a grass would have stuck one step short of bearing for
+  ever. It loops now.
+- Seeding was a coin whose chance was clamped to one. Over 1,440 ticks a grass
+  should shed eight and would have shed one. It draws a count now.
+- A plant on ground that will not keep it lost `HOW_FAST_A_PLANT_GOES_BACK`
+  per tick, from conditions read once at the top of the pass. Over four months
+  that is seven-tenths of the plant inferred from a single wet afternoon or
+  dry one, so a pass can now take at most a third of it, and three bad passes
+  in a row - a year - still kill it. `Soil::draw` is bounded the same way and
+  for the same reason: a straight line drawn from the opening rate runs ahead
+  of the true curve, which tapers as the ground empties.
+
+**And one thing was plainly wrong the moment plants stopped being immortal.**
+`spawn_plant` left the clock at nought, so anything that came up mid-run aged
+the whole run the first time its band came round - for a grass, six times its
+own lifetime, so it was dead before it had grown. Every grass and herb on a
+hundred and twenty by a hundred and twenty was gone by year fifteen and every
+bush by year forty-five, with only the trees left standing because a tree can
+afford it. `spawn_plant`, `plant_crop` and `spawn_patch` all take the tick
+now, so no caller can forget to say which one.
+
+**What it costs in fidelity.** The country settles thinner than it did under
+twenty-tick passes. At year 100 on a hundred and twenty by a hundred and
+twenty with nobody on it:
+
+| | trees | bushes | small | animals |
+|---|---:|---:|---:|---:|
+| every twenty ticks | 865 | 136 | 4,382 | 1,229 |
+| one band in twenty-four | 749 | 29 | 1,508 | 339 |
+
+Most of that is recruitment. A seed gets one throw, and under the old cadence
+it got it within ten ticks of landing; now it waits up to four months for its
+band, and by then the tile it fell on is more often taken. That is a real cost
+of stepping coarsely and it is the price of the fifteenfold. Thirty-two
+worlds, 4,320 ticks: mean last-alive tick 4,062 -> 3,976 and mean peak store
+101.1 -> 120.1, so settlements are unmoved either way.
+
+The bush decline is **not** from this change: at the commit before it, the
+same run takes 524 bushes to 71 over a hundred and fifty years. It came in
+with the denser starting vegetation of #133, where the balance was checked at
+the old density and not the new one. Filed as #135.
+
+One more test moved, and it is the family #132 names:
+`longevity_tests::the_young_are_kept_warm_by_the_adults_around_them` builds an
+unseeded world and fails with a mean of `inf` - a mean over an empty group,
+which is a settlement that died out, not a thermal fault.
+
+### 135. Shrubs go out of a country that nobody is managing
+
+Left alone for a hundred and fifty years, a hundred and twenty by a hundred
+and twenty takes its bushes from 524 to 71 and keeps going down, while its
+trees hold and its grass holds. Woody middling growth - `PlantSize::Medium`
+and not a tree, which is the hazel, the bramble, the berry bush - is squeezed
+from both sides: it sheds a fiftieth of the seed a grass does because it lives
+thirty times as long, and it is the best browse on the map, so what does come
+up is eaten. Neither of those is wrong on its own and the two together are too
+much.
+
+It arrived with the denser starting vegetation of #133: the seed-per-lifetime
+figure was fixed against a map that opened with 145 bushes and the map now
+opens with 524, so the share of the seed rain a bush gets is four times
+thinner against a grass population that grew by the same factor. What it
+probably wants is for browsing pressure to fall off as the browse gets scarce,
+which is the one feedback the grazer does not have - it takes what is in reach
+and does not care how little is left. Filed.
+
+### 136. Every animal was two thirds of a food chain, and the map had no say in it
+
+Four things decided what a country was stocked with, and none of them was
+about the country.
+
+**A ratio where a pyramid belongs.** `prey_to_predator_ratio: 2.0` put a third
+of everything on four legs into the business of eating the other two thirds,
+and made no distinction at all between a fox and a wolf: one bag of
+"predators", drawn from evenly. There are not as many wolves as foxes and
+there are not half as many deer as wolves. `TrophicRole` is the shape the
+chain actually has - grazers, small predators, mid-level predators, top
+predators, seven tenths and eighteen, nine and three hundredths - and it is
+worked out from what a species is rather than declared on it. A thirty-fourth
+hand-written field on thirty-three species is thirty-three chances to say
+something the other fields already contradict.
+
+**What decides it is what it eats, not how big it is.** A wolf and a fox are
+both `AnimalSize::Small`; the comment on the enum says so in as many words
+("Small: Foxes, wolves"). So size cannot separate the top of the chain from
+the middle of it and the prey list has to: a fox takes rabbits and a wolf
+takes deer. Own size is a floor and never more, which was the second half of
+this and got it wrong on the first attempt - reading own size on the same
+scale as prey size filed the boar and the harbour seal with the tigers,
+because both are `AnimalSize::Medium` and a medium *prey* animal is what an
+apex predator eats. Nothing is apex by being large. A bear is apex because it
+takes deer.
+
+**A head count that was an absolute.** `max_initial_population: 200`, whatever
+the map. It never bound on a fifty by fifty and bound at once on a hundred
+square kilometres, where it held the whole country to two animals a square
+kilometre - and worse, it was one pool filled first-come, so the grazers spent
+all two hundred of it before anything that eats them was placed at all. A
+hundred square kilometres came out with a thousand head on it and not one
+wolf. It is `head_per_10000_tiles` now, and each tier draws against its own
+share of it.
+
+**And the map may veto the top of the chain.** A quarter of a square kilometre
+with a wolf pack on it is not a small ecosystem, it is a pen: the wolves eat
+everything in it and then starve. Only the top tier is held to this, which is
+both what the specification says ("only where habitat scale supports them")
+and the only place the argument holds - a fox on the same ground is a fox
+whose range runs off the edge of the map, which is every animal in this model.
+
+Two things had to be fixed before any of it would show:
+
+- **A species that could not live here lost its slot rather than yielding it.**
+  The spawner drew a climate out of the species and then asked whether the map
+  had any of that climate; when it had not, the herd or pack asked for was
+  simply thrown away. On a small map most of the registry's biomes are absent,
+  so a fifty by fifty came out with no predators at all - one pack wanted, one
+  draw, and the draw was an arctic fox. The draw is now made among the species
+  that could actually live on this ground.
+- **The herbivores were drawn evenly, so a small map was stocked with
+  mammoths.** A quarter of a square kilometre carried cows, elk and mammoths
+  and not one rabbit or squirrel. That is odd to look at and fatal to the
+  middle of the chain: every predator below a wolf in this registry lives on
+  rabbits, squirrels and fish, so a country with no small herbivores in it has
+  nothing for a fox to eat. Species now enter the draw as many times as a
+  thing of their size is common - sixteen for a tiny one against one for a
+  huge one - and the same fifty by fifty carries rabbits, squirrels, geese, a
+  few deer and a hawk.
+
+**And the hunt stopped asking about everything.** A predator looked at every
+animal in the world to find one within eight tiles of it, which is every
+predator against every animal, most of it string comparison against a list of
+prey names. On a hundred square kilometres carrying four thousand head that is
+millions of comparisons a tick to find the handful of animals actually in
+front of it. Animals are bucketed into blocks the size of a hunt and a
+predator looks in the nine around it.
+
+What comes out, seeded alike at four sizes:
+
+| | ground | head | grazers | small | mid | top | ms/tick |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 50x50 | 0.2 km² | 26 | 25 | 0 | 1 | 0 | 0.057 |
+| 200x200 | 4.0 km² | 161 | 143 | 0 | 18 | 0 | 0.279 |
+| 500x500 | 25.0 km² | 211 | 180 | 0 | 22 | 9 | 0.813 |
+| 1000x1000 | 100.0 km² | 823 | 703 | 0 | 90 | 30 | 4.932 |
+
+A hundred square kilometres is 21.3 seconds to the world-year, against 16.0
+for the same map when it carried two hundred head and no wolves. The top of
+the chain appears between four square kilometres and twenty-five, which is
+where the rule puts it. The empty column is #137.
+
+**Settlements do better for it**, which was not the point and is worth
+recording. Thirty-two worlds, 4,320 ticks, world for world:
+
+| alive at tick | 250 | 500 | 1000 | 1500 | 2000 | 3000 | 4000 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| before | 10.63 | 9.66 | 8.63 | 7.16 | 6.91 | 5.50 | 0.94 |
+| after | 10.81 | 10.31 | 9.19 | 8.38 | 8.00 | 6.88 | 1.03 |
+
+Mean last-alive tick 3,976 → 3,999 and mean peak store 120.1 → 129.1. The gain
+is in the middle years and it is about a quarter at tick 3,000. The likeliest
+reason is that there is now small game on the map and a man can take small
+game: `could_bring_it_down` wants a hunting tool for anything a thrown stone
+will not kill, so a country of cattle and mammoths is a country a stone-age
+settlement cannot hunt in at all, and a country with rabbits in it is not.
+
+Four tests moved, and all four had been reading a number that came out of
+where the random stream happened to be standing - the family #132 names, since
+any change at all to world generation moves every draw after it:
+
+- `hunting_tests::an_agent_hunts_for_the_skins_it_needs` spawns a deer three
+  tiles from an unarmed agent and asserts he sets out after it. He cannot,
+  and never could; what he was actually walking towards was a hawk eleven
+  tiles off that the default world happened to have stocked. It now clears the
+  world's own animals and gives the man a spear, which is what its name claims
+  it is about.
+- `fishery_tests::an_agent_at_the_water_catches_something` compares four rungs
+  of tackle, each drawn from wherever the stream stood when its arm began. It
+  read "hands 25, spear 52, rod 75, net 0" - a net that landed nothing in
+  sixty casts, which is not a statement about nets. Each rung is seeded alike
+  now.
+- `armed_tests::a_spear_tells_when_you_stand_your_ground` seeded *before*
+  building its world, which pins the world and leaves the fight wherever the
+  world left the stream. It read 1.4 blows bare-handed against 1.3 with a
+  spear: near enough every fight over in one blow, with no room for a spear to
+  tell. It seeds after the world is built, because the fight is the thing
+  being measured.
+- `news_tests::news_reaches_everybody_within_earshot` is seeded, because
+  whether twelve people who wander at random fall within earshot of each other
+  is a draw.
+
+### 137. There is no such thing in this world as a small predator
+
+The chain this model can build runs grass, grazer, fox, wolf, and skips a
+rung. Of thirty-three species in `FaunaRegistry`, eighteen eat plants, nine
+are mid-level predators and six are at the top; the small-predator tier -
+amphibians, reptiles, small birds, the smaller mustelids, everything that
+lives on insects, eggs, frogs and mice - is empty, and no arrangement of the
+existing species will fill it. Nothing in the registry is both small enough
+itself and takes small enough prey: the smallest thing that hunts anything is
+`AnimalSize::Small`, which is the fox and the owl and the hawk, and the
+specification calls those mid-level.
+
+It shows up as a hole in the middle of every country the model stocks. Eighteen
+hundredths of a country's groups belong to this tier; those groups are asked
+for, nothing can fill them, and the country comes out that much thinner than
+it is meant to be, at every map size measured.
+
+The snake is the near miss and is instructive. It is in the specification's
+small-predator list, and it is in this registry, and it comes out mid-level
+because it is `AnimalSize::Small` and there is no size below it that a hunting
+animal is allowed to be. `AnimalSize::Tiny` exists but every animal in it is a
+rabbit, a squirrel or a bird that eats seed.
+
+Filling it wants species rather than a rule change: a frog, a lizard, a
+songbird, a stoat, a shrew - things that eat insects and eggs and each other's
+young, and that a fox and an owl in turn live on. Two of the specification's
+other guilds are missing in the same way and probably belong in the same piece
+of work: nothing scavenges (vultures, crabs, scavenging fish - the model
+already has carrion falling to the ground and rotting untouched, see #169) and
+nothing engineers a habitat (beavers, burrowing animals, oysters).
+
+One neighbouring oddity in the same data, filed here rather than separately:
+`fish` is `DietType::Carnivore` with an empty prey list, so it is counted a
+primary consumer. That is what the data supports and it is not far wrong for
+what the model uses fish for, but the specification asks for predatory fish as
+a real guild and there is nowhere for one to go.
+
+### 138. Now that the chain runs, it eats itself out - and it was not that
+
+**Superseded by #139, and left here because the mistake is the instructive
+part.** Everything below reasons from head counts to a cause, and names
+predation. A tally of what actually kills was built afterwards and says four
+animals were taken by predators in ten years, against five hundred and five
+starved and three hundred and fifteen dead of old age. The die-off is real;
+the reading of it was wrong, and the wrongness came from inferring a mechanism
+from a population curve instead of counting.
+
+
+Putting small herbivores on the map (#136) gave every predator below a wolf
+something it can actually eat, and the food chain started running for the
+first time. It does not settle. Over eight worlds and five years, with nobody
+in them:
+
+| | species held | head, year 0 → 5 |
+|---|---:|---:|
+| 0.25 km², before #136 | 38 of 60 (63%) | 344 → 182 |
+| 0.25 km², after | 15 of 39 (38%) | 295 → 121 |
+| 4 km², before #136 | 68 of 88 (77%) | 1,624 → 2,201 |
+| 4 km², after | 57 of 113 (50%) | 1,272 → 1,153 |
+
+The head is steadier than it was - four square kilometres used to grow by a
+third in five years, unchecked, because the herbivores that were stocked were
+cows and elk and mammoths and nothing in the registry could take one. What
+moves now is the *roll call*. The species that go are the small herbivores -
+rabbit, squirrel, goose - and then, one after them, the things that live on
+those: fox, owl, hawk, eagle, arctic fox, snake. It is a cascade, and it runs
+the same way at every map size measured, from a quarter of a square kilometre
+to twelve.
+
+Half of it was there before and was hidden. Even at four square kilometres
+before this change, seven of the species that went were herbivores being eaten
+out; what is new is that their predators now follow them down, which is the
+truer outcome and the more visible one.
+
+The thing missing is the same one #135 names for browsing, in its other half:
+**nothing about hunting slackens as the prey get scarce.** A predator takes
+what is within `HOW_FAR_A_HUNT_REACHES` of it and does not care whether that
+was the last rabbit in the county; there is no refuge, no search cost that
+rises as the quarry thins, and no switch to a commoner prey. A pair of species
+with a fixed per-capita take and no brake is the textbook unstable
+predator-prey pair, and this is what one looks like from the inside.
+
+What it probably wants is for a hunt's chance of finding anything to fall with
+how much of it there is left - the predator's own version of "browsing
+pressure falls off as the browse gets scarce" - and for a predator that
+consistently finds nothing to move rather than to starve where it stands.
+`most_of_what_lived_here_still_lives_here` had to come down from half to a
+quarter to state what the model actually does, and it now guards the head as
+well as the roll call so that a country reduced to one rabbit of every kind
+does not read as a country that kept its species. Filed.
+
+### 139. It was never the wolves: what actually empties a country
+
+#138 said the food chain was eating itself out, and it was wrong. That entry
+inferred the cause from head counts, which is how it came to name predation;
+so the first thing built here was a tally of what actually kills - `AnimalManager::what_carried_them_off`
+- and the answer is not close. Ten years, four square kilometres, nobody on
+the map:
+
+| | deaths in ten years |
+|---|---:|
+| starvation | 505 |
+| old age | 315 |
+| **taken by something that eats** | **4** |
+
+Four animals in a decade. Predation is not a brake on anything in this model
+and never has been. Behind that reading were five separate faults.
+
+**Every animal in a new world was born on the same morning.** `Animal::new`
+sets `age: 0`, so a country's whole fauna was one cohort: nothing could breed
+until the first maturity age had passed, and then - between years two and
+seven, which is what these lifespans come to - the entire founding stock died
+of old age within a season or two of each other. 161 head at the start, 395 by
+year two, 149 by year three, 34 by year five, with never more than eighteen of
+them starving at once. The flora had exactly this and it was fixed there; the
+fauna had never been looked at. `spawn_naturalistic` spreads the founding
+cohort across each animal's own span now.
+
+**What was born did not depend on how many were breeding.** `process_breeding`
+gated the whole world behind one roll in a hundred and then `break`ed after a
+single pregnancy *per species*, so three rabbits and three thousand rabbits
+recruited at the same absolute rate - about forty litters a species a year
+however many there were of it. Predation is per-predator and therefore
+proportional to the herd; recruitment was a constant. That is not a balance
+that can be tuned: a constant birth rate against a proportional death rate has
+one outcome whatever the constants are. Every fit pair with a mate by it now
+takes its own chance, and what paces a species is its own cooldown and
+gestation, which is where that belongs.
+
+**A mouse ate thirteen times what a mammoth ate.** `what_it_reaches_for` was
+`hunger_rate * 3`. `hunger_rate` is a rate on the animal's *own* scale - how
+fast its own belly empties against its own `max_hunger` - and it runs the
+other way from size, 0.20 for a mouse and 0.015 for a mammoth. Read as forage
+off the ground it says the mouse eats more. Two different quantities were
+being read off one number: how much grass an animal removes, which is bulk,
+and how much good that does it, which is metabolism. They are split now -
+`what_it_reaches_for` by size, `what_a_mouthful_is_worth_to` by the animal -
+and the net energy balance is unchanged for a middling grazer, which is the
+part that had been measured and tuned.
+
+**A hunt was a speed ratio and nothing else.** `(pred_speed / prey_speed) *
+0.4`, and nothing about the ground, the herd, or what the quarry could do
+about it. So a lone wolf took a cow out of the middle of a herd at the same
+rate it took a hare in an open field, a rabbit's burrow was worth nothing, and
+no hunter ever came off worse for trying. Four things bear on it now: a way
+out this ground offers that the hunter cannot follow (down a hole, up a trunk,
+into the air, into the water - and whether the hunter digs, climbs, flies or
+swims in its turn); cover, which helps whichever of the two is smaller, so a
+wood shelters a hare from a fox and shelters a wolf coming up on a deer; what
+it takes to bring the quarry down against what the hunters bring, cubed, so
+that a lone wolf against five cattle standing together brings a twelfth of
+what it needs and a twelfth cubed is not a hunt; and what the quarry does back,
+for anything with the bulk to turn round.
+
+**And the food web was three hand-written names a species.** A country stocked
+with thirty-four geese and nine rabbits fed eighteen predators on the nine,
+because no list said "goose". A hunter takes what it can bring down now -
+anything up to the size of the largest thing it is named as taking - and the
+names say how big that is rather than exhausting the menu. It is also the only
+way "many bird species hunt for fish as well as rodents" can be true without
+writing out every pairing.
+
+### 140. The mice were right and unaffordable, so the small life is assumed
+
+The bottom of the chain was missing (#137) and it was put in: mice, voles,
+songbirds and frogs as records, with stoats, kestrels, kingfishers, adders and
+herons living on them. The measurement is worth keeping because it settles the
+question for good.
+
+Modelled one for one, rodents are **food-limited, not predator-limited**. The
+grass on four square kilometres carries sixteen thousand of them - about four
+thousand to the square kilometre, which is less than a real vole year - and
+they sit there in permanent boom and starve, sixty-five thousand starvation
+deaths in the first year. A hundred square kilometres would want four hundred
+thousand records against a tick budget that is the constraint this whole line
+of work is written under.
+
+So the small life is assumed, the same standing decision the specification
+already makes about decomposers and pollinators. A piece of ground has a
+small-game yield - `what_the_small_life_gives` - and three things fall out of
+it worth having:
+
+- A stoat, a kestrel or an adder can live somewhere without a herd of anything
+  being on the map, which is what a small predator does.
+- It is worth having only to something small. A wolf cannot live on voles and
+  now does not.
+- It is **shared**. What a piece of ground grows is what it grows however many
+  are working it, so two hunters on one hunting ground each get half of it and
+  the second starves off it. That is what a territory is in a model that
+  cannot draw a line on a map, and a hunting ground is sixty-four hectares
+  rather than the eighty-metre block a hunt is resolved in - sharing the small
+  game out over hunt blocks said a hunting ground held two stoats where it
+  should hold three over a hundred times the area, and four square kilometres
+  came out with seven hundred and twenty-one of them.
+
+A carnivore with an empty prey list is the honest way to say "lives on what
+this world does not count", and it is what now puts a species among the small
+predators. That also fixes `fish`, which #137 filed as misclassified.
+
+### 141. The country still does not settle, and it is not for want of looking
+
+**Mostly fixed - see #153, which found what it actually was.** The top and
+middle tiers now hold; the smallest specialists still do not. What follows is
+the original filing, kept because the reasoning in it is where the answer came
+from.
+
+**Was filed open.** With everything in #139 and #140 done, four square kilometres
+left alone still does not come to rest. What it does instead, over four years
+from 196 head: 426, 498, 333, 225 - and by year four the country is a hundred
+and ninety-six geese, fifteen goats, and one or two predators of any kind.
+
+Two things are visible in that and neither is fixed:
+
+- **Predation is still not a brake.** Eleven animals taken in four years. The
+  hunt model in #139 is a better *description* of a hunt, and it did not make
+  hunting frequent enough to hold anything down. A predator hunts on one tick
+  in twenty and a rush that comes off takes one bite out of the quarry; the
+  arithmetic never reaches the scale of what a herd breeds.
+- **Nothing disperses.** Herbivores move only when there is nothing within
+  reach underfoot, so they eat a patch out and overshoot on it while ground a
+  few hundred metres away is untouched. Predator dispersal was added here and
+  is crude: hunters that cannot make a living on their ground step towards a
+  less crowded one, a few of them a tick. The first cut of it moved every
+  hunter on a ground the same way, so they travelled as a clump, piled into a
+  corner, and made predation quadratic - a four-year run went from three
+  minutes to over ten. Scattering the step fixed the cost and not much else.
+
+- **Breeding is gated on a stock, not a flow, so a slow animal never stops.**
+  `can_breed` asks for `hunger < max_hunger * 0.4`, which is how full the
+  animal is rather than whether it is finding anything. The snake has
+  `max_hunger: 200` against a `hunger_rate` of 0.02, so it is four thousand
+  ticks of eating *nothing* away from being unable to breed - and it lays up
+  to twenty eggs with no gestation. Under the old one-pair-per-species rule
+  that never showed; with recruitment proportional to the population (#139) a
+  quarter of a square kilometre came out with nine hundred and seventy-one
+  snakes on it. What ought to gate breeding is whether an animal is actually
+  finding food, which is a rate, and nothing in the model measures one.
+
+Two things were fixed in passing because they were making the measurements
+impossible rather than merely wrong:
+
+- **Nothing has ever killed a young animal.** Everything born or hatched was a
+  full record from its first tick, subject only to starvation, old age and
+  being eaten, so a clutch of twenty eggs was twenty snakes. A thing lays
+  twenty eggs *because* almost none of them make it, and
+  `how_many_of_a_litter_come_through` is a coarse stand-in for the nest
+  predation, cold snaps, disease and failure to thrive the model does not
+  have. It is applied at birth rather than played out, because playing it out
+  means holding records for animals whose whole purpose is to die.
+- **A hunt looked over every animal standing in the nine blocks around it**,
+  which on ground that had filled up is every predator against every animal
+  again - the thing blocking the map was supposed to prevent. A quarter of a
+  square kilometre that ran away to five hundred and sixty head took a
+  five-year run from three seconds to over two hundred, and hung the test
+  suite. A hunter looks over eight animals a block now, which is also the
+  truer statement: it goes for what is in front of it, not for the best of a
+  full census.
+
+The thinning is applied only to the part of a clutch above four, which leaves
+every mammal in the registry as it was and bites on the egg-layers. Flat, it
+took the snakes from nine hundred and seventy-one to four hundred and eleven
+and took everything else on a quarter of a square kilometre down with them, to
+two head in five years; targeted, three of the five guards this work broke
+come back - `a_world_with_nobody_in_it_does_not_empty_of_animals`,
+`most_of_what_lived_here_still_lives_here` and
+`survival_loop_tests::population_feeds_itself_over_a_long_run`. The snake
+still runs away on some seeds and that is the fasting-tolerance point above,
+not the litter.
+
+**Three guards are still red and this is filed as unfinished work**, against
+twenty failures on the commit before it: `the_hedgerows_are_no_thinner_a_few_years_on`
+and `a_herd_settles_at_what_the_ground_will_feed`, both real consequences -
+there is more grazing on the map than there was, and a herd no longer settles
+where the grass alone would put it - and
+`clothing_tests::a_cold_agent_ends_up_dressed`, which is the family #132
+names, an unseeded settlement test that has flipped both ways twice in this
+work alone. The suite also takes 504 seconds against 223, and that is the
+snake: the ecology tests spend their time ticking a world with four hundred
+of them on it.
+
+The honest summary is that the *mechanisms* are now right and the *rates* are
+not, and that six rounds of tuning did not converge. What it wants next, in
+order: a hunt that happens often enough to be a brake at all; dispersal for
+everything rather than for hunters only; and a breeding gate that reads
+whether an animal is finding food rather than how full it happens to be.
+
+---
+
+### 142. What an animal eats was five buckets, and a cow and a mammoth were in the same one
+
+`what_it_reaches_for` read what an animal takes off the ground out of
+`AnimalSize`, which has five steps in it. So a cow at six hundred kilograms
+and a mammoth at six thousand differed by a factor of two, a rabbit and a
+goose were identical, and the whole span from a stoat to a mammoth - four
+orders of magnitude of animal - came out as thirty-five to one.
+
+Species carry a `mass_kg` now and what they eat follows it, at mass to the
+three quarters. Not mass itself: what an animal burns rises more slowly than
+its bulk, which is why a cow eats ten times a sheep and not ten times a
+sheep per kilogram. Anchored on a sixty-kilo sheep at the number the plant
+balance was already measured against, so nothing that was tuned moves.
+
+The same five buckets were also standing in for how hard an animal is to
+bring down, and that is off the same field now, at the root of mass - reach
+and footing and how hard a thing can hit back go up a great deal more slowly
+than weight does, and a cow is three hundred rabbits by mass and nowhere near
+three hundred times the job.
+
+**It settled two of the three guards that #141 left red.** A hundred square
+kilometres was already stocked the same and costs slightly less to run
+(11.14 ms a tick against 12.25), so this is not a trade. What moved is which
+animals a country ends up made of: four square kilometres at year eight used
+to come out as a hundred and ninety-six geese and almost nothing else, and now
+comes out with thirty-one geese, a hundred and thirty-three squirrels,
+thirty-three rabbits, four cattle, eight goats and a pair of owls. Geese ran
+away with the map because a goose record ate what a rabbit record ate and
+weighed eight times as much; against mass they no longer do.
+
+`ecology_tests::a_herd_settles_at_what_the_ground_will_feed` and
+`ecology_tests::the_hedgerows_are_no_thinner_a_few_years_on` are green again.
+The third, `drive_emotion_feedback_tests::test_high_hunger_causes_fear`, is
+nothing to do with the ecology and is its own piece of work.
+
+What this does not touch is the thing #141 names: nothing but a hunter
+disperses, so a country still eats a patch bare and overshoots on it while
+ground three hundred metres off is untouched.
+
+---
+
+### 143. Running away and turning round were the same want
+
+`Action::Attack`, `Action::Fight`, `Action::FleeFrom`, `Action::Freeze` and
+`Action::SeekShelter` all answered `DriveType::Safety`. So an agent that ran
+and an agent that stood had satisfied the same drive, and nothing downstream
+could tell the two apart - not the learning, not the drive that was supposed
+to be pressing, not the record of what happened. No appraisal, however good,
+could change which of them an agent did, because the thing choosing did not
+have two options to choose between.
+
+There is now a second drive. `Safety` is the fear drive - which is what it
+always was; a drive is a need and fear is the feeling that names it - and
+`Aggression` is the anger drive. **Both read one appraisal**, and that is the
+whole design: `Surroundings::what_is_on_me` says how much is on the agent and
+`could_face_it` says whether it can be met, and the same reading becomes fear
+when it cannot and anger when it can. Nothing converts one into the other,
+because there is nothing to convert: a change in what the agent makes of the
+situation moves the demand across in the tick it changes. `Aggression` has an
+accumulation rate of nought for the same reason - it keeps no reservoir, so
+when the thing goes the demand goes with it.
+
+**Fear had no answer of its own.** `what_this_drive_offers(Safety)` returned
+`SeekShelter` when a roof was within reach and `None` otherwise, so a
+frightened agent in open country could have fear as its strongest drive, win
+the tick with it, and produce no behaviour at all. The specification says
+drives result in actions and this was the drive where it failed. Fear runs
+first now, makes for a roof second, and moves off the ground it is standing on
+failing both; anger goes at the thing, through the fight-or-flee tree that was
+already there rather than a second copy of it.
+
+**A parent stands while there is still time to buy.** The specification is
+explicit and it is not the obvious way round: if the young can still get clear
+then standing over them buys the time to do it, and that is anger; if the
+thing is already on top of them, standing buys nothing and what is left is
+fear. This replaces a deliberate older decision - the tree used to have a
+parent fight *whatever the odds were*, described in its own comment as "the
+one place in the model where an agent knowingly takes the worse of two
+options". That is now conditional on there being something to be gained.
+
+Three things had to be fixed on the way, and the second is the interesting
+one:
+
+- **The appraisal saturated.** `what_i_stand_to_lose` was folded into the
+  drive reading as well as the feeling, which pushed it to its ceiling
+  whenever anything at all was about; a settlement of eight starved inside
+  four thousand ticks because fear outranked hunger every tick of every day.
+  What a man stands to lose belongs to how much he minds, not to how much is
+  there.
+- **An agent fled from a rabbit.** `predator_near` is true of anything with an
+  `attack_damage` above nought, which is a rabbit, and now that fear always
+  offers *something* the flag spent the turn instead of falling through to
+  eating. Running is worth a turn only against something that cannot be faced.
+- Both the threat reading and what to run from now weigh distance. A wolf at
+  the edge of sight is not a wolf at your elbow.
+
+**What it costs.** Nothing measurable, and establishing that took more work
+than the change did. Eight people, four thousand ticks, thirty-two worlds a
+block: this branch gave 25, 44 and 35 survivors on three different seed
+blocks, against 35 for the same measurement before it. The spread between
+blocks is several times any difference the change could be making, and
+seed-for-seed comparison is invalid anyway - a sixteenth drive means
+`Agent::new` draws one more random number, so the same seed is no longer the
+same world. Four tests moved for exactly that reason and are seeded now; five
+more were counting drives and now ask the enum.
+
+---
+
+### 144. A deer with a wolf standing over it went on grazing
+
+`update_animal_behavior_with_hunger` was a set of dice keyed on
+`AnimalBehavior` and on nothing else. It could not see what was standing next
+to the animal at all, so a deer with a wolf three paces off did exactly what a
+deer alone in a meadow did: rolled for whether to graze, drink or stand about.
+`AnimalState::Fleeing` and `AnimalState::Attacking` were only ever set by
+`shy_away_from`, which is about people - so between beasts, nothing in this
+world had ever run from anything.
+
+Animals now carry the same two numbers an agent carries in
+`core::Surroundings` - `what_is_on_me` and `could_face_it` - off the same
+`ThreatAssessment`, so there is one model of fear and anger in this project
+rather than one for people and another for beasts. What counts as a threat is
+anything that eats this one: a thing whose prey list names its kind, or which
+takes prey of its size. What counts as being able to face it is what it brings
+against what the thing brings, **with every one of its own kind standing near
+it counted in** - which is the herd, and it is why eight sheep together turn
+on a wolf that one sheep runs from.
+
+It also settles the cattle question from the other end. A wolf never reads a
+cow as a threat to begin with, because a wolf's prey tops out at
+`AnimalSize::Medium` and a cow is Large: that is this model's way of saying a
+lone wolf does not take cattle, and it was already true before any of this.
+
+**What it costs is the reacting, not the looking.** A hundred square
+kilometres went from 11.14 ms a tick to 13.69, and almost none of that is the
+appraisal: driving the pass from the hunters instead of from every animal -
+seven times fewer starting points for the same pairs - moved it by one per
+cent, and running it every fourth tick instead of every tick moved it by four.
+The rest is that animals which run *move*, every tick, and a country whose
+beasts scatter when something comes near them costs more to keep track of than
+one whose beasts stand still. That is the feature, and 59 seconds to the
+world-year is what it comes to.
+
+Two smaller things went in beside it:
+
+- **Dread and urgency were sharing a horizon.** `A_LONG_WAY_OFF` is half a day
+  and is the *urgency* clock - how hard a need should press on what an agent
+  does this turn, deliberately tight or everything is an emergency. The fear
+  calculation read the same number, so a man fifteen days without food and six
+  days from dying of it came out **eight per cent frightened**. Dread looks
+  three days ahead now, which is what "I do not have enough food raises fear"
+  has to mean if it is to mean anything.
+- **Being robbed was anger every time, whoever took it.** A man robbed by
+  somebody twice his size came away resolved to do something about it. It is
+  the same appraisal the wolves get, pointed at a person: what was taken
+  decides how much, and who took it decides whether it is anger or fear.
+
+---
+
+### 145. Six hundred kilogrammes of Passive
+
+The specification asks for a per-species behavioural baseline, and one already
+existed: `AnimalBehavior::how_readily_it_stands_its_ground` - Passive 0.0,
+Neutral 0.6, Defensive 0.9, Aggressive 1.2, Territorial 1.3 - which is what
+`beasts.rs` reads to decide how an animal takes a *person*. It was not read
+when animals appraised each other, so between beasts every species had the
+same nerve, and a rabbit that happened to out-weigh what was in front of it
+would turn round and fight it.
+
+It is one number in one place now: `what_each_animal_is_facing` multiplies
+what an animal brings to a stand-off by its temperament, the same way
+`beasts.rs` does. It matters most at the bottom of the scale, because Passive
+is nought: a rabbit never stands its ground however the arithmetic comes out,
+which is the point - a rabbit that fights a wolf is not a rabbit.
+
+Making it load-bearing exposed the data underneath it. **Cattle were
+`Passive`.** So were sheep, deer, reindeer and pigs, which is right; a cow is
+not. With temperament multiplying into the stand-off, a Passive cow is a cow
+that stands and takes whatever arrives, which is the exact opposite of what
+"cattle and other large herbivores should be capable of defending themselves"
+asks for. Cow is `Defensive` now, which puts it with the rest of the large
+herbivores - camel, elk, goat and goose are Defensive, bear and mammoth
+Territorial - and cattle were the only outlier in the whole list of
+thirty-eight.
+
+The agent side of the same requirement - "animals could receive the same
+baseline whereas agents could receive their baseline with minor deviations" -
+was already there and needed nothing: `DriveState::with_random_weights` gives
+every agent a per-drive multiplier drawn around 1.0, and the Brave and Anxious
+traits move `own_strength` in the threat appraisal, so two agents meeting the
+same wolf do not necessarily reach the same answer. Animals take the species
+baseline flat, with no per-individual draw, which is the asymmetry that was
+asked for.
+
+---
+
+### 146. Fear about a need had nowhere to go
+
+The specification asks for fear to feed the other drives, and gives the case:
+"'I do not have enough food' equals an increased fear drive". Half of it was
+in - `calculate_survival_drive_emotion` weighs a need that has gone unanswered
+against how fast it would kill, and that is the model's one reading of dread -
+but it only ever produced a *feeling*. The fear **drive** could not see it.
+`DriveType::Safety` read the threat appraisal and nothing else, so a man six
+days from starving in an empty field had a fear drive of nought.
+
+Two things had to be settled to wire it up, and both of them the wrong way
+round would be worse than leaving it alone.
+
+**How much it is worth.** `WHAT_DREAD_IS_WORTH` is 0.4 against a Safety
+threshold of 0.5, so dread at its absolute worst cannot carry the drive on its
+own: it takes a bare larder *and* something else - the dark, a wound, a thing
+in the field. That is deliberate and it is the lesson of the cut before this
+one, which folded the whole of what an agent stood to lose into the drive:
+fear beat hunger every tick and a settlement of eight starved inside four
+thousand ticks with full bushes round it. Fear about a need must press in the
+same direction as the need, never in front of it.
+
+**What it comes out as.** A drive that rises has to end in an action, and the
+obvious action is wrong: if fear of running short comes out as running or
+hiding then a hungry settlement spends its days getting behind trees. So
+`what_i_dread` now returns *which* need it is about as well as how much, and
+when there is nothing in the field to run from, the Safety branch offers
+whatever that need offers - the food action when the dread is hunger, the
+water action when it is thirst. Delegated, not duplicated: there is still one
+place in this project that knows how to look for food. `Safety` has no death
+clock of its own, so the fear drive can never end up pointed at its own tail.
+
+**It changes nothing, and that is the result.** Sixteen worlds on one seed
+block, four thousand three hundred ticks: 2426 person-days against 2437, the
+same twelve worlds emptied, the same 8.81 alive at midsummer. A term that
+pushes the same way the need already pushes should not move the outcome, and
+it does not. What it buys is that the fear is now *in the drive* rather than
+only in the feeling, which is where the rest of the model can read it.
+
+---
+
+### 147. A hunting ground was a queue, not a living
+
+Predators turning on each other was already in - a hunter takes another
+hunter it outranks when the ground is `crowded` or it is nearly starving - but
+`crowded` was a flat count: more than three hunters on a block of country,
+whatever was on that country. So the pressure came from how many hunters
+happened to be standing about and never from the game running out. Winter
+could not cause it. A good year could not relieve it. A hard year and an easy
+one looked identical, which is the opposite of what the specification asks
+for: "as prey species decrease in number, this should cause predators to
+attack each other for food".
+
+It is game against hunters now, through one function asked from both ends.
+`AnimalManager::how_good_a_living(game, hunters)` is what a piece of country
+is worth to one more hunter, and `is_the_ground_crowded` is that against
+`WHAT_A_HUNTER_WANTS_UNDER_IT` - ten head to a hunter on sixty-four hectares.
+Ten wolves over plenty of deer are neighbours; two on ground that has been
+eaten out are rivals, which a crowd rule calls quiet.
+
+The same number fixes where a hunter goes when it gives up on its ground.
+That used to pick the neighbouring ground with the fewest rivals on it, and
+the ground with no rivals is very often the ground with nothing on it at all -
+a hunter walking off a crowded field to an empty moor has swapped competition
+for famine. It now picks by the living, counting itself in over there, which
+is the same question about a different piece of country and is why it is one
+function rather than two.
+
+**What could not be measured, and why.** Two worlds over five years, same
+seed, before and after: 27 head against 24.5 across the eight species that
+survived at all. That is not a result. The whole map carries a couple of dozen
+animals on a hundred square kilometres and single species swing further than
+that between years on their own - rabbits went 3.5, 60.5, 21, 2, 4 across the
+run - so nothing at this stocking can be told from noise. The rule is right
+and it is tested directly; whether it *tells* on the ecology cannot be known
+until #141 is fixed, because a model where predators are down to one stoat has
+no predator-on-predator pressure to model.
+
+---
+
+### 148. A burrow was proof against wolves and not against February
+
+"The burrows would offer shelter from weather, predators, and places to
+hibernate in the winter." Only the middle one was in. `what_a_hunt_comes_to`
+has had a hole as the whole of a rabbit's answer to a wolf since the refuges
+went in. Winter did not know burrows existed: every animal on the map paid the
+same upkeep in February as in June, so the season could only reach an animal
+through the forage going off the ground, and it reached every animal the same
+way.
+
+`what_a_winter_costs(species, ground, season)` is the winter half, and it has
+two rates because there are two different things here. A bear is **asleep** -
+`WHAT_A_WINTER_ASLEEP_COSTS`, three tenths. A rabbit in a bank is **out of the
+wind** - `WHAT_A_WINTER_UNDER_COVER_COSTS`, 0.85 - because it is awake, it is
+still eating, and what it saves is the part of its burn that goes on keeping
+warm. Everything else pays in full, which is the point: a rabbit and a deer on
+the same bare ground are now two different animals in December.
+
+Both conditions are about the world rather than the species, so they are read
+fresh each tick rather than kept as a flag. A rabbit on bare rock has no more
+hole than a deer does, and nobody hibernates in July.
+
+**The first cut of this was badly wrong and the measurement caught it.**
+Giving every burrower the sleeping rate - three tenths of its burn for a
+quarter of the year, while it went on feeding normally - is not a burrow, it
+is a rabbit the winter cannot reach. A hundred and twenty by a hundred and
+twenty went from **682 head at the end of its first year to 2,533**, and the
+following year cost **10.94 ms a tick against 1.9** as the country tried to
+carry them; the ecology test that walks that world five years stopped
+finishing. At 0.85 the same run gives 858 head against 682, collapses on the
+same curve afterwards, and costs 1.91 ms against 1.89. That is a shelter.
+
+**The weather third of the specification has nothing to answer yet.** Nothing
+in this model kills an animal with cold directly - winter bites through the
+forage - which is why lying up is expressed as burning less rather than as
+taking less damage. If cold is ever given teeth of its own, this is where the
+burrow answers it, and the shape is already right.
+
+The cost is one read-only pass over the animals, in winter only: it wants the
+registry and the ground under each beast, and the upkeep loop holds both
+mutably. Three seasons in four it is a season comparison and an empty vector.
+
+---
+
+### 149. Twenty-six thousand rabbits, and three wolves to eat them
+
+Two years on a hundred square kilometres, nobody in the world:
+
+```
+  28,718 head        of which     26,276 rabbits
+                                   1,515 geese
+                                     315 goats
+                                       3 wolves
+                                       3 arctic foxes
+  under 10 kg: 27,804 of 28,718  (97%)
+```
+
+The tick over those two years went **17.57 ms in the first quarter to 108.90
+in the eighth**, and 47.12 ms averaged over the run. Ninety-one per cent of
+what the model was spending its time on was rabbits.
+
+And on a small map the same species does the opposite. A hundred and forty-
+four hectares over five years runs 165, 858, 67, 27, 19, 7 head; on the big
+map rabbits went 3.5, 60.5, 21, 2, 4 between years before the herds took hold.
+That is the signature of the representation, not of any parameter in it: a
+fast-breeding animal held as discrete records is a random walk with an
+absorbing barrier at nought, so it either finds the barrier or it finds the
+array.
+
+**The other half of the same mistake was already here.** The small life a
+stoat lives on - mice, voles, the things assumed rather than counted - was
+`what_the_small_life_gives`: `cover x size-fit / hunters-sharing-it`, a
+constant. It could not be drawn down, could not boom, could not crash, and
+nothing an agent did could touch it. So the model held records where a record
+is least reliable and an abstraction where the abstraction could not respond
+to anything.
+
+`SmallLife` is the abstraction with a stock behind it. Each hunting ground -
+eighty cells square, which at ten metres a cell is sixty-four hectares -
+carries a head of **grazers** (rabbits, voles, squirrels) and a head of
+**hunters** (foxes, stoats, weasels), and what it carries comes from the
+cover, the climate and the season. On a hundred square kilometres that is a
+hundred and sixty-nine grounds: a hundred and sixty-nine float updates and one
+terrain sample each, against a tick that already walks every animal and a
+share of a quarter of a million plants.
+
+Measured over the same two years, same seed: **45.42 ms a tick against 47.12**.
+Free, within noise, and the country now runs a seasonal cycle instead of a
+straight line - 11,700 head of grazers in autumn, 5,400 in February, back to
+11,700 by the following autumn, with the hunters trailing a season behind at
+82, 66, 76. That is what "in general the population is balanced between
+predator and prey" looks like when it is a number rather than twenty-six
+thousand records.
+
+Two things it is deliberately not:
+
+- **The hunters do not oscillate.** They track a share of the grazers with a
+  lag rather than making a proper predator-prey pair with them. A swinging
+  model empties a ground of foxes every few years by arithmetic rather than by
+  anything that happened, which is the thing taking the small life out of
+  records was meant to stop.
+- **A ground trapped out is not a dead ground.** A logistic curve through
+  nought never leaves it - the rabbit-as-record failure in another form - so
+  there is a floor of a head or two, which is what "there are always a few
+  about" comes to when the ground next door is not modelled.
+
+`what_the_small_life_gives` now returns what the ground would give at full
+stock, multiplied by how thick it actually is, and takes the head off. Until
+there was a number behind it there was no such thing as a trapped-out wood.
+
+Still to come, and the reason this went in first: the records for the
+under-ten-kilogramme species are still being spawned alongside the stock that
+now stands for them. Taking them out is where the 97% goes, and it cannot be
+done before agents have a way of getting at the abstracted layer - which is
+trapping, and does not exist yet.
+
+---
+
+### 150. A trapline, and three ways of making one that ruins a settlement
+
+The lower tiers are a population now (#149), which leaves a hole: **you
+cannot stalk a number.** `Action::Hunt` walks up to a particular animal
+record, so abstracting the small species away would take the small meat with
+it. What people actually did was set a line and go round it, so that is what
+went in - `Action::SetSnare` and `Action::CheckSnares`, `Undertaking::
+Trapping`, and `Snare` on the world.
+
+What a snare does is read off the ground it is set on, which is the point of
+the exercise:
+
+- **How often it fills** is straight proportion to how thick the small life
+  is there - "the rate of success and speed of catch could be based on the
+  total population".
+- **How long a catch waits** is hunters against grazers. That is not a rule
+  written down; it falls out of the hunters tracking the grazers *behind*
+  them. Trap a wood out and its foxes are still on it with nothing else to
+  eat, so the ratio spikes and a catch is gone in a turn or two. In a settled
+  country it comes out at the quiet rate by construction, because at full
+  stock the ratio is exactly `WHAT_SHARE_ARE_HUNTERS`. That is the
+  specification's "a decrease in rabbit population could decrease the time an
+  agent has to recover a trapped rabbit before a fox steals the catch", and
+  nothing had to be written twice to get it.
+
+**Four numbers were wrong first, and each one was found by measuring rather
+than by reading the code.**
+
+1. **A snare's rate was a snare's rate.** Twelve agents at a dozen snares
+   each put a hundred and forty-four on one sixty-four-hectare block, which
+   at 0.02 a tick apiece is **thirty head a day off a ground whose whole
+   surplus is two**. The camp's ground went to eight thousandths of what it
+   carries inside three months, every catch was robbed before anyone reached
+   it - a ground with no game on it is a ground of hungry foxes - and a
+   settlement of twelve took **one** rabbit in a year. The ground gives what
+   it gives however much string is on it, the same rule
+   `what_the_small_life_gives` already applies to hunters sharing a range. A
+   longer line reaches the ground's yield sooner and never exceeds it.
+2. **A catch put ahead of the food at an agent's feet.** It is the only food
+   in this world that walks away if you leave it, so it looked like it
+   belonged first. It does not: a hungry man then crosses the country for one
+   rabbit instead of eating the berry in front of him. Six worlds over a year
+   went from **23,733 person-days to 14,920**, thirty alive at the end
+   against eleven. Only the free case belongs in front - a snare the agent is
+   standing on. The walk sits behind the ground in front of him, and is
+   bounded at a hundred and fifty metres.
+3. **Setting string ahead of storing food.** A man with a surplus in his pack
+   set snares instead of putting the surplus by, and what he does not put by
+   he has not got in February: **20,126 person-days, deaths in the winter
+   quarter**. Setting a snare is the last thing in the Preparedness chain
+   now, which is the honest place for it - a trapline is what you do when
+   there is nothing better to do with the turn.
+4. **A round was one snare.** `CLOSE_ENOUGH_TO_A_SNARE` was one cell, so a
+   man who stopped at a snare ignored the eleven he set beside it, and a
+   settlement recovered one catch in six. Forty metres, and it recovers half
+   of them in a healthy country and a third across a year that ends badly -
+   the difference being the winter, which is the mechanic working.
+
+**Where it ended up: 23,600 person-days against 23,733 at HEAD, and thirty
+alive against thirty.** Cost-neutral, which is the right result for a
+supplement rather than a staple: one hunting ground's whole surplus is about
+two head a day against twelve people's twenty-odd, so a trapline is a tenth
+of a living. It is not meant to be more than that, and a version of it that
+was would have been a number chosen to flatter the feature.
+
+`WhatTheSnaresDid` counts caught, robbed and taken, and a test asserts they
+add up. The first cut of that tally silently counted nothing - a string
+replace that matched no text - and the missing 185 catches looked for a while
+like a bug in the model rather than in the instrument.
+
+---
+
+### 151. Twenty-six thousand rabbits become a number, and the tick falls fourfold
+
+The stock existed (#149) and the way in for agents existed (#150), so the
+records the stock stands for could go. `AnimalSpecies::
+is_stood_for_by_the_small_life` names them - rabbit, squirrel, goose, duck,
+chicken, fox, arctic fox, stoat, snake, adder - and world-generation and the
+migration that refills a depleted country stop dealing them out.
+
+**They stay in the registry.** A rabbit still has a mass, a temperament, a
+diet and a place in the food web, and `spawn_animal` will still put one on
+the map if something explicitly asks. What stops is the world stocking them,
+because there is already a population of them: counting the same animal twice,
+once as a number on a hunting ground and once as a thing standing in a field,
+would be worse than either.
+
+Two years on a hundred square kilometres, nobody in the world, same seed:
+
+```
+                        HEAD          now
+  head                29,773        2,347
+  ms/tick, mean        47.12        11.77      4.0x
+  ms/tick, last qr    108.90        14.57      7.5x
+```
+
+And the shape changed as much as the size. At HEAD the head count ran away -
+1,614, 2,175, 4,551, 10,850, 15,243, 20,363, 23,850, 29,773 by quarters, with
+the tick following it. It now goes 1,169, 1,303, 1,312, 1,485, 1,657, 1,737,
+1,898, 2,091: a country filling up rather than a country exploding.
+
+**It costs the agents nothing.** Six worlds over a year: **24,022 person-days
+against 23,733 at HEAD**, twenty-eight alive at the end against thirty. The
+rabbits agents used to hunt are the rabbits they now trap, and the trapline
+(#150) carries it.
+
+Two things had to be fixed alongside it, and one of them mattered a great
+deal:
+
+- **The spawn gate asks whether a predator's prey is present.** That gate
+  exists for a good reason - drawn independently it put foxes into worlds of
+  cattle, where they never found a meal in eight thousand ticks - but it reads
+  the *records* on the map. The moment rabbits stopped being records it said
+  "your dinner is not here" of a country thick with rabbits, and a hundred
+  square kilometres came out with **no hawk, no owl, no eagle and no boar on
+  it at all**. The small life is prey: a species whose named prey is one of
+  the abstracted ones is fed by the abstracted layer, and boar came back at 95
+  head.
+- **A country was empty of rabbits on the morning it was made.** The stock was
+  only settled by the first tick, so anything that asked what lived on a piece
+  of ground before then was told nothing did. `stock_the_small_life` runs at
+  generation, through the same pass, so there is one answer to what belongs on
+  a ground rather than two.
+
+**What is still missing is missing from before this.** Hawk, owl, crow,
+kestrel, heron, kingfisher, parrot, otter, monkey and the fish record do not
+appear on a generated map, and did not at HEAD either - the two-year census
+before any of this had one eagle and nothing else of that guild. That is
+#137, not this.
+
+**And the small life spreads.** A worked ground used to come back only off its
+own floor - "there are always a few about" - which is animals from nowhere and
+says nothing about what surrounds it. `let_them_spread` moves grazers between
+neighbouring hunting grounds down the gradient of *crowding* rather than of
+head count, so a rich block does not drain into a barren one and nothing
+crosses onto a salt flat. Each unordered pair is visited once and the flow is
+subtracted from one side and added to the other, so head is conserved exactly
+- an exchange written as "move towards the average of my neighbours" is not
+symmetric and quietly invents animals every tick.
+
+Two tests changed their premise rather than their expectation, which is the
+honest thing when a fact moves rather than breaks: `a_country_holds_more_small
+_things_than_large_ones` counts the population instead of the records, and
+`predators_can_live_off_what_the_world_holds` counts the abstracted layer as
+food. Two more were the #132 family and were seeded or widened to a block:
+`population_feeds_itself_over_a_long_run` had kept seed 4,200's people through
+months of changes and lost them here, in a run where six worlds measured
+together went *up*.
+
+---
+
+### 152. The small-predator guild was never placed, three times over
+
+#137 said the tier was empty because the registry had no species for it. That
+part was fixed - the stoat, the kestrel, the kingfisher, the adder and the
+heron went in - and the tier stayed empty anyway. A hundred square kilometres,
+two years, no people: **no hawk, no owl, no kestrel, no heron, no otter, no
+crow, no parrot, no monkey, no pig and no fish, ever, at any point in the run
+or at any map size.** Eighteen hundredths of a country's groups are asked for
+and nothing filled them.
+
+Three separate causes, and all three are one shape: two places asking the same
+question and disagreeing.
+
+**Which pool a species is drawn from.** It was `diet` plus the length of the
+prey list; `where_it_sits` is the model's actual answer to what a species is,
+and the two disagree about six species. An omnivore with an empty prey list -
+the crow, the parrot, the monkey, the pig - is a primary consumer by
+`where_it_sits` and is *not* `DietType::Herbivore`, so it fell between the two
+pools and could never be placed by anything. A carnivore with an empty list -
+the kestrel, the adder, the fish - is deliberately a **small predator**,
+because `where_it_sits`'s own comment says "a carnivore with nothing on its
+list still hunts: it hunts the small life the map assumes" - and
+`!prey_species.is_empty()` threw all three away. Both pools come off
+`where_it_sits` now.
+
+**Whether it has anything to eat.** The gate that stops a fox being put into a
+world of cattle read an empty prey list as "no food here", which is the same
+disagreement one step later. And it was applied to every tier at once, before
+anything was placed: a heron takes fish, fish are placed among the small
+predators, and the heron was judged before a single one was down. The pyramid
+is built from the bottom now, a tier at a time, so what is put down low counts
+as food for what goes above it.
+
+**Where it was put.** Nothing had ever been placed in water - every water tile
+was skipped as "water, for land animals" and there was no second list - so a
+species that cannot leave the water had nowhere to be put and was never
+placed, and everything living on fish had no prey either. And a hunter was put
+down anywhere in a climate it belonged to, most of which is open: what the
+small life gives is straight proportion to cover, so a hawk on plain got 0.037
+against a burn of 0.070 and was dead whatever else was right.
+
+**And the ladder was stale.** `what_the_small_life_gives` pays by the hunter's
+size, and that ladder was calibrated when the small life meant mice. It has
+not meant only mice since #149: rabbits, squirrels, geese, ducks and crows are
+in it, and a rabbit is a meal for a hawk rather than a scrap. At the old
+numbers a hawk in the best wood in the country, with the wood to itself, got
+**0.073 against a burn of 0.070** - four per cent - and a third of what it
+needed if two others worked the same wood. Small goes 0.35 to 0.70 and Medium
+0.12 to 0.25. Every small predator can now keep itself in a wood it has to
+itself, and none of them can on open plain or three to a wood, which is a fair
+statement of where a bird of prey lives.
+
+**What a country holds now**, on a hundred square kilometres at generation:
+eagle 15, hawk 10, heron 24, kestrel 59, otter 11, owl 3, fish 121, seal 4,
+wolf 14 - against nought of every one of them before.
+
+**Two things this turned up that are not #137.**
+
+- **The crow is a rabbit in feathers.** Half a kilogramme, a primary consumer,
+  and it breeds like one. The moment the pools were fixed and it could be
+  placed at all, a hundred square kilometres went to **58,682 crows out of
+  61,558 head inside a year**, with the tick at 249 ms - worse than the
+  rabbits ever were. It is on the abstracted list now, where every other
+  criterion already said it belonged, and was only ever off it because it was
+  absent from the map.
+- **The pig is the farmyard form of the boar**, which its own description
+  says, and the boar is stocked. It also carries a sow's `litter_size` of six
+  to twelve against a wild ruminant's one or two, which is right for a pig and
+  ruinous in a country with no farmer in it: **3,749 pigs out of 5,607 head**,
+  and the tick at 18.5 ms against 11.8 without them. A country made before
+  anybody arrives is stocked with wild animals;
+  `is_the_farm_form_of_something_wild` says so. `spawn_animal` will still put
+  a pig down, and `can_domesticate` is untouched. The cow is deliberately not
+  on that list - it has no wild form here to be counted twice against, it
+  carries a litter of one, and it sits at seventy-odd head over two years
+  without help.
+
+**Where it lands: 11.29 ms a tick and 2,133 head**, against 11.77 and 2,347
+before the guild existed and 47.12 and 29,773 before any of this. The guild is
+free.
+
+**What it costs the agents, which is not nothing.** Six settlements over a
+year: 22,470 person-days against 24,022 before the guild existed, and
+twenty-three alive at the end against twenty-eight. The hawks and the owls eat
+the small life the people trap, which is what a predator guild *is*, and the
+first cut of it cost twice that by mistake - see below. It is above the spread
+between seed blocks (about three per cent) and is a real cost, honestly come by.
+
+**One number was wrong in a way worth naming**, because it is a trap the same
+shape as everything else here. Raising `what_a_head_of_it_is_worth_to` raised
+the energy `what_the_small_life_gives` pays out, and the take that comes off
+the ground was `got * HEAD_A_UNIT_OF_FORAGE_COMES_TO` - so doubling the ladder
+also doubled the *head* every hunter drew. That says a hawk eats twice as many
+rabbits, when what the ladder means is that it gets twice as much out of each
+one. A country of hawks then stripped the ground the people trap on: 21,527
+person-days, and two settlements of six with anybody left in them at four
+thousand ticks against three. The take is divided by the same rung that paid
+it now, so the ladder moves what a head is worth and never how many are taken.
+
+**And one test is left failing on purpose.**
+`a_cold_agent_ends_up_dressed` has been in the standing failures for months.
+It gives a lone man, kept permanently freezing, fifty days to make a garment
+out of the flax in his pack. He now comes out of that run carrying fish, meat
+and roots as well as the flax and still no coat: a world with a trapline and a
+fishery in it gives a man more errands, and clothing never wins the turn.
+Widening the window does not help - he does not live two hundred days - so
+what the test actually measures is how crowded an agent's day is, which is
+worth knowing and is not a clothing bug.
+
+**What is still not fixed is #141.** Over two years the small predators thin
+from those numbers to eagle 1, hawk 2, owl 1, otter 1 - and so do the wolves
+from 14 to nought, the lions from 10 to 4, the bears from 4 to 1. Every
+predator tier thins, uniformly, which is what makes it one problem and not
+this one: a species that can only exist at low density cannot recruit, because
+two of them never meet. That is the country not settling, and it is filed
+where it belongs.
+
+---
+
+### 153. Not one animal was ever taken by a predator
+
+#141 said predation was not a brake and guessed at why. It was six things,
+and the first of them settles it: over two years on a hundred square
+kilometres, with fourteen wolves, ten lions, four bears and better than a
+thousand sheep on the map, **the tally of animals taken by a predator was
+nought.** Every hunter in the country starved while its dinner grazed past it
+- wolf born 23 and starved 32, eagle 13 and 25, heron 26 and 47 - and the
+whole predator tier aged out.
+
+Made findable by making `carried_off` a per-species tally rather than three
+totals, and by adding `WhatTheHuntingCameTo`, which counts the four places a
+hunt can die. Inferring which from a head count is what got #141 wrong: a
+country whose predators all starve looks the same whether they never met
+their dinner, never rushed it, or rushed it and missed.
+
+**A hunt that came off took a bite.** `what_a_hunt_comes_to` weighs the cover,
+the refuge, how many of the quarry's kind stand with it, how many of the
+hunter's hunt together, and the force ratio, and answers whether the rush
+succeeded. Then `attack_damage` was applied to the quarry as though the answer
+had been "they had a scuffle": a wolf's blow is some fifteen of a sheep's
+eighty and the sheep heals a tenth a tick, so a wolf had to catch **the same
+sheep six times** to eat once. Two answers to one question. The odds are the
+answer, and a hunt that comes off takes the animal.
+
+**A flock of sheep defended itself like a herd of cattle.** The herd term
+counted heads without asking whether that sort stands its ground - the same
+defect `what_each_animal_is_facing` had, in a second place. Herbivores are
+dealt out in fours to twelves and stay in blocks, so eight of their own beside
+them is the ordinary case, and eight sheep took a lone wolf from **0.3456 to
+0.0028**, one rush in three hundred and fifty, tried one tick in twenty. Sheep
+are `Passive`, which is nought, and what they do when a wolf comes is scatter.
+Cattle are `Defensive` and a mammoth `Territorial`, and those are what "a lone
+wolf should not be capable of killing a herd of cattle" was about.
+
+**Nothing ever walked a hungry hunter towards prey it could see.** The hunt
+asked "is there something within eighty metres of me, right now", and if there
+was not, the tick was over: 176,125 hunts went looking, 4,379 had something in
+the nine blocks around them worth trying for, and **thirteen** were close
+enough to rush. A wolf ranges tens of kilometres in a day; this one stood in a
+field waiting for a deer to walk into it. It stalks now, two cells a tick
+towards the nearest thing it would try for.
+
+**A hunter that could not keep itself where it stood took a step every fifty
+ticks.** The fiftieth was set to stop an earlier cut from moving every hunter
+on a ground in lockstep into a corner; what actually fixed that was scattering
+the step and choosing ground by the living it offers, both of which are still
+here. A bird of prey blown onto open plain - where the small life pays it half
+what it burns - was dead long before it reached a wood.
+
+**The small life was shared by head count.** A bear standing in a wood halved
+what a kestrel got out of it, when a bear turning over a log takes six
+hundredths of what a kestrel takes. What shares a layer is the demand on it,
+and `what_a_head_of_it_is_worth_to` is already the model's statement of how
+much of that layer each sort can use.
+
+**Open water was priced as barren, for a fish.** `cover` on a water tile is a
+statement about how much a *land* hunter can find to turn over there. Read for
+a fish it prices its own element as a desert: 121 at generation, 3,953 born
+over a year and 4,031 starved.
+
+**And nothing kept a herd or a pack together.** Animals are dealt out in
+groups and from the first tick every one random-walks on its own account - two
+cells a move, four thousand three hundred ticks to the year - so a group is
+spread over a hundred and thirty cells inside a year, and a mate is looked for
+within ten. Fourteen wolves became fourteen lone wolves that never met again.
+`they_keep_together` closes up what the registry already calls a group
+(`group_size.1 >= 3`: a wolf is (3, 7), a hawk (1, 2)), and it is gated on
+that because packing solitary hunters onto shared ground would divide the
+small life between them and starve the lot. What a **solitary** animal does
+instead is range for a mate - six hundred metres rather than a hundred - which
+is most of what a rut is, and is the only thing standing between a bear at
+`group_size: (1, 1)` and never breeding at all.
+
+**Where it lands**, two years on a hundred square kilometres, against the
+same run before:
+
+```
+                     was          now
+  wolf            14 -> 0     14 -> 15   (50 born)
+  lion            10 -> 4     10 -> 10
+  bear             4 -> 1      4 -> 5    (was 0 born, now 4)
+  boar            23 -> 58    23 -> 44   (21 taken - held down at last)
+  hawk            10 -> 0     10 -> 7
+  hunts rushed         13          825
+  hunts that came off   5          126
+  taken                 0         real
+```
+
+13.16 ms a tick against 11.29, and 21,327 person-days over six settlements
+against 22,470 with twenty-nine alive against twenty-three. The tick and the
+person-days are what a country with predators in it costs: they eat what the
+people would have trapped, and they move about doing it.
+
+**What is still not fixed.** The specialists at the bottom - heron, kestrel,
+otter, owl, kingfisher and the fish - still go to nought. They breed
+(kestrel born 76) and they starve (112), which is a population sitting at a
+ceiling of about nought: their only food is the abstracted small life, and a
+sixty-four hectare wood pays two of them. Whether that wants a richer layer, a
+smaller appetite, or those species abstracted as well is the next question,
+and it is a different one from this.
+
 ---
 
 ## Recently fixed
@@ -5611,3 +9941,472 @@ Listed so nobody re-investigates them. Each has regression tests in
   judgement; nothing had ever asked it about anything but a wound. What
   happened in past fights scales the estimate, so an agent that has been
   beaten runs where one that has won stands.
+
+### 154. The hawk arithmetic: what the sky was standing on, and what was under it
+
+#153 ended with a question it could not answer: the smallest specialists -
+heron, kestrel, otter, owl, kingfisher and the fish - bred and starved at a
+ceiling of about nought, and whether that wanted a richer layer, a smaller
+appetite, or those species abstracted as well was left open.
+
+The specification answered it, with two numbers about one animal: **"a hawk
+can eat a rabbit a day, but a rabbit can also last two days"**, and **"hawks
+will also hunt rodents like mice and will eat four of them in a day"**. Both
+halves were wrong in the model, and each was wrong by about an order of
+magnitude. What follows is that, and the seven other things that came out of
+the same drawer once the layer was being looked at properly.
+
+**The appetite was a size ladder somebody picked.** `what_a_head_of_it_is
+_worth_to` was `Tiny 1.0, Small 0.70, Medium 0.25, Large 0.06, Huge 0.0`, and
+its own comment said it was one number doing two jobs. `AnimalSize` cannot
+carry an appetite at all: **a wolf and a hawk are both `Small` in this
+registry**, at forty kilogrammes and one. It comes off the weight now, and it
+is anchored on the specification's own figures - a rabbit lasts a
+one-kilogramme hunter two days, and the fall-off with weight is fitted to the
+one other end anybody has a number for. The rest of the table was never
+fitted and comes out where it should: a fox about a rabbit a day, a wolf two
+and a fifth, a lion four, a stoat one every three days, an owl four or five
+voles a night.
+
+**There was no rodent band, and the sky is standing on it.** The grazers were
+rabbits, squirrels, geese and crows at eight to the hectare, and once the
+cover, the climate and the season had had their say a hundred square
+kilometres carried about ten thousand of them - a hunting ground's whole
+surplus being some two hundredths of a head a tick, which is what one kestrel
+eats. Sixty-four hectares kept about one small predator, and the country's
+birds died while its fields stood at half stock, which is why a head count
+never gave the answer. `SmallLife` carries a second band now at fifteen times
+the head and four times the growth rate - a hundred and fifty-five thousand
+voles on the same map - and one hunting ground's rodents alone will keep four
+hawks or eight kestrels.
+Both bands come off one statement about the ground - `RODENTS_TO_A_GRAZER_ON
+_THE_GROUND` - so the climate and the season cannot come to mean different
+things to the two of them, and everything written about the grazers before
+the rodents existed reads `in_head_of_grazer` instead, which is why adding a
+band underneath did not treble the foxes or empty the traplines.
+
+**A hunter was charged for what it found rather than for what it ate.** The
+ground was drawn down by the full find every tick whatever state the animal
+was in, and `feed` then threw away everything past full. It also meant the
+find rate could not be set where a hunter could live on it, because raising
+what it could turn up raised what it took by the same amount. Those are
+separate now, and the find rate is where a hawk can actually make a living:
+two rabbits and sixteen voles a day at cover of one, which no ground in the
+world has - the best of it is standing timber at six tenths.
+
+**Passive hunting: a predator catches animals now, one at a time.** What was
+here was a stipend - a smooth trickle of energy every tick, in proportion to
+the ground, that no animal could ever go without and no animal could ever
+have a good day at. The rate is the same rate; it is delivered in whole
+animals, and the period between catches falls out of it exactly as the time a
+snare takes to fill falls out of `how_likely_a_snare_takes_something`.
+
+**Whether a thing drowns in air and whether it feeds in water are two
+questions.** `lives_in_the_water` is about where a founding population may be
+put down and matches only the fish. It was also being read for whether a lake
+is a larder - so a heron, a kingfisher, an otter and a seal, standing on open
+water, were being told their whole territory was barren ground.
+`feeds_in_the_water` is the other question and is derived from what the
+species is written down as hunting.
+
+**A living falls away faster than the cover does.** In straight proportion,
+open plain at fifteen hundredths pays a quarter of what standing timber at
+six tenths does, which is not the difference between where a bird of prey
+lives and where it does not. Bare ground is poor twice over - it grows less
+for the small life to live on and gives it nowhere to be - so it is the cover
+to the power of one and a half, and a plain now pays a seventeenth of the
+best ground there could be.
+
+**And the bar for where a hunter may be put down had to be re-derived with
+it**, which is the sort of thing that is easy to leave behind.
+`WHAT_A_HUNTER_NEEDS_UNDERFOOT` was three tenths of cover because that was
+half of the best ground under the old straight proportion; under the new
+curve it is a sixth of it, so a kestrel put down on riverbank or meadow got
+four fifths of its keep with the ground at half stock and starved - a hundred
+and two of them did. It is four tenths now, which is where the hungriest of
+the small hunters still clears its burn on ground at half stock with nothing
+else on it. Forest and wetland clear that; riverbank, meadow and hills no
+longer do, which is a narrower statement of where a bird of prey lives than
+it was and a truer one.
+
+**Hunger was not a reason to move, and the ground's yield was.** The rule
+asked whether the ground paid less than the animal burnt, which is a question
+about the country rather than about the animal, and it is the wrong one in
+both directions: a fed wolf on ground whose voles will not keep it walked
+anyway, every fourth tick, for ever - a wolf never lives on voles and is not
+supposed to - and a starving one on ground that paid its keep on paper had no
+reason to leave. **"I am hungry and need food. There is no food around me. I
+must move to find food"** is the specification's own sentence, and it is the
+rule now: nothing it could rush, nothing worth walking towards, and a ground
+that will not feed it while it waits.
+
+**Everything mended at a tenth of a point a tick.** Health runs from five on
+a fish to three hundred on a mammoth, sixty-fold, so one absolute rate meant
+a fish mended a quarter of itself in a day and a mammoth four thousandths,
+and neither number was ever chosen. It is a hundredth of the animal a day
+now, which is the specification's figure and is what makes a wound worth
+something - a hundred days from a mortal one to a whole skin.
+
+**What it came to.** Two years on a hundred square kilometres with nobody in
+the world, against the same run before any of this: the tick 13.24 ms and
+13.32, head 2,123 and 2,201, boar 44 and 26 with twenty-eight of them starved
+and three taken, and the small life holding at half of what the ground would
+carry in both bands. Nineteen tests failed before and nineteen after, with
+one going each way: `the_land_will_only_carry_so_many` came out three head
+against five - small-number noise in an unseeded pair of runs, converted to a
+seed block - and `a_cold_agent_ends_up_dressed`, left failing on purpose at
+the end of #153, passes again.
+
+**And what is still open.** The smallest specialists are better and not well:
+kestrel 73 to 1 with 156 starved, heron 16 to 2, otter 13 to 1, eagle, owl
+and fish to nought. The layer under them is no longer the reason - it stands
+at half stock all year and pays a hawk four or five times its keep on ground
+that suits it - so what is left is placement and competition rather than
+appetite, which is a different question again and the one to take next.
+
+### 155. Nothing in this world moved at its own speed, and a block was a prefix
+
+Two defects found on the plainest fixture there is - **fourteen wolves and
+two sheep, standing on one cell** - which the specification asks for in as
+many words: "if one wolf takes six attacks to kill a sheep, then 14 wolves
+should be able to kill two sheep nearly instantly". Over a whole day the
+tally was: not one rush, not one kill, and the sheep thirty-five cells away
+and going.
+
+**A hunter looked at the first eight animals in its block, for ever.** The
+nine blocks around a predator are sieved down to eight entries each, which is
+right - a hunter goes for what is in front of it rather than for the best of
+a full census, and without the cap a filled-up ground is every predator
+against every animal again. But `take(8)` is a *prefix*, and a block is in
+the order the animals were created. Fourteen wolves and two sheep on one cell
+is fourteen wolves in the first fourteen slots, so the tally of hunts that
+"saw something" was **nought** while a sheep stood one cell from all fourteen
+of them. Each hunter starts at its own offset now, which costs the same eight
+comparisons and means the block is actually sampled.
+
+**Every animal alive crossed exactly two cells a tick.** `speed` was read by
+the rush and by nothing else, so a wolf at 1.7, a sheep at 1.0 and a
+crocodile at 0.9 all fled at two cells and all stalked at two. A wolf could
+therefore never close on a fleeing sheep - the gap went 1, 5, 9, 15, 21, 35
+cells and stayed there. **"A wolf should be faster than a sheep" is about
+this before it is about the odds of the rush**, and no amount of work on the
+rush would ever have found it. Flight and the stalk both come off
+`how_far_it_gets_in_a_tick` now, which is the species' pace times what the
+animal has left of it.
+
+**And the rush itself had a flat top.** `(hunter.speed / quarry.speed)
+.min(1.0)` says a wolf against a sheep does exactly as well as a wolf against
+a deer, and that a lame sheep is no easier to catch than a sound one: the
+clamp bites at parity and everything past it is the same number. So being
+faster bought a hunter nothing, and **neither injury nor age could be worth
+anything however they were written**, because what they feed into saturated
+before they could reach it. It is a share rather than a ratio now - how much
+of the pace in the chase is the hunter's - which is exactly the old figure
+when the two are evenly matched and goes on rising after that.
+
+**An animal's condition is one number, read from both ends.**
+`how_fast_it_still_is` is what a wound and the years have left of an animal's
+pace: a lamb at half its mother's, level from maturity until six tenths of
+its life is gone, then down to just over half again, and a wound multiplying
+whatever that comes to. The same figure is read for the hunter and for the
+quarry, so "older animals should also slow down, making them easier to catch
+or making it harder for them to hunt" is one rule and not two.
+
+### 156. A herd only ever got bigger, and a bear lived as a hunter
+
+**Nothing ever split a group.** `they_keep_together` walks every animal
+towards the nearest of its own kind and there was no other half to it, so
+what is dealt out as flocks of four to twelve and packs of three to seven
+converged into one mass wherever two of them met - a country's sheep ran to
+better than a thousand head in two years and the largest bunch of them was
+all of it. The registry has said how large a group gets all along:
+`group_size` is the number a herd is dealt out at and is just as much a
+statement of how large one becomes. An animal with more than that many of its
+own within reach peels off instead of closing up.
+
+**Each on its own bearing, and that is the whole of what makes it work.**
+Stepping away from the nearest of its own kind is what the rule wants to say
+and is useless when they are standing on each other: everything picks the
+same direction and forty sheep cross the country in a block for ever, which
+is the same lockstep that spoilt the first cut of predator dispersal. Eight
+bearings dealt out by position in the list scatter them, and closing-up then
+gathers whoever went the same way into a herd of their own.
+
+**A bear is an omnivore and was living as a hunter.** Which state a hungry
+animal went into was decided by its temperament and by nothing else -
+`Aggressive` and `Territorial` went hunting, everything else grazed. The
+bear, the boar, the pig and the monkey are all omnivores and all sit in the
+aggressive half of that table, so **not one of them ever entered `Grazing`
+and therefore not one of them ever ate a plant**, though the grazing pass has
+always been willing to feed anything that is not a carnivore. Two questions
+with one answer again: what an animal eats is its diet, and what it does
+about a threat is its temper. Three quarters of an omnivore's day is
+foraging now, which is about what a brown bear's year is.
+
+**And a boar rooting is not a cow eating a field.** Letting omnivores forage
+at all and paying them a grazer's return took the boar from twenty-three head
+to **seven hundred and seventy** on a hundred square kilometres in two years -
+none of them starving, one of them taken - and carried the tick from 13 ms to
+32 with it. That is a primary consumer's living with a mid-predator's freedom
+and nothing eating it, and until omnivores could forage nothing had ever had
+to say what rooting is worth. It is a third of what the same ground pays
+something that crops it, which leaves a boar a shade over its keep rather
+than at three times it.
+
+**The first cut of that put the number in the wrong half, and made it three
+times worse still - 2,370 boars.** `what_a_mouthful_is_worth_to` is
+`hunger_rate * MORE_THAN_IT_BURNS / what_it_reaches_for`, so an animal that
+finds all it reaches for comes out ahead of its burn by the same multiple
+*whatever the reach is*. Cutting the reach therefore left the boar's living
+exactly where it was and only made it cheaper on the flora, which left more
+grass for the next boar. It is the project's own recurring defect committed
+while fixing an instance of it: one question with two places to answer it,
+and the obvious place had already been normalised away. The factor belongs on
+the gain. A boar still turns over as much ground as its bulk says.
+
+### 157. Letting a country come up instead of arriving whole
+
+The specification asks whether it would help to populate the world gradually:
+foliage first and let it colonise, then the assumed small creatures and the
+small predators, then the medium, then the large herbivores, and the large
+predators last, with the agents introduced only once the rest is stable.
+
+`World::let_the_country_come_up` does that, and what it buys is worth naming
+precisely, because it is not what it looks like.
+
+**It buys a legible failure.** A world stocked all at once and left alone for
+two years tells you its kestrels are gone. It does not tell you whether they
+starved because the layer under them was too thin, because they were put on
+ground that never suited them, or because something ate them first - and
+inferring which from a head count is exactly what got #141 wrong. A tier that
+arrives on its own, onto a country that is already standing still, fails
+visibly and alone. Every one of the eight findings in #154 and #155 above
+took a purpose-built harness to see; several of them would have been obvious
+from a staged run.
+
+**It gives the model a definition of "settled", which it has never had.**
+There is no point at which a world is *ready*. Each stage is admitted onto
+ground that held its numbers through the last one, and `HowATierCameUp` says
+which stages did.
+
+**It is not a fix for a country that will not carry a tier.** If the steady
+state cannot feed a kestrel, this reaches nought kestrels more slowly and
+more legibly, and the arithmetic of what a kestrel eats is still where the
+answer is. That is why it went in after #154 and not before it: built first,
+its first result would have been to tell us at length what #153 already said.
+
+**The cost is simulated time, and it is paid by every test that wants a
+populated world.** The stages are a parameter rather than a fixed length so
+that a test can use days where an experiment uses years, and the ordinary
+`World::new` is untouched - a country still arrives whole unless somebody
+asks for it not to.
+
+### 158. Where the specialists were put, and what they were made to share
+
+#154 closed by saying the layer under the small specialists was no longer the
+reason they died - it stands at half stock all year and pays a hawk four or
+five times its keep on ground that suits it - and that what was left was
+placement and competition. It was, and it was four things.
+
+**The ground was chosen for one animal and the animals were put down three
+cells away.** `spawn_group` placed every member of a pack on a circle of
+radius three around the position it was given and **not one of them on the
+position itself**, which quietly threw away the whole of the work that chose
+it. Forest is seven per cent of a map and patchy, so three cells off a wood
+is very nearly a tile drawn at random: measured at generation, every one of
+the forty-five kestrel packs was sent to Forest, Wetland or SaltMarsh, and
+the terrain the kestrels actually stood on came out at **exactly the map's
+own terrain proportions** - two fifths of them on bare mountain. Mean cover
+under a kestrel was 0.23 against a bar of 0.40. The first of a pack now goes
+where it was sent and the rest stand round it.
+
+**The climate was chosen without asking whether it had any ground to hunt
+on.** `ground_for` filters a species' biomes by whether the map has that
+climate at all, and the placement then falls back to the whole climate when
+it finds no ground thick enough. On a hundred square kilometres Arctic covers
+four hundred thousand tiles - two fifths of the map, nearly all mountain -
+and **not one of them clears `WHAT_A_HUNTER_NEEDS_UNDERFOOT`**; nor does one
+tile of the seventy-five thousand of desert. Only Temperate has any. So the
+second question silently undid the first. It is one criterion now, and the
+fallback is a last resort across all of a species' climates rather than a
+coin flip at each draw.
+
+**A hunting ground's stock was priced by the terrain of its middle tile.**
+Sixty-four hectares were valued at whatever one cell happened to be, picked
+for no reason but being in the centre. On a map two fifths mountain that put
+most of the country's hunting grounds at a carrying capacity of nearly
+nothing however much wood stood in them - and the yield a hunter reads comes
+off the tile it is standing on, so a kestrel on forest inside such a ground
+found at a wood's rate out of a stock priced as rock. Two answers to "how
+rich is this piece of country", on two different scales, and the one that
+decided what was there to find was a coin toss. The country is surveyed once
+now, a hundred samples to a ground; terrain does not move, so only the season
+is applied on top.
+
+**A hunter is dealt out a territory, not a tile.** Drawing a position
+uniformly from every tile in the country with cover on it puts hunters
+wherever cover is *dense*, which is not at all the same as spreading them
+over the country: a hundred grounds held hunters and the ordinary one held
+four, so each got a quarter of what its ground gives. What a hunting ground
+is for is exactly this - it is the unit a hunter holds - so they are dealt
+out one ground at a time, and a ground with nobody on it is taken before one
+that has.
+
+**And it is two larders, not one.** A hunting ground can hold a lake and a
+wood at once, and every hunter on it was counted against a single figure -
+saying that a fish in the water and a hawk in the trees take the same food
+from each other. At the height of a fish year five hundred of them put the
+demand on their grounds at thirty-four, and the hawks and eagles hunting the
+woods of those same grounds were reading it. Which pool a hunter draws from
+is now decided the way the yield already decides it: by whether the tile it
+stands on is water.
+
+**What it came to**, at generation and over a year on a hundred square
+kilometres:
+
+| | before | after |
+|---|---|---|
+| mean cover under a kestrel | 0.23 | 0.48 |
+| kestrel intake against its burn | 0.36 | 2.00 |
+| hunting grounds holding a hunter | 103 | 126 |
+| kestrel after a year | 2 | 35 |
+| heron / eagle / otter after a year | 0 / 0 / 0 | 6 / 3 / 2 |
+
+**One test moved with it, and it was not about animals.**
+`news_reaches_everybody_within_earshot` was already seeded, with a comment
+saying it "has flipped either way on changes that had nothing to do with
+talking" - and 4,101 stopped holding the moment the country's animals were
+placed differently. A seed only fixes a draw until something else moves what
+happens after it. It is four settlements now, as
+`population_feeds_itself_over_a_long_run` and
+`the_hedgerows_are_no_thinner_a_few_years_on` already are. Nineteen tests
+failed before this work and nineteen after, with that one going each way
+against `lies_are_told_and_found_out_in_a_settlement`, which now passes.
+
+**Still open: the fish.** A hundred and three at generation, **nine hundred
+and eighty-four** by midsummer, one by the year's end. That is the same shape
+#151 abstracted the rabbits for - small, fast-breeding, numerous, and a
+random walk with an absorbing barrier at nought when held as records - and it
+is now the largest single thing crowding the water. Splitting the larders
+took the birds out of its way; it did not make the fishery behave. Whether
+the fish want abstracting as the rabbits were, or only a check on their
+breeding, is the next question and a different one from this.
+
+
+### 159. The last records that should have been a number, and the bird that took their place
+
+#158 closed by naming what was left: the fish. **103 at generation, 984 by
+midsummer, one at the year's end**, and at the height of that year the demand
+on their own hunting grounds stood at thirty-four. That is the shape #151
+abstracted the rabbits for, in a species with an extra sting: a fish is a
+small predator by `where_it_sits`, so every one of those nine hundred was
+counted as a hunter demanding a share of the water it *was*. The heron, the
+otter, the kingfisher and the eagle were being starved off a larder made of
+their own dinner.
+
+**The fish are a band now.** `TheSmallLifeHere` carries a third stock beside
+the grazers and the rodents, and what a ground carries of it comes from how
+much of that ground is water - the water's answer to `cover`, got the same
+way, by walking the country once. `survey_the_grounds` records both in one
+pass, so nothing can come to two views about which grounds have a river in
+them. The climate and the season are read through the same curve the land is
+read through, deliberately: two curves would be two opinions about which
+month is hard.
+
+The water branch of `what_the_small_life_turns_up` draws on it. That branch
+existed before and it was incoherent: a heron standing in a lake took its
+living at the water's own rate and **the head came off the ground's voles**.
+It thinned a field it never touched, and the reach it emptied filled again by
+arithmetic that knew nothing about it.
+
+Measured over two years on a hundred square kilometres with nobody in the
+world, against the same seed:
+
+| | before | after |
+|---|---|---|
+| head | 2,367 | 2,175 |
+| ms/tick | 13.07 | 12.75 |
+| starved | 4,311 | 681 |
+| fish | 103 -> 1 | a stock at 53% of what the water carries |
+| heron | 22 -> 13 | 14 -> 8 |
+| otter | 18 -> 1 | 18 -> 3 |
+| hawk | 12 -> 5 | 19 -> 9 |
+| owl | 2 -> 1 | 9 -> 3 |
+
+Six sevenths of the country's starvation was fish starving.
+
+**Two things it turned over on the way, and both are worth having written
+down.**
+
+*The water has to turn up two bands, because the land does.* Left as one, a
+heron standing in a lake got half of what the same heron got standing in a
+field, while `WHAT_OPEN_WATER_IS_WORTH_TO_A_SWIMMER` says open water is worth
+a wood to something that swims. The herons went to **nought** on water that
+had just been emptied of its competition. Fry and grown fish come off the one
+stock rather than two, and that is where the water and the land differ for a
+reason: what separates the rabbits from the voles is that a snare catches one
+and not the other, and there is no such thing in the water.
+
+*The kingfisher had never once been placed on a map, and the moment the fish
+let go of the water it went off like the crow did.* The fish held every
+watering ground in the country, so for the life of this model the kingfisher
+was passed over at generation. Freed, a hundred square kilometres went from
+85 at generation to **745, with two thousand four hundred starved behind
+them**; the heron fell to two, the otter, the owl, the eagle and the seal to
+nothing, and the tick went from 13.07 ms to **57.65**. It is fifty grammes,
+it breeds like it, and `where_it_sits` calls it a small predator - the same
+three things that make a rabbit a bad record, and the same three the crow was
+abstracted for in #152. It is a band now too.
+
+**And the reason it went off is a defect of its own, still open.** What a
+head of the assumed layers is worth rises steeply as the hunter shrinks -
+`days_a_grazer_keeps` - while what a ground turns up is the same head for
+everything working it. So the smallest hunter on a ground gets the largest
+surplus. Measured on good ground at generation, against its own burn:
+
+| kingfisher | owl | kestrel | hawk | heron | eagle |
+|---|---|---|---|---|---|
+| 4.06x | 2.75x | 1.40x | 1.23x | 1.24x | 1.05x |
+
+A clean inverse ladder in size, and at fifty grammes the bottom of it has no
+brake on it at all. Abstracting the bird is not a fix for that ladder; it is
+the same decision taken about the same three properties, and the ladder is
+what to look at next. The kestrel is the evidence that it has not gone away:
+181 founded, 448 starved, 21 alive.
+
+**Also still open, and named rather than bundled: there are two fisheries.**
+`SmallLife.fish` is what a heron eats; `ResourceType::Fish` nodes are what an
+agent spears, fed by `fish_run` - a run from outside the country rather than
+a stock, which is a deliberate and correct thing to say about salmon and is
+why it was left alone here. But they are two answers to "how many fish are in
+this water", and that is the defect this project keeps finding. Joining them
+means the reach becoming a way in to the band, as a snare is to the grazers,
+and it wants its own piece of work.
+
+### 160. Nobody in a fresh settlement ever takes anybody's word for where anything is
+
+Found by seeding a test that had never been seeded.
+
+`lies_are_told_and_found_out_in_a_settlement` builds a settlement of
+twenty-five with five liars in it, runs it four thousand ticks, and asks that
+somebody somewhere has been told where something is. It passed. It passed
+**only inside the suite**: run on its own it fails, at this commit and at
+`6e2eb70` before it, because what it was really reading was the draws the rest
+of the suite had left in the global dice. That is the #132 family, and a
+change to the fish was enough to move them.
+
+Asked as a block of seeded worlds and summed - which is this project's answer
+to #132 - the claim does not hold at all. Across three fresh settlements over
+four thousand ticks, `exploration_knowledge.who_told_me` is **empty in every
+agent in every world**. Not "few lies were caught": nobody was told anything
+by anybody, so there was nothing to catch.
+
+The machinery is not dead - `news_reaches_everybody_within_earshot` passes, so
+a teller with something to say reaches the people around him in a fixture.
+What is missing is between that and a running settlement: either nobody ever
+reaches the point of telling, or what is told never lands in
+`take_their_word_for_it`. Which of the two it is has not been measured yet.
+
+The test is left failing and seeded rather than tuned back to green, because a
+green test that is reading the suite's dice is worse than a red one that is
+reading the model.

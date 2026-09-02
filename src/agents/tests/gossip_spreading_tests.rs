@@ -369,7 +369,7 @@ fn test_trust_affects_belief_confidence() {
     let info = Information::new(
         InformationType::Accusation {
             accuser: agent0_id,
-            accused: uuid::Uuid::new_v4(),
+            accused: crate::core::dice::name(),
             crime: "theft".to_string(),
         },
         agent0_id,

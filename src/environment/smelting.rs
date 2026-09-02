@@ -4,7 +4,7 @@
 //! Integrates with heat sources to transform raw ores into usable metals.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// A smelting recipe defining transformation of raw material to refined product
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,25 +85,21 @@ impl SmeltingRecipe {
         self
     }
 
-    /// Check if this recipe requires a secondary input
-    pub fn requires_secondary(&self) -> bool {
-        self.secondary_input.is_some()
-    }
 }
 
 /// Smelting recipe registry
 #[derive(Debug, Clone)]
 pub struct SmeltingRegistry {
-    recipes: HashMap<String, SmeltingRecipe>,
+    recipes: BTreeMap<String, SmeltingRecipe>,
     /// Index by input material for quick lookup
-    by_input: HashMap<String, Vec<String>>, // material_id -> recipe_ids
+    by_input: BTreeMap<String, Vec<String>>, // material_id -> recipe_ids
 }
 
 impl SmeltingRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
-            recipes: HashMap::new(),
-            by_input: HashMap::new(),
+            recipes: BTreeMap::new(),
+            by_input: BTreeMap::new(),
         };
         registry.register_all_recipes();
         registry

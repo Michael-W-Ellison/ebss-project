@@ -7,7 +7,7 @@
 //! - Session recordings
 //! - Configuration snapshots
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -95,7 +95,7 @@ impl std::error::Error for StorageError {}
 pub struct DataPoint {
     pub tick: u64,
     pub timestamp: u64,
-    pub values: HashMap<String, f64>,
+    pub values: BTreeMap<String, f64>,
 }
 
 impl DataPoint {
@@ -106,7 +106,7 @@ impl DataPoint {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0),
-            values: HashMap::new(),
+            values: BTreeMap::new(),
         }
     }
 
@@ -241,21 +241,7 @@ impl TimeSeriesStore {
         Ok(points)
     }
 
-    /// Read data points in tick range
-    pub fn read_range(&self, start_tick: u64, end_tick: u64) -> StorageResult<Vec<DataPoint>> {
-        let all = self.read_all()?;
-        Ok(all
-            .into_iter()
-            .filter(|p| p.tick >= start_tick && p.tick <= end_tick)
-            .collect())
-    }
 
-    /// Get latest N data points
-    pub fn read_latest(&self, count: usize) -> StorageResult<Vec<DataPoint>> {
-        let all = self.read_all()?;
-        let start = all.len().saturating_sub(count);
-        Ok(all[start..].to_vec())
-    }
 
     /// Clear all data
     pub fn clear(&mut self) -> StorageResult<()> {
@@ -380,9 +366,9 @@ impl DocumentStore {
 pub struct StorageManager {
     config: StorageConfig,
     /// Time-series stores by name
-    time_series: HashMap<String, TimeSeriesStore>,
+    time_series: BTreeMap<String, TimeSeriesStore>,
     /// Document stores by name
-    documents: HashMap<String, DocumentStore>,
+    documents: BTreeMap<String, DocumentStore>,
 }
 
 impl StorageManager {
@@ -394,8 +380,8 @@ impl StorageManager {
 
         Ok(Self {
             config,
-            time_series: HashMap::new(),
-            documents: HashMap::new(),
+            time_series: BTreeMap::new(),
+            documents: BTreeMap::new(),
         })
     }
 
@@ -450,19 +436,6 @@ impl StorageManager {
         }
     }
 
-    /// Export all data to a directory
-    pub fn export_all<P: AsRef<Path>>(&mut self, export_path: P) -> StorageResult<()> {
-        let export_path = export_path.as_ref();
-        fs::create_dir_all(export_path)?;
-
-        // Flush first
-        self.flush_all()?;
-
-        // Copy all files
-        copy_dir_contents(&self.config.base_path, export_path)?;
-
-        Ok(())
-    }
 }
 
 /// Storage statistics
@@ -476,45 +449,8 @@ pub struct StorageStats {
 }
 
 impl StorageStats {
-    /// Get total size in human-readable format
-    pub fn size_human(&self) -> String {
-        let bytes = self.total_size_bytes;
-        if bytes < 1024 {
-            format!("{} B", bytes)
-        } else if bytes < 1024 * 1024 {
-            format!("{:.2} KB", bytes as f64 / 1024.0)
-        } else if bytes < 1024 * 1024 * 1024 {
-            format!("{:.2} MB", bytes as f64 / (1024.0 * 1024.0))
-        } else {
-            format!("{:.2} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
-        }
-    }
 }
 
-/// Helper function to copy directory contents
-fn copy_dir_contents<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> StorageResult<()> {
-    let from = from.as_ref();
-    let to = to.as_ref();
-
-    if !from.exists() {
-        return Ok(());
-    }
-
-    for entry in fs::read_dir(from)? {
-        let entry = entry?;
-        let path = entry.path();
-        let dest = to.join(entry.file_name());
-
-        if path.is_dir() {
-            fs::create_dir_all(&dest)?;
-            copy_dir_contents(&path, &dest)?;
-        } else {
-            fs::copy(&path, &dest)?;
-        }
-    }
-
-    Ok(())
-}
 
 /// Convenience functions for quick storage operations
 pub mod quick {
@@ -536,15 +472,6 @@ pub mod quick {
         Ok(data)
     }
 
-    /// Append line to file
-    pub fn append_line<P: AsRef<Path>>(path: P, line: &str) -> StorageResult<()> {
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
-        writeln!(file, "{}", line)?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]

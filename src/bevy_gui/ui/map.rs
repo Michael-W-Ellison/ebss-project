@@ -868,10 +868,6 @@ fn should_show_agent(agent: &AgentSnapshot, map_view: &MapViewState) -> bool {
         return false;
     }
 
-    if !filter.show_gender(agent.gender) {
-        return false;
-    }
-
     if agent.is_sleeping {
         return filter.show_sleeping;
     }

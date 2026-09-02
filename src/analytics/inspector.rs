@@ -5,7 +5,7 @@ use crate::agents::{Agent, BodySummary, SkillCategory, EmotionType, Relationship
 use crate::core::{DriveType, Drive};
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Detailed information about an agent for display
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -315,14 +315,14 @@ pub enum Selection {
 /// Inspector manages selected entities and provides data
 pub struct Inspector {
     selection: Selection,
-    agent_data_cache: HashMap<Uuid, AgentInspectorData>,
+    agent_data_cache: BTreeMap<Uuid, AgentInspectorData>,
 }
 
 impl Inspector {
     pub fn new() -> Self {
         Self {
             selection: Selection::None,
-            agent_data_cache: HashMap::new(),
+            agent_data_cache: BTreeMap::new(),
         }
     }
 
@@ -361,14 +361,6 @@ impl Inspector {
         self.agent_data_cache.get(&id)
     }
 
-    /// Update cached data for all agents
-    pub fn update_cache(&mut self, agents: &[Agent]) {
-        self.agent_data_cache.clear();
-        for agent in agents {
-            let data = AgentInspectorData::from_agent(agent);
-            self.agent_data_cache.insert(agent.id, data);
-        }
-    }
 }
 
 impl Default for Inspector {
@@ -391,7 +383,7 @@ mod tests {
     #[test]
     fn test_agent_selection() {
         let mut inspector = Inspector::new();
-        let agent_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
 
         inspector.select_agent(agent_id);
         assert_eq!(inspector.get_selection(), &Selection::Agent(agent_id));
@@ -410,7 +402,7 @@ mod tests {
     #[test]
     fn test_clear_selection() {
         let mut inspector = Inspector::new();
-        inspector.select_agent(Uuid::new_v4());
+        inspector.select_agent(crate::core::dice::name());
 
         inspector.clear_selection();
         assert_eq!(inspector.get_selection(), &Selection::None);
@@ -422,7 +414,7 @@ mod tests {
         let data = AgentInspectorData::from_agent(&agent);
 
         assert_eq!(data.id, agent.id);
-        assert_eq!(data.drives.len(), 15); // 15 core drives, Thirst and Protection among them
+        assert_eq!(data.drives.len(), crate::core::DriveType::all().len());
         assert!(data.health > 0.0);
     }
 
@@ -432,7 +424,7 @@ mod tests {
         let data = AgentInspectorData::from_agent(&agent);
 
         let sorted = data.drives_by_urgency();
-        assert_eq!(sorted.len(), 15);
+        assert_eq!(sorted.len(), crate::core::DriveType::all().len());
 
         // Verify sorted by urgency (descending)
         for i in 1..sorted.len() {

@@ -3,7 +3,7 @@
 
 use bevy_egui::egui::{self, Color32, RichText, Ui};
 
-use crate::agents::{LifeStage, Gender};
+use crate::agents::LifeStage;
 use crate::core::DriveType;
 use crate::world::{TerrainType, ResourceType, BuildingType};
 use crate::gui::state::AgentSnapshot;
@@ -48,6 +48,7 @@ pub fn drive_color(drive: DriveType) -> Color32 {
         DriveType::Thirst => Color32::from_rgb(0, 191, 255),
         DriveType::Rest => Color32::from_rgb(138, 43, 226),
         DriveType::Safety => Color32::from_rgb(255, 0, 0),
+        DriveType::Aggression => Color32::from_rgb(200, 40, 0),
         DriveType::Social => Color32::from_rgb(255, 105, 180),
         DriveType::Shelter => Color32::from_rgb(139, 90, 43),
         DriveType::Curiosity => Color32::from_rgb(255, 255, 0),
@@ -215,11 +216,6 @@ pub fn render_agent_tooltip(ui: &mut Ui, agent: &AgentSnapshot) {
         let (rect, _) = ui.allocate_exact_size(egui::Vec2::new(8.0, 8.0), egui::Sense::hover());
         ui.painter().circle_filled(rect.center(), 4.0, stage_color);
         ui.label(RichText::new(format!("{:?}", agent.life_stage)).strong());
-        let gender_symbol = match agent.gender {
-            Gender::Male => "\u{2642}",
-            Gender::Female => "\u{2640}",
-        };
-        ui.label(RichText::new(gender_symbol).color(Color32::LIGHT_GRAY));
         ui.label(RichText::new(format!("{:.6}...", agent.id)).small().color(Color32::GRAY));
     });
 

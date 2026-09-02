@@ -312,7 +312,7 @@ impl World {
         };
 
         // Check materials from storehouse
-        let mut materials_available = std::collections::HashMap::new();
+        let mut materials_available = std::collections::BTreeMap::new();
         for mat_req in &recipe.materials {
             // Map material string to ItemType
             let item = match mat_req.material_id.as_str() {
@@ -1098,7 +1098,7 @@ mod tests {
     #[test]
     fn test_harvest_action() {
         let mut world = World::new(WorldConfig::default());
-        let agent_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
 
         // Find a resource
         if let Some(resource) = world.resources.first() {
@@ -1120,7 +1120,7 @@ mod tests {
     #[test]
     fn test_move_action() {
         let mut world = World::new(WorldConfig::default());
-        let agent_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
 
         let mut agent_pos = Position::new(10, 10);
         let destination = Position::new(12, 12);
@@ -1138,7 +1138,7 @@ mod tests {
     #[test]
     fn test_deposit_retrieve() {
         let mut world = World::new(WorldConfig::default());
-        let agent_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
 
         let occupied = vec![]; // No other agents
@@ -1165,7 +1165,7 @@ mod tests {
     #[test]
     fn test_construct_building_action() {
         let mut world = World::new(WorldConfig::default());
-        let agent_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let build_pos = Position::new(15, 15);
 
@@ -1191,7 +1191,7 @@ mod tests {
     #[test]
     fn test_construct_building_duplicate_position() {
         let mut world = World::new(WorldConfig::default());
-        let agent_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let build_pos = Position::new(15, 15);
 
@@ -1217,7 +1217,7 @@ mod tests {
     #[test]
     fn test_craft_item_action() {
         let mut world = World::new(WorldConfig::default());
-        let agent_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
 
         // Add required materials to storehouse for stone_axe recipe (2 wood, 3 stone)
@@ -1238,8 +1238,8 @@ mod tests {
     #[test]
     fn test_social_interaction_greet() {
         let world = World::new(WorldConfig::default());
-        let initiator_id = Uuid::new_v4();
-        let target_id = Uuid::new_v4();
+        let initiator_id = crate::core::dice::name();
+        let target_id = crate::core::dice::name();
 
         let interaction_type = SocialInteractionType::Greet;
         let result = world.execute_social_interaction(initiator_id, target_id, &interaction_type);
@@ -1256,8 +1256,8 @@ mod tests {
     #[test]
     fn test_social_interaction_share_meal() {
         let world = World::new(WorldConfig::default());
-        let initiator_id = Uuid::new_v4();
-        let target_id = Uuid::new_v4();
+        let initiator_id = crate::core::dice::name();
+        let target_id = crate::core::dice::name();
 
         let interaction_type = SocialInteractionType::ShareMeal;
         let result = world.execute_social_interaction(initiator_id, target_id, &interaction_type);
@@ -1275,8 +1275,8 @@ mod tests {
     #[test]
     fn test_social_interaction_give_gift() {
         let world = World::new(WorldConfig::default());
-        let initiator_id = Uuid::new_v4();
-        let target_id = Uuid::new_v4();
+        let initiator_id = crate::core::dice::name();
+        let target_id = crate::core::dice::name();
 
         let interaction_type = SocialInteractionType::GiveGift {
             item_type: ItemType::Jewelry,
@@ -1296,8 +1296,8 @@ mod tests {
     #[test]
     fn test_seek_social_interaction_moves_towards_target() {
         let mut world = World::new(WorldConfig::default());
-        let agent_id = Uuid::new_v4();
-        let target_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
+        let target_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let target_pos = Position::new(15, 10);
 
@@ -1330,8 +1330,8 @@ mod tests {
     #[test]
     fn test_seek_social_interaction_success_when_adjacent() {
         let mut world = World::new(WorldConfig::default());
-        let agent_id = Uuid::new_v4();
-        let target_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
+        let target_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let target_pos = Position::new(11, 10); // Adjacent
 
@@ -1351,7 +1351,7 @@ mod tests {
     #[test]
     fn test_trade_post_offer() {
         let mut world = World::new(WorldConfig::default());
-        let seller_id = Uuid::new_v4();
+        let seller_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let occupied = vec![];
 
@@ -1383,8 +1383,8 @@ mod tests {
     #[test]
     fn test_trade_accept_offer() {
         let mut world = World::new(WorldConfig::default());
-        let seller_id = Uuid::new_v4();
-        let buyer_id = Uuid::new_v4();
+        let seller_id = crate::core::dice::name();
+        let buyer_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let occupied = vec![];
 
@@ -1438,7 +1438,7 @@ mod tests {
     #[test]
     fn test_trade_cannot_accept_own_offer() {
         let mut world = World::new(WorldConfig::default());
-        let seller_id = Uuid::new_v4();
+        let seller_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let occupied = vec![];
 
@@ -1477,7 +1477,7 @@ mod tests {
     #[test]
     fn test_trade_insufficient_items() {
         let mut world = World::new(WorldConfig::default());
-        let seller_id = Uuid::new_v4();
+        let seller_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let occupied = vec![];
 
@@ -1500,8 +1500,8 @@ mod tests {
     #[test]
     fn test_perform_help_gathering() {
         let mut world = World::new(WorldConfig::default());
-        let helper_id = Uuid::new_v4();
-        let target_id = Uuid::new_v4();
+        let helper_id = crate::core::dice::name();
+        let target_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let occupied = vec![];
 
@@ -1527,8 +1527,8 @@ mod tests {
     #[test]
     fn test_perform_help_building() {
         let mut world = World::new(WorldConfig::default());
-        let helper_id = Uuid::new_v4();
-        let target_id = Uuid::new_v4();
+        let helper_id = crate::core::dice::name();
+        let target_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let occupied = vec![];
 
@@ -1559,7 +1559,7 @@ mod tests {
     #[test]
     fn test_perform_help_cannot_help_self() {
         let mut world = World::new(WorldConfig::default());
-        let agent_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let occupied = vec![];
 

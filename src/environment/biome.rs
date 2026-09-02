@@ -5,11 +5,13 @@
 //! Each biome has its own temperature range, precipitation, and environmental hazards.
 
 use serde::{Deserialize, Serialize};
-use crate::world::terrain::TerrainType;
 use crate::agents::temperature::{Temperature, Climate};
+use crate::environment::seasons::Season;
 
 /// Biome types representing distinct ecological zones
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
 pub enum BiomeType {
     /// Cold, snowy regions
     Tundra,
@@ -88,21 +90,6 @@ impl BiomeType {
         }
     }
 
-    /// Get typical terrain for this biome
-    pub fn typical_terrain(&self) -> TerrainType {
-        match self {
-            BiomeType::Tundra => TerrainType::Plains,
-            BiomeType::Taiga => TerrainType::Forest,
-            BiomeType::TemperateForest => TerrainType::Forest,
-            BiomeType::Grassland => TerrainType::Plains,
-            BiomeType::Desert => TerrainType::Plains,
-            BiomeType::Tropical => TerrainType::Forest,
-            BiomeType::Savanna => TerrainType::Plains,
-            BiomeType::Alpine => TerrainType::Mountain,
-            BiomeType::Wetland => TerrainType::Water,
-            BiomeType::Coast => TerrainType::Plains,
-        }
-    }
 
     /// Generate a climate appropriate for this biome
     pub fn generate_climate(&self, variation: f32) -> Climate {
@@ -175,8 +162,18 @@ pub struct Biome {
     pub current_climate: Climate,
     /// Time of day (0.0 to 24.0)
     pub time_of_day: f32,
-    /// Season (0.0 to 4.0, representing spring/summer/fall/winter)
-    pub season: f32,
+    /// The season this biome is in.
+    ///
+    /// This was an `f32` documented as "0.0 to 4.0, representing
+    /// spring/summer/fall/winter", read back with `self.season as u32` and
+    /// matched against 0..3. Every test that set it wrote 1.0 or 3.0 and got
+    /// what it asked for; the one live caller wrote
+    /// `day_of_year / DAYS_PER_YEAR`, which is a fraction under one, which
+    /// casts to zero, which is spring. So no world has ever had a winter as
+    /// far as its biomes were concerned. A number standing in for one of four
+    /// named things is how that happens, so it is one of four named things
+    /// now.
+    pub season: Season,
 }
 
 impl Biome {
@@ -185,7 +182,7 @@ impl Biome {
             biome_type,
             current_climate: biome_type.generate_climate(0.5),
             time_of_day: 12.0,
-            season: 2.0, // Start in summer
+            season: Season::Fall,
         }
     }
 
@@ -206,12 +203,11 @@ impl Biome {
         };
 
         // Temperature variation by season
-        let season_factor = match self.season as u32 {
-            0 => 0.8,  // Spring - mild
-            1 => 1.2,  // Summer - hot
-            2 => 0.9,  // Fall - cooling
-            3 => 0.6,  // Winter - cold
-            _ => 1.0,
+        let season_factor = match self.season {
+            Season::Spring => 0.8, // mild
+            Season::Summer => 1.2, // hot
+            Season::Fall => 0.9,   // cooling
+            Season::Winter => 0.6, // cold
         };
 
         let base_temp = self.biome_type.average_temperature();
@@ -347,13 +343,13 @@ mod tests {
     #[test]
     fn test_seasonal_variation() {
         let mut summer_biome = Biome::new(BiomeType::Grassland);
-        summer_biome.season = 1.0; // Summer
+        summer_biome.season = Season::Summer;
         summer_biome.time_of_day = 12.0;
         summer_biome.update_climate(0.0);
         let summer_temp = summer_biome.current_climate.temperature;
 
         let mut winter_biome = Biome::new(BiomeType::Grassland);
-        winter_biome.season = 3.0; // Winter
+        winter_biome.season = Season::Winter;
         winter_biome.time_of_day = 12.0;
         winter_biome.update_climate(0.0);
         let winter_temp = winter_biome.current_climate.temperature;

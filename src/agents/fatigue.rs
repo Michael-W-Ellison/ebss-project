@@ -202,25 +202,7 @@ impl FatigueState {
         }
     }
 
-    /// Get injury chance modifier (1.0 = normal, higher = more accidents)
-    pub fn injury_chance_modifier(&self) -> f32 {
-        match self.severity() {
-            FatigueSeverity::None => 1.0,
-            FatigueSeverity::Mild => 1.1,
-            FatigueSeverity::Moderate => 1.4,
-            FatigueSeverity::Severe => 2.0,
-        }
-    }
 
-    /// Get decision quality modifier (1.0 = normal, lower = worse decisions)
-    pub fn decision_modifier(&self) -> f32 {
-        match self.severity() {
-            FatigueSeverity::None => 1.0,
-            FatigueSeverity::Mild => 0.95,
-            FatigueSeverity::Moderate => 0.80,
-            FatigueSeverity::Severe => 0.50,
-        }
-    }
 
     /// Check if agent should be forced to sleep (extreme exhaustion)
     pub fn should_collapse(&self) -> bool {
@@ -266,11 +248,6 @@ impl FatigueState {
         }
     }
 
-    /// Get hours since last sleep
-    pub fn hours_awake(&self, current_tick: u32) -> f32 {
-        let ticks_awake = current_tick.saturating_sub(self.last_woke_tick);
-        ticks_awake as f32 / 60.0 // Assuming 60 ticks per hour
-    }
 }
 
 /// Severity levels of fatigue

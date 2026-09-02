@@ -4,7 +4,7 @@
 //! Allows agents to discover and share information about resource locations,
 //! threats, and other important world information.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use crate::world::{Position, ResourceType};
 
@@ -23,7 +23,7 @@ pub struct DiscoveredResource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SharedKnowledge {
     /// Discovered resource locations indexed by position
-    discovered_resources: HashMap<Position, DiscoveredResource>,
+    discovered_resources: BTreeMap<Position, DiscoveredResource>,
     /// Current tick (for aging information)
     current_tick: u32,
 }
@@ -31,7 +31,7 @@ pub struct SharedKnowledge {
 impl SharedKnowledge {
     pub fn new() -> Self {
         Self {
-            discovered_resources: HashMap::new(),
+            discovered_resources: BTreeMap::new(),
             current_tick: 0,
         }
     }
@@ -96,10 +96,6 @@ impl SharedKnowledge {
             .min_by_key(|r| from.distance_to(&r.position))
     }
 
-    /// Get all discovered resources (for debugging/visualization)
-    pub fn all_resources(&self) -> Vec<&DiscoveredResource> {
-        self.discovered_resources.values().collect()
-    }
 
     /// Check if a resource at a position is known
     pub fn has_resource_at(&self, position: &Position) -> bool {
@@ -129,17 +125,6 @@ impl SharedKnowledge {
             .collect()
     }
 
-    /// Find closest resource known by a specific agent
-    pub fn find_closest_known_to_agent(
-        &self,
-        agent_id: uuid::Uuid,
-        from: &Position,
-        resource_type: ResourceType,
-    ) -> Option<&DiscoveredResource> {
-        self.get_agent_knowledge(agent_id, resource_type)
-            .into_iter()
-            .min_by_key(|r| from.distance_to(&r.position))
-    }
 
     /// Clean up old/stale resource knowledge
     /// Removes resources that haven't been verified in a long time
@@ -162,7 +147,7 @@ mod tests {
     #[test]
     fn test_discover_resource() {
         let mut knowledge = SharedKnowledge::new();
-        let agent_id = uuid::Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
         let pos = Position::new(10, 10);
 
         knowledge.discover_resource(pos, ResourceType::Food, 50, agent_id);
@@ -176,7 +161,7 @@ mod tests {
     #[test]
     fn test_find_closest_resource() {
         let mut knowledge = SharedKnowledge::new();
-        let agent_id = uuid::Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
 
         knowledge.discover_resource(Position::new(10, 10), ResourceType::Food, 50, agent_id);
         knowledge.discover_resource(Position::new(20, 20), ResourceType::Food, 30, agent_id);
@@ -192,8 +177,8 @@ mod tests {
     #[test]
     fn test_share_knowledge() {
         let mut knowledge = SharedKnowledge::new();
-        let agent1 = uuid::Uuid::new_v4();
-        let agent2 = uuid::Uuid::new_v4();
+        let agent1 = crate::core::dice::name();
+        let agent2 = crate::core::dice::name();
         let pos = Position::new(10, 10);
 
         knowledge.discover_resource(pos, ResourceType::Food, 50, agent1);
@@ -213,7 +198,7 @@ mod tests {
     #[test]
     fn test_remove_depleted_resource() {
         let mut knowledge = SharedKnowledge::new();
-        let agent_id = uuid::Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
         let pos = Position::new(10, 10);
 
         knowledge.discover_resource(pos, ResourceType::Food, 50, agent_id);

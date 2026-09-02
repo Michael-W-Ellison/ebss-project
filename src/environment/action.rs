@@ -2,7 +2,7 @@
 //! Action system for agent-environment interactions.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::core::DriveType;
 use super::{Position, ToolType, ToolTier};
 
@@ -39,7 +39,7 @@ pub enum ActionType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionRequirements {
     /// Required items and quantities
-    pub required_items: HashMap<String, u32>,
+    pub required_items: BTreeMap<String, u32>,
     /// Required tool type
     pub required_tool: Option<ToolType>,
     /// Required tool tier
@@ -47,7 +47,7 @@ pub struct ActionRequirements {
     /// Minimum energy level
     pub min_energy: f32,
     /// Required skills or experience
-    pub required_skills: HashMap<String, f32>,
+    pub required_skills: BTreeMap<String, f32>,
     /// Required proximity to position
     pub required_proximity: Option<(Position, f32)>,
 }
@@ -55,11 +55,11 @@ pub struct ActionRequirements {
 impl ActionRequirements {
     pub fn none() -> Self {
         Self {
-            required_items: HashMap::new(),
+            required_items: BTreeMap::new(),
             required_tool: None,
             required_tier: None,
             min_energy: 0.0,
-            required_skills: HashMap::new(),
+            required_skills: BTreeMap::new(),
             required_proximity: None,
         }
     }
@@ -75,31 +75,23 @@ impl ActionRequirements {
         self
     }
 
-    pub fn with_min_energy(mut self, energy: f32) -> Self {
-        self.min_energy = energy;
-        self
-    }
 
     pub fn with_skill(mut self, skill: String, level: f32) -> Self {
         self.required_skills.insert(skill, level);
         self
     }
 
-    pub fn with_proximity(mut self, position: Position, max_distance: f32) -> Self {
-        self.required_proximity = Some((position, max_distance));
-        self
-    }
 }
 
 /// Effects of an action on agent drives
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionEffects {
     /// Drive changes (positive = satisfy, negative = increase)
-    pub drive_effects: HashMap<DriveType, f32>,
+    pub drive_effects: BTreeMap<DriveType, f32>,
     /// Energy cost
     pub energy_cost: f32,
     /// Experience gain in various skills
-    pub experience_gain: HashMap<String, f32>,
+    pub experience_gain: BTreeMap<String, f32>,
     /// Time required (in ticks)
     pub time_cost: u32,
 }
@@ -107,9 +99,9 @@ pub struct ActionEffects {
 impl ActionEffects {
     pub fn none() -> Self {
         Self {
-            drive_effects: HashMap::new(),
+            drive_effects: BTreeMap::new(),
             energy_cost: 0.0,
-            experience_gain: HashMap::new(),
+            experience_gain: BTreeMap::new(),
             time_cost: 0,
         }
     }
@@ -147,7 +139,7 @@ pub struct ActionContext {
     /// Target material (for harvesting, crafting)
     pub target_material: Option<String>,
     /// Additional parameters
-    pub parameters: HashMap<String, String>,
+    pub parameters: BTreeMap<String, String>,
 }
 
 impl ActionContext {
@@ -157,7 +149,7 @@ impl ActionContext {
             position,
             target_position: None,
             target_material: None,
-            parameters: HashMap::new(),
+            parameters: BTreeMap::new(),
         }
     }
 

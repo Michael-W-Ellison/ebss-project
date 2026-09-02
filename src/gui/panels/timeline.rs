@@ -275,15 +275,3 @@ fn center_on_position(state: &mut GuiState, x: i32, y: i32) {
     state.center_on_position(x, y, TILE_SIZE, view_size);
 }
 
-/// Format tick as time string (e.g., "Day 5, 14:30")
-#[allow(dead_code)]
-pub fn format_tick_as_time(tick: u32) -> String {
-    const TICKS_PER_HOUR: u32 = 60;
-    const TICKS_PER_DAY: u32 = TICKS_PER_HOUR * 24;
-
-    let day = tick / TICKS_PER_DAY + 1;
-    let hour = (tick % TICKS_PER_DAY) / TICKS_PER_HOUR;
-    let minute = (tick % TICKS_PER_HOUR) * 60 / TICKS_PER_HOUR;
-
-    format!("Day {}, {:02}:{:02}", day, hour, minute)
-}

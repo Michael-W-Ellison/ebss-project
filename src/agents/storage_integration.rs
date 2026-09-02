@@ -2,8 +2,8 @@
 //! Integration layer between agent inventory and world storehouse.
 //!
 //! Bridges the gap between the two inventory systems:
-//! - Agent: HashMap<String, InventoryItem> (string-based IDs, weight tracking)
-//! - World: HashMap<ItemType, Item> (enum-based, simple quantity)
+//! - Agent: BTreeMap<String, InventoryItem> (string-based IDs, weight tracking)
+//! - World: BTreeMap<ItemType, Item> (enum-based, simple quantity)
 
 use crate::world::ItemType;
 use super::agent::{Inventory, InventoryItem};
@@ -97,8 +97,47 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         "salt" => Some(ItemType::Salt),
         "greens" => Some(ItemType::Greens),
         "roots" => Some(ItemType::Roots),
+
+        // What the flora system drops.
+        //
+        // Fourth time this table has drifted from the vocabulary beside it,
+        // and the largest: `PlantDrop` names sixty-two things a plant can
+        // give, and this table knew four of them. So every apple, berry,
+        // potato and ear of wheat the flora system produced arrived in a pack
+        // as a name nothing could resolve - no nutrition, no price, no place
+        // in a store, and after the edibility sweep, not food at all.
+        //
+        // Mapped onto the types that already exist rather than inventing new
+        // ones: a pear and an apple are both a handful of ordinary food to a
+        // body, and the model has no reason yet to tell them apart. What is
+        // *not* here is deliberate - petals, fibre, bark, straw, seeds and
+        // poison mushrooms are not supper.
+        "apples" | "bananas" | "baobab_fruit" | "berries" | "cherries"
+        | "coconut" | "mushrooms" | "olives" | "oranges" | "pears"
+        | "pumpkin" | "tomatoes" | "rose_hips" | "nuts" | "fruit" => {
+            Some(ItemType::Food)
+        }
+        "barley" | "corn" | "rice" | "wheat" => Some(ItemType::Grain),
+        "carrots" | "onions" | "potatoes" | "tubers" | "lotus_root"
+        | "ginseng_root" => Some(ItemType::Roots),
+        "cabbage" | "seaweed" | "bamboo_shoots" | "leaves" => Some(ItemType::Greens),
         "sand" => Some(ItemType::Sand),
         "coal" => Some(ItemType::Coal),
+        // Water is a drive, a resource and an item type, and its own name did
+        // not resolve to it.
+        "water" => Some(ItemType::Water),
+
+        // The whole bronze-age tier. Eighteen of the seventy-four item types
+        // did not survive a round trip through their own name - every copper,
+        // bronze and steel thing, plus water - which is the fifth time this
+        // table has drifted from the vocabulary beside it and the reason
+        // `every_item_type_tests::a_type_survives_the_round_trip_through_its_name`
+        // now exists. A tool nothing can name is a tool nothing can price,
+        // store, trade or put in a pit.
+        "copper" => Some(ItemType::Copper),
+        "tin" => Some(ItemType::Tin),
+        "bronze" => Some(ItemType::Bronze),
+        "steel" => Some(ItemType::Steel),
 
         // Processed
         "flour" => Some(ItemType::Flour),
@@ -138,6 +177,12 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         "woodenhammer" | "wooden_hammer" => Some(ItemType::WoodenHammer),
         "stonehammer" | "stone_hammer" => Some(ItemType::StoneHammer),
         "ironhammer" | "iron_hammer" => Some(ItemType::IronHammer),
+        "copperaxe" | "copper_axe" => Some(ItemType::CopperAxe),
+        "bronzeaxe" | "bronze_axe" => Some(ItemType::BronzeAxe),
+        "copperpickaxe" | "copper_pickaxe" => Some(ItemType::CopperPickaxe),
+        "bronzepickaxe" | "bronze_pickaxe" => Some(ItemType::BronzePickaxe),
+        "copperhammer" | "copper_hammer" => Some(ItemType::CopperHammer),
+        "bronzehammer" | "bronze_hammer" => Some(ItemType::BronzeHammer),
 
         // Weapons
         "woodenspear" | "wooden_spear" => Some(ItemType::WoodenSpear),
@@ -145,6 +190,13 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         "stonespear" | "stone_spear" => Some(ItemType::StoneSpear),
         "ironsword" | "iron_sword" => Some(ItemType::IronSword),
         "ironbow" | "iron_bow" => Some(ItemType::IronBow),
+        "copperspear" | "copper_spear" => Some(ItemType::CopperSpear),
+        "coppersword" | "copper_sword" => Some(ItemType::CopperSword),
+        "bronzespear" | "bronze_spear" => Some(ItemType::BronzeSpear),
+        "bronzesword" | "bronze_sword" => Some(ItemType::BronzeSword),
+        "bronzebow" | "bronze_bow" => Some(ItemType::BronzeBow),
+        "copperarmor" | "copper_armor" => Some(ItemType::CopperArmor),
+        "bronzearmor" | "bronze_armor" => Some(ItemType::BronzeArmor),
         "steelsword" | "steel_sword" => Some(ItemType::SteelSword),
 
         // Armor

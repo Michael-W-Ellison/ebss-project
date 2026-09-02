@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 #[test]
 fn test_stone_age_starting_knowledge() {
-    let agent_id = Uuid::new_v4();
+    let agent_id = crate::core::dice::name();
     let mut tech_knowledge = TechnologyKnowledge::new();
 
     // Agents start with basic Stone Age knowledge
@@ -23,7 +23,7 @@ fn test_stone_age_starting_knowledge() {
 
 #[test]
 fn test_accidental_metal_discovery() {
-    let agent_id = Uuid::new_v4();
+    let agent_id = crate::core::dice::name();
     let mut tech_knowledge = TechnologyKnowledge::new();
 
     // Agent starts with fire knowledge
@@ -46,7 +46,7 @@ fn test_accidental_metal_discovery() {
 
 #[test]
 fn test_experimentation_improves_confidence() {
-    let agent_id = Uuid::new_v4();
+    let agent_id = crate::core::dice::name();
     let mut tech_knowledge = TechnologyKnowledge::new();
 
     // Discover via accident (low confidence)
@@ -79,8 +79,8 @@ fn test_experimentation_improves_confidence() {
 
 #[test]
 fn test_knowledge_sharing_via_teaching() {
-    let teacher_id = Uuid::new_v4();
-    let student_id = Uuid::new_v4();
+    let teacher_id = crate::core::dice::name();
+    let student_id = crate::core::dice::name();
 
     let mut teacher_knowledge = TechnologyKnowledge::new();
     let mut student_knowledge = TechnologyKnowledge::new();
@@ -121,8 +121,8 @@ fn test_knowledge_sharing_via_teaching() {
 
 #[test]
 fn test_gossip_creates_rumors() {
-    let discoverer_id = Uuid::new_v4();
-    let gossip_recipient_id = Uuid::new_v4();
+    let discoverer_id = crate::core::dice::name();
+    let gossip_recipient_id = crate::core::dice::name();
 
     let mut recipient_knowledge = TechnologyKnowledge::new();
 
@@ -144,7 +144,7 @@ fn test_gossip_creates_rumors() {
 
 #[test]
 fn test_failed_attempts_reduce_confidence() {
-    let agent_id = Uuid::new_v4();
+    let agent_id = crate::core::dice::name();
     let mut tech_knowledge = TechnologyKnowledge::new();
 
     tech_knowledge.discover_technology(
@@ -211,8 +211,8 @@ fn test_technology_prerequisites() {
     registry.register(copper_smelting);
 
     // Agent only knows flint knapping
-    let agent_id = Uuid::new_v4();
-    let mut known_techs = std::collections::HashMap::new();
+    let agent_id = crate::core::dice::name();
+    let mut known_techs = std::collections::BTreeMap::new();
 
     let mut flint_record = DiscoveryRecord::new(
         "flint_knapping".to_string(),
@@ -359,7 +359,7 @@ fn test_full_technology_progression_scenario() {
     );
 
     // Simulate progression
-    let agent_id = Uuid::new_v4();
+    let agent_id = crate::core::dice::name();
     let mut knowledge = TechnologyKnowledge::new();
 
     // Start with Stone Age knowledge
@@ -425,8 +425,8 @@ fn test_full_technology_progression_scenario() {
 fn test_world_first_discoverer_tracking() {
     let mut registry = TechnologyRegistry::new();
 
-    let agent1 = Uuid::new_v4();
-    let agent2 = Uuid::new_v4();
+    let agent1 = crate::core::dice::name();
+    let agent2 = crate::core::dice::name();
 
     // Agent 1 discovers copper smelting first
     let is_first = registry.record_first_discovery(
@@ -452,7 +452,7 @@ fn test_world_first_discoverer_tracking() {
 
 #[test]
 fn test_mastery_progression() {
-    let agent_id = Uuid::new_v4();
+    let agent_id = crate::core::dice::name();
     let mut knowledge = TechnologyKnowledge::new();
 
     knowledge.discover_technology(

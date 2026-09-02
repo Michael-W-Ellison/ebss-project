@@ -7,7 +7,7 @@
 //! - Social dependency: understanding who fulfills our needs
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 use crate::core::DriveType;
 
@@ -65,14 +65,14 @@ impl SatisfactionRecord {
 pub struct DriveSatisfactionTracker {
     pub drive_type: DriveType,
     /// Map of source_id -> satisfaction record
-    pub sources: HashMap<Uuid, SatisfactionRecord>,
+    pub sources: BTreeMap<Uuid, SatisfactionRecord>,
 }
 
 impl DriveSatisfactionTracker {
     pub fn new(drive_type: DriveType) -> Self {
         Self {
             drive_type,
-            sources: HashMap::new(),
+            sources: BTreeMap::new(),
         }
     }
 
@@ -117,13 +117,13 @@ impl DriveSatisfactionTracker {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SatisfactionTracker {
     /// Map of drive_type -> source tracker
-    trackers: HashMap<DriveType, DriveSatisfactionTracker>,
+    trackers: BTreeMap<DriveType, DriveSatisfactionTracker>,
 }
 
 impl SatisfactionTracker {
     pub fn new() -> Self {
         Self {
-            trackers: HashMap::new(),
+            trackers: BTreeMap::new(),
         }
     }
 
@@ -171,10 +171,6 @@ impl SatisfactionTracker {
         removed
     }
 
-    /// Get tracker for a specific drive
-    pub fn get_tracker(&self, drive_type: DriveType) -> Option<&DriveSatisfactionTracker> {
-        self.trackers.get(&drive_type)
-    }
 }
 
 impl Default for SatisfactionTracker {
@@ -189,7 +185,7 @@ mod tests {
 
     #[test]
     fn test_satisfaction_record() {
-        let source = Uuid::new_v4();
+        let source = crate::core::dice::name();
         let mut record = SatisfactionRecord::new(source);
 
         assert_eq!(record.satisfaction_count, 0);
@@ -206,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_average_satisfaction() {
-        let source = Uuid::new_v4();
+        let source = crate::core::dice::name();
         let mut record = SatisfactionRecord::new(source);
 
         record.record(0.3, 10);
@@ -219,7 +215,7 @@ mod tests {
 
     #[test]
     fn test_importance_calculation() {
-        let source = Uuid::new_v4();
+        let source = crate::core::dice::name();
         let mut record = SatisfactionRecord::new(source);
 
         // Single interaction - low importance
@@ -238,8 +234,8 @@ mod tests {
     #[test]
     fn test_drive_tracker() {
         let mut tracker = DriveSatisfactionTracker::new(DriveType::Social);
-        let friend1 = Uuid::new_v4();
-        let friend2 = Uuid::new_v4();
+        let friend1 = crate::core::dice::name();
+        let friend2 = crate::core::dice::name();
 
         tracker.record_satisfaction(friend1, 0.4, 10);
         tracker.record_satisfaction(friend2, 0.2, 10);
@@ -254,8 +250,8 @@ mod tests {
     #[test]
     fn test_satisfaction_tracker() {
         let mut tracker = SatisfactionTracker::new();
-        let friend = Uuid::new_v4();
-        let food_source = Uuid::new_v4();
+        let friend = crate::core::dice::name();
+        let food_source = crate::core::dice::name();
 
         tracker.record(DriveType::Social, friend, 0.3, 10);
         tracker.record(DriveType::Hunger, food_source, 0.5, 10);
@@ -272,7 +268,7 @@ mod tests {
     #[test]
     fn test_remove_source() {
         let mut tracker = SatisfactionTracker::new();
-        let friend = Uuid::new_v4();
+        let friend = crate::core::dice::name();
 
         tracker.record(DriveType::Social, friend, 0.3, 10);
         tracker.record(DriveType::Reproduction, friend, 0.2, 10);

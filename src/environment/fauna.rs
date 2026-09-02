@@ -2,8 +2,9 @@
 //! Animal life and wildlife system with biome distributions.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use super::flora::ClimateZone;
+use super::small_life::SmallLife;
 use crate::world::{Grid, TerrainType};
 use uuid::Uuid;
 
@@ -41,13 +42,17 @@ pub fn terrain_to_climate_zone(terrain: TerrainType) -> ClimateZone {
 /// take.
 const BREEDING_INTERVAL_SCALE: f32 = 3.0;
 
-/// Side of the patches the world is divided into when asking how crowded a
-/// piece of ground is
-const GRAZING_PATCH: i32 = 6;
-
-/// How many animals a patch of that size will carry before the ones on it stop
-/// breeding
-const PATCH_CARRYING_CAPACITY: u32 = 8;
+/// What the sky is doing, for the plants a grazing animal brings up to date.
+///
+/// Three loose arguments threaded through two calls that have nothing else to
+/// do with the weather, so they travel together and are named for why they are
+/// here.
+#[derive(Debug, Clone, Copy)]
+pub struct GrazingWeather {
+    pub precipitation: f32,
+    pub now: u32,
+    pub season: crate::environment::Season,
+}
 
 /// Configuration for naturalistic animal spawning during world generation
 #[derive(Debug, Clone)]
@@ -56,10 +61,54 @@ pub struct AnimalSpawnConfig {
     pub herds_per_10000_tiles: usize,
     /// Whether to spawn predators
     pub spawn_predators: bool,
-    /// Ratio of prey to predator groups
-    pub prey_to_predator_ratio: f32,
-    /// Maximum initial population cap
-    pub max_initial_population: usize,
+    /// The most head a world starts with, per ten thousand tiles.
+    ///
+    /// Ten thousand tiles is a square kilometre. This was an absolute - two
+    /// hundred head, whatever the map - which never bound on a fifty by fifty
+    /// and bound at once on a hundred square kilometres, where it held the
+    /// whole country to two animals a square kilometre. It is a ceiling and
+    /// not a stocking rate: what a country actually carries is what its grass
+    /// will feed, and that is settled by `what_the_grazers_took` within a few
+    /// years of a world opening.
+    pub head_per_10000_tiles: usize,
+
+    /// Which tiers this pass may put down.
+    ///
+    /// Everything, ordinarily, and the whole country arrives on one morning.
+    /// A country being let up in stages fills one band at a time and comes
+    /// back for the next once the last has held - see
+    /// [`crate::world::World::let_the_country_come_up`].
+    pub tiers_it_may_place: Vec<TrophicRole>,
+
+    /// And which sizes of grazer, smallest to largest.
+    ///
+    /// The herbivores are one trophic tier and four orders of magnitude - a
+    /// goose and a mammoth are both primary consumers - so staging them wants
+    /// a size as well as a tier. A band rather than a ceiling, because a
+    /// later stage that put down everything up to its ceiling would deal out
+    /// a second helping of everything the stage before it had already placed.
+    pub grazers_it_may_place: (AnimalSize, AnimalSize),
+}
+
+impl AnimalSpawnConfig {
+    /// The ordinary case: the whole chain, at once.
+    pub fn every_tier() -> Vec<TrophicRole> {
+        TrophicRole::EVERY_ONE.to_vec()
+    }
+
+    /// And every size of grazer.
+    pub fn anything_at_all() -> (AnimalSize, AnimalSize) {
+        (AnimalSize::Tiny, AnimalSize::Huge)
+    }
+
+    /// A pass that puts down only these tiers, and only grazers in this band.
+    pub fn only(tiers: &[TrophicRole], grazers: (AnimalSize, AnimalSize)) -> Self {
+        Self {
+            tiers_it_may_place: tiers.to_vec(),
+            grazers_it_may_place: grazers,
+            ..Self::default()
+        }
+    }
 }
 
 impl Default for AnimalSpawnConfig {
@@ -73,13 +122,15 @@ impl Default for AnimalSpawnConfig {
             // predator and a prey population at once.
             herds_per_10000_tiles: 40,
             spawn_predators: true,
-            // Two prey groups per predator group rather than four. A world
-            // that starts with one or two predators loses them to bad luck -
-            // a random walk apart, one lean winter - and once they are gone
-            // nothing holds the herds at all. What the herds breed needs a
-            // pack that can actually keep up with them.
-            prey_to_predator_ratio: 2.0,
-            max_initial_population: 200,
+            // Forty head to the square kilometre, which is about where a
+            // country of this sort settles once the grass has had its say -
+            // measured at fifty-odd head on a hundred and forty-four hectares
+            // over a hundred and fifty years. A world that opens near where it
+            // settles spends its first decade being a country rather than
+            // being a crash.
+            head_per_10000_tiles: 10,
+            tiers_it_may_place: Self::every_tier(),
+            grazers_it_may_place: Self::anything_at_all(),
         }
     }
 }
@@ -151,6 +202,614 @@ pub enum DietType {
     Omnivore,
 }
 
+impl AnimalSpecies {
+    /// Whether this is the farmyard form of something the registry already
+    /// has wild, so that stocking a country with both would put the same
+    /// animal on the map twice.
+    ///
+    /// The pig's own description is "Domesticated boar", and the boar is
+    /// stocked. It also carries a farmyard sow's `litter_size` of six to
+    /// twelve against a wild ruminant's one or two, which is right for a pig
+    /// and ruinous in a country with no farmer in it: the first world in
+    /// which a pig could be placed at all came out with **3,749 of them out
+    /// of 5,607 head**, and the tick at 18.5 ms against 11.8 without them.
+    ///
+    /// Nothing here says a pig cannot exist. `spawn_animal` will still put
+    /// one down, which is what a settlement that tames one wants, and
+    /// `can_domesticate` is untouched. What it says is that a country made
+    /// before anybody arrives is stocked with wild animals.
+    ///
+    /// The cow is deliberately not on this list. It has no wild form in this
+    /// registry to be counted twice against, it carries a cow's litter of
+    /// one, and it sits at seventy-odd head over two years without help.
+    pub fn is_the_farm_form_of_something_wild(&self) -> bool {
+        matches!(self.id.as_str(), "pig")
+    }
+
+    /// Whether this one cannot leave the water.
+    ///
+    /// Swimming is not the same thing. A bear swims, a deer swims, a seal
+    /// hauls out on a beach and a crocodile basks - `what_it_can_do().swims`
+    /// is about getting away and following, and every one of those belongs on
+    /// land. This is the shorter list of what drowns in air, and the whole of
+    /// what it decides is which tiles a founding population may be put on.
+    pub fn lives_in_the_water(&self) -> bool {
+        matches!(self.id.as_str(), "fish")
+    }
+
+    /// Whether this one gets its living out of the water.
+    ///
+    /// **A different question from the one above, and reading that one for
+    /// this is why the birds that live off fish went to nothing.** Whether
+    /// an animal drowns in air decides where a founding population may be
+    /// put down; whether it feeds in water decides whether a lake is its
+    /// larder or a hole in its range. A heron, a kingfisher, an otter and a
+    /// seal all breathe air and all eat nothing else - priced as land
+    /// hunters standing on open water, they were being told their whole
+    /// territory was barren ground.
+    ///
+    /// Derived from what it is written down as hunting rather than from a
+    /// second hand-kept list, so that adding a species that takes fish does
+    /// not silently leave it starving on a lake.
+    pub fn feeds_in_the_water(&self) -> bool {
+        self.lives_in_the_water() || self.prey_species.iter().any(|prey| prey == "fish")
+    }
+
+    /// Whether the abstracted lower tiers already stand for this species, so
+    /// the world should not also stock it as individual records.
+    ///
+    /// `SmallLife` holds two guilds a hunting ground at a time - **grazers**
+    /// (rabbits, voles, squirrels: what a snare catches and what a stoat
+    /// lives on) and **hunters** (foxes, stoats, weasels: what catches them,
+    /// and what robs a snare). This names the species those two guilds *are*,
+    /// so that the same animal is not counted twice - once as a number and
+    /// once as a record standing in a field.
+    ///
+    /// The species stays in the registry. It has a mass, a temperament, a
+    /// diet and a place in the food web, and `spawn_animal` will still put
+    /// one on the map if something explicitly asks for one. What changes is
+    /// that world-generation and the migration that refills a depleted
+    /// country no longer deal these out, because there is already a
+    /// population of them.
+    ///
+    /// **Why these and not everything small.** Measured over two years on a
+    /// hundred square kilometres with nobody in the world: 28,718 head, of
+    /// which 26,276 rabbits and 1,515 geese, against three wolves and three
+    /// arctic foxes - and the tick going from 17.57 ms in the first quarter
+    /// to 108.90 in the eighth. A fast-breeding animal held as discrete
+    /// records is a random walk with an absorbing barrier at nought, so it
+    /// finds either the barrier or the array. The eagle, the hawk, the owl,
+    /// the heron, the kingfisher, the crow, the otter and the monkey are
+    /// small too and stay: they are few, they cost nothing, and a country
+    /// with nothing in the sky over it is worse than a country with an
+    /// approximate number of rabbits in it.
+    pub fn is_stood_for_by_the_small_life(&self) -> bool {
+        matches!(
+            self.id.as_str(),
+            // The grazers a snare is set for
+            "rabbit" | "squirrel" | "goose" | "duck" | "chicken"
+            // And the crow, which is a rabbit in feathers and was only ever
+            // absent from this list because it was absent from the map. It
+            // is half a kilogramme, it breeds like one, and `where_it_sits`
+            // calls it a primary consumer - the same three things that make
+            // a rabbit a bad record. The moment the spawn pools were fixed
+            // and it could be placed at all, a hundred square kilometres
+            // went to **58,682 crows** inside a year, out of 61,558 head,
+            // with the tick at 249 ms. See ISSUES_FOUND.md #152.
+            | "crow"
+            // And the fish, for the same three reasons and one more.
+            //
+            // It breeds in thousands, it is eaten by everything and it is
+            // supposed to be numerous - which is the rabbit's case exactly,
+            // and it behaved the same way: 103 at generation, **984** by
+            // midsummer and **one** at the year's end. The one more is that
+            // a fish is a small predator by `where_it_sits`, so every one of
+            // those nine hundred was counted as a hunter demanding a share
+            // of its own ground's water - putting the demand on the fishing
+            // grounds at thirty-four and starving the heron, the otter, the
+            // kingfisher and the eagle off the larder the fish themselves
+            // were. See `TheSmallLifeHere::fish`.
+            | "fish"
+            // And the kingfisher, on the crow's precedent and for the crow's
+            // reasons.
+            //
+            // It is fifty grammes, it breeds like it, and `where_it_sits`
+            // calls it a small predator - the same three things that make a
+            // rabbit a bad record. It had never once been placed on a map:
+            // the fish held every watering ground in the country, so the
+            // kingfisher was passed over at generation for the life of this
+            // model. The moment the fish became a band and let go of them,
+            // a hundred square kilometres went from **85 at generation to
+            // 745, with two thousand four hundred starved behind them**, the
+            // heron fell from thirteen to two, the otter, the owl, the eagle
+            // and the seal went to nothing, and the tick went from 13.07 ms
+            // to 57.65. That is a boom-and-bust in records, which is the one
+            // thing this abstraction exists to stop.
+            //
+            // **Why it, and not the hawk or the eagle beside it.** What a
+            // head of the assumed layers is worth rises steeply as the
+            // hunter shrinks - `days_a_grazer_keeps` - while what a ground
+            // turns up is the same head for everything working it. So the
+            // smallest hunter on a ground gets the largest surplus: measured
+            // on good ground, the kingfisher took four times its keep, the
+            // owl two and three quarters, the kestrel one and two fifths and
+            // the eagle one and a twentieth - a clean inverse ladder in
+            // size. At fifty grammes the bottom of that ladder has no brake
+            // on it at all. That ladder is a defect of its own and it is
+            // named as one in ISSUES_FOUND.md #159; abstracting the bird is
+            // not a fix for it, it is the same decision taken about the same
+            // three properties.
+            | "kingfisher"
+            // And what lives on them, and on what a snare catches
+            | "fox" | "arctic_fox" | "stoat" | "snake" | "adder"
+        )
+    }
+
+    /// What this one can do to get away, and to follow - see
+    /// [`WhatItCanDo`]. `None` for a species this table has never heard of,
+    /// which `every_animal_says_what_it_can_do` makes sure is none of them.
+    pub fn what_it_can_do(&self) -> Option<WhatItCanDo> {
+        use WhatItCanDo as Can;
+
+        let both = |a: WhatItCanDo, b: WhatItCanDo| WhatItCanDo {
+            burrows: a.burrows || b.burrows,
+            climbs: a.climbs || b.climbs,
+            flies: a.flies || b.flies,
+            swims: a.swims || b.swims,
+        };
+
+        Some(match self.id.as_str() {
+            // Down a hole, which is the whole of a rabbit's answer to
+            // everything with teeth.
+            "rabbit" => Can::burrows(),
+            // And down the hole after it, which is what a stoat is for.
+            "stoat" => Can::burrows(),
+            // Earths and setts. A fox digs, so a rabbit's hole is not proof
+            // against one the way it is against a wolf.
+            "fox" | "arctic_fox" => Can::burrows(),
+            // Goes to ground and goes up, and is at home in neither.
+            "snake" | "adder" => both(Can::burrows(), Can::climbs()),
+            "otter" => both(Can::swims(), Can::burrows()),
+
+            // Up a trunk.
+            "squirrel" | "monkey" => Can::climbs(),
+            // Up a crag, which is what mountain ground offers instead of
+            // branches.
+            "goat" => Can::climbs(),
+            "lion" => Can::climbs(),
+            "tiger" => both(Can::climbs(), Can::swims()),
+            "bear" => both(Can::climbs(), Can::swims()),
+
+            // On the wing, which is the reason a fox does not live on geese.
+            "eagle" | "hawk" | "owl" | "crow" | "parrot" => Can::flies(),
+            "kestrel" | "kingfisher" | "heron" => Can::flies(),
+            "duck" | "goose" => both(Can::flies(), Can::swims()),
+
+            // In the water.
+            "fish" | "seal" | "crocodile" | "polar_bear" => Can::swims(),
+            "boar" | "elk" | "reindeer" | "deer" => Can::swims(),
+
+            // And the ones whose only answer is to run, or to turn round.
+            "camel" | "chicken" | "cow" | "mammoth" | "pig" | "sheep" | "wolf" => {
+                Can::nothing()
+            }
+
+            _ => return None,
+        })
+    }
+
+    /// What share of a litter or a clutch comes through to be counted.
+    ///
+    /// Nothing in this model has ever killed a young animal. Everything born
+    /// or hatched was a full record from its first tick, subject only to
+    /// starvation, old age and being eaten - so a snake laying twenty eggs put
+    /// twenty snakes on the map. That was survivable while breeding was one
+    /// pair in the whole world per attempt (#139); with recruitment
+    /// proportional to the population it is not, and a quarter of a square
+    /// kilometre came out with nine hundred and seventy-one snakes on it.
+    ///
+    /// Which is the wrong reading of a big clutch. A thing lays twenty eggs
+    /// *because* almost none of them make it. The share that does is what
+    /// separates the animals that gamble on numbers from the ones that gamble
+    /// on care, and size is a fair proxy for which a species is.
+    ///
+    /// This is a coarse stand-in for a hundred things the model does not have
+    /// - nest predation, cold snaps, disease, the young that simply do not
+    /// thrive - and it is applied at birth rather than played out, because
+    /// playing it out means holding records for animals whose whole purpose is
+    /// to die.
+    pub fn how_many_of_a_litter_come_through(&self) -> f32 {
+        match self.size {
+            AnimalSize::Tiny => 0.35,
+            AnimalSize::Small => 0.45,
+            AnimalSize::Medium => 0.60,
+            AnimalSize::Large => 0.70,
+            AnimalSize::Huge => 0.80,
+        }
+    }
+
+    /// How much of a litter is small enough to be reared rather than gambled.
+    ///
+    /// A doe with three kits rears three; a snake laying twenty is not rearing
+    /// anything, it is buying tickets. So the thinning above is applied only
+    /// to what is over this, which leaves every mammal in the registry as it
+    /// was - their litters are ones and twos and fives - and bites on the
+    /// egg-layers, which is where it is wanted. Applying it flat took the
+    /// snakes down from nine hundred and seventy-one to four hundred and
+    /// eleven and took every other animal on a quarter of a square kilometre
+    /// down with them, to two head in five years.
+    pub const A_LITTER_SMALL_ENOUGH_TO_REAR: u32 = 4;
+
+    /// How many animals one record of this species stands for.
+    ///
+    /// One, for everything a person could walk up to and point at. Not for
+    /// the rodents and the small birds, and that is a deliberate coarsening
+    /// with a measurement behind it: modelled one for one, the mice and voles
+    /// are right and unaffordable. They are food-limited rather than
+    /// predator-limited, the grass on four square kilometres will carry
+    /// sixteen thousand of them - which is about four thousand to the square
+    /// kilometre, and a real vole year is more than that - and a hundred
+    /// square kilometres would want four hundred thousand records. The
+    /// specification this work is written under asks that simulation speed not
+    /// fall away, and four hundred thousand rodents is the whole tick budget.
+    ///
+    /// So a `mouse` here is a colony and a `songbird` is a flock. What follows
+    /// from that is all of a piece: it eats what its number eats, it is worth
+    /// what its number is worth to something that finds it, and it does not
+    /// die to one bite - a predator whittles a colony down over several
+    /// visits, which is what living off a colony actually looks like.
+    ///
+    /// The plants are already read this way and always have been. One `Plant`
+    /// is a patch of sward with five points of condition on it, not one blade
+    /// of grass.
+    pub fn how_many_it_stands_for(&self) -> f32 {
+        // What eats is not read this way. Predators are few and hold ground
+        // against each other, so a stoat is a stoat; it is what is eaten that
+        // lives in numbers.
+        if !self.prey_species.is_empty() || self.size != AnimalSize::Tiny {
+            return 1.0;
+        }
+
+        // A warren, a drey, a skein, a shoal. Measured one for one, four
+        // square kilometres settled at four and a half thousand geese and nine
+        // hundred rabbits - which is about two hundred rabbits to the square
+        // kilometre, and a real one carries ten times that, so the model was
+        // not wrong about the animals. It was wrong about what it could afford
+        // to hold records for.
+        8.0
+    }
+
+    /// How much hunter it takes to bring one of these down.
+    ///
+    /// A cow is not a rabbit that happens to weigh more. What decides it is
+    /// bulk and what the animal can do about being rushed, and both are
+    /// already on the species.
+    pub fn how_much_hunter_it_takes(&self) -> f32 {
+        // The root of its mass, and again not mass itself: what makes an
+        // animal hard to pull down is reach and footing and how hard it can
+        // hit back, and those go up a good deal more slowly than weight does.
+        // A cow is three hundred rabbits by mass and is not three hundred
+        // times the job. Anchored on the same sixty-kilo sheep the old five
+        // buckets were built around, so the hunt balance is where it was.
+        const WHAT_A_SIXTY_KILO_SHEEP_TAKES: f32 = 1.20;
+        let for_its_bulk =
+            WHAT_A_SIXTY_KILO_SHEEP_TAKES * (self.mass_kg.max(0.001) / 60.0).sqrt();
+
+        for_its_bulk * (1.0 + self.defense / 10.0)
+    }
+
+    /// What one of these brings to a hunt.
+    pub fn what_one_of_these_brings(&self) -> f32 {
+        self.attack_damage / 10.0
+    }
+
+    /// Where this one sits in the chain - see [`TrophicRole`].
+    ///
+    /// Decided by the largest thing it takes, and by its own size where the
+    /// two disagree, whichever puts it higher. What actually makes something
+    /// an apex predator is that it can bring down large prey, not that it is
+    /// large - and in this registry it has to be the prey, because a wolf and
+    /// a fox are both `AnimalSize::Small` and the comment on the enum says so
+    /// in as many words ("Small: Foxes, wolves"). Their prey lists do tell
+    /// them apart: a fox takes rabbits and a wolf takes deer.
+    ///
+    /// Own size is a floor and never more: it keeps something big that eats
+    /// small things off the bottom of the chain, and it cannot on its own put
+    /// anything at the top of one.
+    pub fn where_it_sits(&self) -> TrophicRole {
+        if self.diet == DietType::Herbivore {
+            return TrophicRole::PrimaryConsumer;
+        }
+
+        // Nothing on its list of prey means two different things depending on
+        // what the animal is.
+        //
+        // An omnivore is a forager whatever its teeth say: a boar turning over
+        // roots is not hunting anything. A carnivore is a small predator -
+        // it lives on the mice, voles, small birds, frogs, lizards, insects
+        // and worms that this world assumes rather than counts, and an empty
+        // list is the honest way to say so. See `what_the_small_life_gives`.
+        if self.prey_species.is_empty() {
+            return if self.diet == DietType::Carnivore {
+                TrophicRole::SmallPredator
+            } else {
+                TrophicRole::PrimaryConsumer
+            };
+        }
+
+        // What the size of the thing it brings down says about it.
+        fn by_what_it_takes(prey: AnimalSize) -> TrophicRole {
+            match prey {
+                AnimalSize::Tiny => TrophicRole::SmallPredator,
+                AnimalSize::Small => TrophicRole::MidPredator,
+                AnimalSize::Medium | AnimalSize::Large | AnimalSize::Huge => {
+                    TrophicRole::TopPredator
+                }
+            }
+        }
+
+        // And what its own size says, which is only ever a floor and never
+        // reaches the top. Nothing is apex by being big: a bear that eats
+        // berries and field mice is not what a wolf pack is, and a boar
+        // turning up rabbits is a boar. Reading own size on the same scale as
+        // prey size put the boar and the harbour seal in with the tigers,
+        // because both are `AnimalSize::Medium` and a medium *prey* animal is
+        // what an apex predator eats.
+        fn at_least(own: AnimalSize) -> TrophicRole {
+            match own {
+                AnimalSize::Tiny => TrophicRole::SmallPredator,
+                _ => TrophicRole::MidPredator,
+            }
+        }
+
+        // The registry is the only thing that knows how big a named prey
+        // species is, and a species does not carry one - so this is answered
+        // from a fresh registry rather than from a field that could disagree
+        // with the one the world is using.
+        let biggest_it_takes = FaunaRegistry::new()
+            .all_species()
+            .into_iter()
+            .filter(|other| self.prey_species.contains(&other.id))
+            .map(|other| other.size)
+            .max();
+
+        match biggest_it_takes {
+            Some(prey) => by_what_it_takes(prey).max(at_least(self.size)),
+            None => at_least(self.size),
+        }
+    }
+}
+
+/// Where a species sits in the chain that runs up from the grass.
+///
+/// Worked out from what it eats and how big it is rather than declared on
+/// each species, because those two already say it: a thing that eats plants
+/// is a primary consumer, and among the things that eat meat it is size that
+/// decides whether it takes voles, hares or deer. A thirty-fourth
+/// hand-written field on thirty-three species is thirty-three chances to say
+/// something the other fields already contradict.
+///
+/// The distinction matters because a country does not hold the same number of
+/// each. There are a great many grazers, fewer things that eat mice, fewer
+/// again that eat rabbits, and a handful at most that eat deer - and the last
+/// of those only where there is enough ground to be worth a territory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum TrophicRole {
+    /// Eats plants: the grazers, the browsers, the seed-eaters.
+    PrimaryConsumer,
+    /// Amphibians, reptiles, small birds, the smaller mustelids.
+    SmallPredator,
+    /// Foxes, raptors, snakes, the mesocarnivores.
+    MidPredator,
+    /// Wolves, the big cats, bears. Wants a great deal of country.
+    TopPredator,
+}
+
+impl TrophicRole {
+    /// Every tier, from the grass upward.
+    pub const EVERY_ONE: [TrophicRole; 4] = [
+        TrophicRole::PrimaryConsumer,
+        TrophicRole::SmallPredator,
+        TrophicRole::MidPredator,
+        TrophicRole::TopPredator,
+    ];
+
+    /// What share of a country's herds and packs are of this tier.
+    ///
+    /// A pyramid, because that is what a food chain is: what eats has to be
+    /// rarer than what it eats, and each step up is rarer again. It was a flat
+    /// two-to-one of prey to predators, which put a third of everything on
+    /// four legs into the business of eating the other two thirds and made no
+    /// distinction at all between a fox and a wolf.
+    pub fn share_of_a_country(&self) -> f32 {
+        match self {
+            TrophicRole::PrimaryConsumer => 0.70,
+            TrophicRole::SmallPredator => 0.18,
+            TrophicRole::MidPredator => 0.09,
+            TrophicRole::TopPredator => 0.03,
+        }
+    }
+
+    /// How much country, in square kilometres, a map must hold before this
+    /// tier belongs on it at all - or `None` if there is no such bar.
+    ///
+    /// Only the top of the chain is held to this, and that is deliberate. It
+    /// is the one tier the specification singles out ("only where habitat
+    /// scale supports them"), and it is the one whose territory is large
+    /// enough that a map of the size this model is usually run at is a pen
+    /// rather than a window on a country: a quarter of a square kilometre
+    /// with a wolf pack on it is not a small ecosystem, it is an enclosure,
+    /// and the wolves eat everything in it and then starve. A fox on the same
+    /// ground is a fox whose range runs off the edge of the map, which is
+    /// every animal in this model and is nobody's problem.
+    pub fn how_much_country_before_it_belongs(&self) -> Option<f32> {
+        match self {
+            TrophicRole::TopPredator => Some(20.0),
+            _ => None,
+        }
+    }
+}
+
+/// What an animal can do that bears on being caught, and on catching.
+///
+/// One table read from both ends. It says how a thing gets away, and for the
+/// thing chasing it, whether it can follow: a rabbit goes down a hole and a
+/// fox digs, so a fox sometimes has it out; a wolf does not dig and never
+/// does. A squirrel goes up a trunk, where only something that climbs or
+/// flies follows it.
+///
+/// Written out per species because there is no getting at it any other way -
+/// nothing about a squirrel's size, diet or biome says that it climbs. It is
+/// one vocabulary in one place rather than four more fields on thirty-three
+/// literals, and `every_animal_says_what_it_can_do` holds it and the registry
+/// to each other in both directions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct WhatItCanDo {
+    /// Digs, and goes to ground.
+    pub burrows: bool,
+    /// Climbs, and goes up.
+    pub climbs: bool,
+    /// Flies.
+    pub flies: bool,
+    /// Swims, and is at home in the water.
+    pub swims: bool,
+}
+
+impl WhatItCanDo {
+    const fn nothing() -> Self {
+        Self { burrows: false, climbs: false, flies: false, swims: false }
+    }
+    const fn burrows() -> Self { Self { burrows: true, ..Self::nothing() } }
+    const fn climbs() -> Self { Self { climbs: true, ..Self::nothing() } }
+    const fn flies() -> Self { Self { flies: true, ..Self::nothing() } }
+    const fn swims() -> Self { Self { swims: true, ..Self::nothing() } }
+}
+
+/// What a piece of ground offers something being hunted on it.
+///
+/// Read off the terrain rather than off the plants actually standing there,
+/// and that is a compromise worth naming: asking the flora for what is on one
+/// tile is a walk over a quarter of a million plants, and a hunt happens every
+/// tick. Terrain is the map's own statement about its foliage - the flora
+/// system puts its trees on `Forest` and its reeds on `Wetland` - so the two
+/// agree at the start and drift only if a wood is cleared without the ground
+/// under it changing. Filed as the cost of doing this in constant time.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WhatTheGroundOffers {
+    /// How much of a hunt is lost to cover here, nought to one.
+    pub cover: f32,
+    /// Whether something that digs can go to ground here.
+    pub can_be_dug: bool,
+    /// Whether there is anything here to go up.
+    pub somewhere_to_climb: bool,
+    /// Whether there is water here to get into.
+    pub is_water: bool,
+}
+
+/// What this ground offers - see [`WhatTheGroundOffers`].
+pub fn what_this_ground_offers(terrain: TerrainType) -> WhatTheGroundOffers {
+    let (cover, can_be_dug, somewhere_to_climb, is_water) = match terrain {
+        // Standing timber: the best cover there is, and the only ground with
+        // anything on it worth going up.
+        TerrainType::Forest => (0.60, true, true, false),
+        // Reeds and standing water. Nothing to climb and nowhere to dig that
+        // will not fill.
+        TerrainType::Wetland | TerrainType::SaltMarsh => (0.50, false, false, true),
+        TerrainType::Riverbank => (0.30, true, false, true),
+        TerrainType::Meadow => (0.30, true, false, false),
+        TerrainType::Hills => (0.25, true, false, false),
+        // Crags rather than branches, which is what a goat goes up.
+        TerrainType::Mountain => (0.20, false, true, false),
+        TerrainType::Plains | TerrainType::Farmland => (0.15, true, false, false),
+        TerrainType::Water | TerrainType::Sea => (0.10, false, false, true),
+        TerrainType::Beach => (0.05, true, false, false),
+        TerrainType::Desert => (0.05, true, false, false),
+        TerrainType::SaltFlat => (0.00, false, false, false),
+    };
+
+    WhatTheGroundOffers { cover, can_be_dug, somewhere_to_climb, is_water }
+}
+
+/// What one hunting ground grows, from one walk of the country.
+///
+/// Sixty-four hectares priced by walking them rather than by the terrain of
+/// whichever cell happens to be in the middle - see `survey_the_grounds`.
+/// The three questions are asked together because they are answered off the
+/// same tiles, and asking them apart is how a ground came to be a wood for
+/// one purpose and bare rock for another.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct WhatThisGroundGrows {
+    /// How much this ground grows, averaged over it.
+    pub cover: f32,
+    /// And how much of it is water, which is what its fish live in.
+    pub share_that_is_water: f32,
+    /// The climate most of it is in, which decides how hard its year is.
+    pub climate: ClimateZone,
+}
+
+/// What the hunting of a country came to, for measuring.
+///
+/// Four numbers because there are four places a hunt can die, and inferring
+/// which from a head count got it wrong twice: a country whose predators all
+/// starve looks the same whether they never met their dinner, never rushed
+/// it, or rushed it and missed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WhatTheHuntingCameTo {
+    /// A hungry hunter got its one roll in twenty and went looking.
+    pub went_looking: u64,
+    /// And had something in reach it would try for.
+    pub saw_something: u64,
+    /// And rushed it.
+    pub rushed: u64,
+    /// And it came off.
+    pub came_off: u64,
+}
+
+/// What passive hunting - working the assumed layers - came to.
+///
+/// The counterpart to [`WhatTheHuntingCameTo`], which counts rushes at
+/// animals that are records. Most of what most predators eat is here, and
+/// until it was counted there was no way to tell a country whose hunters
+/// were living off the ground from one whose hunters were starving on it.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct WhatPassiveHuntingCameTo {
+    /// Hunter-ticks spent working a piece of ground.
+    pub went_out: u64,
+    /// Head of the grazer layer - rabbits, squirrels - taken.
+    pub caught_grazers: u64,
+    /// And of the rodent layer.
+    pub caught_rodents: u64,
+    /// And out of the water.
+    #[serde(default)]
+    pub caught_fish: u64,
+}
+
+/// What carried the animals off, since the world opened.
+///
+/// A running tally rather than a state anything reads: when a country empties
+/// out the first question is what emptied it, and answering that by inference
+/// from head counts got it wrong twice. Old age looked like starvation because
+/// every animal in a new world was born on the same morning.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WhatCarriedThemOff {
+    /// Died of old age.
+    pub old_age: u64,
+    /// Starved.
+    pub starvation: u64,
+    /// Taken by something that eats.
+    pub taken: u64,
+}
+
+/// What a rush at one animal comes to - see
+/// [`AnimalManager::what_a_hunt_comes_to`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HuntOdds {
+    /// The chance the rush ends with the quarry hurt.
+    pub comes_off: f32,
+    /// What the quarry takes out of the hunter if it does not.
+    pub what_it_costs: f32,
+}
+
 /// Size classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AnimalSize {
@@ -159,6 +818,31 @@ pub enum AnimalSize {
     Medium,    // Deer, sheep
     Large,     // Bears, cattle
     Huge,      // Mammoths, elephants
+}
+
+impl AnimalSize {
+    /// How common a thing of this size is, against the others.
+    ///
+    /// A country holds a great many rabbits, a fair number of deer, and a few
+    /// cattle. Stocking a map by drawing evenly from the list of herbivores
+    /// says the opposite - that mammoths and rabbits are equally likely - and
+    /// on a small map, where there are only a handful of herds to deal out,
+    /// what came of it was a quarter of a square kilometre carrying cows, elk
+    /// and mammoths and not one rabbit or squirrel.
+    ///
+    /// That is not only odd to look at. Every predator below a wolf in this
+    /// registry lives on rabbits, squirrels and fish, so a country with no
+    /// small herbivores in it has nothing for a fox to eat, and the whole
+    /// middle of the chain goes missing from the map.
+    pub fn how_common_a_thing_this_size_is(&self) -> usize {
+        match self {
+            AnimalSize::Tiny => 16,
+            AnimalSize::Small => 8,
+            AnimalSize::Medium => 4,
+            AnimalSize::Large => 2,
+            AnimalSize::Huge => 1,
+        }
+    }
 }
 
 /// An animal species
@@ -178,6 +862,15 @@ pub struct AnimalSpecies {
     pub behavior: AnimalBehavior,
     pub diet: DietType,
     pub size: AnimalSize,
+
+    /// What one of them weighs, in kilograms.
+    ///
+    /// `size` is five buckets and answers "is this bigger than that"; mass
+    /// answers "how much of it is there", and the two are not the same
+    /// question. What an animal eats, and what it takes to bring one down,
+    /// follow mass - a cow and a mammoth are both above `AnimalSize::Large`
+    /// and one of them is ten times the other.
+    pub mass_kg: f32,
 
     /// Habitat
     pub primary_biomes: Vec<ClimateZone>,
@@ -253,13 +946,13 @@ pub struct AnimalProduct {
 /// Animal species database
 #[derive(Debug, Clone)]
 pub struct FaunaRegistry {
-    species: HashMap<String, AnimalSpecies>,
+    species: BTreeMap<String, AnimalSpecies>,
 }
 
 impl FaunaRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
-            species: HashMap::new(),
+            species: BTreeMap::new(),
         };
 
         registry.register_all_species();
@@ -289,6 +982,14 @@ impl FaunaRegistry {
     }
 
     fn register_all_species(&mut self) {
+        // The small predators, which live on the small life the map assumes
+        // rather than counts - see `what_the_small_life_gives`.
+        self.register(stoat());
+        self.register(kestrel());
+        self.register(kingfisher());
+        self.register(adder());
+        self.register(heron());
+
         // Tiny passive animals
         self.register(rabbit());
         self.register(squirrel());
@@ -355,6 +1056,194 @@ impl FaunaRegistry {
 // TINY PASSIVE ANIMALS
 // ============================================================================
 
+// ============================================================================
+// THE BOTTOM OF THE CHAIN
+//
+// Nothing lived here between the rabbit and the fox, and nothing bred fast
+// enough to be eaten. A country stocked itself with sixty-four reindeer and
+// thirty-four geese against nine rabbits and two squirrels, and the eighteen
+// predators it also stocked lived on the nine: they starved inside a year,
+// every time, and the food chain was over before it began.
+//
+// What was missing is the layer a wood actually runs on - the mice and voles
+// and small birds that breed in weeks rather than years - and the things that
+// live on those. See ISSUES_FOUND.md #137.
+// ============================================================================
+
+
+
+
+
+fn stoat() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "stoat".to_string(),
+        name: "Stoat".to_string(),
+        description: "Goes down the hole after what it is chasing".to_string(),
+        health: 8.0,
+        attack_damage: 4.0,
+        defense: 1.0,
+        speed: 1.7,
+        behavior: AnimalBehavior::Neutral,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Tiny,
+        mass_kg: 0.3,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Arctic],
+        group_size: (1, 2),
+        drops: vec![AnimalDrop::new("fur".to_string(), 1, 1)],
+        can_domesticate: false,
+        living_products: vec![],
+        lifespan: (3000, 5000),
+        maturity_age: 500,
+        breeding_cooldown: 800,
+        gestation_period: 300,
+        litter_size: (3, 6),
+        hunger_rate: 0.10,
+        max_hunger: 80.0,
+        food_value: 8.0,
+        // A stoat takes rabbits, and otherwise lives on what this world does
+        // not count.
+        prey_species: vec!["rabbit".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
+    }
+}
+
+fn kestrel() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "kestrel".to_string(),
+        name: "Kestrel".to_string(),
+        description: "Hangs over the rough ground waiting for a vole".to_string(),
+        health: 8.0,
+        attack_damage: 4.0,
+        defense: 1.0,
+        speed: 1.9,
+        behavior: AnimalBehavior::Neutral,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Tiny,
+        mass_kg: 0.2,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Desert],
+        group_size: (1, 2),
+        drops: vec![AnimalDrop::new("feathers".to_string(), 1, 2)],
+        can_domesticate: false,
+        living_products: vec![],
+        lifespan: (4000, 7000),
+        maturity_age: 600,
+        breeding_cooldown: 900,
+        gestation_period: 0,
+        litter_size: (3, 5),
+        hunger_rate: 0.10,
+        max_hunger: 80.0,
+        food_value: 8.0,
+        // Nothing a kestrel eats is a record in this world. An empty list is
+        // the honest statement of that, and it is what puts a species among
+        // the small predators - see `AnimalSpecies::where_it_sits`.
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
+    }
+}
+
+fn kingfisher() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "kingfisher".to_string(),
+        name: "Kingfisher".to_string(),
+        description: "A bird that lives off the water".to_string(),
+        health: 6.0,
+        attack_damage: 3.0,
+        defense: 1.0,
+        speed: 1.9,
+        behavior: AnimalBehavior::Neutral,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Tiny,
+        mass_kg: 0.05,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Tropical],
+        group_size: (1, 2),
+        drops: vec![AnimalDrop::new("feathers".to_string(), 1, 2)],
+        can_domesticate: false,
+        living_products: vec![],
+        lifespan: (3500, 6000),
+        maturity_age: 500,
+        breeding_cooldown: 900,
+        gestation_period: 0,
+        litter_size: (3, 6),
+        hunger_rate: 0.10,
+        max_hunger: 80.0,
+        food_value: 7.0,
+        prey_species: vec!["fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
+    }
+}
+
+fn adder() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "adder".to_string(),
+        name: "Adder".to_string(),
+        description: "Lies up in the sun and takes what comes past".to_string(),
+        health: 7.0,
+        attack_damage: 4.0,
+        defense: 1.0,
+        speed: 0.8,
+        behavior: AnimalBehavior::Defensive,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Tiny,
+        mass_kg: 0.15,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Desert],
+        group_size: (1, 2),
+        drops: vec![AnimalDrop::new("leather".to_string(), 1, 1)],
+        can_domesticate: false,
+        living_products: vec![],
+        lifespan: (5000, 9000),
+        maturity_age: 900,
+        breeding_cooldown: 1200,
+        gestation_period: 500,
+        litter_size: (4, 9),
+        hunger_rate: 0.05,
+        max_hunger: 90.0,
+        food_value: 7.0,
+        prey_species: vec![],
+        is_migratory: false,
+        migration_direction: (0, 0),
+    }
+}
+
+fn heron() -> AnimalSpecies {
+    AnimalSpecies {
+        id: "heron".to_string(),
+        name: "Heron".to_string(),
+        description: "Stands in the shallows for what swims past".to_string(),
+        health: 18.0,
+        attack_damage: 6.0,
+        defense: 1.0,
+        speed: 1.4,
+        behavior: AnimalBehavior::Neutral,
+        diet: DietType::Carnivore,
+        size: AnimalSize::Small,
+        mass_kg: 1.5,
+        primary_biomes: vec![ClimateZone::Temperate],
+        secondary_biomes: vec![ClimateZone::Tropical],
+        group_size: (1, 3),
+        drops: vec![AnimalDrop::new("feathers".to_string(), 2, 3)],
+        can_domesticate: false,
+        living_products: vec![],
+        lifespan: (8000, 14000),
+        maturity_age: 900,
+        breeding_cooldown: 1400,
+        gestation_period: 0,
+        litter_size: (2, 4),
+        hunger_rate: 0.08,
+        max_hunger: 110.0,
+        food_value: 14.0,
+        prey_species: vec!["fish".to_string()],
+        is_migratory: false,
+        migration_direction: (0, 0),
+    }
+}
+
 fn rabbit() -> AnimalSpecies {
     AnimalSpecies {
         id: "rabbit".to_string(),
@@ -367,6 +1256,7 @@ fn rabbit() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Tiny,
+        mass_kg: 2.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Desert],
         group_size: (1, 3),
@@ -404,6 +1294,7 @@ fn squirrel() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Tiny,
+        mass_kg: 0.5,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 1),
@@ -439,6 +1330,7 @@ fn chicken() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Omnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 2.5,
         primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Tropical],
         secondary_biomes: vec![],
         group_size: (3, 8),
@@ -484,6 +1376,7 @@ fn fox() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 7.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 2),
@@ -520,6 +1413,7 @@ fn wolf() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 40.0,
         primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (3, 7),
@@ -561,6 +1455,7 @@ fn deer() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
+        mass_kg: 70.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (2, 6),
@@ -597,6 +1492,7 @@ fn sheep() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
+        mass_kg: 60.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![],
         group_size: (4, 12),
@@ -639,6 +1535,7 @@ fn goat() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
+        mass_kg: 50.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Desert],
         group_size: (3, 8),
@@ -685,6 +1582,7 @@ fn boar() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Omnivore,
         size: AnimalSize::Medium,
+        mass_kg: 80.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (1, 4),
@@ -719,9 +1617,15 @@ fn cow() -> AnimalSpecies {
         attack_damage: 8.0,
         defense: 3.0,
         speed: 0.9,
-        behavior: AnimalBehavior::Passive,
+        // Defensive, not Passive. Six hundred kilogrammes of cattle is
+        // not something a wolf walks up to, and a herd of them is not
+        // something a lone wolf touches at all. Temperament is now read
+        // when an animal decides whether to run or turn round, so
+        // Passive here would have meant a cow that stands and takes it.
+        behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Large,
+        mass_kg: 600.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (2, 8),
@@ -768,6 +1672,7 @@ fn bear() -> AnimalSpecies {
         behavior: AnimalBehavior::Territorial,
         diet: DietType::Omnivore,
         size: AnimalSize::Large,
+        mass_kg: 300.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 1),
@@ -806,6 +1711,7 @@ fn lion() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Large,
+        mass_kg: 190.0,
         primary_biomes: vec![ClimateZone::Desert],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (3, 8),
@@ -847,6 +1753,7 @@ fn arctic_fox() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 4.0,
         primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (1, 2),
@@ -883,6 +1790,7 @@ fn camel() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Large,
+        mass_kg: 500.0,
         primary_biomes: vec![ClimateZone::Desert],
         secondary_biomes: vec![],
         group_size: (2, 6),
@@ -926,6 +1834,7 @@ fn mammoth() -> AnimalSpecies {
         behavior: AnimalBehavior::Territorial,
         diet: DietType::Herbivore,
         size: AnimalSize::Huge,
+        mass_kg: 6000.0,
         primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (2, 8),
@@ -968,6 +1877,7 @@ fn duck() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Omnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 1.2,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (4, 10),
@@ -1009,6 +1919,7 @@ fn goose() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Tiny,
+        mass_kg: 4.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![],
         group_size: (5, 12),
@@ -1050,6 +1961,7 @@ fn pig() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Omnivore,
         size: AnimalSize::Medium,
+        mass_kg: 100.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (3, 8),
@@ -1089,6 +2001,7 @@ fn crow() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Omnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 0.5,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Desert, ClimateZone::Arctic],
         group_size: (3, 15),
@@ -1124,6 +2037,7 @@ fn eagle() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 5.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Desert, ClimateZone::Arctic],
         group_size: (1, 2),
@@ -1160,6 +2074,7 @@ fn hawk() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 1.0,
         primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Desert],
         secondary_biomes: vec![],
         group_size: (1, 2),
@@ -1195,6 +2110,7 @@ fn owl() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 1.5,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (1, 1),
@@ -1230,6 +2146,7 @@ fn parrot() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Omnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 1.0,
         primary_biomes: vec![ClimateZone::Tropical],
         secondary_biomes: vec![],
         group_size: (2, 8),
@@ -1269,6 +2186,7 @@ fn snake() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 1.0,
         primary_biomes: vec![ClimateZone::Desert, ClimateZone::Tropical],
         secondary_biomes: vec![ClimateZone::Temperate],
         group_size: (1, 1),
@@ -1305,6 +2223,7 @@ fn tiger() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Large,
+        mass_kg: 220.0,
         primary_biomes: vec![ClimateZone::Tropical],
         secondary_biomes: vec![ClimateZone::Temperate],
         group_size: (1, 1),
@@ -1342,6 +2261,7 @@ fn crocodile() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Large,
+        mass_kg: 400.0,
         primary_biomes: vec![ClimateZone::Tropical],
         secondary_biomes: vec![ClimateZone::Desert],
         group_size: (1, 3),
@@ -1379,6 +2299,7 @@ fn polar_bear() -> AnimalSpecies {
         behavior: AnimalBehavior::Aggressive,
         diet: DietType::Carnivore,
         size: AnimalSize::Large,
+        mass_kg: 450.0,
         primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (1, 1),
@@ -1420,6 +2341,7 @@ fn elk_animal() -> AnimalSpecies {
         behavior: AnimalBehavior::Defensive,
         diet: DietType::Herbivore,
         size: AnimalSize::Large,
+        mass_kg: 350.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (3, 10),
@@ -1456,6 +2378,7 @@ fn reindeer_animal() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Herbivore,
         size: AnimalSize::Medium,
+        mass_kg: 120.0,
         primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (5, 20),
@@ -1497,6 +2420,7 @@ fn monkey() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Omnivore,
         size: AnimalSize::Small,
+        mass_kg: 8.0,
         primary_biomes: vec![ClimateZone::Tropical],
         secondary_biomes: vec![],
         group_size: (5, 15),
@@ -1536,6 +2460,7 @@ fn fish() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Carnivore,
         size: AnimalSize::Tiny,
+        mass_kg: 2.0,
         primary_biomes: vec![ClimateZone::Temperate, ClimateZone::Tropical],
         secondary_biomes: vec![ClimateZone::Arctic],
         group_size: (10, 50),
@@ -1570,6 +2495,7 @@ fn otter() -> AnimalSpecies {
         behavior: AnimalBehavior::Neutral,
         diet: DietType::Carnivore,
         size: AnimalSize::Small,
+        mass_kg: 10.0,
         primary_biomes: vec![ClimateZone::Temperate],
         secondary_biomes: vec![ClimateZone::Tropical],
         group_size: (2, 6),
@@ -1605,6 +2531,7 @@ fn seal() -> AnimalSpecies {
         behavior: AnimalBehavior::Passive,
         diet: DietType::Carnivore,
         size: AnimalSize::Medium,
+        mass_kg: 150.0,
         primary_biomes: vec![ClimateZone::Arctic],
         secondary_biomes: vec![],
         group_size: (3, 12),
@@ -1704,7 +2631,25 @@ pub struct Animal {
     pub is_starving: bool,  // Taking starvation damage
 
     /// Living product timers
-    pub product_timers: HashMap<String, u32>, // material_id -> ticks until production
+    pub product_timers: BTreeMap<String, u32>, // material_id -> ticks until production
+
+    /// How much is on this one, and whether it reckons it could face it.
+    ///
+    /// The same two numbers an agent carries in `core::Surroundings`, off the
+    /// same `ThreatAssessment`, so that there is one model of fear and anger
+    /// in this project rather than one for people and another for beasts.
+    /// Animals had neither: `update_animal_behavior_with_hunger` was a set of
+    /// dice keyed on `AnimalBehavior` and nothing else, so a deer with a wolf
+    /// standing over it did exactly what a deer alone in a meadow did.
+    #[serde(default)]
+    pub what_is_on_me: f32,
+    #[serde(default)]
+    pub could_face_it: bool,
+    /// And where it is, which is what there is to run from or turn on.
+    #[serde(default)]
+    pub what_is_on_me_from: Option<(i32, i32)>,
+    #[serde(default)]
+    pub what_is_on_me_id: Option<Uuid>,
 }
 
 impl Animal {
@@ -1712,7 +2657,7 @@ impl Animal {
         use rand::Rng;
         let mut rng = crate::core::dice::roll();
 
-        let mut product_timers = HashMap::new();
+        let mut product_timers = BTreeMap::new();
         for product in &species.living_products {
             product_timers.insert(product.material_id.clone(), product.production_time);
         }
@@ -1721,7 +2666,7 @@ impl Animal {
         let max_lifespan = rng.gen_range(species.lifespan.0..=species.lifespan.1);
 
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             species_id,
             position,
             facing: 0.0,
@@ -1748,6 +2693,10 @@ impl Animal {
             hunger_rate: species.hunger_rate,
             is_starving: false,
             product_timers,
+            what_is_on_me: 0.0,
+            could_face_it: false,
+            what_is_on_me_from: None,
+            what_is_on_me_id: None,
         }
     }
 
@@ -1892,11 +2841,22 @@ impl Animal {
 
     /// Increase hunger by the animal's hunger rate
     pub fn tick_hunger(&mut self) {
+        self.tick_hunger_burning(1.0);
+    }
+
+    /// The same, for a beast that is burning some share of its ordinary rate.
+    ///
+    /// The share is one number and it comes from one place -
+    /// `what_a_winter_costs` - so that "this animal is lying up" is a fact
+    /// about where it is standing and what sort it is, rather than a flag
+    /// somebody has to remember to set and clear.
+    pub fn tick_hunger_burning(&mut self, share_of_its_rate: f32) {
         if !self.is_alive() {
             return;
         }
 
-        self.hunger = (self.hunger + self.hunger_rate).min(self.max_hunger * 1.5);
+        self.hunger =
+            (self.hunger + self.hunger_rate * share_of_its_rate).min(self.max_hunger * 1.5);
 
         // Check starvation threshold
         if self.hunger >= self.max_hunger {
@@ -1939,9 +2899,103 @@ impl Animal {
         self.hunger > self.max_hunger * 0.15
     }
 
+    /// How much of an animal's speed a wound takes off it.
+    ///
+    /// "An injured animal should be slower than a healthier animal." At this
+    /// figure a beast on its last legs moves at a third of its pace and one
+    /// at half health at two thirds, which is what makes a wound worth
+    /// something after the rush that caused it: a hurt deer is a deer the
+    /// pack comes back for.
+    pub const WHAT_A_WOUND_TAKES_OFF_ITS_PACE: f32 = 0.7;
+
+    /// What a newborn has of a grown animal's pace.
+    ///
+    /// Not nought - a lamb runs the day it is born, and everything in this
+    /// model that is worth modelling about a calf is that it runs *worse*
+    /// than its mother.
+    pub const WHAT_A_NEWBORN_CAN_MANAGE: f32 = 0.5;
+
+    /// How far through its life an animal starts to slow.
+    pub const WHEN_IT_STARTS_TO_SLOW: f32 = 0.6;
+
+    /// And what is left of its pace at the very end of it.
+    ///
+    /// "Older animals should also slow down, making them easier to catch or
+    /// making it harder for them to hunt." Both halves fall out of one
+    /// number, because the same figure is read for the hunter and for the
+    /// quarry: an old wolf is worse at catching a deer and an old deer is
+    /// easier for a wolf to catch, and neither needed writing down twice.
+    pub const WHAT_AN_OLD_ONE_HAS_LEFT: f32 = 0.55;
+
     /// Get health percentage
     pub fn health_percentage(&self) -> f32 {
         self.current_health / self.max_health
+    }
+
+    /// How far this one covers in a tick, going flat out.
+    ///
+    /// **Nothing in this model moved at its own speed.** `speed` was read by
+    /// the rush and by nothing else, so every animal alive - a wolf at 1.7, a
+    /// sheep at 1.0, a crocodile at 0.9 - crossed exactly two cells a tick
+    /// when it fled and exactly two when it stalked. A wolf could therefore
+    /// never close on a fleeing sheep: measured on fourteen wolves standing
+    /// over two sheep, the sheep ran and the gap went 1, 5, 9, 15, 21, 35
+    /// cells and stayed there, with not one rush in a whole day. "A wolf
+    /// should be faster than a sheep" is about this before it is about the
+    /// odds of the rush.
+    ///
+    /// Off the same figure the rush reads, so an old or hurt animal is
+    /// slower here too and there are not two answers to how fast it is.
+    pub fn how_far_it_gets_in_a_tick(&self, species: &AnimalSpecies) -> i32 {
+        /// What a pace of one covers, which is what everything covered
+        /// before: twenty metres a tick, or a couple of kilometres a day.
+        const WHAT_A_PACE_OF_ONE_COVERS: f32 = 2.0;
+
+        let going = species.speed * self.how_fast_it_still_is() * WHAT_A_PACE_OF_ONE_COVERS;
+        (going.round() as i32).max(1)
+    }
+
+    /// How much of its own kind's pace this animal still has.
+    ///
+    /// The species carries a `speed` and every animal of it moved at that
+    /// speed for its whole life, whole or half dead, three days old or
+    /// twenty years. This is the difference between them, and it is one
+    /// number read from both ends of a hunt: it makes an old or hurt animal
+    /// easier to catch and, applied to the hunter, worse at catching.
+    ///
+    /// Youth and age are one curve with a flat middle - up from
+    /// `WHAT_A_NEWBORN_CAN_MANAGE` to full pace at maturity, level until
+    /// `WHEN_IT_STARTS_TO_SLOW` of its life is gone, then down to
+    /// `WHAT_AN_OLD_ONE_HAS_LEFT`. A wound multiplies whatever that comes
+    /// to, so an old deer with a leg torn is very catchable indeed, which is
+    /// the animal a wolf pack actually takes.
+    pub fn how_fast_it_still_is(&self) -> f32 {
+        let grown = if self.maturity_age > 0 && self.age < self.maturity_age {
+            Self::WHAT_A_NEWBORN_CAN_MANAGE
+                + (1.0 - Self::WHAT_A_NEWBORN_CAN_MANAGE)
+                    * (self.age as f32 / self.maturity_age as f32)
+        } else {
+            1.0
+        };
+
+        let old = if self.max_lifespan == 0 {
+            1.0
+        } else {
+            let through = self.age as f32 / self.max_lifespan as f32;
+            if through <= Self::WHEN_IT_STARTS_TO_SLOW {
+                1.0
+            } else {
+                let down = (through - Self::WHEN_IT_STARTS_TO_SLOW)
+                    / (1.0 - Self::WHEN_IT_STARTS_TO_SLOW);
+                1.0 - down.clamp(0.0, 1.0) * (1.0 - Self::WHAT_AN_OLD_ONE_HAS_LEFT)
+            }
+        };
+
+        let hurt = 1.0
+            - (1.0 - self.health_percentage().clamp(0.0, 1.0))
+                * Self::WHAT_A_WOUND_TAKES_OFF_ITS_PACE;
+
+        (grown.min(old) * hurt).clamp(0.05, 1.0)
     }
 
     /// Get stamina percentage
@@ -1958,7 +3012,17 @@ impl Animal {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimalManager {
     animals: Vec<Animal>,
-    groups: HashMap<Uuid, Vec<Uuid>>, // Group ID -> Animal IDs
+
+    /// What the grazers have taken off the map altogether, for measuring.
+    #[serde(default)]
+    forage_taken: f64,
+    /// How many animal-passes ended in a mouthful, and how many tried.
+    #[serde(default)]
+    mouths_fed: u64,
+    #[serde(default)]
+    mouths_that_tried: u64,
+
+    groups: BTreeMap<Uuid, Vec<Uuid>>, // Group ID -> Animal IDs
 
     /// Spawning parameters
     spawn_rate: f32, // Chance per tick to spawn
@@ -1967,7 +3031,7 @@ pub struct AnimalManager {
     /// The most of each species this world has ever held, which is what a
     /// depleted population is judged against
     #[serde(default)]
-    peak_population: HashMap<String, u32>,
+    peak_population: BTreeMap<String, u32>,
 
     /// Size of the map, so animals wandering in from outside know where the
     /// edge is
@@ -1981,16 +3045,49 @@ pub struct AnimalManager {
     /// Reference to fauna registry (not serialized)
     #[serde(skip)]
     registry: Option<FaunaRegistry>,
+
+    /// What carried the dead off, a species at a time - see
+    /// [`WhatCarriedThemOff`]. Summed by `what_carried_them_off`, so the
+    /// total and the breakdown cannot disagree.
+    #[serde(default, skip)]
+    pub carried_off: BTreeMap<String, WhatCarriedThemOff>,
+
+    /// See [`WhatTheHuntingCameTo`].
+    #[serde(default, skip)]
+    pub hunting: WhatTheHuntingCameTo,
+
+    /// And what working the assumed layers came to - see
+    /// [`WhatPassiveHuntingCameTo`].
+    #[serde(default)]
+    pub passive: WhatPassiveHuntingCameTo,
+
+    /// What each hunting ground grows, how much of it is water, and what
+    /// climate most of it is in, surveyed once - see `survey_the_grounds`.
+    #[serde(default)]
+    how_rich_each_ground_is: BTreeMap<(i32, i32), WhatThisGroundGrows>,
+
+    /// The lower tiers of the food web, as a population rather than as
+    /// records - see [`crate::environment::SmallLife`].
+    #[serde(default)]
+    pub small_life: crate::environment::SmallLife,
 }
 
 impl AnimalManager {
     pub fn new(max_population: usize) -> Self {
         Self {
             animals: Vec::new(),
-            groups: HashMap::new(),
+            forage_taken: 0.0,
+            mouths_fed: 0,
+            mouths_that_tried: 0,
+            carried_off: BTreeMap::new(),
+            hunting: WhatTheHuntingCameTo::default(),
+            small_life: crate::environment::SmallLife::default(),
+            passive: WhatPassiveHuntingCameTo::default(),
+            how_rich_each_ground_is: BTreeMap::new(),
+            groups: BTreeMap::new(),
             spawn_rate: 0.001, // 0.1% chance per tick
             max_population,
-            peak_population: HashMap::new(),
+            peak_population: BTreeMap::new(),
             world_bounds: None,
             ticks_since_migration: 0,
             registry: Some(FaunaRegistry::new()),
@@ -1999,7 +3096,7 @@ impl AnimalManager {
 
     /// Spawn an animal at a position
     pub fn spawn_animal(&mut self, species_id: String, position: (i32, i32)) -> Option<Uuid> {
-        if self.animals.len() >= self.max_population {
+        if self.how_many_are_alive() >= self.max_population {
             return None;
         }
 
@@ -2011,22 +3108,45 @@ impl AnimalManager {
     }
 
     /// Spawn a herd/pack of animals
+    /// Put a group of one species on the map.
+    ///
+    /// Whether there is room for them is the caller's question, not this
+    /// one's - `process_breeding`, `spawn_initial_population` and
+    /// `process_immigration` each ask it before they get here, and each means
+    /// something slightly different by it. This used to ask again on its own
+    /// account, which quietly overrode the one caller that had a reason to
+    /// say yes: a species that is *gone* is let back into a full map on
+    /// purpose - see `process_immigration` - and every one of its arrivals
+    /// was refused here.
     pub fn spawn_group(&mut self, species_id: String, center: (i32, i32), count: u32) -> Option<Uuid> {
-        let group_id = Uuid::new_v4();
+        let group_id = crate::core::dice::name();
         let mut members = Vec::new();
 
         let species = self.registry.as_ref()?.get(&species_id)?;
 
         for i in 0..count {
-            if self.animals.len() >= self.max_population {
-                break;
-            }
-
-            // Spawn in a circle around center
-            let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
-            let radius = 3.0;
-            let x = center.0 + (angle.cos() * radius) as i32;
-            let y = center.1 + (angle.sin() * radius) as i32;
+            // The first one goes where it was sent, and the rest stand round
+            // it.
+            //
+            // **Every one of them used to be put on a circle of radius three
+            // and not one on the middle**, which quietly threw away the whole
+            // of the work that chose the place. A hunter's ground is picked
+            // for having cover it can feed on, and forest is seven per cent
+            // of a map and patchy, so three cells off it is very nearly a
+            // tile drawn at random: the terrain under a newly placed kestrel
+            // came out at exactly the map's own terrain proportions - two
+            // fifths of them on bare mountain - though every position chosen
+            // for them was forest, wetland or salt marsh.
+            let (x, y) = if i == 0 {
+                center
+            } else {
+                let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
+                let radius = 1.0;
+                (
+                    center.0 + (angle.cos() * radius).round() as i32,
+                    center.1 + (angle.sin() * radius).round() as i32,
+                )
+            };
 
             let mut animal = Animal::new(species_id.clone(), (x, y), species);
             animal.group_id = Some(group_id);
@@ -2044,8 +3164,63 @@ impl AnimalManager {
     }
 
     /// Get all animals
+    /// What the grazers have taken off the map, how many animal-passes ended
+    /// in a mouthful, and how many looked. For measuring only.
+    /// What carried the dead off - see [`WhatCarriedThemOff`].
+    pub fn what_carried_them_off(&self) -> WhatCarriedThemOff {
+        let mut all = WhatCarriedThemOff::default();
+        for one in self.carried_off.values() {
+            all.old_age += one.old_age;
+            all.starvation += one.starvation;
+            all.taken += one.taken;
+        }
+        all
+    }
+
+    /// And the same for one species, which is how a tier that will not hold
+    /// is told apart from a tier nothing is eating.
+    pub fn what_carried_off(&self, species_id: &str) -> WhatCarriedThemOff {
+        self.carried_off.get(species_id).copied().unwrap_or_default()
+    }
+
+    pub fn what_the_grazing_came_to(&self) -> (f64, u64, u64) {
+        (self.forage_taken, self.mouths_fed, self.mouths_that_tried)
+    }
+
     pub fn get_all(&self) -> &Vec<Animal> {
         &self.animals
+    }
+
+    /// How many animals this world actually holds.
+    ///
+    /// Not `self.animals.len()`, which is how many animal *records* exist -
+    /// and every one of those checks was asking the wrong question, because
+    /// nothing ever took a dead animal out of the list. Measured on a world
+    /// with nobody in it at all, twenty years in: **898 records of which 9.8
+    /// were alive**. The corpses filled `max_population`, so nothing could be
+    /// born and nothing could migrate in, the boom cohort aged out together,
+    /// and **seventeen of twenty species were extinct in every world**. A map
+    /// with no people on it emptied itself of animals.
+    ///
+    /// One owner, because the cap is asked about in seven places and all
+    /// seven meant the living. See ISSUES_FOUND.md #127.
+    pub fn how_many_are_alive(&self) -> usize {
+        self.animals.iter().filter(|animal| animal.is_alive()).count()
+    }
+
+    /// Take the dead off the map.
+    ///
+    /// A body is read exactly once, in the tick it falls: whatever killed it
+    /// looks at it there and then - a predator to feed, a hunter to butcher -
+    /// and nothing wants it afterwards. Leaving them in the list made the
+    /// world's animal population a tally of everything that had ever lived in
+    /// it.
+    ///
+    /// If something is one day wanted that eats what nobody stood over - see
+    /// the open note on a kill left lying - it will want the bodies kept for
+    /// a while, and this is where that would go.
+    fn bury_the_dead(&mut self) {
+        self.animals.retain(|animal| animal.is_alive());
     }
 
     /// All animals, mutably
@@ -2084,141 +3259,78 @@ impl AnimalManager {
             .collect()
     }
 
-    /// Get animals of a specific species
-    pub fn get_by_species(&self, species_id: &str) -> Vec<&Animal> {
-        self.animals.iter()
-            .filter(|a| a.species_id == species_id && a.is_alive())
-            .collect()
-    }
 
-    /// Get domesticated animals owned by an agent
-    pub fn get_owned_by(&self, owner_id: &Uuid) -> Vec<&Animal> {
-        self.animals.iter()
-            .filter(|a| a.owner_id == Some(*owner_id) && a.is_alive())
-            .collect()
-    }
 
     /// Get species from registry
     pub fn get_species(&self, species_id: &str) -> Option<&AnimalSpecies> {
         self.registry.as_ref()?.get(species_id)
     }
 
-    /// Remove dead animals
-    pub fn remove_dead(&mut self) {
-        self.animals.retain(|a| a.is_alive());
-    }
 
-    /// Kill an animal and generate drops based on its species
-    /// Returns a list of (material_id, quantity) tuples representing the drops
-    pub fn kill_animal(&mut self, animal_id: &Uuid) -> Vec<(String, u32)> {
-        use rand::Rng;
-        let mut rng = crate::core::dice::roll();
-        let mut drops = Vec::new();
 
-        // Find the animal and get its species
-        let species_id = {
-            if let Some(animal) = self.animals.iter_mut().find(|a| a.id == *animal_id) {
-                if !animal.is_alive() {
-                    return drops; // Already dead
-                }
-                animal.state = AnimalState::Dead;
-                animal.current_health = 0.0;
-                animal.species_id.clone()
-            } else {
-                return drops;
-            }
-        };
 
-        // Get the species drops
-        if let Some(registry) = &self.registry {
-            if let Some(species) = registry.get(&species_id) {
-                for drop in &species.drops {
-                    // Check drop chance
-                    if rng.gen::<f32>() <= drop.drop_chance {
-                        let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
-                        drops.push((drop.material_id.clone(), quantity));
-                    }
-                }
-            }
-        }
-
-        drops
-    }
-
-    /// Get the drops that would result from hunting a specific animal
-    /// Does not actually kill the animal, just calculates expected drops
-    pub fn get_potential_drops(&self, animal_id: &Uuid) -> Vec<(String, u32, u32)> {
-        let mut potential_drops = Vec::new();
-
-        if let Some(animal) = self.animals.iter().find(|a| a.id == *animal_id) {
-            if let Some(registry) = &self.registry {
-                if let Some(species) = registry.get(&animal.species_id) {
-                    for drop in &species.drops {
-                        potential_drops.push((
-                            drop.material_id.clone(),
-                            drop.min_quantity,
-                            drop.max_quantity,
-                        ));
-                    }
-                }
-            }
-        }
-
-        potential_drops
-    }
-
-    /// Harvest living products from domesticated animals
-    /// Returns a map of animal_id -> list of (material_id, quantity) produced
-    pub fn harvest_living_products(&mut self) -> HashMap<Uuid, Vec<(String, u32)>> {
-        let mut products = HashMap::new();
-
-        let registry = match &self.registry {
-            Some(r) => r,
-            None => return products,
-        };
-
-        for animal in &mut self.animals {
-            if !animal.is_alive() || !animal.is_mature() {
-                continue;
-            }
-
-            // Only domesticated animals produce regular products
-            if !animal.is_domesticated {
-                continue;
-            }
-
-            if let Some(species) = registry.get(&animal.species_id) {
-                let produced = animal.tick_products();
-
-                // Match product names with species living_products to get correct quantities
-                let mut animal_products = Vec::new();
-                for (material_id, _) in produced {
-                    if let Some(product_info) = species.living_products.iter()
-                        .find(|p| p.material_id == material_id)
-                    {
-                        animal_products.push((material_id, product_info.quantity));
-                    } else {
-                        animal_products.push((material_id, 1)); // Default quantity
-                    }
-                }
-
-                if !animal_products.is_empty() {
-                    products.insert(animal.id, animal_products);
-                }
-            }
-        }
-
-        products
-    }
 
     /// Tick all animals (age, products, natural healing, AI behaviors, lifecycle)
-    pub fn tick(&mut self) {
+    /// A tick of everything with legs, in the world it is standing in.
+    ///
+    /// It took nothing before, which is how grazing came to feed every animal
+    /// out of thin air: there was no ground and no vegetation to take from,
+    /// so what a mouthful was worth came down to a headcount per patch
+    /// standing in for the food that should have been doing the work. What
+    /// sets the size of a herd now is what is growing where it is standing.
+    /// `grazing_ticks` is how many ticks of feeding this pass stands for, and
+    /// nought means "not this tick". Grazing runs on the same ten-tick
+    /// cadence the vegetation does, because it has to look up what is growing
+    /// on each tile and building that lookup is a pass over every plant in the
+    /// world - eighty thousand of them on a hundred square kilometres, which
+    /// at every tick was three-quarters of what a tick cost. It also has to be
+    /// the *same* pass, because the lookup holds indices into the plant list
+    /// and that list is rebuilt whenever anything dies.
+    pub fn tick_in_world(
+        &mut self,
+        grid: &mut crate::world::Grid,
+        plants: &mut crate::environment::PlantManager,
+        grazing_ticks: f32,
+        weather: GrazingWeather,
+    ) {
         if self.registry.is_none() {
             return;
         }
 
+        // What each beast is paying to get through this tick, which in
+        // winter is not the same for all of them - see `what_a_winter_costs`.
+        //
+        // Worked out in a read-only pass and only in winter, because it wants
+        // the registry and the ground under each animal and the loop below
+        // holds them all mutably. Three seasons in four this is an empty
+        // vector and a season comparison.
+        let burning: Vec<f32> = if weather.season == crate::environment::Season::Winter {
+            let registry = self.registry.as_ref();
+            self.animals
+                .iter()
+                .map(|animal| {
+                    let Some(species) =
+                        registry.and_then(|r| r.get(&animal.species_id))
+                    else {
+                        return 1.0;
+                    };
+                    let ground = grid
+                        .get_tile(&crate::world::Position::new(
+                            animal.position.0,
+                            animal.position.1,
+                        ))
+                        .map(|tile| what_this_ground_offers(tile.terrain.terrain_type))
+                        .unwrap_or_else(|| what_this_ground_offers(TerrainType::Plains));
+                    Self::what_a_winter_costs(species, ground, weather.season)
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         // First pass: basic updates and lifecycle
         let mut deaths_from_age = Vec::new();
+        let mut starved: Vec<String> = Vec::new();
         for (idx, animal) in self.animals.iter_mut().enumerate() {
             if !animal.is_alive() {
                 continue;
@@ -2234,7 +3346,11 @@ impl AnimalManager {
             }
 
             // Hunger system
-            animal.tick_hunger();
+            let stood_up_to_it = animal.is_alive();
+            animal.tick_hunger_burning(burning.get(idx).copied().unwrap_or(1.0));
+            if stood_up_to_it && !animal.is_alive() {
+                starved.push(animal.species_id.clone());
+            }
 
             // Natural stamina recovery when resting
             if animal.state == AnimalState::Resting {
@@ -2244,9 +3360,18 @@ impl AnimalManager {
                 animal.use_stamina(0.1);
             }
 
-            // Slow natural healing (if not starving)
+            // Mending, which is slow and is a share of the animal rather
+            // than a fixed amount.
+            //
+            // **It was a flat tenth of a point a tick for everything alive.**
+            // Health runs from five on a fish to three hundred on a mammoth,
+            // sixty-fold, so one absolute rate meant a fish mended a quarter
+            // of itself in a day and a mammoth four thousandths - and neither
+            // number was ever chosen. What a wound costs an animal has to be
+            // read against the animal, or the same blow is a scratch to one
+            // sort and a season to another for no reason but the units.
             if animal.current_health < animal.max_health && !animal.is_starving {
-                animal.heal(0.1);
+                animal.heal(animal.max_health * Self::HOW_MUCH_OF_ITSELF_IT_MENDS_A_TICK);
             }
 
             // Tick products
@@ -2260,10 +3385,17 @@ impl AnimalManager {
 
         // Kill animals that died of old age
         for idx in deaths_from_age.iter().rev() {
-            if let Some(animal) = self.animals.get_mut(*idx) {
-                animal.state = AnimalState::Dead;
-                animal.current_health = 0.0;
-            }
+            let Some(animal) = self.animals.get_mut(*idx) else {
+                continue;
+            };
+            animal.state = AnimalState::Dead;
+            animal.current_health = 0.0;
+            let which = animal.species_id.clone();
+            self.carried_off.entry(which).or_default().old_age += 1;
+        }
+
+        for which in starved {
+            self.carried_off.entry(which).or_default().starvation += 1;
         }
 
         // Second pass: Births (process pregnant animals ready to give birth)
@@ -2273,14 +3405,35 @@ impl AnimalManager {
         self.process_breeding();
 
         // Fourth pass: Predator hunting
-        self.process_predation();
+        // Bring the lower tiers on before anything draws from them.
+        self.tick_the_small_life(grid, weather.season);
+
+        // And let the herds and the packs close up, before anything asks who
+        // is standing with whom.
+        if weather.now % Self::HOW_OFTEN_A_BEAST_LOOKS_FOR_ITS_OWN == 0 {
+            self.they_keep_together(grid);
+        }
+
+        self.process_predation(grid);
 
         // Animals from beyond the edge of the map, for species that have been
         // wiped out or hunted down to nothing here
         self.process_immigration();
 
-        // Fifth pass: Herbivore feeding (grazing reduces hunger)
-        self.process_grazing();
+        // Fifth pass: Herbivore feeding - what is taken off the ground, and
+        // what goes back onto it
+        self.what_the_grazers_took(grid, plants, grazing_ticks, weather);
+
+        // What each of them is facing, before any of them acts on it.
+        //
+        // Not every tick. A hunt reaches eight cells and a hunter covers a
+        // cell or two in a tick, so a reading four ticks old is a reading of
+        // very nearly the same field; the readings persist between passes
+        // rather than being cleared, so nothing goes blind in between.
+        const HOW_OFTEN_A_BEAST_LOOKS_UP: u32 = 4;
+        if weather.now % HOW_OFTEN_A_BEAST_LOOKS_UP == 0 {
+            self.what_each_animal_is_facing();
+        }
 
         // Sixth pass: AI behavior (needs fresh registry borrow)
         let animals_data: Vec<(usize, String, AnimalBehavior, bool, bool)> = {
@@ -2302,6 +3455,10 @@ impl AnimalManager {
         for (idx, _species_id, behavior, is_wild, is_hungry) in animals_data {
             self.update_animal_behavior_with_hunger(idx, behavior, is_wild, is_hungry);
         }
+
+        // And what died this pass goes off the map. Everything that wanted to
+        // look at a body has looked at it by now.
+        self.bury_the_dead();
     }
 
     /// What a wild animal does about people.
@@ -2413,7 +3570,7 @@ impl AnimalManager {
             .filter(|a| a.is_alive() && a.ready_to_give_birth())
             .filter_map(|a| {
                 let species = registry.get(&a.species_id)?;
-                let litter_size = rng.gen_range(species.litter_size.0..=species.litter_size.1);
+                let litter_size = Self::how_many_come_through(species, &mut rng);
 
                 // Complete birth
                 a.give_birth();
@@ -2432,7 +3589,7 @@ impl AnimalManager {
         for (species_id, position, group_id, litter_size, _cooldown) in births {
             if let Some(species) = registry.get(&species_id) {
                 for _ in 0..litter_size {
-                    if self.animals.len() >= self.max_population {
+                    if self.how_many_are_alive() >= self.max_population {
                         break;
                     }
 
@@ -2463,119 +3620,514 @@ impl AnimalManager {
             None => return,
         };
 
-        // Only attempt breeding occasionally (not every tick)
-        if rng.gen::<f32>() > 0.01 {
-            return;
-        }
-
-        // How many mouths are already on each patch of ground.
+        // What decides whether the land will carry another is whether the
+        // animals already on it are fed, and `can_breed` is where that is
+        // asked - it wants hunger under two-fifths of what the animal can
+        // stand. Since grazing takes real forage off real plants, a herd that
+        // has eaten its ground bare is a hungry herd and a hungry herd does
+        // not breed, so carrying capacity comes out of the grass.
         //
-        // Animals breed when the land around them will carry another. Without
-        // this a herd has no size it stops at: grazing feeds every animal
-        // nearly a hundred times what it burns, so hunger never becomes the
-        // limit, and herds grew until they hit the hard population cap however
-        // little ground they were on.
-        let mut crowding: HashMap<(i32, i32), u32> = HashMap::new();
-        for animal in &self.animals {
-            if animal.is_alive() {
-                *crowding
-                    .entry((animal.position.0 / GRAZING_PATCH, animal.position.1 / GRAZING_PATCH))
-                    .or_insert(0) += 1;
-            }
-        }
+        // There used to be a headcount of mouths per six-by-six patch here,
+        // with a hard ceiling on it, standing in for exactly that. It had to
+        // be there while grazing fed every animal out of thin air; it is a
+        // second answer to a question the food now answers, and two answers to
+        // one question is how they drift.
+        //
+        // **What is bred is proportional to what is breeding.** This whole
+        // pass used to sit behind one roll in a hundred for the world, and
+        // then to `break` after a single pregnancy per species - so three
+        // rabbits and three thousand rabbits recruited at exactly the same
+        // absolute rate, about forty litters a species a year however many
+        // there were of it. Predation does not work like that: every predator
+        // hunts on its own account, so what is taken rises with the herd and
+        // what is born did not. That is the arithmetic behind a country
+        // eating itself out, and it is not a balance that could be tuned - a
+        // constant birth rate against a proportional death rate has one
+        // outcome whatever the constants are.
+        //
+        // Now every animal that is fit to breed and has a mate by it takes
+        // its own chance. What paces a species is its own cooldown and
+        // gestation, which is where that belongs, and what stops it is the
+        // grass.
+        const WHAT_A_PAIR_COMES_TO_IN_A_TICK: f32 = 0.05;
 
-        // Find breeding candidates by species
-        let mut breeding_candidates: HashMap<String, Vec<usize>> = HashMap::new();
+        // Who is standing where, in blocks a mate could be found across, so
+        // that this is not every animal against every other animal.
+        let mut who_is_about: BTreeMap<(i32, i32), Vec<usize>> = BTreeMap::new();
         for (idx, animal) in self.animals.iter().enumerate() {
             if !animal.can_breed() {
                 continue;
             }
-
-            let patch = (
-                animal.position.0 / GRAZING_PATCH,
-                animal.position.1 / GRAZING_PATCH,
-            );
-            if crowding.get(&patch).copied().unwrap_or(0) > PATCH_CARRYING_CAPACITY {
-                continue;
-            }
-
-            breeding_candidates
-                .entry(animal.species_id.clone())
-                .or_insert_with(Vec::new)
+            who_is_about
+                .entry(Self::which_block(animal.position))
+                .or_default()
                 .push(idx);
         }
 
-        // For each species with 2+ candidates, attempt breeding
-        for (species_id, candidates) in breeding_candidates {
-            if candidates.len() < 2 {
+        let ready: Vec<usize> = who_is_about.values().flatten().copied().collect();
+
+        let mut pairings = Vec::new();
+        let mut spoken_for: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
+
+        for idx_a in ready {
+            if spoken_for.contains(&idx_a) {
+                continue;
+            }
+            if rng.gen::<f32>() > WHAT_A_PAIR_COMES_TO_IN_A_TICK {
                 continue;
             }
 
-            // Get species data
+            let pos_a = self.animals[idx_a].position;
+            let species_id = self.animals[idx_a].species_id.clone();
+            let hereabouts = Self::which_block(pos_a);
+
+            // How far one of these will go to find the other.
+            //
+            // A herd animal finds its mate in the herd, and `they_keep_
+            // together` is what makes sure there is one there: a hundred
+            // metres is plenty. A **solitary** animal does not live in a
+            // group and cannot be made to - a bear is `group_size: (1, 1)` -
+            // so for one of those this is the only thing standing between it
+            // and never breeding at all. Four bears on a hundred square
+            // kilometres never came within a hundred metres of each other in
+            // two years: **no births, ever**, and the tier aged out. They
+            // range for a mate, which is what solitary animals do and is most
+            // of what a rut is.
+            let how_far_it_will_go = self
+                .registry
+                .as_ref()
+                .and_then(|registry| registry.get(&species_id))
+                .map(|species| {
+                    if species.group_size.1 >= Self::WHAT_COUNTS_AS_A_GROUP {
+                        Self::HOW_FAR_A_MATE_IS_LOOKED_FOR
+                    } else {
+                        Self::HOW_FAR_A_SOLITARY_ONE_RANGES_FOR_A_MATE
+                    }
+                })
+                .unwrap_or(Self::HOW_FAR_A_MATE_IS_LOOKED_FOR);
+
+            // How many blocks that is. A herd animal looks at the nine
+            // around it as it always did; a solitary one looks over as many
+            // as its range covers, which costs nothing because there are
+            // four bears on a hundred square kilometres and not four hundred.
+            let blocks_out =
+                (how_far_it_will_go + Self::HOW_FAR_A_HUNT_REACHES - 1) / Self::HOW_FAR_A_HUNT_REACHES;
+
+            let mate = (-blocks_out..=blocks_out)
+                .flat_map(|dy| (-blocks_out..=blocks_out).map(move |dx| (dx, dy)))
+                .filter_map(|(dx, dy)| {
+                    who_is_about.get(&(hereabouts.0 + dx, hereabouts.1 + dy))
+                })
+                .flatten()
+                .copied()
+                .find(|&idx_b| {
+                    idx_b != idx_a
+                        && !spoken_for.contains(&idx_b)
+                        && self.animals[idx_b].species_id == species_id
+                        && (self.animals[idx_b].position.0 - pos_a.0).abs()
+                            + (self.animals[idx_b].position.1 - pos_a.1).abs()
+                            <= how_far_it_will_go
+                });
+
+            if let Some(idx_b) = mate {
+                spoken_for.insert(idx_a);
+                spoken_for.insert(idx_b);
+                pairings.push((species_id, idx_a, idx_b));
+            }
+        }
+
+        for (species_id, idx_a, idx_b) in pairings {
             let species = match registry.get(&species_id) {
                 Some(s) => s,
                 None => continue,
             };
 
-            // Check pairs for proximity (within breeding distance)
-            for i in 0..candidates.len() {
-                for j in (i + 1)..candidates.len() {
-                    let idx_a = candidates[i];
-                    let idx_b = candidates[j];
+            let cooldown =
+                ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32;
 
-                    let pos_a = self.animals[idx_a].position;
-                    let pos_b = self.animals[idx_b].position;
+            if species.gestation_period > 0 {
+                // Mammal-style: one becomes pregnant
+                self.animals[idx_a].become_pregnant(species.gestation_period, cooldown);
+                self.animals[idx_b].reproduction_cooldown = cooldown;
+            } else {
+                // Egg-layer: both go on cooldown, eggs spawn immediately
+                self.animals[idx_a].reproduction_cooldown = cooldown;
+                self.animals[idx_b].reproduction_cooldown = cooldown;
 
-                    // Check proximity. Ten tiles rather than five because
-                    // nothing in the model keeps a group together: animals
-                    // spawn as a herd and then wander off on their own. A
-                    // herd of ten still has pairs in range after that; a pair
-                    // of wolves does not, which left predators unable to
-                    // breed at all while the herbivores they were supposed to
-                    // be holding down ran to the population cap.
-                    let distance = ((pos_a.0 - pos_b.0).abs() + (pos_a.1 - pos_b.1).abs()) as f32;
-                    if distance <= 10.0 {
-                        // Breeding chance based on proximity
-                        if rng.gen::<f32>() < 0.3 {
-                            // One becomes pregnant (or both go on cooldown for egg-layers)
-                            if species.gestation_period > 0 {
-                                // Mammal-style: one becomes pregnant
-                                self.animals[idx_a].become_pregnant(
-                                    species.gestation_period,
-                                    ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32,
-                                );
-                                self.animals[idx_b].reproduction_cooldown = ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32;
-                            } else {
-                                // Egg-layer: both go on cooldown, eggs spawn immediately
-                                self.animals[idx_a].reproduction_cooldown = ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32;
-                                self.animals[idx_b].reproduction_cooldown = ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32;
-
-                                // Spawn eggs (as new animals with age 0)
-                                let litter = rng.gen_range(species.litter_size.0..=species.litter_size.1);
-                                for _ in 0..litter {
-                                    if self.animals.len() >= self.max_population {
-                                        break;
-                                    }
-                                    let pos = self.animals[idx_a].position;
-                                    let offspring = Animal::new_offspring(
-                                        species_id.clone(),
-                                        pos,
-                                        species,
-                                        self.animals[idx_a].group_id,
-                                    );
-                                    self.animals.push(offspring);
-                                }
-                            }
-                            break; // Only one breeding per species per tick
-                        }
+                let litter = Self::how_many_come_through(species, &mut rng);
+                for _ in 0..litter {
+                    if self.how_many_are_alive() >= self.max_population {
+                        break;
                     }
+                    let pos = self.animals[idx_a].position;
+                    let offspring = Animal::new_offspring(
+                        species_id.clone(),
+                        pos,
+                        species,
+                        self.animals[idx_a].group_id,
+                    );
+                    self.animals.push(offspring);
                 }
             }
         }
     }
 
+    /// How far a herd or pack animal looks for a mate: it finds one in the
+    /// group, and `they_keep_together` is what puts one there.
+    const HOW_FAR_A_MATE_IS_LOOKED_FOR: i32 = 10;
+
+    /// And how far a solitary one ranges for one, which is most of what a rut
+    /// is. Six hundred metres at ten metres a cell.
+    const HOW_FAR_A_SOLITARY_ONE_RANGES_FOR_A_MATE: i32 = 60;
+
+    /// How many of a kind stand together before it is a herd or a pack rather
+    /// than an animal that happens to have a mate.
+    ///
+    /// Read off `group_size`, which the registry already carries: a wolf is
+    /// (3, 7), a lion (3, 8), a flock of sheep (4, 12) and a shoal of fish
+    /// (10, 50); a hawk is (1, 2), an owl (1, 1) and a bear (1, 1). The line
+    /// falls where the data already put it.
+    const WHAT_COUNTS_AS_A_GROUP: u32 = 3;
+
+    /// How often an animal looks round for its own kind.
+    ///
+    /// The same cadence as looking up for something with teeth: often enough
+    /// to matter over a season, seldom enough to cost nothing.
+    const HOW_OFTEN_A_BEAST_LOOKS_FOR_ITS_OWN: u32 = 4;
+
+    /// Keep the herds and the packs together.
+    ///
+    /// **Nothing did.** Animals are dealt out in herds of four to twelve and
+    /// packs of one to four, and from the first tick every one of them
+    /// random-walks on its own account: two cells a move, four thousand three
+    /// hundred ticks to the year, so a group that started together is spread
+    /// over a hundred and thirty cells inside a year. A mate is looked for
+    /// within ten. So a pack of fourteen wolves became fourteen lone wolves
+    /// that never met again, and every predator tier aged out without
+    /// breeding - bear four to one with **no births at all**, polar bear
+    /// three to one, the same.
+    ///
+    /// It is not only breeding. `stands_with` is what makes a herd worth
+    /// anything against a wolf and `hunters_together` is what makes a pack
+    /// worth anything against a herd; both count what is standing nearby, and
+    /// nothing ever was.
+    ///
+    /// A coarse block, because the whole point is to find one's own kind at
+    /// the distance they have actually drifted to - `which_block` is eight
+    /// cells and they are sixty apart. One step a look, so a group closes up
+    /// over days rather than snapping together.
+    pub(crate) fn they_keep_together(&mut self, grid: &crate::world::Grid) {
+        let across = Self::HOW_BIG_A_HUNTING_GROUND_IS;
+        let whereabouts = |at: (i32, i32)| (at.0.div_euclid(across), at.1.div_euclid(across));
+
+        let mut who_is_about: BTreeMap<(i32, i32), Vec<usize>> = BTreeMap::new();
+        for (idx, animal) in self.animals.iter().enumerate() {
+            if !animal.is_alive() {
+                continue;
+            }
+            who_is_about.entry(whereabouts(animal.position)).or_default().push(idx);
+        }
+
+        let mut closing_up: Vec<(usize, (i32, i32))> = Vec::new();
+        let mut breaking_away: Vec<(usize, (i32, i32))> = Vec::new();
+
+        for (idx, animal) in self.animals.iter().enumerate() {
+            if !animal.is_alive() {
+                continue;
+            }
+
+            // Only what actually lives in a group closes up. The registry
+            // already says which: a wolf is (3, 7) and a lion (3, 8) and a
+            // flock of sheep (4, 12), while a hawk is (1, 2) and a bear
+            // (1, 1). Making a hawk keep company with hawks would be wrong
+            // twice over - it is not what a hawk does, and it would pack the
+            // whole guild onto shared ground, where `what_the_small_life
+            // _gives` divides the living between them and starves the lot.
+            let group_size = self
+                .registry
+                .as_ref()
+                .and_then(|registry| registry.get(&animal.species_id))
+                .map(|species| species.group_size);
+            let Some((_, as_many_as_stand_together)) = group_size else {
+                continue;
+            };
+            if as_many_as_stand_together < Self::WHAT_COUNTS_AS_A_GROUP {
+                continue;
+            }
+
+            let here = whereabouts(animal.position);
+            let mut nearest: Option<((i32, i32), i32)> = None;
+            // And how many of its own are already standing with it, which is
+            // what says whether this group is full.
+            let mut standing_with = 0u32;
+
+            for dy in -1..=1i32 {
+                for dx in -1..=1i32 {
+                    let Some(block) = who_is_about.get(&(here.0 + dx, here.1 + dy)) else {
+                        continue;
+                    };
+                    for &other in block {
+                        if other == idx
+                            || self.animals[other].species_id != animal.species_id
+                        {
+                            continue;
+                        }
+                        let at = self.animals[other].position;
+                        let how_far = (at.0 - animal.position.0).abs()
+                            + (at.1 - animal.position.1).abs();
+                        if how_far <= Self::HOW_FAR_A_HERD_STANDS_TOGETHER {
+                            standing_with += 1;
+                        }
+                        if nearest.map(|(_, so_far)| how_far < so_far).unwrap_or(true) {
+                            nearest = Some((at, how_far));
+                        }
+                    }
+                }
+            }
+
+            let Some((towards, how_far)) = nearest else {
+                continue;
+            };
+
+            // **A group that has outgrown itself splits into two.**
+            //
+            // "If a pack of wolves gets too large, it should split into two
+            // packs. If a herd of sheep gets too large, it should split into
+            // two smaller herds." Nothing here ever said no: every animal
+            // walked towards the nearest of its own kind for ever, so a
+            // country's sheep converged on each other and a block that ended
+            // with a thousand of them held one flock of a thousand. A flock
+            // is four to twelve and a pack three to seven, and the registry
+            // has said so all along - `group_size` is the number a herd is
+            // dealt out at, and it is just as much a statement of how large
+            // one gets.
+            //
+            // No new bookkeeping, and no second group to name: the ones with
+            // too much company step away from it, drift out of reach of the
+            // old group, and then close up on whichever of their own they
+            // find nearest - which is each other. Two herds, out of the rule
+            // that made one.
+            if standing_with >= as_many_as_stand_together {
+                breaking_away.push((idx, towards));
+                continue;
+            }
+
+            // Already standing with its own: nothing to do. Only something
+            // that has drifted out of the group walks back in, so a herd does
+            // not collapse to a point.
+            if how_far > Self::HOW_FAR_A_HERD_STANDS_TOGETHER {
+                closing_up.push((idx, towards));
+            }
+        }
+
+        let edge = (grid.width as i32 - 1, grid.height as i32 - 1);
+        for (idx, towards) in closing_up {
+            if let Some(animal) = self.animals.get_mut(idx) {
+                animal.position.0 = (animal.position.0
+                    + (towards.0 - animal.position.0).signum())
+                .clamp(0, edge.0);
+                animal.position.1 = (animal.position.1
+                    + (towards.1 - animal.position.1).signum())
+                .clamp(0, edge.1);
+            }
+        }
+
+        // And the ones peeling off go outwards, a step at a time, so a herd
+        // that is too big loosens over days rather than flying apart.
+        //
+        // **Each on its own bearing**, and that is the whole of what makes
+        // this work. Stepping away from the nearest of its own kind is what
+        // the rule wants to say and is useless when they are standing on each
+        // other: everything picks the same direction and forty sheep cross
+        // the country in a block for ever, which is the same lockstep that
+        // spoilt the first cut of predator dispersal. Eight bearings dealt
+        // out by position in the list scatter them, and `closing_up` then
+        // gathers whoever went the same way into a herd of their own.
+        const EIGHT_WAYS: [(i32, i32); 8] = [
+            (1, 0),
+            (1, 1),
+            (0, 1),
+            (-1, 1),
+            (-1, 0),
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+        ];
+        for (idx, _) in breaking_away {
+            let (dx, dy) = EIGHT_WAYS[idx % EIGHT_WAYS.len()];
+            if let Some(animal) = self.animals.get_mut(idx) {
+                animal.position.0 = (animal.position.0 + dx).clamp(0, edge.0);
+                animal.position.1 = (animal.position.1 + dy).clamp(0, edge.1);
+            }
+        }
+    }
+
+    /// Bring every hunting ground's small life on by a tick.
+    ///
+    /// A country of a hundred square kilometres is about a hundred and
+    /// seventy hunting grounds, so this is a hundred and seventy float
+    /// updates and one terrain lookup each against a tick that already walks
+    /// every animal and a share of a quarter of a million plants. It is the
+    /// cheapest thing in the pass, and that is the argument for holding the
+    /// lower tiers this way rather than as several thousand more records.
+    ///
+    /// The ground is read at the middle of each block. A hunting ground is
+    /// eight hundred metres square and terrain does not change every cell, so
+    /// one sample stands for the block - and sampling every cell of every
+    /// block would cost more than the whole rest of the fauna.
+    /// Stock every hunting ground at what it will carry, for a country that
+    /// has just been made.
+    ///
+    /// The same pass as the tick, and `tick_a_ground` settles an unseen
+    /// ground at full stock, so this is one call rather than a second way of
+    /// working out what belongs where.
+    pub fn stock_the_small_life(
+        &mut self,
+        grid: &crate::world::Grid,
+        season: crate::environment::Season,
+    ) {
+        self.tick_the_small_life(grid, season);
+    }
+
+    /// How far apart the survey samples a hunting ground.
+    ///
+    /// Eighty cells square is six thousand four hundred of them, and walking
+    /// every one of a hundred and sixty-nine grounds is a million lookups.
+    /// Every eighth cell is a hundred samples a ground and seventeen thousand
+    /// altogether, once in a world's life, which is nothing - and a hundred
+    /// samples is a good enough average of what a wood-and-hillside is.
+    const HOW_FAR_APART_THE_SURVEY_LOOKS: i32 = 8;
+
+    /// Walk the country once and record what each hunting ground grows, and
+    /// what climate most of it is.
+    fn survey_the_grounds(
+        &mut self,
+        grid: &crate::world::Grid,
+        grounds_x: i32,
+        grounds_y: i32,
+        across: i32,
+    ) {
+        for gy in 0..grounds_y {
+            for gx in 0..grounds_x {
+                let mut cover = 0.0f32;
+                let mut water = 0u32;
+                let mut looked = 0u32;
+                let mut climates: BTreeMap<ClimateZone, u32> = BTreeMap::new();
+
+                let mut y = gy * across;
+                while y < (gy + 1) * across && y < grid.height as i32 {
+                    let mut x = gx * across;
+                    while x < (gx + 1) * across && x < grid.width as i32 {
+                        if let Some(tile) =
+                            grid.get_tile(&crate::world::Position::new(x, y))
+                        {
+                            let terrain = tile.terrain.terrain_type;
+                            let offers = what_this_ground_offers(terrain);
+                            cover += offers.cover;
+                            // How much of the ground is water at all, which
+                            // is the water's answer to cover and is got the
+                            // same way. One walk of the country records
+                            // both, so nothing can come to two views about
+                            // which grounds have a river in them.
+                            if offers.is_water {
+                                water += 1;
+                            }
+                            *climates.entry(terrain_to_climate_zone(terrain)).or_insert(0) += 1;
+                            looked += 1;
+                        }
+                        x += Self::HOW_FAR_APART_THE_SURVEY_LOOKS;
+                    }
+                    y += Self::HOW_FAR_APART_THE_SURVEY_LOOKS;
+                }
+
+                if looked == 0 {
+                    continue;
+                }
+
+                // The climate most of the ground is in, which decides how
+                // hard its year is. A ground that is half mountain and half
+                // meadow is a temperate ground with a hill in it, not an
+                // arctic one.
+                let climate = climates
+                    .into_iter()
+                    .max_by_key(|&(_, how_many)| how_many)
+                    .map(|(climate, _)| climate)
+                    .unwrap_or(ClimateZone::Temperate);
+
+                self.how_rich_each_ground_is.insert(
+                    (gx, gy),
+                    WhatThisGroundGrows {
+                        cover: cover / looked as f32,
+                        share_that_is_water: water as f32 / looked as f32,
+                        climate,
+                    },
+                );
+            }
+        }
+    }
+
+    fn tick_the_small_life(
+        &mut self,
+        grid: &crate::world::Grid,
+        season: crate::environment::Season,
+    ) {
+        let across = Self::HOW_BIG_A_HUNTING_GROUND_IS;
+        let grounds_x = (grid.width as i32).div_euclid(across) + 1;
+        let grounds_y = (grid.height as i32).div_euclid(across) + 1;
+
+        // What each ground grows, surveyed once.
+        //
+        // **It was the terrain of the ground's middle tile**, which is to say
+        // that sixty-four hectares were priced by one cell picked for no
+        // reason but being in the centre of it. On a map that is two fifths
+        // mountain that put most of the country's hunting grounds at a
+        // carrying capacity of nearly nothing however much wood was standing
+        // in them - and the yield a hunter reads comes off the tile it is
+        // standing on, so a kestrel on forest inside such a ground found at a
+        // wood's rate out of a stock priced as rock. Two answers to "how rich
+        // is this piece of country", on two different scales, and the one
+        // that decided what was there to find was a coin toss.
+        //
+        // Terrain does not change, so this is done once and read for ever
+        // after; only the season moves, and that is applied on top.
+        if self.how_rich_each_ground_is.is_empty() {
+            self.survey_the_grounds(grid, grounds_x, grounds_y, across);
+        }
+
+        for gy in 0..grounds_y {
+            for gx in 0..grounds_x {
+                let Some(&grows) = self.how_rich_each_ground_is.get(&(gx, gy)) else {
+                    continue;
+                };
+
+                let would_carry = crate::environment::SmallLife::what_this_ground_will_carry(
+                    grows.cover,
+                    grows.climate,
+                    season,
+                    across,
+                );
+                let would_carry_fish =
+                    crate::environment::SmallLife::what_this_ground_will_carry_of_fish(
+                        grows.share_that_is_water,
+                        grows.climate,
+                        season,
+                        across,
+                    );
+
+                self.small_life
+                    .tick_a_ground((gx, gy), would_carry, would_carry_fish, 1.0);
+            }
+        }
+
+        // And let them work outwards, now that every ground is up to date.
+        // Separate pass because a ground's neighbours have to have grown
+        // before anything moves between them, or which way an animal walks
+        // depends on the order the grounds were visited in.
+        self.small_life.let_them_spread(1.0);
+    }
+
     /// Process predator hunting - carnivores/omnivores hunt prey
-    fn process_predation(&mut self) {
+    fn process_predation(&mut self, grid: &crate::world::Grid) {
         use rand::Rng;
         let mut rng = crate::core::dice::roll();
 
@@ -2593,109 +4145,662 @@ impl AnimalManager {
         // otherwise, which is what ties its numbers to the herds.
         const HUNT_ATTEMPT_CHANCE: f32 = 0.05;
 
+
+        /// How often a hunter that is not making a living gives up on the
+        /// ground it is standing on and tries the next one.
+        /// **Raised from a fiftieth.** At that rate a hunter that could not
+        /// keep itself where it stood took a step every fifty ticks - four
+        /// days - and a bird of prey blown onto open plain, where the small
+        /// life pays it half what it burns, was dead long before it reached a
+        /// wood. The fiftieth was set to stop the first cut of this from
+        /// moving every hunter on a ground in lockstep into a corner; what
+        /// actually fixed that was scattering the step and choosing ground by
+        /// the living it offers, both of which are still here.
+        const HOW_OFTEN_A_HUNTER_GIVES_UP_ON_GROUND: f32 = 0.25;
+
         // Find hungry predators and their prey
-        let predator_data: Vec<(usize, String, Vec<String>, (i32, i32), f32, bool, AnimalSize)> =
+        let predator_data:
+            Vec<(usize, String, Vec<String>, (i32, i32), bool, Option<AnimalSize>)> =
             self.animals
                 .iter()
                 .enumerate()
                 .filter(|(_, a)| a.is_alive() && a.will_hunt())
                 .filter_map(|(idx, a)| {
                     let species = registry.get(&a.species_id)?;
-                    if species.prey_species.is_empty() {
+                    // A carnivore with nothing on its list still hunts - it
+                    // hunts the small life the map assumes. Only a forager
+                    // with no teeth for it is left out.
+                    if species.prey_species.is_empty()
+                        && species.diet != DietType::Carnivore
+                    {
                         return None;
                     }
                     // The biggest thing it knows how to bring down, which is
-                    // what bounds what it will try when it is desperate. A
-                    // wolf takes deer, so a goat is fair game; a fox takes
-                    // rabbits, and no amount of hunger makes a cow catchable.
+                    // what bounds what it will try. A wolf takes deer, so a
+                    // goat is fair game; a fox takes rabbits, and no amount of
+                    // hunger makes a cow catchable.
+                    // Nothing on the list means nothing on the map is fair
+                    // game, not that everything its own size is: a kestrel
+                    // lives on what is not counted, and a squirrel is safe
+                    // from it.
                     let usual_limit = species
                         .prey_species
                         .iter()
                         .filter_map(|prey| registry.get(prey))
                         .map(|prey| prey.size)
-                        .max()
-                        .unwrap_or(species.size);
+                        .max();
 
                     Some((
                         idx,
                         a.species_id.clone(),
                         species.prey_species.clone(),
                         a.position,
-                        species.attack_damage,
                         a.is_very_hungry(),
                         usual_limit,
                     ))
                 })
                 .collect();
 
+        // Who is standing where, in blocks the size of a hunt.
+        //
+        // A predator used to look at every animal in the world to find one
+        // within eight tiles of it, which is every predator against every
+        // animal: on a hundred square kilometres carrying four thousand head
+        // that is millions of comparisons a tick, most of them string
+        // comparisons against a list of prey species, to find the handful of
+        // animals actually in front of it. Blocks of `HOW_FAR_A_HUNT_REACHES`
+        // mean a predator looks in the nine blocks around it and nowhere else.
+        let mut who_is_about: BTreeMap<(i32, i32), Vec<usize>> = BTreeMap::new();
+        for (idx, animal) in self.animals.iter().enumerate() {
+            if !animal.is_alive() {
+                continue;
+            }
+            who_is_about
+                .entry(Self::which_block(animal.position))
+                .or_default()
+                .push(idx);
+        }
+
+        // And how many hunters are standing on each hunting ground, and how
+        // much game is under them.
+        //
+        // Both, because a hunting ground is crowded relative to what it
+        // *feeds*, not to a number written down here. Ten wolves on ground
+        // thick with deer are not in each other's way; two on ground that has
+        // been eaten out are, and that is the specification's "as prey
+        // species decrease in number, this should cause predators to attack
+        // each other for food" - the pressure has to come from the game
+        // running out, or it is just a crowd rule with the seasons taken out
+        // of it.
+        //
+        // One pass, and it is the pass that was already here.
+        let mut hunters_in: BTreeMap<(i32, i32), usize> = BTreeMap::new();
+        let mut game_in: BTreeMap<(i32, i32), usize> = BTreeMap::new();
+        // And how much of the *small life* each ground is being asked for.
+        //
+        // Not a head count. `what_the_small_life_turns_up` divides its yield
+        // by the hunters sharing the ground, and dividing by heads says a
+        // bear standing in a wood halves what a kestrel gets out of it - when
+        // a bear turning over a log for grubs takes a third of a day's keep
+        // off ground that keeps a kestrel three times over. What shares a
+        // layer is the demand on it, which is
+        // `how_much_it_leans_on_the_small_life`.
+        // **And it is two larders, not one.**
+        //
+        // A hunting ground is sixty-four hectares and can hold a lake and a
+        // wood at once. Counting every hunter on it against one figure says a
+        // fish in the water and a hawk in the trees are taking the same food
+        // from each other, which they are not: measured at the height of a
+        // fish year, five hundred of them in the lakes put the demand on
+        // their grounds at thirty-four, and the hawks and eagles hunting the
+        // woods of those same grounds were reading it - hawk down to half its
+        // keep and eagle to a sixth on ground that would have kept both.
+        //
+        // Which pool a hunter draws from is decided the same way the yield
+        // already decides it: by whether the tile it is standing on is water.
+        // One question, one answer, in the one place.
+        let mut demand_on: BTreeMap<((i32, i32), bool), f32> = BTreeMap::new();
+        for animal in self.animals.iter().filter(|a| a.is_alive()) {
+            let Some(species) = registry.get(&animal.species_id) else {
+                continue;
+            };
+            let hunts = species.where_it_sits() != TrophicRole::PrimaryConsumer;
+            let ground = Self::whose_ground(animal.position);
+            if hunts {
+                let in_the_water = grid
+                    .get_tile(&crate::world::Position::new(
+                        animal.position.0,
+                        animal.position.1,
+                    ))
+                    .map(|tile| what_this_ground_offers(tile.terrain.terrain_type).is_water)
+                    .unwrap_or(false);
+                *hunters_in.entry(ground).or_insert(0) += 1;
+                *demand_on.entry((ground, in_the_water)).or_insert(0.0) +=
+                    Self::how_much_it_leans_on_the_small_life(species);
+            } else {
+                *game_in.entry(ground).or_insert(0) += 1;
+            }
+        }
+
         // For each predator, look for nearby prey
         let mut kills = Vec::new();
-        for (pred_idx, _pred_species, prey_species, pred_pos, attack, desperate, usual_limit) in
+        let mut stalking: Vec<(usize, (i32, i32))> = Vec::new();
+        let mut went_looking = 0u64;
+        let mut saw_something = 0u64;
+        let mut rushed = 0u64;
+        let mut came_off = 0u64;
+        let mut hurts = Vec::new();
+        let mut foraged = Vec::new();
+        let mut moved_on = Vec::new();
+        for (pred_idx, pred_species_id, prey_species, pred_pos, desperate, usual_limit) in
             predator_data
         {
+            let hunter = match registry.get(&pred_species_id) {
+                Some(s) => s,
+                None => continue,
+            };
+
+            // How many animals a hunter will look over before it picks one.
+            //
+            // A hunter goes for what is in front of it, not for the best of a
+            // full census, and the difference matters for what this costs: the
+            // nine blocks around a predator hold every animal standing there,
+            // so on ground that has filled up this loop is every predator
+            // against every animal again and the whole point of blocking it
+            // was to stop that. A quarter of a square kilometre that ran away
+            // to five hundred and sixty head took a five-year run from three
+            // seconds to over two hundred.
+            const HOW_MANY_IT_LOOKS_OVER: usize = 8;
+
+            let hereabouts = Self::which_block(pred_pos);
+            let this_ground = Self::whose_ground(pred_pos);
+
+            // What the ground itself yields, every tick.
+            //
+            // Not behind the hunt roll. Turning over the ground for small game
+            // is what a small predator does all day, not a thing it tries once
+            // in twenty; gated at one tick in twenty it fed a stoat about a
+            // third of what a stoat burns, and thirty-six stoats on four
+            // square kilometres were down to three inside three years with
+            // twelve animals taken in the whole world over that time. See
+            // `what_the_small_life_gives`.
+            //
+            // What the ground pays on an ordinary day is kept outside the
+            // block: whether to stay is a different question from feeding,
+            // and it is asked further down, once it is known whether there
+            // was anything else here worth staying for.
+            let mut the_ground_pays = 0.0f32;
+            {
+                let ground = grid
+                    .get_tile(&crate::world::Position::new(pred_pos.0, pred_pos.1))
+                    .map(|tile| what_this_ground_offers(tile.terrain.terrain_type))
+                    .unwrap_or_else(|| what_this_ground_offers(TerrainType::Plains));
+
+                let sharing_it = demand_on
+                    .get(&(this_ground, ground.is_water))
+                    .copied()
+                    .unwrap_or(1.0);
+
+                // What the ground would turn up if it were carrying all it
+                // can, and then what is actually on it, a band at a time. The
+                // second half is the whole point of holding the small life as
+                // a stock: a wood that has been trapped out feeds a stoat
+                // worse than a wood that has not, and until there was a
+                // number behind it there was no such thing as a trapped-out
+                // wood.
+                let (at_full_grazers, at_full_rodents, at_full_fish) =
+                    Self::what_the_small_life_turns_up(hunter, ground, sharing_it);
+                let standing = self.small_life.here(this_ground);
+                let wants_grazers = at_full_grazers * standing.how_thick_it_is();
+                let wants_rodents = at_full_rodents * standing.how_thick_the_rodents_are();
+                let wants_fish = at_full_fish * standing.how_thick_the_fish_are();
+
+                // **Passive hunting: it catches animals, one at a time.**
+                //
+                // The specification, in as many words: "a wolf should be
+                // capable of hunting animals like how agents trap animals -
+                // the predator goes into passive hunting mode and catches a
+                // random assumed creature after a period of time". What was
+                // here was a stipend: a smooth trickle of energy every tick,
+                // in proportion to the ground, which no animal could ever go
+                // without and no animal could ever have a good day at.
+                //
+                // The rate is the same rate; what changes is that it is
+                // delivered in whole animals. A wolf on middling ground turns
+                // up a rabbit about once a day and knows nothing about it in
+                // between; a kestrel takes two or three voles most days and
+                // some days none. The period between catches is not written
+                // down anywhere - it falls out of the rate, exactly as the
+                // time a snare takes to fill falls out of `how_likely_a_snare
+                // _takes_something`, and for the same reason.
+                //
+                // It catches only when it is hungry, which is what
+                // `will_hunt` already gates this whole pass on, and that is
+                // what keeps a country of fed hunters from stripping the
+                // layer under them for nothing: an animal that has eaten
+                // stops hunting until it has burnt what it ate.
+                let a_grazer = Self::what_a_grazer_is_worth_to(hunter);
+                let a_rodent = Self::what_a_rodent_is_worth_to(hunter);
+                let a_fish = Self::what_a_fish_is_worth_to(hunter);
+
+                // What the ground pays on an average day, which is what
+                // decides whether it is worth standing on. Not what this
+                // tick's roll happened to produce: a hunter that walked off
+                // good ground because it drew a blank one morning would
+                // spend its life walking, and turning the stipend into
+                // catches would have made every hunter in the country do
+                // exactly that.
+                the_ground_pays =
+                    wants_grazers * a_grazer + wants_rodents * a_rodent + wants_fish * a_fish;
+
+                let caught_grazers = Self::what_a_period_of_hunting_takes(wants_grazers, &mut rng);
+                let caught_rodents = Self::what_a_period_of_hunting_takes(wants_rodents, &mut rng);
+                let caught_fish = Self::what_a_period_of_hunting_takes(wants_fish, &mut rng);
+
+                if caught_grazers > 0.0 || caught_rodents > 0.0 || caught_fish > 0.0 {
+                    // And it comes off the ground, band by band, in head -
+                    // which is what the ground is counted in. One conversion
+                    // between head and energy, in one place
+                    // (`what_a_grazer_is_worth_to`), used in both directions:
+                    // the thing that was wrong before.
+                    let grazers = self.small_life.take(this_ground, caught_grazers);
+                    let rodents = self.small_life.take_rodents(this_ground, caught_rodents);
+                    let fish = self.small_life.take_fish(this_ground, caught_fish);
+
+                    let got = grazers * a_grazer + rodents * a_rodent + fish * a_fish;
+
+                    if got > 0.0 {
+                        self.passive.caught_grazers += grazers as u64;
+                        self.passive.caught_rodents += rodents as u64;
+                        self.passive.caught_fish += fish as u64;
+                        foraged.push((pred_idx, got));
+                    }
+                }
+                self.passive.went_out += 1;
+
+            }
+
             if rng.gen::<f32>() > HUNT_ATTEMPT_CHANCE {
                 continue;
             }
+            went_looking += 1;
+            let nearby: Vec<usize> = [-1, 0, 1]
+                .iter()
+                .flat_map(|dy| [-1, 0, 1].iter().map(move |dx| (*dx, *dy)))
+                .filter_map(|(dx, dy)| {
+                    who_is_about.get(&(hereabouts.0 + dx, hereabouts.1 + dy))
+                })
+                // **Eight of them, and not always the same eight.**
+                //
+                // `take(8)` is a prefix of the block, and a block is in the
+                // order the animals were created - so a hunter standing in a
+                // block whose first eight entries are its own kind sees
+                // nothing else, for ever, however close the dinner is.
+                // Measured on the plainest case there is: fourteen wolves and
+                // two sheep on one cell, the sheep spawned last, and over
+                // half a day of wolves looking at the block the tally of
+                // "saw something" was **nought** while a sheep stood one cell
+                // away from all fourteen of them.
+                //
+                // Starting each hunter at its own offset costs the same eight
+                // comparisons and means the block is actually sampled.
+                .flat_map(|block| {
+                    let from = if block.is_empty() { 0 } else { pred_idx % block.len() };
+                    block
+                        .iter()
+                        .cycle()
+                        .skip(from)
+                        .take(HOW_MANY_IT_LOOKS_OVER.min(block.len()))
+                })
+                .copied()
+                .collect();
 
-            // Find nearby prey
-            for (prey_idx, prey) in self.animals.iter().enumerate() {
+            // Ground that is holding more hunters than it will carry. What a
+            // territory is, in a model with no way to draw a line on a map, is
+            // that the animals holding one turn on each other when there are
+            // too many of them for the game that is left.
+            let crowded = Self::is_the_ground_crowded(
+                game_in.get(&this_ground).copied().unwrap_or(0),
+                hunters_in.get(&this_ground).copied().unwrap_or(1),
+            );
+
+            // How many of its own kind are hunting alongside it. A pack takes
+            // what one of them could not.
+            let hunters_together = nearby
+                .iter()
+                .filter(|&&idx| {
+                    self.animals[idx].is_alive()
+                        && self.animals[idx].species_id == pred_species_id
+                        && (self.animals[idx].position.0 - pred_pos.0).abs()
+                            + (self.animals[idx].position.1 - pred_pos.1).abs()
+                            <= Self::HOW_FAR_A_HERD_STANDS_TOGETHER
+                })
+                .count()
+                .max(1);
+
+            // Find nearby prey, and the nearest thing worth walking to if
+            // none of it is within a rush.
+            let mut closest: Option<((i32, i32), i32)> = None;
+            let mut rushed_something = false;
+
+            for prey_idx in nearby.iter().copied() {
+                let prey = &self.animals[prey_idx];
                 if !prey.is_alive() || prey_idx == pred_idx {
                     continue;
                 }
 
-                // Normally a predator takes what it knows how to take. One
-                // that is close to starving takes whatever it can catch: any
-                // grazing animal no bigger than itself will do.
-                let usual_prey = prey_species.contains(&prey.species_id);
-                let worth_trying = usual_prey
-                    || (desperate
-                        && registry
-                            .get(&prey.species_id)
-                            .map(|s| s.prey_species.is_empty() && s.size <= usual_limit)
-                            .unwrap_or(false));
+                let quarry = match registry.get(&prey.species_id) {
+                    Some(s) => s,
+                    None => continue,
+                };
+
+                // What a hunter will try.
+                //
+                // It used to be the three or four names written on the species
+                // and nothing else, which left the food web almost entirely
+                // disconnected: a country stocked with thirty-four geese and
+                // nine rabbits fed eighteen predators on the nine, because no
+                // hand-written list said "goose". A hunter takes what it can
+                // bring down - anything up to the size of the largest thing it
+                // is named as taking - and the names now say how big that is
+                // rather than exhausting the menu. It is also the only way the
+                // specification's "many bird species hunt for fish as well as
+                // rodents" can be true without writing every pairing out.
+                let it_eats_meat = quarry.where_it_sits() != TrophicRole::PrimaryConsumer;
+                let small_enough = usual_limit.map(|top| quarry.size <= top).unwrap_or(false);
+
+                let worth_trying = prey_species.contains(&prey.species_id)
+                    || (small_enough && !it_eats_meat)
+                    // And one hunter takes another when the ground is crowded
+                    // or it is nearly starving - but only one it outranks, so
+                    // that this is a wolf taking a fox and never the other way
+                    // about.
+                    || (small_enough
+                        && it_eats_meat
+                        && (crowded || desperate)
+                        && quarry.where_it_sits() < hunter.where_it_sits());
 
                 if !worth_trying {
                     continue;
                 }
+                saw_something += 1;
 
-                // Check proximity (hunting range of 8 tiles)
-                let distance = ((pred_pos.0 - prey.position.0).abs()
-                    + (pred_pos.1 - prey.position.1).abs()) as f32;
-                if distance > 8.0 {
+                // Check proximity - the blocks are only a sieve, and a
+                // neighbouring block reaches further than a hunt does.
+                let distance = (pred_pos.0 - prey.position.0).abs()
+                    + (pred_pos.1 - prey.position.1).abs();
+                if distance > Self::HOW_FAR_A_HUNT_REACHES {
+                    // Too far to rush, and worth walking towards. **This is
+                    // the whole of why nothing in this world ever ate.**
+                    //
+                    // A hunt asked "is there something I would try for within
+                    // eighty metres of me, right now", and if there was not,
+                    // the tick was over. Nothing ever moved a hungry hunter
+                    // towards prey it could see. Measured over a year on a
+                    // hundred square kilometres: 176,125 hunts went looking,
+                    // 4,379 of them had something in the nine blocks around
+                    // them worth trying for, and **thirteen** of those were
+                    // close enough to rush. A wolf ranges tens of kilometres
+                    // in a day; this one stood in a field waiting for a deer
+                    // to walk into it.
+                    if closest.map(|(_, so_far)| distance < so_far).unwrap_or(true) {
+                        closest = Some((prey.position, distance));
+                    }
                     continue;
                 }
 
-                // Hunt success based on speed comparison and randomness
-                let prey_species_data = registry.get(&prey.species_id);
-                let prey_speed = prey_species_data.map(|s| s.speed).unwrap_or(1.0);
-                let pred_species_data = registry.get(&self.animals[pred_idx].species_id);
-                let pred_speed = pred_species_data.map(|s| s.speed).unwrap_or(1.0);
+                // How many of its own kind are standing with it.
+                let prey_pos = prey.position;
+                let prey_species_id = prey.species_id.clone();
+                let stands_with = nearby
+                    .iter()
+                    .filter(|&&idx| {
+                        idx != prey_idx
+                            && self.animals[idx].is_alive()
+                            && self.animals[idx].species_id == prey_species_id
+                            && (self.animals[idx].position.0 - prey_pos.0).abs()
+                                + (self.animals[idx].position.1 - prey_pos.1).abs()
+                                <= Self::HOW_FAR_A_HERD_STANDS_TOGETHER
+                    })
+                    .count();
 
-                let chase_chance = (pred_speed / prey_speed).min(1.0) * 0.4;
+                let ground = grid
+                    .get_tile(&crate::world::Position::new(prey_pos.0, prey_pos.1))
+                    .map(|tile| what_this_ground_offers(tile.terrain.terrain_type))
+                    .unwrap_or_else(|| what_this_ground_offers(TerrainType::Plains));
 
-                if rng.gen::<f32>() < chase_chance {
-                    // Successful hunt - attack prey
-                    let prey_food_value = prey_species_data.map(|s| s.food_value).unwrap_or(10.0);
-                    kills.push((pred_idx, prey_idx, attack, prey_food_value));
-                    break; // One hunt per predator per tick
+                let odds = Self::what_a_hunt_between_these_two_comes_to(
+                    hunter,
+                    quarry,
+                    ground,
+                    hunters_together,
+                    stands_with,
+                    self.animals[pred_idx].how_fast_it_still_is(),
+                    self.animals[prey_idx].how_fast_it_still_is(),
+                );
+
+                rushed += 1;
+                rushed_something = true;
+                if rng.gen::<f32>() < odds.comes_off {
+                    came_off += 1;
+                    kills.push((pred_idx, prey_idx, quarry.food_value));
+                } else if odds.what_it_costs > 0.0 {
+                    hurts.push((pred_idx, odds.what_it_costs));
+                }
+                break; // One rush per predator per tick, come off or not.
+            }
+
+            // Nothing within a rush, but something worth walking to. A
+            // predator's day is mostly the walk.
+            if !rushed_something {
+                if let Some((towards, _)) = closest {
+                    stalking.push((pred_idx, towards));
+                }
+            }
+
+            // **"I am hungry and need food. There is no food around me. I
+            // must move to find food."**
+            //
+            // The specification's own sentence, and the model had no rule
+            // that said it. What stood here instead asked whether the
+            // *ground* paid less than the animal burnt - which is a question
+            // about the country and not about the animal, and it is the
+            // wrong one in both directions. A fed wolf on ground whose voles
+            // will not keep it walked anyway, every fourth tick, for ever: a
+            // wolf never lives on voles and is not supposed to, so the test
+            // was permanently true for every large hunter on the map and
+            // they spent their lives crossing it instead of hunting. And a
+            // starving one on ground that pays its keep on paper had no
+            // reason to leave at all.
+            //
+            // Hunger is the reason to move, and it moves when there is
+            // nothing here: nothing it could rush, nothing worth walking
+            // towards, and a ground that will not feed it while it waits.
+            // A few of them each tick rather than all of them - moved in
+            // step, every hunter on one ground picks the same neighbour and
+            // they travel as a clump for ever, which lands the lot of them
+            // in a corner and is worse than not moving at all.
+            let nothing_here = !rushed_something
+                && closest.is_none()
+                && the_ground_pays < hunter.hunger_rate;
+            if nothing_here
+                && self.animals[pred_idx].is_hungry()
+                && rng.gen::<f32>() < HOW_OFTEN_A_HUNTER_GIVES_UP_ON_GROUND
+            {
+                // Where it goes is where the living is better, and "better"
+                // is both larders: the animals standing on a ground, and the
+                // assumed layers under it, each divided between the hunters
+                // that would then be working it. Counting only hunters sent
+                // animals to empty ground because it was empty of everything;
+                // counting only records sends a kestrel off a field thick
+                // with voles because no deer is standing in it.
+                //
+                // The two are put on one footing by
+                // `WHAT_A_HUNTER_WANTS_UNDER_IT`, which is already the
+                // model's statement of how much game a hunter wants beneath
+                // it before a ground is worth holding: a ground carrying all
+                // the small life it can is worth that much to something that
+                // lives entirely off it, and proportionately less to a wolf.
+                let leans = Self::how_much_it_leans_on_the_small_life(hunter);
+                // And which larder it reads is the larder it eats out of. A
+                // heron comparing grounds by their voles walks towards a
+                // wood; what it wants is water, and the two are not the same
+                // grounds.
+                let by_the_water = hunter.feeds_in_the_water();
+                let mut living_on = |ground: (i32, i32), counting_itself: usize| -> f32 {
+                    let here = self.small_life.here(ground);
+                    let under_it = if by_the_water {
+                        here.how_thick_the_water_is_against_the_best_there_could_be(
+                            Self::HOW_BIG_A_HUNTING_GROUND_IS,
+                        )
+                    } else {
+                        here.how_thick_against_the_best_ground_there_could_be(
+                            Self::HOW_BIG_A_HUNTING_GROUND_IS,
+                        )
+                    };
+
+                    Self::how_good_a_living(
+                        game_in.get(&ground).copied().unwrap_or(0),
+                        hunters_in.get(&ground).copied().unwrap_or(0) + counting_itself,
+                    ) + leans * Self::WHAT_A_HUNTER_WANTS_UNDER_IT * under_it
+                };
+
+                let here = living_on(this_ground, 0);
+                let mut best: Option<((i32, i32), f32)> = None;
+                for dy in -1..=1i32 {
+                    for dx in -1..=1i32 {
+                        if dx == 0 && dy == 0 {
+                            continue;
+                        }
+                        // Counting itself in over there, or every hunter on a
+                        // crowded ground reckons the neighbour by what it
+                        // holds without them and they all go.
+                        let living = living_on((this_ground.0 + dx, this_ground.1 + dy), 1);
+                        if living > here && best.map(|(_, best)| living > best).unwrap_or(true) {
+                            best = Some(((dx, dy), living));
+                        }
+                    }
+                }
+
+                if let Some(((dx, dy), _)) = best {
+                    moved_on.push((pred_idx, (dx, dy)));
                 }
             }
         }
 
         // Apply kills
-        for (pred_idx, prey_idx, damage, food_value) in kills {
-            // Damage prey
-            if let Some(prey) = self.animals.get_mut(prey_idx) {
-                prey.take_damage(damage);
+        self.hunting.went_looking += went_looking;
+        self.hunting.saw_something += saw_something;
+        self.hunting.rushed += rushed;
+        self.hunting.came_off += came_off;
+
+        // A hunt that comes off takes the animal.
+        //
+        // **It used to take a bite out of it.** `what_a_hunt_comes_to` weighs
+        // the cover, the refuge, how many of the quarry's own kind are
+        // standing with it, how many of the hunter's are hunting together and
+        // what the force ratio comes to, and answers whether the rush
+        // succeeded - and then `attack_damage` was applied to the quarry as
+        // though the answer had been "they had a scuffle". A wolf's blow is
+        // some fifteen of a sheep's eighty, and the sheep heals a tenth a
+        // tick, so a wolf had to catch *the same sheep* six times to eat
+        // once. Measured over two years on a hundred square kilometres, with
+        // fourteen wolves, ten lions, four bears and better than a thousand
+        // sheep on the map: **not one animal was taken by a predator, ever.**
+        // Every hunter in the country starved - wolf born 23, starved 32;
+        // eagle 13 and 25; heron 26 and 47 - while its dinner grazed past it.
+        //
+        // Two answers to one question, which is this project's oldest defect.
+        // The odds are the answer. Whether a wolf can take a cow is settled
+        // in `what_a_hunt_comes_to`, where the cow's size, its herd and its
+        // temperament are already counted, and where the answer for one wolf
+        // and one cow is very near nought.
+        let mut taken: Vec<String> = Vec::new();
+        for (pred_idx, prey_idx, food_value) in kills {
+            let Some(prey) = self.animals.get_mut(prey_idx) else {
+                continue;
+            };
+            // Something else may have had it already this tick.
+            if !prey.is_alive() {
+                continue;
             }
 
-            // If prey died, feed predator
-            if let Some(prey) = self.animals.get(prey_idx) {
-                if !prey.is_alive() {
-                    if let Some(predator) = self.animals.get_mut(pred_idx) {
-                        predator.feed(food_value);
-                    }
-                }
+            prey.state = AnimalState::Dead;
+            prey.current_health = 0.0;
+            taken.push(prey.species_id.clone());
+
+            if let Some(predator) = self.animals.get_mut(pred_idx) {
+                predator.feed(food_value);
+            }
+        }
+
+        for which in taken {
+            self.carried_off.entry(which).or_default().taken += 1;
+        }
+
+        // What the small life fed.
+        for (pred_idx, got) in foraged {
+            if let Some(hunter) = self.animals.get_mut(pred_idx) {
+                hunter.feed(got);
+            }
+        }
+
+        // And who is walking towards its dinner.
+        //
+        // Before the ranging, and instead of it for anything that can see
+        // something: a hunter that has game in front of it has no business
+        // wondering whether the next block over is less crowded.
+        // How far a hunter walks towards what it has seen, which is its own
+        // pace: a wolf gains on a sheep and loses ground on a deer, which is
+        // what those two numbers in the table were always for.
+        let how_far_it_stalks = |animals: &Vec<Animal>, idx: usize| -> i32 {
+            animals
+                .get(idx)
+                .and_then(|animal| {
+                    registry
+                        .get(&animal.species_id)
+                        .map(|species| animal.how_far_it_gets_in_a_tick(species))
+                })
+                .unwrap_or(2)
+        };
+        let edge = (grid.width as i32 - 1, grid.height as i32 - 1);
+        let mut already_moving: std::collections::BTreeSet<usize> =
+            std::collections::BTreeSet::new();
+
+        for (pred_idx, towards) in stalking {
+            already_moving.insert(pred_idx);
+            let carries = how_far_it_stalks(&self.animals, pred_idx);
+            if let Some(hunter) = self.animals.get_mut(pred_idx) {
+                let step = |from: i32, to: i32| -> i32 {
+                    (to - from).signum() * (to - from).abs().min(carries)
+                };
+                hunter.position.0 =
+                    (hunter.position.0 + step(hunter.position.0, towards.0)).clamp(0, edge.0);
+                hunter.position.1 =
+                    (hunter.position.1 + step(hunter.position.1, towards.1)).clamp(0, edge.1);
+            }
+        }
+
+        // And who went looking for better ground. A step at a time, so that
+        // crossing a hunting ground takes a hunter the best part of a season
+        // and a country does not slosh from one corner to the other.
+        const HOW_FAR_A_HUNTER_RANGES_IN_A_TICK: i32 = 1;
+        for (pred_idx, (dx, dy)) in moved_on {
+            if already_moving.contains(&pred_idx) {
+                continue;
+            }
+            if let Some(hunter) = self.animals.get_mut(pred_idx) {
+                hunter.position.0 += dx * HOW_FAR_A_HUNTER_RANGES_IN_A_TICK;
+                hunter.position.1 += dy * HOW_FAR_A_HUNTER_RANGES_IN_A_TICK;
+                hunter.position.0 = hunter.position.0.clamp(0, edge.0);
+                hunter.position.1 = hunter.position.1.clamp(0, edge.1);
+            }
+        }
+
+        // And what the ones that stood their ground did back.
+        for (pred_idx, hurt) in hurts {
+            if let Some(predator) = self.animals.get_mut(pred_idx) {
+                predator.take_damage(hurt);
             }
         }
     }
@@ -2729,19 +4834,16 @@ impl AnimalManager {
         /// How many arrive at once
         const ARRIVALS: (u32, u32) = (1, 3);
 
-        self.ticks_since_migration += 1;
-        if self.ticks_since_migration < MIGRATION_INTERVAL {
-            return;
-        }
-        self.ticks_since_migration = 0;
-
-        let bounds = match self.world_bounds {
-            Some(bounds) => bounds,
-            None => return,
-        };
-
-        // What is here now, and the most there has ever been
-        let mut present: HashMap<String, u32> = HashMap::new();
+        // What is here now, and the most there has ever been.
+        //
+        // Counted every pass rather than every two thousand ticks. This used
+        // to sit below the interval gate, so a species had to be alive at a
+        // migration moment to be remembered at all - anything that came into
+        // the world and died inside its first two thousand ticks was recorded
+        // as never having lived here, and could never come back. That is what
+        // happened to the owl, which was in one world of eight at the start
+        // and in none of them ever again. See ISSUES_FOUND.md #127.
+        let mut present: BTreeMap<String, u32> = BTreeMap::new();
         for animal in &self.animals {
             if animal.is_alive() {
                 *present.entry(animal.species_id.clone()).or_insert(0) += 1;
@@ -2753,12 +4855,34 @@ impl AnimalManager {
             *peak = (*peak).max(*count);
         }
 
+        self.ticks_since_migration += 1;
+        if self.ticks_since_migration < MIGRATION_INTERVAL {
+            return;
+        }
+        self.ticks_since_migration = 0;
+
+        let bounds = match self.world_bounds {
+            Some(bounds) => bounds,
+            None => return,
+        };
+
         let depleted: Vec<String> = self
             .peak_population
             .iter()
             .filter(|(species_id, peak)| {
                 let here = present.get(*species_id).copied().unwrap_or(0) as f32;
                 here < (**peak as f32) * DEPLETED_SHARE
+            })
+            // And nothing the small life already stands for. A country whose
+            // rabbits are a number cannot be short of rabbit *records*, and
+            // walking some in would put them back on the map beside the
+            // population that is already there.
+            .filter(|(species_id, _)| {
+                self.registry
+                    .as_ref()
+                    .and_then(|registry| registry.get(species_id))
+                    .map(|species| !species.is_stood_for_by_the_small_life())
+                    .unwrap_or(true)
             })
             .map(|(species_id, _)| species_id.clone())
             .collect();
@@ -2770,8 +4894,21 @@ impl AnimalManager {
         let mut rng = crate::core::dice::roll();
 
         for species_id in depleted {
-            if self.animals.len() >= self.max_population {
-                break;
+            // A species that is *gone* comes back whether the map is full or
+            // not. The cap is a rough statement of how much life this country
+            // carries, and a country carrying its whole weight in rabbits is
+            // exactly the country a fox should walk into - refusing him for
+            // want of room is the cap deciding which species exist.
+            //
+            // Measured before this: with the map pinned at its cap, the
+            // immigration pass broke out on the first line every time, so
+            // owl and fox went out of every world that had them in the first
+            // year and never came back in twenty. A merely thin species still
+            // waits for room; an absent one does not.
+            let gone = present.get(&species_id).copied().unwrap_or(0) == 0;
+
+            if !gone && self.how_many_are_alive() >= self.max_population {
+                continue;
             }
 
             if !rng.gen_bool(MIGRATION_CHANCE) {
@@ -2791,92 +4928,1451 @@ impl AnimalManager {
         }
     }
 
-    /// Process grazing - herbivores reduce hunger when grazing.
+    /// What the grazers took off the ground, and what went back onto it.
     ///
-    /// What a mouthful is worth depends on how many other mouths are on the
-    /// same ground. Grazing used to feed every animal the same amount however
-    /// many of them there were, which is to say the grass was infinite: nothing
-    /// stopped a herd growing until it hit the hard population cap, and no
-    /// number of predators could hold a herd that had no other limit on it.
-    fn process_grazing(&mut self) {
-        /// How many grazers a patch feeds properly before they start
-        /// competing for it
-        const GRAZERS_PER_PATCH: f32 = 6.0;
+    /// Grazing used to feed every animal out of nothing. There was a crowding
+    /// term - a headcount of mouths per patch - standing in for the food that
+    /// should have been doing the work, and the comment above `process_breeding`
+    /// has said as much since it was written: "grazing feeds every animal
+    /// nearly a hundred times what it burns, so hunger never becomes the
+    /// limit". Nothing on the map got any smaller for being eaten, so what
+    /// stopped a herd growing was a hard number in a field.
+    ///
+    /// Now a mouthful comes off a plant that is standing there and the plant
+    /// is that much less of a plant for it. What is left over after the animal
+    /// has taken what it can use lands on the ground behind it - see
+    /// `WHAT_AN_ANIMAL_GETS_OUT_OF_A_MOUTHFUL` - so the greater part of what
+    /// is grazed comes back to the soil a little further on, which is what
+    /// grazing animals are for as far as the ground is concerned.
+    fn what_the_grazers_took(
+        &mut self,
+        grid: &mut crate::world::Grid,
+        plants: &mut crate::environment::PlantManager,
+        grazing_ticks: f32,
+        weather: GrazingWeather,
+    ) {
+        use crate::world::Position;
+
+        if grazing_ticks <= 0.0 {
+            return;
+        }
 
         let registry = match &self.registry {
-            Some(r) => r,
+            Some(r) => r.clone(),
             None => return,
         };
 
-        // How many grazers are on each patch of ground
-        let mut crowding: HashMap<(i32, i32), f32> = HashMap::new();
-        for animal in &self.animals {
-            if !animal.is_alive() {
-                continue;
-            }
+        let flora = crate::environment::FloraRegistry::new();
 
-            let grazes = registry
-                .get(&animal.species_id)
-                .map(|species| {
-                    matches!(species.diet, DietType::Herbivore | DietType::Omnivore)
-                })
-                .unwrap_or(false);
-
-            if grazes {
-                *crowding
-                    .entry((
-                        animal.position.0 / GRAZING_PATCH,
-                        animal.position.1 / GRAZING_PATCH,
-                    ))
-                    .or_insert(0.0) += 1.0;
+        // Where the standing growth is. Built once for the pass, and laid out
+        // flat rather than as a map keyed by position: asking each animal to
+        // search the plant list would be every animal against every plant, and
+        // a tree map of eighty thousand entries a pass is not much better -
+        // see the canopy in `PlantManager::tick_in_world`, which is the same
+        // shape for the same reason. `u32::MAX` means nothing is growing here.
+        let (width, height) = (grid.width, grid.height);
+        let mut where_it_grows = vec![u32::MAX; width * height];
+        for (index, plant) in plants.all_plants().iter().enumerate() {
+            let (x, y) = plant.position;
+            if x >= 0 && y >= 0 && (x as usize) < width && (y as usize) < height {
+                where_it_grows[y as usize * width + x as usize] = index as u32;
             }
         }
 
+        // What each plant lost this pass, and whether it was pulled up whole.
+        let mut cropped: BTreeMap<usize, f32> = BTreeMap::new();
+        let mut pulled_up: std::collections::BTreeSet<usize> =
+            std::collections::BTreeSet::new();
+        let mut dunged: Vec<((i32, i32), f32)> = Vec::new();
+        let mut took_altogether = 0.0f64;
+        let mut mouths = 0u64;
+        let mut reached = 0u64;
+
         for animal in &mut self.animals {
-            if !animal.is_alive() {
+            if !animal.is_alive() || animal.state != AnimalState::Grazing {
                 continue;
             }
 
-            // Only grazing animals get food
-            if animal.state != AnimalState::Grazing {
+            let Some(species) = registry.get(&animal.species_id) else {
+                continue;
+            };
+
+            if species.diet == DietType::Carnivore {
                 continue;
             }
 
-            // Get diet type
-            if let Some(species) = registry.get(&animal.species_id) {
-                match species.diet {
-                    DietType::Herbivore | DietType::Omnivore => {
-                        // Grazing provides food (proportional to size)
-                        let graze_amount = match species.size {
-                            AnimalSize::Tiny => 2.0,
-                            AnimalSize::Small => 4.0,
-                            AnimalSize::Medium => 6.0,
-                            AnimalSize::Large => 10.0,
-                            AnimalSize::Huge => 15.0,
-                        };
+            let mut wanted = Self::what_it_reaches_for(species) * grazing_ticks;
+            let mut taken = 0.0;
 
-                        let mouths = crowding
-                            .get(&(
-                                animal.position.0 / GRAZING_PATCH,
-                                animal.position.1 / GRAZING_PATCH,
-                            ))
-                            .copied()
-                            .unwrap_or(1.0);
-                        let share = 1.0 / (1.0 + (mouths / GRAZERS_PER_PATCH));
-
-                        animal.feed(graze_amount * share);
-                    }
-                    DietType::Carnivore => {
-                        // Carnivores don't benefit from grazing
-                    }
+            // Underfoot first, then a step in any direction. An animal that is
+            // grazing is standing still and eating what is around it, not
+            // ranging - the ranging is what `update_animal_behavior_with_hunger`
+            // does when it is hungry and there is nothing here.
+            for (dx, dy) in Self::WHERE_AN_ANIMAL_CAN_REACH {
+                if wanted <= 0.0 {
+                    break;
                 }
+
+                let (x, y) = (animal.position.0 + dx, animal.position.1 + dy);
+                if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                    continue;
+                }
+
+                let index = where_it_grows[y as usize * width + x as usize];
+                if index == u32::MAX {
+                    continue;
+                }
+                let index = index as usize;
+
+                let plant = &plants.all_plants()[index];
+                let Some(kind) = flora.get(&plant.species_id) else {
+                    continue;
+                };
+
+                // Bring it up to now before taking anything off it. Most of
+                // the vegetation waits four months for its zone to come round
+                // - see `PlantManager::grow_a_zone` - and a plant something is
+                // standing on cannot wait that long, or it would lose
+                // condition a hundred and forty-four times for every time it
+                // gained any. This is the whole of what "unless there is
+                // something within reach of it" means.
+                plants.catch_up_one(
+                    index,
+                    grid,
+                    weather.precipitation,
+                    weather.now,
+                    weather.season,
+                );
+
+                let plant = &plants.all_plants()[index];
+
+                let already = cropped.get(&index).copied().unwrap_or(0.0);
+                let standing = plant.current_health - already;
+                if standing <= 0.0 {
+                    continue;
+                }
+
+                // A grown tree is browse, not grazing. Nothing eats a trunk;
+                // what a deer or a sheep gets off an oak is the shoots and
+                // leaves it can reach, which is a mouthful or two and no more
+                // however big the tree is - so what a tree offers is a flat
+                // small amount rather than a share of its bulk, and cropping
+                // it does not touch the tree.
+                //
+                // Excluding grown trees outright was the first cut and it is
+                // wrong on a wooded map: most of what is standing on a fresh
+                // map is timber, so twelve sheep on twenty-five hectares had
+                // almost nothing in reach, overshot to thirty on the hunger
+                // they were born with, and starved.
+                let grown_tree = kind.is_tree
+                    && !matches!(
+                        plant.growth_stage,
+                        crate::environment::GrowthStage::Seedling
+                            | crate::environment::GrowthStage::Growing
+                    );
+
+                let there_to_take = if grown_tree {
+                    standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_ticks - already)
+                } else {
+                    standing
+                };
+
+                if there_to_take <= 0.0 {
+                    continue;
+                }
+
+                let bite = wanted.min(there_to_take);
+                *cropped.entry(index).or_insert(0.0) += bite;
+                wanted -= bite;
+                taken += bite;
+
+                // A bear does not crop a root, it digs it up, and what has
+                // been dug up does not come back. Which animals do that is
+                // which animals feed by digging: the big omnivores. It is the
+                // manner of the feeding rather than a list of plants that
+                // decides it, so nothing here has to keep a hand-written
+                // vocabulary of what counts as a root.
+                if Self::does_it_dig(species) && !kind.is_tree {
+                    pulled_up.insert(index);
+                }
+            }
+
+            reached += 1;
+
+            if taken <= 0.0 {
+                // Nothing within reach. An animal that cannot feed where it
+                // is standing walks until it can, and until now nothing in
+                // this module did: a hungry animal either stood still or
+                // shuffled a cell or two at random once its `state_timer` ran
+                // out, which will not carry a herd off ground it has eaten
+                // bare. Twelve sheep on a fifty by fifty map cropped their own
+                // few tiles to nothing by tick two thousand eight hundred and
+                // then took not one further mouthful in three thousand ticks,
+                // with six hundred plants and thirty-eight thousand of
+                // standing growth on the map around them.
+                if let Some(towards) =
+                    Self::where_there_is_something_growing(animal.position, &where_it_grows, width, height)
+                {
+                    animal.position = towards;
+                }
+                continue;
+            }
+
+            animal.feed(taken * Self::what_a_mouthful_is_worth_to(species));
+            took_altogether += taken as f64;
+            mouths += 1;
+
+            // And what came straight through lands where the animal is now.
+            dunged.push((
+                animal.position,
+                taken * (1.0 - Self::WHAT_AN_ANIMAL_GETS_OUT_OF_A_MOUTHFUL),
+            ));
+        }
+
+        // Take it off the plants, and take up what was pulled up.
+        let standing = plants.all_plants_mut();
+        for (index, lost) in cropped {
+            if let Some(plant) = standing.get_mut(index) {
+                plant.current_health -= lost;
+                if pulled_up.contains(&index) {
+                    plant.current_health = 0.0;
+                }
+            }
+        }
+
+        self.forage_taken += took_altogether;
+        self.mouths_fed += mouths;
+        self.mouths_that_tried += reached;
+
+        // The dead go back into the ground on the plants' own pass - see
+        // `PlantManager::what_died`, which is what reads a plant at nothing.
+
+        for (at, muck) in dunged {
+            let here = Position::new(at.0, at.1);
+            if let Some(tile) = grid.get_tile_mut(&here) {
+                tile.soil.add_leaf_litter(muck);
             }
         }
     }
 
+    /// The tile an animal is on, and the eight around it.
+    const WHERE_AN_ANIMAL_CAN_REACH: [(i32, i32); 9] = [
+        (0, 0),
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1, 1),
+        (1, -1),
+        (-1, 1),
+        (-1, -1),
+    ];
+
+    /// How much standing growth an animal reaches for in a tick.
+    ///
+    /// Worked out from what it costs to be that animal - its own
+    /// `hunger_rate` - rather than from a table of appetites by size. Size is
+    /// what sets `hunger_rate` in the first place, so a second table by size
+    /// is a second answer to one question, and the first cut of this had one:
+    /// it set the appetites so that a mouthful came out worth what the old
+    /// flat rates gave, which preserved a number the module's own comments
+    /// call out as feeding an animal "nearly a hundred times what it burns".
+    /// Five thousand seven hundred head on a hundred and forty-four hectares
+    /// with a mean hunger of 0.30 - which is to say the grass was still
+    /// infinite, only now it was infinite by arithmetic instead of by
+    /// omission.
+    ///
+    /// The margin over what it burns is what lets a well-fed animal put
+    /// condition on and get to breeding; on ground that will not give it that
+    /// much it takes what there is and stays hungry.
+    fn what_it_reaches_for(species: &AnimalSpecies) -> f32 {
+        // Mass to the three quarters, which is how much of a thing there is
+        // to feed.
+        //
+        // Not mass itself: a cow is three hundred times a rabbit and does not
+        // eat three hundred times the grass, because what an animal burns
+        // rises more slowly than its bulk does. Three quarters is the exponent
+        // the biology uses and it is the difference between a herd of cattle
+        // being ten times a herd of sheep and being a hundred times it.
+        //
+        // This was five size buckets, which is the same statement made in five
+        // steps: it said a cow and a mammoth eat the same as each other within
+        // a factor of two, when one of them is ten times the other. Anchored
+        // so that a sixty-kilo sheep eats exactly what it ate before, because
+        // the plant balance was measured against that number and there is no
+        // reason to move it.
+        const WHAT_A_SIXTY_KILO_SHEEP_TAKES: f32 = 0.18;
+        let by_mass = WHAT_A_SIXTY_KILO_SHEEP_TAKES
+            * (species.mass_kg.max(0.001) / 60.0).powf(0.75);
+
+        // And by how many of them the record stands for, which is one for
+        // everything but the colonies - see
+        // `AnimalSpecies::how_many_it_stands_for`.
+        //
+        by_mass * species.how_many_it_stands_for()
+    }
+
+    /// What a mouthful an omnivore turns up is worth against what the same
+    /// ground pays something that crops it.
+    ///
+    /// **A boar rooting is not a cow eating a field**, and until omnivores
+    /// could forage at all nothing had to say so. Letting them into `Grazing`
+    /// and paying them a grazer's return took the boar from twenty-three head
+    /// to seven hundred and seventy on a hundred square kilometres in two
+    /// years - none of them starving, one of them taken - which is a primary
+    /// consumer's living with a mid-predator's freedom and nothing eating it.
+    ///
+    /// **And it has to be the gain rather than the reach**, which is where
+    /// the first cut of it put the number and why that cut made the boars
+    /// three times worse still, at 2,370. `what_a_mouthful_is_worth_to`
+    /// divides by `what_it_reaches_for`, so an animal that finds all it
+    /// reaches for comes out ahead of its burn by `MORE_THAN_IT_BURNS`
+    /// *whatever the reach is*: cutting the reach left the boar's living
+    /// exactly as it was and only made it cheaper on the flora, so there was
+    /// more grass for the next boar. One question with two places to answer
+    /// it, and the first place was the one that had already been normalised
+    /// away.
+    ///
+    /// A boar still turns over as much ground as its bulk says - `does_it_dig`
+    /// destroys what it turns up rather than cropping it - and gets a third
+    /// of a grazer's living out of it, which leaves it a shade over its keep
+    /// instead of at three times it.
+    const WHAT_ROOTING_PAYS_AGAINST_GRAZING: f32 = 0.35;
+
+    /// And which animals are doing that.
+    fn what_a_mouthful_is_worth_against_a_grazer(species: &AnimalSpecies) -> f32 {
+        if species.diet == DietType::Omnivore {
+            Self::WHAT_ROOTING_PAYS_AGAINST_GRAZING
+        } else {
+            1.0
+        }
+    }
+
+    /// What one unit of forage is worth to this animal, on its own hunger
+    /// scale.
+    ///
+    /// The other half of the same split. An animal that finds all it reaches
+    /// for comes out ahead of its own burn by `MORE_THAN_IT_BURNS`, whatever
+    /// size it is - which is what the old single formula meant and is worth
+    /// keeping - but it now gets there from a mouthful sized by its bulk
+    /// rather than by its metabolism. A mouse takes very little grass and that
+    /// very little is a great deal to a mouse.
+    fn what_a_mouthful_is_worth_to(species: &AnimalSpecies) -> f32 {
+        species.hunger_rate
+            * Self::MORE_THAN_IT_BURNS
+            * Self::what_a_mouthful_is_worth_against_a_grazer(species)
+            / Self::what_it_reaches_for(species).max(0.0001)
+    }
+
+    /// A step towards the nearest ground with something growing on it.
+    ///
+    /// Rings outwards from where the animal is standing and stops at the
+    /// first thing it finds, so it walks towards the near side of the next
+    /// patch rather than across the map. A cell is ten metres, so
+    /// `HOW_FAR_AN_ANIMAL_WILL_LOOK` is a couple of hundred metres - about as
+    /// far as an animal can see over open ground, and as far as it is worth
+    /// spending on the search.
+    fn where_there_is_something_growing(
+        from: (i32, i32),
+        where_it_grows: &[u32],
+        width: usize,
+        height: usize,
+    ) -> Option<(i32, i32)> {
+        const HOW_FAR_AN_ANIMAL_WILL_LOOK: i32 = 20;
+
+        for ring in 2..=HOW_FAR_AN_ANIMAL_WILL_LOOK {
+            for dy in -ring..=ring {
+                for dx in -ring..=ring {
+                    // Only the edge of this ring; the inside has been looked at.
+                    if dx.abs() != ring && dy.abs() != ring {
+                        continue;
+                    }
+
+                    let (x, y) = (from.0 + dx, from.1 + dy);
+                    if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                        continue;
+                    }
+                    if where_it_grows[y as usize * width + x as usize] == u32::MAX {
+                        continue;
+                    }
+
+                    // A step of the size an animal covers between grazing
+                    // passes, in the direction of what it has found.
+                    let step = |d: i32| d.signum() * d.abs().min(Self::HOW_FAR_AN_ANIMAL_WALKS);
+                    return Some((from.0 + step(dx), from.1 + step(dy)));
+                }
+            }
+        }
+
+        None
+    }
+
+    /// How far an animal moves in a grazing pass, in cells.
+    ///
+    /// Ten ticks is most of a day and a cell is ten metres, so this is a few
+    /// hundred metres of walking - which is what a grazing animal does in a
+    /// day when the ground it is on has been eaten off.
+    const HOW_FAR_AN_ANIMAL_WALKS: i32 = 3;
+
+    /// How much a grown tree gives a browsing animal, per tick.
+    ///
+    /// A flat amount rather than a share of the tree: what is within reach of
+    /// something on four legs is the same handful of shoots whether the tree
+    /// is a birch or a sequoia. Enough that a wood will carry a few animals
+    /// and nothing like what a meadow carries, which is the right way round.
+    const WHAT_A_TREE_OFFERS_A_BROWSER: f32 = 0.05;
+
+    /// How much over its own burn an animal eats when it can find it.
+    ///
+    /// What matters about the exchange between a plant and an animal is that
+    /// the two ends are real - how fast a plant puts condition back on
+    /// (`HOW_FAST_A_PLANT_COMES_BACK`, scaled by what the ground gives it) and
+    /// how fast an animal burns it (`hunger_rate`) - because their ratio is
+    /// what a piece of country will carry.
+    ///
+    /// As it comes out for a middling grazer: a grass has five points of
+    /// condition and puts back about eight a year on middling ground, and a
+    /// deer burns two hundred a year. So a deer wants the whole yield of
+    /// something like seventy or eighty patches of sward, and a hundred and
+    /// forty-four hectares carrying ten thousand of them will feed deer in the
+    /// low hundreds.
+    const MORE_THAN_IT_BURNS: f32 = 3.0;
+
+    /// How much of a mouthful an animal actually gets out of it.
+    ///
+    /// A grazing animal digests something over half of what it eats and the
+    /// rest goes through and lands on the ground behind it. Of the half it
+    /// does digest, nearly all is burnt for warmth and movement and leaves as
+    /// breath and water; only a few per cent ever becomes animal. So what the
+    /// ground gets back is what came straight through, and what it loses for
+    /// good is what the animal burned.
+    const WHAT_AN_ANIMAL_GETS_OUT_OF_A_MOUTHFUL: f32 = 0.55;
+
+    /// How many of a litter or clutch are put on the map.
+    ///
+    /// The size the species declares, thinned by what actually comes through -
+    /// see `AnimalSpecies::how_many_of_a_litter_come_through`. Drawn rather
+    /// than rounded, so that a pair whose expected surviving litter is under
+    /// one still sometimes rears one.
+    fn how_many_come_through(
+        species: &AnimalSpecies,
+        rng: &mut impl rand::Rng,
+    ) -> u32 {
+        let born = rng.gen_range(species.litter_size.0..=species.litter_size.1);
+
+        let reared = born.min(AnimalSpecies::A_LITTER_SMALL_ENOUGH_TO_REAR);
+        let gambled = born.saturating_sub(AnimalSpecies::A_LITTER_SMALL_ENOUGH_TO_REAR);
+        let expected = reared as f32
+            + gambled as f32 * species.how_many_of_a_litter_come_through();
+
+        let mut reared = expected.floor() as u32;
+        if rng.gen::<f32>() < expected.fract() {
+            reared += 1;
+        }
+        reared
+    }
+
+    /// How far a predator will chase, in cells.
+    const HOW_FAR_A_HUNT_REACHES: i32 = 8;
+
+    /// How far off one of its own kind still counts as standing with it.
+    const HOW_FAR_A_HERD_STANDS_TOGETHER: i32 = 4;
+
+    /// The same, for anything outside this module that wants to count a herd
+    /// the way the hunt counts one.
+    pub fn how_far_a_herd_stands_together() -> i32 {
+        Self::HOW_FAR_A_HERD_STANDS_TOGETHER
+    }
+
+    /// How big a hunting ground is, in cells.
+    ///
+    /// Eighty cells is eight hundred metres, so a hunting ground is sixty-four
+    /// hectares. It is not the same thing as the block a hunt is resolved in
+    /// and must not be: a hunt reaches eighty metres and a stoat's range is
+    /// tens of hectares, and sharing the small game out over eighty-metre
+    /// squares said a hunting ground held two stoats where it should hold
+    /// three over a hundred times the area. Four square kilometres came out
+    /// with seven hundred and twenty-one of them.
+    pub(crate) const HOW_BIG_A_HUNTING_GROUND_IS: i32 = 80;
+
+    /// What share of its ordinary burn a beast is paying, where it is standing,
+    /// in the season it is standing there.
+    ///
+    /// "The burrows would offer shelter from weather, predators, and places to
+    /// hibernate in the winter." The predator half of that was already in -
+    /// see `what_a_hunt_comes_to`, where a hole is what a rabbit's answer to
+    /// a wolf is. This is the winter half, and it is the half that decides
+    /// which animals a hard year takes: a rabbit that can lie up in a bank
+    /// pays a fraction of what a deer standing out in it pays, on the same
+    /// bare ground.
+    ///
+    /// A burrower needs ground it can actually dig - a rabbit on bare rock
+    /// has no more hole than a deer does - and a bear needs nothing, because
+    /// a bear dens wherever it finds a den. Nothing else gets anything: a
+    /// wolf's winter is a wolf's winter.
+    ///
+    /// The weather half of the specification has nothing to answer yet.
+    /// Nothing in this model kills an animal with cold directly; winter bites
+    /// through the forage going off the map, which is why lying up is
+    /// expressed as burning less rather than as taking less damage.
+    pub fn what_a_winter_costs(
+        species: &AnimalSpecies,
+        ground: WhatTheGroundOffers,
+        season: crate::environment::Season,
+    ) -> f32 {
+        if season != crate::environment::Season::Winter {
+            return 1.0;
+        }
+
+        let can = match species.what_it_can_do() {
+            Some(can) => can,
+            None => return 1.0,
+        };
+
+        // A bear is asleep. A rabbit is not: it is out of the wind, and that
+        // is a different and much smaller thing.
+        if species.id == "bear" {
+            Self::WHAT_A_WINTER_ASLEEP_COSTS
+        } else if can.burrows && ground.can_be_dug {
+            Self::WHAT_A_WINTER_UNDER_COVER_COSTS
+        } else {
+            1.0
+        }
+    }
+
+    /// How much of itself an animal mends in a day.
+    ///
+    /// "Healing should be a gradual process, not an instant process. Perhaps
+    /// along the lines of 1% per day." A hundred days from a mortal wound to
+    /// a whole skin, which for most of this registry is a good part of a
+    /// life - and that is the point of it. A wound that mends by Thursday is
+    /// a wound that costs nothing, and once being hurt makes an animal slower
+    /// (see [`Animal::how_fast_it_still_is`]) a rush that does not kill still
+    /// has to be worth something to the pack that made it.
+    pub const HOW_MUCH_OF_ITSELF_IT_MENDS_A_DAY: f32 = 0.01;
+
+    /// And a tick of it, off the calendar rather than written out again.
+    pub const HOW_MUCH_OF_ITSELF_IT_MENDS_A_TICK: f32 = Self::HOW_MUCH_OF_ITSELF_IT_MENDS_A_DAY
+        / crate::environment::seasons::TICKS_PER_DAY as f32;
+
+    /// What a winter spent asleep costs, against one spent out in it.
+    ///
+    /// Not nought. A hibernating animal is not a stopped clock - it lives off
+    /// what it put on in the autumn and it can still run out - and a beast
+    /// that paid nothing all winter would be an animal the season could not
+    /// touch, which is the opposite of what the season is for.
+    pub const WHAT_A_WINTER_ASLEEP_COSTS: f32 = 0.3;
+
+    /// And what one spent in a burrow costs, which is a far smaller thing.
+    ///
+    /// **This number was measured, and the first guess at it was badly
+    /// wrong.** Giving every burrower the sleeping rate - three tenths, for a
+    /// quarter of the year, while it goes on feeding normally - took a
+    /// hundred and twenty by a hundred and twenty from 682 head at the end of
+    /// its first year to **2,533**, and the tick from 1.9 ms to 10.9 the
+    /// following year as the country tried to carry them. That is not a
+    /// burrow; that is a rabbit the winter cannot reach.
+    ///
+    /// A rabbit in a bank is out of the wind and nothing more. It is awake,
+    /// it is eating, and what it saves is the part of its burn that goes on
+    /// keeping warm.
+    pub const WHAT_A_WINTER_UNDER_COVER_COSTS: f32 = 0.85;
+
+    /// The weight of hunter one head of the grazer layer is measured
+    /// against, in kilogrammes: a hawk.
+    ///
+    /// Everything about what the small life is worth is anchored here,
+    /// because this is the one place the specification gives two numbers
+    /// that can be checked against each other rather than guessed.
+    const THE_HUNTER_A_RABBIT_IS_A_MEAL_FOR: f32 = 1.0;
+
+    /// And how many days one head of it keeps that hunter.
+    ///
+    /// "A hawk can eat a rabbit a day, but a rabbit can also last two days."
+    const DAYS_A_GRAZER_KEEPS_THAT_HUNTER: f32 = 2.0;
+
+    /// How the keep one carcase gives falls off as the hunter gets bigger.
+    ///
+    /// **Not the three-quarter power of metabolism**, which is the obvious
+    /// thing to reach for and is wrong here by a factor of five. Metabolism
+    /// says a forty-kilogramme wolf needs sixteen times a hawk's day and so
+    /// gets a sixteenth of a hawk's keep out of a rabbit - twelve rabbits a
+    /// day, which is not a wolf. What a wolf actually wants is nearer two
+    /// and a half.
+    ///
+    /// The gap is waste. A hawk is the right size for a rabbit and gets days
+    /// out of it; a wolf is not, and most of what a hawk would live on for a
+    /// week a wolf swallows in a sitting. So this is fitted to the two ends
+    /// rather than derived from the middle: a hawk at two days a rabbit and a
+    /// wolf at two and a half rabbits a day is `log 4 / log 40`, which is
+    /// this. The rest of the table falls where it should - a fox a rabbit a
+    /// day, a stoat three days to one, a lion four a day - and none of those
+    /// was fitted.
+    const HOW_KEEP_FALLS_OFF_WITH_WEIGHT: f32 = 0.4;
+
+    /// How many days one head of the small-grazer layer - a rabbit - keeps a
+    /// hunter of this weight fed.
+    ///
+    /// The unit the whole abstracted layer is priced in, and the reason it
+    /// is priced in days rather than in a size ladder: days are a thing the
+    /// specification states about real animals and a ladder is a thing
+    /// somebody picks. `AnimalSize` cannot carry this - a wolf and a hawk are
+    /// both `Small` in this model, at forty kilogrammes and one - so it comes
+    /// off the weight, which is already in the table and already right.
+    pub fn days_a_grazer_keeps(mass_kg: f32) -> f32 {
+        let weight = mass_kg.max(0.01) / Self::THE_HUNTER_A_RABBIT_IS_A_MEAL_FOR;
+        Self::DAYS_A_GRAZER_KEEPS_THAT_HUNTER * weight.powf(-Self::HOW_KEEP_FALLS_OFF_WITH_WEIGHT)
+    }
+
+    /// And how many days one head of the rodent layer - a vole - keeps it.
+    ///
+    /// Straight off the same figure, at the exchange rate the layers
+    /// themselves carry: a quarter of a day for the hawk, which is the
+    /// specification's four mice, and it was never separately chosen.
+    pub fn days_a_rodent_keeps(mass_kg: f32) -> f32 {
+        Self::days_a_grazer_keeps(mass_kg) / SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER
+    }
+
+    /// What one head of the grazer layer is worth to this animal, in the
+    /// units `feed` takes.
+    ///
+    /// Days of keep times what it burns in a day: the one place head and
+    /// energy are converted into each other, so that what comes off a ground
+    /// and what goes into an animal cannot disagree. That they *did* disagree
+    /// is the whole of ISSUES #153's residue - the ground was asked for what
+    /// a hunter could hold rather than what a carcase holds, so the country's
+    /// small life stood at six per cent of what it would carry.
+    pub fn what_a_grazer_is_worth_to(hunter: &AnimalSpecies) -> f32 {
+        Self::days_a_grazer_keeps(hunter.mass_kg)
+            * crate::environment::seasons::TICKS_PER_DAY as f32
+            * hunter.hunger_rate
+    }
+
+    /// And one head of the rodent layer.
+    pub fn what_a_rodent_is_worth_to(hunter: &AnimalSpecies) -> f32 {
+        Self::what_a_grazer_is_worth_to(hunter) / SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER
+    }
+
+    /// How many head a period of hunting actually comes away with, given the
+    /// rate the ground pays.
+    ///
+    /// Whole animals. A rate under one is the chance of taking anything at
+    /// all this tick; a rate over one is that many for certain and a roll on
+    /// what is left over. The expectation is exactly the rate, so turning
+    /// the old stipend into catches did not quietly change what a piece of
+    /// country feeds - it changed only whether a hunter's week has good days
+    /// and bad ones in it.
+    fn what_a_period_of_hunting_takes(rate: f32, rng: &mut impl rand::Rng) -> f32 {
+        if rate <= 0.0 {
+            return 0.0;
+        }
+        let whole = rate.floor();
+        whole + if rng.gen::<f32>() < rate - whole { 1.0 } else { 0.0 }
+    }
+
+    /// How much bigger than itself a hunter will take on in the assumed
+    /// layers.
+    ///
+    /// The one thing weight cannot say by itself. A kingfisher weighs fifty
+    /// grammes and a rabbit two kilogrammes, and no arithmetic about days of
+    /// keep will stop it eating one unless something says it cannot lift it.
+    /// A vole is under everybody's ceiling and never touches this.
+    const HOW_MUCH_BIGGER_THAN_ITSELF_IT_WILL_TAKE: f32 = 2.0;
+
+    /// What share of the grazer layer a hunter of this weight can actually
+    /// take.
+    ///
+    /// One at a fox and above, a fifth for a kestrel, a twentieth for a
+    /// kingfisher - which is what "the small predators live on voles, not on
+    /// rabbits" comes to when it is written as a number rather than as a
+    /// list of species.
+    pub fn how_much_of_the_grazers_it_can_take(mass_kg: f32) -> f32 {
+        (mass_kg * Self::HOW_MUCH_BIGGER_THAN_ITSELF_IT_WILL_TAKE
+            / SmallLife::WHAT_A_GRAZER_WEIGHS)
+            .clamp(0.0, 1.0)
+    }
+
+    /// How many head of the grazer layer a hunter turns up in a day, working
+    /// the best ground in the country with nobody else on it.
+    ///
+    /// A find rate, not an appetite - and that distinction is what the
+    /// rodents made necessary. It is the same for everything that hunts,
+    /// because how much a day of turning over a wood produces is a fact
+    /// about the wood and about how long a day is, not about how hungry the
+    /// animal doing it happens to be. What differs between a hawk and a wolf
+    /// is what the day's find is *worth* to them, and
+    /// `what_a_grazer_is_worth_to` is where that lives.
+    ///
+    /// Two rabbits and sixteen voles at `cover` of one - which is a
+    /// ceiling nothing in the world actually stands on. The thickest cover
+    /// any terrain offers is standing timber at six tenths, so a hawk with
+    /// the best wood in the country to itself and the wood carrying all it
+    /// can turns up a rabbit and ten voles in a day. That is four or five
+    /// times its keep in the one case that should be easy, and it is cut by
+    /// the cover, by how thick the ground actually is, and by everything
+    /// else working the same ground - which between them are what decide
+    /// whether a bird of prey can live somewhere.
+    ///
+    /// **Measured up from three quarters.** At that figure a hawk alone on
+    /// full-stocked forest got 1.8 times its keep, which sounds ample and is
+    /// not: halve it for a ground standing at half stock and halve it again
+    /// for one rival, and it is under its burn. A hundred square kilometres
+    /// came out with no eagle, no heron, no kestrel and no fish on it.
+    ///
+    /// Raising it costs the layer nothing, which is the part worth knowing.
+    /// A hunter eats what it burns and no more - it takes what it eats, not
+    /// what it finds - so the find rate decides *whether* an animal can
+    /// reach its keep on a piece of ground and never *how much* comes off
+    /// that ground once it can. What the layer will support is set by the
+    /// surplus it grows, and one hunting ground's rodents alone will keep
+    /// four hawks or eight kestrels.
+    const GRAZERS_A_DAY_ON_THE_BEST_GROUND: f32 = 2.0;
+
+    /// How much cover a piece of ground wants before something that hunts
+    /// can be put down on it.
+    ///
+    /// Derived rather than picked, and **re-derived when the curve under it
+    /// moved**. What a ground turns up goes as the cover to the power of one
+    /// and a half, so three tenths of cover is a sixth of the best ground
+    /// there could be rather than a third of it: at the old bar a kestrel put
+    /// down on riverbank or meadow got four fifths of its keep on ground at
+    /// half stock and starved, and a hundred and two of them did. This is
+    /// where the hungriest of the small hunters still clears its burn with
+    /// the ground at half stock and nothing else on it, which is the least a
+    /// bar like this can mean.
+    ///
+    /// Forest and wetland clear it; riverbank, meadow, hills, open plain,
+    /// desert, beach and salt flat do not - which is a narrower statement of
+    /// where a bird of prey lives than it was, and a truer one.
+    pub const WHAT_A_HUNTER_NEEDS_UNDERFOOT: f32 = 0.40;
+
+    /// What a piece of country is worth to one more hunter: the game on it,
+    /// divided between the hunters that would then be on it.
+    ///
+    /// One owner for the question, asked from both ends. Whether the ground a
+    /// hunter is standing on is crowded and which way it should go when it
+    /// leaves are the same question about two pieces of country, and having
+    /// two spellings of it is how a hunter ends up leaving good ground for
+    /// bad. It also keeps the arithmetic honest at nought hunters, which the
+    /// caller can produce for a neighbouring ground with nothing on it.
+    pub fn how_good_a_living(game: usize, hunters: usize) -> f32 {
+        game as f32 / hunters.max(1) as f32
+    }
+
+    /// How much game one hunter wants under it before the ground is holding
+    /// all the hunters it will hold.
+    ///
+    /// Sixty-four hectares carrying this much a head is the line. It is not a
+    /// carrying capacity - the ground does not stop them - it is where a
+    /// hunter stops treating another hunter as a neighbour.
+    pub const WHAT_A_HUNTER_WANTS_UNDER_IT: f32 = 10.0;
+
+    /// Whether a piece of country is holding more hunters than the game on it
+    /// will keep apart.
+    ///
+    /// This used to be a flat count - three hunters to a ground, whatever was
+    /// on it - which makes a territory a queue rather than a living. Ten
+    /// wolves on ground thick with deer are not in each other's way and two on
+    /// ground that has been eaten out are, and it is the second of those that
+    /// the specification is about: "as prey species decrease in number, this
+    /// should cause predators to attack each other for food". The pressure has
+    /// to come from the game running out, or the seasons have been taken out
+    /// of it.
+    pub fn is_the_ground_crowded(game: usize, hunters: usize) -> bool {
+        Self::how_good_a_living(game, hunters) < Self::WHAT_A_HUNTER_WANTS_UNDER_IT
+    }
+
+    /// Which hunting ground a position falls in.
+    pub fn whose_ground(at: (i32, i32)) -> (i32, i32) {
+        (
+            at.0.div_euclid(Self::HOW_BIG_A_HUNTING_GROUND_IS),
+            at.1.div_euclid(Self::HOW_BIG_A_HUNTING_GROUND_IS),
+        )
+    }
+
+    /// What a rush in the open comes off at, before anything else is counted.
+    const WHAT_AN_OPEN_CHASE_COMES_OFF: f32 = 0.4;
+
+    /// What a way out leaves of a hunt, when the hunter cannot follow.
+    ///
+    /// A large advantage and not an absolute one. A hole in the ground is not
+    /// proof and neither is a tree: things get caught short of the burrow, off
+    /// the water, on the nest, on the ground. An absolute escape was the first
+    /// cut and it was measured wrong - it handed the birds the map, because a
+    /// goose that no fox, wolf, boar or otter could ever touch outbred
+    /// everything that could be caught, and four square kilometres came out
+    /// with a hundred and eighty geese and no deer, sheep, cattle or rabbits
+    /// at all. The specification asks that a squirrel in a tree be safe from
+    /// *many* predators and that a rabbit have the *option* of its burrow,
+    /// which is this and not immunity.
+    const WHAT_A_REFUGE_LEAVES: f32 = 0.12;
+
+    /// What every other one of its own kind standing with it adds to what it
+    /// takes to bring it down.
+    const WHAT_ANOTHER_OF_ITS_KIND_ADDS: f32 = 0.5;
+
+    /// What the quarry takes out of a hunter whose rush does not come off,
+    /// as a share of what the quarry hits for.
+    const WHAT_A_FAILED_RUSH_COSTS: f32 = 0.3;
+
+    /// What the small life of a piece of ground gives something hunting over
+    /// it.
+    ///
+    /// The mice, the voles, the small birds, the frogs, the lizards, the
+    /// insects and the worms are assumed, not counted - the same standing
+    /// decision the specification makes about decomposers and pollinators, and
+    /// for the same reason. They were tried as records and the measurement is
+    /// worth keeping: modelled one for one they are *right* and unaffordable.
+    /// The grass on four square kilometres carries sixteen thousand of them,
+    /// which is about four thousand to the square kilometre and less than a
+    /// real vole year, and a hundred square kilometres would want four hundred
+    /// thousand records against a tick budget that is the constraint this
+    /// whole piece of work is written under.
+    ///
+    /// So the ground has a small-game yield instead, and three things fall out
+    /// of it that are worth having:
+    ///
+    /// - A stoat, a kestrel and an adder can live somewhere without a herd of
+    ///   anything being on the map, which is what a small predator does.
+    /// - It is worth having only to something small. A wolf cannot live on
+    ///   voles and does not.
+    /// - It is **shared**. What a piece of ground yields is what it yields,
+    ///   however many are working it, so hunters in each other's way each get
+    ///   less - which is what a territory is, in a model that cannot draw a
+    ///   line on a map.
+    pub fn what_the_small_life_gives(
+        hunter: &AnimalSpecies,
+        ground: WhatTheGroundOffers,
+        sharing_it: f32,
+    ) -> f32 {
+        let (grazers, rodents, fish) =
+            Self::what_the_small_life_turns_up(hunter, ground, sharing_it);
+        grazers * Self::what_a_grazer_is_worth_to(hunter)
+            + rodents * Self::what_a_rodent_is_worth_to(hunter)
+            + fish * Self::what_a_fish_is_worth_to(hunter)
+    }
+
+    /// And the same in head, a band at a time: what a day of working this
+    /// ground turns up, divided by a tick.
+    ///
+    /// The head is the thing the ground actually loses, so this is what the
+    /// forage reads and `what_the_small_life_gives` is a wrapper over it
+    /// rather than the other way round. Written the other way round - an
+    /// energy, converted back into head by whatever divisor was to hand -
+    /// is how a full country's small life came to stand at six per cent of
+    /// what it would carry with nothing to show for it.
+    pub fn what_the_small_life_turns_up(
+        hunter: &AnimalSpecies,
+        ground: WhatTheGroundOffers,
+        sharing_it: f32,
+    ) -> (f32, f32, f32) {
+        /// And what open water is worth to something that lives in it.
+        ///
+        /// On a par with a wood, which is what a lake is to a fish: the
+        /// `cover` of a water tile is a statement about how much a *land*
+        /// hunter can find to turn over there, and reading it for a fish
+        /// prices its own element as barren.
+        const WHAT_OPEN_WATER_IS_WORTH_TO_A_SWIMMER: f32 = 0.60;
+
+        // Cover stands for how much the ground grows, which is what the
+        // small life is living on in its turn: a wood and a reed bed are
+        // thick with it and a salt flat has none.
+        //
+        // Open water grows nothing a hunter can turn over - **unless the
+        // hunter lives in it**, in which case the water is its whole larder
+        // and the penalty is written from the wrong point of view. That is
+        // what starved the fish: 121 of them at generation, 3,953 born over a
+        // year and 4,031 starved, because a lake was being priced as bad
+        // ground for a fish. A hunting ground of open water is as rich to
+        // something that swims as a wood is to something that does not.
+        /// How much faster than the cover itself a hunter's living falls
+        /// away as the ground thins.
+        ///
+        /// Not in straight proportion, which is what it was. Bare ground is
+        /// poor twice over: it grows less for the small life to live on, and
+        /// what does live on it has nowhere to be, so a hunter turns up less
+        /// of less. At the square root of a cube a wood at six tenths pays
+        /// nearly half of the best ground there could be and open plain at
+        /// fifteen hundredths pays a seventeenth - which is the difference
+        /// between where a bird of prey lives and where it does not, and in
+        /// straight proportion it was only a factor of four.
+        const HOW_A_LIVING_FALLS_AWAY_WITH_THE_COVER: f32 = 1.5;
+
+        let how_rich = if ground.is_water {
+            if hunter.feeds_in_the_water() {
+                WHAT_OPEN_WATER_IS_WORTH_TO_A_SWIMMER
+            } else if ground.can_be_dug {
+                ground.cover
+            } else {
+                ground.cover * 0.25
+            }
+        } else {
+            ground.cover
+        }
+        .clamp(0.0, 1.0)
+        .powf(HOW_A_LIVING_FALLS_AWAY_WITH_THE_COVER);
+
+        // Shared out, not softened by a root. What a piece of ground grows is
+        // what it grows however many are working it, and that is the whole of
+        // what a territory is in a model that cannot draw a line on a map:
+        // two hunters on one ground each get half of it, and the second one
+        // starves off it.
+        let a_tick = Self::GRAZERS_A_DAY_ON_THE_BEST_GROUND * how_rich / sharing_it.max(1.0)
+            / crate::environment::seasons::TICKS_PER_DAY as f32;
+
+        // **Which larder it is taking out of, not only how much.** A heron
+        // standing in a lake is not turning over voles, and until the fish
+        // were a band it was doing exactly that: the yield came out of the
+        // water's own rate and was subtracted from the ground's mice. So
+        // water hunters thinned a field they never touched, and the water
+        // they emptied refilled by arithmetic that knew nothing about them.
+        //
+        // The same question the yield already asks - is the tile it is
+        // standing on water, and does this animal feed in water - decides
+        // it, in the one place.
+        if ground.is_water && hunter.feeds_in_the_water() {
+            // Grown fish, as much of them as it can take, **and the fry**.
+            //
+            // The land turns up two bands and the water has to turn up two
+            // as well, or open water is worth half a wood to the thing that
+            // swims in it while `WHAT_OPEN_WATER_IS_WORTH_TO_A_SWIMMER` says
+            // it is worth the same. Measured with the fry left off: the
+            // heron went from thirteen to **nought** on water that had just
+            // been emptied of its competition, because a heron standing in a
+            // lake was getting half of what the same heron got standing in a
+            // field.
+            //
+            // They come off the one stock rather than a second one, which is
+            // where the water and the land differ and why: what separates
+            // the rabbits from the voles is that a snare catches one and not
+            // the other, and there is no such thing in the water. Fry and
+            // grown fish live in the same reach and answer to the same
+            // capacity, so one band in head of grown fish holds both, with
+            // the fry counted at what they are worth.
+            const FRY_TURNED_UP_FOR_A_GROWN_FISH: f32 =
+                SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER;
+            const HOW_MANY_FRY_MAKE_A_FISH: f32 = SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER;
+
+            return (
+                0.0,
+                0.0,
+                a_tick
+                    * (Self::how_much_of_the_fish_it_can_take(hunter.mass_kg)
+                        + FRY_TURNED_UP_FOR_A_GROWN_FISH / HOW_MANY_FRY_MAKE_A_FISH),
+            );
+        }
+
+        (
+            a_tick * Self::how_much_of_the_grazers_it_can_take(hunter.mass_kg),
+            a_tick * SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER,
+            0.0,
+        )
+    }
+
+    /// How much of what is in the water this one can actually take, nought
+    /// to one.
+    ///
+    /// The same rule the grazer band is under, said of the band the water
+    /// holds: a fifty-gramme bird cannot take a two-kilogramme fish, and
+    /// without this the water was a larder every fish-eater drew on at the
+    /// same rate however big it was.
+    ///
+    /// What it costs is that a bird which lives on minnows gets a poor
+    /// living out of this model's water, because the water is held as one
+    /// band and that band is grown fish. The land answers the same question
+    /// with two bands - see `TheSmallLifeHere::rodents` - and the water has
+    /// no equivalent. That is a real limit, and it is written down rather
+    /// than tuned around: **it is not what stopped the kingfisher**, and
+    /// putting it in by itself made the kingfisher worse, because what it
+    /// did was move a bird that was living off the water onto the land's
+    /// voles instead. See `is_stood_for_by_the_small_life`.
+    pub fn how_much_of_the_fish_it_can_take(mass_kg: f32) -> f32 {
+        (mass_kg * Self::HOW_MUCH_BIGGER_THAN_ITSELF_IT_WILL_TAKE / SmallLife::WHAT_A_FISH_WEIGHS)
+            .clamp(0.0, 1.0)
+    }
+
+    /// What one fish out of the water is worth to something that eats it.
+    ///
+    /// The same as a grazer, because a fish and a grazer are the same two
+    /// kilogrammes - see `SmallLife::WHAT_A_FISH_WEIGHS`. Written as its own
+    /// function rather than as a call to the grazer's at every site, so that
+    /// the day the two weights part company there is one line to change and
+    /// not a search to do.
+    pub fn what_a_fish_is_worth_to(hunter: &AnimalSpecies) -> f32 {
+        Self::days_a_grazer_keeps(hunter.mass_kg)
+            * (SmallLife::WHAT_A_FISH_WEIGHS / SmallLife::WHAT_A_GRAZER_WEIGHS)
+            * crate::environment::seasons::TICKS_PER_DAY as f32
+            * hunter.hunger_rate
+    }
+
+    /// How much of its living a hunter of this sort would take out of the
+    /// assumed layers, if it had good ground to itself: nought to one.
+    ///
+    /// What shares a hunting ground. Counting heads says a bear standing in a
+    /// wood halves what a kestrel gets out of it, when a bear turning over a
+    /// log for grubs takes a third of a day's keep from ground that keeps a
+    /// kestrel three times over. This is that, asked of a species rather than
+    /// of an animal, so it costs nothing to ask it of every hunter on the map
+    /// every tick.
+    pub fn how_much_it_leans_on_the_small_life(hunter: &AnimalSpecies) -> f32 {
+        let best_ground = WhatTheGroundOffers {
+            cover: 1.0,
+            is_water: hunter.feeds_in_the_water(),
+            can_be_dug: true,
+            somewhere_to_climb: false,
+        };
+
+        let a_day = Self::what_the_small_life_gives(hunter, best_ground, 1.0)
+            * crate::environment::seasons::TICKS_PER_DAY as f32;
+        let it_burns = hunter.hunger_rate * crate::environment::seasons::TICKS_PER_DAY as f32;
+        if it_burns <= 0.0 {
+            return 0.0;
+        }
+
+        (a_day / it_burns).clamp(0.0, 1.0)
+    }
+
+    /// What one hunter's rush at one animal comes to.
+    ///
+    /// It was a speed ratio and nothing else - `(pred_speed / prey_speed) *
+    /// 0.4` - which is to say that a hunt was decided by two numbers on the
+    /// species and by nothing about the ground, the herd, or what the quarry
+    /// could do about it. So a lone wolf took a cow out of the middle of a
+    /// herd of cattle at the same rate it took a hare in an open field, a
+    /// rabbit's burrow was worth nothing to it, and no hunter ever came off
+    /// worse for trying. Four things bear on it now.
+    ///
+    /// **A way out this ground offers, that the hunter cannot follow.** A
+    /// rabbit on ground it can dig, a squirrel where there is anything to go
+    /// up, a goose at all, a fish in water: gone, unless the thing chasing it
+    /// digs, climbs, flies or swims in its turn.
+    ///
+    /// **Cover, which helps whichever of the two is smaller.** A small thing
+    /// is lost in it and a large one cannot come through it quietly - so a
+    /// wood shelters a hare from a fox, and shelters a wolf coming up on a
+    /// deer.
+    ///
+    /// **What it takes to bring the quarry down, against what the hunters
+    /// bring.** Steeply: a force short of what the job wants does not merely
+    /// do it more slowly, it mostly does not do it at all. A lone wolf against
+    /// five cattle standing together brings a twelfth of what it would need,
+    /// and a twelfth cubed is not a hunt.
+    ///
+    /// **And what the quarry does back**, for anything big enough to turn
+    /// round.
+    pub fn what_a_hunt_comes_to(
+        hunter: &AnimalSpecies,
+        quarry: &AnimalSpecies,
+        ground: WhatTheGroundOffers,
+        hunters_together: usize,
+        quarry_stands_with: usize,
+    ) -> HuntOdds {
+        Self::what_a_hunt_between_these_two_comes_to(
+            hunter,
+            quarry,
+            ground,
+            hunters_together,
+            quarry_stands_with,
+            1.0,
+            1.0,
+        )
+    }
+
+    /// And the same hunt between two particular animals, each in whatever
+    /// condition it is in - see [`Animal::how_fast_it_still_is`].
+    ///
+    /// The species answer above is this one with both of them in their
+    /// prime, which is what a question about wolves and sheep in general
+    /// means. There is one implementation, so the two cannot come to
+    /// disagree about what a wolf can do to a sheep.
+    #[allow(clippy::too_many_arguments)]
+    pub fn what_a_hunt_between_these_two_comes_to(
+        hunter: &AnimalSpecies,
+        quarry: &AnimalSpecies,
+        ground: WhatTheGroundOffers,
+        hunters_together: usize,
+        quarry_stands_with: usize,
+        how_fast_the_hunter_is: f32,
+        how_fast_the_quarry_is: f32,
+    ) -> HuntOdds {
+        let hunter_can = hunter.what_it_can_do().unwrap_or_default();
+        let quarry_can = quarry.what_it_can_do().unwrap_or_default();
+
+        let got_away = (quarry_can.burrows && ground.can_be_dug && !hunter_can.burrows)
+            || (quarry_can.climbs
+                && ground.somewhere_to_climb
+                && !(hunter_can.climbs || hunter_can.flies))
+            || (quarry_can.flies && !hunter_can.flies)
+            || (quarry_can.swims && ground.is_water && !hunter_can.swims);
+
+        let way_out = if got_away { Self::WHAT_A_REFUGE_LEAVES } else { 1.0 };
+
+        // The chase, and it is a chase between two animals rather than
+        // between two rows of a table. A wolf is written down at 1.7 and a
+        // sheep at 1.0, so a wolf runs a sheep down - it always could, and
+        // that part was already right. What was missing is that neither of
+        // them is necessarily in any condition to do it: an old sheep, or a
+        // hurt one, is slower than the number on its species, and so is an
+        // old wolf. One number from each side, and the ratio decides the
+        // chase as it always did.
+        let hunter_goes = hunter.speed * how_fast_the_hunter_is.max(0.01);
+        let quarry_goes = quarry.speed * how_fast_the_quarry_is.max(0.01);
+        // Two speeds, and not a ratio with a lid on it.
+        //
+        // `(hunter / quarry).min(1)` says a wolf at 1.7 against a sheep at
+        // 1.0 does exactly as well as a wolf against a deer at 1.7, and that
+        // a lame sheep is no easier to catch than a sound one: the clamp
+        // bites at parity and everything past it is the same number. So "a
+        // wolf should be faster than a sheep" bought a wolf nothing, and
+        // neither a wound nor twenty years could be worth anything however
+        // they were written, because what they feed into had a flat top.
+        //
+        // A share rather than a ratio: how much of the pace in the chase is
+        // the hunter's. It comes to exactly `WHAT_AN_OPEN_CHASE_COMES_OFF`
+        // when the two are evenly matched - which is where that number was
+        // calibrated - and it goes on rising after that instead of stopping.
+        let in_the_open = (hunter_goes / (hunter_goes + quarry_goes))
+            * 2.0
+            * Self::WHAT_AN_OPEN_CHASE_COMES_OFF;
+
+        let after_cover = if quarry.size < hunter.size {
+            in_the_open * (1.0 - ground.cover)
+        } else {
+            in_the_open * (1.0 + ground.cover)
+        };
+
+        // What the quarry takes to bring down, with its own kind standing
+        // by it counted in - **weighted by whether that sort stands its
+        // ground at all.**
+        //
+        // Counting heads without asking that is the same defect
+        // `what_each_animal_is_facing` had, in a second place, and it is the
+        // reason no predator in this world ever ate. Herbivores spawn in
+        // herds of four to twelve and stay in blocks, so eight of their own
+        // kind beside them is the ordinary case, not the exception; a flock
+        // of eight sheep took a lone wolf's odds from 0.3456 to **0.0028**,
+        // one rush in three hundred and fifty, tried one tick in twenty when
+        // hungry. Measured over two years on a hundred square kilometres with
+        // fourteen wolves and a thousand sheep: not one animal taken.
+        //
+        // A flock of sheep is not a defence. Sheep are `Passive`, which is
+        // nought, and what they do when a wolf comes is scatter. Cattle are
+        // `Defensive` and a mammoth `Territorial`, and those do close up and
+        // are what "a lone wolf should not be capable of killing a herd of
+        // cattle" was about. One number, in one place, read by everything
+        // that asks how an animal takes a threat.
+        let stands_together = quarry_stands_with as f32
+            * Self::WHAT_ANOTHER_OF_ITS_KIND_ADDS
+            * quarry.behavior.how_readily_it_stands_its_ground();
+        let what_it_takes = quarry.how_much_hunter_it_takes() * (1.0 + stands_together);
+        let what_they_bring =
+            (hunters_together.max(1) as f32) * hunter.what_one_of_these_brings();
+
+        let enough = (what_they_bring / what_it_takes.max(0.01)).min(1.0);
+        let comes_off =
+            (after_cover * enough * enough * enough * way_out).clamp(0.0, 1.0);
+
+        // Only something with the bulk to turn round does anything back. A
+        // hare does not cost a fox anything for missing it.
+        let what_it_costs = if quarry.size >= AnimalSize::Medium {
+            quarry.attack_damage * Self::WHAT_A_FAILED_RUSH_COSTS
+        } else {
+            0.0
+        };
+
+        HuntOdds { comes_off, what_it_costs }
+    }
+
+    /// The block of country a position falls in, for finding what is near it
+    /// without asking about everything that is not.
+    fn which_block(at: (i32, i32)) -> (i32, i32) {
+        (
+            at.0.div_euclid(Self::HOW_FAR_A_HUNT_REACHES),
+            at.1.div_euclid(Self::HOW_FAR_A_HUNT_REACHES),
+        )
+    }
+
+    /// Whether this animal feeds by digging.
+    ///
+    /// A big omnivore does: a bear turns ground over for roots and grubs and
+    /// what it turns over does not grow back. A deer crops what is above the
+    /// ground and the plant puts it back.
+    fn does_it_dig(species: &AnimalSpecies) -> bool {
+        species.diet == DietType::Omnivore
+            && matches!(species.size, AnimalSize::Large | AnimalSize::Huge)
+    }
+
     /// Update animal behavior with hunger consideration
+    /// What each animal is facing, before any of them acts on it.
+    ///
+    /// The same appraisal the agents get, in the same shape and off the same
+    /// `ThreatAssessment` - see `core::Surroundings::what_is_on_me`. A whole
+    /// pass rather than a question each animal asks for itself, because the
+    /// answer depends on where everything else is standing and that must not
+    /// change underneath them while they are deciding.
+    ///
+    /// What counts as a threat to an animal is anything that eats it: a thing
+    /// whose prey list names its kind, or which takes prey of its size. What
+    /// counts as being able to face it is what it brings against what the
+    /// thing brings, with the rest of its own kind standing near it counted in
+    /// - which is why cattle in a herd turn round and a lone cow runs.
+    fn what_each_animal_is_facing(&mut self) {
+        let registry = match &self.registry {
+            Some(r) => r.clone(),
+            None => return,
+        };
+
+        let mut who_is_about: BTreeMap<(i32, i32), Vec<usize>> = BTreeMap::new();
+        for (idx, animal) in self.animals.iter().enumerate() {
+            if animal.is_alive() {
+                who_is_about
+                    .entry(Self::which_block(animal.position))
+                    .or_default()
+                    .push(idx);
+            }
+        }
+
+        // Driven from the hunters rather than from everything.
+        //
+        // Asking every animal what is near it is a nine-block gather per
+        // animal, and a country has seven times more things being eaten than
+        // things eating: at a hundred square kilometres that cost 28 per cent
+        // of the whole tick. Walking out from the hunters instead touches the
+        // same pairs and visits a ninth as many animals to find them.
+        let mut coming_at: BTreeMap<usize, Vec<f32>> = BTreeMap::new();
+        let mut worst_at: BTreeMap<usize, (f32, (i32, i32), Uuid)> = BTreeMap::new();
+
+        for (hunter_idx, hunter) in self.animals.iter().enumerate() {
+            if !hunter.is_alive() {
+                continue;
+            }
+            let Some(theirs) = registry.get(&hunter.species_id) else {
+                continue;
+            };
+            if theirs.prey_species.is_empty() {
+                continue;
+            }
+
+            let biggest = theirs
+                .prey_species
+                .iter()
+                .filter_map(|prey| registry.get(prey))
+                .map(|prey| prey.size)
+                .max();
+
+            let here = Self::which_block(hunter.position);
+            let nearby: Vec<usize> = [-1, 0, 1]
+                .iter()
+                .flat_map(|dy| [-1, 0, 1].iter().map(move |dx| (*dx, *dy)))
+                .filter_map(|(dx, dy)| who_is_about.get(&(here.0 + dx, here.1 + dy)))
+                .flatten()
+                .copied()
+                .collect();
+
+            for prey_idx in nearby {
+                if prey_idx == hunter_idx || !self.animals[prey_idx].is_alive() {
+                    continue;
+                }
+                if self.animals[prey_idx].species_id == hunter.species_id {
+                    continue;
+                }
+                let Some(mine) = registry.get(&self.animals[prey_idx].species_id) else {
+                    continue;
+                };
+
+                // Something that eats this one: it names its kind, or it takes
+                // prey of its size.
+                let eats_me = theirs.prey_species.contains(&mine.id)
+                    || biggest.map(|top| mine.size <= top).unwrap_or(false);
+                if !eats_me {
+                    continue;
+                }
+
+                let paces = (hunter.position.0 - self.animals[prey_idx].position.0)
+                    .abs()
+                    .max((hunter.position.1 - self.animals[prey_idx].position.1).abs());
+                if paces > Self::HOW_FAR_AN_ANIMAL_LOOKS {
+                    continue;
+                }
+
+                // Weighed by nearness, the same way an agent weighs it.
+                let nearness = 1.0
+                    - (paces as f32 / Self::HOW_FAR_AN_ANIMAL_LOOKS as f32).clamp(0.0, 1.0);
+                let brings = theirs.what_one_of_these_brings() * nearness;
+
+                coming_at.entry(prey_idx).or_default().push(brings);
+                let worse = worst_at
+                    .get(&prey_idx)
+                    .map(|(most, _, _)| brings > *most)
+                    .unwrap_or(true);
+                if worse {
+                    worst_at.insert(prey_idx, (brings, hunter.position, hunter.id));
+                }
+            }
+        }
+
+        let mut readings: Vec<(usize, f32, bool, (i32, i32), Uuid)> =
+            Vec::with_capacity(coming_at.len());
+
+        for (prey_idx, coming) in &coming_at {
+            let prey = &self.animals[*prey_idx];
+            let Some(mine) = registry.get(&prey.species_id) else {
+                continue;
+            };
+            let Some((_, where_it_is, which)) = worst_at.get(prey_idx).copied() else {
+                continue;
+            };
+
+            // How many of its own kind are standing with it - counted only for
+            // the few that have something on them, which is why this is not a
+            // pass over the whole country.
+            let here = Self::which_block(prey.position);
+            let its_own = [-1, 0, 1]
+                .iter()
+                .flat_map(|dy| [-1, 0, 1].iter().map(move |dx| (*dx, *dy)))
+                .filter_map(|(dx, dy)| who_is_about.get(&(here.0 + dx, here.1 + dy)))
+                .flatten()
+                .filter(|&&other| {
+                    other != *prey_idx
+                        && self.animals[other].is_alive()
+                        && self.animals[other].species_id == prey.species_id
+                        && (self.animals[other].position.0 - prey.position.0)
+                            .abs()
+                            .max((self.animals[other].position.1 - prey.position.1).abs())
+                            <= Self::HOW_FAR_A_HERD_STANDS_TOGETHER
+                })
+                .count();
+
+            let against = crate::agents::ThreatAssessment::a_pack_of(coming);
+
+            // What this one brings: its own punch, in the condition it is
+            // actually in, every one of its kind standing with it, and how
+            // readily its sort stands its ground at all.
+            //
+            // That last is the per-species baseline the specification asks
+            // for, and it already existed - `how_readily_it_stands_its_ground`
+            // is what `beasts.rs` reads to decide how an animal takes a
+            // person, and reading it here too means temperament is one number
+            // in one place rather than two that drift. It matters most at the
+            // bottom: a Passive thing is nought, so a rabbit never turns round
+            // however the arithmetic comes out, and a rabbit that fights a
+            // wolf is not a rabbit.
+            let mine_brings = mine.what_one_of_these_brings()
+                * mine.behavior.how_readily_it_stands_its_ground()
+                * prey.health_percentage().max(0.1)
+                * (1.0 + its_own as f32 * Self::WHAT_ANOTHER_OF_ITS_KIND_ADDS);
+
+            let judged = crate::agents::ThreatAssessment::assess(
+                mine_brings,
+                against,
+                crate::agents::EmotionSource::Creature(prey.species_id.clone()),
+            );
+
+            readings.push((
+                *prey_idx,
+                judged.threat_level,
+                judged.can_overcome,
+                where_it_is,
+                which,
+            ));
+        }
+
+        // Everything starts the pass with nothing on it, so a reading does not
+        // outlive the thing that caused it.
+        for animal in self.animals.iter_mut() {
+            animal.what_is_on_me = 0.0;
+            animal.could_face_it = false;
+            animal.what_is_on_me_from = None;
+            animal.what_is_on_me_id = None;
+        }
+
+        for (idx, level, can, from, which) in readings {
+            let animal = &mut self.animals[idx];
+            animal.what_is_on_me = level;
+            animal.could_face_it = can;
+            animal.what_is_on_me_from = Some(from);
+            animal.what_is_on_me_id = Some(which);
+        }
+    }
+
+    /// How far an animal notices something that would eat it.
+    const HOW_FAR_AN_ANIMAL_LOOKS: i32 = 10;
+
+    /// How much has to be on an animal before it stops grazing about it.
+    const WORTH_AN_ANIMAL_LEAVING_OFF: f32 = 0.2;
+
     fn update_animal_behavior_with_hunger(&mut self, animal_idx: usize, behavior: AnimalBehavior, is_wild: bool, is_hungry: bool) {
+        // Whether there is anything in a plant for this one.
+        //
+        // Read before the animal is borrowed, and read from the *diet* -
+        // which is the point of it. See the omnivore's arm below.
+        let it_eats_plants = self
+            .registry
+            .as_ref()
+            .and_then(|registry| registry.get(&self.animals[animal_idx].species_id))
+            .map(|species| species.diet != DietType::Carnivore)
+            .unwrap_or(false);
+
+        // And how far it gets when it runs, which is its own pace and not
+        // everybody's - see [`Animal::how_far_it_gets_in_a_tick`].
+        let it_covers = self
+            .registry
+            .as_ref()
+            .and_then(|registry| registry.get(&self.animals[animal_idx].species_id))
+            .map(|species| self.animals[animal_idx].how_far_it_gets_in_a_tick(species))
+            .unwrap_or(2);
+
         let animal = &mut self.animals[animal_idx];
+
+        // Something that eats this one, close enough to matter, comes before
+        // anything else - including the state timer, because a deer that has
+        // just settled down to graze does not go on grazing because it is
+        // partway through a graze. This is the fear and anger split, on the
+        // same appraisal the agents use: run from what cannot be faced, turn
+        // on what can. See `what_each_animal_is_facing`.
+        if animal.what_is_on_me >= Self::WORTH_AN_ANIMAL_LEAVING_OFF {
+            // Already doing the right thing about it, and partway through
+            // doing it. A beast in flight does not stop every tick to
+            // reconsider whether it is in flight.
+            let already = matches!(
+                animal.state,
+                AnimalState::Fleeing { .. } | AnimalState::Attacking { .. }
+            );
+            if already && animal.state_timer > 0 {
+                if let AnimalState::Fleeing { from_position } = animal.state {
+                    let away = (
+                        (animal.position.0 - from_position.0).signum(),
+                        (animal.position.1 - from_position.1).signum(),
+                    );
+                    animal.position.0 += away.0 * it_covers;
+                    animal.position.1 += away.1 * it_covers;
+                }
+                return;
+            }
+
+            if animal.could_face_it {
+                if let Some(which) = animal.what_is_on_me_id {
+                    animal.state = AnimalState::Attacking { target_id: which };
+                    animal.state_timer = 6;
+                    return;
+                }
+            }
+
+            if let Some(from) = animal.what_is_on_me_from {
+                animal.state = AnimalState::Fleeing { from_position: from };
+                animal.state_timer = 8;
+
+                // And actually go, rather than standing still in a state
+                // called fleeing.
+                let away = (
+                    (animal.position.0 - from.0).signum(),
+                    (animal.position.1 - from.1).signum(),
+                );
+                animal.position.0 += away.0 * it_covers;
+                animal.position.1 += away.1 * it_covers;
+                return;
+            }
+        }
 
         // If state timer is active, continue current behavior
         if animal.state_timer > 0 {
@@ -2888,7 +6384,7 @@ impl AnimalManager {
             animal.state = AnimalState::Grazing; // Or hunting for carnivores
             animal.state_timer = 40;
             // Move while seeking food
-            let offset = (rand::random::<i32>() % 5 - 2, rand::random::<i32>() % 5 - 2);
+            let offset = (crate::core::dice::any::<i32>() % 5 - 2, crate::core::dice::any::<i32>() % 5 - 2);
             animal.position.0 += offset.0;
             animal.position.1 += offset.1;
             return;
@@ -2900,10 +6396,10 @@ impl AnimalManager {
                 if animal.is_exhausted() {
                     animal.state = AnimalState::Resting;
                     animal.state_timer = 50;
-                } else if is_hungry || rand::random::<f32>() < 0.3 {
+                } else if is_hungry || crate::core::dice::any::<f32>() < 0.3 {
                     animal.state = AnimalState::Grazing;
                     animal.state_timer = 30;
-                    let offset = (rand::random::<i32>() % 3 - 1, rand::random::<i32>() % 3 - 1);
+                    let offset = (crate::core::dice::any::<i32>() % 3 - 1, crate::core::dice::any::<i32>() % 3 - 1);
                     animal.position.0 += offset.0;
                     animal.position.1 += offset.1;
                 } else {
@@ -2918,7 +6414,7 @@ impl AnimalManager {
                 } else if is_hungry {
                     animal.state = AnimalState::Grazing;
                     animal.state_timer = 35;
-                } else if rand::random::<f32>() < 0.2 {
+                } else if crate::core::dice::any::<f32>() < 0.2 {
                     animal.state = AnimalState::Drinking;
                     animal.state_timer = 25;
                 } else {
@@ -2930,7 +6426,7 @@ impl AnimalManager {
                 if animal.is_exhausted() {
                     animal.state = AnimalState::Resting;
                     animal.state_timer = 45;
-                } else if is_hungry || rand::random::<f32>() < 0.5 {
+                } else if is_hungry || crate::core::dice::any::<f32>() < 0.5 {
                     animal.state = AnimalState::Grazing;
                     animal.state_timer = 35;
                 } else {
@@ -2942,10 +6438,36 @@ impl AnimalManager {
                 if animal.is_exhausted() {
                     animal.state = AnimalState::Resting;
                     animal.state_timer = 60;
-                } else if is_wild && (is_hungry || rand::random::<f32>() < 0.3) {
-                    animal.state = AnimalState::Hunting { target_id: None };
+                } else if is_wild && (is_hungry || crate::core::dice::any::<f32>() < 0.3) {
+                    // **A bear is an omnivore and was living as a hunter.**
+                    //
+                    // Which state a hungry animal went into was decided by its
+                    // temper and by nothing else: `Aggressive` and
+                    // `Territorial` went hunting and everything else grazed.
+                    // A bear, a boar, a pig and a monkey are all omnivores and
+                    // all sit in the aggressive half of the table, so not one
+                    // of them ever went into `Grazing` and therefore not one
+                    // of them ever ate a plant, though `what_the_grazers_took`
+                    // has always been willing to feed anything that is not a
+                    // carnivore. Two questions with one answer again: what an
+                    // animal eats is its diet, and what it does about a threat
+                    // is its temper.
+                    //
+                    // Most of a brown bear's year is berries, roots and grubs.
+                    // It still hunts - a bear takes a deer, and the whole
+                    // top-predator tier depends on it doing so - but the
+                    // greater part of its living is turned up rather than run
+                    // down.
+                    const WHAT_SHARE_OF_AN_OMNIVORES_DAY_IS_FORAGING: f32 = 0.75;
+                    let foraging = it_eats_plants
+                        && crate::core::dice::any::<f32>() < WHAT_SHARE_OF_AN_OMNIVORES_DAY_IS_FORAGING;
+                    animal.state = if foraging {
+                        AnimalState::Grazing
+                    } else {
+                        AnimalState::Hunting { target_id: None }
+                    };
                     animal.state_timer = 50;
-                    let offset = (rand::random::<i32>() % 5 - 2, rand::random::<i32>() % 5 - 2);
+                    let offset = (crate::core::dice::any::<i32>() % 5 - 2, crate::core::dice::any::<i32>() % 5 - 2);
                     animal.position.0 += offset.0;
                     animal.position.1 += offset.1;
                 } else {
@@ -2994,7 +6516,18 @@ impl AnimalManager {
     /// - Predators spawn in smaller numbers
     /// - Aquatic animals spawn near water
     /// - Mountain animals spawn in highlands
+    /// Tell the country how big it is.
+    ///
+    /// Ordinarily `spawn_naturalistic` does this on its way past, which is
+    /// fine while every world is stocked on the morning it is made and wrong
+    /// the moment one is not - a country being let up in stages has to know
+    /// its own edges before the first animal is put on it.
+    pub fn knows_how_big_the_world_is(&mut self, grid: &Grid) {
+        self.world_bounds = Some((grid.width as i32, grid.height as i32));
+    }
+
     pub fn spawn_naturalistic(&mut self, grid: &Grid, config: &AnimalSpawnConfig) {
+        let nothing_here_before = self.animals.len();
         use rand::Rng;
         let mut rng = crate::core::dice::roll();
 
@@ -3007,51 +6540,238 @@ impl AnimalManager {
 
         let total_tiles = grid.width * grid.height;
         let total_herds = (total_tiles * config.herds_per_10000_tiles) / 10000;
+        // Never below what a small map was always allowed, so that turning
+        // this from an absolute into a density does not quietly empty the
+        // fifty by fifty every test is built on: a quarter of a square
+        // kilometre at ten head to the kilometre is two animals, where the
+        // herd counts alone put thirty-odd on it and always have. On anything
+        // big enough for the density to mean something, the density wins.
+        const WHAT_EVEN_A_SMALL_MAP_MAY_HOLD: usize = 200;
+
+        let at_the_very_outside = ((total_tiles * config.head_per_10000_tiles) / 10000)
+            .max(WHAT_EVEN_A_SMALL_MAP_MAY_HOLD);
+
+        // And what each tier of it may hold, by the same shares the herds are
+        // dealt out on. One pool, filled first-come, meant the grazers spent
+        // the whole of it before anything that eats them was placed at all -
+        // which is why a hundred square kilometres came out with a thousand
+        // head on it and not one wolf.
+        let room_for = |role: TrophicRole| -> usize {
+            ((at_the_very_outside as f32) * role.share_of_a_country()) as usize
+        };
 
         // Categorize species by diet for balanced spawning
-        let herbivores: Vec<_> = registry.all_species()
+        // Which pool a species goes in is `where_it_sits`, and nothing else.
+        //
+        // **It used to be the diet field and the length of the prey list, and
+        // those two disagree with `where_it_sits` about six species.** An
+        // omnivore with an empty prey list - the crow, the parrot, the monkey,
+        // the pig - is a primary consumer by `where_it_sits` and is *not* a
+        // herbivore by diet, so it fell between the two pools and was never
+        // placed on any map at any size. A carnivore with an empty prey list -
+        // the kestrel, the adder, the fish - is deliberately a small predator
+        // by `where_it_sits`, whose own comment says "a carnivore with nothing
+        // on its list still hunts: it hunts the small life the map assumes" -
+        // and `!prey_species.is_empty()` threw all three of them away. That is
+        // this project's own recurring defect exactly: one question, two
+        // places, and the two places disagreeing.
+        //
+        // One owner now. `where_it_sits` is the model's answer to what a
+        // species is, and it decides which pool it is drawn from.
+        let of_the_country: Vec<_> = registry
+            .all_species()
             .into_iter()
-            .filter(|s| s.diet == DietType::Herbivore)
+            // Not the species the small life already stands for. There is
+            // already a population of rabbits and foxes on every hunting
+            // ground - see `AnimalSpecies::is_stood_for_by_the_small_life` -
+            // and dealing records of them out beside it counts the same
+            // animal twice, once as a number and once as a thing standing in
+            // a field.
+            .filter(|s| !s.is_stood_for_by_the_small_life())
+            // Nor the farmyard form of something already here wild.
+            .filter(|s| !s.is_the_farm_form_of_something_wild())
             .collect();
-        let predators: Vec<_> = registry.all_species()
-            .into_iter()
-            .filter(|s| s.diet == DietType::Carnivore || s.diet == DietType::Omnivore)
-            .filter(|s| !s.prey_species.is_empty())
+
+        let herbivores: Vec<_> = of_the_country
+            .iter()
+            .copied()
+            .filter(|s| s.where_it_sits() == TrophicRole::PrimaryConsumer)
+            .collect();
+        let predators: Vec<_> = of_the_country
+            .iter()
+            .copied()
+            .filter(|s| s.where_it_sits() != TrophicRole::PrimaryConsumer)
             .collect();
 
         if herbivores.is_empty() {
             return;
         }
 
-        // Calculate prey vs predator herds
-        let prey_herds = if config.spawn_predators && !predators.is_empty() {
-            ((total_herds as f32) * config.prey_to_predator_ratio / (config.prey_to_predator_ratio + 1.0)) as usize
-        } else {
-            total_herds
-        };
-        let predator_herds = total_herds.saturating_sub(prey_herds);
+        // How many herds and packs of each tier this country carries.
+        //
+        // A pyramid rather than a ratio - see `TrophicRole::share_of_a_country`
+        // - and one that the size of the map can veto at the top: what wants
+        // twenty square kilometres to a territory has no business on a quarter
+        // of one. A hundred square kilometres carries wolves; a fifty by fifty
+        // test map carries foxes and nothing above them, which is what "only
+        // where habitat scale supports them" comes to.
+        let country = grid.how_much_ground();
+
+        let mut how_many_of: BTreeMap<TrophicRole, usize> = BTreeMap::new();
+        for role in TrophicRole::EVERY_ONE {
+            // At least one group of anything that belongs here at all. Three
+            // hundredths of the ten herds a fifty by fifty gets is nought
+            // groups, and rounding a whole tier out of existence is not the
+            // same statement as the map being too small for it - the veto
+            // below is the thing that means that, and it should be the only
+            // thing that does.
+            let wanted = ((total_herds as f32 * role.share_of_a_country()) as usize).max(1);
+
+            let holds = match role.how_much_country_before_it_belongs() {
+                Some(room) if country < room => 0,
+                _ => wanted,
+            };
+
+            how_many_of.insert(role, holds);
+        }
+
+        if !config.spawn_predators {
+            for role in TrophicRole::EVERY_ONE {
+                if role != TrophicRole::PrimaryConsumer {
+                    how_many_of.insert(role, 0);
+                }
+            }
+        }
+
+        let mut prey_herds = how_many_of
+            .get(&TrophicRole::PrimaryConsumer)
+            .copied()
+            .unwrap_or(0);
 
         // Collect terrain positions by climate zone
-        let mut positions_by_climate: HashMap<ClimateZone, Vec<(i32, i32)>> = HashMap::new();
+        let mut positions_by_climate: BTreeMap<ClimateZone, Vec<(i32, i32)>> = BTreeMap::new();
+        // And the water, which nothing was ever put in.
+        //
+        // Every tile a fish could live on was skipped as "water, for land
+        // animals", and there was no other list - so a species that cannot
+        // leave the water had nowhere at all to be put and was never placed,
+        // whatever else about it was right. Everything that lives off fish -
+        // the heron, the otter, the kingfisher, the polar bear, the crocodile
+        // - then had no prey on the map either.
+        let mut water_positions: Vec<(i32, i32)> = Vec::new();
+        // And ground thick enough to keep something that hunts.
+        //
+        // A hunter was put down anywhere in a climate it belongs to, and most
+        // of a temperate map is open. What the small life gives is straight
+        // proportion to cover - see `what_the_small_life_gives` - so a hawk
+        // on open plain gets 0.037 against a burn of 0.070 and is dead
+        // whatever else about it is right. Placing it where it can feed is
+        // not a kindness; it is what "this species lives here" means.
+        let mut cover_by_climate: BTreeMap<ClimateZone, Vec<(i32, i32)>> = BTreeMap::new();
+        // The same ground again, gathered by the hunting ground it belongs
+        // to, so that hunters can be dealt out a territory at a time.
+        let mut cover_by_ground: BTreeMap<ClimateZone, BTreeMap<(i32, i32), Vec<(i32, i32)>>> =
+            BTreeMap::new();
         for y in 0..grid.height {
             for x in 0..grid.width {
                 let terrain = grid.tiles[y][x].terrain.terrain_type;
+                let ground = what_this_ground_offers(terrain);
+                if ground.is_water {
+                    water_positions.push((x as i32, y as i32));
+                }
                 // Skip water for land animals
                 if terrain == TerrainType::Water {
                     continue;
                 }
                 let climate = terrain_to_climate_zone(terrain);
+                if ground.cover >= Self::WHAT_A_HUNTER_NEEDS_UNDERFOOT {
+                    cover_by_climate.entry(climate).or_default().push((x as i32, y as i32));
+                    // And the same ground, kept by the hunting ground it
+                    // falls in - see where the predators are dealt out.
+                    cover_by_ground
+                        .entry(climate)
+                        .or_default()
+                        .entry(Self::whose_ground((x as i32, y as i32)))
+                        .or_default()
+                        .push((x as i32, y as i32));
+                }
                 positions_by_climate.entry(climate)
                     .or_insert_with(Vec::new)
                     .push((x as i32, y as i32));
             }
         }
 
+        // The sorts of ground a species lives on that this map actually has.
+        //
+        // Drawing a climate out of the species and then asking whether the map
+        // has any of it loses the animal when it has not: the pack asked for
+        // is thrown away rather than put somewhere it could live. On a small
+        // map most of the registry's biomes are absent, so a fifty by fifty
+        // came out with no predators at all - one pack wanted, one draw, and
+        // the draw was an arctic fox.
+        let ground_for = |species: &AnimalSpecies| -> Vec<ClimateZone> {
+            let wanted: Vec<ClimateZone> = if species.primary_biomes.is_empty() {
+                vec![ClimateZone::Temperate]
+            } else {
+                species.primary_biomes.clone()
+            };
+
+            wanted
+                .into_iter()
+                .filter(|climate| {
+                    positions_by_climate
+                        .get(climate)
+                        .map(|ground| !ground.is_empty())
+                        .unwrap_or(false)
+                })
+                .collect()
+        };
+
         // Spawn herbivore herds
         let mut spawned = 0;
-        let mut prey_present: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let grazers_may_have = room_for(TrophicRole::PrimaryConsumer).max(1);
+
+        // Only the ones that could live here, so that a herd asked for is a
+        // herd placed - and each of them entered as many times as a thing of
+        // its size is common, so that the draw is not a coin between a rabbit
+        // and a mammoth. See `AnimalSize::how_common_a_thing_this_size_is`.
+        let herbivores: Vec<_> = herbivores
+            .into_iter()
+            .filter(|species| !ground_for(species).is_empty())
+            // And in the band this pass is allowed to put down, which is
+            // everything unless the country is being let up in stages.
+            .filter(|species| {
+                species.size >= config.grazers_it_may_place.0
+                    && species.size <= config.grazers_it_may_place.1
+            })
+            .flat_map(|species| {
+                std::iter::repeat(species).take(species.size.how_common_a_thing_this_size_is())
+            })
+            .collect();
+
+        // What is already standing on this map, which a staged pass has to
+        // know about: the tier below it was put down on an earlier morning
+        // and is exactly the food that makes this one worth placing.
+        let mut prey_present: std::collections::BTreeSet<String> = self
+            .animals
+            .iter()
+            .filter(|a| a.is_alive())
+            .map(|a| a.species_id.clone())
+            .collect();
+
+        let may_place = |role: TrophicRole| config.tiers_it_may_place.contains(&role);
+
+        if herbivores.is_empty() || !may_place(TrophicRole::PrimaryConsumer) {
+            // Not a return: a staged pass that is placing only predators has
+            // no herbivores to deal out and every reason to go on.
+            prey_herds = 0;
+        }
+
         for _ in 0..prey_herds {
-            if spawned >= config.max_initial_population || self.animals.len() >= self.max_population {
+            if herbivores.is_empty()
+                || spawned >= grazers_may_have
+                || self.how_many_are_alive() >= self.max_population
+            {
                 break;
             }
 
@@ -3059,11 +6779,8 @@ impl AnimalManager {
             let species = &herbivores[rng.gen_range(0..herbivores.len())];
 
             // Find a position in an appropriate biome
-            let climate = if !species.primary_biomes.is_empty() {
-                species.primary_biomes[rng.gen_range(0..species.primary_biomes.len())]
-            } else {
-                ClimateZone::Temperate
-            };
+            let at_home = ground_for(species);
+            let climate = at_home[rng.gen_range(0..at_home.len())];
 
             if let Some(positions) = positions_by_climate.get(&climate) {
                 if !positions.is_empty() {
@@ -3086,50 +6803,246 @@ impl AnimalManager {
         // thousand ticks, their hunger climbed in a straight line from birth
         // to death, and the herds they should have been holding down ran to
         // the population cap unopposed.
-        let feedable: Vec<_> = predators
-            .iter()
-            .filter(|species| {
-                species
+        // And the small life is prey. A hawk lives on rabbits, and the
+        // rabbits are still there - they are a number on every hunting
+        // ground rather than a thousand records standing in fields, and
+        // `what_the_small_life_gives` feeds anything the right size for
+        // them. Without this the gate reads "your dinner is not on the map"
+        // of a country thick with it, and the whole small-predator guild
+        // stops being spawned the moment its prey is abstracted: measured,
+        // a hundred square kilometres came out with no hawk, no owl, no
+        // eagle and no boar on it at all.
+        let the_small_life_feeds_it = |species: &AnimalSpecies| -> bool {
+            species.prey_species.iter().any(|prey| {
+                registry
+                    .get(prey)
+                    .map(|prey| prey.is_stood_for_by_the_small_life())
+                    .unwrap_or(false)
+            })
+        };
+
+        // And the sorts of ground a *hunter* can make a living on, which is a
+        // different question and was never asked.
+        //
+        // **This is what starved the small-predator guild.** `ground_for`
+        // filters a species' biomes by whether the map has any of that
+        // climate at all, and the placement then falls back to the whole
+        // climate when it has no ground thick enough. Measured on a hundred
+        // square kilometres: Arctic covers four hundred thousand tiles - two
+        // fifths of the map, nearly all of it mountain - and **not one of
+        // them clears `WHAT_A_HUNTER_NEEDS_UNDERFOOT`**; nor does one tile of
+        // the seventy-five thousand of desert. Only Temperate has any, and it
+        // has a hundred and three thousand. So a kestrel whose biomes include
+        // Arctic drew Arctic about as often as not and was put on bare
+        // mountain, where what the ground turns up is a twentieth of what a
+        // wood gives. The mean cover under a kestrel at generation was
+        // **0.23** against a bar of 0.40, and seventy-three of them went to
+        // one inside a year with a hundred and fifty-six starved.
+        //
+        // The climate and the ground have to be chosen on one criterion or
+        // the second silently undoes the first. A hunter with nowhere to hunt
+        // in any of its climates still gets put down - that is what the
+        // fallback is for, and it is a last resort across all of them rather
+        // than a coin flip at each draw.
+        let hunting_ground_for = |species: &AnimalSpecies| -> Vec<ClimateZone> {
+            let where_it_could_feed: Vec<ClimateZone> = ground_for(species)
+                .into_iter()
+                .filter(|climate| {
+                    cover_by_climate
+                        .get(climate)
+                        .map(|ground| !ground.is_empty())
+                        .unwrap_or(false)
+                })
+                .collect();
+
+            if where_it_could_feed.is_empty() {
+                ground_for(species)
+            } else {
+                where_it_could_feed
+            }
+        };
+
+        // Whether a country like this one will keep this species.
+        //
+        // Three ways, and the first was missing. An empty prey list is not a
+        // species with nothing to eat - `where_it_sits` calls such a thing a
+        // small predator on purpose, because what it eats is the small life
+        // the map assumes and `what_the_small_life_gives` feeds it. Reading
+        // an empty list as "no food here" is the same disagreement that kept
+        // it out of the pool in the first place.
+        let will_keep = |species: &AnimalSpecies, already_here: &std::collections::BTreeSet<String>| -> bool {
+            species.prey_species.is_empty()
+                || species
                     .prey_species
                     .iter()
-                    .any(|prey| prey_present.contains(prey))
-            })
-            .collect();
+                    .any(|prey| already_here.contains(prey))
+                || the_small_life_feeds_it(species)
+        };
 
-        if config.spawn_predators && !feedable.is_empty() {
-            for _ in 0..predator_herds {
-                if spawned >= config.max_initial_population || self.animals.len() >= self.max_population {
-                    break;
+        if config.spawn_predators {
+            // Built from the bottom, a tier at a time, so that what is put
+            // down low counts as food for what goes above it.
+            //
+            // Drawing every tier's packs first and placing them afterwards
+            // meant nothing could ever eat anything placed in the same pass:
+            // a heron takes fish, fish are placed among the small predators,
+            // and the heron was judged before a single one was down. So the
+            // heron, the otter and the kingfisher were refused a country
+            // whose rivers were about to be stocked with exactly what they
+            // live on.
+            //
+            // Each tier is still drawn from its own kind, which is what stops
+            // a map too small for wolves from simply having fewer foxes.
+            let mut put_down_of: BTreeMap<TrophicRole, usize> = BTreeMap::new();
+            // Which hunting grounds already have a hunter on them.
+            let mut ground_is_held: std::collections::BTreeSet<(i32, i32)> =
+                std::collections::BTreeSet::new();
+
+            for role in TrophicRole::EVERY_ONE {
+                if role == TrophicRole::PrimaryConsumer || !may_place(role) {
+                    continue;
                 }
 
-                // Pick a predator that can live off what is here
-                let species = feedable[rng.gen_range(0..feedable.len())];
+                let of_this_tier: Vec<_> = predators
+                    .iter()
+                    .copied()
+                    .filter(|species| species.where_it_sits() == role)
+                    .filter(|species| will_keep(species, &prey_present))
+                    .filter(|species| !hunting_ground_for(species).is_empty())
+                    .collect();
 
-                // Find a position in an appropriate biome
-                let climate = if !species.primary_biomes.is_empty() {
-                    species.primary_biomes[rng.gen_range(0..species.primary_biomes.len())]
-                } else {
-                    ClimateZone::Temperate
-                };
+                if of_this_tier.is_empty() {
+                    continue;
+                }
 
-                if let Some(positions) = positions_by_climate.get(&climate) {
-                    if !positions.is_empty() {
-                        let pos = positions[rng.gen_range(0..positions.len())];
-                        // Predator packs are typically smaller
-                        let pack_size = rng.gen_range(1..=species.group_size.1.min(4));
+                for _ in 0..how_many_of.get(&role).copied().unwrap_or(0) {
+                    if self.how_many_are_alive() >= self.max_population {
+                        break;
+                    }
 
-                        if let Some(_) = self.spawn_group(species.id.clone(), pos, pack_size) {
-                            spawned += pack_size as usize;
+                    let already = put_down_of.get(&role).copied().unwrap_or(0);
+                    if already >= room_for(role).max(1) {
+                        break;
+                    }
+
+                    let species = of_this_tier[rng.gen_range(0..of_this_tier.len())];
+
+                    // Where it can be put down. Something that cannot leave
+                    // the water goes in the water; everything else goes on a
+                    // sort of ground it lives on that this map actually has.
+                    // **A hunter is dealt out a territory, not a tile.**
+                    //
+                    // Drawing a position uniformly from every tile in the
+                    // country that has cover on it puts hunters wherever
+                    // cover is *dense*, which is not the same as spreading
+                    // them over the country: measured, a hundred grounds held
+                    // hunters and the ordinary one held four, so each got a
+                    // quarter of what its ground gives and better than half
+                    // the guild was under its keep on the morning the world
+                    // was made. What a hunting ground is for is exactly this
+                    // - it is the unit a hunter holds - so they are dealt out
+                    // one ground at a time, and a ground that has nobody on
+                    // it is taken before one that has.
+                    let mut pos = None;
+                    if !species.lives_in_the_water() {
+                        let at_home = hunting_ground_for(species);
+                        if at_home.is_empty() {
+                            continue;
+                        }
+                        let climate = at_home[rng.gen_range(0..at_home.len())];
+                        if let Some(grounds) = cover_by_ground.get(&climate) {
+                            let empty: Vec<&(i32, i32)> = grounds
+                                .keys()
+                                .filter(|ground| !ground_is_held.contains(*ground))
+                                .collect();
+                            let choice = if !empty.is_empty() {
+                                Some(*empty[rng.gen_range(0..empty.len())])
+                            } else if !grounds.is_empty() {
+                                grounds.keys().nth(rng.gen_range(0..grounds.len())).copied()
+                            } else {
+                                None
+                            };
+
+                            if let Some(ground) = choice {
+                                if let Some(tiles) = grounds.get(&ground) {
+                                    if !tiles.is_empty() {
+                                        ground_is_held.insert(ground);
+                                        pos = Some(tiles[rng.gen_range(0..tiles.len())]);
+                                    }
+                                }
+                            }
                         }
                     }
+
+                    // A swimmer goes in the water, and anything the country
+                    // has no ground for goes wherever its climate is - which
+                    // is better than refusing to place the species at all. A
+                    // desert fox is a hard living and not an impossible one.
+                    let pos = match pos {
+                        Some(pos) => pos,
+                        None => {
+                            let fallback: &[(i32, i32)] = if species.lives_in_the_water() {
+                                &water_positions
+                            } else {
+                                let at_home = hunting_ground_for(species);
+                                if at_home.is_empty() {
+                                    continue;
+                                }
+                                let climate = at_home[rng.gen_range(0..at_home.len())];
+                                match positions_by_climate.get(&climate) {
+                                    Some(positions) => positions,
+                                    None => continue,
+                                }
+                            };
+                            if fallback.is_empty() {
+                                continue;
+                            }
+                            fallback[rng.gen_range(0..fallback.len())]
+                        }
+                    };
+                    // Predator packs are typically smaller
+                    let pack_size = rng.gen_range(1..=species.group_size.1.min(4));
+
+                    if self.spawn_group(species.id.clone(), pos, pack_size).is_some() {
+                        spawned += pack_size as usize;
+                        *put_down_of.entry(role).or_insert(0) += pack_size as usize;
+                        prey_present.insert(species.id.clone());
+                    }
                 }
+            }
+        }
+    
+
+        // And they were not all born this morning.
+        //
+        // `Animal::new` starts everything at nought, which is right for
+        // something that has just been born and wrong for a country. A world
+        // opened with every animal on it a newborn, so the whole of its fauna
+        // was one cohort: nothing could breed until the first maturity age had
+        // passed, and then between years two and seven - which is what these
+        // lifespans come to - the entire founding stock died of old age within
+        // a season or two of each other. Measured on four square kilometres:
+        // 161 head at the start, 395 by year two, 149 by year three and 34 by
+        // year five, with never more than eighteen of them starving at once.
+        // It was not the grass and it was not the wolves. It was that they
+        // were all the same age.
+        //
+        // The flora had exactly this and it was fixed there; nothing had
+        // looked at the fauna. Ages are spread across each animal's own span,
+        // so a country opens with young stock, breeding stock and old stock in
+        // it, as one that has been there a while would.
+        {
+            use rand::Rng;
+            let mut rng = crate::core::dice::roll();
+            for animal in self.animals.iter_mut().skip(nothing_here_before) {
+                animal.age = rng.gen_range(0..animal.max_lifespan.max(1));
             }
         }
     }
 
     /// Get a summary of spawned animals by species
-    pub fn population_summary(&self) -> HashMap<String, usize> {
-        let mut summary = HashMap::new();
+    pub fn population_summary(&self) -> BTreeMap<String, usize> {
+        let mut summary = BTreeMap::new();
         for animal in &self.animals {
             if animal.is_alive() {
                 *summary.entry(animal.species_id.clone()).or_insert(0) += 1;
@@ -3138,66 +7051,7 @@ impl AnimalManager {
         summary
     }
 
-    /// Process seasonal migration for migratory species
-    ///
-    /// Called when the season changes. Migratory animals will move in their
-    /// migration direction, simulating seasonal movement patterns like
-    /// birds flying south or herds following food sources.
-    pub fn process_migration(&mut self, season: crate::environment::Season, world_size: (usize, usize)) {
-        use crate::environment::Season;
 
-        let registry = match &self.registry {
-            Some(r) => r.clone(),
-            None => return,
-        };
-
-        // Only migrate at season changes - check which direction to go
-        let migration_multiplier = match season {
-            Season::Fall | Season::Winter => 1.0,   // Move in migration direction
-            Season::Spring | Season::Summer => -1.0, // Return migration
-        };
-
-        for animal in &mut self.animals {
-            if !animal.is_alive() {
-                continue;
-            }
-
-            // Get species to check if migratory
-            let species = match registry.get(&animal.species_id) {
-                Some(s) => s,
-                None => continue,
-            };
-
-            if !species.is_migratory {
-                continue;
-            }
-
-            // Calculate new position based on migration direction
-            let (dx, dy) = species.migration_direction;
-            let new_x = animal.position.0 + (dx as f32 * migration_multiplier) as i32;
-            let new_y = animal.position.1 + (dy as f32 * migration_multiplier) as i32;
-
-            // Clamp to world bounds
-            let new_x = new_x.clamp(0, world_size.0 as i32 - 1);
-            let new_y = new_y.clamp(0, world_size.1 as i32 - 1);
-
-            animal.position = (new_x, new_y);
-        }
-    }
-
-    /// Check if any species are currently migrating
-    pub fn get_migrating_species(&self) -> Vec<String> {
-        let registry = match &self.registry {
-            Some(r) => r,
-            None => return vec![],
-        };
-
-        registry.all_species()
-            .into_iter()
-            .filter(|s| s.is_migratory)
-            .map(|s| s.id.clone())
-            .collect()
-    }
 }
 
 impl Default for AnimalManager {
@@ -3406,11 +7260,25 @@ mod tests {
 
     #[test]
     fn test_animal_manager_tick_aging() {
+        let mut grid = crate::world::Grid::new(8, 8);
+        grid.generate_terrain();
+        grid.settle_soil();
+        let mut plants = crate::environment::PlantManager::new(16);
+
         let mut manager = AnimalManager::new(100);
         manager.spawn_animal("rabbit".to_string(), (0, 0));
 
         let initial_age = manager.animals[0].age;
-        manager.tick();
+        manager.tick_in_world(
+            &mut grid,
+            &mut plants,
+            10.0,
+            GrazingWeather {
+                precipitation: 40.0,
+                now: 10,
+                season: crate::environment::Season::Summer,
+            },
+        );
 
         // Animal should have aged
         assert!(manager.animals[0].age > initial_age);
@@ -3504,6 +7372,6 @@ mod tests {
         let config = AnimalSpawnConfig::default();
         assert!(config.herds_per_10000_tiles > 0);
         assert!(config.spawn_predators);
-        assert!(config.prey_to_predator_ratio > 1.0);
+        assert!(config.head_per_10000_tiles > 0);
     }
 }

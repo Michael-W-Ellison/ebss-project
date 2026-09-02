@@ -324,11 +324,6 @@ impl StreamingVisualizer {
         self
     }
 
-    /// Set tick interval for rate limiting
-    pub fn with_interval(mut self, interval: u64) -> Self {
-        self.tick_interval = interval;
-        self
-    }
 
     /// Emit an event
     pub fn emit(&mut self, event: StreamEvent) -> std::io::Result<()> {
@@ -401,7 +396,7 @@ pub struct WidgetData {
     pub average_happiness: f32,
     pub births: u64,
     pub deaths: u64,
-    pub custom: std::collections::HashMap<String, String>,
+    pub custom: std::collections::BTreeMap<String, String>,
 }
 
 /// Simple text widget
@@ -528,9 +523,6 @@ impl WidgetDashboard {
         }
     }
 
-    pub fn add_widget<W: DisplayWidget + 'static>(&mut self, widget: W) {
-        self.widgets.push(Box::new(widget));
-    }
 
     pub fn render(&self, data: &WidgetData) -> String {
         let mut output = String::new();
@@ -615,7 +607,7 @@ mod tests {
         viz.emit(StreamEvent::tick(1, 50, 75.0, 0.6)).unwrap();
 
         // This should pass through
-        viz.emit(StreamEvent::birth(1, Uuid::new_v4(), (0, 0, 0))).unwrap();
+        viz.emit(StreamEvent::birth(1, crate::core::dice::name(), (0, 0, 0))).unwrap();
 
         let lines = buffer.get_lines();
         assert_eq!(lines.len(), 1);

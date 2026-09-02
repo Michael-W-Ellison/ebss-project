@@ -559,9 +559,11 @@ fn a_volunteer_on_the_midden_teaches_whoever_sees_it() {
     // A midden broken down far enough for what was voided in it to come up
     if let Some(tile) = world.grid.get_tile_mut(&where_it_is) {
         tile.terrain = Terrain::new(TerrainType::Plains);
-        for _ in 0..40 {
-            tile.soil.somebody_voided_here(1.0);
-        }
+    }
+    for _ in 0..40 {
+        world.grid.somebody_voided_on(&where_it_is, 1.0);
+    }
+    if let Some(tile) = world.grid.get_tile_mut(&where_it_is) {
         for _ in 0..2000 {
             tile.soil.decay(1.0, 20.0);
         }

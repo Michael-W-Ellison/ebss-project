@@ -1,7 +1,7 @@
 // src/environment/registry.rs
 //! Plugin registry for managing environment plugins.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 use super::{EnvironmentPlugin, EnvironmentError, EnvironmentResult, PluginConfig};
 
@@ -11,7 +11,7 @@ use super::{EnvironmentPlugin, EnvironmentError, EnvironmentResult, PluginConfig
 /// access to them by ID. Plugins can be registered, retrieved, and
 /// managed through this interface.
 pub struct PluginRegistry {
-    plugins: HashMap<String, Arc<RwLock<Box<dyn EnvironmentPlugin>>>>,
+    plugins: BTreeMap<String, Arc<RwLock<Box<dyn EnvironmentPlugin>>>>,
     active_plugin: Option<String>,
 }
 
@@ -19,7 +19,7 @@ impl PluginRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
         Self {
-            plugins: HashMap::new(),
+            plugins: BTreeMap::new(),
             active_plugin: None,
         }
     }
@@ -77,15 +77,7 @@ impl PluginRegistry {
         self.active_plugin.as_deref()
     }
 
-    /// Check if a plugin is registered
-    pub fn has_plugin(&self, plugin_id: &str) -> bool {
-        self.plugins.contains_key(plugin_id)
-    }
 
-    /// Get all registered plugin IDs
-    pub fn plugin_ids(&self) -> Vec<String> {
-        self.plugins.keys().cloned().collect()
-    }
 
     /// Remove a plugin from the registry
     pub fn unregister(&mut self, plugin_id: &str) -> EnvironmentResult<()> {
@@ -140,20 +132,6 @@ impl Default for PluginRegistry {
     }
 }
 
-/// Global plugin registry instance
-static mut GLOBAL_REGISTRY: Option<PluginRegistry> = None;
-static REGISTRY_INIT: std::sync::Once = std::sync::Once::new();
-
-/// Get the global plugin registry
-#[allow(static_mut_refs)]
-pub fn global_registry() -> &'static mut PluginRegistry {
-    unsafe {
-        REGISTRY_INIT.call_once(|| {
-            GLOBAL_REGISTRY = Some(PluginRegistry::new());
-        });
-        GLOBAL_REGISTRY.as_mut().unwrap()
-    }
-}
 
 #[cfg(test)]
 mod tests {

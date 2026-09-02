@@ -402,9 +402,25 @@ fn main() {
 
     println!("Initial population: {}", manager.population_count());
 
-    // Simulate 100 ticks
-    for _ in 0..100 {
-        manager.tick();
+    // Simulate 100 ticks. Animals graze off the ground they are standing on,
+    // so the tick wants a world to stand in.
+    let mut ground = ebss::world::Grid::new(64, 64);
+    ground.generate_terrain();
+    ground.settle_soil();
+    let mut growing = ebss::environment::PlantManager::new(500);
+    growing.spawn_naturalistic(&ground);
+
+    for pass in 0..100u32 {
+        manager.tick_in_world(
+            &mut ground,
+            &mut growing,
+            10.0,
+            ebss::environment::GrazingWeather {
+                precipitation: 40.0,
+                now: pass * 10,
+                season: ebss::environment::Season::Summer,
+            },
+        );
     }
 
     println!("After 100 ticks:");

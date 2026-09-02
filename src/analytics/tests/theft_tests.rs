@@ -137,7 +137,12 @@ fn taking_a_mans_last_stick_costs_more_than_taking_one_of_forty() {
 
         let me = simulation.population.agents[0].id;
 
-        simulation.population.agents[1].they_took_something_of_mine(me, "wood", had / 2, 0);
+        // A thief of the victim's own size, so this stays about the share
+        // taken rather than about who took it - see
+        // `they_took_something_of_mine`.
+        let evenly_matched = simulation.population.agents[0].own_strength();
+        simulation.population.agents[1]
+            .they_took_something_of_mine(me, "wood", had / 2, 0, evenly_matched);
 
         -simulation.population.agents[1]
             .relationships
@@ -601,4 +606,48 @@ fn a_thing_answers_the_drive_it_is_for() {
     assert_eq!(who.what_this_would_answer("grain"), DriveType::Hunger);
     assert_eq!(who.what_this_would_answer("water"), DriveType::Thirst);
     assert_eq!(who.what_this_would_answer("flax"), DriveType::Utility);
+}
+
+/// Who took it decides whether the man is angry or afraid.
+///
+/// It was anger every time, whoever the thief was - so a man robbed by
+/// somebody twice his size came away resolved to do something about it. The
+/// same appraisal that decides whether a wolf is a fight or a flight decides
+/// this, pointed at a person instead: see `ThreatAssessment` and
+/// `DriveType::Aggression`.
+#[test]
+fn being_robbed_by_somebody_bigger_frightens_rather_than_angers() {
+    let robbed_by = |how_strong_they_are: f32| {
+        let mut simulation = two_people();
+        give(&mut simulation, 1, "wood", 10);
+        let thief = simulation.population.agents[0].id;
+
+        simulation.population.agents[1].they_took_something_of_mine(
+            thief,
+            "wood",
+            5,
+            0,
+            how_strong_they_are,
+        );
+
+        let victim = &simulation.population.agents[1];
+        (victim.emotions.anger, victim.emotions.fear)
+    };
+
+    let mine = {
+        let simulation = two_people();
+        simulation.population.agents[1].own_strength()
+    };
+
+    let (angry, afraid) = robbed_by(mine * 0.4);
+    assert!(
+        angry > afraid,
+        "somebody he could take should make him angry: anger {angry:.2}, fear {afraid:.2}"
+    );
+
+    let (angry, afraid) = robbed_by(mine * 4.0);
+    assert!(
+        afraid > angry,
+        "and somebody he could not should frighten him: anger {angry:.2}, fear {afraid:.2}"
+    );
 }

@@ -111,7 +111,7 @@ fn main() {
     // ===== Part 5: Creating a Farm =====
     println!("--- Part 5: Agricultural System - Creating a Farm ---");
 
-    let farmer_id = Uuid::new_v4();
+    let farmer_id = ebss::core::dice::name();
     println!("Farmer {} establishing farm at (50, 10)...", farmer_id);
 
     // Plant crops in a 10x10 grid

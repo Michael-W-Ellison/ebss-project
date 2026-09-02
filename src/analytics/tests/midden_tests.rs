@@ -38,9 +38,10 @@ fn a_midden_underfoot(simulation: &mut Simulation) -> Position {
         }
     }
 
-    if let Some(tile) = simulation.world.grid.get_tile_mut(&where_it_is) {
-        tile.soil.somebody_voided_here(Soil::AS_FOUL_AS_IT_GETS);
-    }
+    simulation
+        .world
+        .grid
+        .somebody_voided_on(&where_it_is, Soil::AS_FOUL_AS_IT_GETS);
 
     where_it_is
 }
@@ -220,9 +221,9 @@ fn a_midden_left_alone_comes_up_in_food() {
         .resources
         .retain(|resource| resource.position != midden);
 
+    simulation.world.grid.somebody_voided_on(&midden, 20.0);
+    // And let it break down, which is what the seasons would do.
     if let Some(tile) = simulation.world.grid.get_tile_mut(&midden) {
-        tile.soil.somebody_voided_here(20.0);
-        // And let it break down, which is what the seasons would do.
         for _ in 0..400 {
             tile.soil.decay(1.0, 12.0);
         }
@@ -257,8 +258,8 @@ fn nothing_comes_up_where_something_already_grows() {
         50,
     ));
 
+    simulation.world.grid.somebody_voided_on(&midden, 20.0);
     if let Some(tile) = simulation.world.grid.get_tile_mut(&midden) {
-        tile.soil.somebody_voided_here(20.0);
         for _ in 0..400 {
             tile.soil.decay(1.0, 12.0);
         }

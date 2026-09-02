@@ -230,7 +230,7 @@ fn render_tech_tree_visual(
                     .then_with(|| a.prerequisites.len().cmp(&b.prerequisites.len()))
             });
 
-            let mut node_positions: std::collections::HashMap<String, Pos2> = std::collections::HashMap::new();
+            let mut node_positions: std::collections::BTreeMap<String, Pos2> = std::collections::BTreeMap::new();
 
             for node in &sorted_nodes {
                 if node.era_index >= ERAS.len() {

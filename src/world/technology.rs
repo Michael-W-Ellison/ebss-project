@@ -2,7 +2,7 @@
 //! Technology discovery and progression system.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 use crate::world::ItemType;
 
@@ -44,7 +44,7 @@ pub struct Technology {
 
 impl Technology {
     /// Check if all prerequisites are met
-    pub fn can_discover(&self, known_techs: &HashSet<&'static str>) -> bool {
+    pub fn can_discover(&self, known_techs: &BTreeSet<&'static str>) -> bool {
         self.prerequisites.iter().all(|prereq| known_techs.contains(prereq))
     }
 
@@ -63,13 +63,13 @@ impl Technology {
 /// Global technology tree
 #[derive(Debug, Clone)]
 pub struct TechnologyTree {
-    technologies: HashMap<&'static str, Technology>,
+    technologies: BTreeMap<&'static str, Technology>,
 }
 
 impl TechnologyTree {
     pub fn new() -> Self {
         let mut tree = Self {
-            technologies: HashMap::new(),
+            technologies: BTreeMap::new(),
         };
         tree.initialize_technologies();
         tree
@@ -313,13 +313,6 @@ impl TechnologyTree {
             .collect()
     }
 
-    /// Get all discoverable technologies (prerequisites met but not yet known)
-    pub fn get_discoverable(&self, known_techs: &HashSet<&'static str>) -> Vec<&Technology> {
-        self.technologies
-            .values()
-            .filter(|t| !known_techs.contains(t.id) && t.can_discover(known_techs))
-            .collect()
-    }
 
     /// Get all technologies
     pub fn all(&self) -> Vec<&Technology> {
@@ -337,19 +330,19 @@ impl Default for TechnologyTree {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnownTechnologies {
     /// Technology IDs this agent knows
-    known: HashSet<String>,
+    known: BTreeSet<String>,
 
     /// Experimentation progress toward discovering new techs
     /// Maps tech_id -> progress (0-100)
-    experimentation_progress: HashMap<String, u8>,
+    experimentation_progress: BTreeMap<String, u8>,
 
     /// Technologies discovered by this agent (for prestige)
-    discovered_by_self: HashSet<String>,
+    discovered_by_self: BTreeSet<String>,
 }
 
 impl KnownTechnologies {
     pub fn new() -> Self {
-        let mut known = HashSet::new();
+        let mut known = BTreeSet::new();
 
         // Everyone starts with basic knowledge
         known.insert("fire".to_string());
@@ -357,8 +350,8 @@ impl KnownTechnologies {
 
         Self {
             known,
-            experimentation_progress: HashMap::new(),
-            discovered_by_self: HashSet::new(),
+            experimentation_progress: BTreeMap::new(),
+            discovered_by_self: BTreeSet::new(),
         }
     }
 
@@ -391,10 +384,6 @@ impl KnownTechnologies {
         }
     }
 
-    /// Get known tech IDs (as a HashSet for compatibility)
-    pub fn get_known(&self) -> HashSet<&str> {
-        self.known.iter().map(|s| s.as_str()).collect()
-    }
 
     /// Get experimentation progress for a tech
     pub fn get_progress(&self, tech_id: &str) -> u8 {
@@ -415,8 +404,8 @@ impl KnownTechnologies {
     }
 
     /// Get all craftable items
-    pub fn get_craftable_items(&self, tech_tree: &TechnologyTree) -> HashSet<ItemType> {
-        let mut craftable = HashSet::new();
+    pub fn get_craftable_items(&self, tech_tree: &TechnologyTree) -> BTreeSet<ItemType> {
+        let mut craftable = BTreeSet::new();
         for tech_id in &self.known {
             if let Some(tech) = tech_tree.get(tech_id) {
                 for item in &tech.unlocks_recipes {
@@ -464,7 +453,7 @@ mod tests {
     #[test]
     fn test_technology_prerequisites() {
         let tree = TechnologyTree::new();
-        let mut known = HashSet::new();
+        let mut known = BTreeSet::new();
 
         let flint = tree.get("flint_knapping").unwrap();
         assert!(flint.can_discover(&known)); // No prereqs

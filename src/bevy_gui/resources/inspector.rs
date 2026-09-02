@@ -65,12 +65,5 @@ pub struct InspectorState {
 }
 
 impl InspectorState {
-    pub fn set_tab(&mut self, tab: InspectorTab) {
-        self.active_tab = tab;
-    }
 
-    pub fn unpin(&mut self) {
-        self.pinned = false;
-        self.pinned_selection = None;
-    }
 }

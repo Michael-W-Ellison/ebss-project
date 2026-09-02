@@ -185,7 +185,8 @@ impl TerrainResourceMapper {
     }
 }
 
-/// A patch of the size the ground it stands on will carry.
+/// A patch of the size the ground it stands on will carry, on the day the
+/// world opens.
 ///
 /// Free-standing, because there are **two** resource spawners in this project
 /// and they had two vocabularies. `TerrainResourceMapper::amount_range` covers
@@ -195,13 +196,41 @@ impl TerrainResourceMapper {
 /// berries came out of the other one and a world still held 994 units of them
 /// against 1,000 before. That is the fourth time this project has been bitten
 /// by two copies of one vocabulary. See ISSUES_FOUND #57.
+///
+/// `today` is the day of the year the world starts on, and it decides whether
+/// there is anything on the plant at all. A world used to be made with every
+/// bush in full fruit whatever the date: measured over sixteen spring worlds,
+/// **216 units of fruit, 254 of grain and 34 of honey** that had no business
+/// being there in spring, which then fell off over the first ten days. About
+/// a day and a third of food for twelve people, handed to them free in
+/// exactly the fortnight half of them die in.
+///
+/// A patch that *is* in season starts at what its ground will carry, which is
+/// what it always did. There is no ramp across the window, and that is worth
+/// being explicit about because the two halves behave quite differently:
+/// measured by stripping a patch bare and waiting, **a fruit node is back to
+/// full in one day, and greens and roots are still short after thirty**. So
+/// for fruit the opening amount hardly matters, and for greens and roots it
+/// matters a great deal - which is exactly why they are seeded at capacity
+/// rather than at some fraction of it. They bear from the first day of the
+/// year, so there is no coming-into-season moment for them to ramp through.
 pub fn what_this_ground_carries(
     grid: &Grid,
     resource_type: ResourceType,
     pos: Position,
     at_its_best: u32,
+    today: u32,
 ) -> ResourceNode {
     let mut node = ResourceNode::new(resource_type, pos, at_its_best);
+
+    // Out of its season it carries nothing, whatever it is. This is asked
+    // before `is_it_grown` because honey is not a growing thing and has a
+    // season all the same - a hive worth robbing in autumn is not one in
+    // March, and it used to spawn full in March.
+    if !resource_type.is_it_bearing(today) {
+        node.amount = 0;
+        return node;
+    }
 
     if !resource_type.is_it_grown() {
         return node;
@@ -220,13 +249,17 @@ pub fn what_this_ground_carries(
 pub struct NaturalisticSpawner<'a> {
     grid: &'a Grid,
     rng: rand::rngs::StdRng,
+    /// The day of the year the world opens on, which decides what is standing
+    /// on the plants when anybody first walks past them.
+    today: u32,
 }
 
 impl<'a> NaturalisticSpawner<'a> {
-    pub fn new(grid: &'a Grid) -> Self {
+    pub fn new(grid: &'a Grid, today: u32) -> Self {
         Self {
             grid,
             rng: crate::core::dice::roll(),
+            today,
         }
     }
 
@@ -363,7 +396,7 @@ impl<'a> NaturalisticSpawner<'a> {
         pos: Position,
         at_its_best: u32,
     ) -> ResourceNode {
-        what_this_ground_carries(self.grid, resource_type, pos, at_its_best)
+        what_this_ground_carries(self.grid, resource_type, pos, at_its_best, self.today)
     }
 
     /// Find a random position in one of the preferred terrain types
@@ -573,48 +606,131 @@ impl AnimalResourceMapper {
 pub struct TerrainGenerator;
 
 impl TerrainGenerator {
-    /// Generate adjacent terrain types around water to create natural transitions
-    pub fn generate_water_adjacent_terrain() -> Vec<(TerrainType, f32)> {
-        vec![
-            (TerrainType::Beach, 0.3),      // Beaches along coasts
-            (TerrainType::Riverbank, 0.4),  // Riverbanks along rivers
-            (TerrainType::Wetland, 0.2),    // Wetlands in low areas
-            (TerrainType::Plains, 0.1),     // Some plains
-        ]
-    }
 
-    /// Generate terrain types around mountains
-    pub fn generate_mountain_adjacent_terrain() -> Vec<(TerrainType, f32)> {
-        vec![
-            (TerrainType::Hills, 0.5),      // Hills are common around mountains
-            (TerrainType::Forest, 0.3),     // Forests on lower slopes
-            (TerrainType::Plains, 0.2),     // Valleys
-        ]
-    }
 
-    /// Generate terrain types for arid regions
-    pub fn generate_arid_terrain() -> Vec<(TerrainType, f32)> {
-        vec![
-            (TerrainType::Desert, 0.6),
-            (TerrainType::Plains, 0.3),
-            (TerrainType::Hills, 0.1),
-        ]
-    }
 
-    /// Generate terrain types for temperate regions
-    pub fn generate_temperate_terrain() -> Vec<(TerrainType, f32)> {
-        vec![
-            (TerrainType::Plains, 0.3),
-            (TerrainType::Forest, 0.3),
-            (TerrainType::Meadow, 0.25),
-            (TerrainType::Hills, 0.15),
-        ]
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::environment::seasons::{first_day_of, PartOfSeason, Season};
+
+    fn some_ground() -> Grid {
+        let mut grid = Grid::new(40, 40);
+        grid.generate_terrain();
+        grid.settle_soil();
+        grid
+    }
+
+    /// A world used to be made with every bush in full fruit whatever the
+    /// date. Measured over sixteen spring worlds: 216 units of fruit, 254 of
+    /// grain and 34 of honey standing on day nought, all of which fell off
+    /// over the following ten days.
+    #[test]
+    fn nothing_is_standing_on_a_plant_out_of_its_season() {
+        let grid = some_ground();
+        let pos = Position::new(20, 20);
+
+        let deep_spring = first_day_of(Season::Spring, PartOfSeason::Deep);
+
+        for out_of_season in [
+            ResourceType::Food,
+            ResourceType::Grain,
+            ResourceType::Honey,
+        ] {
+            let node = what_this_ground_carries(&grid, out_of_season, pos.clone(), 60, deep_spring);
+            assert_eq!(
+                node.amount, 0,
+                "{out_of_season:?} does not bear in spring, so there is nothing on it"
+            );
+        }
+    }
+
+    /// Honey is the one that used to slip past: it is not a *growing* thing,
+    /// so the early return for stone and clay caught it, and a hive worth
+    /// robbing in autumn spawned full in March.
+    #[test]
+    fn honey_has_a_season_even_though_it_does_not_grow() {
+        let grid = some_ground();
+        let pos = Position::new(20, 20);
+
+        assert!(!ResourceType::Honey.is_it_grown());
+
+        let march = first_day_of(Season::Spring, PartOfSeason::Deep);
+        let midsummer = first_day_of(Season::Summer, PartOfSeason::Deep);
+
+        assert_eq!(
+            what_this_ground_carries(&grid, ResourceType::Honey, pos.clone(), 60, march).amount,
+            0
+        );
+        assert!(
+            what_this_ground_carries(&grid, ResourceType::Honey, pos, 60, midsummer).amount > 0,
+            "and there is a hive worth robbing at midsummer"
+        );
+    }
+
+    /// In its own season a patch carries what the ground it stands on will
+    /// carry, which is what it always did.
+    #[test]
+    fn a_patch_in_season_carries_what_its_ground_will_carry() {
+        let grid = some_ground();
+        let pos = Position::new(20, 20);
+
+        for (what, when) in [
+            (ResourceType::Greens, (Season::Spring, PartOfSeason::Early)),
+            (ResourceType::Roots, (Season::Spring, PartOfSeason::Early)),
+            (ResourceType::Food, (Season::Fall, PartOfSeason::Early)),
+            (ResourceType::Grain, (Season::Fall, PartOfSeason::Early)),
+        ] {
+            let day = first_day_of(when.0, when.1);
+            let node = what_this_ground_carries(&grid, what, pos.clone(), 60, day);
+            assert!(
+                node.amount > 0,
+                "{what:?} bears on day {day} and should have something on it"
+            );
+            assert!(
+                node.amount <= node.max_amount,
+                "and no more than the ground will carry"
+            );
+        }
+    }
+
+    /// A seam of clay does not care what month it is, and nor does a tree.
+    #[test]
+    fn what_never_bears_is_the_same_on_every_day_of_the_year() {
+        let grid = some_ground();
+        let pos = Position::new(20, 20);
+
+        for what in [
+            ResourceType::Stone,
+            ResourceType::Clay,
+            ResourceType::Iron,
+            ResourceType::Wood,
+        ] {
+            let through_the_year: Vec<u32> = [
+                (Season::Spring, PartOfSeason::Early),
+                (Season::Summer, PartOfSeason::Deep),
+                (Season::Fall, PartOfSeason::Late),
+                (Season::Winter, PartOfSeason::Deep),
+            ]
+            .into_iter()
+            .map(|(season, part)| {
+                what_this_ground_carries(&grid, what, pos.clone(), 60, first_day_of(season, part))
+                    .amount
+            })
+            .collect();
+
+            assert!(
+                through_the_year.iter().all(|&n| n > 0),
+                "{what:?} does not bear, so it cannot stop: {through_the_year:?}"
+            );
+            assert!(
+                through_the_year.windows(2).all(|w| w[0] == w[1]),
+                "{what:?} should be the same all year: {through_the_year:?}"
+            );
+        }
+    }
 
     #[test]
     fn test_terrain_resource_mapping() {

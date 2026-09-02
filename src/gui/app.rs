@@ -86,10 +86,6 @@ impl EbssApp {
         }
     }
 
-    /// Send a command to the simulation thread
-    pub fn send_command(&self, cmd: SimulationCommand) {
-        let _ = self.command_tx.send(cmd);
-    }
 
     /// Process any pending snapshots from simulation
     fn process_snapshots(&mut self) {

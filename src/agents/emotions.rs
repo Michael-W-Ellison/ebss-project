@@ -2,7 +2,7 @@
 //! Emotion system for agents responding to threats and relationships.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 /// Twelve two-hour ticks to a day - see `crate::environment::seasons`
 const TICKS_PER_DAY: f32 = 12.0;
@@ -30,7 +30,7 @@ pub struct EmotionState {
     /// Ordered maps, and not for speed. `worst_agent` and `worst_creature`
     /// take a `max_by` over these, so when two things frighten somebody
     /// equally the winner is whichever the iterator reached first - and a
-    /// `HashMap` orders by a hash seeded per process. **What an agent was most
+    /// `BTreeMap` orders by a hash seeded per process. **What an agent was most
     /// afraid of, and so whether it ran or stood, changed between runs of the
     /// same binary on the same seed.** That is the threat tree deciding on a
     /// coin, and it is why five tests came and went with the dice already
@@ -81,10 +81,6 @@ impl EmotionState {
         None
     }
 
-    /// Clear attack memory (e.g., after successful retaliation or reconciliation)
-    pub fn clear_attacker(&mut self) {
-        self.last_attacker = None;
-    }
 
     /// Add anger toward a source
     pub fn add_anger(&mut self, source: EmotionSource, amount: f32) {
@@ -161,15 +157,6 @@ impl EmotionState {
         self.update_totals();
     }
 
-    /// Set curiosity level for a source (replaces existing value)
-    pub fn set_curiosity(&mut self, source: EmotionSource, amount: f32) {
-        if amount > 0.0 {
-            self.curiosity_sources.insert(source, amount.min(1.0));
-        } else {
-            self.curiosity_sources.remove(&source);
-        }
-        self.update_totals();
-    }
 
     /// The creature this agent is most afraid of, and how much.
     ///
@@ -223,24 +210,6 @@ impl EmotionState {
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
     }
 
-    /// How much of this agent's anger comes from each kind of source.
-    ///
-    /// Reported so that "a fifth of the settlement would fight" can be broken
-    /// into what it would fight, which is the difference between a model that
-    /// does something and one that only looks like it might.
-    pub fn anger_by_kind(&self) -> (f32, f32, f32) {
-        let mut at_people = 0.0;
-        let mut at_creatures = 0.0;
-        let mut at_everything_else = 0.0;
-        for (source, amount) in self.anger_sources.iter() {
-            match source {
-                EmotionSource::Agent(_) => at_people += amount,
-                EmotionSource::Creature(_) => at_creatures += amount,
-                _ => at_everything_else += amount,
-            }
-        }
-        (at_people, at_creatures, at_everything_else)
-    }
 
     fn worst_creature(sources: &BTreeMap<EmotionSource, f32>) -> Option<(&str, f32)> {
         sources
@@ -347,12 +316,69 @@ impl EmotionState {
 
     /// Check if agent should flee (high fear)
     pub fn should_flee(&self) -> bool {
-        self.fear > 0.6
+        self.worst_thing_frightening_me() > Self::AFRAID_ENOUGH_TO_ACT
     }
 
-    /// Check if agent should attack (high anger, low fear)
+    /// Angry enough at one thing to turn on it, and not too frightened to.
     pub fn should_attack(&self) -> bool {
-        self.anger > 0.5 && self.fear < 0.3
+        self.worst_thing_angering_me() > Self::ANGRY_ENOUGH_TO_ACT
+            && self.fear < Self::TOO_FRIGHTENED_TO_STAND
+    }
+
+    /// How much of what one thing can make you feel is enough to act on it.
+    ///
+    /// Six sevenths, and not chosen: it is what the fear gate already demanded.
+    /// Fleeing wanted `0.6` against a ceiling of `0.7`, so the same fraction
+    /// applied to anger's ceiling of `0.5` gives `0.4286` - and the fear gate
+    /// comes out at exactly the number it had before, which is the point. The
+    /// fear half of the threat tree was never the defect; it is quiet because
+    /// predators leave, not because it cannot be reached.
+    const WHAT_IT_TAKES_TO_ACT: f32 = 6.0 / 7.0;
+
+    /// Angry enough at one thing to turn on it: `0.4286`.
+    ///
+    /// It used to be `anger > 0.5` read off the *sum* of every source, against
+    /// a single-source ceiling of `0.5`. So a man at the very worst rage one
+    /// animal can produce sat exactly on the gate and did not pass it, and the
+    /// branch fired only when two separate grudges added past a half - an agent
+    /// turning on the wolf in front of it partly because it also resented a
+    /// boar. Measured before the change: **28.7% of every turn was "a creature
+    /// on the mind, under the gate"**, against 0.12% that got through.
+    const ANGRY_ENOUGH_TO_ACT: f32 =
+        ThreatAssessment::AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU * Self::WHAT_IT_TAKES_TO_ACT;
+
+    /// Frightened enough of one thing to run from it: `0.6`, as before.
+    const AFRAID_ENOUGH_TO_ACT: f32 =
+        ThreatAssessment::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU * Self::WHAT_IT_TAKES_TO_ACT;
+
+    /// Too frightened overall to stand and fight anything.
+    ///
+    /// This one stays on the *sum* on purpose. The other two ask about the
+    /// thing in front of you; this asks whether you are in any state to face
+    /// it, and being afraid of three things at once is exactly the state it is
+    /// about.
+    const TOO_FRIGHTENED_TO_STAND: f32 = 0.3;
+
+    /// The worst single thing angering this one, whatever kind of thing it is.
+    ///
+    /// The gates read this rather than the total because it is what the
+    /// branches behind them act on - `what_angers_me_most` for a creature,
+    /// `who_angers_me_most` for a person. A gate that asks a different question
+    /// from the branch it guards is a gate set against nothing.
+    pub fn worst_thing_angering_me(&self) -> f32 {
+        Self::worst_of(&self.anger_sources)
+    }
+
+    /// The same, for fear.
+    pub fn worst_thing_frightening_me(&self) -> f32 {
+        Self::worst_of(&self.fear_sources)
+    }
+
+    fn worst_of(sources: &BTreeMap<EmotionSource, f32>) -> f32 {
+        sources
+            .values()
+            .copied()
+            .fold(0.0_f32, f32::max)
     }
 
     /// Check if agent is emotionally distressed
@@ -926,13 +952,13 @@ pub enum RelationshipType {
 /// Tracks all relationships for an agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelationshipMap {
-    relationships: HashMap<Uuid, Relationship>,
+    relationships: BTreeMap<Uuid, Relationship>,
 }
 
 impl RelationshipMap {
     pub fn new() -> Self {
         Self {
-            relationships: HashMap::new(),
+            relationships: BTreeMap::new(),
         }
     }
 
@@ -967,13 +993,9 @@ impl RelationshipMap {
             .collect()
     }
 
-    /// Remove a relationship
-    pub fn remove_relationship(&mut self, agent_id: &Uuid) {
-        self.relationships.remove(agent_id);
-    }
 
     /// Get all relationships
-    pub fn get_all(&self) -> &HashMap<Uuid, Relationship> {
+    pub fn get_all(&self) -> &BTreeMap<Uuid, Relationship> {
         &self.relationships
     }
 
@@ -1008,13 +1030,6 @@ impl RelationshipMap {
             .collect()
     }
 
-    /// Get relationships by quality
-    pub fn get_by_quality(&self, min_bond: f32) -> Vec<&Relationship> {
-        self.relationships
-            .values()
-            .filter(|r| r.bond_strength >= min_bond)
-            .collect()
-    }
 
     /// Count incompatible trait conflicts with another agent
     pub fn count_trait_conflicts(
@@ -1160,14 +1175,26 @@ impl ThreatAssessment {
         }
     }
 
+    /// The most one thing can make somebody angry.
+    ///
+    /// Anger and fear are not on the same scale and never were: a threat you
+    /// reckon you can beat makes you angry up to a half, one you reckon you
+    /// cannot makes you afraid up to seven tenths. Any gate that reads either
+    /// has to be set against these, or it is set against nothing - which is
+    /// exactly how `EmotionState::should_attack` came to want *strictly more*
+    /// than a half out of a quantity that stops at a half. See
+    /// ISSUES_FOUND.md #101.
+    pub const AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU: f32 = 0.5;
+
+    /// And the most one thing can frighten somebody.
+    pub const AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU: f32 = 0.7;
+
     /// Get emotion amount (0.0 to 1.0)
     pub fn emotion_amount(&self) -> f32 {
         if self.can_overcome {
-            // Anger scales with threat level
-            self.threat_level * 0.5
+            self.threat_level * Self::AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU
         } else {
-            // Fear scales with overwhelming odds
-            self.threat_level * 0.7
+            self.threat_level * Self::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU
         }
     }
 }
@@ -1218,6 +1245,115 @@ mod tests {
         assert_eq!(emotions.dominant_emotion(), Some(EmotionType::Fear));
     }
 
+    /// The gate a creature can actually reach.
+    ///
+    /// `ThreatAssessment` caps anger at one thing at
+    /// `AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU`, and the gate used to want
+    /// strictly more than that same number off the *total*. So a man at the
+    /// very worst rage one animal can produce sat exactly on the gate and did
+    /// not pass it, and the branch fired only when two separate grudges added
+    /// past a half. See ISSUES_FOUND.md #101.
+    #[test]
+    fn the_worst_one_animal_can_do_is_enough_to_turn_on_it() {
+        let mut emotions = EmotionState::new();
+        emotions.add_anger(
+            EmotionSource::Creature("wolf".to_string()),
+            ThreatAssessment::AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU,
+        );
+
+        assert!(
+            emotions.should_attack(),
+            "a man at the worst rage one animal can produce should be able to \
+             turn on it"
+        );
+    }
+
+    /// And two mild grudges are not, which is the false positive the old gate
+    /// let through: an agent turning on the wolf in front of it partly because
+    /// it also resented a boar.
+    #[test]
+    fn two_small_grudges_do_not_add_up_to_a_fight() {
+        let mut emotions = EmotionState::new();
+        emotions.add_anger(EmotionSource::Creature("wolf".to_string()), 0.3);
+        emotions.add_anger(EmotionSource::Creature("boar".to_string()), 0.3);
+
+        assert!(
+            emotions.anger > 0.5,
+            "the total is what the old gate read, and it passes a half"
+        );
+        assert!(
+            !emotions.should_attack(),
+            "but neither thing on its own is worth turning on, and the branch \
+             behind the gate acts on one thing"
+        );
+    }
+
+    /// The gates are tied to the ceilings they read, so neither can drift away
+    /// from the other again.
+    ///
+    /// This is the test that would have caught the original defect: it fails
+    /// the moment a gate wants more than the quantity behind it can produce.
+    #[test]
+    fn neither_gate_asks_for_more_than_one_thing_can_give() {
+        let mut angry = EmotionState::new();
+        angry.add_anger(
+            EmotionSource::Creature("aurochs".to_string()),
+            ThreatAssessment::AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU,
+        );
+        assert!(angry.should_attack(), "the anger ceiling must clear its gate");
+
+        let mut afraid = EmotionState::new();
+        afraid.add_fear(
+            EmotionSource::Creature("bear".to_string()),
+            ThreatAssessment::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU,
+        );
+        assert!(afraid.should_flee(), "the fear ceiling must clear its gate");
+    }
+
+    /// Fleeing asks for exactly what it always asked for.
+    ///
+    /// The fear half of the threat tree was never the defect - it is quiet
+    /// because predators leave, not because it cannot be reached - so the
+    /// number did not move. Six sevenths of `0.7` is `0.6`, which is what the
+    /// gate read before. What changed is the *quantity*: the strongest single
+    /// thing rather than the sum of everything.
+    #[test]
+    fn the_flight_gate_is_the_number_it_always_was() {
+        assert!((EmotionState::AFRAID_ENOUGH_TO_ACT - 0.6).abs() < 1e-6);
+    }
+
+    /// And a man frightened of two things at once no longer runs from the
+    /// larger one on the strength of the smaller.
+    #[test]
+    fn two_small_frights_do_not_add_up_to_a_flight() {
+        let mut emotions = EmotionState::new();
+        emotions.add_fear(EmotionSource::Creature("wolf".to_string()), 0.4);
+        emotions.add_fear(EmotionSource::Creature("boar".to_string()), 0.4);
+
+        assert!(emotions.fear > 0.6, "the total is what the old gate read");
+        assert!(!emotions.should_flee());
+    }
+
+    /// Too frightened to stand still reads the total, on purpose: the other
+    /// two gates ask about the thing in front of you, this asks whether you
+    /// are in any state to face it.
+    #[test]
+    fn general_terror_still_stops_somebody_standing_their_ground() {
+        let mut emotions = EmotionState::new();
+        emotions.add_anger(
+            EmotionSource::Creature("wolf".to_string()),
+            ThreatAssessment::AS_ANGRY_AS_ONE_THING_CAN_MAKE_YOU,
+        );
+        assert!(emotions.should_attack());
+
+        emotions.add_fear(EmotionSource::Creature("bear".to_string()), 0.2);
+        emotions.add_fear(EmotionSource::Event("the dark".to_string()), 0.2);
+        assert!(
+            !emotions.should_attack(),
+            "afraid of enough things at once, nobody turns on anything"
+        );
+    }
+
     #[test]
     fn test_should_flee() {
         let mut emotions = EmotionState::new();
@@ -1236,7 +1372,7 @@ mod tests {
 
     #[test]
     fn test_relationship_creation() {
-        let other_agent = Uuid::new_v4();
+        let other_agent = crate::core::dice::name();
         let rel = Relationship::new(other_agent, RelationshipType::Parent);
 
         assert_eq!(rel.bond_strength, 0.9);
@@ -1247,8 +1383,8 @@ mod tests {
     #[test]
     fn test_relationship_map() {
         let mut map = RelationshipMap::new();
-        let parent_id = Uuid::new_v4();
-        let friend_id = Uuid::new_v4();
+        let parent_id = crate::core::dice::name();
+        let friend_id = crate::core::dice::name();
 
         map.add_relationship(Relationship::new(parent_id, RelationshipType::Parent));
         map.add_relationship(Relationship::new(friend_id, RelationshipType::Friend));
@@ -1286,7 +1422,7 @@ mod tests {
 
     #[test]
     fn test_strengthen_relationship() {
-        let mut rel = Relationship::new(Uuid::new_v4(), RelationshipType::Friend);
+        let mut rel = Relationship::new(crate::core::dice::name(), RelationshipType::Friend);
         assert_eq!(rel.bond_strength, 0.5);
 
         rel.strengthen(0.2);
@@ -1307,8 +1443,8 @@ mod tests {
 
     #[test]
     fn test_trait_incompatibility_weakens_relationship() {
-        let agent1_id = Uuid::new_v4();
-        let agent2_id = Uuid::new_v4();
+        let agent1_id = crate::core::dice::name();
+        let agent2_id = crate::core::dice::name();
 
         let mut agent1_traits = TraitSet::new();
         agent1_traits.add_trait(Trait::Believer);
@@ -1333,8 +1469,8 @@ mod tests {
 
     #[test]
     fn test_compatible_traits_strengthen_relationship() {
-        let agent1_id = Uuid::new_v4();
-        let agent2_id = Uuid::new_v4();
+        let agent1_id = crate::core::dice::name();
+        let agent2_id = crate::core::dice::name();
 
         let mut agent1_traits = TraitSet::new();
         agent1_traits.add_trait(Trait::Empathetic);
@@ -1367,8 +1503,8 @@ mod tests {
 
     #[test]
     fn test_forgiving_trait_reduces_conflict_impact() {
-        let agent1_id = Uuid::new_v4();
-        let agent2_id = Uuid::new_v4();
+        let agent1_id = crate::core::dice::name();
+        let agent2_id = crate::core::dice::name();
 
         // Agent 1 is forgiving
         let mut agent1_traits = TraitSet::new();
@@ -1398,8 +1534,8 @@ mod tests {
 
     #[test]
     fn test_family_bonds_more_resilient() {
-        let parent_id = Uuid::new_v4();
-        let child_id = Uuid::new_v4();
+        let parent_id = crate::core::dice::name();
+        let child_id = crate::core::dice::name();
 
         let mut parent_traits = TraitSet::new();
         parent_traits.add_trait(Trait::Diligent);
@@ -1430,7 +1566,7 @@ mod tests {
 
     #[test]
     fn test_relationship_quality_descriptor() {
-        let other_id = Uuid::new_v4();
+        let other_id = crate::core::dice::name();
 
         let excellent = Relationship::new(other_id, RelationshipType::Parent);
         assert_eq!(excellent.quality_descriptor(), "Excellent");
@@ -1445,8 +1581,8 @@ mod tests {
     #[test]
     fn test_relationship_map_trait_update() {
         let mut map = RelationshipMap::new();
-        let agent1_id = Uuid::new_v4();
-        let agent2_id = Uuid::new_v4();
+        let agent1_id = crate::core::dice::name();
+        let agent2_id = crate::core::dice::name();
 
         map.add_relationship(Relationship::new(agent2_id, RelationshipType::Friend));
 
@@ -1510,8 +1646,8 @@ mod tests {
     fn test_get_degrading_relationships() {
         let mut map = RelationshipMap::new();
 
-        let friend_id = Uuid::new_v4();
-        let enemy_id = Uuid::new_v4();
+        let friend_id = crate::core::dice::name();
+        let enemy_id = crate::core::dice::name();
 
         let mut friend_rel = Relationship::new(friend_id, RelationshipType::Friend);
         friend_rel.bond_strength = -0.2; // Degraded
@@ -1528,8 +1664,8 @@ mod tests {
     fn test_get_hostile_relationships() {
         let mut map = RelationshipMap::new();
 
-        let rival_id = Uuid::new_v4();
-        let enemy_id = Uuid::new_v4();
+        let rival_id = crate::core::dice::name();
+        let enemy_id = crate::core::dice::name();
 
         let rival_rel = Relationship::new(rival_id, RelationshipType::Rival);
         map.add_relationship(rival_rel); // -0.3, not hostile yet
@@ -1543,7 +1679,7 @@ mod tests {
 
     #[test]
     fn test_relationship_becomes_hostile_from_traits() {
-        let other_id = Uuid::new_v4();
+        let other_id = crate::core::dice::name();
 
         let mut agent1_traits = TraitSet::new();
         agent1_traits.add_trait(Trait::Believer);

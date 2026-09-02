@@ -2,7 +2,7 @@
 //! Memory system for agents with dynamic expansion and management.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 /// Type of memory
@@ -118,7 +118,7 @@ pub enum MemoryData {
 impl MemoryEntry {
     pub fn new(memory_type: MemoryType, importance: MemoryImportance, data: MemoryData, timestamp: u64) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             memory_type,
             importance,
             strength: 1.0,
@@ -180,29 +180,7 @@ impl Default for MemoryConfig {
 }
 
 impl MemoryConfig {
-    /// Create a config optimized for large populations
-    pub fn for_large_population() -> Self {
-        Self {
-            max_memories: Some(500),  // Lower limit per agent
-            decay_rate: 0.002,        // Slightly faster decay
-            auto_forget: true,
-            forget_threshold: 0.15,   // Forget weaker memories sooner
-            prune_interval: 50,       // Prune more frequently
-            batch_decay: true,
-        }
-    }
 
-    /// Create a config for small populations with detailed memory
-    pub fn for_small_population() -> Self {
-        Self {
-            max_memories: Some(2000), // Higher limit
-            decay_rate: 0.0005,       // Slower decay
-            auto_forget: true,
-            forget_threshold: 0.05,   // Keep weaker memories longer
-            prune_interval: 200,      // Prune less frequently
-            batch_decay: false,       // Can afford per-tick decay
-        }
-    }
 }
 
 /// Types of spatial memory
@@ -386,11 +364,6 @@ impl Memory {
         }
     }
 
-    /// Force immediate pruning (useful when memory pressure is high)
-    pub fn force_prune(&mut self) {
-        self.batch_decay_and_prune();
-        self.ticks_since_prune = 0;
-    }
 
     /// Get memory statistics
     pub fn stats(&self) -> MemoryStats {
@@ -403,7 +376,7 @@ impl Memory {
         };
 
         // Count memories by type
-        let mut by_type: HashMap<String, usize> = HashMap::new();
+        let mut by_type: BTreeMap<String, usize> = BTreeMap::new();
         for memory in &self.spatial_memories {
             let type_name = format!("{:?}", memory.memory_type);
             *by_type.entry(type_name).or_insert(0) += 1;
@@ -412,7 +385,7 @@ impl Memory {
         *by_type.entry("Knowledge".to_string()).or_insert(0) += self.knowledge.len();
 
         // Categorize by strength/importance
-        let mut by_importance: HashMap<String, usize> = HashMap::new();
+        let mut by_importance: BTreeMap<String, usize> = BTreeMap::new();
         for memory in &self.spatial_memories {
             let importance = if memory.confidence > 0.8 {
                 "Strong"
@@ -436,14 +409,6 @@ impl Memory {
         }
     }
 
-    /// Check if memory is under pressure (near capacity)
-    pub fn is_under_pressure(&self) -> bool {
-        if let Some(max) = self.config.max_memories {
-            self.spatial_memories.len() + self.knowledge.len() > (max * 9 / 10)
-        } else {
-            false
-        }
-    }
 
     /// Add or update spatial memory
     pub fn remember_location(&mut self, memory_type: SpatialMemoryType, position: (i32, i32, i32)) {
@@ -537,9 +502,9 @@ impl Default for Memory {
 pub struct MemoryStats {
     pub total_memories: usize,
     /// Count of memories by type (e.g., "Food", "Water", "Knowledge")
-    pub by_type: HashMap<String, usize>,
+    pub by_type: BTreeMap<String, usize>,
     /// Count of memories by strength/importance (e.g., "Strong", "Moderate", "Weak")
-    pub by_importance: HashMap<String, usize>,
+    pub by_importance: BTreeMap<String, usize>,
     pub average_strength: f32,
 }
 

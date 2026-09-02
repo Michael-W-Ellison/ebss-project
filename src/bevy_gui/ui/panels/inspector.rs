@@ -13,7 +13,6 @@ use crate::gui::state::{
     SelectedAgentData, SelectedBuildingData, SelectedResourceData,
     DriveData, SkillData, InventoryItemData, GoalData,
 };
-use crate::agents::Gender;
 use crate::environment::TICKS_PER_YEAR;
 
 /// How many ticks make a year, in the shape the age fields want.
@@ -201,13 +200,13 @@ fn render_agent_header(ui: &mut egui::Ui, agent: &SelectedAgentData, notificatio
         let (rect, _) = ui.allocate_exact_size(egui::Vec2::new(24.0, 24.0), egui::Sense::hover());
         ui.painter().circle_filled(rect.center(), 10.0, stage_color);
 
-        // Gender symbol overlay (only shown for non-children)
+        // There is no gender in this model - "agents are gender neutral; there
+        // are no male/female agents, merely child and adult agents" - so what
+        // used to be a male or female symbol beside somebody grown is now the
+        // only distinction there is: whether they are grown.
         let gender_symbol = match agent.life_stage {
             crate::agents::LifeStage::Infant | crate::agents::LifeStage::Child => "",
-            _ => match agent.gender {
-                Gender::Male => "♂",
-                Gender::Female => "♀",
-            }
+            _ => "\u{25CF}",
         };
 
         ui.vertical(|ui| {
@@ -529,6 +528,7 @@ fn drive_icon(drive_type: crate::core::DriveType) -> &'static str {
         DriveType::Thirst => "💧",
         DriveType::Rest => "💤",
         DriveType::Safety => "🛡",
+        DriveType::Aggression => "⚔",
         DriveType::Social => "👥",
         DriveType::Shelter => "🏠",
         DriveType::Curiosity => "❓",
@@ -543,7 +543,7 @@ fn drive_icon(drive_type: crate::core::DriveType) -> &'static str {
     }
 }
 
-fn render_agent_skills(ui: &mut egui::Ui, skills: &std::collections::HashMap<String, SkillData>, state: &mut InspectorState) {
+fn render_agent_skills(ui: &mut egui::Ui, skills: &std::collections::BTreeMap<String, SkillData>, state: &mut InspectorState) {
     ui.horizontal(|ui| {
         ui.heading("Skills");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -592,7 +592,7 @@ fn render_agent_skills(ui: &mut egui::Ui, skills: &std::collections::HashMap<Str
     }
 
     // Group by category
-    let mut categories: std::collections::HashMap<&str, Vec<&SkillData>> = std::collections::HashMap::new();
+    let mut categories: std::collections::BTreeMap<&str, Vec<&SkillData>> = std::collections::BTreeMap::new();
     for skill in &sorted_skills {
         categories.entry(&skill.category).or_default().push(skill);
     }

@@ -35,6 +35,15 @@ fn a_meal(of: ItemType, called: &str, how_many: u32) -> InventoryItem {
     meal
 }
 
+/// A making nobody is born knowing: grain between two stones. See
+/// `making::CRUSH_GRAIN`, which is `obvious: false`, and so is the kind of
+/// thing that is still worth asking a neighbour about.
+const THE_MAKING: &str = "flour";
+
+fn a_making() -> InventoryItem {
+    InventoryItem::new_with_weight(THE_MAKING.to_string(), 3, 0.5)
+}
+
 fn a_settlement(how_many: usize) -> Simulation {
     let mut world = World::new(WorldConfig::default());
     world.animals.get_all_mut().clear();
@@ -363,10 +372,16 @@ fn clay_is_worth_watching_and_a_flint_is_not() {
 // Asking somebody
 // --------------------------------------------------------------------------
 
-/// Somebody eating dried meat is worth asking about, if you have never seen
-/// the like of it.
+/// A dried strip has nothing left to tell anybody.
+///
+/// It used to be worth asking about: laying food out to keep it had to be
+/// watched before somebody would do it on purpose, and a neighbour eating
+/// dried meat was one of the two ways to see it. Everybody is born knowing it
+/// now - see `Agent::what_anybody_is_born_knowing` - so a meal teaches
+/// nothing, and the branch that asked about one is gone. What is still worth
+/// asking about is a *making* nobody has worked out. See ISSUES_FOUND.md #125.
 #[test]
-fn somebody_eating_dried_meat_is_worth_asking_about() {
+fn a_meal_is_no_longer_worth_asking_about() {
     let mut simulation = a_settlement(2);
 
     {
@@ -375,8 +390,6 @@ fn somebody_eating_dried_meat_is_worth_asking_about() {
             food.preparation = PreparationState::Dried;
         }
         simulation.population.agents[1].inventory.add_item(dried);
-        simulation.population.agents[1]
-            .found_out_how_to(crate::agents::Agent::THAT_LAYING_IT_OUT_KEEPS_IT);
     }
 
     let here = simulation.population.agents[0].state.position;
@@ -384,21 +397,17 @@ fn somebody_eating_dried_meat_is_worth_asking_about() {
         .somebody_to_ask_about_something(&simulation.population.agents[0], here);
 
     assert!(
-        matches!(asked, Some((_, ref what)) if what == "meatstrips"),
-        "{asked:?}"
+        !matches!(asked, Some((_, ref what)) if what == "meatstrips"),
+        "there is nothing a dried strip can teach: {asked:?}"
     );
 }
 
-/// A man who has never dried anything cannot tell you how.
+/// A man who has never crushed grain cannot tell you how.
 #[test]
 fn nobody_can_explain_a_thing_they_do_not_understand() {
     let mut simulation = a_settlement(2);
 
-    let mut dried = a_meal(ItemType::Meat, "meatstrips", 6);
-    if let Some(food) = dried.food_data.as_mut() {
-        food.preparation = PreparationState::Dried;
-    }
-    simulation.population.agents[1].inventory.add_item(dried);
+    simulation.population.agents[1].inventory.add_item(a_making());
     // and agent 1 has found nothing out at all
 
     let here = simulation.population.agents[0].state.position;
@@ -431,15 +440,9 @@ fn nobody_asks_after_a_stick() {
 fn nobody_asks_after_a_thing_they_already_know() {
     let mut simulation = a_settlement(2);
 
-    let mut dried = a_meal(ItemType::Meat, "meatstrips", 6);
-    if let Some(food) = dried.food_data.as_mut() {
-        food.preparation = PreparationState::Dried;
-    }
-    simulation.population.agents[1].inventory.add_item(dried);
-    simulation.population.agents[1]
-        .found_out_how_to(crate::agents::Agent::THAT_LAYING_IT_OUT_KEEPS_IT);
-    simulation.population.agents[0]
-        .found_out_how_to(crate::agents::Agent::THAT_LAYING_IT_OUT_KEEPS_IT);
+    simulation.population.agents[1].inventory.add_item(a_making());
+    simulation.population.agents[1].found_out_how_to(THE_MAKING);
+    simulation.population.agents[0].found_out_how_to(THE_MAKING);
 
     let here = simulation.population.agents[0].state.position;
     assert_eq!(
@@ -454,13 +457,8 @@ fn nobody_asks_after_a_thing_they_already_know() {
 fn nobody_shouts_across_a_valley() {
     let mut simulation = a_settlement(2);
 
-    let mut dried = a_meal(ItemType::Meat, "meatstrips", 6);
-    if let Some(food) = dried.food_data.as_mut() {
-        food.preparation = PreparationState::Dried;
-    }
-    simulation.population.agents[1].inventory.add_item(dried);
-    simulation.population.agents[1]
-        .found_out_how_to(crate::agents::Agent::THAT_LAYING_IT_OUT_KEEPS_IT);
+    simulation.population.agents[1].inventory.add_item(a_making());
+    simulation.population.agents[1].found_out_how_to(THE_MAKING);
     simulation.population.agents[1].state.position = (60, 60, 0);
 
     let here = simulation.population.agents[0].state.position;
@@ -477,23 +475,16 @@ fn nobody_shouts_across_a_valley() {
 fn being_told_lets_you_try_it_rather_than_making_you_believe_it() {
     let mut simulation = a_settlement(2);
 
-    let mut dried = a_meal(ItemType::Meat, "meatstrips", 6);
-    if let Some(food) = dried.food_data.as_mut() {
-        food.preparation = PreparationState::Dried;
-    }
-    simulation.population.agents[1].inventory.add_item(dried);
-    simulation.population.agents[1]
-        .found_out_how_to(crate::agents::Agent::THAT_LAYING_IT_OUT_KEEPS_IT);
+    simulation.population.agents[1].inventory.add_item(a_making());
+    simulation.population.agents[1].found_out_how_to(THE_MAKING);
 
     let them = simulation.population.agents[1].id;
-    let before = simulation.population.agents[0]
-        .lessons
-        .tried_this("dry");
+    let before = simulation.population.agents[0].lessons.tried_this(THE_MAKING);
 
     let result = simulation.execute_action(
         &Action::AskAbout {
             who: them,
-            what: "meatstrips".to_string(),
+            what: THE_MAKING.to_string(),
         },
         0,
     );
@@ -502,14 +493,14 @@ fn being_told_lets_you_try_it_rather_than_making_you_believe_it() {
     assert!(
         simulation.population.agents[0]
             .what_i_found_out()
-            .contains(crate::agents::Agent::THAT_LAYING_IT_OUT_KEEPS_IT),
+            .contains(THE_MAKING),
         "he knows it can be done now"
     );
     assert_eq!(
-        simulation.population.agents[0].lessons.tried_this("dry"),
+        simulation.population.agents[0].lessons.tried_this(THE_MAKING),
         before,
-        "and he has still never dried anything, which is the difference \
-         between being told a thing works and finding out"
+        "and he has still never crushed a handful of grain, which is the \
+         difference between being told a thing works and finding out"
     );
 }
 
@@ -543,7 +534,7 @@ fn asking_yourself_teaches_nothing() {
     let result = simulation.execute_action(
         &Action::AskAbout {
             who: me,
-            what: "meatstrips".to_string(),
+            what: THE_MAKING.to_string(),
         },
         0,
     );

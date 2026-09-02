@@ -165,13 +165,29 @@ fn walking_past_a_field_does_not_make_a_farmer() {
     let mut simulation = Simulation::new(world, population);
     for _ in 0..600 {
         simulation.tick();
+
+        // Keep him alive. This test is about whether being *near* a field
+        // teaches farming, and a country of nothing but grain in spring feeds
+        // nobody - he starved somewhere around day fifty and the assertion
+        // below then indexed a corpse, which is a panic rather than a result.
+        if let Some(agent) = simulation.population.agents.first_mut() {
+            agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
+            agent.state.physiology.hydration = 1.0;
+        }
     }
 
-    let farming = simulation.population.agents[0]
-        .skills
-        .get_skill_if_exists(SkillType::Farming)
+    let farming = simulation
+        .population
+        .agents
+        .first()
+        .and_then(|agent| agent.skills.get_skill_if_exists(SkillType::Farming))
         .map(|skill| skill.level)
         .unwrap_or(-10);
+
+    assert!(
+        !simulation.population.agents.is_empty(),
+        "he was being kept fed and watered; if he is gone this test measured nothing"
+    );
 
     assert!(
         farming < 0,

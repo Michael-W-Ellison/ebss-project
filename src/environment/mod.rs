@@ -13,7 +13,7 @@
 //! - `PluginRegistry`: Manages loaded plugins and provides access to them
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::core::DriveType;
 
 pub mod making;
@@ -30,6 +30,7 @@ pub mod smelting;
 pub mod clothing_recipes;
 pub mod flora;
 pub mod fauna;
+pub mod small_life;
 pub mod biome;
 pub mod weather;
 pub mod exposure;
@@ -49,8 +50,9 @@ pub use flora::{PlantSpecies, FloraRegistry, ClimateZone, GrowthStage, PlantSize
 pub use fauna::{
     AnimalSpecies, FaunaRegistry, AnimalBehavior, DietType, AnimalSize,
     Animal, AnimalState, AnimalManager, AnimalDrop, AnimalProduct,
-    AnimalSpawnConfig, terrain_to_climate_zone,
+    AnimalSpawnConfig, GrazingWeather, TrophicRole, terrain_to_climate_zone,
 };
+pub use small_life::{SmallLife, TheSmallLifeHere};
 pub use biome::{BiomeType, Biome};
 pub use weather::{Weather, WeatherType, WeatherGenerator, PrecipitationType};
 pub use exposure::{ExposureType, ExposureStatus, ExposureProtection};
@@ -97,7 +99,7 @@ impl std::fmt::Display for EnvironmentError {
 impl std::error::Error for EnvironmentError {}
 
 /// Position in 3D space
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
@@ -129,7 +131,7 @@ pub struct ActionResult {
     /// Whether the action succeeded
     pub success: bool,
     /// Drives that were affected and by how much (positive = satisfied, negative = increased)
-    pub drive_changes: HashMap<DriveType, f32>,
+    pub drive_changes: BTreeMap<DriveType, f32>,
     /// Items produced or obtained
     pub items_gained: Vec<ItemStack>,
     /// Items consumed or lost
@@ -301,6 +303,10 @@ pub enum Action {
     SpreadMuck,
     /// Take what the run is carrying, from the reach the agent is standing at
     Fish,
+    /// Set a snare on the ground the agent is standing on
+    SetSnare,
+    /// Walk the line and take what has gone into it
+    CheckSnares,
     /// Wait/idle
     Wait,
 }
@@ -322,10 +328,21 @@ impl Action {
             Action::Mate { .. } => Some(DriveType::Reproduction), // Mating satisfies reproduction drive
             Action::Mount { .. } => Some(DriveType::Utility), // Mounting provides travel utility
             Action::Dismount => Some(DriveType::Utility), // Dismounting when needed
-            Action::Attack { .. } => Some(DriveType::Safety), // Defense/aggression
+            // Turning round on a thing answers the anger drive, and running
+            // from it answers the fear drive. They were both `Safety`, which
+            // meant an agent that ran and an agent that stood had satisfied
+            // the same want - so nothing downstream could tell the two apart,
+            // and neither drive could learn anything from what happened.
+            Action::Attack { .. } => Some(DriveType::Aggression),
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
-            Action::Fight { .. } => Some(DriveType::Safety), // Driving a thing off, not eating it
+            Action::Fight { .. } => Some(DriveType::Aggression), // Driving a thing off, not eating it
             Action::Fish => Some(DriveType::Hunger), // A fish is a meal first
+            // Setting a line is putting food by against a want you have not
+            // felt yet, which is what Preparedness is; going round it is a
+            // meal. Two different wants, one activity, and that is the
+            // difference between a trapper and a hungry man.
+            Action::SetSnare => Some(DriveType::Preparedness),
+            Action::CheckSnares => Some(DriveType::Hunger),
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
@@ -371,7 +388,7 @@ impl ActionResult {
     pub fn success() -> Self {
         Self {
             success: true,
-            drive_changes: HashMap::new(),
+            drive_changes: BTreeMap::new(),
             items_gained: Vec::new(),
             items_consumed: Vec::new(),
             experience: 0.0,
@@ -384,7 +401,7 @@ impl ActionResult {
     pub fn failure(message: String) -> Self {
         Self {
             success: false,
-            drive_changes: HashMap::new(),
+            drive_changes: BTreeMap::new(),
             items_gained: Vec::new(),
             items_consumed: Vec::new(),
             experience: 0.0,

@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// The 5 core emotions that drive agent behavior
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum EmotionType {
     Fear,
     Anger,

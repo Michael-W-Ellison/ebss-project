@@ -7,7 +7,7 @@
 //! - Time-based food spoilage with preservation methods
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use super::inventory::ItemType;
 
 /// Types of nutrients that agents need
@@ -59,10 +59,6 @@ impl NutritionalContent {
         }
     }
 
-    /// Check if this provides meaningful nutrition
-    pub fn is_nutritious(&self) -> bool {
-        self.total() > 5.0
-    }
 }
 
 /// What a fire does to a particular kind of food
@@ -155,6 +151,11 @@ impl Piece {
     }
 
     /// Whether a person can put this in their mouth as it is.
+    ///
+    /// Only about *shape*: a whole carcass has to come apart first. It is not
+    /// the question of whether the thing is food at all - that is
+    /// `is_this_food` below - and it was being used as though it were, which
+    /// is how `eat_food_item` came to swallow wood.
     pub fn can_it_be_eaten(&self) -> bool {
         !matches!(self, Self::Whole)
     }
@@ -199,6 +200,32 @@ impl Piece {
         }
     }
 }
+
+/// What a mouthful of food nobody has recorded anything about is worth.
+///
+/// Most of what an agent picks up arrives with a full `FoodData` on it, but
+/// some paths hand over a bare stack - a trade, an animal product - and a body
+/// still has to be able to eat one. This is what `eat_food_item` credits it
+/// with, and `find_best_food_to_eat` scores it by, so the two cannot differ:
+/// they did, and the difference was that the search could not see such a stack
+/// at all.
+pub fn what_an_untracked_mouthful_is_worth() -> NutritionalContent {
+    NutritionalContent::new(20.0, 5.0, 5.0, 0.3)
+}
+
+/// Whether a thing with this name is food at all.
+///
+/// The one answer for item ids, as `ItemType::is_it_food` is the one answer
+/// for types - this is that question asked through `id_to_item_type`, so a
+/// cooked joint and a cut portion resolve to what they were cut off. Anything
+/// the name does not resolve to is not food: an unknown name is a thing
+/// nobody has taught this model about, and guessing that it might be edible
+/// from a substring is what `LOOKS_EDIBLE` did.
+pub fn is_this_food(item_id: &str) -> bool {
+    crate::agents::storage_integration::id_to_item_type(item_id)
+        .is_some_and(|kind| kind.is_it_food())
+}
+
 
 /// Preparation state of food affecting utilization and spoilage
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
@@ -426,6 +453,22 @@ impl FoodData {
     }
 
     /// Update freshness based on current tick
+    /// How many ticks this has before it stops being food.
+    ///
+    /// What is left of its own clock: the whole of it at the pace its
+    /// preparation lets it run, times how much of that is still to come.
+    /// Freshness is *derived* from `created_tick` by `update_freshness`, so
+    /// this needs no tick handed to it and cannot disagree with what the
+    /// world last worked out.
+    ///
+    /// The one owner of the question. `Pit::how_long_this_would_keep` asks it
+    /// and multiplies by what the hole is worth; `find_best_food_to_eat` asks
+    /// it to decide what to eat first.
+    pub fn how_long_this_has_left(&self) -> f32 {
+        let spoils_in = self.base_spoilage_ticks as f32 / self.preparation.spoilage_multiplier();
+        (spoils_in * self.freshness.clamp(0.0, 1.0)).max(0.0)
+    }
+
     pub fn update_freshness(&mut self, current_tick: u32) {
         let elapsed = current_tick.saturating_sub(self.created_tick);
         let spoilage_rate = self.preparation.spoilage_multiplier();
@@ -524,7 +567,7 @@ pub struct FoodTemplate {
 
 /// Registry of food nutritional data
 pub struct FoodDatabase {
-    entries: HashMap<ItemType, FoodTemplate>,
+    entries: BTreeMap<ItemType, FoodTemplate>,
 }
 
 impl Default for FoodDatabase {
@@ -536,7 +579,7 @@ impl Default for FoodDatabase {
 impl FoodDatabase {
     pub fn new() -> Self {
         let mut db = Self {
-            entries: HashMap::new(),
+            entries: BTreeMap::new(),
         };
         db.register_all_foods();
         db
@@ -831,15 +874,6 @@ impl NutritionalState {
         penalty
     }
 
-    /// Get overall nutritional status (0.0 = critical, 1.0 = excellent)
-    pub fn overall_status(&self) -> f32 {
-        let energy_factor = self.energy_reserves / 100.0;
-        let protein_factor = self.protein_stores / 100.0;
-        let micro_factor = self.micronutrient_level / 100.0;
-
-        // Weighted average - energy is most important short-term
-        energy_factor * 0.5 + protein_factor * 0.3 + micro_factor * 0.2
-    }
 
     /// Check if agent is starving (critical energy)
     pub fn is_starving(&self) -> bool {
@@ -858,24 +892,6 @@ impl NutritionalState {
         }
     }
 
-    /// Get status string for debugging/display
-    pub fn status_string(&self) -> String {
-        let mut status = format!(
-            "E:{:.0} P:{:.0} V:{:.0}",
-            self.energy_reserves,
-            self.protein_stores,
-            self.micronutrient_level
-        );
-
-        if self.has_protein_deficiency() {
-            status.push_str(" [WASTING]");
-        }
-        if self.has_micronutrient_deficiency() {
-            status.push_str(" [SCURVY]");
-        }
-
-        status
-    }
 }
 
 /// Result of eating food
@@ -1088,5 +1104,76 @@ mod tests {
         // Still fresh a couple of years on
         assert!(food.freshness > 0.9);
         assert_eq!(food.freshness_description(), "Fresh");
+    }
+}
+
+#[cfg(test)]
+mod one_answer_to_what_is_food {
+    use super::{is_this_food, FoodDatabase};
+    use crate::world::ItemType;
+
+    /// `ItemType::is_it_food` is a static list and `FoodDatabase` is a runtime
+    /// table, and the first is only trustworthy while it matches the second.
+    /// Every resource type in the model is put to both.
+    #[test]
+    fn every_food_type_has_a_template() {
+        let db = FoodDatabase::new();
+        for what in crate::world::ResourceType::all() {
+            let Some(kind) = crate::agents::storage_integration::id_to_item_type(
+                &format!("{what:?}").to_lowercase(),
+            ) else {
+                continue;
+            };
+            assert_eq!(
+                kind.is_it_food(),
+                db.is_food(&kind),
+                "{kind:?} is food to one of these and not the other"
+            );
+        }
+
+        // And the twelve the database carries, named, so that dropping one
+        // from either side fails here rather than quietly starving somebody.
+        for kind in [
+            ItemType::Food, ItemType::Meat, ItemType::Fish, ItemType::Greens,
+            ItemType::Roots, ItemType::Grain, ItemType::Flour, ItemType::Bread,
+            ItemType::Milk, ItemType::Cheese, ItemType::Honey, ItemType::Ale,
+        ] {
+            assert!(kind.is_it_food(), "{kind:?} should be food");
+            assert!(db.is_food(&kind), "{kind:?} should have a template");
+        }
+        for kind in [ItemType::Wood, ItemType::Stone, ItemType::Iron, ItemType::Clay] {
+            assert!(!kind.is_it_food(), "{kind:?} is not food");
+            assert!(!db.is_food(&kind), "{kind:?} should have no template");
+        }
+    }
+
+    /// The name-level question agrees with the type-level one, through the
+    /// cooking prefix and the cutting suffix alike.
+    #[test]
+    fn a_cooked_joint_is_still_food_and_a_stone_is_still_not() {
+        for id in ["food", "grain", "greens", "roots", "fish", "meat",
+                   "bread", "cooked_meat", "meatportions", "fishportions"] {
+            assert!(is_this_food(id), "{id} should be food");
+        }
+
+        // And what the flora system drops, which is where this test earned its
+        // keep: it was written asserting that *nothing* is called "berries",
+        // on the strength of the word appearing only in prose in the decision
+        // layer. `PlantDrop` names sixty-two things a plant can give and
+        // "berries" is one of them - so the assertion was wrong, and it failed
+        // the moment the name table was taught the drops. A guard that only
+        // ever agrees with you is not a guard.
+        for id in ["berries", "apples", "potatoes", "wheat", "mushrooms", "cabbage"] {
+            assert!(is_this_food(id), "the flora system drops {id}");
+        }
+
+        // Not everything a plant gives is supper.
+        for id in ["bark", "resin", "straw", "plant_fiber", "rose_petals",
+                   "poison_mushrooms", "cotton_seeds"] {
+            assert!(!is_this_food(id), "{id} is not a meal");
+        }
+        for id in ["wood", "stone", "clay", "bowl", "basket", "flax", "iron", "spear"] {
+            assert!(!is_this_food(id), "{id} is not food");
+        }
     }
 }

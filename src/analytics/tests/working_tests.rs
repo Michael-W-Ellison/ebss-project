@@ -508,6 +508,10 @@ fn a_basket_carries_what_the_arms_cannot() {
     let mut simulation = a_person();
     empty_the_pack(&mut simulation);
 
+    // Emptying the pack takes the founder's basket out of it, but a carrier
+    // is put down on a turn like it is taken up - so ask for the turn, or
+    // "bare arms" is a pair of arms still wearing a backpack.
+    simulation.population.agents[0].take_up_the_cart();
     let bare_arms = simulation.population.agents[0]
         .inventory
         .effective_max_weight();
@@ -520,6 +524,15 @@ fn a_basket_carries_what_the_arms_cannot() {
         simulation.population.agents[0].how_many_i_have("basket") > 0,
         "there is a basket in the pack"
     );
+
+    // And it goes on the back, which is a thing that happens rather than a
+    // property of having one. `tick_with_percepts` does this every turn, so in
+    // a running world the basket is carrying by the next one; here the turn
+    // has to be asked for. Before ISSUES #116 the capacity rose the moment the
+    // basket entered the pack *and* again when it was taken up, which is
+    // where the double count lived.
+    simulation.population.agents[0].take_up_the_cart();
+
     assert!(
         simulation.population.agents[0]
             .inventory

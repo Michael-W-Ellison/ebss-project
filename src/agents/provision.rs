@@ -51,6 +51,100 @@ pub const DAYS_IN_A_MONTH: u32 = DAYS_PER_SEASON / 2;
 pub const UNITS_IN_ONE_STORED_ITEM: f32 =
     physiology::UNITS_IN_ONE_ITEM * physiology::ENERGY_OF_ORDINARY_FOOD;
 
+/// What one grown body gets through in a day, in the items a store is counted
+/// in.
+///
+/// The paragraph above already says eleven and a half. This is that sentence
+/// written as a number, so that anything sizing a store against a stretch of
+/// days has one place to get it from and cannot pick its own.
+///
+/// It is worth saying plainly what having to write this down cost. The store
+/// wanted **seven items put by per mouth for a whole winter** - a figure
+/// picked, with a doc comment reasoning carefully from "a person gets through
+/// about a hundred units in ten thousand ticks", which was true of the body
+/// this model had before the starvation clock was corrected and is out by
+/// something over two orders of magnitude against the body it has now. Seven
+/// items is half a day. Measured, a person eats **15.4 items a day**, which is
+/// this figure and a bit, the bit being that a settlement lives on food
+/// thinner than ordinary forage.
+pub const WHAT_A_BODY_EATS_IN_A_DAY: f32 =
+    physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY / UNITS_IN_ONE_STORED_ITEM;
+
+/// What one handful of gathered food weighs, in the units a pack is weighed in.
+///
+/// Written twice before this - in the Gather executor's weight table and again
+/// in the forage branch of `Eat` - and wanted a third time by anything asking
+/// how much room a day's eating takes.
+pub const WHAT_A_HANDFUL_OF_FOOD_WEIGHS: f32 = 0.5;
+
+/// The most one pair of hands takes off a patch in one trip.
+///
+/// Above this a patch is not worth more for being bigger: a hedge with a
+/// thousand berries on it and one with fifty are the same afternoon's work.
+///
+/// Lived in the decision layer, where nothing outside it could reach the
+/// figure - and what a pack has to have room for is exactly this, since a pack
+/// that cannot take what a trip brings back is a pack that makes the trip
+/// pointless.
+pub const AS_MUCH_AS_ONE_TRIP_TAKES: f32 = 14.0;
+
+/// The longest run of days in the year on which nothing a person can eat is
+/// growing anywhere.
+///
+/// The hungry gap, derived from the bearing windows rather than picked. The
+/// hedgerows only: fish and meat never stop, and a store sized on the
+/// assumption that everybody will be fishing is optimism - `Fish` is refused
+/// ninety-three times in a hundred.
+///
+/// This is the stretch anything sizing a store has to survive, and it is the
+/// honest length of "put by" in a seasonal world. It was derived once already,
+/// inside the decision layer's store code, where nothing outside that layer
+/// could reach it; the breeding gate needed the same number and would
+/// otherwise have picked its own. One derivation, one answer.
+pub fn how_long_the_land_gives_nothing() -> u32 {
+    use crate::environment::seasons::DAYS_PER_YEAR;
+    static ANSWER: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+
+    *ANSWER.get_or_init(|| {
+        // Round the turn of the year, so a run that straddles new year is one
+        // run and not two. Twice through, counting only the second lap.
+        let mut longest = 0;
+        let mut running = 0;
+        for day in 0..(DAYS_PER_YEAR * 2) {
+            running = if is_anything_bearing_on(day % DAYS_PER_YEAR) {
+                0
+            } else {
+                running + 1
+            };
+            if day >= DAYS_PER_YEAR {
+                longest = longest.max(running.min(DAYS_PER_YEAR));
+            }
+        }
+        longest
+    })
+}
+
+/// Whether anything a person can eat is growing anywhere on this day.
+pub fn is_anything_bearing_on(day_of_year: u32) -> bool {
+    crate::world::ResourceType::all()
+        .into_iter()
+        .filter(|what| what.is_it_food() && what.is_it_grown())
+        .any(|what| what.is_it_bearing(day_of_year))
+}
+
+/// What one mouth of this many years wants put by to see it through the gap.
+///
+/// The days the land gives nothing, times what a body that age eats in a day.
+/// A newborn is a fifth of a grown appetite, so it is a fifth of the figure a
+/// grown person needs - which is the same arithmetic the settlement store
+/// uses, asked about one mouth instead of all of them.
+pub fn what_one_mouth_this_age_wants_put_by(years: u32) -> u32 {
+    (WHAT_A_BODY_EATS_IN_A_DAY
+        * crate::agents::agent::what_a_body_this_age_eats(years)
+        * how_long_the_land_gives_nothing() as f32)
+        .ceil() as u32
+}
+
 /// How far ahead an agent can see food, and what failing each horizon costs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HowLongTheFoodLasts {
@@ -151,6 +245,14 @@ pub struct WhatIsPutBy {
     pub how_near_winter: f32,
     /// Which rung it puts the agent on
     pub rung: HowLongTheFoodLasts,
+    /// How much of `units` is inside the agent rather than put by.
+    ///
+    /// The reckoning counts what is in the stomach and the gut, and it is
+    /// right to: somebody who has just eaten is not short of supper. But a
+    /// meal already swallowed cannot feed anybody next season, so anything
+    /// asking "what would still be here in a month" has to be able to take it
+    /// back off again. Nought unless somebody says otherwise.
+    pub units_in_the_body: f32,
 }
 
 impl WhatIsPutBy {
@@ -166,7 +268,20 @@ impl WhatIsPutBy {
             winter_days,
             how_near_winter,
             rung: HowLongTheFoodLasts::reckon(days_in_hand, winter_days, how_near_winter),
+            units_in_the_body: 0.0,
         }
+    }
+
+    /// Say how much of it was inside the agent.
+    pub fn of_which_in_the_body(mut self, units: f32) -> Self {
+        self.units_in_the_body = units.clamp(0.0, self.units);
+        self
+    }
+
+    /// What is actually put by: the pack and the camp's stores, with what has
+    /// already been eaten taken back off.
+    pub fn units_put_by(&self) -> f32 {
+        (self.units - self.units_in_the_body).max(0.0)
     }
 
     /// What this agent is trying to have laid by before the winter.

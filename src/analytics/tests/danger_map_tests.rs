@@ -294,7 +294,7 @@ fn the_only_patch_there_is_gets_walked_to_anyway() {
 fn somebody_remembers_where_they_last_saw_you() {
     let mut simulation = one_person();
     let map = &mut simulation.population.agents[0].exploration_knowledge;
-    let somebody = uuid::Uuid::new_v4();
+    let somebody = crate::core::dice::name();
 
     assert!(map.where_did_i_last_see(somebody, 0).is_none());
 
@@ -311,7 +311,7 @@ fn somebody_remembers_where_they_last_saw_you() {
 fn a_sighting_goes_stale() {
     let mut simulation = one_person();
     let map = &mut simulation.population.agents[0].exploration_knowledge;
-    let somebody = uuid::Uuid::new_v4();
+    let somebody = crate::core::dice::name();
 
     map.saw_somebody(somebody, Position::new(40, 40), 100);
 

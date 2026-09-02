@@ -8,7 +8,7 @@
 //! - World generation
 
 use std::any::Any;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use super::{
     EnvironmentPlugin, PluginMetadata, PluginConfig, WorldState,
     Material, Action, ActionContext, ActionResult, RecipeBook,
@@ -110,15 +110,6 @@ impl FurnaceState {
         }
     }
 
-    /// Insert an item for smelting
-    pub fn insert_item(&mut self, item: &str) -> bool {
-        if self.input_item.is_some() || Self::get_smelt_output(item).is_none() {
-            return false;
-        }
-        self.input_item = Some(item.to_string());
-        self.smelt_progress = 0;
-        true
-    }
 
     /// Tick the furnace simulation
     pub fn tick(&mut self) {
@@ -155,15 +146,7 @@ impl FurnaceState {
         }
     }
 
-    /// Collect the output item
-    pub fn collect_output(&mut self) -> Option<String> {
-        self.output_item.take()
-    }
 
-    /// Check if furnace is ready (has fuel and is hot)
-    pub fn is_ready(&self) -> bool {
-        self.fuel_remaining > 0 && self.temperature > 100.0
-    }
 
     /// Get current smelting efficiency (0.0-1.0)
     pub fn efficiency(&self) -> f32 {
@@ -186,11 +169,11 @@ impl Default for FurnaceState {
 pub struct MinecraftSurvivalPlugin {
     metadata: PluginMetadata,
     world_state: WorldState,
-    materials: HashMap<String, Material>,
-    actions: HashMap<String, Action>,
+    materials: BTreeMap<String, Material>,
+    actions: BTreeMap<String, Action>,
     recipe_book: RecipeBook,
     world_size: (i32, i32, i32),
-    blocks: HashMap<(i32, i32, i32), Block>,
+    blocks: BTreeMap<(i32, i32, i32), Block>,
     initialized: bool,
 }
 
@@ -207,11 +190,11 @@ impl MinecraftSurvivalPlugin {
                 tags: vec!["survival".to_string(), "crafting".to_string(), "mining".to_string()],
             },
             world_state: WorldState::new(0),
-            materials: HashMap::new(),
-            actions: HashMap::new(),
+            materials: BTreeMap::new(),
+            actions: BTreeMap::new(),
             recipe_book: RecipeBook::new(),
             world_size: (256, 256, 128),
-            blocks: HashMap::new(),
+            blocks: BTreeMap::new(),
             initialized: false,
         };
 
@@ -514,7 +497,7 @@ impl MinecraftSurvivalPlugin {
         };
 
         let quantity = material.drop_quantity.0 +
-            (rand::random::<u32>() % (material.drop_quantity.1 - material.drop_quantity.0 + 1).max(1));
+            (crate::core::dice::any::<u32>() % (material.drop_quantity.1 - material.drop_quantity.0 + 1).max(1));
 
         ActionResult::success()
             .with_item_gained(ItemStack::new(material_id.to_string(), quantity))

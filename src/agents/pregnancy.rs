@@ -13,7 +13,7 @@ pub const PREGNANCY_ENERGY_MULTIPLIER: f32 = 1.3;
 /// Movement speed reduction while pregnant (late stages)
 pub const PREGNANCY_SPEED_PENALTY: f32 = 0.7;
 
-/// Pregnancy state for female agents
+/// Pregnancy state, held by whichever agent is carrying
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PregnancyState {
     /// Tick when conception occurred
@@ -95,10 +95,6 @@ impl PregnancyState {
         1.0 + (progress * (PREGNANCY_ENERGY_MULTIPLIER - 1.0))
     }
 
-    /// Get ticks remaining until birth
-    pub fn ticks_remaining(&self, current_tick: u32) -> u32 {
-        self.due_tick.saturating_sub(current_tick)
-    }
 }
 
 #[cfg(test)]
@@ -107,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_pregnancy_progress() {
-        let father_id = Uuid::new_v4();
+        let father_id = crate::core::dice::name();
         let pregnancy = PregnancyState::new(100, father_id);
 
         assert_eq!(pregnancy.progress(100), 0.0);
@@ -118,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_pregnancy_due() {
-        let father_id = Uuid::new_v4();
+        let father_id = crate::core::dice::name();
         let pregnancy = PregnancyState::new(100, father_id);
 
         assert!(!pregnancy.is_due(100));
@@ -129,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_trimester() {
-        let father_id = Uuid::new_v4();
+        let father_id = crate::core::dice::name();
         let pregnancy = PregnancyState::new(0, father_id);
 
         assert_eq!(pregnancy.trimester(0), 1);
@@ -142,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_speed_modifier() {
-        let father_id = Uuid::new_v4();
+        let father_id = crate::core::dice::name();
         let pregnancy = PregnancyState::new(0, father_id);
 
         // First half: no penalty
@@ -156,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_nutrition_tracking() {
-        let father_id = Uuid::new_v4();
+        let father_id = crate::core::dice::name();
         let mut pregnancy = PregnancyState::new(0, father_id);
 
         // Well-fed mother

@@ -723,10 +723,6 @@ impl AsciiRenderer {
         print!("        "); // Clear trailing characters
     }
 
-    /// Render a compact single-line status (for backwards compatibility)
-    pub fn render_compact(&self, population: &Population, tick: u32) {
-        self.render_compact_line(population, tick);
-    }
 }
 
 impl Default for AsciiRenderer {

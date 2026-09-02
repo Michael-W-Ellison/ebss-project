@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Type of equipment slot
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum EquipmentSlot {
     // Clothing/Armor slots
     Head,
@@ -43,15 +43,7 @@ impl EquipmentSlot {
         }
     }
 
-    /// Check if this is a weapon/tool slot
-    pub fn is_weapon_slot(&self) -> bool {
-        matches!(self, EquipmentSlot::MainHand | EquipmentSlot::OffHand)
-    }
 
-    /// Check if this is an armor/clothing slot
-    pub fn is_armor_slot(&self) -> bool {
-        !self.is_weapon_slot()
-    }
 }
 
 /// Material type for clothing
@@ -242,17 +234,6 @@ impl WoodMaterial {
         }
     }
 
-    /// Flexibility (for bows)
-    pub fn flexibility(&self) -> f32 {
-        match self {
-            WoodMaterial::Yew => 1.5,
-            WoodMaterial::Ash => 1.3,
-            WoodMaterial::Birch => 1.2,
-            WoodMaterial::Oak => 0.9,
-            WoodMaterial::Ironwood => 0.7,
-            WoodMaterial::Pine => 1.0,
-        }
-    }
 }
 
 /// Stone materials for primitive tools and weapons
@@ -285,15 +266,6 @@ impl StoneMaterial {
         }
     }
 
-    /// Sharpness retention (affects durability loss when used)
-    pub fn sharpness_retention(&self) -> f32 {
-        match self {
-            StoneMaterial::Obsidian => 0.5, // Loses sharpness quickly
-            StoneMaterial::Flint => 0.8,
-            StoneMaterial::Granite => 0.9,
-            StoneMaterial::Limestone => 0.6,
-        }
-    }
 }
 
 /// General equipment material type
@@ -451,16 +423,6 @@ impl EquipmentType {
         )
     }
 
-    /// Is this an accessory (jewelry)?
-    pub fn is_accessory(&self) -> bool {
-        matches!(
-            self,
-            EquipmentType::Ring
-                | EquipmentType::Necklace
-                | EquipmentType::Amulet
-                | EquipmentType::Bracelet
-        )
-    }
 
     /// Get base damage for this weapon type
     pub fn base_damage(&self) -> f32 {
@@ -544,7 +506,7 @@ impl Equipment {
         let max_durability = material.base_durability() * quality_mult;
 
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             name,
             slot,
             material,
@@ -698,7 +660,7 @@ impl EquipmentItem {
         };
 
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             name,
             equipment_type,
             slot,
@@ -803,26 +765,13 @@ impl EquipmentItem {
         self.durability = (self.durability + amount).min(self.max_durability);
     }
 
-    /// Get equipment condition description
-    pub fn condition_description(&self) -> &'static str {
-        let pct = self.durability_percentage();
-        match pct {
-            p if p >= 0.9 => "Pristine",
-            p if p >= 0.75 => "Excellent",
-            p if p >= 0.5 => "Good",
-            p if p >= 0.25 => "Worn",
-            p if p >= 0.1 => "Damaged",
-            p if p > 0.0 => "Nearly Broken",
-            _ => "Broken",
-        }
-    }
 }
 
 /// Equipment Manager - manages all equipped items for an agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EquipmentManager {
     /// Currently equipped items by slot
-    equipped: std::collections::HashMap<EquipmentSlot, EquipmentItem>,
+    equipped: std::collections::BTreeMap<EquipmentSlot, EquipmentItem>,
 
     /// Total weight of equipped items
     total_weight: f32,
@@ -835,7 +784,7 @@ impl EquipmentManager {
     /// Create a new equipment manager
     pub fn new(max_carry_weight: f32) -> Self {
         Self {
-            equipped: std::collections::HashMap::new(),
+            equipped: std::collections::BTreeMap::new(),
             total_weight: 0.0,
             max_carry_weight,
         }
@@ -978,12 +927,6 @@ impl EquipmentManager {
             .filter(|item| item.equipment_type.is_tool())
     }
 
-    /// Get mining speed bonus from equipped tool
-    pub fn mining_speed_bonus(&self) -> f32 {
-        self.get_tool_for_task("mining")
-            .map(|tool| tool.effective_mining_speed())
-            .unwrap_or(1.0)
-    }
 
     /// Get harvesting speed bonus from equipped tool
     pub fn harvesting_speed_bonus(&self) -> f32 {
@@ -1000,73 +943,12 @@ impl EquipmentManager {
         })
     }
 
-    /// Get the current tool's primitive status for a task
-    /// Returns true if tool is made of primitive materials (wood/stone)
-    pub fn is_using_primitive_tool_for_task(&self, task: &str) -> bool {
-        self.get_tool_for_task(task)
-            .map(|tool| tool.material.is_primitive())
-            .unwrap_or(false)
-    }
 
-    /// Get mining speed bonus with Traditionalist trait bonus
-    /// Traditionalist trait grants +30% efficiency with primitive tools
-    pub fn mining_speed_with_traits(&self, traits: &crate::core::traits::TraitSet) -> f32 {
-        let base_speed = self.mining_speed_bonus();
-        if traits.has(crate::core::traits::Trait::Traditionalist) {
-            if self.is_using_primitive_tool_for_task("mining") {
-                return base_speed * 1.3; // 30% bonus with primitive tools
-            }
-        }
-        base_speed
-    }
 
-    /// Get harvesting speed bonus with Traditionalist trait bonus
-    /// Traditionalist trait grants +30% efficiency with primitive tools
-    pub fn harvesting_speed_with_traits(&self, traits: &crate::core::traits::TraitSet) -> f32 {
-        let base_speed = self.harvesting_speed_bonus();
-        if traits.has(crate::core::traits::Trait::Traditionalist) {
-            if self.is_using_primitive_tool_for_task("harvesting") || self.is_using_primitive_tool_for_task("woodcutting") {
-                return base_speed * 1.3; // 30% bonus with primitive tools
-            }
-        }
-        base_speed
-    }
 
-    /// Tick all equipped items (apply wear)
-    pub fn tick_all_equipment(&mut self) {
-        for item in self.equipped.values_mut() {
-            if !item.is_broken() {
-                item.tick_wear();
-            }
-        }
-    }
 
-    /// Apply combat wear to weapon
-    pub fn apply_combat_wear(&mut self, wear_amount: f32) {
-        if let Some(weapon) = self.equipped.get_mut(&EquipmentSlot::MainHand) {
-            weapon.apply_wear(wear_amount);
-        }
-    }
 
-    /// Apply tool wear for a specific task
-    pub fn apply_tool_wear(&mut self, task: &str, wear_amount: f32) {
-        if let Some(slot) = self.get_tool_slot_for_task(task) {
-            if let Some(tool) = self.equipped.get_mut(&slot) {
-                tool.apply_wear(wear_amount);
-            }
-        }
-    }
 
-    /// Get armor coverage for a specific body part
-    pub fn get_armor_for_part(&self, part: BodyPartType) -> f32 {
-        let mut total_armor = 0.0;
-        for item in self.equipped.values() {
-            if item.slot.covered_parts().contains(&part) {
-                total_armor += item.effective_armor();
-            }
-        }
-        total_armor.min(0.95) // Max 95% damage reduction
-    }
 
     /// Check if carrying too much weight
     pub fn is_encumbered(&self) -> bool {
@@ -1123,42 +1005,8 @@ impl EquipmentManager {
         }).sum()
     }
 
-    /// Get list of broken equipment
-    pub fn get_broken_equipment(&self) -> Vec<EquipmentSlot> {
-        self.equipped
-            .iter()
-            .filter(|(_, item)| item.is_broken())
-            .map(|(slot, _)| *slot)
-            .collect()
-    }
 
-    /// Unequip all broken items
-    pub fn unequip_broken(&mut self) -> Vec<EquipmentItem> {
-        let broken_slots: Vec<EquipmentSlot> = self.get_broken_equipment();
-        broken_slots
-            .into_iter()
-            .filter_map(|slot| self.unequip(slot))
-            .collect()
-    }
 
-    /// Get equipment summary string
-    pub fn equipment_summary(&self) -> String {
-        if self.equipped.is_empty() {
-            return "No equipment".to_string();
-        }
-
-        let mut summary = Vec::new();
-        for (slot, item) in &self.equipped {
-            summary.push(format!(
-                "{:?}: {} ({})",
-                slot,
-                item.name,
-                item.condition_description()
-            ));
-        }
-
-        summary.join(", ")
-    }
 
     // Helper methods
 
@@ -1195,25 +1043,6 @@ impl EquipmentManager {
             .unwrap_or(0.0)
     }
 
-    fn get_tool_slot_for_task(&self, task: &str) -> Option<EquipmentSlot> {
-        let required_type = match task {
-            "mining" => Some(EquipmentType::Pickaxe),
-            "woodcutting" => Some(EquipmentType::Hatchet),
-            "digging" => Some(EquipmentType::Shovel),
-            "harvesting" => Some(EquipmentType::Sickle),
-            _ => None,
-        };
-
-        if let Some(req_type) = required_type {
-            for (slot, item) in &self.equipped {
-                if item.equipment_type == req_type {
-                    return Some(*slot);
-                }
-            }
-        }
-
-        None
-    }
 }
 
 impl Default for EquipmentManager {
@@ -1586,15 +1415,6 @@ impl WeaponTemplate {
         )
     }
 
-    pub fn bronze_sword(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Bronze Sword".to_string(),
-            EquipmentType::Sword,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Bronze),
-            quality,
-        )
-    }
 
     // Axes
     pub fn iron_axe(quality: Quality) -> EquipmentItem {
@@ -1607,26 +1427,7 @@ impl WeaponTemplate {
         )
     }
 
-    pub fn steel_axe(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Steel Axe".to_string(),
-            EquipmentType::Axe,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Steel),
-            quality,
-        )
-    }
 
-    // Spears
-    pub fn iron_spear(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Iron Spear".to_string(),
-            EquipmentType::Spear,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Iron),
-            quality,
-        )
-    }
 
     pub fn wooden_spear(quality: Quality) -> EquipmentItem {
         EquipmentItem::new(
@@ -1638,68 +1439,11 @@ impl WeaponTemplate {
         )
     }
 
-    // Daggers
-    pub fn iron_dagger(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Iron Dagger".to_string(),
-            EquipmentType::Dagger,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Iron),
-            quality,
-        )
-    }
 
-    pub fn obsidian_dagger(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Obsidian Dagger".to_string(),
-            EquipmentType::Dagger,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Stone(StoneMaterial::Obsidian),
-            quality,
-        )
-    }
 
-    // Maces
-    pub fn iron_mace(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Iron Mace".to_string(),
-            EquipmentType::Mace,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Iron),
-            quality,
-        )
-    }
 
-    pub fn stone_mace(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Stone Mace".to_string(),
-            EquipmentType::Mace,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Stone(StoneMaterial::Granite),
-            quality,
-        )
-    }
 
-    // Bows
-    pub fn yew_bow(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Yew Bow".to_string(),
-            EquipmentType::Bow,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Wood(WoodMaterial::Yew),
-            quality,
-        )
-    }
 
-    pub fn ash_bow(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Ash Bow".to_string(),
-            EquipmentType::Bow,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Wood(WoodMaterial::Ash),
-            quality,
-        )
-    }
 }
 
 /// Tool templates
@@ -1727,15 +1471,6 @@ impl ToolTemplate {
         )
     }
 
-    pub fn steel_pickaxe(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Steel Pickaxe".to_string(),
-            EquipmentType::Pickaxe,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Steel),
-            quality,
-        )
-    }
 
     // Hatchets
     pub fn stone_hatchet(quality: Quality) -> EquipmentItem {
@@ -1748,46 +1483,9 @@ impl ToolTemplate {
         )
     }
 
-    pub fn iron_hatchet(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Iron Hatchet".to_string(),
-            EquipmentType::Hatchet,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Iron),
-            quality,
-        )
-    }
 
-    pub fn steel_hatchet(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Steel Hatchet".to_string(),
-            EquipmentType::Hatchet,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Steel),
-            quality,
-        )
-    }
 
-    // Shovels
-    pub fn wooden_shovel(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Wooden Shovel".to_string(),
-            EquipmentType::Shovel,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Wood(WoodMaterial::Oak),
-            quality,
-        )
-    }
 
-    pub fn iron_shovel(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Iron Shovel".to_string(),
-            EquipmentType::Shovel,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Iron),
-            quality,
-        )
-    }
 
     // Hammers
     pub fn stone_hammer(quality: Quality) -> EquipmentItem {
@@ -1810,84 +1508,17 @@ impl ToolTemplate {
         )
     }
 
-    // Sickles
-    pub fn iron_sickle(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Iron Sickle".to_string(),
-            EquipmentType::Sickle,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Iron),
-            quality,
-        )
-    }
 
-    pub fn bronze_sickle(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Bronze Sickle".to_string(),
-            EquipmentType::Sickle,
-            EquipmentSlot::MainHand,
-            EquipmentMaterial::Metal(MetalMaterial::Bronze),
-            quality,
-        )
-    }
 }
 
 /// Armor templates (metal armor)
 pub struct ArmorTemplate;
 
 impl ArmorTemplate {
-    // Light Armor
-    pub fn leather_light_armor(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Leather Armor".to_string(),
-            EquipmentType::LightArmor,
-            EquipmentSlot::Torso,
-            EquipmentMaterial::Cloth(ClothingMaterial::Leather),
-            quality,
-        )
-    }
 
-    // Medium Armor
-    pub fn bronze_medium_armor(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Bronze Armor".to_string(),
-            EquipmentType::MediumArmor,
-            EquipmentSlot::Torso,
-            EquipmentMaterial::Metal(MetalMaterial::Bronze),
-            quality,
-        )
-    }
 
-    pub fn iron_medium_armor(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Iron Armor".to_string(),
-            EquipmentType::MediumArmor,
-            EquipmentSlot::Torso,
-            EquipmentMaterial::Metal(MetalMaterial::Iron),
-            quality,
-        )
-    }
 
-    // Heavy Armor
-    pub fn iron_heavy_armor(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Iron Plate Armor".to_string(),
-            EquipmentType::HeavyArmor,
-            EquipmentSlot::Torso,
-            EquipmentMaterial::Metal(MetalMaterial::Iron),
-            quality,
-        )
-    }
 
-    pub fn steel_heavy_armor(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Steel Plate Armor".to_string(),
-            EquipmentType::HeavyArmor,
-            EquipmentSlot::Torso,
-            EquipmentMaterial::Metal(MetalMaterial::Steel),
-            quality,
-        )
-    }
 
     // Shields
     pub fn wooden_shield(quality: Quality) -> EquipmentItem {
@@ -1900,25 +1531,7 @@ impl ArmorTemplate {
         )
     }
 
-    pub fn iron_shield(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Iron Shield".to_string(),
-            EquipmentType::Shield,
-            EquipmentSlot::OffHand,
-            EquipmentMaterial::Metal(MetalMaterial::Iron),
-            quality,
-        )
-    }
 
-    pub fn steel_shield(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Steel Shield".to_string(),
-            EquipmentType::Shield,
-            EquipmentSlot::OffHand,
-            EquipmentMaterial::Metal(MetalMaterial::Steel),
-            quality,
-        )
-    }
 
     // Helmets
     pub fn leather_helmet(quality: Quality) -> EquipmentItem {
@@ -1941,26 +1554,7 @@ impl ArmorTemplate {
         )
     }
 
-    pub fn steel_helmet(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Steel Helmet".to_string(),
-            EquipmentType::HeavyArmor,
-            EquipmentSlot::Head,
-            EquipmentMaterial::Metal(MetalMaterial::Steel),
-            quality,
-        )
-    }
 
-    // Gauntlets
-    pub fn iron_gauntlets(quality: Quality) -> EquipmentItem {
-        EquipmentItem::new(
-            "Iron Gauntlets".to_string(),
-            EquipmentType::MediumArmor,
-            EquipmentSlot::Hands,
-            EquipmentMaterial::Metal(MetalMaterial::Iron),
-            quality,
-        )
-    }
 
     // Boots
     pub fn leather_boots(quality: Quality) -> EquipmentItem {

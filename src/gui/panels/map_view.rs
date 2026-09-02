@@ -840,6 +840,7 @@ fn drive_color(drive: crate::core::DriveType) -> Color32 {
         DriveType::Thirst => Color32::from_rgb(0, 191, 255),
         DriveType::Rest => Color32::from_rgb(138, 43, 226),
         DriveType::Safety => Color32::from_rgb(255, 0, 0),
+        DriveType::Aggression => Color32::from_rgb(200, 40, 0),
         DriveType::Social => Color32::from_rgb(255, 105, 180),
         DriveType::Shelter => Color32::from_rgb(139, 90, 43),
         DriveType::Curiosity => Color32::from_rgb(255, 255, 0),
@@ -856,10 +857,6 @@ fn drive_color(drive: crate::core::DriveType) -> Color32 {
 
 fn should_show_agent(agent: &AgentSnapshot, filter: &AgentMapFilter) -> bool {
     if !filter.show_life_stage(agent.life_stage) {
-        return false;
-    }
-
-    if !filter.show_gender(agent.gender) {
         return false;
     }
 

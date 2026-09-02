@@ -1,5 +1,12 @@
 // src/agents/tests/nutrition_integration_tests.rs
 //! Integration tests for the nutrition system
+//! A note on the item names used here. These fixtures used to say "meal",
+//! "fruit", "raw_meat" and "spoiled_meat" - names nothing in this model has
+//! ever produced. Eating now asks `nutrition::is_this_food`, which resolves a
+//! name through `id_to_item_type` and refuses anything it cannot place, so a
+//! made-up name is refused as firmly as a stone is. The fixtures say what the
+//! model actually makes: "food", "berries", "meatportions".
+
 
 use crate::agents::{Agent, AgentConfig, InventoryItem};
 use crate::world::nutrition::{
@@ -37,7 +44,7 @@ fn test_eating_raw_food_less_effective() {
     );
 
     let raw_item = InventoryItem::new_food(
-        "raw_meat".to_string(),
+        "meatportions".to_string(),
         5,
         2.0,
         raw_meat,
@@ -47,7 +54,7 @@ fn test_eating_raw_food_less_effective() {
     let initial_protein = agent.nutrition.protein_stores;
 
     // Eat raw meat
-    let result = agent.eat_food_item("raw_meat", 100);
+    let result = agent.eat_food_item("meatportions", 100);
 
     match result {
         EatResult::Success(nutrition) => {
@@ -122,7 +129,7 @@ fn test_spoiled_food_harmful() {
     spoiled_food.freshness = 0.0; // Completely spoiled
 
     let spoiled_item = InventoryItem::new_food(
-        "spoiled_meat".to_string(),
+        "meatportions".to_string(),
         5,
         2.0,
         spoiled_food,
@@ -131,7 +138,7 @@ fn test_spoiled_food_harmful() {
     agent.inventory.add_item(spoiled_item);
 
     // Eating spoiled food should make sick
-    let result = agent.eat_food_item("spoiled_meat", 100);
+    let result = agent.eat_food_item("meatportions", 100);
 
     match result {
         EatResult::MadeSick(damage) => {
@@ -346,13 +353,13 @@ fn test_eating_satisfies_hunger_drive() {
         0,
     );
     agent.inventory.add_item(InventoryItem::new_food(
-        "meal".to_string(), 3, 1.0, food,
+        "food".to_string(), 3, 1.0, food,
     ));
 
     let initial_hunger = agent.drives.get(DriveType::Hunger).unwrap().value;
 
     // Eat
-    agent.eat_food_item("meal", 100);
+    agent.eat_food_item("food", 100);
 
     // Hunger should decrease
     let final_hunger = agent.drives.get(DriveType::Hunger).unwrap().value;
@@ -376,13 +383,13 @@ fn test_food_with_water_satisfies_thirst() {
         0,
     );
     agent.inventory.add_item(InventoryItem::new_food(
-        "fruit".to_string(), 5, 0.3, fruit,
+        "berries".to_string(), 5, 0.3, fruit,
     ));
 
     let initial_thirst = agent.drives.get(DriveType::Thirst).unwrap().value;
 
     // Eat fruit
-    agent.eat_food_item("fruit", 100);
+    agent.eat_food_item("berries", 100);
 
     // Thirst should decrease (water content > 0.3)
     let final_thirst = agent.drives.get(DriveType::Thirst).unwrap().value;

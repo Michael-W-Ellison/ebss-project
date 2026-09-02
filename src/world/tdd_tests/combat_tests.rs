@@ -89,8 +89,8 @@ fn test_combat_manager_creation() {
 fn test_combat_execution() {
     let mut manager = CombatManager::new();
 
-    let attacker_id = Uuid::new_v4();
-    let defender_id = Uuid::new_v4();
+    let attacker_id = crate::core::dice::name();
+    let defender_id = crate::core::dice::name();
 
     let attacker_stats = CombatStats {
         base_damage: 10.0,
@@ -125,8 +125,8 @@ fn test_combat_execution() {
 fn test_combat_log() {
     let mut manager = CombatManager::new();
 
-    let attacker_id = Uuid::new_v4();
-    let defender_id = Uuid::new_v4();
+    let attacker_id = crate::core::dice::name();
+    let defender_id = crate::core::dice::name();
 
     let attacker_stats = CombatStats::default();
     let defender_stats = CombatStats::default();
@@ -159,8 +159,8 @@ fn test_combat_log_clear() {
 
     // Add some combat entries
     manager.execute_combat(
-        Uuid::new_v4(),
-        Uuid::new_v4(),
+        crate::core::dice::name(),
+        crate::core::dice::name(),
         &attacker_stats,
         &defender_stats,
         None,
@@ -176,8 +176,8 @@ fn test_combat_log_clear() {
 fn test_combat_statistics() {
     let mut manager = CombatManager::new();
 
-    let attacker_id = Uuid::new_v4();
-    let defender_id = Uuid::new_v4();
+    let attacker_id = crate::core::dice::name();
+    let defender_id = crate::core::dice::name();
 
     let attacker_stats = CombatStats {
         base_damage: 10.0,
@@ -243,8 +243,8 @@ fn test_combat_statistics_averages() {
 fn test_combat_with_mounted_bonus() {
     let mut manager = CombatManager::new();
 
-    let attacker_id = Uuid::new_v4();
-    let defender_id = Uuid::new_v4();
+    let attacker_id = crate::core::dice::name();
+    let defender_id = crate::core::dice::name();
 
     // Mounted attacker gets bonus
     let mounted_attacker = CombatStats {
@@ -272,8 +272,8 @@ fn test_combat_with_mounted_bonus() {
 fn test_combat_high_armor_mitigation() {
     let mut manager = CombatManager::new();
 
-    let attacker_id = Uuid::new_v4();
-    let defender_id = Uuid::new_v4();
+    let attacker_id = crate::core::dice::name();
+    let defender_id = crate::core::dice::name();
 
     let attacker_stats = CombatStats {
         base_damage: 100.0,
@@ -320,8 +320,8 @@ fn test_combat_manager_log_size_limit() {
     // Add more than max_log_size (100) entries
     for _ in 0..150 {
         manager.execute_combat(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
+            crate::core::dice::name(),
+            crate::core::dice::name(),
             &attacker_stats,
             &defender_stats,
             None,

@@ -3,7 +3,7 @@
 
 use bevy::prelude::*;
 
-use crate::agents::{LifeStage, Gender, JobCategory};
+use crate::agents::{LifeStage, JobCategory};
 
 /// Map layer visibility toggles
 #[derive(Debug, Clone)]
@@ -143,12 +143,6 @@ impl AgentMapFilter {
         }
     }
 
-    pub fn show_gender(&self, gender: Gender) -> bool {
-        match gender {
-            Gender::Male => self.show_male,
-            Gender::Female => self.show_female,
-        }
-    }
 
     pub fn show_job(&self, job: Option<JobCategory>) -> bool {
         match job {

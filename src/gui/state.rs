@@ -1,9 +1,9 @@
 // src/gui/state.rs
 //! State management and communication types for the GUI.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use uuid::Uuid;
-use crate::agents::{LifeStage, Gender, JobCategory};
+use crate::agents::{LifeStage, JobCategory};
 use crate::core::DriveType;
 use crate::world::{Position, BuildingType, ResourceType, TerrainType};
 use super::events::TimelineState;
@@ -104,7 +104,6 @@ pub struct AgentSnapshot {
     pub relationship_count: usize,
     pub inventory_count: u32,
     pub current_activity: Option<String>,
-    pub gender: Gender,
     pub inferred_job: Option<JobCategory>,
 }
 
@@ -149,7 +148,6 @@ pub struct SimulationSnapshot {
 pub struct SelectedAgentData {
     pub id: Uuid,
     pub name: String,
-    pub gender: Gender,
     pub position: (i32, i32, i32),
     pub health: f32,
     pub energy: f32,
@@ -158,7 +156,7 @@ pub struct SelectedAgentData {
     pub life_stage: LifeStage,
     pub drives: Vec<DriveData>,
     pub traits: Vec<String>,
-    pub skills: HashMap<String, SkillData>,
+    pub skills: BTreeMap<String, SkillData>,
     pub inventory: Vec<InventoryItemData>,
     pub relationships: Vec<RelationshipData>,
     pub emotions: EmotionData,
@@ -515,7 +513,7 @@ pub struct RelationshipGraphState {
     pub layout_mode: GraphLayoutMode,
     pub show_labels: bool,
     pub focus_agent: Option<Uuid>,
-    pub node_positions: HashMap<Uuid, GraphNodePosition>,
+    pub node_positions: BTreeMap<Uuid, GraphNodePosition>,
     pub layout_iterations: u32,
     pub needs_layout: bool,
 }
@@ -531,7 +529,7 @@ impl Default for RelationshipGraphState {
             layout_mode: GraphLayoutMode::default(),
             show_labels: true,
             focus_agent: None,
-            node_positions: HashMap::new(),
+            node_positions: BTreeMap::new(),
             layout_iterations: 0,
             needs_layout: true,
         }
@@ -637,13 +635,6 @@ impl AgentMapFilter {
             LifeStage::Adolescent => self.show_adolescent,
             LifeStage::Adult => self.show_adult,
             LifeStage::Elderly => self.show_elderly,
-        }
-    }
-
-    pub fn show_gender(&self, gender: Gender) -> bool {
-        match gender {
-            Gender::Male => self.show_male,
-            Gender::Female => self.show_female,
         }
     }
 

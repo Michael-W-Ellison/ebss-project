@@ -104,7 +104,7 @@ fn test_satisfied_drive_no_negative_emotion() {
 #[test]
 fn test_track_social_satisfaction_source() {
     let mut agent = Agent::new(AgentConfig::default());
-    let friend_id = Uuid::new_v4();
+    let friend_id = crate::core::dice::name();
 
     // Record that friend satisfies social drive
     agent.record_drive_satisfaction(DriveType::Social, friend_id, 0.2, 0);
@@ -118,9 +118,9 @@ fn test_track_social_satisfaction_source() {
 #[test]
 fn test_multiple_social_sources() {
     let mut agent = Agent::new(AgentConfig::default());
-    let friend1 = Uuid::new_v4();
-    let friend2 = Uuid::new_v4();
-    let family = Uuid::new_v4();
+    let friend1 = crate::core::dice::name();
+    let friend2 = crate::core::dice::name();
+    let family = crate::core::dice::name();
 
     // Record multiple sources
     agent.record_drive_satisfaction(DriveType::Social, friend1, 0.15, 0);
@@ -138,7 +138,7 @@ fn test_multiple_social_sources() {
 #[test]
 fn test_loss_of_social_source_triggers_sadness() {
     let mut agent = Agent::new(AgentConfig::default());
-    let best_friend = Uuid::new_v4();
+    let best_friend = crate::core::dice::name();
 
     // Establish friend as primary social source
     agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.4, 0);
@@ -158,8 +158,8 @@ fn test_loss_of_social_source_triggers_sadness() {
 #[test]
 fn test_loss_of_minor_source_less_sadness() {
     let mut agent = Agent::new(AgentConfig::default());
-    let best_friend = Uuid::new_v4();
-    let acquaintance = Uuid::new_v4();
+    let best_friend = crate::core::dice::name();
+    let acquaintance = crate::core::dice::name();
 
     // Establish friend as primary source, acquaintance as minor
     agent.record_drive_satisfaction(DriveType::Social, best_friend, 0.4, 0);
@@ -177,7 +177,7 @@ fn test_loss_of_minor_source_less_sadness() {
 #[test]
 fn test_source_loss_with_high_drive_amplifies_emotion() {
     let mut agent = Agent::new(AgentConfig::default());
-    let friend = Uuid::new_v4();
+    let friend = crate::core::dice::name();
 
     // Friend was satisfying social drive (multiple interactions = important source)
     for _ in 0..3 {
@@ -201,8 +201,8 @@ fn test_source_loss_with_high_drive_amplifies_emotion() {
 #[test]
 fn test_anger_at_source_of_death_when_losing_satisfaction_source() {
     let mut agent = Agent::new(AgentConfig::default());
-    let friend = Uuid::new_v4();
-    let killer = Uuid::new_v4();
+    let friend = crate::core::dice::name();
+    let killer = crate::core::dice::name();
 
     // Friend satisfies social drive
     agent.record_drive_satisfaction(DriveType::Social, friend, 0.4, 0);
@@ -224,7 +224,7 @@ fn test_anger_at_source_of_death_when_losing_satisfaction_source() {
 #[test]
 fn test_no_anger_at_natural_death() {
     let mut agent = Agent::new(AgentConfig::default());
-    let friend = Uuid::new_v4();
+    let friend = crate::core::dice::name();
 
     // Friend satisfies social drive
     agent.record_drive_satisfaction(DriveType::Social, friend, 0.3, 0);
@@ -308,7 +308,7 @@ fn test_drive_frustration_decays_when_satisfied() {
 #[test]
 fn test_source_importance_tracked_over_time() {
     let mut agent = Agent::new(AgentConfig::default());
-    let friend = Uuid::new_v4();
+    let friend = crate::core::dice::name();
 
     // Record satisfaction over multiple interactions
     for _ in 0..10 {
@@ -320,7 +320,7 @@ fn test_source_importance_tracked_over_time() {
     assert!(importance > 0.5, "Frequent satisfaction source should have high importance");
 
     // Compare to one-time source
-    let stranger = Uuid::new_v4();
+    let stranger = crate::core::dice::name();
     agent.record_drive_satisfaction(DriveType::Social, stranger, 0.2, 0);
 
     let stranger_importance = agent.get_source_importance(DriveType::Social, stranger);
@@ -330,7 +330,7 @@ fn test_source_importance_tracked_over_time() {
 #[test]
 fn test_functional_grief_message() {
     let mut agent = Agent::new(AgentConfig::default());
-    let friend = Uuid::new_v4();
+    let friend = crate::core::dice::name();
 
     // Establish friend as social source
     for _ in 0..5 {
@@ -399,7 +399,7 @@ fn test_satisfied_drives_create_happiness() {
 #[test]
 fn test_receiving_help_improves_bond() {
     let mut agent = Agent::new(AgentConfig::default());
-    let helper = Uuid::new_v4();
+    let helper = crate::core::dice::name();
     
     // Helper provides social satisfaction
     let initial_bond = if let Some(rel) = agent.relationships.get_relationship(&helper) {
@@ -419,7 +419,7 @@ fn test_receiving_help_improves_bond() {
 #[test]
 fn test_receiving_help_creates_happiness() {
     let mut agent = Agent::new(AgentConfig::default());
-    let helper = Uuid::new_v4();
+    let helper = crate::core::dice::name();
     
     // Helper provides help
     agent.record_drive_satisfaction(DriveType::Hunger, helper, 0.5, 0);
@@ -431,7 +431,7 @@ fn test_receiving_help_creates_happiness() {
 #[test]
 fn test_helping_others_creates_happiness() {
     let mut agent = Agent::new(AgentConfig::default());
-    let recipient = Uuid::new_v4();
+    let recipient = crate::core::dice::name();
     
     // Agent helps someone
     agent.process_helper_happiness(recipient, 0.4);
@@ -448,7 +448,7 @@ fn test_empathetic_trait_bonus_for_helping() {
     let mut empathetic_agent = Agent::new(AgentConfig::default());
     empathetic_agent.traits.add_trait(Trait::Empathetic);
     
-    let recipient = Uuid::new_v4();
+    let recipient = crate::core::dice::name();
     
     // Both help someone
     regular_agent.process_helper_happiness(recipient, 0.4);
@@ -465,7 +465,7 @@ fn test_empathetic_trait_bonus_for_helping() {
 #[test]
 fn test_happiness_decays_over_time() {
     let mut agent = Agent::new(AgentConfig::default());
-    let helper = Uuid::new_v4();
+    let helper = crate::core::dice::name();
     
     // Receive help, creating happiness
     agent.record_drive_satisfaction(DriveType::Social, helper, 0.5, 0);
@@ -503,3 +503,4 @@ fn test_well_being_considers_both_happiness_and_sadness() {
     assert!(mixed_wellbeing > 0.0, 
             "Well-being should be positive when happiness outweighs sadness");
 }
+

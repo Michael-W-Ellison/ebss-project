@@ -17,7 +17,15 @@ fn test_agent_starts_with_full_health_and_energy() {
 
     assert_eq!(agent.state.health, 100.0);
     assert_eq!(agent.state.energy, 100.0);
-    assert_eq!(agent.state.age, 0);
+
+    // And a grown person, which is what everything that says `Agent::new`
+    // without mentioning an age means. It used to be a newborn, and nothing
+    // minded until the age capability curve was hung on what two hands hold.
+    assert_eq!(
+        agent.state.years_old(),
+        Agent::WHAT_AGE_A_PERSON_IS_UNLESS_TOLD
+    );
+    assert_eq!(agent.state.life_stage, crate::agents::LifeStage::Adult);
 }
 
 #[test]

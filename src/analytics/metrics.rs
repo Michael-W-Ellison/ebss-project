@@ -2,7 +2,7 @@
 //! Time-series metrics tracking for simulation analysis.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::agents::Population;
 use crate::core::{DriveType, EmotionType, Trait};
@@ -12,9 +12,9 @@ use crate::core::{DriveType, EmotionType, Trait};
 pub struct TickSnapshot {
     pub tick: u32,
     pub population: PopulationSnapshot,
-    pub drives: HashMap<DriveType, DriveSnapshot>,
-    pub emotions: HashMap<EmotionType, EmotionSnapshot>,
-    pub traits: HashMap<Trait, u32>, // Count of agents with each trait
+    pub drives: BTreeMap<DriveType, DriveSnapshot>,
+    pub emotions: BTreeMap<EmotionType, EmotionSnapshot>,
+    pub traits: BTreeMap<Trait, u32>, // Count of agents with each trait
     pub relationships: RelationshipSnapshot,
     pub goals: GoalSnapshot,
     pub curiosity: CuriositySnapshot,
@@ -24,7 +24,7 @@ pub struct TickSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PopulationSnapshot {
     pub total: usize,
-    pub by_life_stage: HashMap<String, usize>, // Infant, Child, etc.
+    pub by_life_stage: BTreeMap<String, usize>, // Infant, Child, etc.
     pub births_this_tick: u32,
     pub deaths_this_tick: u32,
     pub abandonments_this_tick: u32,
@@ -55,7 +55,7 @@ pub struct EmotionSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelationshipSnapshot {
     pub total_relationships: usize,
-    pub by_strength: HashMap<String, usize>, // CloseFriend, Friend, etc.
+    pub by_strength: BTreeMap<String, usize>, // CloseFriend, Friend, etc.
     pub average_trust: f32,
     pub average_affection: f32,
     pub family_bonds: usize,
@@ -76,7 +76,7 @@ pub struct GoalSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CuriositySnapshot {
     pub total_discoveries: usize,
-    pub discoveries_by_type: HashMap<String, usize>,
+    pub discoveries_by_type: BTreeMap<String, usize>,
     pub average_exploration_efficiency: f32,
     pub total_curiosity_driven_explorations: u32,
     pub average_curiosity_satisfaction: f32,
@@ -104,20 +104,7 @@ impl SimulationMetrics {
         }
     }
 
-    /// Create metrics with specific world size
-    pub fn with_world_size(sampling_interval: u32, max_snapshots: usize, world_size: (usize, usize)) -> Self {
-        Self {
-            snapshots: Vec::new(),
-            sampling_interval,
-            max_snapshots,
-            world_size,
-        }
-    }
 
-    /// Set the world size for exploration calculations
-    pub fn set_world_size(&mut self, width: usize, height: usize) {
-        self.world_size = (width, height);
-    }
 
     /// Record a snapshot if it's time to sample
     pub fn record_if_time(&mut self, tick: u32, population: &Population) {
@@ -154,7 +141,7 @@ impl SimulationMetrics {
     fn snapshot_population(&self, population: &Population) -> PopulationSnapshot {
         let total = population.agents.len();
 
-        let mut by_life_stage = HashMap::new();
+        let mut by_life_stage = BTreeMap::new();
         let mut total_age = 0u32;
 
         for agent in &population.agents {
@@ -180,8 +167,8 @@ impl SimulationMetrics {
         }
     }
 
-    fn snapshot_drives(&self, population: &Population) -> HashMap<DriveType, DriveSnapshot> {
-        let mut drive_map: HashMap<DriveType, Vec<f32>> = HashMap::new();
+    fn snapshot_drives(&self, population: &Population) -> BTreeMap<DriveType, DriveSnapshot> {
+        let mut drive_map: BTreeMap<DriveType, Vec<f32>> = BTreeMap::new();
 
         // Collect all drive values
         for agent in &population.agents {
@@ -209,8 +196,8 @@ impl SimulationMetrics {
             .collect()
     }
 
-    fn snapshot_emotions(&self, population: &Population) -> HashMap<EmotionType, EmotionSnapshot> {
-        let mut emotion_map: HashMap<EmotionType, Vec<f32>> = HashMap::new();
+    fn snapshot_emotions(&self, population: &Population) -> BTreeMap<EmotionType, EmotionSnapshot> {
+        let mut emotion_map: BTreeMap<EmotionType, Vec<f32>> = BTreeMap::new();
         let mut well_being_sum = 0.0;
 
         for agent in &population.agents {
@@ -263,8 +250,8 @@ impl SimulationMetrics {
             .collect()
     }
 
-    fn snapshot_traits(&self, population: &Population) -> HashMap<Trait, u32> {
-        let mut trait_counts: HashMap<Trait, u32> = HashMap::new();
+    fn snapshot_traits(&self, population: &Population) -> BTreeMap<Trait, u32> {
+        let mut trait_counts: BTreeMap<Trait, u32> = BTreeMap::new();
 
         for agent in &population.agents {
             for trait_type in agent.traits.get_traits() {
@@ -277,7 +264,7 @@ impl SimulationMetrics {
 
     fn snapshot_relationships(&self, population: &Population) -> RelationshipSnapshot {
         let mut total_relationships = 0;
-        let mut by_strength: HashMap<String, usize> = HashMap::new();
+        let mut by_strength: BTreeMap<String, usize> = BTreeMap::new();
         let mut trust_sum = 0.0;
         let mut affection_sum = 0.0;
         let mut family_bonds = 0;
@@ -382,7 +369,7 @@ impl SimulationMetrics {
 
     fn snapshot_curiosity(&self, population: &Population) -> CuriositySnapshot {
         let mut total_discoveries = 0;
-        let mut combined_discoveries: HashMap<String, usize> = HashMap::new();
+        let mut combined_discoveries: BTreeMap<String, usize> = BTreeMap::new();
         let mut total_efficiency = 0.0;
         let mut total_explorations = 0u32;
         let mut total_satisfaction = 0.0;
@@ -462,70 +449,12 @@ impl SimulationMetrics {
             .collect()
     }
 
-    /// Get trend for a specific drive over time
-    pub fn drive_trend(&self, drive_type: DriveType) -> Vec<(u32, f32)> {
-        self.snapshots
-            .iter()
-            .filter_map(|s| {
-                s.drives.get(&drive_type).map(|d| (s.tick, d.average_value))
-            })
-            .collect()
-    }
 
-    /// Get trend for a specific emotion over time
-    pub fn emotion_trend(&self, emotion_type: EmotionType) -> Vec<(u32, f32)> {
-        self.snapshots
-            .iter()
-            .filter_map(|s| {
-                s.emotions
-                    .get(&emotion_type)
-                    .map(|e| (s.tick, e.average_value))
-            })
-            .collect()
-    }
 
-    /// Get trend for trait prevalence over time
-    pub fn trait_trend(&self, trait_item: Trait) -> Vec<(u32, u32)> {
-        self.snapshots
-            .iter()
-            .map(|s| {
-                let count = s.traits.get(&trait_item).copied().unwrap_or(0);
-                (s.tick, count)
-            })
-            .collect()
-    }
 
-    /// Get trend for total discoveries over time
-    pub fn discoveries_trend(&self) -> Vec<(u32, usize)> {
-        self.snapshots
-            .iter()
-            .map(|s| (s.tick, s.curiosity.total_discoveries))
-            .collect()
-    }
 
-    /// Get trend for curiosity-driven explorations over time
-    pub fn curiosity_explorations_trend(&self) -> Vec<(u32, u32)> {
-        self.snapshots
-            .iter()
-            .map(|s| (s.tick, s.curiosity.total_curiosity_driven_explorations))
-            .collect()
-    }
 
-    /// Get trend for exploration efficiency over time
-    pub fn exploration_efficiency_trend(&self) -> Vec<(u32, f32)> {
-        self.snapshots
-            .iter()
-            .map(|s| (s.tick, s.curiosity.average_exploration_efficiency))
-            .collect()
-    }
 
-    /// Get trend for agents with high curiosity over time
-    pub fn high_curiosity_agents_trend(&self) -> Vec<(u32, usize)> {
-        self.snapshots
-            .iter()
-            .map(|s| (s.tick, s.curiosity.agents_with_high_curiosity))
-            .collect()
-    }
 
     /// Get summary statistics for the entire simulation
     pub fn summary(&self) -> SimulationSummary {

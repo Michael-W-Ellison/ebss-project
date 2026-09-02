@@ -264,6 +264,14 @@ fn an_agent_hunts_for_the_skins_it_needs() {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
 
+    // The deer is the only animal in this world, so what the agent does is
+    // about the deer. It was not, and the test was green on an accident: an
+    // unarmed man has never been able to take a deer - `could_bring_it_down`
+    // asks for a hunting tool for anything a thrown stone will not kill - and
+    // what the agent was actually setting out after was a hawk eleven tiles
+    // off that the world happened to have stocked. Change what the world is
+    // stocked with and the assertion says nothing at all.
+    world.animals.get_all_mut().clear();
     world
         .spawn_animal("deer".to_string(), (30, 33))
         .expect("a deer should spawn");
@@ -271,6 +279,16 @@ fn an_agent_hunts_for_the_skins_it_needs() {
     let mut simulation = Simulation::new(world, population);
     simulation.population.agents[0].state.position = (30, 30, 0);
     simulation.population.agents[0].inventory.max_weight = 500.0;
+
+    // And something to take it with, for the same reason.
+    simulation.population.agents[0]
+        .inventory
+        .add_item(crate::agents::InventoryItem::new_with_durability(
+            "spear".to_string(),
+            1,
+            25.0,
+            crate::agents::Quality::Basic,
+        ));
 
     // Wants to be warmer than the weather will ever make it
     simulation.population.agents[0].body_temperature.ideal = 45.0;
@@ -348,3 +366,4 @@ fn skins_become_the_warm_clothing() {
         agent.body.total_cold_insulation()
     );
 }
+

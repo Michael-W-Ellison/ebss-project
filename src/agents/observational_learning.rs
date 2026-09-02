@@ -9,12 +9,12 @@
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Category of observable activity that can be learned through observation.
 /// Each category represents a distinct type of activity with different
 /// learning difficulties and observation requirements.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum ObservableActionType {
     /// Mining/harvesting resources
     Mining,
@@ -207,7 +207,7 @@ impl Default for LearningProgress {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObservationalLearning {
     /// Observations organized by (performer, action_type)
-    observations: HashMap<(Uuid, ActionType), LearningProgress>,
+    observations: BTreeMap<(Uuid, ActionType), LearningProgress>,
     /// Recent observations (last 100)
     recent_observations: Vec<ObservedAction>,
     /// Maximum number of recent observations to keep
@@ -219,7 +219,7 @@ pub struct ObservationalLearning {
 impl ObservationalLearning {
     pub fn new(learning_rate: f32) -> Self {
         Self {
-            observations: HashMap::new(),
+            observations: BTreeMap::new(),
             recent_observations: Vec::new(),
             max_recent: 100,
             learning_rate: learning_rate.clamp(0.1, 2.0),
@@ -327,32 +327,17 @@ impl ObservationalLearning {
             .collect()
     }
 
-    /// Get recent observations from a specific performer
-    pub fn get_recent_from_performer(&self, performer: &Uuid) -> Vec<&ObservedAction> {
-        self.recent_observations
-            .iter()
-            .filter(|obs| obs.performer == *performer)
-            .collect()
-    }
 
     /// Get all performers being learned from
     pub fn get_all_teachers(&self) -> Vec<Uuid> {
         self.observations
             .keys()
             .map(|(performer, _)| *performer)
-            .collect::<std::collections::HashSet<_>>()
+            .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect()
     }
 
-    /// Check if an action type was recently observed (for Copycat trait)
-    /// Returns true if this action type was observed within the last few ticks
-    pub fn was_action_type_recently_observed(&self, action_type: ActionType, tick_window: u32, current_tick: u32) -> bool {
-        self.recent_observations.iter().any(|obs| {
-            obs.action_type == action_type &&
-            current_tick.saturating_sub(obs.timestamp as u32) <= tick_window
-        })
-    }
 
     /// Get count of recent observations of a specific action type
     pub fn count_recent_observations_of_type(&self, action_type: ActionType, tick_window: u32, current_tick: u32) -> usize {
@@ -393,7 +378,7 @@ mod tests {
 
     #[test]
     fn test_observed_action_quality() {
-        let performer = Uuid::new_v4();
+        let performer = crate::core::dice::name();
 
         // Close, successful observation
         let good_obs = ObservedAction::new(
@@ -421,7 +406,7 @@ mod tests {
     #[test]
     fn test_learning_progress() {
         let mut progress = LearningProgress::new();
-        let performer = Uuid::new_v4();
+        let performer = crate::core::dice::name();
 
         assert_eq!(progress.observation_count, 0);
         assert_eq!(progress.confidence, 0.0);
@@ -445,7 +430,7 @@ mod tests {
     #[test]
     fn test_observational_learning_basic() {
         let mut learning = ObservationalLearning::new(1.0);
-        let performer = Uuid::new_v4();
+        let performer = crate::core::dice::name();
 
         let obs = ObservedAction::new(
             performer,
@@ -465,7 +450,7 @@ mod tests {
     #[test]
     fn test_should_adopt_from_parent() {
         let mut learning = ObservationalLearning::new(1.5); // Child learning rate
-        let parent_id = Uuid::new_v4();
+        let parent_id = crate::core::dice::name();
 
         // Observe parent mining several times
         for i in 0..5 {
@@ -495,7 +480,7 @@ mod tests {
     #[test]
     fn test_should_not_adopt_from_stranger() {
         let mut learning = ObservationalLearning::new(1.0);
-        let stranger_id = Uuid::new_v4();
+        let stranger_id = crate::core::dice::name();
 
         // Observe stranger once
         let obs = ObservedAction::new(
@@ -522,7 +507,7 @@ mod tests {
     #[test]
     fn test_adopt_behavior() {
         let mut learning = ObservationalLearning::new(1.0);
-        let teacher_id = Uuid::new_v4();
+        let teacher_id = crate::core::dice::name();
 
         // Observe and adopt
         for i in 0..10 {
@@ -555,8 +540,8 @@ mod tests {
     #[test]
     fn test_get_adopted_behaviors() {
         let mut learning = ObservationalLearning::new(1.0);
-        let teacher1 = Uuid::new_v4();
-        let teacher2 = Uuid::new_v4();
+        let teacher1 = crate::core::dice::name();
+        let teacher2 = crate::core::dice::name();
 
         // Need to observe first before adopting
         learning.observe_action(ObservedAction::new(
@@ -592,7 +577,7 @@ mod tests {
         // Adult learning (normal)
         let mut adult_learning = ObservationalLearning::new(1.0);
 
-        let parent_id = Uuid::new_v4();
+        let parent_id = crate::core::dice::name();
 
         // Both observe same action 3 times
         for i in 0..3 {
@@ -632,7 +617,7 @@ mod tests {
         let mut learning = ObservationalLearning::new(1.0);
         learning.max_recent = 5;
 
-        let performer = Uuid::new_v4();
+        let performer = crate::core::dice::name();
 
         // Add 10 observations
         for i in 0..10 {
@@ -655,8 +640,8 @@ mod tests {
     #[test]
     fn test_get_all_teachers() {
         let mut learning = ObservationalLearning::new(1.0);
-        let teacher1 = Uuid::new_v4();
-        let teacher2 = Uuid::new_v4();
+        let teacher1 = crate::core::dice::name();
+        let teacher2 = crate::core::dice::name();
 
         learning.observe_action(ObservedAction::new(
             teacher1,

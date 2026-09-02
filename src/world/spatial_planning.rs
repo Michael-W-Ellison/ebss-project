@@ -5,7 +5,7 @@
 //! that minimize travel time and maximize production efficiency.
 
 use super::{World, BuildingType};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Position as (x, y, z) tuple for spatial planning
 pub type Position = (i32, i32, i32);
@@ -39,8 +39,8 @@ pub enum PlacementCriteria {
 /// Spatial planner for intelligent building placement
 pub struct SpatialPlanner<'a> {
     world: &'a World,
-    resource_locations: HashMap<String, Vec<Position>>,
-    building_locations: HashMap<BuildingType, Vec<Position>>,
+    resource_locations: BTreeMap<String, Vec<Position>>,
+    building_locations: BTreeMap<BuildingType, Vec<Position>>,
 }
 
 impl<'a> SpatialPlanner<'a> {
@@ -48,8 +48,8 @@ impl<'a> SpatialPlanner<'a> {
     pub fn new(world: &'a World) -> Self {
         let mut planner = Self {
             world,
-            resource_locations: HashMap::new(),
-            building_locations: HashMap::new(),
+            resource_locations: BTreeMap::new(),
+            building_locations: BTreeMap::new(),
         };
 
         planner.index_world();
@@ -488,21 +488,6 @@ impl<'a> SpatialPlanner<'a> {
         score
     }
 
-    /// Score location considering agent position and strategy.
-    ///
-    /// This is a convenience method that infers placement criteria from the
-    /// building type. For more control over placement criteria, use
-    /// `score_location_for_agent_with_criteria` directly.
-    pub fn score_location_for_agent(
-        &self,
-        pos: Position,
-        agent_pos: Position,
-        building_type: BuildingType,
-        strategy: PlacementStrategy,
-    ) -> f32 {
-        let criteria = self.infer_criteria_from_building(building_type);
-        self.score_location_for_agent_with_criteria(pos, agent_pos, building_type, strategy, &criteria)
-    }
 
     fn score_location_for_agent_with_criteria(
         &self,

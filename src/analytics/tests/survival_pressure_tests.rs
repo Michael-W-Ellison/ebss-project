@@ -18,8 +18,13 @@ use crate::world::{ItemType, Position, ResourceNode, ResourceType, World, WorldC
 
 fn fed_adult() -> Agent {
     let mut agent = Agent::new(AgentConfig::default());
-    agent.state.age = 4000;
-    agent.update_life_stage();
+    // Years, not ticks. This said 4,000 - ticks, from the calendar where a
+    // year was about eleven hundred of them. A year is 4,320 now, so "a fed
+    // adult" was a body in its first year, and anything here that asked
+    // whether a grown person would do something was asking it of an infant.
+    // The same correction as in `a_hungry_year_takes_the_children_first`
+    // below, which found it first.
+    agent.state.now_this_many_years_old(30);
     agent
 }
 
@@ -83,7 +88,24 @@ fn hunger_that_is_ignored_takes_an_agent_over() {
 fn a_child_waits_on_a_surplus_and_not_on_a_full_stomach() {
     let mut just_eaten = fed_adult();
     let mut provided_for = fed_adult();
-    give_food(&mut provided_for, 12);
+
+    // What it takes: the pair's eating for as long as the land gives nothing.
+    //
+    // This was twelve items in a pack, and it passed because the gate had an
+    // `|| a full belly` in it and the pack was never the binding question.
+    // Twelve items is one day for one grown body. It is also, as it happens,
+    // most of what a pack will hold - the pack takes twelve weight, which is
+    // twenty-four items of food and about two days' eating - so a surplus
+    // worth breeding on could never have been a thing somebody was *carrying*
+    // in the first place. It is the camp's stores, which is what
+    // `what_the_larder_says` reckons and what this now reads.
+    let gap = crate::agents::provision::how_long_the_land_gives_nothing() as f32;
+    let a_day = provided_for.state.physiology.what_i_burn_in_a_day;
+    let for_two = a_day * (1.0 + crate::agents::agent::what_a_body_this_age_eats(0));
+    let winter = 90.0;
+
+    let stocked = crate::agents::provision::WhatIsPutBy::reckon(for_two * gap, a_day, winter, 0);
+    provided_for.state.what_the_larder_says = Some(stocked);
 
     assert!(
         !just_eaten.should_attempt_reproduction(),
@@ -91,12 +113,25 @@ fn a_child_waits_on_a_surplus_and_not_on_a_full_stomach() {
     );
     assert!(
         provided_for.should_attempt_reproduction(),
-        "food in hand for two is"
+        "put by for the two of them through the gap is"
+    );
+
+    // And the same amount, if all of it is inside the agent rather than put
+    // by, is not. A meal already swallowed cannot feed anybody next season.
+    let mut just_a_big_supper = fed_adult();
+    just_a_big_supper.state.what_the_larder_says = Some(
+        crate::agents::provision::WhatIsPutBy::reckon(for_two * gap, a_day, winter, 0)
+            .of_which_in_the_body(for_two * gap),
+    );
+    assert!(
+        !just_a_big_supper.should_attempt_reproduction(),
+        "what is in the stomach is not what is put by"
     );
 
     // And somebody who has been going short recently does not, however much
-    // they happen to be carrying now
-    give_food(&mut just_eaten, 12);
+    // is in the ground now
+    just_eaten.state.what_the_larder_says =
+        Some(crate::agents::provision::WhatIsPutBy::reckon(for_two * gap, a_day, winter, 0));
     if let Some(hunger) = just_eaten.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.9;
         for _ in 0..40 {
@@ -115,31 +150,40 @@ fn a_child_waits_on_a_surplus_and_not_on_a_full_stomach() {
 /// A famine takes the young before it takes the grown.
 #[test]
 fn a_hungry_year_takes_the_children_first() {
-    fn health_after_famine(age: u32) -> f32 {
+    fn health_after_famine(years: u32) -> f32 {
         let mut agent = Agent::new(AgentConfig::default());
-        agent.state.age = age;
-        agent.update_life_stage();
+        // Years. This took *ticks*, and passed 900 and 4000 for "a child" and
+        // "an adult" - figures from the calendar where a year was about eleven
+        // hundred ticks. A year is 4,320 now, so both fixtures were nought
+        // years old and the test was comparing an infant with an infant.
+        agent.state.now_this_many_years_old(years);
         agent.state.health = 100.0;
         agent.state.energy = 100.0;
         agent.state.last_ate_tick = 0;
 
-        // Nobody eats for two thousand ticks
-        for tick in 1..=2000u32 {
+        // Nobody eats for three weeks, which is what a reserve is worth.
+        //
+        // This ran for two thousand ticks - a hundred and sixty-seven days -
+        // by which point both bodies are long dead and both read nought, so
+        // the comparison could not have come out either way. Three weeks is
+        // where the question is actually answerable.
+        let three_weeks = 21 * crate::environment::seasons::TICKS_PER_DAY;
+        for tick in 1..=three_weeks {
             agent.state.age_tick_with_modifier(tick, 1.0);
         }
 
         agent.state.health
     }
 
-    let child = health_after_famine(900);
-    let adult = health_after_famine(4000);
+    let child = health_after_famine(8);
+    let adult = health_after_famine(30);
 
     assert!(
         child < adult,
         "a child should suffer a famine sooner than an adult: {child:.1} against {adult:.1}"
     );
     assert_eq!(
-        LifeStage::from_age(900),
+        LifeStage::from_years(8),
         LifeStage::Child,
         "the fixture should be testing a child"
     );
@@ -336,7 +380,7 @@ fn what_agents_do_in_a_run_becomes_something_they_know() {
 #[test]
 fn a_newborn_is_not_born_parched() {
     let born_at = 9_000;
-    let mother = uuid::Uuid::new_v4();
+    let mother = crate::core::dice::name();
 
     let mut baby = Agent::with_parents(AgentConfig::default(), vec![mother], born_at);
 

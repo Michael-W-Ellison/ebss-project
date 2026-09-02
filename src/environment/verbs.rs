@@ -426,11 +426,13 @@ pub const SCRAPE: Verb = verb(
     Some("scrape"),
 );
 
+/// Anything pointed will do it, which is the whole of a tool ladder and not
+/// one rung of it. See `HUNT`.
 pub const PIERCE: Verb = verb(
     "pierce",
     Family::Disruption,
     Targets::AnAnimal,
-    Wants::ThisInHand("spear"),
+    Wants::AToolFor(SkillType::Hunting),
     &[Changes::ABody],
     None,
 );
@@ -787,11 +789,27 @@ pub const HARVEST: Verb = verb(
     Some("gather"),
 );
 
+/// What a hunt needs in hand depends on what is being hunted, and this table
+/// cannot see the animal.
+///
+/// It said `ThisInHand("spear")`, and that was the **third** spelling of
+/// "armed" in this codebase - the decision layer read the equipment slot, the
+/// executor read `what_i_have_to_work_with(Hunting)`, and this read one item
+/// by name. So a man with a sharpened stick, a sling or a bow in his pack was
+/// refused before the executor was ever reached, and so was a man going after
+/// a rabbit, which the specification says a thrown stone will kill. Measured
+/// over six worlds, **589 hunts in 599 died here** - not at the animal, not
+/// for want of skill, but on a precondition that named the wrong thing.
+///
+/// The requirement is real and it is conditional, so it belongs where the
+/// quarry can be seen: `Simulation::could_bring_it_down` is the one owner, and
+/// `worth_hunting` now asks it before anybody sets out. What this table can
+/// honestly say is that a hunt takes hands.
 pub const HUNT: Verb = verb(
     "hunt",
     Family::Survival,
     Targets::AnAnimal,
-    Wants::ThisInHand("spear"),
+    Wants::BareHands,
     &[Changes::ABody, Changes::WhatIsHeld],
     Some("hunt"),
 );
@@ -857,11 +875,21 @@ pub const DEFEND_WITH: Verb = happens_when(
     "something comes at you",
 );
 
+/// The other half of a hunt, and the half that was actually refusing them.
+///
+/// `what_this_action_cannot_do_without` gathers every verb whose `done_by` is
+/// the same word, so a hunt asks both `HUNT` and this one - the comment on
+/// that function has said so since it was written: "a hunt is a throwing and a
+/// hunting and both want the spear". Changing `HUNT` alone changed nothing at
+/// all, which is worth writing down: a requirement stated in two places is
+/// still stated once you have removed it from one of them.
+///
+/// A thrown stone is a throw. See `HUNT` for where the real requirement lives.
 pub const THROW: Verb = verb(
     "throw",
     Family::Combat,
     Targets::AnAnimal,
-    Wants::ThisInHand("spear"),
+    Wants::BareHands,
     &[Changes::ABody, Changes::WhatIsHeld],
     Some("hunt"),
 );

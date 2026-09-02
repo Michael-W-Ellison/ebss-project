@@ -14,7 +14,7 @@ use uuid::Uuid;
 use std::collections::VecDeque;
 
 /// Type of episodic event
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum EpisodeType {
     /// Social interaction
     SocialInteraction,
@@ -126,7 +126,7 @@ impl Episode {
         let intensity = episode_type.base_emotional_intensity();
 
         Self {
-            id: Uuid::new_v4(),
+            id: crate::core::dice::name(),
             episode_type,
             timestamp,
             location: None,
@@ -155,11 +155,6 @@ impl Episode {
         self
     }
 
-    /// Add tags for retrieval
-    pub fn with_tags(mut self, tags: Vec<String>) -> Self {
-        self.tags = tags;
-        self
-    }
 
     /// Recall this memory (reinforces it)
     pub fn recall(&mut self, current_time: u64) {
@@ -365,12 +360,6 @@ impl EpisodicMemory {
             .collect()
     }
 
-    /// Get strongest memories
-    pub fn strongest_memories(&self, limit: usize) -> Vec<&Episode> {
-        let mut episodes: Vec<&Episode> = self.episodes.iter().collect();
-        episodes.sort_by(|a, b| b.strength.partial_cmp(&a.strength).unwrap());
-        episodes.into_iter().take(limit).collect()
-    }
 
     /// Consolidate memories (move important ones to long-term)
     pub fn consolidate_memories(&mut self) {
@@ -384,7 +373,7 @@ impl EpisodicMemory {
 
     /// Get statistics
     pub fn stats(&self) -> EpisodicMemoryStats {
-        let mut type_counts = std::collections::HashMap::new();
+        let mut type_counts = std::collections::BTreeMap::new();
         let mut total_strength = 0.0;
         let mut consolidated_count = 0;
 
@@ -431,7 +420,7 @@ pub struct EpisodicMemoryStats {
     pub total_episodes: usize,
     pub consolidated_episodes: usize,
     pub average_strength: f32,
-    pub episodes_by_type: std::collections::HashMap<EpisodeType, usize>,
+    pub episodes_by_type: std::collections::BTreeMap<EpisodeType, usize>,
 }
 
 #[cfg(test)]
@@ -547,7 +536,7 @@ mod tests {
     fn test_context_based_retrieval() {
         let mut memory = EpisodicMemory::new(10);
 
-        let agent_id = Uuid::new_v4();
+        let agent_id = crate::core::dice::name();
         let episode = Episode::new(
             EpisodeType::SocialInteraction,
             0,

@@ -59,7 +59,7 @@ fn test_child_observes_parent_mining() {
 
 #[test]
 fn test_child_learns_faster_than_adult() {
-    let parent_id = Uuid::new_v4();
+    let parent_id = crate::core::dice::name();
 
     // Create child agent
     let mut child = Agent::new(AgentConfig::default());
@@ -120,7 +120,7 @@ fn test_child_learns_faster_than_adult() {
 #[test]
 fn test_cannot_observe_if_not_visible() {
     let mut observer = Agent::new(AgentConfig::default());
-    let performer_id = Uuid::new_v4();
+    let performer_id = crate::core::dice::name();
 
     observer.state.position = (0, 0, 0);
 
@@ -142,7 +142,7 @@ fn test_cannot_observe_if_not_visible() {
 #[test]
 fn test_distance_affects_observation_quality() {
     let mut learner = Agent::new(AgentConfig::default());
-    let teacher_id = Uuid::new_v4();
+    let teacher_id = crate::core::dice::name();
 
     learner.senses.vision.visible_agents.insert(teacher_id);
     learner.state.position = (0, 0, 0);
@@ -182,7 +182,7 @@ fn test_adopt_learned_behavior() {
     let mut learner = Agent::new(AgentConfig::default());
     learner.set_learning_rate(1.5);
 
-    let teacher_id = Uuid::new_v4();
+    let teacher_id = crate::core::dice::name();
     learner.relationships.add_relationship(Relationship::new(teacher_id, RelationshipType::Parent));
     learner.senses.vision.visible_agents.insert(teacher_id);
     learner.state.position = (0, 0, 0);
@@ -222,8 +222,8 @@ fn test_learning_from_parents_tracking() {
     let mut child = Agent::new(AgentConfig::default());
     child.set_learning_rate(1.5);
 
-    let parent1_id = Uuid::new_v4();
-    let parent2_id = Uuid::new_v4();
+    let parent1_id = crate::core::dice::name();
+    let parent2_id = crate::core::dice::name();
 
     // Add two parents
     child.relationships.add_relationship(Relationship::new(parent1_id, RelationshipType::Parent));
@@ -273,7 +273,7 @@ fn test_learning_from_parents_tracking() {
 #[test]
 fn test_failed_actions_reduce_learning_quality() {
     let mut learner = Agent::new(AgentConfig::default());
-    let teacher_id = Uuid::new_v4();
+    let teacher_id = crate::core::dice::name();
 
     learner.senses.vision.visible_agents.insert(teacher_id);
     learner.relationships.add_relationship(Relationship::new(teacher_id, RelationshipType::Friend));
@@ -321,7 +321,7 @@ fn test_failed_actions_reduce_learning_quality() {
 #[test]
 fn test_multiple_action_types_from_same_teacher() {
     let mut learner = Agent::new(AgentConfig::default());
-    let teacher_id = Uuid::new_v4();
+    let teacher_id = crate::core::dice::name();
 
     learner.senses.vision.visible_agents.insert(teacher_id);
     learner.relationships.add_relationship(Relationship::new(teacher_id, RelationshipType::Parent));
