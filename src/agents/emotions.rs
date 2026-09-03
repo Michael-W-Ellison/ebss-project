@@ -22,6 +22,20 @@ pub struct EmotionState {
     pub happiness: f32,
     /// Curiosity: drive to explore and refresh knowledge (0.0 to 1.0)
     pub curiosity: f32,
+    /// Worry: what this one expects its own habits to cost it (0.0 to 1.0).
+    ///
+    /// The odd one out here, deliberately. Every other emotion keeps its own
+    /// sources map beside it; this one does not, because what an agent is
+    /// worried about is already written down somewhere better - against the
+    /// elements of the thing it is worried about doing, in `agents::patterns`,
+    /// where it can be subtracted from what that thing is expected to pay.
+    /// Keeping a second copy here is how a question ends up with two answers
+    /// that disagree, so this is a read-out of that one and not a store.
+    ///
+    /// See `Agent::feel_what_the_habits_are_costing`, which sets it, and
+    /// `patterns::how_fast_worry_fades`, which is its clock.
+    #[serde(default)]
+    pub worry: f32,
     /// Decay rate per tick for each emotion
     pub decay_rate: f32,
     /// Emotion sources: what/who triggered each emotion
@@ -54,6 +68,7 @@ impl EmotionState {
             sadness: 0.0,
             happiness: 0.0,
             curiosity: 0.0,
+            worry: 0.0,
             decay_rate: 0.01, // 1% per tick
             anger_sources: BTreeMap::new(),
             fear_sources: BTreeMap::new(),

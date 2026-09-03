@@ -573,6 +573,14 @@ impl Simulation {
     /// How near you have to be standing to notice that the midden is growing.
     pub(in crate::analytics) const CLOSE_ENOUGH_TO_SEE_IT_COME_UP: i32 = 6;
 
+    /// What one witness to a theft costs the thief in worry.
+    ///
+    /// A thief in a camp of forty is a thief to forty people, and being seen
+    /// by six is six times the reason to expect trouble - up to the ceiling on
+    /// what any single incident can teach, which stops one bad afternoon from
+    /// settling the matter for life.
+    pub(in crate::analytics) const WHAT_ONE_PAIR_OF_EYES_COSTS: f32 = 0.1;
+
     /// What a mouthful of a strange plant that turns out to be food is worth.
     pub(in crate::analytics) const WHAT_ONE_MOUTHFUL_IS_WORTH: f32 = 60.0;
 

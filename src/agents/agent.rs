@@ -3970,6 +3970,13 @@ impl Agent {
         self.apply_building_proximity_effects();
         self.memory.tick();
 
+        // And the trails fade. Charged by the day inside `fade`, so calling
+        // it every turn costs a subtraction and takes nothing until a day
+        // has actually gone by. A path nobody walks grows over, which is what
+        // keeps an agent holding the corner of the world that has paid it
+        // rather than all of the world it has ever seen.
+        self.patterns.fade(current_tick);
+
         // Check for stale storage knowledge and trigger curiosity
         self.update_storage_curiosity(current_tick);
 
@@ -3978,11 +3985,28 @@ impl Agent {
 
         // Update emotions based on drive states (every tick)
         self.update_emotions_from_drives();
+        self.feel_what_the_habits_are_costing();
         // Drives rise differently depending on whether the agent has anything
         // more pressing on. See `DriveType::is_long_term`.
         let secure = self.immediate_needs_met();
         let situation = self.what_the_situation_asks();
         self.drives.tick_in(&situation, secure);
+
+        // And worry presses on whatever it is worried for. A man who expects
+        // his standing to suffer for what he has been doing attends to his
+        // standing - which is worry making somebody act rather than merely
+        // decline, and is the half of it that a subtraction in the pattern
+        // layer cannot do. Added after the ordinary rise so that it is a
+        // push on top of the need and not a replacement for it.
+        for drive in self.drives.drives.iter_mut() {
+            let worried = self
+                .patterns
+                .how_much_i_fear_for(drive.drive_type)
+                .clamp(0.0, Self::THE_MOST_WORRY_CAN_ADD);
+            if worried > 0.0 {
+                drive.value = (drive.value + worried).min(1.0);
+            }
+        }
 
         // Hunger and thirst are not accumulated; they are read off the body.
         //
@@ -5869,12 +5893,19 @@ impl Agent {
     ) {
         use super::patterns::Patterns;
 
-        let what = Self::what_was_tried(action);
+        let elements = self.what_this_episode_was_made_of(action, where_it_was, now);
+        let turns = self.how_long_that_took();
         let mut answered_anything = false;
 
         for (need, change) in &action_result.drive_changes {
             if *change <= -Patterns::ENOUGH_TO_NOTICE {
-                self.patterns.it_worked(*need, &what, where_it_was, now);
+                // Efficiency, not the bare fact of it: how much demand came
+                // off per turn spent getting it off. Somebody who can answer
+                // a need quickly has the rest of the day for the other ones,
+                // and that is what makes one way of doing it better than
+                // another rather than merely possible.
+                let efficiency = -*change / turns as f32;
+                self.patterns.it_worked(*need, &elements, efficiency, now);
                 if *need == aimed_at {
                     answered_anything = true;
                 }
@@ -5882,8 +5913,104 @@ impl Agent {
         }
 
         if !answered_anything {
-            self.patterns.it_did_not(aimed_at, &what);
+            self.patterns.it_did_not(aimed_at, &elements);
         }
+    }
+
+    /// The elements of what just happened: everything that was true of it
+    /// which some later episode might also be true of.
+    ///
+    /// This is the whole of the generalising. Two hunts that fed somebody
+    /// share `Did("hunt")` and `On("Deer")` and differ in `At` and `Toward`,
+    /// so the doing outgrows the direction without anybody deciding that it
+    /// should.
+    pub fn what_this_episode_was_made_of(
+        &self,
+        action: &Action,
+        where_it_was: (i32, i32, i32),
+        now: u32,
+    ) -> Vec<super::patterns::Element> {
+        use super::patterns::{Bearing, Element};
+        use crate::environment::seasons::{Season, DAYS_PER_YEAR, TICKS_PER_DAY};
+
+        let tried = Self::what_was_tried(action);
+        let mut elements = Vec::with_capacity(5);
+
+        // `what_was_tried` writes "gather:Berries" - the verb and the thing it
+        // was done to, glued. Split, they are two elements that vary
+        // independently, which is what lets an agent learn that gathering
+        // pays without concluding that berries are the only thing worth
+        // gathering.
+        match tried.split_once(':') {
+            Some((verb, subject)) => {
+                elements.push(Element::Did(verb.to_string()));
+                elements.push(Element::On(subject.to_string()));
+            }
+            None => elements.push(Element::Did(tried)),
+        }
+
+        elements.push(Element::At(where_it_was));
+
+        if let Some(errand) = &self.errand {
+            if let Some(bearing) = Bearing::from_home(errand.set_out_from, where_it_was) {
+                elements.push(Element::Toward(bearing));
+            }
+        }
+
+        let day_of_year = (now / TICKS_PER_DAY) % DAYS_PER_YEAR;
+        elements.push(Element::When(Season::from_day_of_year(day_of_year)));
+
+        elements
+    }
+
+    /// Read the felt total of what this one expects its habits to cost it.
+    ///
+    /// Worry is not accumulated here; it is accumulated against the elements
+    /// of the things that earned it, and this is the sum of that. Doing it the
+    /// other way round would give an agent two records of the same fear which
+    /// would drift apart, and the one in the pattern layer is the one that can
+    /// actually be acted on.
+    fn feel_what_the_habits_are_costing(&mut self) {
+        self.emotions.worry = self.patterns.everything_i_dread().clamp(0.0, 1.0);
+    }
+
+    /// Something has cost this one future satisfaction of a drive.
+    ///
+    /// Whatever it has been doing lately takes the blame, against the drive
+    /// that took the loss - see `Patterns::it_cost_me`. What sorts out which
+    /// of those things actually caused it is repetition and nothing else.
+    pub fn this_cost_me(&mut self, cost_to: DriveType, how_much: f32, now: u32) {
+        self.patterns.it_cost_me(cost_to, how_much, now);
+        self.feel_what_the_habits_are_costing();
+    }
+
+    /// How much worry is pressing on a particular drive.
+    ///
+    /// This is worry feeding the drive layer: a man who expects his standing
+    /// to suffer attends to his standing. It is what turns "I am wary of this"
+    /// into a reason to go and do something about it, which is the whole
+    /// point - worry has to make somebody *act*, not merely refuse.
+    pub fn what_worry_adds_to(&self, drive: DriveType) -> f32 {
+        self.patterns.how_much_i_fear_for(drive).clamp(0.0, Self::THE_MOST_WORRY_CAN_ADD)
+    }
+
+    /// How far a worry can push a drive on its own.
+    ///
+    /// Well short of the thing actually going wrong. Being worried about your
+    /// standing is not the same as being friendless, and an agent that treated
+    /// them alike would spend its life mending fences nobody had broken.
+    pub const THE_MOST_WORRY_CAN_ADD: f32 = 0.25;
+
+    /// How many turns went into what was just finished.
+    ///
+    /// The walk as well as the work: an errand that took nine turns to reach a
+    /// bush and one to strip it cost ten, and pricing it at one is what makes
+    /// a far-off meal look as cheap as a near one.
+    fn how_long_that_took(&self) -> u32 {
+        self.errand
+            .as_ref()
+            .map(|errand| errand.turns_on_it.max(1))
+            .unwrap_or(1)
     }
 
     /// Ground this agent would walk back to for a need, if any.
@@ -9390,6 +9517,15 @@ impl Agent {
 pub struct Errand {
     /// Where it is going
     pub going_to: (i32, i32, i32),
+    /// And the ground it set out from.
+    ///
+    /// There is no settlement object in this model - see ISSUES_FOUND #11 -
+    /// so there is no camp to take a bearing from. Where somebody stood when
+    /// they set out is the honest origin anyway: the thing being learned is
+    /// "going that way answered it", and that way is relative to where the
+    /// going started.
+    #[serde(default)]
+    pub set_out_from: (i32, i32, i32),
     /// Or what it is making, if the errand is a job rather than a journey.
     ///
     /// A tool is not one turn's work. Measured, the tool arithmetic diverted

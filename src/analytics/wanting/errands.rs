@@ -450,8 +450,10 @@ impl Simulation {
             if let Some(for_drive) = presses_hardest {
                 let pressed_this_hard =
                     self.population.agents[agent_index].how_hard_it_presses(for_drive);
+                let set_out_from = self.population.agents[agent_index].state.position;
                 self.population.agents[agent_index].errand = Some(crate::agents::Errand {
                     going_to: target,
+                    set_out_from,
                     to_make: None,
                     for_drive,
                     pressed_this_hard,
@@ -1001,6 +1003,7 @@ impl Simulation {
             let here = self.population.agents[agent_index].state.position;
             self.population.agents[agent_index].errand = Some(crate::agents::Errand {
                 going_to: here,
+                set_out_from: here,
                 to_make: Some(better.called.to_string()),
                 for_drive,
                 pressed_this_hard,
@@ -1157,6 +1160,7 @@ impl Simulation {
 
         self.population.agents[agent_index].errand = Some(crate::agents::Errand {
             going_to: here,
+            set_out_from: here,
             to_make: Some(wanted.to_string()),
             for_drive,
             pressed_this_hard,

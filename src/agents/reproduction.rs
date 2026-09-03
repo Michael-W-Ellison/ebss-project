@@ -200,6 +200,13 @@ fn give_birth_internal(
         offspring.traits.add_trait(born_with);
     }
 
+    // And what the child is wary of, which it cannot have earned yet. Only
+    // the worries pass, not the trails - a child inherits its parents' fears
+    // and not their map. See `Patterns::what_the_child_takes_from`.
+    offspring
+        .patterns
+        .what_the_child_takes_from(&[&parent1.patterns, &parent2.patterns]);
+
     // A child's own personality bends its own drives. This has to come after
     // both the drives and the traits are settled - the weights are inherited
     // above and the traits just now - and it is written to be safe to repeat,
