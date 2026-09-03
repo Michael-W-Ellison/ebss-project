@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `065ca1a` and the work since.
+**Last verified:** September 2026, against commit `1adaff4` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -11204,3 +11204,98 @@ traced: `an_agent_lights_a_fire_and_cooks_on_it`,
 `a_dedicated_farmer_brings_back_more_than_a_casual_one`, which reads 0 against
 0 for a reason that is **not** the bearing season — that was tried and it
 changed nothing.
+
+---
+
+### 168. Settlements do bank food. They bank about one per cent more than they eat
+
+"Make settlements bank food" turns out to be the wrong instruction, and #240's
+title — "a full settlement now reaches winter with nothing put by" — is no
+longer true. They reach winter with a full larder and starve beside it anyway,
+for a reason that is neither the larder's fault nor the decision layer's.
+
+**The pits fill.** Traced over a year, eight worlds, the food in the ground:
+
+| day | season | alive | in the pits |
+|---|---|---|---|
+| 15 | Spring | 9.9 | 29 |
+| 90 | Summer | 7.9 | 92 |
+| 180 | Fall | 7.8 | 124 |
+| 240 | Fall | 7.1 | 222 |
+| 270 | Winter | 6.9 | 201 |
+| 300 | Winter | 4.5 | 191 |
+| 330 | Winter | 1.6 | 181 |
+| 345 | Winter | 0.9 | **179** |
+
+The settlement dies with **89% of its store still in the ground**. And it is
+real food, not scrap: sixteen pits across eight worlds at the opening of
+winter, every one with something eatable in it, holding 1,600 items between
+them — 578 nuts, 502 roots, 391 legumes, and the rest fish, grain and meat.
+
+#### Three things that are not the cause
+
+Each was measured against a 64-world baseline of **25/62 settlements out of
+their first winter, 24/64 alive a year on**. None of the three is in the tree.
+
+- **The store sitting behind foraging in the hunger chain.** Moving
+  `something_out_of_the_store` ahead of `food_action`: 26/62 and 25/64. One
+  settlement, which is noise. This also confirms #43's finding from the other
+  direction.
+- **The store's reach.** `WORTH_WALKING_TO_THE_STORE` is 14 paces while
+  `FORAGE_RADIUS` is 25, so a settlement forages its way out of range of its
+  own larder — measured, only **29% of hungry person-ticks in winter had an
+  eatable pit inside fourteen paces**. Deriving the drawing reach from the
+  foraging reach instead: 25/62 and 24/64. **No change at all.**
+- **The store's target.** `what_one_mouth_this_age_wants_put_by` is correctly
+  derived — what a body eats in a day, times the age share, times how long the
+  land gives nothing — and comes to about 860 items for an adult. (The line in
+  `_debug_store` that says "the store target is 7 apiece" is a hard-coded
+  string in the harness, left over from an older figure. It is not a reading.)
+
+#### What the cause is
+
+The store holds about **200 items when winter opens**. A body eats **12.7
+items a day**, measured, and there are about seven people. That is **2.2 days
+of food for the settlement against a ninety-day winter.**
+
+And the reason it is only 200 is the rate it grows at. The pits go from 29
+items on day 15 to 222 on day 240 — **193 items banked over 225 days of
+growing season**, for a settlement of eight eating about a hundred items a day
+between them. The settlement runs a surplus of **under one per cent of what it
+consumes**.
+
+To bank a lean season — 75 days at ~89 items a day is about 6,700 items — in a
+225-day growing season, it would need to put by about **thirty items a day**.
+It manages **under one**.
+
+So the constraint is not the larder, the reach, the ordering or the target. It
+is upstream of all of them: **what a settlement gathers in a day is within one
+per cent of what it eats in a day.** A store cannot be filled out of a surplus
+that does not exist, and nothing downstream of the surplus can be tuned to
+make one.
+
+That also settles #167 without touching the breeding gate. A gate asking for
+seventy-five days of food for two is unreachable not because the gate is
+strict but because the settlement's whole annual surplus is two days' food.
+
+#### What would actually move it
+
+Not measured, and named here so the next attempt starts from the number rather
+than from the larder:
+
+- **What a body eats.** 12.7 items a day is the figure everything else is
+  weighed against. If a "handful" is worth less than it should be, or the
+  daily burn is too high, every ratio in this entry moves at once. This is
+  worth checking before anything is built, because it is one number and it
+  sets the scale of the whole problem.
+- **What a trip brings back.** `what_a_trip_brings_back` decides how much one
+  forage yields. A settlement gathering hand-to-mouth is one where a day's
+  work feeds a person for a day and no more.
+- **How many turns go on food at all.** If a person spends half their turns
+  on errands that are not food, the surplus is halved before any of the above.
+
+`food_items_into_packs` records 3,233 items a world a year, which is about 1.1
+per person per day — but that counter is specifically "edible items that
+landed in somebody's pack off a forage" and does not include hunting, fishing
+or eating straight off a node, so it is not the whole intake and is not
+evidence on its own.
