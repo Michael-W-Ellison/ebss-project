@@ -144,40 +144,54 @@ fn a_man_dying_of_thirst_drinks_it_anyway() {
 /// after — "even if it seems to temporarily satiate it".
 #[test]
 fn the_sea_costs_more_than_it_gives() {
-    let mut simulation = one_person();
+    /// What is left in a body's skin after three days, salted or not.
+    ///
+    /// **The body on its own, and two of them.** This test has been asked
+    /// three wrong ways. It followed one man and held his thirst steady
+    /// between ticks with `gone_without_water_for(0)`, which fills the skin
+    /// back up - so the fixture's own way of holding everything else still
+    /// erased the one thing it meant to measure, and it read 0.3 against 0.3.
+    /// Asked as the worst thirst two men reach it reads backwards, because
+    /// the one the salt is hurting dies sooner and so records a *lower* peak -
+    /// 0.57 against 0.80. Asked as time to death in a live world neither man
+    /// dies at all, because a live world has water in it and he goes and
+    /// drinks.
+    ///
+    /// What the claim is actually about is what the salt does to a body over
+    /// the days after, so the body is what to ask. Neither of these two
+    /// drinks; the only difference between them is the salt.
+    ///
+    /// The mouthful of water a sea drink brings with it is not here on
+    /// purpose - it is handled where the drinking happens, in
+    /// `Simulation::gathering`, which takes half a drink's worth straight off
+    /// the hydration and then calls `drank_salt_water` for the rest.
+    fn water_left_after_three_days(drinks_the_sea: bool) -> f32 {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.physiology.hydration = 1.0;
+        agent.state.health = 100.0;
 
-    {
-        let agent = &mut simulation.population.agents[0];
-        if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
-            thirst.value = 0.3;
+        if drinks_the_sea {
+            agent.drank_salt_water(0);
         }
-        agent.drank_salt_water(0);
+
+        for tick in 1..=(crate::environment::seasons::TICKS_PER_DAY * 3) {
+            agent.state.last_ate_tick = tick;
+            agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
+            agent.tick_with_percepts(tick);
+            agent.process_survival_tick(tick);
+        }
+
+        agent.state.physiology.hydration
     }
 
-    let straight_after = simulation.population.agents[0]
-        .drives
-        .get(DriveType::Thirst)
-        .map(|thirst| thirst.value)
-        .unwrap_or(0.0);
-
-    // Let the body work through it. Nothing else may touch the thirst, so
-    // hold everything else steady.
-    let mut worst = straight_after;
-    for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 6) {
-        simulation.population.agents[0].state.last_drank_tick = simulation.current_tick;
-        simulation.population.agents[0].state.gone_without_water_for(0);
-        simulation.tick();
-        let thirst = simulation.population.agents[0]
-            .drives
-            .get(DriveType::Thirst)
-            .map(|thirst| thirst.value)
-            .unwrap_or(0.0);
-        worst = worst.max(thirst);
-    }
+    let after_the_sea = water_left_after_three_days(true);
+    let left_alone = water_left_after_three_days(false);
 
     assert!(
-        worst > straight_after,
-        "the thirst should come back worse than it was left: {straight_after} -> {worst}"
+        after_the_sea < left_alone,
+        "three days on, the man who drank the sea should have less water in \
+         him than the man who drank nothing: {after_the_sea} against \
+         {left_alone}"
     );
 }
 

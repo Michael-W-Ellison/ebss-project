@@ -1993,9 +1993,26 @@ impl Agent {
 
         let salt = self.state.salt_in_me;
 
-        if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
-            thirst.increase(salt * Self::WHAT_SALT_ADDS_TO_A_THIRST);
-        }
+        // **Out of the body, not off the drive.**
+        //
+        // This raised the Thirst drive directly, and the drive is *assigned*
+        // from the body a few hundred lines up - `drive.value =
+        // body_wants_water` - so every unit of thirst the salt added was wiped
+        // the same tick it was added. Measured: a man given a drink of the sea
+        // and then followed for six days came out at exactly the thirst he
+        // went in with, 0.3 against 0.3. The whole of ISSUES_FOUND.md #155 -
+        // salt water "drinkable, tempting, and worse than nothing" - did
+        // nothing whatever.
+        //
+        // Which is also the right model rather than a way round the
+        // assignment. Sea water does not make you feel thirstier; it makes you
+        // *drier*, because the kidney spends more water getting the salt out
+        // than the drink brought in. Taking it off the hydration is the fact,
+        // and the thirst then follows on its own like every other thirst in
+        // the model.
+        self.state.physiology.hydration =
+            (self.state.physiology.hydration - salt * Self::WHAT_THE_SALT_COSTS_IN_WATER)
+                .clamp(0.0, 1.0);
 
         self.state.salt_in_me = (salt - Self::HOW_FAST_SALT_GOES).max(0.0);
     }
@@ -2006,13 +2023,19 @@ impl Agent {
     /// And the most anybody can be carrying at once.
     const AS_SALT_AS_ANYBODY_GETS: f32 = 1.0;
 
-    /// How much a full load of salt adds to the thirst every tick.
+    /// How much water a full load of salt costs the body every tick.
     ///
-    /// Set against `Thirst`'s own accumulation so that a drink of the sea
-    /// costs rather more than it gave: the drink takes half a unit off, and
-    /// getting rid of the salt puts most of a unit back on over the days it
-    /// takes.
-    const WHAT_SALT_ADDS_TO_A_THIRST: f32 = 0.012;
+    /// The drink itself is worth `physiology::A_DRINK_IS_WORTH`, a third of a
+    /// skin. One drink of the sea leaves 0.35 of salt, which goes at
+    /// `HOW_FAST_SALT_GOES` a tick and so takes about twenty-nine ticks to
+    /// clear, and over those ticks the salt in it costs about 0.35 of a skin
+    /// in water at this rate.
+    ///
+    /// So a drink of the sea gives a third and takes rather more than a third
+    /// back over the two and a half days it takes to be rid of, which is what
+    /// "worse than nothing" means and is why it is a thing a desperate man
+    /// does and a sensible one does not.
+    const WHAT_THE_SALT_COSTS_IN_WATER: f32 = 0.0007;
 
     /// And how fast the body gets rid of it.
     const HOW_FAST_SALT_GOES: f32 = 0.012;
