@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `1adaff4` and the work since.
+**Last verified:** September 2026, against commit `136d727` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -5405,6 +5405,51 @@ instrument that could see across two processes, and then holding the property
 with the type system rather than by hand.
 
 ## Housekeeping
+
+### 169. The one store nothing reads, and why capping it cost thirteen times the running time
+
+`ExplorationKnowledge::explored_tiles` is a `BTreeSet<Position>` with no
+ceiling and nothing ever taken out of it: every tile anybody has stood within
+sight of, for as long as they live, on a map of a hundred square kilometres.
+It is written from two places - `world/mod.rs:2589` and
+`analytics/doing/moving.rs:372` - which insert every tile in a radius round
+the agent on every move.
+
+It is also, at the time of writing, **the only store on an agent that nothing
+reads**. Its one accessor, `ExplorationKnowledge::is_explored`, has no callers
+anywhere in `src`. The `true`/`false` return of `explore_tile` feeds a
+`newly_explored_count`, and that is the whole of what the set is for.
+
+The obvious fix - cap it, drop the ground furthest from where the agent is
+standing - is wrong, and expensively so. Measured on two worlds of sixty days
+in release:
+
+| | seconds |
+|---|---|
+| before any of the pattern work | 7.95 |
+| with the cap on insert | 103 |
+| with the cap moved to a daily clock | 12.4 |
+| with the cap removed again | 8.09 |
+
+**Thirteen times the running time.** Not because the pruning is slow in
+itself: an agent sees a good deal of ground at once, so dropping the furthest
+of it only for the same eye to put it straight back leaves the set sitting on
+its ceiling and being rebuilt on nearly every tile observed. Moving the prune
+to once a day removed the thrash and still cost half as much again, because
+capping a set whose only question is "have I seen this before" makes ground
+*falsely new*, and every falsely new tile is an allocation and a count.
+
+So the entry stands rather than the fix. A store that nothing reads should
+either get a reader or stop being written; it should not be pruned, because
+pruning is what breaks the one thing it does. Both other candidates in the
+same struct are already bounded - `where_it_went_badly` and `where_it_ran_out`
+at 32 apiece - and `known_resources` is capped at 96 by
+`Agent::forget_what_does_not_matter`, so this is the only one left.
+
+The measurement is kept here because it is the useful part: it is a worked
+example of a ceiling enforced on the wrong event, and the same shape will
+appear anywhere else somebody caps a set that is written far more often than
+it is read.
 
 ### 93. Fourteen per cent of the public surface had no caller
 

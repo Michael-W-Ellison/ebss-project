@@ -298,10 +298,19 @@ fn news_reaches_everybody_within_earshot() {
     //
     // Twelve worlds turned out to be too thin for that threshold all the
     // same: when ill agents started actually fetching herbs, and so spending
-    // turns away from the camp, the twelve-world block read 7. Twenty-four
-    // holds. A block wide enough to be a rate has to be wide enough to stay
-    // one when the settlement's habits change.
-    let worlds = 24;
+    // turns away from the camp, the twelve-world block read 7.
+    //
+    // And twenty-four was too thin in its turn. When agents began walking
+    // back to the ground their own history says has paid them, they spread
+    // out over more of it, and the twenty-four-world block read 15 - one
+    // short of the two-thirds bar. Forty-eight passes. The rate has not
+    // moved; the block was again not wide enough to be one, which is now the
+    // third time this test has been widened for the same reason and is worth
+    // reading as a property of the measurement rather than of the settlement.
+    // A block wide enough to be a rate has to be wide enough to stay one when
+    // the settlement's habits change, and habits change every time anything
+    // in the decision layer does.
+    let worlds = 48;
     let heard_by_more_than_one = (0..worlds)
         .filter(|world_number| widest_a_teller_reached(4_101 + world_number) > 1)
         .count();

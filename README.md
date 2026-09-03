@@ -2285,11 +2285,66 @@ and what it lets go of first is what answers no need it has — hearsay before
 what it saw itself, and older before newer where it wants them equally.
 
 ### Memory
-Agents remember:
-- Spatial locations (resources, structures, landmarks)
-- Storage contents with decay over time
-- Social relationships and observed behaviors
-- Discovered crafting recipes
+
+Memory here is pattern recognition, and the record it keeps is a set of worn
+paths rather than a filing cabinet.
+
+An episode is not stored as an episode. It is broken into its elements - what
+was done, what it was done to, the ground it was done on, which way that
+ground lies from where the walk began, the time of year - and every one of
+them is reinforced when a need is answered. The element that is there every
+time climbs on every success; the element that varies climbs on its own
+successes only and is overtaken. So a man who hunts out east and eats, and
+hunts out west and eats, ends up believing in *hunting* twice as strongly as
+in *east*, and nobody had to decide that the hunting was the part that
+mattered. The arithmetic decides, out of his own history.
+
+What is added is not the fact of success but its efficiency: how much demand
+came off per turn spent, counting the walk as well as the work. A drink ten
+paces away is worth more than the same drink a hundred paces away, because
+answering a need quickly leaves the rest of the day for the other ones.
+
+Strength goes down with time - two per cent a day - and a path that falls
+under the floor is forgotten. That is what lets an agent hold the corner of
+the world that has paid it rather than all of the world it has seen, and it
+is why map knowledge is not required to stay accurate, only useful.
+
+Because two situations are alike to the degree that they share elements, a
+trail that goes cold already knows what to suggest instead. A bank that has
+gone dry brings to mind the drinking that was done at it, and the other places
+that drinking was done at are the ones that come back - not the best place the
+agent knows, which may have nothing to do with the case.
+
+Alongside the trails, agents still keep: places they have been told about,
+storage contents with decay, social relationships, and what they know how to
+make.
+
+### Worry
+
+The same machinery run backwards. An element carries what it has *cost* as
+well as what it has paid, against the drive it cost it to, and the cost is
+subtracted from the payment when anybody weighs the thing up. Stealing answers
+hunger and endangers standing; both facts are written against the same
+elements.
+
+What costs a thief is being *seen*, not taking. With nobody watching, nothing
+is written down, the worry already there fades on its own clock, and the trail
+strengthens on every meal - so a man who is never caught gets bolder. That is
+the behaviour asked for and not a hole in it.
+
+How long a worry lasts comes off the drive it guards, which is the drive's own
+rank and not a second opinion about it: a month for the ones that kill you, a
+fortnight for the ones that decide whether your people are here in ten years,
+a day for the ones that decide what sort of place they live in. It is felt as
+an emotion, and it presses on the drive it fears for, so a man who expects his
+standing to suffer goes and attends to his standing rather than merely
+declining to do things.
+
+A newborn has no history, so if worry could only be earned the first thing
+every child would learn is that nothing costs anything. Two other sources:
+what it saw happen to somebody else, and a third of what the people who raised
+it were wary of. The worry passes; the trails do not. A child does not inherit
+its parents' map.
 
 ### The turning year
 

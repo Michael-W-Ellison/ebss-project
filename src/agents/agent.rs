@@ -8850,6 +8850,10 @@ impl Agent {
             return;
         }
 
+        // Asked once rather than once per place: the sweep runs every turn for
+        // every living agent, and a lookup per place per need is real time.
+        let what_the_trails_say = self.patterns.what_every_place_is_worth();
+
         let mut worth: Vec<(crate::world::Position, f32)> = self
             .exploration_knowledge
             .known_resources
@@ -8893,7 +8897,21 @@ impl Agent {
                     // being told it is bare
                     .unwrap_or(0.5);
 
-                let keeping = wanted * 4.0 + freshness + how_rich
+                // And what the trails say about it, which is the only one of
+                // these terms that is about whether the place has actually
+                // ever paid. The rest are about whether it looks like it
+                // should: what is wanted, how fresh the news is, how much was
+                // standing there. A bank an agent has drunk at four times is
+                // worth more to it than a richer one it has heard of and never
+                // been to, and until this term nothing here could say so - the
+                // map and the pattern layer answered the same question and
+                // only one of them had been anywhere.
+                let has_paid = what_the_trails_say
+                    .get(&(where_it_is.x, where_it_is.y, 0))
+                    .copied()
+                    .unwrap_or(0.0);
+
+                let keeping = wanted * 4.0 + freshness + how_rich + has_paid * 2.0
                     - if heard_not_seen { 0.5 } else { 0.0 };
                 (*where_it_is, keeping)
             })

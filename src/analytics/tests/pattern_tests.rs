@@ -646,3 +646,82 @@ fn a_hunt() -> Action {
 fn a_meal() -> ActionResult {
     ActionResult::success().with_drive_change(DriveType::Hunger, -0.5)
 }
+
+/// A bank that has gone dry should bring another bank to mind, not the best
+/// thing the agent knows about anything.
+#[test]
+fn when_a_place_stops_working_the_next_one_is_one_like_it() {
+    use crate::agents::patterns::Patterns;
+
+    let mut patterns = Patterns::default();
+
+    let one_bank = Element::At((10, 0, 0));
+    let another_bank = Element::At((30, 0, 0));
+    let a_berry_patch = Element::At((0, 40, 0));
+    let drinking = Element::Did("gather".to_string());
+    let water = Element::On("water".to_string());
+    let picking = Element::Did("gather".to_string());
+    let berries = Element::On("Berries".to_string());
+
+    // Drinking is done at two banks, often enough for both to be habits
+    for tick in 0..4 {
+        patterns.it_worked(
+            DriveType::Thirst,
+            &[drinking.clone(), water.clone(), one_bank.clone()],
+            0.4,
+            tick,
+        );
+    }
+    for tick in 4..8 {
+        patterns.it_worked(
+            DriveType::Thirst,
+            &[drinking.clone(), water.clone(), another_bank.clone()],
+            0.3,
+            tick,
+        );
+    }
+    // And a berry patch has answered thirst too, better than either bank -
+    // fruit is wet - but it has nothing else in common with them
+    for tick in 8..12 {
+        patterns.it_worked(
+            DriveType::Thirst,
+            &[picking.clone(), berries.clone(), a_berry_patch.clone()],
+            0.9,
+            tick,
+        );
+    }
+
+    // With nothing having failed, the best-worn place wins
+    assert_eq!(
+        patterns.where_it_worked(DriveType::Thirst, 12),
+        Some((0, 40, 0)),
+        "the berry patch is the best thing he knows"
+    );
+
+    // Now the first bank goes dry
+    patterns.it_did_not(
+        DriveType::Thirst,
+        &[drinking.clone(), water.clone(), one_bank.clone()],
+    );
+
+    assert_eq!(
+        patterns.where_it_worked(DriveType::Thirst, 12),
+        Some((30, 0, 0)),
+        "a dry bank should send him to the other bank - the place that shares \
+         its afternoons - and not to the berry patch that shares nothing"
+    );
+
+    // Two banks are more alike than a bank and a berry patch. They are not
+    // wholly unalike - gathering is gathering, and that is the generalising
+    // working rather than failing - but the water is only true of the banks.
+    let two_banks = patterns.how_alike(DriveType::Thirst, &one_bank, &another_bank);
+    let bank_and_patch = patterns.how_alike(DriveType::Thirst, &one_bank, &a_berry_patch);
+    assert!(
+        two_banks > bank_and_patch,
+        "both banks share the gathering and the water; the patch shares only          the gathering: {two_banks} against {bank_and_patch}"
+    );
+    assert!(
+        bank_and_patch > 0,
+        "and gathering is gathering wherever it is done"
+    );
+}

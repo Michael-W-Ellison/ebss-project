@@ -35,7 +35,7 @@
 //!   `Trail::threatens` and `Agent`'s worry. Stealing answers hunger and
 //!   endangers standing, and both facts are written against the same elements.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -255,6 +255,19 @@ pub struct Trail {
     /// `Patterns::fade`.
     #[serde(default)]
     pub threatens: BTreeMap<DriveType, f32>,
+    /// What else was true the times this element was.
+    ///
+    /// Two situations are alike to the degree that they share elements, and
+    /// this is what makes that a question the agent can actually ask. Without
+    /// it the elements are independent weights and there is no way to get from
+    /// "the bank I drank at has gone dry" to "where else has drinking worked",
+    /// because nothing records that those two elements were ever in the same
+    /// afternoon. See `Patterns::something_like_it`.
+    ///
+    /// Kept small on purpose. This is what a place brings to mind, not a
+    /// register of everything that ever happened at it.
+    #[serde(default)]
+    pub alongside: BTreeSet<Element>,
 }
 
 impl Trail {
@@ -295,6 +308,24 @@ pub struct Patterns {
     /// the thing that matters, which is noticing that *this* keeps costing me.
     #[serde(default)]
     lately: Vec<(u32, DriveType, Vec<Element>)>,
+    /// The last place that was tried for a need and did not answer it.
+    ///
+    /// Kept so that the next answer to "where do I go for this" can be the
+    /// nearest thing to what just failed rather than whatever is best overall.
+    /// A man whose bank has gone dry wants another bank, not the finest berry
+    /// patch he knows.
+    #[serde(default)]
+    let_me_down: BTreeMap<DriveType, Element>,
+    /// What is feared for, per drive, kept as a running total.
+    ///
+    /// Not a second store: a sum of `Trail::threatens` that would otherwise
+    /// have to be recomputed over every trail. `how_much_i_fear_for` is asked
+    /// once per drive per agent per turn, and walking a thousand trails
+    /// sixteen times a turn per person took the suite from four minutes to
+    /// twenty-two. Rebuilt by `count_up_what_is_feared_for` whenever a worry
+    /// changes, which is rare; read on the hot path, which is not.
+    #[serde(default)]
+    feared_for: BTreeMap<DriveType, f32>,
 }
 
 impl Patterns {
@@ -374,9 +405,27 @@ impl Patterns {
             trail.strength += earned;
             trail.times = trail.times.saturating_add(1);
             trail.last_worked = now;
+
+            // What else was true this time. A place remembers the doing that
+            // was done at it, which is what lets a dry bank point at the next
+            // bank rather than at nothing.
+            for other in elements {
+                if other == element {
+                    continue;
+                }
+                if trail.alongside.len() < Self::AS_MUCH_AS_A_PLACE_BRINGS_TO_MIND {
+                    trail.alongside.insert(other.clone());
+                }
+            }
         }
 
         Self::shed_the_faintest(against);
+
+        if let Some(place) = elements.iter().find(|element| element.is_a_place()) {
+            if self.let_me_down.get(&need) == Some(place) {
+                self.let_me_down.remove(&need);
+            }
+        }
 
         self.lately.push((now, need, elements.to_vec()));
         self.forget_what_is_too_old_to_blame(now);
@@ -442,6 +491,8 @@ impl Patterns {
             }
         }
 
+        self.count_up_what_is_feared_for();
+
         laid_down
     }
 
@@ -470,21 +521,25 @@ impl Patterns {
     /// this asks "what is at risk", which is what makes a worried agent go and
     /// shore the thing up rather than merely decline to do anything.
     pub fn how_much_i_fear_for(&self, drive: DriveType) -> f32 {
-        self.against
-            .values()
-            .flat_map(|against| against.values())
-            .map(|trail| trail.threat_to(drive))
-            .sum()
+        self.feared_for.get(&drive).copied().unwrap_or(0.0)
+    }
+
+    /// Add the worries up again. Called whenever one of them changes.
+    fn count_up_what_is_feared_for(&mut self) {
+        self.feared_for.clear();
+        for against in self.against.values() {
+            for trail in against.values() {
+                for (drive, worry) in &trail.threatens {
+                    *self.feared_for.entry(*drive).or_insert(0.0) += worry;
+                }
+            }
+        }
     }
 
     /// And what this agent dreads across everything it knows: the felt total,
     /// which is what the emotion is.
     pub fn everything_i_dread(&self) -> f32 {
-        self.against
-            .values()
-            .flat_map(|against| against.values())
-            .map(|trail| trail.threatens.values().sum::<f32>())
-            .sum()
+        self.feared_for.values().sum()
     }
 
     /// Lay a worry down directly, without anything having happened.
@@ -505,6 +560,7 @@ impl Patterns {
         }
         let trail = self.against.entry(need).or_default().entry(element).or_default();
         *trail.threatens.entry(cost_to).or_insert(0.0) += how_much;
+        self.count_up_what_is_feared_for();
     }
 
     /// Note that these elements were there and the need was *not* answered.
@@ -526,6 +582,11 @@ impl Patterns {
         }
 
         against.retain(|_, trail| trail.strength > Self::TOO_FAINT_TO_FOLLOW);
+
+        // And note where it was, so the next answer can be somewhere like it
+        if let Some(place) = elements.iter().find(|element| element.is_a_place()) {
+            self.let_me_down.insert(need, place.clone());
+        }
     }
 
     /// What one failure walks back off a trail.
@@ -566,6 +627,7 @@ impl Patterns {
         }
 
         self.against.retain(|_, against| !against.is_empty());
+        self.count_up_what_is_feared_for();
     }
 
     /// Drop the faintest trails when there are more than anybody holds.
@@ -574,21 +636,136 @@ impl Patterns {
             return;
         }
 
-        let mut by_strength: Vec<(Element, f32)> = against
-            .iter()
-            .map(|(element, trail)| (element.clone(), trail.strength))
-            .collect();
-        // Weakest first, and the element breaks the tie so two agents in the
-        // same state shed the same trail.
-        by_strength.sort_by(|(left_element, left), (right_element, right)| {
-            left.partial_cmp(right)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| left_element.cmp(right_element))
-        });
+        // One clone per trail actually dropped, rather than one per trail held.
+        // This runs on every success once an agent is at its ceiling, and
+        // copying sixty-four keys - strings among them - to throw one away is
+        // the sort of thing that only shows up under a stopwatch.
+        while against.len() > Self::AS_MANY_TRAILS_AS_ANYBODY_HOLDS {
+            // Weakest first, and the element breaks the tie so two agents in
+            // the same state shed the same trail.
+            let Some(faintest) = against
+                .iter()
+                .min_by(|(left_element, left), (right_element, right)| {
+                    left.strength
+                        .partial_cmp(&right.strength)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| left_element.cmp(right_element))
+                })
+                .map(|(element, _)| element.clone())
+            else {
+                break;
+            };
+            against.remove(&faintest);
+        }
+    }
 
-        let too_many = against.len() - Self::AS_MANY_TRAILS_AS_ANYBODY_HOLDS;
-        for (element, _) in by_strength.into_iter().take(too_many) {
-            against.remove(&element);
+    /// How many other elements one element brings to mind.
+    ///
+    /// Five, which is about what one episode has in it. A place is meant to
+    /// recall the sort of afternoon it was, not every afternoon it ever was.
+    pub const AS_MUCH_AS_A_PLACE_BRINGS_TO_MIND: usize = 5;
+
+    /// The nearest thing to this that has also worked.
+    ///
+    /// "When a pattern goes from working to not working, agents should attempt
+    /// to find similar patterns to recreate the drive satisfaction results."
+    ///
+    /// Alike means sharing elements, and nothing else. The bank that has gone
+    /// dry brings to mind the drinking that was done there; the other places
+    /// that drinking was done at are the ones that come back; and the best of
+    /// those is where the agent goes. A place that shares nothing with the one
+    /// that failed is not an answer to this question however well worn it is,
+    /// because the thing being asked is not "where else is good" but "where
+    /// else is *like* this".
+    ///
+    /// Returns nothing when there is no second-best worth the walk, which is
+    /// an honest answer: sometimes what is left is to go and look.
+    pub fn something_like_it(
+        &self,
+        need: DriveType,
+        instead_of: &Element,
+        now: u32,
+    ) -> Option<Element> {
+        let against = self.against.get(&need)?;
+        let failed = against.get(instead_of)?;
+
+        let mut best: Option<(usize, f32, &Element)> = None;
+
+        for (element, trail) in against {
+            if element == instead_of {
+                continue;
+            }
+            // Only what could stand in for it: a place for a place, a doing
+            // for a doing. A season is not somewhere else to go.
+            if std::mem::discriminant(element) != std::mem::discriminant(instead_of) {
+                continue;
+            }
+            if trail.times < Self::A_HABIT_BY_NOW {
+                continue;
+            }
+            if now.saturating_sub(trail.last_worked) > Self::STILL_WORTH_THE_WALK {
+                continue;
+            }
+            let worth = trail.worth();
+            if worth <= 0.0 {
+                continue;
+            }
+
+            let shared = trail.alongside.intersection(&failed.alongside).count();
+            if shared == 0 {
+                continue;
+            }
+
+            let better = match best {
+                None => true,
+                Some((most_shared, best_worth, best_element)) => {
+                    (shared, worth) > (most_shared, best_worth)
+                        || ((shared, worth) == (most_shared, best_worth)
+                            && element < best_element)
+                }
+            };
+            if better {
+                best = Some((shared, worth, element));
+            }
+        }
+
+        best.map(|(_, _, element)| element.clone())
+    }
+
+    /// Whether anything at all is feared for. For the instruments.
+    pub fn is_worried_about_anything(&self) -> bool {
+        !self.feared_for.is_empty()
+    }
+
+    /// What this agent's own history says every place it knows is worth.
+    ///
+    /// One pass over the trails rather than a lookup per place per need. The
+    /// caller wants an opinion on ninety-six places at once and asking for
+    /// them one at a time is how a per-turn sweep turns into real time.
+    pub fn what_every_place_is_worth(&self) -> BTreeMap<(i32, i32, i32), f32> {
+        let mut worth = BTreeMap::new();
+        for against in self.against.values() {
+            for (element, trail) in against {
+                if let Some(place) = element.place() {
+                    let paid = trail.worth();
+                    if paid > 0.0 {
+                        *worth.entry(place).or_insert(0.0) += paid;
+                    }
+                }
+            }
+        }
+        worth
+    }
+
+    /// How alike two elements' situations are: how much they have been true at
+    /// the same time as.
+    pub fn how_alike(&self, need: DriveType, one: &Element, other: &Element) -> usize {
+        let Some(against) = self.against.get(&need) else {
+            return 0;
+        };
+        match (against.get(one), against.get(other)) {
+            (Some(left), Some(right)) => left.alongside.intersection(&right.alongside).count(),
+            _ => 0,
         }
     }
 
@@ -683,6 +860,18 @@ impl Patterns {
     /// strength, so a place an agent has reason to dread is not walked to
     /// merely because it has fed him before.
     pub fn where_it_worked(&self, need: DriveType, now: u32) -> Option<(i32, i32, i32)> {
+        // If somewhere has just let this one down, the nearest thing to it is
+        // a better answer than the best thing overall - see
+        // `something_like_it`. Falls through when there is nothing like it,
+        // which is the ordinary case and the first time round.
+        if let Some(failed) = self.let_me_down.get(&need) {
+            if let Some(instead) = self.something_like_it(need, failed, now) {
+                if let Some(place) = instead.place() {
+                    return Some(place);
+                }
+            }
+        }
+
         self.places_worth_the_walk(need, now)
             .max_by(|(left_place, left), (right_place, right)| {
                 left.partial_cmp(right)
