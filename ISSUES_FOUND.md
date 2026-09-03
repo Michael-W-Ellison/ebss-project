@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `bd8f374` and the work since.
+**Last verified:** September 2026, against commit `065ca1a` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -11092,3 +11092,115 @@ Two would genuinely behave differently and are not small:
 - **Orchards.** A tree that takes years to come into bearing and then bears
   for decades is a multi-year investment, and nothing in this model has one.
   `ResourceType::Food` covers the fruit; it does not cover the waiting.
+
+---
+
+### 167. Nobody is ever born, because the surplus gate wants fifty-three times what anybody has
+
+Nine of the eighteen standing test failures were live-settlement claims —
+that a settlement ends up with enemies in it, that somebody notices a pattern
+nobody wrote down, that a lie gets found out, that children live past infancy.
+They looked like nine separate problems. They are mostly one, and it is
+measurable.
+
+**Every settlement is empty by six thousand ticks, and no child is ever born
+in any of them.** Eight worlds of twelve founders, sampled every five hundred
+ticks:
+
+| tick | alive | born here | worlds still standing |
+|---|---|---|---|
+| 0 | 12.0 | 0.0 | 8 |
+| 1,000 | 7.9 | 0.0 | 8 |
+| 2,000 | 7.8 | 0.0 | 8 |
+| 3,000 | 6.9 | 0.0 | 8 |
+| 3,500 | 5.2 | 0.0 | 7 |
+| 4,000 | 1.5 | 0.0 | 6 |
+| 4,500 | 0.4 | 0.0 | 2 |
+| 6,000 | 0.0 | 0.0 | 0 |
+
+The crash is the first winter — it opens on day 270, tick 3,240. But the
+second column is the sharper fact: **not "few children", none at all, ever, in
+any world.** A settlement of twelve adults that never reproduces cannot do
+anything but dwindle, and every claim in the suite that needs a second
+generation, or needs anybody alive after four thousand ticks, is asking for
+something the model cannot currently produce.
+
+#### Which link is binding
+
+Walked over 4,713 person-samples across eight worlds and four thousand ticks:
+
+| the chain | person-samples |
+|---|---|
+| alive | 4,713 |
+| of age to have a child | 4,713 |
+| ...and immediate needs met | 3,691 |
+| ...and has not been going short | 3,687 |
+| **...and enough put by for a child** | **0** |
+| would attempt reproduction | 0 |
+
+Three and a half thousand agents cleared every other gate. Not one ever
+cleared the last. It is not rare — it never happens.
+
+And it is not close. Weighing what the gate asks against what those same
+agents actually hold:
+
+- **mean units the gate wants: 129,600**
+- **mean units actually put by: 2,436**
+
+A factor of fifty-three. The gate asks for seventy-five days of food for two
+people — `how_long_the_land_gives_nothing()` is 75 days, and
+`for_the_two_of_them` is a grown body's day plus a fifth for the infant. What
+a settlement actually holds is about **a day and a half of food for one
+person.**
+
+The units are the same on both sides, which was worth checking: the comment on
+`UNITS_IN_ONE_STORED_ITEM` says eleven and a half stored items make a day, and
+`what_i_burn_in_a_day` is 1,440 energy units, which is consistent. This is a
+real shortfall and not a scale mix-up.
+
+#### What this is and is not
+
+The gate is not obviously wrong. `expects_to_be_able_to_feed_a_child` was
+written deliberately (#48: "breed only on a surplus, not on a full belly"),
+and the reasoning in its docstring is sound — a full belly says nothing about
+whether the next meal exists. Loosening it to make tests pass would undo a
+decision that was made on measurement.
+
+The binding constraint is upstream: **the store never fills**, which is #240
+("a full settlement now reaches winter with nothing put by"), #241
+(preservation throughput is what caps the winter store) and #213. A gate that
+asks for a winter's food is unreachable in a model where nobody banks two days
+of it.
+
+So this is not a test problem and it is not a gate problem. It is the
+project's central open question, now with a number attached to it: **a
+settlement would need fifty times the store it manages before its first child
+could be conceived.**
+
+#### What was done about the eighteen
+
+Nine of the eighteen were fixed, and each was a real defect rather than a
+threshold:
+
+- **Four** were one arithmetic error — reserve and burning both scaled by body
+  size, so size cancelled out of every ratio and a child and a grown man had
+  identical days to live. Kleiber's law (mass to the three quarters) in one
+  function fixed all four. See #227.
+- **Three** were fixtures asking one question while starving or dehydrating
+  their subject, including one that set `last_drank_tick` — a counter
+  `age_tick_with_modifier` says in its own comment is "derived rather than
+  counted", so the fixture was writing to a readout while the body dried out
+  underneath.
+- **One** was salt water doing nothing whatever, because the drive it raised
+  is assigned from the body a few hundred lines later. See #155 and the
+  commit.
+- **Two** encoded the old calendar: a test asserting `TICKS_PER_YEAR <= 2000`,
+  which is the figure #42 deliberately replaced, and a life-stage test reading
+  tick counts from a calendar where a year was eleven hundred ticks. See #206.
+
+The nine that remain are the ones above plus three that have not yet been
+traced: `an_agent_lights_a_fire_and_cooks_on_it`,
+`test_production_chain_buildings_cluster`, and
+`a_dedicated_farmer_brings_back_more_than_a_casual_one`, which reads 0 against
+0 for a reason that is **not** the bearing season — that was tried and it
+changed nothing.

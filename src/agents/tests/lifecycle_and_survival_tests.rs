@@ -300,37 +300,35 @@ fn test_agent_is_dead_when_health_zero() {
 
 #[test]
 fn test_life_stage_progression() {
+    use crate::environment::seasons::TICKS_PER_YEAR;
+
     let mut agent = Agent::new(AgentConfig::default());
 
-    // Start as infant
-    agent.state.life_stage = LifeStage::Infant;
-    agent.state.age = 0;
-
-    // Age through stages (based on LifeStage::from_age thresholds)
-    // Infant (0-500)
-    agent.state.age = 250;
-    agent.update_life_stage();
-    assert_eq!(agent.state.life_stage, LifeStage::Infant);
-
-    // Child (501-1500)
-    agent.state.age = 1000;
-    agent.update_life_stage();
-    assert_eq!(agent.state.life_stage, LifeStage::Child);
-
-    // Adolescent (1501-2500)
-    agent.state.age = 2000;
-    agent.update_life_stage();
-    assert_eq!(agent.state.life_stage, LifeStage::Adolescent);
-
-    // Adult (2501-8000)
-    agent.state.age = 5000;
-    agent.update_life_stage();
-    assert_eq!(agent.state.life_stage, LifeStage::Adult);
-
-    // Elderly (8001+)
-    agent.state.age = 9000;
-    agent.update_life_stage();
-    assert_eq!(agent.state.life_stage, LifeStage::Elderly);
+    // **In years, through the calendar, rather than in hand-counted ticks.**
+    //
+    // This read 250, 1000, 2000, 5000 and 9000 and called them infant, child,
+    // adolescent, adult and elderly. Those were ticks from a calendar where a
+    // year was about eleven hundred of them. A year is 4,320 now - see
+    // ISSUES_FOUND.md #42 - so every one of those numbers is a different stage
+    // of life than it was, and 1000 ticks is a baby of three months rather
+    // than a child of eight. See #206.
+    //
+    // The thresholds themselves are `LifeStage`'s own, so this cannot drift
+    // again when somebody decides childhood ends at twelve.
+    for (years, expected) in [
+        (LifeStage::KEPT_IN_ARMS_UNTIL - 1, LifeStage::Infant),
+        (LifeStage::KEPT_IN_SIGHT_UNTIL - 1, LifeStage::Child),
+        (LifeStage::KEPT_WITHIN_AN_HOUR_UNTIL - 1, LifeStage::Adolescent),
+        (LifeStage::STRENGTH_STARTS_GOING_AT - 1, LifeStage::Adult),
+        (LifeStage::STRENGTH_STARTS_GOING_AT + 1, LifeStage::Elderly),
+    ] {
+        agent.state.age = years * TICKS_PER_YEAR;
+        agent.update_life_stage();
+        assert_eq!(
+            agent.state.life_stage, expected,
+            "somebody {years} years old should be {expected:?}"
+        );
+    }
 }
 
 #[test]

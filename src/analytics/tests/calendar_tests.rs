@@ -29,11 +29,25 @@ use std::collections::BTreeSet;
 fn a_year_is_shorter_than_a_run() {
     assert_eq!(TICKS_PER_YEAR, TICKS_PER_DAY * DAYS_PER_YEAR);
 
-    // The runs everything else in this suite is measured over are eight
-    // thousand ticks. A year has to be comfortably inside one.
+    // A year has to be inside a run this suite actually does.
+    //
+    // This asserted `TICKS_PER_YEAR <= 2000`, which is the *old* calendar -
+    // the one where a year was about eleven hundred ticks and a life did not
+    // fit inside a run. The calendar was deliberately changed to 4,320 so
+    // that ninety-day seasons and a lifetime would both fit; see
+    // ISSUES_FOUND.md #42 and #209. This test was left asserting the figure
+    // that was replaced, so it did not measure a risk, it forbade the
+    // decision. See #206.
+    //
+    // What it is for is still worth keeping: a year has to be short enough
+    // that the long runs in this suite - eight and nine thousand ticks -
+    // cover more than one, or nothing in here ever sees a second spring.
+    const THE_LONGEST_RUNS_IN_THIS_SUITE: u32 = 8_000;
     assert!(
-        TICKS_PER_YEAR <= 2000,
-        "a year is {TICKS_PER_YEAR} ticks, which no run will ever reach"
+        TICKS_PER_YEAR < THE_LONGEST_RUNS_IN_THIS_SUITE,
+        "a year is {TICKS_PER_YEAR} ticks and the longest run in this suite is \
+         {THE_LONGEST_RUNS_IN_THIS_SUITE}, so nothing here would see a second \
+         spring"
     );
 
     // And a day has to be more than one tick, or dawn, noon and midnight stop
