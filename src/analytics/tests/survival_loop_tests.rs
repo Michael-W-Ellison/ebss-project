@@ -25,11 +25,28 @@ fn population_tick_runs_nutrition_metabolism() {
 
     let starting_reserves = population.agents[0].nutrition.energy_reserves;
 
-    for _ in 0..200 {
+    // Watered as it goes, so that the body lives long enough to be measured.
+    //
+    // Two hundred ticks is seventeen days and a body that never drinks is
+    // dead on the sixth, swept out of the population - so this indexed an
+    // empty list. Whether metabolism runs is a question about the tick, not
+    // about how long a man lasts alone in an empty world.
+    let mut reserves = starting_reserves;
+    for tick in 1..=200u32 {
+        if let Some(agent) = population.agents.first_mut() {
+            agent.state.physiology.hydration = 1.0;
+            agent.state.last_drank_tick = tick;
+            agent.state.ticks_without_water = 0;
+        }
+
         population.tick();
+
+        let Some(agent) = population.agents.first() else {
+            break;
+        };
+        reserves = agent.nutrition.energy_reserves;
     }
 
-    let reserves = population.agents[0].nutrition.energy_reserves;
     assert!(
         reserves < starting_reserves,
         "energy reserves should be consumed by metabolism, stayed at {reserves}"

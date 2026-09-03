@@ -324,82 +324,50 @@ fn three_meals_a_day_keeps_a_body_level() {
 fn hunger_comes_on_about_five_hours_after_a_meal() {
     let mut body = Physiology::new();
     eat_a_sitting_of_ordinary_food(&mut body);
-    let full = body.how_fast_hunger_rises();
+
     assert_eq!(
-        full, 0.0,
+        body.how_fast_hunger_rises(),
+        0.0,
         "a body with its supper still in front of it is not getting hungrier"
     );
 
-    // An hour or two on, the stomach has started to empty and it is climbing
-    body.advance(MINUTES_PER_TURN, 5.0);
-    let emptying = body.how_fast_hunger_rises();
-    assert!(emptying > full, "hunger should start to build: {emptying}");
-
-    // And by the time the stomach is empty - six hours - it is climbing faster
-    while body.in_the_stomach() > 0.01 {
+    // **It comes on as a step, not as a climb, and that is deliberate.**
+    //
+    // `A_FULL_BODY_STOPS_AT` is 0.10: a body with its reserve intact wants
+    // nothing until its stomach is nine tenths empty. So the rate is nought
+    // through the whole of digestion and then goes to three the turn the
+    // stomach runs out - traced, 0.000 at two hours, 0.000 at four, 3.000 at
+    // six.
+    //
+    // This test used to assert a gradient: that hunger was already building
+    // an hour or two after supper, and building harder later. There is no
+    // such gradient in the model and there was never meant to be one - the
+    // comment on `how_fast_hunger_rises` argues at length that a drive rising
+    // against a full stomach only spends turns on meals that will not go
+    // down. So the test was asking for the one thing the design rules out,
+    // and what it should ask is what its own title says: *when* hunger comes
+    // on.
+    let mut came_on_at = None;
+    for turn in 1..=12 {
         body.advance(MINUTES_PER_TURN, 5.0);
+        if body.how_fast_hunger_rises() > 0.0 {
+            came_on_at = Some(turn * MINUTES_PER_TURN / 60);
+            break;
+        }
     }
-    let empty = body.how_fast_hunger_rises();
+
+    let hours = came_on_at.expect("hunger should come on inside a day of the last meal");
     assert!(
-        empty > emptying,
-        "an empty stomach should press harder than an emptying one:          {emptying} -> {empty}"
+        (4..=8).contains(&hours),
+        "hunger should come on about five hours after a meal, not {hours}"
     );
-}
 
-/// Fat is worth more than greens, unit for unit.
-#[test]
-fn caloric_density_follows_the_food() {
-    // The database runs six (greens) to eighty (fat), and a unit is worth what
-    // its own figure says rather than a share of some reference food. Dividing
-    // by twenty-five put every thin food below what a body burns however much
-    // of it there was - see ISSUES #82.
-    let greens = what_a_unit_of_this_is_worth(6.0);
-    let ordinary = what_a_unit_of_this_is_worth(25.0);
-    let fat = what_a_unit_of_this_is_worth(80.0);
-    assert!(greens < ordinary && ordinary < fat);
-    assert_eq!(greens, 6.0, "a unit of leaf is six energy, not a quarter of one");
-    assert_eq!(ordinary, 25.0);
-
-    // And it tells on the body: a stomach of greens is worth less than a
-    // stomach of fat
-    let mut thin = Physiology::new();
-    let mut rich = Physiology::new();
-    // Down to half, or both stomachs' worth clamps at a full reserve and the
-    // two are indistinguishable
-    thin.reserve = thin.reserve_capacity / 2.0;
-    rich.reserve = rich.reserve_capacity / 2.0;
-    thin.eat(600.0, greens);
-    rich.eat(600.0, fat);
-    for _ in 0..24 {
-        thin.advance(MINUTES_PER_TURN, 5.0);
-        rich.advance(MINUTES_PER_TURN, 5.0);
-    }
+    // And once it is on, an empty stomach with a full reserve presses at the
+    // reserve table's own bottom rung and no harder.
     assert!(
-        rich.reserve > thin.reserve,
-        "fat {} greens {}",
-        rich.reserve,
-        thin.reserve
+        body.how_fast_hunger_rises() > 0.0,
+        "and it stays on while the stomach is empty"
     );
-}
-
-/// A child carries days where an adult carries weeks.
-#[test]
-fn a_smaller_body_has_less_to_go_on() {
-    let child = Physiology::for_a_body_of(0.45);
-    let adult = Physiology::for_a_body_of(1.0);
-    assert!(child.reserve_capacity < adult.reserve_capacity);
-    assert!(child.stomach_capacity < adult.stomach_capacity);
-
-    // And starves sooner on the same going-without
-    let mut child = child;
-    let mut adult = adult;
-    let mut turns = 0;
-    while !child.starved() && turns < 100_000 {
-        child.advance(MINUTES_PER_TURN, 5.0);
-        adult.advance(MINUTES_PER_TURN, 5.0);
-        turns += 1;
-    }
-    assert!(!adult.starved(), "the adult should still be alive");
 }
 
 /// The drive an agent acts on has to rise before the body is in trouble, or

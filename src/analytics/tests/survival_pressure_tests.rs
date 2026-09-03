@@ -150,7 +150,16 @@ fn a_child_waits_on_a_surplus_and_not_on_a_full_stomach() {
 /// A famine takes the young before it takes the grown.
 #[test]
 fn a_hungry_year_takes_the_children_first() {
-    fn health_after_famine(years: u32) -> f32 {
+    /// How many days of famine this body lasts before its health is gone.
+    ///
+    /// **The time to death, not the health at a chosen moment.** This read
+    /// health after a fixed span twice over and got nought both times, twice
+    /// for the same reason: at two thousand ticks and again at three weeks
+    /// both bodies are already dead, so the comparison could not come out
+    /// either way whatever the model did. Picking a horizon at which the
+    /// answer is visible is picking the answer; asking when each one goes is
+    /// the question the test's own title asks.
+    fn days_of_famine_survived(years: u32) -> f32 {
         let mut agent = Agent::new(AgentConfig::default());
         // Years. This took *ticks*, and passed 900 and 4000 for "a child" and
         // "an adult" - figures from the calendar where a year was about eleven
@@ -161,26 +170,40 @@ fn a_hungry_year_takes_the_children_first() {
         agent.state.energy = 100.0;
         agent.state.last_ate_tick = 0;
 
-        // Nobody eats for three weeks, which is what a reserve is worth.
-        //
-        // This ran for two thousand ticks - a hundred and sixty-seven days -
-        // by which point both bodies are long dead and both read nought, so
-        // the comparison could not have come out either way. Three weeks is
-        // where the question is actually answerable.
-        let three_weeks = 21 * crate::environment::seasons::TICKS_PER_DAY;
-        for tick in 1..=three_weeks {
+        let a_long_time = 60 * crate::environment::seasons::TICKS_PER_DAY;
+        for tick in 1..=a_long_time {
+            // Watered, so that what kills this body is the famine.
+            //
+            // It was not, and both bodies died on day six of **thirst** -
+            // which does not scale with body size, so the answer was 6.0
+            // against 6.0 and the test could not see a famine at all. A
+            // fixture that means to ask one question has to hold the other
+            // clocks off; this is the third place in the suite that has been
+            // caught not doing it.
+            agent.state.physiology.hydration = 1.0;
+            agent.state.last_drank_tick = tick;
+            agent.state.ticks_without_water = 0;
+
             agent.state.age_tick_with_modifier(tick, 1.0);
+            if agent.state.health <= 0.0 {
+                return tick as f32 / crate::environment::seasons::TICKS_PER_DAY as f32;
+            }
         }
 
-        agent.state.health
+        f32::INFINITY
     }
 
-    let child = health_after_famine(8);
-    let adult = health_after_famine(30);
+    let child = days_of_famine_survived(8);
+    let adult = days_of_famine_survived(30);
 
     assert!(
+        adult.is_finite(),
+        "a grown body should starve to death inside two months of eating nothing"
+    );
+    assert!(
         child < adult,
-        "a child should suffer a famine sooner than an adult: {child:.1} against {adult:.1}"
+        "a child should go first in a famine: the child lasted {child:.1} days \
+         against the grown body's {adult:.1}"
     );
     assert_eq!(
         LifeStage::from_years(8),

@@ -136,7 +136,17 @@ fn health_recovers_when_fed_and_watered() {
 
     let mut tick = 100;
     for _ in 0..200 {
-        // Keep the agent fed and watered so nothing is harming it
+        // Keep the agent fed and watered so nothing is harming it.
+        //
+        // Through the **body**, not the turn counters. `age_tick_with_modifier`
+        // says in its own comment that those counters "are kept only for the
+        // interface and for older tests to read, and are derived rather than
+        // counted so they cannot disagree with the body" - so setting them was
+        // writing to a readout. The body dried out regardless, thirst took
+        // health off faster than it could come back, and this test had been
+        // asking whether health recovers while quietly dehydrating the man.
+        agent.state.physiology.hydration = 1.0;
+        agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
         agent.state.last_ate_tick = tick;
         agent.state.last_drank_tick = tick;
 

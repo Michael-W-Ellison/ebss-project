@@ -273,6 +273,38 @@ pub fn what_the_work_costs(energy_spent: f32) -> f32 {
     AT_REST + (WORKING_HARD - AT_REST) * share
 }
 
+/// What a body of this size burns, against what a grown one burns.
+///
+/// **Not its share of a grown body, which is what this was, and that made
+/// every question about body size cancel itself out.** A body's reserve
+/// scaled by `share` and its burning scaled by `share` too, so
+/// `reserve / burn` - the number of days a body has if it never eats again -
+/// came out the same for a child and a grown man. Measured: **235 turns
+/// against 235**. `days_into_the_reserve` cancelled the same way, and so did
+/// what share of its own store three days costs a body.
+///
+/// The docstring on `Physiology::for_a_body_of` has claimed the opposite
+/// since it was written - "a child carries days where an adult carries weeks,
+/// so the same famine takes the young first without anybody having written
+/// that down" - and the arithmetic under it made that impossible. Four tests
+/// asserted it and four tests failed. See ISSUES_FOUND.md #227.
+///
+/// Kleiber's law is the reason and the number: metabolic rate goes as mass to
+/// the three quarters, not as mass. A small body burns proportionally *more*
+/// than its size for its own store, which is why children are the first to go
+/// in a famine and why a mouse eats its own weight in a week. Reserve still
+/// scales with size; burning scales more slowly; the two no longer cancel.
+///
+/// At a child's share of 0.45 that is 0.55 of a grown body's burning against
+/// 0.45 of its reserve - so the child has about 0.82 of the man's days, and
+/// three days without food costs it a fifth more of what it carries.
+pub fn what_a_body_this_size_burns(share: f32) -> f32 {
+    /// Mass to the three quarters. Kleiber, 1932, and it has held up.
+    const WHAT_SIZE_DOES_TO_BURNING: f32 = 0.75;
+
+    share.clamp(0.05, 1.0).powf(WHAT_SIZE_DOES_TO_BURNING)
+}
+
 /// A meal in the stomach, emptying into the gut on its own clock.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Meal {
@@ -369,7 +401,8 @@ impl Physiology {
             stomach_capacity: STOMACH_CAPACITY * share,
             waste: 0.0,
             burned_today: 0.0,
-            what_i_burn_in_a_day: UNITS_BURNED_IN_AN_ORDINARY_DAY * share,
+            what_i_burn_in_a_day: UNITS_BURNED_IN_AN_ORDINARY_DAY
+                * what_a_body_this_size_burns(share),
             units_ever_eaten: 0.0,
             meals_ever_eaten: 0,
         }
@@ -395,7 +428,8 @@ impl Physiology {
         // Which is the whole of "a child and an adult come out identical" from
         // the project status report, in reverse: they were not identical, they
         // disagreed with themselves.
-        self.what_i_burn_in_a_day = UNITS_BURNED_IN_AN_ORDINARY_DAY * share;
+        self.what_i_burn_in_a_day =
+            UNITS_BURNED_IN_AN_ORDINARY_DAY * what_a_body_this_size_burns(share);
     }
 
     /// Whether there is room for another mouthful.
@@ -421,7 +455,7 @@ impl Physiology {
     /// given. It made a child need more meals a day than its father while
     /// carrying a quarter of the stomach to take them in.
     pub fn how_fast_this_body_burns(&self) -> f32 {
-        self.reserve_capacity / RESERVE_OF_A_GROWN_BODY
+        what_a_body_this_size_burns(self.reserve_capacity / RESERVE_OF_A_GROWN_BODY)
     }
 
     /// What is in the stomach now.
