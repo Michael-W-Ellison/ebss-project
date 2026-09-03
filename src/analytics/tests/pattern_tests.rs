@@ -222,18 +222,40 @@ fn the_place_you_are_standing_is_not_a_destination() {
         None,
         "\"where do I go\" is not answered by \"here\""
     );
+
+    // Nor by anywhere else at the moment - nobody walks on the strength of a
+    // memory until an errand can price its own trip. See
+    // `Agent::somewhere_that_answered` for the measurement that settled it.
     assert_eq!(
         agent.somewhere_that_answered(DriveType::Thirst, (40, 40, 0), 6),
+        None,
+        "not from across the map either, for now"
+    );
+
+    // But the place is written down, and that is what comes back on
+    assert_eq!(
+        agent.patterns.where_it_worked(DriveType::Thirst, 6),
         Some(here),
-        "but from across the map it is"
+        "the bank is remembered even though nobody is walking to it"
     );
 }
 
 // --- what it changes --------------------------------------------------------
 
-/// A thirsty agent with nowhere in reach walks back to where it drank.
+/// A thirsty agent knows where it drank, and stays where it is.
+///
+/// This test used to assert the opposite, and the assertion was right about
+/// what the code did and wrong about whether it should. Measured over two
+/// blocks of sixty-four worlds, walking to remembered ground cost about a
+/// fifth of the people alive at the end of a year - the table is in
+/// `Agent::somewhere_that_answered`. What the settlement gains by remembering
+/// the bank it loses twice over by sending somebody to it, because an errand
+/// is priced at the work and not at the walk.
+///
+/// So the test is kept, pointed the other way, and it is the test that will
+/// have to be turned back round when ISSUES_FOUND #189 is fixed.
 #[test]
-fn a_thirsty_agent_walks_back_to_the_bank_it_drank_from() {
+fn a_thirsty_agent_knows_the_bank_it_drank_from_and_does_not_set_off_for_it() {
     let population = a_lone_agent();
     let mut world = World::new(WorldConfig::default());
 
@@ -269,10 +291,20 @@ fn a_thirsty_agent_walks_back_to_the_bank_it_drank_from() {
         simulation.what_this_drive_offers(DriveType::Thirst, agent, here)
     };
 
-    assert_eq!(
+    assert_ne!(
         action,
         Some(Action::Move { target: bank }),
-        "with no water anywhere in reach, the remembered bank is the answer"
+        "the bank is remembered, but setting off for it is what costs the \
+         settlement more than the memory is worth"
+    );
+
+    // And the memory itself is intact, which is the half of this that works
+    assert_eq!(
+        simulation.population.agents[0]
+            .patterns
+            .where_it_worked(DriveType::Thirst, 6),
+        Some(bank),
+        "he knows perfectly well where the water was"
     );
 }
 

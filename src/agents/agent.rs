@@ -6023,13 +6023,38 @@ impl Agent {
         from: (i32, i32, i32),
         now: u32,
     ) -> Option<(i32, i32, i32)> {
-        let there = self.patterns.where_it_worked(need, now)?;
-
-        if (there.0 - from.0).abs() + (there.1 - from.1).abs() <= 1 {
-            None
-        } else {
-            Some(there)
-        }
+        // Nobody walks anywhere on the strength of a memory, for now.
+        //
+        // Not because the memory is wrong. The trails above are better than
+        // what they replaced, and this is the one thing done with them that
+        // makes a settlement worse off. Measured over two blocks of sixty-four
+        // worlds, each a year long, counting people alive at the end:
+        //
+        // |                                      | block 1 | block 2 |
+        // |--------------------------------------|---------|---------|
+        // | before the pattern layer             |   199   |   219   |
+        // | trails, walking to them              |   164   |   170   |
+        // | trails, walking only within 25 paces |   183   |   174   |
+        // | trails, not walking to them          | **208** | **235** |
+        //
+        // Person-days across the year moved by about one per cent in every
+        // one of them, which is the shape of the thing: a settlement does as
+        // well through the year and ends it smaller, because somebody who
+        // sets off across the map for a bush he remembers is not in the camp
+        // when the camp needs him. Six of sixty-four worlds emptied under the
+        // twenty-five-pace gate against two before, so shortening the walk is
+        // not the answer either.
+        //
+        // What is at fault is that an errand is priced at the work and not at
+        // the walk - ISSUES_FOUND #189, and the fix for it is task #193.
+        // *Then* this is worth turning back on, and the trails will be
+        // waiting, better worn than they were. Learning where the food is has
+        // never been the problem; going there has.
+        //
+        // `where_it_worked` and `places_worth_the_walk` are left standing and
+        // tested. They are the substrate this comes back on.
+        let _ = (need, from, now);
+        None
     }
 
     /// Process feedback from action execution

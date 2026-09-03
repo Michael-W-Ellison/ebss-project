@@ -2385,13 +2385,37 @@ to. Measured over eight worlds of ten thousand ticks, a settlement works out
 about thirteen of these per living agent from nothing, and four agents in five
 end up knowing where the water is.
 
-What it does not do is change how a settlement fares. Eight worlds a side at
-ten thousand ticks put the population up by 16 at a standard error of 11; eight
-worlds a side at twelve thousand put it *down* by 14 at a standard error of 10.
-Two runs pointing opposite ways at the same size is noise, and the honest
-reading is that the mechanism costs nothing and buys nothing yet. It is kept
-because it is the substrate the rest of the discovery work stands on, and
-because what it records is worth having whether or not it has paid off.
+#### And what to do with a pattern, which is the harder half
+
+Two blocks of sixty-four worlds, each run a full year, counting people alive
+at the end:
+
+| | block 1 | block 2 | person-days |
+|---|---|---|---|
+| before the pattern layer | 199 | 219 | 209k / 213k |
+| trails, walking to what they point at | 164 | 170 | 208k / 210k |
+| trails, walking only within 25 paces | 183 | 174 | 209k / 211k |
+| **trails, not walking to them** | **208** | **235** | **212k / 214k** |
+
+Both blocks say the same thing and they say it twice. Learning where the food
+is helps. *Going there* costs about a fifth of the people alive at the end of
+a year, and shortening the walk does not rescue it - the twenty-five-pace
+version emptied six worlds of sixty-four against two.
+
+Person-days across the year move by about one per cent in every row, which is
+the shape of the thing. A settlement does as well through the year and ends it
+smaller, because somebody who sets off across the map for a bush he remembers
+is not in the camp when the camp needs him. The trails are not at fault and
+neither is remembering; what is at fault is that an errand is priced at the
+work and not at the walk. So the trails learn and nobody walks on them yet,
+and the mechanism that turns them into a journey comes back when an errand can
+weigh its own trip.
+
+That is also the honest reading of the whole memory rewrite: it is a better
+substrate than what it replaced and it is worth about a per cent of the tick,
+but the settlement-level gain in the last row is a gain from *removing* a
+journey, not from adding a memory. What memory buys will not be visible until
+the thing downstream of it can count the cost of acting on it.
 
 ### Learning
 - **Trial & Error**: Random exploration with reinforcement
