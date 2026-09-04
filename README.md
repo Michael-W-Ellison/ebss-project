@@ -2315,9 +2315,50 @@ gone dry brings to mind the drinking that was done at it, and the other places
 that drinking was done at are the ones that come back - not the best place the
 agent knows, which may have nothing to do with the case.
 
-Alongside the trails, agents still keep: places they have been told about,
-storage contents with decay, social relationships, and what they know how to
-make.
+#### The country, which is two different things
+
+Alongside the trails, what an agent knows of the map is split in two -
+`agents::whereabouts`.
+
+**General knowledge** is the impression a place leaves by being lived in. Five
+points a day for looking at an area, no more than once a day however long
+somebody stands there; then a month's grace and five points a month off
+anything nobody goes back to. So twenty days of living somewhere is enough to
+know it thoroughly, twenty months of never returning is enough to lose it, and
+a field crossed once in the spring is a five per cent impression that is gone
+by the summer. An area is thirty-two tiles across, which is not arbitrary: an
+agent sees three tiles in each direction, so about twenty looks covers one, and
+five points a look reaching a hundred in twenty looks is the same number
+arrived at from the other end.
+
+**Important places** are the areas where a need was once answered, and they
+keep for five years. They are areas rather than tiles on purpose - a man
+remembers that there are berries in that valley, not which bush - which is
+both truer and cheaper, because a valley does not go stale when a bush is
+picked.
+
+Alongside both, agents still keep: places they have been told about, storage
+contents with decay, social relationships, and what they know how to make.
+
+What this does *not* yet do is change any decision, and that is worth stating
+plainly rather than leaving to be discovered. The only thing reading the
+general impression is the sweep that decides which ninety-six remembered
+places to keep, and it cannot tell them apart: an agent's remembered places
+are nearly all in country it knows equally well, so the term never reorders
+anything. Measured over two blocks of sixty-four worlds the result is
+byte-identical to the run without it. The consumer that *would* use it is
+heading for an area that once answered a need - and that is the same
+walking-to-remembered-ground that costs a fifth of the settlement, above. So
+this is substrate, like the trails, and it comes alive at the same moment
+they do.
+
+An earlier version did change things, for the wrong reason: it let "somewhere
+that once worked" outrank "somewhere I want something from today" in that
+sweep, which filled heads with old valleys and pushed out the fresh, near,
+well-stocked places a hungry man needs. It cost 39 people in one block of
+sixty-four and nothing in the other. Being important is about *retention*, not
+precedence, and retention was already handled - by keeping the area and the
+need for five years, at no cost to anything else.
 
 ### Worry
 

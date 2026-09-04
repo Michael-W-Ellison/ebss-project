@@ -1380,6 +1380,10 @@ pub struct Agent {
     /// What has answered which need, and where it answered it.
     #[serde(default)]
     pub patterns: super::patterns::Patterns,
+    /// What this one knows of the country: an impression of the areas it has
+    /// been in, and the areas where a need was once answered.
+    #[serde(default)]
+    pub whereabouts: super::whereabouts::Whereabouts,
     pub storage_preferences: super::storage_management::StoragePreferences, // Storage management preferences
     pub parent_ids: Vec<Uuid>,
 
@@ -1506,6 +1510,7 @@ impl Agent {
             food_i_ate: 0,
             food_that_rotted_on_me: 0,
             patterns: super::patterns::Patterns::default(),
+            whereabouts: super::whereabouts::Whereabouts::default(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
             practices: super::practices::Practices::new(),
@@ -3977,6 +3982,12 @@ impl Agent {
         // rather than all of the world it has ever seen.
         self.patterns.fade(current_tick);
 
+        // And the country fades with it, on its own arithmetic: a month's
+        // grace and then five points a month off any area nobody has been
+        // back to. See `agents::whereabouts`.
+        self.whereabouts
+            .forget_what_has_not_been_seen(Self::what_day_it_is(current_tick));
+
         // Check for stale storage knowledge and trigger curiosity
         self.update_storage_curiosity(current_tick);
 
@@ -5906,6 +5917,17 @@ impl Agent {
                 // another rather than merely possible.
                 let efficiency = -*change / turns as f32;
                 self.patterns.it_worked(*need, &elements, efficiency, now);
+
+                // And the area goes down as a place that answers this, which
+                // is the half of it that keeps for years. The trail above is
+                // a tile and a season; this is a valley and a life. See
+                // `agents::whereabouts`.
+                self.whereabouts.it_answered_here(
+                    super::whereabouts::Area::holding(where_it_was),
+                    *need,
+                    &Self::what_was_tried(action),
+                    Self::what_day_it_is(now),
+                );
                 if *need == aimed_at {
                     answered_anything = true;
                 }
@@ -6000,6 +6022,14 @@ impl Agent {
     /// standing is not the same as being friendless, and an agent that treated
     /// them alike would spend its life mending fences nobody had broken.
     pub const THE_MOST_WORRY_CAN_ADD: f32 = 0.25;
+
+    /// Which day of the world's life a tick falls on.
+    ///
+    /// Everything about remembering the country is counted in days, because
+    /// what a day is does not change and what a turn is might.
+    pub fn what_day_it_is(tick: u32) -> u32 {
+        tick / crate::environment::seasons::TICKS_PER_DAY
+    }
 
     /// How many turns went into what was just finished.
     ///
@@ -8936,7 +8966,36 @@ impl Agent {
                     .copied()
                     .unwrap_or(0.0);
 
-                let keeping = wanted * 4.0 + freshness + how_rich + has_paid * 2.0
+                // And how well this one knows the country the place is in,
+                // which is the term that decides whether a head fills up with
+                // the parish or with everywhere anybody ever walked. An area
+                // lived in for three weeks is remembered; one crossed once on
+                // the way somewhere is an impression that will be gone by the
+                // summer, and so are the places in it.
+                let area = super::whereabouts::Area::holding((
+                    where_it_is.x,
+                    where_it_is.y,
+                    0,
+                ));
+                let country = self.whereabouts.how_well_i_know(&area);
+
+                // Important places are deliberately *not* a term here.
+                //
+                // They were, at five points, and it was a mistake worth
+                // writing down: it made "somewhere that once worked" outrank
+                // "somewhere I want something from today", so a head filled
+                // with old valleys and pushed out the fresh, near, well
+                // stocked places a hungry man actually needs. Being important
+                // is about *retention*, not precedence - and retention is
+                // already handled, and handled better, by
+                // `Whereabouts::important`, which keeps the area and the need
+                // for five years at no cost to anything else. Two mechanisms
+                // for one idea, and only one of them was any good.
+                let keeping = wanted * 4.0
+                    + freshness
+                    + how_rich
+                    + has_paid * 2.0
+                    + country * 3.0
                     - if heard_not_seen { 0.5 } else { 0.0 };
                 (*where_it_is, keeping)
             })

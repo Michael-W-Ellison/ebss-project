@@ -5406,6 +5406,51 @@ with the type system rather than by hand.
 
 ## Housekeeping
 
+### 170. A one-minute turn is out of reach, and the reason is the world rather than the people
+
+Measured, on 240x240 with twelve people, in release:
+
+| | microseconds a tick |
+|---|---|
+| the world with nobody in it | 1,641 |
+| the same world with twelve people | 7,237 |
+| so the people | 5,596 (77%) |
+
+At the twelve-turn day that is 0.087 seconds a simulated day and about half a
+minute a simulated year for one world, which is what makes a sixty-four-world
+paired block a forty-minute job and the measurement discipline in this
+repository possible at all.
+
+At one turn a minute it is **10.4 seconds a simulated day and an hour a
+simulated year for one world**. A sixty-four-world block either side of a
+change becomes several days of running. And deciding less often cannot rescue
+it: the world alone, with nobody in it at all, is 2.4 seconds a simulated day
+at that clock, which is fourteen minutes a year a world before a single agent
+thinks about anything.
+
+So a minute turn needs the *world* processes charged by elapsed time, not just
+the decisions - `World::tick` doing sixty minutes' worth of work once an hour
+rather than one minute's worth sixty times. Some of that exists already
+(#252, #253); most of it does not.
+
+**A half-hour turn is reachable and was measured.** Setting `TICKS_PER_DAY` to
+48 compiles and runs; the suite goes from 293 seconds to 1,540, and from 7
+failures to 16. The eleven new ones are all the #206 family - tests that
+encode the turn length rather than the behaviour:
+`a_turn_is_two_hours_of_living` (which says so in its name),
+`an_ordinary_day_burns_about_what_an_ordinary_day_holds`, the four drying
+tests, `a_walk_is_finished_rather_than_re_decided_at_every_step`, and three
+long-run ecology tests that now need four times the ticks to cover the same
+years. All fixable. The standing cost is that every measurement in this
+repository takes four times as long, which is a decision about the project
+rather than about the code.
+
+Not audited yet, and it would have to be before such a change: the hard-coded
+moduli. `current_tick % 50`, `% 100`, `% 20`, `% 10` appear in
+`analytics/turn/` and are not derived from `TICKS_PER_DAY`, so they silently
+mean "every four days" at twelve turns and "every fifty minutes" at
+forty-eight. That is #205, and this is the change that would make it bite.
+
 ### 169. The one store nothing reads, and why capping it cost thirteen times the running time
 
 `ExplorationKnowledge::explored_tiles` is a `BTreeSet<Position>` with no

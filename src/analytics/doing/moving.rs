@@ -375,6 +375,16 @@ impl Simulation {
             }
         }
 
+        // And the area takes an impression. Once a day, however long anybody
+        // stands in it - see `agents::whereabouts`. This is the general half
+        // of the map: what a place leaves behind by being lived in, as
+        // against the places that answered something, which are kept for
+        // years and separately.
+        agent.whereabouts.looked_at(
+            crate::agents::whereabouts::Area::holding(target_pos),
+            crate::agents::Agent::what_day_it_is(self.current_tick),
+        );
+
         // Seeing for yourself.
         //
         // An agent's knowledge of where things are is fed both by

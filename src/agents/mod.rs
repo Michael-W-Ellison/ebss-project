@@ -17,6 +17,7 @@ pub mod pregnancy;
 pub mod childcare;
 pub mod fatigue;
 pub mod practices;
+pub mod whereabouts;
 pub mod wondering;
 pub mod patterns;
 pub mod physiology;
