@@ -5451,6 +5451,67 @@ moduli. `current_tick % 50`, `% 100`, `% 20`, `% 10` appear in
 mean "every four days" at twelve turns and "every fifty minutes" at
 forty-eight. That is #205, and this is the change that would make it bite.
 
+### 171. The half-hour turn, and the five clocks that had to be found first
+
+The turn was two hours - twelve decisions in a waking day, which is not enough
+to live one. It is half an hour now: `TICKS_PER_DAY` is 48.
+
+Changing the constant is one line. What took the work was that the cadence of
+the world was written down in **eight** places and derived from the calendar in
+none of them, so shortening the turn would have quietly moved every one of
+them. Found and fixed in this pass, each one a rate or a trigger that meant
+"about once a day" and would have come to mean "every twenty minutes":
+
+| where | was | now |
+|---|---|---|
+| `World::tick` weather, rot, regeneration triggers | `% 10` | `ONCE_A_DAY` |
+| `rot_what_is_lying_about` | `TICKS_PER_PASS = 10.0` | `ONCE_A_DAY` |
+| `HOW_OFTEN_THE_WEATHER_GETS_AT_IT` | `10` | `ONCE_A_DAY` |
+| grazing cadence *and* what a pass stands for | two separate `10`s | one constant |
+| `ResourceNode` regeneration rates | fitted "per pass, every ten ticks" | scaled by the pass length |
+| plant zone sweep | `60` in `World::tick`, `60` twice more in flora fixtures | `HOW_OFTEN_A_ZONE_COMES_ROUND` |
+| `PreparationState::how_long_it_takes_to_dry` | `72` and `24` ticks | six days and two days |
+| `HOW_LONG_A_THING_LIES_THERE` | `432`, called "a season and a half" | a season and a half |
+
+That last one was already wrong before any of this: 432 ticks *was* a season
+and a half when a season was twenty-four days, and a season became ninety in
+#209 without it following. It had meant thirty-six days for a while, and food,
+which gets a quarter of it, nine. The same shape as
+`patterns::STILL_WORTH_THE_WALK` reading 288 against a comment saying "a
+season". A number that agrees with its own doc comment only on a calendar
+nobody uses any more is the commonest bug in this repository.
+
+Relatedly, four places worked out the clock in the window as `tick / 1440` and
+`(tick % 1440) / 60`, reading a turn as a minute. A turn has never been a
+minute here: the window was showing hour three on the third day of a world a
+fortnight old. There is one `what_the_clock_says` now.
+
+#### What it cost, and what is still open
+
+The suite goes from 293 seconds to about 1,200 - a little over four times, as
+expected, since agents are 77% of a tick and there are four times as many
+turns. Failures went 7 -> 18 at the flip and are 11 after the cadence work: the
+six that were already failing, and five new ones.
+
+Those five are one family and `a_year_is_shorter_than_a_run` names it exactly:
+**a test that runs for N ticks now covers a quarter of the simulated time it
+used to.** A year is 17,280 ticks and the longest run in the suite is 8,000, so
+nothing in here sees a second spring any more. That test is doing its job by
+failing. The five:
+
+- `a_year_is_shorter_than_a_run` - the meta-test, correct to fail
+- `a_settlement_lives_through_a_winter` and `most_of_what_lived_here_still_lives_here`
+  - long runs that no longer reach the season they are about
+- `food_left_lying_goes_into_the_ground` and
+  `what_is_left_out_goes_off_faster_than_what_is_carried` - windows calibrated
+  to the old spoilage rates
+
+The fix for all five is the same and is a sweep of its own: **test run lengths
+are written in ticks and a tick changed meaning.** They want stating in days or
+seasons, like the constants above, and the long ones want four times the ticks
+to cover the ground they did - which is more suite time again. That is #206 one
+level up, and it is the honest remaining cost of the half-hour turn.
+
 ### 169. The one store nothing reads, and why capping it cost thirteen times the running time
 
 `ExplorationKnowledge::explored_tiles` is a `BTreeSet<Position>` with no

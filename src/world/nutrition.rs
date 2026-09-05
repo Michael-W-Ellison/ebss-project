@@ -193,10 +193,22 @@ impl Piece {
     /// which is the whole reason anybody bothers cutting a thing into strips
     /// rather than just quartering it.
     pub fn how_long_it_takes_to_dry(&self) -> u32 {
+        /// Six days for a joint, two for a strip.
+        ///
+        /// These were 72 and 24 as bare tick counts, which said six days and
+        /// two days at a two-hour turn and would have said a day and a half
+        /// and half a day at a half-hour one. The spoilage tables beside them
+        /// were already stated in days and converted - see `days` - and this
+        /// was not. Drying is a thing that takes so many days in the sun; it
+        /// is not a thing that takes so many decisions.
+        const fn days(how_many: u32) -> u32 {
+            how_many * crate::environment::seasons::TICKS_PER_DAY
+        }
+
         match self {
             Self::Whole => u32::MAX,
-            Self::Portion => 72,
-            Self::Strip | Self::Small => 24,
+            Self::Portion => days(6),
+            Self::Strip | Self::Small => days(2),
         }
     }
 }

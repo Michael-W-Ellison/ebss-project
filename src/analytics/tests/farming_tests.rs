@@ -147,7 +147,7 @@ fn a_worked_field_carries_a_crop_and_a_neglected_one_does_not() {
                 soil.somebody_worked_this_field();
             }
 
-            field.regenerate_in_ground(20.0, 0.6, 1.0, true, &mut soil);
+            field.regenerate_in_ground(20.0, 0.6, 1.0, true, &mut soil, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
         }
 
         field.amount

@@ -29,7 +29,7 @@ pub const MINUTES_PER_DAY: u32 = 1440;
 ///
 /// Derived, so that making the decision loop finer makes the body's steps
 /// smaller rather than making the body wrong.
-pub const MINUTES_PER_TURN: u32 = MINUTES_PER_DAY / crate::environment::seasons::TICKS_PER_DAY;
+pub use crate::environment::seasons::MINUTES_PER_TURN;
 
 /// Three days without water and an adult is dead.
 pub const MINUTES_TO_DIE_OF_THIRST: u32 = 3 * MINUTES_PER_DAY;

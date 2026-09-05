@@ -459,7 +459,7 @@ original specifications.
 
   Why nobody can starve: the thresholds were never rebased when the calendar
   was. `ticks_without_food > 1440` is commented "a day" and would be, at a tick
-  of a minute — but `TICKS_PER_DAY` is **12**, so it is 120 days, and the death
+  of a minute — but `TICKS_PER_DAY` is **48**, so it is 30 days, and the death
   threshold is over two years. **Not one of those branches has ever fired.**
   ISSUES #24 again, in the survival clock this time. Filed as #203 rather than
   fixed, because making starvation possible for the first time is a balance
@@ -1984,7 +1984,7 @@ original specifications.
 - ✅ Family: parents keep their children close and go to one that has strayed or
   that something is stalking; children learn skills by watching the adults
   around them, and most from their own parents
-- ✅ A calendar that turns: a tick is two hours, a day twelve ticks, a season
+- ✅ A calendar that turns: a tick is half an hour, a day forty-eight ticks, a season
   twenty-four days and a year 1,152 ticks. A world opens in spring, an
   eight-thousand-tick run covers seven years and all four seasons, and a life
   spans eight or nine of them. Every run before this ended on Year 0, Day 4,

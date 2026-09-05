@@ -739,7 +739,16 @@ impl World {
     /// A season and a half for anything: long enough that somebody walking the
     /// same country again finds it, short enough that a world does not silt up
     /// with everything anybody ever put down.
-    pub const HOW_LONG_A_THING_LIES_THERE: u32 = 432;
+    ///
+    /// This read 432, which *was* a season and a half - back when a season was
+    /// twenty-four days. A season became ninety days and this did not follow,
+    /// so it had quietly meant thirty-six days for a while, and food, which
+    /// gets a quarter of it, nine. Derived from the season now, so the comment
+    /// and the number cannot part company again. The same shape as
+    /// `patterns::STILL_WORTH_THE_WALK`, which read 288 against a comment
+    /// saying "a season".
+    pub const HOW_LONG_A_THING_LIES_THERE: u32 =
+        crate::environment::seasons::DAYS_PER_SEASON * 3 / 2 * crate::environment::seasons::TICKS_PER_DAY;
 
     /// What the weather does to what is lying about.
     ///
@@ -834,11 +843,16 @@ impl World {
     /// Superseded by `nutrition::Piece::how_long_it_takes_to_dry`, which asks
     /// the question this constant could not: how big is the piece.
     #[allow(dead_code)]
-    const HOW_LONG_DRYING_TAKES: u32 = 24;
+    const HOW_LONG_DRYING_TAKES: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
 
     /// How often the weathering pass runs, which is what the extra ageing is
     /// reckoned against.
-    const HOW_OFTEN_THE_WEATHER_GETS_AT_IT: u32 = 10;
+    ///
+    /// The fourth spelling of one cadence, and the plainest: it sat next to a
+    /// `% 10` in the same file that it had to agree with, and said so in its
+    /// own doc comment. Derived now, so the ageing and the running of it
+    /// cannot drift apart.
+    const HOW_OFTEN_THE_WEATHER_GETS_AT_IT: u32 = crate::environment::seasons::ONCE_A_DAY;
 
     /// What share of what a plant is carrying comes off it each pass, once
     /// the season it bears in has passed.
@@ -2254,7 +2268,7 @@ impl World {
         self.heat_sources.tick_all();
 
         // And the weather gets at whatever is lying about
-        if self.tick % 10 == 0 {
+        if self.tick % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.what_is_lying_about_weathers();
         }
 
@@ -2265,7 +2279,16 @@ impl World {
         // ground and put back onto it. Grazing runs on the vegetation's own
         // ten-tick cadence - see `AnimalManager::tick_in_world` - so a
         // grazing pass stands for ten ticks of feeding.
-        let grazing_ticks = if self.tick % 10 == 0 { 10.0 } else { 0.0 };
+        // The cadence and the amount are one number. A pass stands for
+        // exactly as long as it is since the last pass, and reading that off
+        // two separate literals is how a herd ends up eating a tenth or ten
+        // times what it should the moment the turn length changes.
+        let how_often_the_ground_is_grazed = crate::environment::seasons::ONCE_A_DAY;
+        let grazing_ticks = if self.tick % how_often_the_ground_is_grazed == 0 {
+            how_often_the_ground_is_grazed as f32
+        } else {
+            0.0
+        };
         let weather = crate::environment::GrazingWeather {
             precipitation: self.climate.weather.wetness_per_tick() * 100.0,
             now: self.tick,
@@ -2309,7 +2332,10 @@ impl World {
         // of it - see `PlantManager::catch_up_one` - because a grazed plant
         // would otherwise lose condition a hundred and forty-four times for
         // every time it gained any.
-        const HOW_OFTEN_A_ZONE_COMES_ROUND: u32 = 60;
+        // The one spelling, and it lives with the plants because the plants
+        // are what it is about - see `PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND`.
+        use crate::environment::flora::PlantManager;
+        const HOW_OFTEN_A_ZONE_COMES_ROUND: u32 = PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND;
 
         if self.tick % HOW_OFTEN_A_ZONE_COMES_ROUND == 0 {
             let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
@@ -2322,7 +2348,7 @@ impl World {
         }
 
         // Regenerate resources based on climate conditions (every 10 ticks to reduce overhead)
-        if self.tick % 10 == 0 {
+        if self.tick % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.rot_what_is_lying_about();
             self.regenerate_resources();
         }
@@ -2355,8 +2381,12 @@ impl World {
         // Rain reaches everywhere; the ground decides what it does with it
         let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
 
-        // One pass every ten ticks, so each pass stands for ten ticks of rot
-        const TICKS_PER_PASS: f32 = 10.0;
+        // A pass stands for however long it has been since the last one, which
+        // is one number and not two. This read ten while the trigger in
+        // `World::tick` read ten separately, in another function - two
+        // spellings of one cadence, and shortening the turn would have moved
+        // one and not the other.
+        const TICKS_PER_PASS: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
 
         // Every tile in the world, because every tile in the world has litter
         // on it - `Soil::for_terrain` gives a forest floor 1.5 and a desert
@@ -2459,12 +2489,17 @@ impl World {
                 continue;
             }
 
+            // A pass stands for exactly the ground it covers: however long it
+            // has been since the last one. The rates inside are per-pass
+            // numbers fitted when a pass was ten ticks, and they are read
+            // against that - see `ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO`.
             let _regen_amount = resource.regenerate_in_ground(
                 temperature,
                 ground_water,
                 season_modifier,
                 cultivated,
                 soil,
+                crate::environment::seasons::ONCE_A_DAY as f32,
             );
 
             // And how good a year it is, which only the mast asks. A wood

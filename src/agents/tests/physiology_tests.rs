@@ -24,14 +24,15 @@ fn eat_a_sitting_of_ordinary_food(body: &mut Physiology) {
 }
 
 #[test]
-fn a_turn_is_two_hours_of_living() {
+fn a_turn_is_half_an_hour_of_living() {
     assert_eq!(MINUTES_PER_DAY, 1440);
     assert_eq!(
         MINUTES_PER_TURN,
         MINUTES_PER_DAY / crate::environment::seasons::TICKS_PER_DAY
     );
-    // Twelve turns to the day, so two hours to the turn
-    assert_eq!(MINUTES_PER_TURN, 120);
+    // Forty-eight turns to the day, so half an hour to the turn. It was two
+    // hours, and twelve decisions in a day is not enough to live one.
+    assert_eq!(MINUTES_PER_TURN, 30);
 }
 
 #[test]
@@ -278,7 +279,7 @@ fn work_costs_more_than_rest() {
 fn an_ordinary_day_burns_about_what_an_ordinary_day_holds() {
     let mut body = Physiology::new();
     let started = body.reserve;
-    for _ in 0..12 {
+    for _ in 0..crate::environment::seasons::TICKS_PER_DAY {
         body.advance(MINUTES_PER_TURN, 5.0);
     }
     let burned = started - body.reserve;

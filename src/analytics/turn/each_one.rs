@@ -126,7 +126,7 @@ impl Simulation {
         let agent_id = self.population.agents[agent_index].id;
 
         // Generate goals periodically based on drives and emotions
-        if self.current_tick % 50 == 0 {
+        if self.current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
             let agent = &mut self.population.agents[agent_index];
 
             // Collect current drive types and emotion values
@@ -648,7 +648,9 @@ impl Simulation {
 
         // Try to create a plan for goals if agent doesn't have one
         // Only do this periodically to avoid constant replanning
-        if !agent.has_active_plan() && self.current_tick % 50 == 0 {
+        if !agent.has_active_plan()
+            && self.current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0
+        {
             // Use a default resource/return location (should be enhanced with real world data)
             let resource_loc = (50, 50, 0);
             let return_loc = (0, 0, 0);
@@ -704,7 +706,7 @@ impl Simulation {
         }
 
         // Cleanup completed goals periodically
-        if self.current_tick % 100 == 0 {
+        if self.current_tick % crate::environment::seasons::ONCE_A_WEEK == 0 {
             let agent = &mut self.population.agents[agent_index];
             agent.goals.cleanup_completed();
         }
@@ -719,7 +721,7 @@ impl Simulation {
 
         // Check if agent should interact with storehouse (every 20 ticks, or when Preparedness is high)
         // This happens independently of drive-based actions to enable cooperative resource sharing
-        if self.current_tick % 20 == 0 || {
+        if self.current_tick % crate::environment::seasons::ONCE_EVERY_OTHER_DAY == 0 || {
             let agent = &self.population.agents[agent_index];
             agent.drives.get(DriveType::Preparedness)
                 .map(|d| d.value > 0.6)

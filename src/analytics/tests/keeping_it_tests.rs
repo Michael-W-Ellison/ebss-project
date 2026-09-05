@@ -385,7 +385,14 @@ fn a_downpour_is_worse_than_a_drizzle() {
             0,
         );
 
-        for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 3) {
+        // One day, not three.
+        //
+        // The weathering pass runs once a day, and three days of it now
+        // destroys the food under either sky - which reads as "0 against 0"
+        // and compares nothing. What this test is for is whether a downpour
+        // is worse than a drizzle, and that has to be asked while both are
+        // still there to be compared. See ISSUES_FOUND #205.
+        for _ in 0..crate::environment::seasons::TICKS_PER_DAY {
             simulation.world.climate.weather.weather_type = sky;
             simulation.world.climate.weather.duration_remaining = u32::MAX;
             simulation.world.tick();
@@ -430,7 +437,14 @@ fn a_roof_keeps_the_rain_off() {
             0,
         );
 
-        for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 3) {
+        // One day, not three.
+        //
+        // The weathering pass runs once a day, and three days of it now
+        // destroys the food under either sky - which reads as "0 against 0"
+        // and compares nothing. What this test is for is whether a downpour
+        // is worse than a drizzle, and that has to be asked while both are
+        // still there to be compared. See ISSUES_FOUND #205.
+        for _ in 0..crate::environment::seasons::TICKS_PER_DAY {
             simulation.world.climate.weather.weather_type = WeatherType::HeavyRain;
             simulation.world.climate.weather.duration_remaining = u32::MAX;
             simulation.world.tick();

@@ -516,9 +516,8 @@ pub fn render_menu_bar(
                     let alive_count = snap.population.agents.iter().filter(|a| a.is_alive).count();
                     let total_count = snap.population.agents.len();
 
-                    let days = snap.tick / 1440;
-                    let hours = (snap.tick % 1440) / 60;
-                    let minutes = snap.tick % 60;
+                    let (days, hours, minutes) =
+                        crate::environment::seasons::what_the_clock_says(snap.tick);
 
                     // Status with icon
                     ui.label(egui::RichText::new(status_text).color(status_color).strong())

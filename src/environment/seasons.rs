@@ -61,16 +61,72 @@ pub const MINUTES_IN_A_WHOLE_LIFE: u32 = MINUTES_PER_YEAR * YEARS_BEFORE_OLD_AGE
 /// is stated in minutes because that is what a body runs on; this is how
 /// often anybody in it stops to think.
 ///
-/// Twelve, so a turn is two hours. Every clock that matters is derived from
-/// the minute figures rather than from this, so making it finer makes the
-/// decision loop denser without making any of the physiology wrong - see
-/// `agents::physiology::MINUTES_PER_TURN`. At one, a turn is a minute and a
-/// seventy-year life is thirty-six million of them, which is the calendar as
-/// specified and is not a thing anybody can run.
-pub const TICKS_PER_DAY: u32 = 12;
+/// Forty-eight, so a turn is half an hour.
+///
+/// It was twelve - a two-hour turn - and twelve decisions in a waking day is
+/// not enough to live one. Every clock that matters is derived from the minute
+/// figures rather than from this, so making it finer makes the decision loop
+/// denser without making any of the physiology wrong; what it does *not*
+/// automatically do is carry the world's cadences with it, and that is what
+/// `ONCE_A_DAY` and its neighbours below are for.
+///
+/// One a minute is the calendar as specified and is still out of reach, and
+/// the reason is the world rather than the people: an empty world costs about
+/// 1.6 milliseconds a tick, so at a minute turn the ground and the weather
+/// alone come to fourteen minutes of running per simulated year per world,
+/// before a single agent thinks about anything. Deciding less often cannot
+/// rescue that; charging `World::tick` by elapsed time might. Measured in
+/// ISSUES_FOUND #170.
+pub const TICKS_PER_DAY: u32 = 48;
 
 /// How many turns a year lasts.
 pub const TICKS_PER_YEAR: u32 = TICKS_PER_DAY * DAYS_PER_YEAR;
+
+/// How often the world's slower business is attended to.
+///
+/// These were written as bare tick counts - 10, 20, 50 and 100 - chosen for
+/// overhead at a time when a turn was two hours, so they meant "about a day",
+/// "about two days", "about four days" and "about a week". As tick counts they
+/// would have gone on meaning ten, twenty, fifty and a hundred *turns* the
+/// moment a turn got shorter, which at half an hour is twenty minutes, forty
+/// minutes, an hour and two hours: relationships decaying every couple of
+/// hours, technology discovered before breakfast. That is the whole of
+/// ISSUES_FOUND #205, and this is the fix - a cadence stated in days means the
+/// same thing at any turn length, and there is one place to read it off.
+///
+/// At the twelve-turn day these come to 12, 24, 48 and 84 against the 10, 20,
+/// 50 and 100 they replace, so nothing much moves by the renaming itself.
+pub const ONCE_A_DAY: u32 = TICKS_PER_DAY;
+pub const ONCE_EVERY_OTHER_DAY: u32 = TICKS_PER_DAY * 2;
+pub const ONCE_EVERY_FEW_DAYS: u32 = TICKS_PER_DAY * 4;
+pub const ONCE_A_WEEK: u32 = TICKS_PER_DAY * DAYS_IN_A_SHORT_WEEK;
+
+/// What time of day it is, as a day number and a clock reading.
+///
+/// Four places worked this out for themselves as `tick / 1440` and
+/// `(tick % 1440) / 60`, which reads a turn as a minute. A turn has never been
+/// a minute in this model: it was two hours, and the clock in the window was
+/// therefore showing hour three on the third day of a world that was a
+/// fortnight old. Derived here so that it is right, and right at any turn
+/// length.
+pub fn what_the_clock_says(tick: u32) -> (u32, u32, u32) {
+    let minutes_into_the_day = (tick % TICKS_PER_DAY) * MINUTES_PER_TURN;
+    (
+        tick / TICKS_PER_DAY,
+        minutes_into_the_day / MINUTES_PER_HOUR,
+        minutes_into_the_day % MINUTES_PER_HOUR,
+    )
+}
+
+/// How many minutes one turn of thinking covers.
+///
+/// The one spelling. `agents::physiology::MINUTES_PER_TURN` derives from the
+/// same place; this is here because the clock in the window needs it too and
+/// should not be reaching into the physiology to get it.
+pub const MINUTES_PER_TURN: u32 = MINUTES_PER_DAY / TICKS_PER_DAY;
+
+/// Minutes in an hour, so nobody writes 60 twice.
+pub const MINUTES_PER_HOUR: u32 = 60;
 
 /// Where in a season a day falls: the first fortnight, the long middle, or
 /// the last fortnight.

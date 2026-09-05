@@ -2174,6 +2174,20 @@ impl PlantManager {
     /// How many zones the map is cut into for growing.
     pub const HOW_MANY_ZONES: usize = 24;
 
+    /// How often one zone's turn comes round.
+    ///
+    /// Five days, so the whole map is grown through every hundred and twenty.
+    /// It was a bare `60` in `World::tick` and a bare `60` again in two test
+    /// fixtures here that drive the same sweep - and *those two numbers have
+    /// to agree*, because they each work out which zone it is by dividing the
+    /// tick by their own copy. Disagree and the wrong quarter of the country
+    /// grows. Stated in days it stays five days at any turn length; stated in
+    /// ticks it would have been a day and a quarter the moment the turn got
+    /// shorter, and the whole map would have been grown four times over in a
+    /// season. See ISSUES_FOUND #205.
+    pub const HOW_OFTEN_A_ZONE_COMES_ROUND: u32 =
+        crate::environment::seasons::TICKS_PER_DAY * 5;
+
     /// Grow one zone of what is standing, on what the ground and sky give it.
     ///
     /// This is where the vegetation and the soil meet. Each plant takes its
@@ -3199,8 +3213,11 @@ fn a_plant_that_has_had_its_years_goes_over() {
 
     // A grass lives two years. Three of them is well past it. Every zone in
     // its turn, because the plant is only looked at when its own comes round.
-    for tick in (0..(3 * TICKS_PER_YEAR)).step_by(60) {
-        let zone = (tick / 60) as usize % PlantManager::HOW_MANY_ZONES;
+    for tick in (0..(3 * TICKS_PER_YEAR))
+        .step_by(PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND as usize)
+    {
+        let zone = (tick / PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
+            % PlantManager::HOW_MANY_ZONES;
         plants.grow_a_zone(&mut grid, 40.0, tick, Season::Summer, zone);
     }
 
@@ -3248,8 +3265,9 @@ fn seed_on_the_wrong_ground_rots_instead_of_waiting_for_ever() {
 
     // Long enough for seed to have fallen and for the first of it to be gone.
     let ticks = cactus.seed_keeps_for_ticks() * 3;
-    for tick in (0..ticks).step_by(60) {
-        let zone = (tick / 60) as usize % PlantManager::HOW_MANY_ZONES;
+    for tick in (0..ticks).step_by(PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND as usize) {
+        let zone = (tick / PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
+            % PlantManager::HOW_MANY_ZONES;
         plants.grow_a_zone(&mut grid, 40.0, tick, Season::Summer, zone);
     }
 

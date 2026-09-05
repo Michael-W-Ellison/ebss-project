@@ -244,7 +244,7 @@ fn a_patch_grows_as_well_as_the_ground_it_stands_in() {
         for _ in 0..200 {
             // Keep the ground as it was: this is about the rate, not depletion
             soil.nutrients = fertility;
-            patch.regenerate_in_ground(20.0, 0.6, 1.0, cultivated, &mut soil);
+            patch.regenerate_in_ground(20.0, 0.6, 1.0, cultivated, &mut soil, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
         }
 
         patch.amount
@@ -278,7 +278,7 @@ fn a_crop_draws_the_ground_down() {
     patch.amount = 0;
 
     for _ in 0..400 {
-        patch.regenerate_in_ground(20.0, 0.6, 1.0, true, &mut soil);
+        patch.regenerate_in_ground(20.0, 0.6, 1.0, true, &mut soil, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
     }
 
     assert!(patch.amount > 0, "something should have grown");

@@ -1308,6 +1308,7 @@ impl ResourceNode {
             season_modifier,
             cultivated,
             &mut nowhere,
+            Self::WHAT_THESE_RATES_WERE_FITTED_TO,
         )
     }
 
@@ -1325,6 +1326,7 @@ impl ResourceNode {
         season_modifier: f32,
         cultivated: bool,
         soil: &mut Soil,
+        ticks_this_pass_stands_for: f32,
     ) -> u32 {
         self.regenerate_in_ground(
             temperature,
@@ -1332,6 +1334,7 @@ impl ResourceNode {
             season_modifier,
             cultivated,
             soil,
+            ticks_this_pass_stands_for,
         )
     }
 
@@ -1342,6 +1345,19 @@ impl ResourceNode {
     /// hour's rainfall in here meant every plant in the world was in drought on
     /// any day it was not actively raining, which cut growth to a fifth
     /// wherever a marsh and a dune were treated alike.
+    /// The cadence these rates were fitted against: one pass every ten world
+    /// ticks, when a turn was two hours and `World::tick` said `% 10`.
+    ///
+    /// The rates in `how_fast_it_comes_back` and `water_inflow` are
+    /// hand-fitted numbers *per pass*, and how long a pass stood for lived as
+    /// a literal in another file. Three spellings of one cadence, in three
+    /// modules, and none of them derived from the calendar: shorten the turn
+    /// and wild food quietly comes back at a fraction of the rate it was
+    /// balanced at, with nothing to say so. This is what lets the pass be
+    /// scheduled on the calendar while the rates stay the ones that were
+    /// measured. See ISSUES_FOUND #205.
+    pub const WHAT_THESE_RATES_WERE_FITTED_TO: f32 = 10.0;
+
     pub fn regenerate_in_ground(
         &mut self,
         temperature: f32,
@@ -1349,6 +1365,7 @@ impl ResourceNode {
         season_modifier: f32,
         cultivated: bool,
         soil: &mut Soil,
+        ticks_this_pass_stands_for: f32,
     ) -> u32 {
         if self.amount >= self.how_heavy_a_crop_it_carries(soil.fertility(), cultivated) {
             return 0; // As heavy a crop as this ground will carry
@@ -1485,7 +1502,10 @@ impl ResourceNode {
 
 
         // Calculate total regeneration
-        let regen_amount = base_rate
+        let how_long_a_pass_is_now =
+            ticks_this_pass_stands_for / Self::WHAT_THESE_RATES_WERE_FITTED_TO;
+        let regen_amount = how_long_a_pass_is_now
+            * base_rate
             * temp_modifier
             * precip_modifier
             * season_modifier

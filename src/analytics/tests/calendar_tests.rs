@@ -198,6 +198,7 @@ fn the_ground_gives_more_in_summer() {
                 season.plant_growth_modifier(),
                 false,
                 &mut soil,
+                crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO,
             );
         }
 

@@ -396,18 +396,18 @@ impl Population {
         self.let_grudges_tell_on_the_bond();
 
         // Decay distant relationships (every 100 ticks to reduce overhead)
-        if current_tick % 100 == 0 {
+        if current_tick % crate::environment::seasons::ONCE_A_WEEK == 0 {
             self.decay_relationships();
         }
 
         // Process social interactions (every 10 ticks to reduce overhead)
-        if current_tick % 10 == 0 {
+        if current_tick % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.process_social_interactions();
         }
 
         // Process trait-based proximity effects (every 10 ticks)
         // Handles: Romantic partner happiness, Mediator calming, Intolerant stranger penalty
-        if current_tick % 10 == 0 {
+        if current_tick % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.process_trait_proximity_effects();
         }
 
@@ -420,7 +420,7 @@ impl Population {
         self.update_who_can_see_whom();
 
         // Process observational learning (every 20 ticks to reduce overhead)
-        if current_tick % 20 == 0 {
+        if current_tick % crate::environment::seasons::ONCE_EVERY_OTHER_DAY == 0 {
             self.process_observational_learning();
         }
 
@@ -442,7 +442,7 @@ impl Population {
         self.share_technologies();
 
         // Attempt technology discovery (every 50 ticks to reduce overhead)
-        if current_tick % 50 == 0 {
+        if current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
             self.discover_technologies();
         }
 
