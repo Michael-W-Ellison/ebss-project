@@ -97,7 +97,7 @@ fn main() {
         println!("  Movement modifier: {:.0}%", weather_type.movement_modifier() * 100.0);
         println!("  Temperature change: {:+.1}°C", weather_type.temperature_modifier());
         println!("  Precipitation: {:.2}", weather_type.precipitation_intensity());
-        println!("  Exposure damage: {:.3}/tick", weather_type.exposure_damage_per_tick());
+        println!("  Exposure damage: {:.3}/day", weather_type.exposure_damage_in_a_day());
     }
     println!();
 

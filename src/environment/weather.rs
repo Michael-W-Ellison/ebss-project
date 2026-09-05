@@ -145,8 +145,19 @@ impl WeatherType {
         )
     }
 
-    /// Get exposure damage per tick (0.0 to 1.0)
-    pub fn exposure_damage_per_tick(&self) -> f32 {
+    /// What a day of standing out in this weather does to a body.
+    ///
+    /// Per day, like everything in `environment::exposure` - see
+    /// `ExposureStatus::THE_TURN_THESE_WERE_WRITTEN_FOR` for why the figures
+    /// below are the old per-turn literals times twelve, and what leaving
+    /// them per-turn cost when the turn got shorter.
+    pub fn exposure_damage_in_a_day(&self) -> f32 {
+        self.exposure_damage_per_turn_as_written()
+            * crate::environment::exposure::ExposureStatus::THE_TURN_THESE_WERE_WRITTEN_FOR
+    }
+
+    /// The literals as they were written, per turn of an unnamed length.
+    fn exposure_damage_per_turn_as_written(&self) -> f32 {
         match self {
             WeatherType::Thunderstorm => 0.02,
             WeatherType::Blizzard => 0.05,
@@ -218,8 +229,10 @@ impl Weather {
         self.duration_remaining == 0
     }
 
-    /// Get wetness accumulation per tick (for agents/items)
-    pub fn wetness_per_tick(&self) -> f32 {
+    /// How wet a day of standing out in this leaves you, as a share of soaked.
+    ///
+    /// Per day; see `exposure_damage_in_a_day` above.
+    pub fn how_wet_it_gets_you_in_a_day(&self) -> f32 {
         self.weather_type.precipitation_intensity() * 0.01
     }
 
@@ -504,8 +517,8 @@ mod tests {
 
     #[test]
     fn test_exposure_damage() {
-        assert!(WeatherType::Blizzard.exposure_damage_per_tick() > 0.0);
-        assert!(WeatherType::Clear.exposure_damage_per_tick() == 0.0);
+        assert!(WeatherType::Blizzard.exposure_damage_in_a_day() > 0.0);
+        assert!(WeatherType::Clear.exposure_damage_in_a_day() == 0.0);
     }
 
     #[test]
@@ -573,8 +586,8 @@ mod tests {
         assert_eq!(WeatherType::Sleet.precipitation_type(), PrecipitationType::Sleet);
         assert_eq!(WeatherType::Hail.precipitation_type(), PrecipitationType::Hail);
         assert!(WeatherType::Hail.is_dangerous());
-        assert!(WeatherType::Sleet.exposure_damage_per_tick() > 0.0);
-        assert!(WeatherType::Hail.exposure_damage_per_tick() > WeatherType::Sleet.exposure_damage_per_tick());
+        assert!(WeatherType::Sleet.exposure_damage_in_a_day() > 0.0);
+        assert!(WeatherType::Hail.exposure_damage_in_a_day() > WeatherType::Sleet.exposure_damage_in_a_day());
     }
 
     #[test]
@@ -589,7 +602,7 @@ mod tests {
         assert!(WeatherType::Sandstorm.is_dangerous());
         assert!(WeatherType::Sandstorm.visibility_reduction() > 0.7);
         assert!(WeatherType::Sandstorm.temperature_modifier() > 0.0); // Hot wind
-        assert!(WeatherType::Sandstorm.exposure_damage_per_tick() > 0.0);
+        assert!(WeatherType::Sandstorm.exposure_damage_in_a_day() > 0.0);
     }
 
     #[test]
@@ -654,7 +667,7 @@ mod tests {
         let rain = Weather::new(WeatherType::HeavyRain);
         let clear = Weather::clear();
 
-        assert!(rain.wetness_per_tick() > 0.0);
-        assert_eq!(clear.wetness_per_tick(), 0.0);
+        assert!(rain.how_wet_it_gets_you_in_a_day() > 0.0);
+        assert_eq!(clear.how_wet_it_gets_you_in_a_day(), 0.0);
     }
 }

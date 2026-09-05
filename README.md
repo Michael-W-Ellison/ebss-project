@@ -2458,6 +2458,28 @@ but the settlement-level gain in the last row is a gain from *removing* a
 journey, not from adding a memory. What memory buys will not be visible until
 the thing downstream of it can count the cost of acting on it.
 
+### Cold, and what a rate means
+
+Every rate in `environment/exposure.rs` was a bare number applied once a turn:
+hypothermia at 0.02, sunburn accruing at 0.01, damage shed at 0.05 under
+cover. Per what? The file was written nine months before this model had a
+calendar, so the honest answer was: per call, and nothing more. When the turn
+went from two hours to half an hour, every one of them became four times what
+it had been in a day without anybody touching a number, and the share of
+deaths booked to the weather went from **3.2% to 25%**.
+
+They name a day now, and one function divides by `TICKS_PER_DAY`. The figures
+are the old ones times twelve - the turn the balance was last measured at,
+which is a calibration and is labelled as one rather than passed off as a
+design. Two guard tests tick a body through a whole simulated day of blizzard
+and of wind and check the total comes to the day's figure, so the next change
+to the turn leaves the weather alone.
+
+Over sixty-four seeded worlds it is worth **+3.1% person-days**, and it cuts
+the weather from a quarter of all deaths to a sixth. It is a correction rather
+than a cure: sixty-one settlements in sixty-four still die in their first
+winter, of hunger, and that is a larger problem than the weather ever was.
+
 ### The turn, and the minute
 
 A turn is half an hour. That is `TICKS_PER_DAY = 48`, and it is the grain at

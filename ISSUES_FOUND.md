@@ -7506,6 +7506,125 @@ supply and wants measuring on its own.
 
 ---
 
+### 172. Every rate in the exposure file was per call, and the file predates the calendar
+
+The half-hour turn (#171) swept eight clocks in the world processes and missed
+`environment/exposure.rs` entirely, because that file is not a world process
+and nobody had reason to open it. Every rate in it was a bare literal applied
+once per call to `update_agent_exposure`, which runs once a tick:
+
+```rust
+ExposureType::Hypothermia => 0.02,      // per what?
+const SHELTERED_RECOVERY: f32 = 0.05;   // per what?
+self.sun_exposure += 0.01;              // per what?
+damage_this_tick += weather.weather_type.exposure_damage_per_tick();
+```
+
+**Per what, is the question, and the answer was nothing at all.** The file was
+written in November 2025. `TICKS_PER_DAY` was introduced in August 2026, nine
+months later. These rates never named a length of time because at the time they
+were written there was none to name - so when the turn went from two hours to
+half an hour, every one of them quietly became four times what it had been in a
+day, and the damage feeds `lose_health(damage * 10.0)`.
+
+#### What it was worth
+
+Measured across the clock change, eight worlds a side, the model's own
+cause-of-death tally:
+
+| cause | two-hour turn | half-hour turn |
+|---|---|---|
+| hunger + starvation | 36.9% | 47.3% |
+| dehydration + thirst | 54.7% | 17.3% |
+| **the weather** | **3.2%** | **19.4%** |
+
+Standing out in a blizzard, hypothermic and in the wind, came to 0.11 a tick -
+1.1 health - which at forty-eight ticks to the day is **fifty-three health a
+day, so two days of it kills a grown man**. At twelve ticks to the day the same
+literals were thirteen a day, and a week of it.
+
+#### The fix
+
+Every rate in the file now names a day, and one function divides by
+`TICKS_PER_DAY`. The figures are the old literals times twelve, which is the
+turn the model's balance was last measured at - `THE_TURN_THESE_WERE_WRITTEN_FOR`
+says so and says why that is a calibration rather than a design. Two guard
+tests tick a body through a whole simulated day of blizzard and of wind and
+assert the total comes to the per-day figure, so this cannot drift again when
+the turn next changes.
+
+`Weather::wetness_per_tick` turned out to have four callers in `world/mod.rs`
+that multiplied it by a hundred - exactly undoing its `* 0.01` - to read
+precipitation intensity through a wetness function. They ask
+`precipitation_intensity()` directly now.
+
+`test_sunburn_accumulation` looped "100 ticks", which was eight days at the old
+turn and two at the new one; it says five days now. That is #171's family again.
+
+#### What it bought
+
+Sixty-four seeded worlds, two years, twelve founders, paired before and after:
+
+| seeds | before | after |
+|---|---:|---:|
+| 0-31 | 94,914 person-days | 97,521 (+2.7%) |
+| 32-63 | 88,238 | 91,382 (+3.6%) |
+| **total** | **183,152** | **188,903 (+3.1%)** |
+
+Deaths booked to the weather fall from **25.4% to 15.7%** of all deaths - down
+by more than a third - and the people who used to freeze now live long enough
+to starve, so starvation rises to take up the slack. Settlements out of their
+first winter: **1 of 64 to 3 of 64**.
+
+**It is a correction, not a cure.** The first winter still empties sixty-one
+settlements in sixty-four, and the next entry is about why.
+
+### 173. Every settlement dies in its first winter, and it is not the pack
+
+"Get the agents to the point where they can survive sustainably" starts from a
+measurement, and the measurement is stark. Thirty-two seeded worlds, twelve
+founders, two years: **every settlement is emptied, and the days they empty on
+are 309 to 356** - a forty-seven-day window at the end of the first winter,
+with the population holding near ten through month nine and reaching zero by
+month twelve. It is a cliff, not a decline.
+
+Two hypotheses were tested and both are refuted. They are recorded because the
+next person will have them too.
+
+**The pack is full of rocks.** It is, and it does not matter. Sampled through
+the year, packs run at 97-110% of capacity all year round, and on the day
+winter opens a person carries, of a 17.2-unit pack: wood 4.3, iron 2.8, stone
+2.4, handaxe 1.9 - and **0.3 items of food**. 594,825 gathered items go back
+on the bush against 25,880 kept, for want of room. That reads like the whole
+story and is not: #119 already swept carrying capacity over three blocks of
+thirty-two worlds and found it **flat from six to twelve and a fifth worse at
+a hundred and twenty**. Capacity is a licence for other work, and the other
+work is what kills them.
+
+**The sufficiency thresholds are unreachable.** `ENOUGH_MATERIALS = 30.0`
+counts items in a pack that holds about thirteen items of material by weight,
+so Industry can never come down; `ENOUGH_FOOD = 20.0` is a day and a half
+against the project's own derived figure of ~860
+(`provision::what_one_mouth_this_age_wants_put_by`). Both are real defects of
+the kind this document is full of - one question answered twice, in a currency
+that does not match what holds it. **Neither is the cause.** Swept over eight
+worlds at `ENOUGH_MATERIALS` of 30, 8 and 4: 8 of 8 emptied in every arm, on
+days 311-358 in every arm, with the same causes. (Preparedness turns out not
+to read its threshold at all - `situation.rs` overwrites its value each pass
+with the derived larder reckoning - so only Sustenance and Industry ever see
+the number.)
+
+**Where it points.** #168 measured the constraint and it still stands: a
+settlement's annual surplus is **under one per cent of what it consumes**, so
+there is nothing to bank however good the larder is. #119 and #120 between them
+have ruled out the pack, the kit, the counters, the verb, and the walk to a
+remembered source, and both point at the same place: *a settlement lives or
+dies on whether the ground its people are standing on bears anything.* That is
+where the next attempt should start, and it should start by measuring what is
+within reach of somebody at the moment they starve.
+
+---
+
 ### 121. Three spellings of "armed", and a planner that looks one job ahead
 
 "The planner should attempt to anticipate drive demand increase so that

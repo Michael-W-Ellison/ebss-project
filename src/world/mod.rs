@@ -1629,7 +1629,7 @@ impl World {
     /// founders could drink one dry in the first morning of the world - which
     /// is the whole failure this is meant to prevent, arriving ten ticks early.
     fn prime_the_springs(&mut self) {
-        let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+        let precipitation = self.climate.weather.weather_type.precipitation_intensity();
 
         for resource in &mut self.resources {
             if resource.resource_type != ResourceType::Water {
@@ -2290,7 +2290,7 @@ impl World {
             0.0
         };
         let weather = crate::environment::GrazingWeather {
-            precipitation: self.climate.weather.wetness_per_tick() * 100.0,
+            precipitation: self.climate.weather.weather_type.precipitation_intensity(),
             now: self.tick,
             season: self.climate.current_season(),
         };
@@ -2338,7 +2338,7 @@ impl World {
         const HOW_OFTEN_A_ZONE_COMES_ROUND: u32 = PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND;
 
         if self.tick % HOW_OFTEN_A_ZONE_COMES_ROUND == 0 {
-            let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+            let precipitation = self.climate.weather.weather_type.precipitation_intensity();
             let season = self.climate.current_season();
             let zone = (self.tick / HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
                 % crate::environment::PlantManager::HOW_MANY_ZONES;
@@ -2379,7 +2379,7 @@ impl World {
         use crate::world::soil::Soil;
 
         // Rain reaches everywhere; the ground decides what it does with it
-        let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+        let precipitation = self.climate.weather.weather_type.precipitation_intensity();
 
         // A pass stands for however long it has been since the last one, which
         // is one number and not two. This read ten while the trigger in
@@ -2412,7 +2412,7 @@ impl World {
         let today = self.climate.calendar.day_of_year;
         let this_year = self.climate.calendar.year;
         let season_modifier = current_season.plant_growth_modifier();
-        let precipitation = self.climate.weather.wetness_per_tick() * 100.0; // Scale to 0-1 range
+        let precipitation = self.climate.weather.weather_type.precipitation_intensity(); // Scale to 0-1 range
 
         for resource in &mut self.resources {
             // Get temperature at resource position
