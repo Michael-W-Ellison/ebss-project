@@ -45,9 +45,70 @@ impl Simulation {
             .collect();
 
         for agent_id in agent_ids {
+            self.one_persons_turn(agent_id, &agent_positions);
+
+            // And then, for anybody with something on them, the rest of the
+            // half hour a minute at a time.
+            //
+            // "Every 30 ticks/minutes agents should have the option of making
+            // a decision. This does not apply if an agent encounters a
+            // dangerous situation, as they must then make decisions minute by
+            // minute to enhance their survival odds."
+            //
+            // A turn is half an hour of committed action, which is the right
+            // grain for walking to a hedgerow and the wrong one for a wolf:
+            // half an hour is a long time to have already decided what you are
+            // doing. So somebody frightened enough to run or angry enough to
+            // stand goes round again, once a simulated minute, until the
+            // danger is off them or the half hour is gone.
+            //
+            // Only that person, and only while it lasts. The rest of the
+            // world stands still - and that is the whole difficulty with this
+            // mechanism, which was twice estimated as cheap and is not. A
+            // `Move` is one tile, whatever the turn is worth in minutes. Give
+            // a frightened man twenty-nine extra turns and he covers
+            // twenty-nine tiles while the wolf covers one, so the fast clock
+            // is not a finer grain on the same world: it is an escape hatch
+            // out of every predator balance the model has. Hence
+            // `predators_try_their_luck_at` just below - the thing that is
+            // after him gets its minutes too, and running away costs him what
+            // it should.
+            let mut minutes_left = crate::environment::seasons::MINUTES_PER_TURN;
+            while minutes_left > 1 {
+                let Some(agent_index) =
+                    self.population.agents.iter().position(|a| a.id == agent_id)
+                else {
+                    break;
+                };
+
+                let agent = &self.population.agents[agent_index];
+                if !agent.state.is_alive || !agent.emotions.in_danger() {
+                    break;
+                }
+
+                minutes_left -= 1;
+                self.minutes_spent_in_danger += 1;
+
+                self.one_persons_turn(agent_id, &agent_positions);
+                self.predators_try_their_luck_at(agent_index);
+            }
+        }
+    }
+
+    /// One person's turn: what is pressing, what they do about it, and what
+    /// came of it.
+    ///
+    /// Taken once a turn by everybody, and then once a minute by anybody in
+    /// danger - see `everybody_takes_a_turn`.
+    fn one_persons_turn(
+        &mut self,
+        agent_id: uuid::Uuid,
+        agent_positions: &[(uuid::Uuid, (i32, i32, i32))],
+    ) {
+        {
             let Some(agent_index) = self.population.agents.iter().position(|a| a.id == agent_id)
             else {
-                continue;
+                return;
             };
 
             // What is pressing hardest, and where this one is standing.
@@ -60,7 +121,7 @@ impl Simulation {
                     agent.state.position,
                 )
             };
-            let Some(drive_type) = drive_type else { continue };
+            let Some(drive_type) = drive_type else { return };
 
             debug!(
                 "Agent {} - Most urgent drive: {:?} (value: {:.2})",

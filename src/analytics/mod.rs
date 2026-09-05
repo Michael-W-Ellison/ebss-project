@@ -155,6 +155,14 @@ pub struct Simulation {
     /// about which of those it was, because every way of declining looks like
     /// `None` from outside. This counts the declining as well as the deciding.
     pub what_a_threat_came_to: std::collections::BTreeMap<String, u64>,
+    /// How many extra minutes have been spent on the fast clock.
+    ///
+    /// A minute of somebody's life that they got to decide about because
+    /// something was on them. Counted because the whole mechanism is invisible
+    /// otherwise: it fires only for people in danger, and a run where it never
+    /// fires looks exactly like a run without it. See
+    /// `Simulation::everybody_takes_a_turn`.
+    pub minutes_spent_in_danger: u64,
 }
 
 /// Configuration for simulation behavior and limits
@@ -320,6 +328,7 @@ impl Simulation {
             actions_failed: std::collections::BTreeMap::new(),
             actions_failed_because: std::collections::BTreeMap::new(),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
+            minutes_spent_in_danger: 0,
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
@@ -1145,6 +1154,7 @@ impl Simulation {
             actions_failed: std::collections::BTreeMap::new(),
             actions_failed_because: std::collections::BTreeMap::new(),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
+            minutes_spent_in_danger: 0,
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,

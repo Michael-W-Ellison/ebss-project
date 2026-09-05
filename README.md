@@ -2458,6 +2458,47 @@ but the settlement-level gain in the last row is a gain from *removing* a
 journey, not from adding a memory. What memory buys will not be visible until
 the thing downstream of it can count the cost of acting on it.
 
+### The turn, and the minute
+
+A turn is half an hour. That is `TICKS_PER_DAY = 48`, and it is the grain at
+which somebody decides what to do: walk to the hedgerow, sit down and knap a
+blade, carry the meat home. Half an hour is the right length for all of that
+and the wrong length for a wolf. Half an hour is a very long time to have
+already decided what you are doing when something is coming at you.
+
+So anybody frightened enough to run, or angry enough to stand, goes round
+again once a simulated minute until the danger is off them or the half hour is
+gone. Nobody else moves while it happens - except the thing that is after
+them, which gets its minutes too.
+
+That last clause is the whole of the difficulty, and it was twice estimated as
+cheap before it was looked at. A `Move` is one tile, whatever the turn is
+worth in minutes. Hand a frightened man twenty-nine extra turns and he covers
+twenty-nine tiles while the wolf covers one: the fast clock would not be a
+finer grain on the same world, it would be an escape hatch out of every
+predator balance in it. Hence the predator on the same clock.
+
+Measured over eleven half-year runs of twelve people, the extra minutes come
+to a median of **1% of person-turns**, and the spread is the point rather than
+the median: three runs never used the mechanism at all, and the two that used
+it most - 15% and 20% of person-turns - are the two runs that ended with four
+and seven people alive out of twelve. The fast clock costs nothing in the
+settlements that were never in trouble and fires hardest in the ones that
+were, which is what it is for. Against the tick cost it is inside the noise of
+a paired before-and-after run.
+
+Somebody is "in danger" on the same appraisal that decides whether they fight
+or run, not on a separate flag: `EmotionState::in_danger` is `should_flee() ||
+should_attack()`. This matters for writing tests about it. Fear and anger are
+re-appraised from what is actually present every turn, so writing a fright
+into an agent's emotions and ticking produces fear 1.000 followed immediately
+by fear 0.000 - correctly, because a wolf that does not exist is not
+frightening. A test about danger has to put something in the world to be in
+danger of. And it has to put it on the right man: a sound adult sizes up one
+wolf and comes out *angry*, at 0.21 against a gate of 0.43, because he can
+face it. It is the man already hurt who reads the same wolf as more than he
+can cope with.
+
 ### Learning
 - **Trial & Error**: Random exploration with reinforcement
 - **Observation**: Young agents copy experienced agents

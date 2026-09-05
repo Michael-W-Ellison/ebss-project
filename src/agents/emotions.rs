@@ -80,6 +80,17 @@ impl EmotionState {
         }
     }
 
+    /// Whether something is on this one that will not wait.
+    ///
+    /// The same gate that lets the threat tree take the turn: frightened
+    /// enough to run, or angry enough to stand. Either is a situation where
+    /// half an hour of committed action is too long to be committed for, and
+    /// it is what puts somebody on the minute clock - see
+    /// `Simulation::everybody_takes_a_turn`.
+    pub fn in_danger(&self) -> bool {
+        self.should_flee() || self.should_attack()
+    }
+
     /// Record being attacked by another agent
     pub fn record_attack(&mut self, attacker_id: Uuid, current_tick: u32) {
         self.last_attacker = Some(attacker_id);
