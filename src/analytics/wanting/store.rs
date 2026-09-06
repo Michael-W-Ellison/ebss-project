@@ -574,10 +574,25 @@ impl Simulation {
             return None;
         }
 
+        // Any pit anywhere, not one within fourteen paces.
+        //
+        // A larder is food, and there is no more reason to stop looking for
+        // it at the edge of a circle than for a hedgerow. Measured over
+        // thirty-two worlds, at the last look anybody got before they died
+        // the settlement's pits held **eight hundred items among under seven
+        // mouths** - ten days of food for everybody - and the nearest pit
+        // with something in it was a median of eighteen paces off, so **six
+        // starving person-days in ten had a full larder that this line could
+        // not see.** The `?` returned before any other gate was reached.
+        //
+        // Widening it is worth nothing on its own - swept at fourteen,
+        // twenty-five and forty over thirty-two seeded worlds, person-days
+        // came out 97,521 / 97,537 / 97,529, which is a spread of one part in
+        // six thousand. It is here because a man who knows where the store is
+        // should not forget it at fifteen paces, not because it feeds
+        // anybody. What stops him is measured next door.
         let here = Position::new(agent_position.0, agent_position.1);
-        let (pit, paces) = self
-            .world
-            .nearest_full_pit(here, Self::WORTH_WALKING_TO_THE_STORE)?;
+        let (pit, paces) = self.world.nearest_full_pit(here, u32::MAX)?;
 
         let what = pit.something_to_eat()?.to_string();
 
