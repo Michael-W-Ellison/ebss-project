@@ -146,6 +146,20 @@ pub struct Simulation {
     /// kept. Without it there is no way to tell a settlement that is not
     /// gathering enough from one that is gathering plenty and losing it.
     pub food_items_into_packs: u64,
+
+    /// What actually went down, by name, and what it was worth.
+    ///
+    /// A body burns `UNITS_BURNED_IN_AN_ORDINARY_DAY` - fourteen hundred and
+    /// forty - and one item is `UNITS_IN_ORDINARY_ITEM` five units of volume
+    /// times whatever that food's own energy is. So a handful of fat nuts at
+    /// eighty is four hundred, and a handful of spring leaf at six is thirty:
+    /// **thirteen handfuls of leaf to one of nuts.** Whether a settlement
+    /// eats enough is therefore not a question about how much it gathers, it
+    /// is a question about what. Nothing counted it until now.
+    pub what_went_down: std::collections::BTreeMap<String, u64>,
+
+    /// And what all of it came to, in the units a day is measured in.
+    pub energy_that_went_down: f64,
     /// Where the threat tree came out, by the name of the branch.
     ///
     /// The same argument as `actions_failed_because`, one level earlier. An
@@ -334,6 +348,8 @@ impl Simulation {
             what_would_not_fit_in_the_pack: 0,
             what_went_back_on_the_bush: 0,
             food_items_into_packs: 0,
+            what_went_down: std::collections::BTreeMap::new(),
+            energy_that_went_down: 0.0,
         }
     }
 
@@ -1056,6 +1072,13 @@ impl Simulation {
     }
 
     /// Whether an agent can stand on this tile
+    /// Shout if somebody has just been put where there is no map.
+    ///
+    /// Temporary: `Move: No passable route` is half of every refusal left in
+    /// the model and every one of them is an agent standing off the grid.
+    /// Four places move an agent and all four look guarded, so this asks them
+    /// one at a time which is lying.
+
     fn is_passable_tile(&self, x: i32, y: i32) -> bool {
         use crate::world::{Position, TerrainType};
 
@@ -1201,6 +1224,8 @@ impl Simulation {
             what_would_not_fit_in_the_pack: 0,
             what_went_back_on_the_bush: 0,
             food_items_into_packs: 0,
+            what_went_down: std::collections::BTreeMap::new(),
+            energy_that_went_down: 0.0,
         };
 
         info!("Simulation loaded from tick {}", sim.current_tick);

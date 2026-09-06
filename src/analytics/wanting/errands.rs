@@ -188,7 +188,31 @@ impl Simulation {
                 // The goal tile itself may hold a building or resource the
                 // agent is heading for, so only intermediate tiles must be
                 // walkable.
-                if next != goal && !self.is_passable_tile(next.0, next.1) {
+                //
+                // Only tiles, though. This exemption had no floor under it,
+                // and a goal off the edge of the map is not a barn door: it
+                // is nowhere. A decision that named a target one pace past
+                // the edge got the agent walked onto it, and the next turn
+                // named one further out, and so on - the trace reads
+                // "walking toward (50, 10) to (50, 10)", then (51, 10), then
+                // (52, 10). `is_passable_tile` refuses every tile outside the
+                // grid, so once out there the agent had **no passable
+                // neighbour in any direction** and never took another step:
+                // it could not walk to food or to water and it starved where
+                // it stood. Measured over eight seeded world-years, `Move: No
+                // passable route toward destination` was 63,922 refusals -
+                // half of every refusal left in the model - and every one of
+                // them reported "standing off the map, with 0 ways out".
+                //
+                // One agent a world, from the day it wandered out to the day
+                // it died: 10,537 agent-ticks in the first world measured,
+                // which is two hundred and twenty days of a life spent
+                // standing still.
+                let on_the_map = next.0 >= 0
+                    && next.1 >= 0
+                    && next.0 < self.world.grid.width as i32
+                    && next.1 < self.world.grid.height as i32;
+                if !on_the_map || (next != goal && !self.is_passable_tile(next.0, next.1)) {
                     continue;
                 }
 

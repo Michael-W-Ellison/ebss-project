@@ -11719,3 +11719,110 @@ different coat: a decision that names a destination the mover cannot reach.
 ISSUES #235 - "nobody owns pathfinding: an unused A* and two coordinate
 nudges" - is the entry for it, and it is now the largest single refusal in the
 model.
+
+### 171. It was never pathfinding: they walked off the map and stood there until they died
+
+`Move: No passable route toward destination` was 63,922 refusals over eight
+seeded world-years - half of every refusal left in the model after #170 - and
+"no passable route" is a bad name for it. By the time that message is written
+the agent has already tried the direct step, **a breadth-first search of four
+thousand tiles**, and all four of its neighbours. There is nothing wrong with
+the search: an indirect path is looked for, and found, whenever one exists.
+
+So the message was taught to say what it had found. Every single one of the
+63,922 came back the same:
+
+```
+Move: No passable route toward destination
+  (standing on off the map, which is not walkable, with 0 ways out)
+```
+
+`is_passable_tile` refuses every tile outside the grid, so an agent past the
+edge has **no neighbour it can step to, in any direction, ever again**. It
+cannot walk to food or to water. It stands where it is until it starves.
+Traced by hand: **one agent a world**, and in the first world measured it went
+out on day 79 and was still standing there on day 299 - **10,537 agent-ticks,
+two hundred and twenty days of a life spent motionless**, returning one
+refusal every turn of it.
+
+#### How they got out there
+
+Not by walking, which is bounds-checked at every step. The trace reads:
+
+```
+OFFMAP by walking toward (50, 10, 0) to (50, 10, 0)
+OFFMAP by walking toward (51, 10, 0) to (51, 10, 0)
+OFFMAP by walking toward (52, 10, 0) to (52, 10, 0)
+```
+
+`next_step_toward` exempts **the goal tile** from the passability check, and
+that exemption is right: a goal is often a barn door or a berry bush rather
+than open ground, and an agent that will not step onto its own destination
+cannot arrive. What it had no floor under it was the map. A decision naming a
+target one pace past the edge got the agent walked onto it; the next turn
+named one further out; and so on, out into nowhere, on a fifty-by-fifty grid.
+The exemption now applies only to tiles that exist.
+
+Two more places put a body where a body cannot stand, found on the way and
+fixed with it, though neither was the source here:
+
+- **A newborn** was placed at `mother_pos ± 1` in each axis with no bounds
+  check. A mother on the first column put one child in three at x = -1. A baby
+  is born where its mother is now.
+- **`Explore`** stepped `current + direction` while asking nothing at all: no
+  bounds, no water, no building. It is the one way of walking that checked
+  nothing. Somebody who cannot go that way looks from where they stand.
+
+#### What it bought
+
+| | before | after |
+|---|---|---|
+| `Move: No passable route` | 63,922 | **0** |
+| refusals, all causes | 126,395 | **72,550** |
+| person-days (32 seeded worlds, 2 years) | 93,055 | 95,994 |
+
+Person-days are still inside the ten per cent noise. Thirty thousand wasted
+turns a world-year and one person in twelve frozen for most of their life are
+gone regardless, and `Move` is off the refusal list altogether.
+
+### 172. They eat five and a half times what they burn, and a quarter of them starve
+
+The previous two entries closed by naming "what a body burns" as the next
+number to check, on the reasoning that tripling the food into packs had not
+moved the population. That reasoning was wrong, and the number says so.
+
+`what_went_down` and `energy_that_went_down` now count what actually reaches a
+stomach and what it is worth. Over eight seeded world-years, 23,351
+person-days:
+
+**Energy eaten: 7,863 a person-day, against the 1,440 a body burns in an
+ordinary day. Five hundred and forty-six per cent of maintenance.**
+
+Nor is it thin food. The caloric ladder in the database is real - nuts 80 an
+energy unit, grain 60, legumes 45, roots and meat 30, fish 25, berries 20,
+spring greens 6 - which puts a handful (five units) of nuts at 400 and a
+handful of leaf at 30, thirteen to one. What they actually eat:
+
+| | share of handfuls |
+|---|---|
+| Legumes | 22.9% |
+| Roots | 22.4% |
+| Food (berries) | 15.7% |
+| Greens | 15.3% |
+| Nuts | 7.9% |
+| Fish | 5.2% |
+
+That is a good mixed diet weighted to the dense end, not a settlement living
+on leaf. The most a body can burn is `what_the_work_costs` at its ceiling of
+1.5, so 2,160 a day; they eat three and a half times *that*.
+
+**And starvation and hunger are still 53% of all deaths.** A settlement that
+eats five and a half times its maintenance and dies of hunger is not short of
+food, and is not burning too fast. The energy is arriving in aggregate and not
+arriving where it is needed - which makes this a question about *distribution*
+between people, not about supply, appetite or the calorie table. The mean is
+not the man.
+
+That is the next measurement and it is a different one: not how much a
+settlement eats, but the spread of what each body gets, and what the reserve
+of the ones who die looked like on the days before they died.

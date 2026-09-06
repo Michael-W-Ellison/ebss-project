@@ -59,6 +59,7 @@ pub mod scarcity_tests;
 pub mod sickness_tests;
 mod full_pack_tests;
 mod larder_reach_tests;
+mod off_the_map_tests;
 mod weather_tests;
 pub mod working_tests;
 pub mod barter_tests;

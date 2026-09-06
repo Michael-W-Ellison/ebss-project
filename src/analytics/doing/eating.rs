@@ -71,6 +71,11 @@ impl Simulation {
             eaten = 1;
         }
 
+        let name = format!("{what:?}");
+        *self.what_went_down.entry(name).or_default() += eaten as u64;
+        self.energy_that_went_down += energy_in as f64;
+        let agent = &mut self.population.agents[agent_index];
+
         // Foraged fruit and berries carry water too
         if nutrition.water_content > 0.3 {
             if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
@@ -125,6 +130,7 @@ impl Simulation {
         if let Some(item_id) = carried_food {
             let mut energy_in = 0.0f32;
             let mut mouthfuls = 0u32;
+            let mut went_down_here = 0u64;
             let mut made_sick: Option<f32> = None;
             while energy_in < physiology::WHAT_A_SITTING_AIMS_AT
                 && agent.state.physiology.room_in_the_stomach()
@@ -144,6 +150,7 @@ impl Simulation {
                         }
                         energy_in += went_down * worth;
                         mouthfuls += 1;
+                        went_down_here += 1;
                     }
                     EatResult::MadeSick(damage) => {
                         made_sick = Some(damage);
@@ -153,6 +160,10 @@ impl Simulation {
                     EatResult::Spoiled | EatResult::NoFood => break,
                 }
             }
+
+            *self.what_went_down.entry(item_id.clone()).or_default() += went_down_here;
+            self.energy_that_went_down += energy_in as f64;
+            let agent = &mut self.population.agents[agent_index];
 
             if let Some(damage) = made_sick {
                 if mouthfuls == 0 {
@@ -318,6 +329,13 @@ impl Simulation {
                 if eaten_here == 0 {
                     eaten_here = 1;
                 }
+
+                *self
+                    .what_went_down
+                    .entry(format!("{foraged_item:?}"))
+                    .or_default() += eaten_here as u64;
+                self.energy_that_went_down += energy_in as f64;
+                let agent = &mut self.population.agents[agent_index];
 
                 // Foraged fruit and berries carry water too
                 if nutrition.water_content > 0.3 {

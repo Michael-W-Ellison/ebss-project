@@ -146,9 +146,29 @@ impl Simulation {
         let (next_x, next_y, next_z) = match step {
             Some(step) => step,
             None => {
-                return ActionResult::failure(
-                    "No passable route toward destination".to_string(),
-                )
+                // Say which, because "no passable route" was being read as a
+                // pathfinding failure and it is not one. The direct step, a
+                // breadth-first search of four thousand tiles and all four
+                // neighbours have all been tried by this point, so there is
+                // no route because **there is nowhere to put a foot**: this
+                // agent is boxed in on every side. The only question worth
+                // asking is what it is boxed in by, and by standing on what.
+                let standing_on = self
+                    .world
+                    .grid
+                    .get_tile(&Position::new(current_pos.0, current_pos.1))
+                    .map(|tile| format!("{:?}", tile.terrain.terrain_type))
+                    .unwrap_or_else(|| "off the map".to_string());
+                let can_stand_here = self.is_passable_tile(current_pos.0, current_pos.1);
+                let ways_out = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                    .iter()
+                    .filter(|(dx, dy)| self.is_passable_tile(current_pos.0 + dx, current_pos.1 + dy))
+                    .count();
+
+                return ActionResult::failure(format!(
+                    "No passable route toward destination                      (standing on {standing_on}, which is {}, with {ways_out} ways out)",
+                    if can_stand_here { "walkable" } else { "not walkable" }
+                ));
             }
         };
 
@@ -334,6 +354,19 @@ impl Simulation {
         let target_x = current_pos.0 + direction.0;
         let target_y = current_pos.1 + direction.1;
         let target_z = current_pos.2 + direction.2;
+
+        // Looking about is still walking, and this was the one way of walking
+        // that asked nothing about where it was going: no bounds, no water,
+        // no building. An agent exploring at the edge stepped off the map and
+        // was stranded there for the rest of its life - see the reasoning on
+        // the newborn in `agents::reproduction`. Somebody who cannot go that
+        // way has still spent the turn looking, and looks from where they
+        // stand.
+        let (target_x, target_y) = if self.is_passable_tile(target_x, target_y) {
+            (target_x, target_y)
+        } else {
+            (current_pos.0, current_pos.1)
+        };
         let target_pos = (target_x, target_y, target_z);
 
         // What is really out here, before anybody's opinion of it
