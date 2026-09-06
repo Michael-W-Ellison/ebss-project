@@ -125,6 +125,27 @@ impl Simulation {
             return Some((coat, 1));
         }
 
+        // And a meal for somebody with none, which is the same shape of rule
+        // and was not here at all.
+        //
+        // `what_i_can_spare` excludes food by name and by nutrition data -
+        // `item.food_data.is_none() && !name.contains("food")` - so **the one
+        // thing everybody in this model needs every day was the one thing
+        // barter could not move**. Measured, sampling every living body once a
+        // day over eight seeded world-years: the well fed carry 5.9 items of
+        // food and 90-97% of everybody under a quarter of their reserve
+        // carries *none at all*, standing in the same camp. That is not a
+        // settlement short of food. It is food that cannot get from the man
+        // who has it to the man who has not.
+        //
+        // Narrow, on the coat's terms: it fires only when the other has
+        // nothing to eat and is hungry enough for it to matter, and only from
+        // somebody who would still have a day's food after handing it over.
+        // Nobody strips their own pack for a neighbour who is merely peckish.
+        if let Some(meal) = self.a_meal_for_somebody_with_none(me, them) {
+            return Some(meal);
+        }
+
         let mine = self.population.agents[me].what_i_can_spare()?;
 
         let they_have = self.population.agents[them].how_many_i_have(&mine.0);
@@ -137,6 +158,53 @@ impl Simulation {
         }
 
         Some(mine)
+    }
+
+    /// Food in my pack that somebody standing here has none of.
+    ///
+    /// What a person keeps back for themselves is a day's worth - the figure
+    /// the store branch already uses to decide whether to open a pit - so
+    /// what is offered is whatever is over that.
+    fn a_meal_for_somebody_with_none(&self, me: usize, them: usize) -> Option<(String, u32)> {
+        let giver = &self.population.agents[me];
+        let taker = &self.population.agents[them];
+
+        // They have something to eat: this is not that rule.
+        if taker.how_many_meals_i_have() > 0 {
+            return None;
+        }
+
+        // And they are actually short. Hunger past its own threshold, or a
+        // body that says so.
+        let hungry = taker
+            .drives
+            .get(crate::core::DriveType::Hunger)
+            .is_some_and(|hunger| {
+                hunger.value >= crate::core::DriveType::Hunger.default_threshold()
+            })
+            || taker.state.is_starving()
+            || taker.nutrition.is_starving();
+        if !hungry {
+            return None;
+        }
+
+        // A giver who would be left short himself keeps it. The sacrifice
+        // branch - `somebody_of_mine_who_needs_it_more` - is where handing
+        // over what you need yourself belongs, and it is for loved ones.
+        let keeps_back = Self::what_a_day_of_food_is();
+        let mine = giver.how_many_meals_i_have();
+        if mine <= keeps_back {
+            return None;
+        }
+
+        let (what, _) = giver.what_food_i_can_spare()?;
+        let spare = giver.how_many_i_have(&what).min(mine - keeps_back);
+        (spare > 0).then_some((what, spare))
+    }
+
+    /// What a person keeps on them rather than handing over: a day's eating.
+    pub(in crate::analytics) fn what_a_day_of_food_is() -> u32 {
+        crate::agents::provision::WHAT_A_BODY_EATS_IN_A_DAY.ceil() as u32
     }
 
     /// A garment in my pack that would do somebody else more good than it is
@@ -388,7 +456,16 @@ impl Simulation {
             .iter()
             .position(|other| other.id == agent.id)?;
 
-        let spare = agent.what_i_can_spare()?;
+        // What this one has spare of the *materials*, which is the only thing
+        // this function used to be able to hand over.
+        //
+        // It opened with `what_i_can_spare()?`, and that excludes food by name
+        // and by nutrition data, so a man carrying nothing but a week's dinner
+        // returned `None` here before any candidate was looked at. The shared
+        // answer to "what would I hand this person" - `what_i_would_hand_over`
+        // - was reached on the last line and could never say anything the
+        // first line had not already allowed.
+        let spare = agent.what_i_can_spare();
 
         self.population
             .agents
@@ -401,11 +478,67 @@ impl Simulation {
                     .max((them.state.position.1 - agent_position.1).abs())
                     <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
             })
-            .filter(|(_, them)| {
-                agent.how_far_i_trust(them.id, &them.traits) >= Self::WELL_ENOUGH_OF_THEM_TO_GIVE
+            .find(|(them, they)| {
+                let Some((what, _)) = self.what_i_would_hand_over(me, *them) else {
+                    return false;
+                };
+
+                // A surplus of stuff goes to somebody who says they want it,
+                // and only to somebody thought well enough of - both as
+                // before. A coat for somebody bare and a meal for somebody
+                // with nothing are decided by their need inside
+                // `what_i_would_hand_over`, and a band does not let a
+                // neighbour go hungry on the strength of a poor opinion.
+                let it_is_the_surplus = spare.as_ref().is_some_and(|(mine, _)| *mine == what);
+                if !it_is_the_surplus {
+                    return true;
+                }
+
+                agent.how_far_i_trust(they.id, &they.traits) >= Self::WELL_ENOUGH_OF_THEM_TO_GIVE
+                    && they.what_i_am_short_of().contains(&what.as_str())
             })
-            .filter(|(_, them)| them.what_i_am_short_of().contains(&spare.0.as_str()))
-            .find(|(them, _)| self.what_i_would_hand_over(me, *them).is_some())
+            .map(|(_, them)| them.id)
+    }
+
+    /// Somebody standing here with nothing to eat, who I could feed.
+    ///
+    /// The gap the measurement keeps pointing at. Sampling every living body
+    /// once a day over eight seeded world-years: the well fed carry 5.9 items
+    /// of food and 90-97% of everybody under a quarter of their reserve
+    /// carries none at all - in the same camp, with 334 to 1,176 items in the
+    /// settlement's pits. Nothing moved food from the one to the other.
+    /// `somebody_of_mine_who_needs_it_more` comes closest and requires
+    /// `bond.is_loved_one()`, so a man starves beside a stranger with a full
+    /// pack.
+    ///
+    /// This sits with the parent feeding its child rather than behind the
+    /// Social drive, for the same reason that one does: a person who watches
+    /// somebody go hungry with food in their own pack is not deciding to be
+    /// sociable, and a drive that has to win a turn first will not fire on the
+    /// day it matters.
+    pub(in crate::analytics) fn somebody_beside_me_with_nothing_to_eat(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        let me = self
+            .population
+            .agents
+            .iter()
+            .position(|other| other.id == agent.id)?;
+
+        self.population
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, them)| them.id != agent.id && them.state.is_alive)
+            .filter(|(_, them)| {
+                (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs())
+                    <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
+            })
+            .find(|(them, _)| self.a_meal_for_somebody_with_none(me, *them).is_some())
             .map(|(_, them)| them.id)
     }
 

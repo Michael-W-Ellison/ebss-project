@@ -2006,6 +2006,50 @@ impl Population {
                     .remember_how_much_is_there(memory_type, (pos.x, pos.y, 0), how_much);
             }
 
+            // And the larder, which is not a resource and so was in none of
+            // the above.
+            //
+            // `SpatialMemoryType::Storage` had a reader and **no writer at
+            // all**: nobody in this model had ever remembered a pit. The
+            // decision found one by asking the world - `nearest_full_pit` -
+            // which is omniscience, and the omniscience covered for the
+            // missing memory so completely that nothing noticed the memory was
+            // dead. A hole in the ground somebody dug and filled is exactly
+            // the kind of place a person remembers, and it is the one place a
+            // settlement's food reliably is.
+            //
+            // Seen full, it is remembered with what was in it; seen empty, it
+            // is forgotten, on the same terms as a picked-over berry patch.
+            let pits_in_view: Vec<((i32, i32, i32), u32)> = world
+                .pits
+                .iter()
+                .filter(|pit| {
+                    let dx = pit.where_it_is.x - agent_pos.x;
+                    let dy = pit.where_it_is.y - agent_pos.y;
+                    dx * dx + dy * dy <= sight * sight
+                })
+                .map(|pit| {
+                    (
+                        (pit.where_it_is.x, pit.where_it_is.y, 0),
+                        if pit.has_food() { pit.how_much_is_in_it() } else { 0 },
+                    )
+                })
+                .collect();
+
+            for (where_it_is, holding) in pits_in_view {
+                if holding > 0 {
+                    agent.memory.remember_how_much_is_there(
+                        SpatialMemoryType::Storage,
+                        where_it_is,
+                        holding,
+                    );
+                } else {
+                    agent
+                        .memory
+                        .forget_location(SpatialMemoryType::Storage, where_it_is);
+                }
+            }
+
             // Learn skills from discovered buildings, on the tick of finding
             // them and not on the nine after it - see above
             for (pos, building_type) in &agent.exploration_knowledge.known_buildings {

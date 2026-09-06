@@ -415,6 +415,14 @@ impl Simulation {
             return (Action::GiveTo { to }, false);
         }
 
+        // And anybody at all standing here with nothing to eat, when there is
+        // more than a day's food in this pack. Not only one's own: a band
+        // feeds the man beside it. See
+        // `somebody_beside_me_with_nothing_to_eat`.
+        if let Some(to) = self.somebody_beside_me_with_nothing_to_eat(agent, agent_position) {
+            return (Action::GiveTo { to }, false);
+        }
+
         // And somebody too young to be this far from anybody grown, heading
         // back. `LifeStage` has described the three bands of this in prose
         // since the lifecycle was written and nothing ever read them: with a

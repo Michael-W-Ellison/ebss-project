@@ -473,10 +473,14 @@ impl Simulation {
         let here = Position::new(agent_position.0, agent_position.1);
         let walk = here.distance_to(&Position::new(there.0, there.1));
 
+        // The same pit the store branch is talking about, which is one this
+        // agent remembers rather than whichever exists - see
+        // `nearest_pit_i_remember`. Two places asking the same question have
+        // to ask it the same way, or the comparison is between a pit he can
+        // find and a pit he cannot.
         if let Some(store) = self.something_out_of_the_store(agent, agent_position) {
             if self
-                .world
-                .nearest_full_pit(here, u32::MAX)
+                .nearest_pit_i_remember(agent, agent_position)
                 .is_some_and(|(_, paces)| paces <= walk)
             {
                 return store;

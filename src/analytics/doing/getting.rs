@@ -1186,6 +1186,16 @@ impl Simulation {
         // What comes out of a hole. The matrix says excavating changes
         // the ground and what is held, and this is the second half.
         let agent = &mut self.population.agents[agent_index];
+
+        // And a man knows where he dug. Seeing a pit is one way to learn of
+        // one - see the sight pass in `Population` - but it is not the way you
+        // learn about your own: you were there with the shovel. Without this a
+        // digger who walked away and came back would have to catch sight of
+        // his own larder again to remember it.
+        agent.memory.remember_location(
+            crate::core::memory::SpatialMemoryType::Storage,
+            (here.x, here.y, 0),
+        );
         agent.inventory.add_item(crate::agents::InventoryItem::new_with_weight(
             "stone".to_string(),
             Self::WHAT_COMES_OUT_OF_A_HOLE,

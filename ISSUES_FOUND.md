@@ -11911,3 +11911,71 @@ holds six hundred units of volume, and a 480-energy sitting of legumes is
 under eleven of them, **under two per cent of the stomach**. A spent body
 could eat fifty such sittings before it ran out of room. Not changed here
 because the measurement above says appetite is not what is killing them.
+
+### 174. A larder nobody knew about, and a neighbour who would not hand over supper
+
+Entry #173 ended on the shape of the problem rather than the cause: the
+settlement's pits held between 334 and 1,176 items at every level of
+individual starvation, and 90-97% of the bodies nearest death were carrying
+nothing at all. A full store thirty paces off and a man dying beside it. Two
+of the three ways a person could close that gap were not working, and this is
+those two.
+
+#### The store an agent walked to had never been seen
+
+`something_out_of_the_store` asked the world: `world.nearest_full_pit`. So did
+`the_larder_or_this_walk`. That is omniscience - a man set off for a hole in
+the ground that nobody in his settlement had ever laid eyes on - and the cost
+of it was not the walking. It was that it hid a store with a reader and no
+writer, which is this project's recurring defect in its purest form:
+
+`SpatialMemoryType::Storage` had `recall_locations` called on it and nothing
+anywhere ever called `remember_location` with it. Not the sight pass, not the
+man who dug the pit, not the man who filled it. The memory existed, was
+plumbed through to a reader, and was empty for the whole life of the project -
+and no measurement could see that, because every reader that mattered was
+asking the world instead.
+
+Three writers now, which are the three ways a person comes to know where a
+store is:
+
+- **Seeing it.** The sight pass in `population.rs` already walked the
+  resources in view; it walks `world.pits` as well now, and records how much
+  is in one it can see - or forgets the place, if it has been emptied since.
+- **Digging it.** `Excavate` records the hole the digger just made.
+- **Filling it.** `putting_food_by` records the pit the food went into.
+
+And `nearest_pit_i_remember` replaces `nearest_full_pit` in both readers: the
+memory says a pit was worth walking to, the pit says what is actually in it
+when you get there, and if the walk was wasted the sight pass corrects the
+memory on arrival. Which is how a person works.
+
+#### Barter would not trade the one thing worth trading
+
+`what_i_would_hand_over` ran off `what_i_can_spare()` - a surplus. A man with
+two days of food and a starving neighbour has no surplus, so nothing was
+offered, so nothing changed hands. Measured across the arms, hunger and
+starvation together took **49.4%** of everybody who died, in settlements whose
+pits were never empty.
+
+`a_meal_for_somebody_with_none` fires on the taker having nothing rather than
+the giver having plenty: a day of food stays in the giver's pack and the rest
+is his neighbour's if his neighbour has no meals at all and is hungry. And
+`somebody_beside_me_with_nothing_to_eat` puts it in the override chain
+directly behind feeding one's own child, so it does not wait on anybody
+feeling sociable.
+
+#### What it came to
+
+Pits fuller: 1,151 to 1,324 items at the end of a run. Person-days 93,439 to
+93,297, which is flat inside a block-to-block noise of about ten per cent, and
+the empty-pack share among the depleted did not move (95-98%). One of the
+eleven standing suite failures - `a_settlement_lives_through_a_winter` - now
+passes, which is the first time that test has gone green.
+
+So the access gap is narrower and it is not closed. What the numbers say is
+that neither knowing where the store is nor being handed a meal by the man
+beside you is the binding constraint on its own; both were broken, both are
+mended, and the settlement still loses the same people. The remaining rung is
+the one that is still missing: a store at the camp, between the pack and the
+pit, that a man is standing next to when he needs it.

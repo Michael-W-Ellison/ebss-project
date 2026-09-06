@@ -298,6 +298,38 @@ fn what_is_buried_outlasts_what_is_carried() {
     );
 }
 
+/// Tell everybody about every pit there is.
+///
+/// A pit is a place an agent has to have *learned* about now - by seeing it,
+/// or by having dug or filled it - rather than a fact about the world that
+/// every mind has free of charge. See `nearest_pit_i_remember`. These
+/// fixtures push a pit straight into the world and then ask a decision about
+/// it, so they have to hand over the knowledge that a settlement would have
+/// come by in the ordinary way.
+fn and_everybody_knows_about_it(simulation: &mut Simulation) {
+    let pits: Vec<((i32, i32, i32), u32)> = simulation
+        .world
+        .pits
+        .iter()
+        .map(|pit| {
+            (
+                (pit.where_it_is.x, pit.where_it_is.y, 0),
+                pit.how_much_is_in_it().max(1),
+            )
+        })
+        .collect();
+
+    for agent in simulation.population.agents.iter_mut() {
+        for (where_it_is, holding) in &pits {
+            agent.memory.remember_how_much_is_there(
+                crate::core::memory::SpatialMemoryType::Storage,
+                *where_it_is,
+                *holding,
+            );
+        }
+    }
+}
+
 /// An open pit is a hole with food in it, which is much the same as leaving
 /// it on the grass.
 #[test]
@@ -396,6 +428,7 @@ fn a_store_across_the_camp_is_walked_to() {
         covered: true,
         dug: 0,
     });
+    and_everybody_knows_about_it(&mut simulation);
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation
@@ -844,6 +877,7 @@ fn one_meal_in_the_pack_does_not_shut_the_store() {
         covered: true,
         dug: 0,
     });
+    and_everybody_knows_about_it(&mut simulation);
     let _ = simulation.population.agents[0].inventory.add_item(supper(
         Simulation::WHAT_A_PERSON_KEEPS_ON_THEM,
         0,
@@ -1023,6 +1057,7 @@ fn a_pack_full_of_carcass_is_a_pack_with_no_meals_in_it() {
         covered: true,
         dug: 0,
     });
+    and_everybody_knows_about_it(&mut simulation);
     let here = simulation.population.agents[0].state.position;
 
     assert!(
@@ -1345,6 +1380,7 @@ fn a_starving_man_opens_the_store_whatever_the_month() {
         covered: true,
         dug: 0,
     });
+    and_everybody_knows_about_it(&mut simulation);
 
     assert!(simulation.are_the_hedgerows_bearing(), "still spring");
 

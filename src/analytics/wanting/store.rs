@@ -591,18 +591,60 @@ impl Simulation {
         // six thousand. It is here because a man who knows where the store is
         // should not forget it at fifteen paces, not because it feeds
         // anybody. What stops him is measured next door.
+        // A pit this one has actually seen, rather than whichever pit exists.
+        //
+        // This asked the world - `nearest_full_pit` - which is omniscience:
+        // an agent walked to a larder it had never laid eyes on. It reads the
+        // agent's own memory now. `SpatialMemoryType::Storage` had a reader
+        // and no writer until the sight pass was taught to notice a pit, and
+        // the omniscience here is precisely what hid that.
         let here = Position::new(agent_position.0, agent_position.1);
-        let (pit, paces) = self.world.nearest_full_pit(here, u32::MAX)?;
+        let (where_it_is, paces) = self.nearest_pit_i_remember(agent, agent_position)?;
 
-        let what = pit.something_to_eat()?.to_string();
-
+        // What is actually in it is a thing you find out by opening it. The
+        // memory says a pit was worth walking to; the pit says what is in it
+        // now, and if the walk was wasted the sight pass corrects the memory
+        // on arrival.
+        let standing_on_it = self.world.pit_at(where_it_is);
         if paces == 0 {
+            let what = standing_on_it?.something_to_eat()?.to_string();
             return Some(Action::PickUp { what });
         }
 
         Some(Action::Move {
-            target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+            target: (where_it_is.x, where_it_is.y, agent_position.2),
         })
+    }
+
+    /// The nearest pit this one remembers having food in it.
+    ///
+    /// Memory, not the world. A settlement's pits are the one place its food
+    /// reliably is - measured, between 334 and 1,176 items in the ground at
+    /// every level of individual starvation - and until the sight pass was
+    /// taught to notice one, nobody had ever remembered where a pit was. The
+    /// decision covered for it by asking the world directly, which is how a
+    /// dead store keeps a reader for a year without anybody noticing.
+    pub(in crate::analytics) fn nearest_pit_i_remember(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<(crate::world::Position, u32)> {
+        use crate::core::memory::SpatialMemoryType;
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+
+        agent
+            .memory
+            .recall_locations(SpatialMemoryType::Storage)
+            .into_iter()
+            .filter(|remembered| remembered.value > 0.0)
+            .map(|remembered| {
+                let there = Position::new(remembered.position.0, remembered.position.1);
+                let paces = here.distance_to(&there);
+                (there, paces)
+            })
+            .min_by_key(|(_, paces)| *paces)
     }
 
     /// How much food in the pack is enough that a person leaves the store

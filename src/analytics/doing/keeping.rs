@@ -304,9 +304,24 @@ impl Simulation {
             }
         }
 
+        let mut holds = 0u32;
         if let Some(pit) = self.world.pit_at_mut(here) {
             pit.put_in(going_in);
             pit.covered = true;
+            holds = pit.how_much_is_in_it();
+        }
+
+        // And the man who buried it knows what he put where. The sight pass
+        // notices a pit in view; this is the other way anybody learns of one,
+        // and it is the more reliable: you do not forget the hole you filled.
+        if holds > 0 {
+            self.population.agents[agent_index]
+                .memory
+                .remember_how_much_is_there(
+                    crate::core::memory::SpatialMemoryType::Storage,
+                    (here.x, here.y, 0),
+                    holds,
+                );
         }
 
         debug!(

@@ -51,6 +51,19 @@ fn one_bush_and_a_full_pit(bush_at: (i32, i32)) -> crate::analytics::Simulation 
     pit.put_in(buried);
     simulation.world.pits.push(pit);
 
+    // A pit is a place somebody has to have *learned* about - by seeing it,
+    // or by having dug or filled it - rather than a fact about the world that
+    // every mind has free of charge; see `nearest_pit_i_remember`. This one
+    // was pushed straight into the world, so hand him the knowledge a man
+    // would have had of the store he buried.
+    simulation.population.agents[0]
+        .memory
+        .remember_how_much_is_there(
+            crate::core::memory::SpatialMemoryType::Storage,
+            (here.0 + PACES_TO_THE_PIT, here.1, 0),
+            150,
+        );
+
     // Starving, which is what opens a store while the hedgerows are bearing.
     if let Some(hunger) = simulation.population.agents[0]
         .drives
