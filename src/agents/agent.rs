@@ -1888,6 +1888,30 @@ impl Agent {
         wanted.clamp(1, item.quantity)
     }
 
+    /// How much of this one goes on the grass to make room for something
+    /// better, when the load is inside the limit and simply full.
+    ///
+    /// The same question as `how_much_of_this_i_would_set_down`, asked
+    /// against a want rather than against a shortfall. A pack that is exactly
+    /// full is not over its limit, so the carrying invariant has nothing to
+    /// say about it - and a man whose pack is exactly full of stone cannot
+    /// pick up a berry for the rest of his life. Somebody standing on food
+    /// with a pack full of rock puts the rock down, and it stays where he was
+    /// standing for him or anybody else to come back to.
+    pub fn how_much_of_this_makes_room(&self, what: &str, room_wanted: f32) -> u32 {
+        let Some(item) = self.inventory.get_item(what) else {
+            return 0;
+        };
+
+        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        if each <= 0.0 {
+            return item.quantity;
+        }
+
+        let wanted = (room_wanted / each).ceil() as u32;
+        wanted.clamp(1, item.quantity)
+    }
+
     /// Food this agent has more of than it is going to eat.
     ///
     /// Deliberately separate from `what_i_can_spare`, which excludes anything

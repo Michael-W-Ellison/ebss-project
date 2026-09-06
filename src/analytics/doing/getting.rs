@@ -17,6 +17,95 @@ use log::debug;
 use rand::Rng;
 
 impl Simulation {
+    /// Set down what is worth less than food, to make room for food.
+    ///
+    /// The carrying invariant - `what_nobody_can_carry_any_more` - only fires
+    /// on a pack that is *over* its limit, and trims it back to exactly the
+    /// limit. So a pack equilibrates at a hundred per cent full and stays
+    /// there: measured across a run, packs sat at 97-110% of capacity all
+    /// year, **fifty-five per cent raw material by weight and about one per
+    /// cent food**, and refused every armful anybody was standing over.
+    ///
+    /// Being full is not being overloaded, and what to carry is a decision
+    /// rather than a law. This is the decision: food is worth more than the
+    /// fourth stone, so the stone goes down. What goes down is what
+    /// `what_i_would_set_down` ranks - the heaviest thing that is not food,
+    /// not a tool this one works with, and not the thing it carries its load
+    /// in - and only as much of it as the room wants. It stays where the
+    /// agent is standing, to be picked up by them or by anybody else.
+    ///
+    /// Returns how much room was actually made, which is nothing at all for
+    /// somebody whose pack is all food and tools.
+    ///
+    /// Note what this is *not*: shedding down to a standing reserve, whether
+    /// there is anything to pick up or not. That was tried - a blanket
+    /// "limit less a day's food" - and cost **five per cent of a settlement's
+    /// person-days over 160 worlds**, because a man drops his firewood in the
+    /// middle of the moor and goes back for more. This fires only with a crop
+    /// in the hand that will not fit, so what goes down goes down beside what
+    /// it was swapped for.
+    pub(in crate::analytics) fn set_down_what_is_worth_less_than_food(
+        &mut self,
+        agent_index: usize,
+        room_wanted: f32,
+    ) -> f32 {
+        use crate::world::Position;
+
+        let here = {
+            let at = self.population.agents[agent_index].state.position;
+            Position::new(at.0, at.1)
+        };
+        let now = self.current_tick;
+        let started_with = self.population.agents[agent_index]
+            .inventory
+            .weight_capacity_remaining();
+
+        loop {
+            let room = self.population.agents[agent_index]
+                .inventory
+                .weight_capacity_remaining();
+            let still_wanted = room_wanted - (room - started_with).max(0.0);
+            if still_wanted <= 0.0 {
+                break;
+            }
+
+            let Some(what) = self.population.agents[agent_index].what_i_would_set_down() else {
+                break;
+            };
+
+            let how_many =
+                self.population.agents[agent_index].how_much_of_this_makes_room(&what, still_wanted);
+            if how_many == 0 {
+                break;
+            }
+
+            let Some(mut down) = self.population.agents[agent_index]
+                .inventory
+                .get_item(&what)
+                .cloned()
+            else {
+                break;
+            };
+            down.quantity = how_many;
+
+            self.population.agents[agent_index]
+                .inventory
+                .remove_item(&what, how_many);
+            self.world.somebody_left_this(down, here, now);
+
+            debug!(
+                "Agent {} set down {how_many} {what} to make room for food",
+                self.population.agents[agent_index].id
+            );
+        }
+
+        (self.population.agents[agent_index]
+            .inventory
+            .weight_capacity_remaining()
+            - started_with)
+            .max(0.0)
+    }
+
     /// What a trip to a food plant brings back.
     ///
     /// A forager strips a bush; they do not pick a single fruit and walk
@@ -437,7 +526,36 @@ impl Simulation {
                 // As much as will go, rather than all or nothing: an armful
                 // offered as one lump to a pack with room for half of it used
                 // to be refused entire. See #118.
-                let took = self.take_what_fits(agent_index, &item);
+                let mut took = self.take_what_fits(agent_index, &item);
+
+                // And a pack that is merely full puts the stone down.
+                //
+                // The carrying invariant only fires on a pack that is *over*
+                // its limit, and trims it to exactly the limit - so packs sit
+                // at a hundred per cent, year round, **fifty-five per cent
+                // raw material by weight and about one per cent food**, and
+                // refuse every armful anybody stands over. That is the whole
+                // of `Gather: Inventory full`: 139,126 refusals of 199,981.
+                //
+                // Being full is not the same as being overloaded, and it is a
+                // decision rather than a law: what is worth carrying is what
+                // you are going to need, and a man on a berry patch in autumn
+                // needs the berries more than he needs the fourth stone.
+                // So food, and only food, is worth setting something down
+                // for, and what goes down is what `what_i_would_set_down`
+                // already ranks lowest - never food, never a tool he works
+                // with, never the thing he carries his load in. It stays
+                // where he was standing, for him or anybody else.
+                if it_is_food && took < harvested {
+                    let each = item.weight_per_unit * item.how_much_lighter_it_is();
+                    let short = (harvested - took) as f32 * each;
+                    if self.set_down_what_is_worth_less_than_food(agent_index, short) > 0.0 {
+                        let mut the_rest = item.clone();
+                        the_rest.quantity = harvested - took;
+                        took += self.take_what_fits(agent_index, &the_rest);
+                    }
+                }
+                let took = took;
                 let went_in_the_pack = took > 0;
                 if it_is_food {
                     self.food_items_into_packs += took as u64;
@@ -477,6 +595,41 @@ impl Simulation {
                     // a hundred and fifty in packs, and the rest went
                     // nowhere at all. ISSUES #165 states this principle
                     // and never reached this branch.
+                    // Except that a mouth is not a pack.
+                    //
+                    // This was the single largest refusal in the model -
+                    // **139,126 of 199,981, seven in ten of everything anybody
+                    // was refused** - and a good share of it was somebody
+                    // hungry, standing on a bush, being told they could not
+                    // carry it. They were not trying to carry it. Measured at
+                    // the last look before death: 61.5% of the dying had no
+                    // room for another armful, and they died eleven days into
+                    // a three-week reserve.
+                    //
+                    // So food picked by somebody who cannot carry it is eaten
+                    // where it stands, and only what is left over goes back on
+                    // the bush. Nothing else changes: a full pack still cannot
+                    // carry wood, and a man who is not hungry still cannot
+                    // pick up what he has no room for.
+                    if it_is_food {
+                        if let Some(kind) = Self::edible_item_for(resource_type_enum) {
+                            let (eaten, nutrition) =
+                                self.a_sitting_from_the_hand(agent_index, kind, harvested);
+
+                            self.world.resources[resource_index]
+                                .put_it_back(harvested.saturating_sub(eaten));
+
+                            return ActionResult::success()
+                                .with_drive_change(DriveType::Hunger, -0.3)
+                                .with_energy_cost(10.0)
+                                .with_message(format!(
+                                    "Ate {eaten} {resource_type} where it stood, \
+                                     having no room to carry any ({:.1} energy)",
+                                    nutrition.energy
+                                ));
+                        }
+                    }
+
                     self.world.resources[resource_index].put_it_back(harvested);
                     ActionResult::failure("Inventory full - cannot carry more".to_string())
                 }

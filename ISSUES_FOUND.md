@@ -11569,3 +11569,88 @@ per person per day — but that counter is specifically "edible items that
 landed in somebody's pack off a forage" and does not include hunting, fishing
 or eating straight off a node, so it is not the whole intake and is not
 evidence on its own.
+
+### 169. The pack refused seven in ten of everything, and mending it triples what comes home and saves nobody
+
+`Gather: Inventory full - cannot carry more` was **139,126 refusals out of
+199,981 — seven in ten of everything anybody in this model was ever refused.**
+`PickUp: No room for it` was another 2,641 of 3,170. It was not that these
+packs were overloaded. The carrying invariant,
+`what_nobody_can_carry_any_more`, only fires on a pack that is *over* its
+limit and trims it back to exactly the limit, so packs equilibrate at a
+hundred per cent full and stay there — measured across a run, 97–110% of
+capacity all year, **fifty-five per cent raw material by weight and about one
+per cent food.** Being full is not being overloaded, and nothing in the model
+had anything to say about a pack that was merely full.
+
+Two things were wrong with that, and they are different:
+
+- **A mouth is not a pack.** Somebody hungry, standing on a berry patch, was
+  told he could not carry it. He was not trying to carry it. Measured at the
+  last look anybody got before they died, 61.5% of the dying had no room for
+  another armful, and they died eleven days into a three-week reserve. Food
+  picked by somebody who cannot carry it is eaten where it stands now, and
+  only what is left over goes back on the bush.
+- **Food is worth more than the fourth stone.** What a person carries is a
+  decision, not a law. A food gather that will not fit now sets down what
+  `what_i_would_set_down` already ranks lowest — never food, never a tool this
+  one works with, never the thing they carry their load in — and only as much
+  of it as the room wants. It stays where they were standing, for them or
+  anybody else. This is *not* the refuted blanket reserve: shedding to "the
+  limit less a day's food" whether or not there is anything to pick up cost
+  **five per cent of person-days over 160 worlds**, because a man drops his
+  firewood in the middle of the moor. This fires only with a crop in the hand
+  that will not fit, so what goes down goes down beside what it was swapped
+  for.
+
+The decision layer's twin of that gate went with it:
+`could_this_gather_come_to_anything` no longer refuses a food trip for want of
+room, because a full pack is no longer a reason to stay where you are.
+
+#### It works, and it is not enough
+
+`food_items_into_packs` — edible items landing in a pack off a forage — over
+eight seeded world-years:
+
+| | food into packs, a world-year |
+|---|---|
+| before (recorded in #168) | 3,233 |
+| after | **10,399** |
+
+**Three and a quarter times as much food comes home.** And the settlements die
+on the same day. Measured over 32 seeded worlds, two years, twelve founders,
+person-days:
+
+| arm | person-days | out of the first winter |
+|---|---|---|
+| eat where it stands only | 94,575 | 0/32 |
+| + the pack sheds for food | 96,460 | 0/32 |
+| + the larder against the walk | 97,272 | 1/32 |
+
+Block-to-block noise on this measurement is about ten per cent. All three are
+flat.
+
+That is the finding, and it is worth more than the fix: **#168 was right and
+its remedy was in the wrong place.** The surplus is not limited by what a
+settlement can pick up or carry. Tripling the intake changed nothing, so the
+constraint is downstream of the pack — in what a body burns, or in how long
+the land gives nothing — and those are the two numbers #168 already named.
+
+#### And the larder, which was a real regression
+
+Taking the limit off the range of the food search (#189's neighbourhood) had a
+consequence nobody looked for: `food_action` could no longer return `None`.
+It always had *somewhere* to send a man, so `something_out_of_the_store`,
+which sits behind it in the hunger chain, stopped being reachable at all.
+
+Measured at the last look before death, over thirty-two worlds: the
+settlement's pits held **805.7 items among 6.68 mouths** — ten days of food
+for everybody — the larder was wholly empty in under one per cent of those
+samples, and the dying were carrying **one item**, eleven days into a
+three-week reserve. They starved walking somewhere.
+
+The store is neither in front of foraging nor behind it now: it is compared,
+on which is the shorter walk. A bush underfoot still beats a hole in the
+ground — that ordering was measured in #43 and is not being changed — and a
+pit five paces off beats a patch across the valley. The store's own gates are
+untouched.

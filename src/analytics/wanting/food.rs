@@ -337,8 +337,12 @@ impl Simulation {
                 return None;
             }
 
+            // And the larder is measured against that walk too. This branch
+            // is where the dying were: a place they remembered, further off
+            // than the hole in the ground behind them with ten days of food
+            // in it.
             if distance > 1 {
-                return Some(Action::Move { target });
+                return Some(self.the_larder_or_this_walk(agent, agent_position, target));
             }
 
             return Some(Action::Gather { resource_type: "food".to_string() });
@@ -398,11 +402,15 @@ impl Simulation {
 
             // The whole map, before a random walk. Nothing about being hungry
             // is answered by wandering, and there is no reason a person stops
-            // looking at the edge of a circle drawn round themselves.
+            // looking at the edge of a circle drawn round themselves - but
+            // the larder is on that map too, and it is nearer than most of
+            // it.
             if let Some(there) = self.the_best_food_anywhere(agent, agent_position) {
-                return Some(Action::Move {
-                    target: (there.x, there.y, agent_position.2),
-                });
+                return Some(self.the_larder_or_this_walk(
+                    agent,
+                    agent_position,
+                    (there.x, there.y, agent_position.2),
+                ));
             }
 
             // And only then, with nothing standing anywhere that would pay
@@ -417,12 +425,65 @@ impl Simulation {
         // is simply that the food is further off than the circle. A walk
         // begun today is a meal tomorrow; standing still is neither.
         if let Some(there) = self.the_best_food_anywhere(agent, agent_position) {
-            return Some(Action::Move {
-                target: (there.x, there.y, agent_position.2),
-            });
+            return Some(self.the_larder_or_this_walk(
+                agent,
+                agent_position,
+                (there.x, there.y, agent_position.2),
+            ));
         }
 
-        None
+        self.something_out_of_the_store(agent, agent_position)
+    }
+
+    /// The larder against a walk, decided on which is the shorter.
+    ///
+    /// The store used to sit behind the whole of `food_action` in the hunger
+    /// arm - `.or_else(something_out_of_the_store)` - and that ordering was
+    /// measured and is right: a pit in front of everything is drawn on five
+    /// times as often, halves the rot, and costs a fifth of all the food
+    /// anybody eats and six of the people in a settlement, because a meal out
+    /// of a hole costs two turns where a berry costs one. See ISSUES #43.
+    ///
+    /// What broke it was taking the limit off the range of the search. When
+    /// `food_action` ended at the edge of a circle it returned `None` on a
+    /// bare countryside and the store got its turn; once it could see the
+    /// whole map it always had *somewhere* to send a man, so the branch
+    /// behind it stopped existing. Measured at the last look anybody got
+    /// before they died, over thirty-two worlds: the settlement's pits held
+    /// **805.7 items among 6.68 mouths** - ten days of food for everybody -
+    /// the larder was wholly empty in under one per cent of those samples,
+    /// and the dying were carrying **one item** and were eleven days into a
+    /// three-week reserve. They starved walking somewhere.
+    ///
+    /// So it is neither in front nor behind: it is compared. This is the tail
+    /// of the branch, after everything underfoot and everything known, where
+    /// what is left is a long walk either way - and a walk to a hole with ten
+    /// days of food in it beats a walk twice as far to a bush. The store's own
+    /// gates are untouched: somebody with two days' food about them does not
+    /// open it, and neither does anybody at all while the hedgerows are
+    /// bearing unless they are starving.
+    fn the_larder_or_this_walk(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        there: (i32, i32, i32),
+    ) -> Action {
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let walk = here.distance_to(&Position::new(there.0, there.1));
+
+        if let Some(store) = self.something_out_of_the_store(agent, agent_position) {
+            if self
+                .world
+                .nearest_full_pit(here, u32::MAX)
+                .is_some_and(|(_, paces)| paces <= walk)
+            {
+                return store;
+            }
+        }
+
+        Action::Move { target: there }
     }
 
     /// The best food standing anywhere in the world.

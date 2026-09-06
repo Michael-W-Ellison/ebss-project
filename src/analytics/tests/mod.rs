@@ -57,6 +57,8 @@ pub mod portion_tests;
 pub mod salt_tests;
 pub mod scarcity_tests;
 pub mod sickness_tests;
+mod full_pack_tests;
+mod larder_reach_tests;
 mod weather_tests;
 pub mod working_tests;
 pub mod barter_tests;

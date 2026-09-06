@@ -20,6 +20,67 @@ use log::debug;
 use rand::Rng;
 
 impl Simulation {
+    /// A sitting down to eat off what is in the hand, and how many of it that
+    /// comes to.
+    ///
+    /// **Eating never consults the pack.** A mouth is not a rucksack: a man
+    /// with his arms full can still put a handful of berries in it. This is
+    /// the one place the arithmetic lives, because two verbs end with food in
+    /// somebody's hand - `Eat` off a patch, and `Gather` that found no room -
+    /// and they had better agree about what a meal is.
+    ///
+    /// How many items a sitting comes to depends on what they are: four fish
+    /// or sixteen handfuls of leaf come to the same supper, which is the whole
+    /// of what caloric density means here. It stops at a third of a day's
+    /// energy or at a full stomach, whichever comes first, and never at
+    /// nought - somebody who has walked to a bush gets a mouthful even with a
+    /// stomach that says otherwise.
+    pub(in crate::analytics) fn a_sitting_from_the_hand(
+        &mut self,
+        agent_index: usize,
+        what: crate::world::ItemType,
+        in_the_hand: u32,
+    ) -> (u32, crate::world::nutrition::NutritionalContent) {
+        let nutrition = self
+            .food_database
+            .get(&what)
+            .map(|template| template.base_nutrition)
+            .unwrap_or_else(|| NutritionalContent::new(20.0, 5.0, 35.0, 0.8));
+
+        let now = self.current_tick;
+        let agent = &mut self.population.agents[agent_index];
+
+        agent.nutrition.consume(&nutrition);
+        agent.state.eat(now, nutrition.energy);
+
+        let worth = physiology::what_a_unit_of_this_is_worth(nutrition.energy);
+        let mut eaten = 0u32;
+        let mut energy_in = 0.0f32;
+        while eaten < in_the_hand && energy_in < physiology::WHAT_A_SITTING_AIMS_AT {
+            let went_down = agent
+                .state
+                .physiology
+                .eat(physiology::UNITS_IN_ONE_ITEM, worth);
+            if went_down <= 0.0 {
+                break;
+            }
+            energy_in += went_down * worth;
+            eaten += 1;
+        }
+        if eaten == 0 {
+            eaten = 1;
+        }
+
+        // Foraged fruit and berries carry water too
+        if nutrition.water_content > 0.3 {
+            if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
+                thirst.decrease(nutrition.water_content * 0.1);
+            }
+        }
+
+        (eaten.min(in_the_hand.max(1)), nutrition)
+    }
+
     /// `Action::Eat`.
     pub(in crate::analytics) fn eating(&mut self, food_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng) -> ActionResult {
         // A full stomach will not take more, however much the reserve

@@ -871,7 +871,21 @@ impl Simulation {
 
         // A pack with no room in it. Five thousand refused turns a world were
         // somebody asking for another armful with their arms already full.
-        if agent.inventory.weight_capacity_remaining() < Self::AS_MUCH_AS_ONE_TRIP_WEIGHS {
+        //
+        // Unless it is food, in which case the pack is not the reason to stay
+        // where you are. A full pack is full of something, and food is worth
+        // more than what it is full of: the stone goes on the grass and the
+        // crop goes in - see `set_down_what_is_worth_less_than_food`. Where
+        // there is nothing anybody would set down, what will not go in the
+        // pack goes in the mouth - see the tail of `gathering`. Either way
+        // the trip is worth making, and this gate used to stop the decision
+        // before the executor could do either, so a starving man with a full
+        // pack did not walk to the bush at all.
+        let food_is_the_point = wanted == ResourceType::Food;
+
+        if !food_is_the_point
+            && agent.inventory.weight_capacity_remaining() < Self::AS_MUCH_AS_ONE_TRIP_WEIGHS
+        {
             return false;
         }
 
