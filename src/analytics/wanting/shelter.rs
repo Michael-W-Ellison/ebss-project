@@ -11,10 +11,82 @@ use super::super::Simulation;
 use crate::environment::Action;
 
 impl Simulation {
-    /// Whether the agent is cold enough, and bare enough, to want another layer
+    /// Whether the agent is bare enough, and pressed enough, to want another
+    /// layer.
+    ///
+    /// **The Shelter drive decides this, not the thermometer.** It used to be
+    /// "am I cold at this instant, and am I bare", which made the drive a
+    /// router rather than a cause: `DriveType::Shelter` sent the tick here and
+    /// this line sent it straight back unless the body was already below its
+    /// ideal. Nobody made a coat in autumn, because in autumn nobody is
+    /// shivering yet - and the coat that is wanted in December has to be cut,
+    /// carried and sewn in October.
+    ///
+    /// Being cold now still counts, and counts on its own: a body under its
+    /// ideal wants a layer whatever a drive says about it. What is new is the
+    /// second way in - a Shelter drive over its own threshold, which is what
+    /// the drive layer means by "this one is exposed and it matters", and
+    /// which rises on the weather and the season rather than on the current
+    /// reading of one body.
+    ///
+    /// Bareness is the same test as before and is the harder half: somebody
+    /// already carrying `ENOUGH_INSULATION` wants nothing more however cold it
+    /// is or however hard the drive presses, which is what stops a settlement
+    /// spending the winter sewing.
     pub(in crate::analytics) fn wants_more_clothing(agent: &crate::agents::Agent) -> bool {
-        agent.body_temperature.current < agent.body_temperature.ideal - Self::CHILLY_MARGIN
-            && agent.body.total_cold_insulation() < Self::ENOUGH_INSULATION
+        if agent.body.total_cold_insulation() >= Self::ENOUGH_INSULATION {
+            return false;
+        }
+
+        let cold_now = agent.body_temperature.current
+            < agent.body_temperature.ideal - Self::CHILLY_MARGIN;
+
+        let the_drive_is_pressing = agent
+            .drives
+            .get(crate::core::DriveType::Shelter)
+            .map(|drive| drive.value >= crate::core::DriveType::Shelter.default_threshold())
+            .unwrap_or(false);
+
+        cold_now || the_drive_is_pressing
+    }
+
+    /// Whether this one of mine is bare enough that I should clothe it.
+    ///
+    /// A child cannot clothe itself - it cannot gather flax, has no skill to
+    /// sew, and until now nobody made it anything. The model already knew
+    /// this: `update_agent_exposure` has a paragraph explaining that a child
+    /// left to the weather runs two or three degrees colder than the adults
+    /// round it and dies of that, and it works around it by counting a carer
+    /// standing nearby *as shelter*. That is a plaster over the hole rather
+    /// than the thing itself, and it only holds while somebody is stood next
+    /// to them.
+    ///
+    /// So clothing hangs off Protection as well as Shelter, which is what a
+    /// parent is for.
+    pub(in crate::analytics) fn one_of_mine_who_is_bare(
+        &self,
+        agent: &crate::agents::Agent,
+    ) -> Option<uuid::Uuid> {
+        use crate::agents::LifeStage;
+
+        self.population
+            .agents
+            .iter()
+            .filter(|child| child.state.is_alive)
+            .filter(|child| child.parent_ids.contains(&agent.id))
+            .filter(|child| {
+                matches!(child.state.life_stage, LifeStage::Infant | LifeStage::Child)
+            })
+            .filter(|child| child.body.total_cold_insulation() < Self::ENOUGH_INSULATION)
+            // Near enough to hand it over. A gift is a thing you put in
+            // somebody's hands, not a thing you post.
+            .filter(|child| {
+                let (x, y, _) = child.state.position;
+                let (mx, my, _) = agent.state.position;
+                (x - mx).abs().max((y - my).abs()) <= Self::WITHIN_SIGHT
+            })
+            .map(|child| child.id)
+            .next()
     }
 
     /// What an agent of this much practice turns a given material into.
@@ -256,6 +328,28 @@ impl Simulation {
         // it comes to standing between them and a wolf.
         if let Some(sick) = self.one_of_mine_who_is_ill(agent, agent_position) {
             return Some(Action::Treat { who: Some(sick) });
+        }
+
+        // And one of your own going bare in the cold.
+        //
+        // Clothing hangs off two drives now, which is what was asked for and
+        // what the model always implied: Shelter is a coat for yourself,
+        // Protection is a coat for your child. A garment in hand goes to the
+        // child that has none; with none in hand, making one is the errand,
+        // and `clothing_action` already knows how to cut flax and sew it.
+        //
+        // Both of those are behind the ill and in front of the wolf, on the
+        // same reasoning as the line above: a thing that is happening to a
+        // child now beats a thing that is wearing it down, and a wolf beats
+        // both.
+        if let Some(bare) = self.one_of_mine_who_is_bare(agent) {
+            if Self::garment_to_put_on(agent).is_some() {
+                return Some(Action::GiveTo { to: bare });
+            }
+
+            if let Some(garment) = Self::garment_to_make(agent) {
+                return Some(Action::MakeClothing { garment });
+            }
         }
 
         // Only the small ones. An adolescent can look after itself.

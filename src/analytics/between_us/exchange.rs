@@ -107,6 +107,24 @@ impl Simulation {
     /// and fewer than six on the other, and over eight worlds of ten thousand
     /// ticks a settlement traded once.
     pub(in crate::analytics) fn what_i_would_hand_over(&self, me: usize, them: usize) -> Option<(String, u32)> {
+        // A coat for somebody going bare comes before anything else, and does
+        // not have to be a surplus.
+        //
+        // `what_i_can_spare` hands over whatever you have *most* of past
+        // `ENOUGH_TO_HAND`, which for a garment - held one or two at a time -
+        // is never. So a parent setting out to clothe a bare child handed it
+        // firewood, which is this document's oldest shape: a want that reaches
+        // the list and not the pack. See ISSUES #175.
+        //
+        // The rule is narrow on purpose. It fires only when the other has less
+        // than `ENOUGH_INSULATION` and I have a garment that would put them
+        // over what they are wearing, so nobody strips themselves for a
+        // stranger who is merely chilly, and nobody hands out a second cloak
+        // to somebody already dressed.
+        if let Some(coat) = self.a_coat_for_somebody_bare(me, them) {
+            return Some((coat, 1));
+        }
+
         let mine = self.population.agents[me].what_i_can_spare()?;
 
         let they_have = self.population.agents[them].how_many_i_have(&mine.0);
@@ -119,6 +137,45 @@ impl Simulation {
         }
 
         Some(mine)
+    }
+
+    /// A garment in my pack that would do somebody else more good than it is
+    /// doing me.
+    ///
+    /// What makes this a gift rather than a trade is that nothing comes back
+    /// and nothing is spare: a parent hands over the coat because the child is
+    /// cold, not because there were two of them.
+    fn a_coat_for_somebody_bare(&self, me: usize, them: usize) -> Option<String> {
+        use crate::agents::equipment::garment_recipe;
+
+        let them = &self.population.agents[them];
+        if them.body.total_cold_insulation() >= Self::ENOUGH_INSULATION {
+            return None;
+        }
+
+        self.population.agents[me]
+            .inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.quantity > 0)
+            .filter_map(|item| {
+                let recipe = garment_recipe(&item.item_id)?;
+                let quality = item.quality.unwrap_or(crate::agents::skills::Quality::Crude);
+                let wear = match (item.current_durability, item.max_durability) {
+                    (Some(current), Some(max)) if max > 0.0 => (current / max).clamp(0.0, 1.0),
+                    _ => 1.0,
+                };
+                let warmth = Self::garment_warmth(recipe, quality) * wear;
+
+                // Worth their putting on over whatever is already on that part
+                // of them.
+                if warmth > Self::warmth_worn(them, recipe.slot) {
+                    Some(item.item_id.clone())
+                } else {
+                    None
+                }
+            })
+            .next()
     }
 
     /// How many times more of a thing you have to have before it is worth
