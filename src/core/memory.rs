@@ -195,6 +195,47 @@ pub enum SpatialMemoryType {
     Storage,
 }
 
+impl SpatialMemoryType {
+    /// How much forgetting this place would cost.
+    ///
+    /// A spatial memory had no importance at all: `SpatialMemory::decay` took
+    /// a flat thousandth a tick, so **the pit a man dug and filled with his
+    /// winter food was forgotten at exactly the rate of a bush he once glanced
+    /// at**. `MemoryImportance::decay_multiplier` has described five bands of
+    /// this since memories were written and only the episodic entries ever
+    /// read it - a table with a reader for half its callers, which is this
+    /// project's recurring defect wearing its plainest face.
+    ///
+    /// The arithmetic it was hiding: confidence starts at 1.0, `recall_locations`
+    /// wants it above 0.3, and a flat thousandth a tick spends that in 700
+    /// ticks - **fourteen and a half days**. The lean season is seventy-five.
+    /// So a store laid down in autumn was forgotten a fortnight later and its
+    /// owner starved thirty paces from it: measured, of the turns taken by a
+    /// body under a quarter of its reserve, **0.6% could remember a store at
+    /// all**, while the settlement's pits held two thousand items.
+    ///
+    /// A store is Critical because it is a thing you made, not a thing you
+    /// noticed, and because the whole point of making it was to come back to
+    /// it in a season when nothing else will feed you. Water next, because
+    /// thirst kills in three days. A bush is ordinary: bushes come and go and
+    /// being wrong about one costs a walk.
+    pub fn how_much_this_matters(&self) -> MemoryImportance {
+        match self {
+            // Somewhere you buried food, for a winter you could see coming.
+            SpatialMemoryType::Storage => MemoryImportance::Critical,
+            // Thirst is the fastest of the slow deaths.
+            SpatialMemoryType::Water => MemoryImportance::Important,
+            // What has hurt you, and where you sleep.
+            SpatialMemoryType::Danger | SpatialMemoryType::Shelter => MemoryImportance::Important,
+            // A bush, a seam, a thing left lying. Worth knowing and no
+            // disaster to be wrong about.
+            SpatialMemoryType::Food | SpatialMemoryType::Resource | SpatialMemoryType::Tool => {
+                MemoryImportance::Normal
+            }
+        }
+    }
+}
+
 /// A spatial memory entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpatialMemory {
@@ -217,12 +258,34 @@ impl SpatialMemory {
     }
 
     /// Decay confidence over time
-    pub fn decay(&mut self, current_tick: u32) {
-        let ticks_elapsed = current_tick.saturating_sub(self.last_seen);
-        // Confidence decays by 0.1% per tick
-        let decay = (ticks_elapsed as f32) * 0.001;
-        self.confidence = (self.confidence - decay).max(0.0);
+    pub fn forget_a_little(&mut self, ticks: u32) {
+        // A thousandth a tick, at the pace this kind of place is forgotten -
+        // see `SpatialMemoryType::how_much_this_matters`. It was flat, and a
+        // winter store went the way of a berry bush.
+        //
+        // Denominated in **ticks since this was last called**, not in the tick
+        // it is now. It used to take `current_tick` and read `last_seen`,
+        // which is an absolute reading - correct if you call it once, and
+        // quadratic if you call it every tick, because each call subtracts the
+        // whole elapsed span again from an already-decayed confidence. Both
+        // callers existed. `Memory::tick` called it every tick, so a memory
+        // was gone in under a minute; `batch_decay_and_prune` called it every
+        // hundred with its own copy of the arithmetic. Two callers with
+        // opposite contracts and one function to satisfy them, which is why
+        // neither was right. This has one meaning and both callers now say how
+        // much time has passed.
+        let spent = ticks as f32
+            * Self::HOW_FAST_AN_ORDINARY_PLACE_IS_FORGOTTEN
+            * self.memory_type.how_much_this_matters().decay_multiplier();
+        self.confidence = (self.confidence - spent).max(0.0);
     }
+
+    /// What a tick costs an ordinary place's confidence.
+    ///
+    /// At `MemoryImportance::Normal` this spends a fresh memory's confidence
+    /// down to the 0.3 `recall_locations` wants in 700 ticks, which is a
+    /// fortnight - about right for a bush somebody walked past once.
+    pub const HOW_FAST_AN_ORDINARY_PLACE_IS_FORGOTTEN: f32 = 0.001;
 
     /// Refresh memory (saw it again)
     pub fn refresh(&mut self, tick: u32) {
@@ -330,7 +393,7 @@ impl Memory {
         } else {
             // Per-tick mode: decay every tick (original behavior)
             for memory in &mut self.spatial_memories {
-                memory.decay(self.current_tick);
+                memory.forget_a_little(1);
             }
             // Remove very old, low-confidence memories
             self.spatial_memories.retain(|m| m.confidence > self.config.forget_threshold);
@@ -339,14 +402,28 @@ impl Memory {
 
     /// Perform batch decay and pruning (efficient for large populations)
     fn batch_decay_and_prune(&mut self) {
-        let decay_multiplier = self.config.prune_interval as f32; // Accumulate decay
-
-        // Apply accumulated decay to spatial memories
+        // One spelling of forgetting, and this is not where it lives.
+        //
+        // This had its own copy of the thousandth-a-tick rule, ignored
+        // `how_much_this_matters`, and then multiplied by `prune_interval` on
+        // top of `time_elapsed` - which double-counts, because `decay` already
+        // measures from `last_seen` and is not an increment. With the default
+        // interval of a hundred that came to **a tenth of confidence per tick
+        // elapsed**: a fresh memory fell below the 0.3 `recall_locations` wants
+        // in seven ticks and was pruned outright in nine, so **anywhere a
+        // person had not looked in the last four hours was gone**.
+        //
+        // Measured over eight seeded world-years: of the turns taken by a body
+        // under a quarter of its reserve, 0.6% could remember a store at all,
+        // while the settlement's pits held two thousand items. Every world
+        // emptied between day 315 and 350 with a full larder in the ground.
+        //
+        // `SpatialMemory::decay` computes from `last_seen` absolutely, so
+        // calling it on an interval is exactly the same as calling it every
+        // tick and there is nothing to accumulate.
+        let since = self.config.prune_interval;
         for memory in &mut self.spatial_memories {
-            // Apply decay proportional to ticks elapsed
-            let time_elapsed = self.current_tick.saturating_sub(memory.last_seen);
-            let decay = (time_elapsed as f32 * 0.001 * decay_multiplier).min(1.0);
-            memory.confidence = (memory.confidence - decay).max(0.0);
+            memory.forget_a_little(since);
         }
 
         // Prune weak memories

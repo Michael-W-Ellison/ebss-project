@@ -676,8 +676,17 @@ impl Simulation {
                 }
             }
 
-            if resource_type_enum == ResourceType::Food {
-                self.forget_nearby_food_memories(agent_index);
+            // A place that has just been looked at and had nothing in it is
+            // not where the food is, nor where the water is. Water was left
+            // out of this, which was harmless while a memory lasted four hours
+            // and is not harmless now that one lasts a fortnight.
+            match resource_type_enum {
+                ResourceType::Food => self.forget_nearby_food_memories(agent_index),
+                ResourceType::Water => self.forget_what_is_not_there(
+                    agent_index,
+                    crate::core::memory::SpatialMemoryType::Water,
+                ),
+                _ => {}
             }
 
             ActionResult::failure(format!("No {} sources nearby", resource_type))

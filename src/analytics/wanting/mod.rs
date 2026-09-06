@@ -433,9 +433,30 @@ impl Simulation {
             return (action, false);
         }
 
-        // And freezing, where there is a roof within reach. Exposure is
-        // already doing damage by the time this fires, so it is not a matter
-        // of how much the agent wants to be warm.
+        // And freezing, where there is a roof within reach.
+        //
+        // *Freezing*, not cold. This asked `needs_shelter`, which is
+        // `is_critical() || !active_exposures.is_empty()` - that is, being cold
+        // at all - and it sits above every drive there is, Hunger included. In
+        // winter every agent is cold every turn, so from the first frost this
+        // line answered the turn for everybody, for ever, and **the Hunger
+        // drive was never reached again**.
+        //
+        // Measured over eight seeded world-years, over the 204,003 turns taken
+        // by a body under a quarter of its reserve: the hunger drive was
+        // active in 97.7% of them and `food_action` had an answer ready in
+        // **83.5%**. What those bodies actually did was Move 49.3% and
+        // SeekShelter 34.7%. **They ate in 0.2%.** Every settlement emptied
+        // between day 315 and day 350 with food still in the ground.
+        //
+        // Narrowing it to `is_critical` was tried and is **not** kept. Over 32
+        // seeded worlds it moved SeekShelter from 34.7% of a thin body's turns
+        // to 16.5% and did not move Eat at all - it stayed at 0.2% - while the
+        // weather went from 18.5% of deaths to 23.6% and person-days fell
+        // 98,769 to 94,879. The override is not what stands between a starving
+        // man and his supper; being unable to reach the store is. Left as it
+        // was, with the measurement recorded so nobody spends the afternoon on
+        // it again.
         if agent.needs_shelter() && self.nearest_shelter_from(agent_position).is_some() {
             return (Action::SeekShelter, false);
         }

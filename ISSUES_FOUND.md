@@ -12083,3 +12083,100 @@ Two things this did *not* buy, said plainly:
 `a_settlement_lives_through_a_winter` went green under #174 and is red again
 here, which is where it had sat for a long time before: the standing suite
 failures are 11, as they were.
+
+### 176. Anywhere a person had not looked in the last four hours was gone
+
+Every settlement empties between day 315 and day 350. That is a thirty-five day
+window across thirty-two seeded worlds, which is not attrition - it is a cliff,
+and a cliff has a mechanism.
+
+#### What a body a few days from death actually does
+
+Sampling every turn taken by a body under a quarter of its reserve, over eight
+seeded world-years - 204,003 turns:
+
+| | share of those turns |
+|---|---|
+| the hunger drive is active | 97.7% |
+| `food_action` has an answer ready | **83.5%** |
+| ...and it is allowed through (`is_starving`) | 30.6% |
+| **spent on `Move`** | **49.3%** |
+| **spent on `SeekShelter`** | **34.7%** |
+| **spent on `Eat`** | **0.2%** |
+
+A dying settlement eats **once in five hundred turns** while the food branch
+has a good answer four times in five. And of those turns, only 0.6% could
+remember where the settlement's store was - while its pits held two thousand
+items, 65% of which were sound, edible food.
+
+#### One rule, two spellings, and neither of them right
+
+`SpatialMemory::decay` took `current_tick`, read `last_seen`, and subtracted
+the whole elapsed span. That is an **absolute** reading: correct called once,
+quadratic called repeatedly. It had two callers with opposite contracts.
+
+- `Memory::tick` called it **every tick**, so each call subtracted the entire
+  elapsed span again from an already-decayed confidence. A memory was gone in
+  under a minute.
+- `batch_decay_and_prune` - the live path, since `batch_decay` defaults to true
+  - had **its own copy** of the arithmetic and then multiplied by
+  `prune_interval` on top of the elapsed time. With the default hundred that is
+  a tenth of confidence per tick elapsed: a fresh memory fell below the 0.3
+  `recall_locations` wants in **seven ticks** and was pruned outright in nine.
+
+**Anywhere a person had not looked in the last four hours was gone.** A man
+buried his winter food in October and could not find it in November.
+
+`forget_a_little(ticks)` replaces it: denominated in time since the last call,
+so it means one thing, and both callers now say how much time has passed.
+
+#### And a store is not a bush
+
+A spatial memory had no importance at all, so the pit a man dug and filled was
+forgotten at exactly the rate of a bush he glanced at.
+`MemoryImportance::decay_multiplier` has described five bands of this since
+memories were written and **only the episodic entries ever read it** - a table
+with a reader for half its callers. `SpatialMemoryType::how_much_this_matters`
+supplies the other half: a store is Critical, water and danger Important, a
+bush Normal. A bush is now forgotten in a fortnight and a store outlasts the
+seventy-five days the land gives nothing, which is the span it was laid down
+for.
+
+And a memory that persists has to be correctable, or it is a lie the agent
+keeps walking back to. `forget_nearby_food_memories` was written for food and
+only ever called for food; it is now `forget_what_is_not_there`, and the failed
+`Gather` calls it for water too.
+
+#### What it came to, including what it did not
+
+Over 32 seeded worlds, person-days **98,769 to 98,328** - flat, inside noise.
+What moved was *which* constraint binds:
+
+| | before | after |
+|---|---|---|
+| starvation | 28.2% | **21.1%** |
+| the weather | 18.5% | 17.2% |
+| dehydration | 12.8% | **18.2%** |
+
+A quarter fewer die of starvation. They die of thirst instead, at springs that
+dried up months ago - the memory now outlives the water. The water call site
+above measured **no change at all** over 32 worlds, so whatever corrects a
+stale water memory, it is not the failed `Gather`; that is an open thread, not
+a fix, and it is recorded here as one.
+
+#### The branch that was not the answer, so nobody spends the afternoon again
+
+`needs_shelter()` is `is_critical() || !active_exposures.is_empty()` - cold at
+all - and it sits above every drive there is, Hunger included. From the first
+frost it answers the turn for everybody, for ever. That looks exactly like the
+cause of the table at the top, and it is not. Narrowing it to `is_critical`
+moved `SeekShelter` from 34.7% of a thin body's turns to 16.5%, **did not move
+`Eat` at all** - 0.2% either way - sent `Move` up to 61.6%, took the weather
+from 18.5% of deaths to 23.6%, and cost person-days 98,769 to 94,879. Reverted,
+and the measurement left in the comment.
+
+The override is not what stands between a starving man and his supper. Being
+unable to reach the store was, and now that he can remember where it is, what
+stands there is the walk itself: 82.2% of a thin body's turns go on `Move`, and
+nothing in the model prices a journey against what is at the end of it. That is
+entry #193, still open, and it is now the top of the list.
