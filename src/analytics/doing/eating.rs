@@ -40,7 +40,7 @@ impl Simulation {
         agent_index: usize,
         what: crate::world::ItemType,
         in_the_hand: u32,
-    ) -> (u32, crate::world::nutrition::NutritionalContent) {
+    ) -> (u32, f32, crate::world::nutrition::NutritionalContent) {
         let nutrition = self
             .food_database
             .get(&what)
@@ -83,7 +83,7 @@ impl Simulation {
             }
         }
 
-        (eaten.min(in_the_hand.max(1)), nutrition)
+        (eaten.min(in_the_hand.max(1)), energy_in, nutrition)
     }
 
     /// `Action::Eat`.
@@ -181,7 +181,11 @@ impl Simulation {
                 );
 
                 return ActionResult::success()
-                    .with_drive_change(DriveType::Hunger, -0.3)
+                    .with_drive_change(
+                        DriveType::Hunger,
+                        -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
+                            * physiology::what_this_meal_answers(energy_in),
+                    )
                     .with_energy_cost(1.0) // Eating from inventory is cheap
                     .with_message(format!(
                         "Ate {mouthfuls} of carried {item_id} ({energy_in:.0} energy)"

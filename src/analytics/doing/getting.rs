@@ -609,14 +609,18 @@ impl Simulation {
                     // pick up what he has no room for.
                     if it_is_food {
                         if let Some(kind) = Self::edible_item_for(resource_type_enum) {
-                            let (eaten, nutrition) =
+                            let (eaten, went_in, nutrition) =
                                 self.a_sitting_from_the_hand(agent_index, kind, harvested);
 
                             self.world.resources[resource_index]
                                 .put_it_back(harvested.saturating_sub(eaten));
 
                             return ActionResult::success()
-                                .with_drive_change(DriveType::Hunger, -0.3)
+                                .with_drive_change(
+                                    DriveType::Hunger,
+                                    -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
+                                        * physiology::what_this_meal_answers(went_in),
+                                )
                                 .with_energy_cost(10.0)
                                 .with_message(format!(
                                     "Ate {eaten} {resource_type} where it stood, \

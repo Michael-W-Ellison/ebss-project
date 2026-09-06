@@ -1359,7 +1359,10 @@ impl Simulation {
 #[cfg(test)]
 mod tests;
 
-
-
-
-
+/// What a full sitting down to eat answers of a hunger.
+///
+/// The figure every eating path used to subtract flat, whatever had actually
+/// gone down. It is still what a *full* meal answers; what a partial one
+/// answers is now that much of it - see
+/// `agents::physiology::what_this_meal_answers`.
+pub const WHAT_A_FULL_SITTING_ANSWERS: f32 = 0.3;

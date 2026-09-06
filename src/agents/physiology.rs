@@ -242,6 +242,27 @@ pub fn share_of_a_meal_gone_by(age_in_minutes: u32) -> f32 {
 /// fishing. The fishery's numbers are the later and the more specific, so they
 /// are the ones taken. The stomach's six hundred is a volume, and it is a
 /// ceiling on gorging rather than a daily target.
+/// How much of a hunger a meal of this much energy actually answers.
+///
+/// One, for a full sitting; a fifth, for a fifth of one. **Every eating path
+/// in this model discharged the Hunger drive by a flat constant** - minus
+/// three tenths for a meal and minus three tenths for a single berry - and
+/// the drive is an accumulator, not something re-read off the body each turn.
+/// So a mouthful bought a starving man's hunger off entirely: the drive fell
+/// under the threshold, another drive won the turn, and he walked away from
+/// the food with his reserve still emptying.
+///
+/// Measured over eight seeded world-years, sampling every living body once a
+/// day, that shows up as a fold in the middle of the table. Bodies at a
+/// quarter to a half of their reserve carry a hunger of **0.96 on an empty
+/// stomach**; bodies under a *tenth* of their reserve carry **0.71, with a
+/// hundred and fifty energy in the belly**. The ones nearest death were the
+/// less hungry, because something had gone down. A hundred and fifty energy
+/// against the fourteen hundred and forty a body burns in a day.
+pub fn what_this_meal_answers(energy_in: f32) -> f32 {
+    (energy_in / WHAT_A_SITTING_AIMS_AT).clamp(0.0, 1.0)
+}
+
 pub fn what_a_unit_of_this_is_worth(energy: f32) -> f32 {
     energy.max(0.5)
 }

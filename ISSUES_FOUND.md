@@ -11826,3 +11826,88 @@ not the man.
 That is the next measurement and it is a different one: not how much a
 settlement eats, but the spread of what each body gets, and what the reserve
 of the ones who die looked like on the days before they died.
+
+### 173. A mouthful buys off a starving man's hunger, because the drive is discharged flat
+
+"Why is a depleting reserve not making agents eat more to compensate?" It
+makes them eat **oftener**, and that half works. It does not make them eat
+**more**, and the reason is one number repeated in eight places.
+
+`how_fast_hunger_rises` reads the reserve and multiplies the rate by **1.0 at
+a full reserve up to 4.0 under a tenth of one**, and moves the "full enough to
+stop wanting" line down as the reserve empties. That is a real feedback and it
+fires. But hunger is an **accumulator** - `drive.value += base_rate ×
+how_fast_hunger_rises`, clamped - and nothing re-reads it off the body. It
+comes *down* only when an action subtracts from it, and every eating path
+subtracted a flat constant:
+
+```
+eating.rs:184   -0.3      eating.rs:405   -0.3      eating.rs:838   -0.05
+getting.rs:619  -0.3      getting.rs:842  -0.4      getting.rs:1332 -0.15
+getting.rs:1491 -0.15     keeping.rs:365  -0.1
+```
+
+Three tenths for a full sitting of four hundred and eighty energy, and three
+tenths for one berry worth a hundred. So a man eleven days into a three-week
+reserve who finds a single handful stops being hungry enough to act on it,
+another drive wins the turn, and he walks away with his reserve still falling.
+
+#### The fold in the middle of the table
+
+Sampling every living body once a day over eight seeded world-years, by how
+much of its reserve it has left:
+
+| reserve | samples | hunger | belly (energy) | food in pack | empty pack | in the pits |
+|---|---|---|---|---|---|---|
+| under 10% | 79 | **0.71** | **152** | 0.1 | 90% | 334 |
+| 10-25% | 126 | 0.84 | 71 | 0.2 | 90% | 484 |
+| 25-50% | 300 | **0.96** | **20** | 0.1 | 96% | 604 |
+| 50-75% | 387 | 0.93 | 41 | 0.6 | 94% | 819 |
+| over 75% | 23,043 | 0.12 | 979 | 5.9 | 49% | 1,176 |
+
+Read the first and third rows together. **The bodies nearest death are the
+less hungry**, because something has gone down - a hundred and fifty energy
+against the fourteen hundred and forty a day they burn. The drive is answered
+by a mouthful and not by a meal.
+
+A meal now answers what a meal is worth: `what_this_meal_answers` scales the
+discharge by the energy that actually went down, so a full sitting is worth
+exactly the three tenths it always was and a handful is worth a fifth of that.
+
+#### What it bought, and the two bigger things the table says
+
+Days spent under a quarter of a reserve fell about a sixth (892 depleted
+body-day samples to 742). Person-days: 95,994 to 93,439 over 32 seeded worlds,
+which is inside the noise and slightly down.
+
+Because the drive was never the binding constraint, and the same table says
+what is:
+
+- **The hungry have nothing to eat.** 90-97% of every depleted sample carries
+  no food at all, against 49% of the well-fed. Mean food in pack 0.1 items
+  against 5.9.
+- **The settlement's larder is full the whole time.** 334 to 1,176 items in
+  the ground, at every level of individual starvation, including for the
+  bodies under a tenth of their reserve.
+- **And the distribution is bimodal, not a spread.** 23,043 of 23,935 samples
+  - 96.3% - sit above three quarters of a reserve. Only 3.7% are below. Almost
+  everybody is nearly full almost always, and a few fall off a cliff and do
+  not come back.
+
+That is the shape of it: this is not a settlement going hungry, it is a
+settlement in which a few individuals lose access to the food and nobody -
+including them, with a full pit thirty paces off - closes the gap. The next
+work is that gap, not the appetite.
+
+#### And one design gap left standing, named here
+
+`WHAT_A_SITTING_AIMS_AT` is a flat third of a day, 480 energy, for every body
+in every condition. A man at a tenth of his reserve sits down to exactly what
+a full man sits down to. The docstring on `how_fast_hunger_rises` records that
+raising hunger *through* a full stomach was tried and rejected - "a body
+cannot answer a hunger it has no room for" - and that was right about
+frequency and never examined the portion. The room is there: the stomach
+holds six hundred units of volume, and a 480-energy sitting of legumes is
+under eleven of them, **under two per cent of the stomach**. A spent body
+could eat fifty such sittings before it ran out of room. Not changed here
+because the measurement above says appetite is not what is killing them.
