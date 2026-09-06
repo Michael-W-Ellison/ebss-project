@@ -11979,3 +11979,107 @@ beside you is the binding constraint on its own; both were broken, both are
 mended, and the settlement still loses the same people. The remaining rung is
 the one that is still missing: a store at the camp, between the pack and the
 pit, that a man is standing next to when he needs it.
+
+### 175. A pack holds 17.4 units, and a working stock was twelve of anything
+
+Entry #174 ended saying the remaining rung was "a store at the camp, between
+the pack and the pit, that a man is standing next to when he needs it". Going
+after that rung found two things in the way of it and one much larger thing in
+the way of everything.
+
+#### Nothing in this model could ever finish a roof
+
+`Action::Build` pushes a `Building::new_under_construction` and takes the
+materials off the builder on the spot. The only caller of
+`add_construction_progress` anywhere in the model is `ConstructionWork` in the
+parallel `world::actions` system, which the decision layer does not issue, and
+`has_all_resources` asks about materials *delivered to the site*, which nothing
+delivers. So construction had a starter and no finisher.
+
+Measured over eight seeded world-years: **45 burrows dug, 45 still going up
+when the last of the diggers died.** The only eight finished roofs in any world
+were the ones the world was seeded with. `seeking_shelter` asks `is_completed`,
+so **185,100 turns of `SeekShelter` - 12.2% of every turn anybody ever took -
+could only ever be answered by a forest tile**, and the weather took between
+fifteen and twenty per cent of everybody who died.
+
+A `Build` on a site already going up now puts a morning's work into it, and a
+roof that gets finished has a covered pit dug under it - the middle rung, and a
+`Pit` rather than a new container because a burrow *is* a hole in the ground
+and everything a store has to do is already written once, for pits.
+
+And `digging_in` had to stop reading "there is a building within two paces" as
+"so stop". That was right while nothing could finish one and exactly wrong the
+moment something could: a man dug a burrow, the site was then within two paces
+of him for ever, and he never went back.
+
+#### The thing in the way of everything
+
+Sampling every living pack once a day over eight seeded world-years:
+
+**A pack holds 17.4 units and carries 15.7. 89.2% of them had under five units
+of room.**
+
+| in the pack | share of all the weight anybody carried |
+|---|---|
+| wood | 25.7% |
+| legumes | 23.3% |
+| handaxe | 9.9% |
+| **iron** | **9.4%** |
+| roots, stone, nuts | 13.1% |
+
+They were not short of tools - 18,303 handaxe-days and 20,227 stone-knife-days.
+They were short of *room*, and what filled it was not food. A people who cannot
+smelt were each carrying half a pack of iron ore about with them for life:
+`ResourceType::Iron` weighs eight units, so **one lump is 46% of everything a
+person can carry**, spent on a stone nobody can do anything with.
+
+Nothing capped it. `WHAT_A_WORKING_STOCK_IS` is twelve, counted in items, and
+it governs only the top-up branch - and **twelve wood at two units each is
+twenty-four units of weight, more than the whole pack holds.** Two numbers
+about the same pack that had never been compared, which is this project's
+recurring defect in the plainest form it has yet taken.
+
+The consequence was not hoarding for its own sake. Instrumenting the tool chain
+found that of **4,983 sampled moments where somebody needed stone or wood for a
+tool, every single one - without exception - found the pack too full to take
+it.** `Excavate` was refused 9,952 times out of 10,014, which is why nobody
+could dig the store that would have held the food.
+
+Two questions now, both asked at `could_this_gather_come_to_anything`, which is
+the one gate every way of deciding to gather anything comes through:
+
+- **Is there any use for this?** `is_this_any_use_to` asks whether the agent
+  knows a step that takes it. Iron leaves the pack entirely. A thing nothing is
+  made of - supper - is not refused, because the question does not apply.
+- **Is this already a working stock?** Denominated in weight now, as a third of
+  the agent's own pack, because the thing a stock competes with is supper and
+  supper is weighed. Read off the pack rather than named, so it cannot drift
+  away from it the way the count did. Somebody actually making a thing is
+  exempt: he is not hoarding, he is short two stone for a knife, and
+  `Errand::to_make` is where the model already says so.
+
+#### What it came to
+
+Over the same 32 seeded worlds: **person-days 93,297 to 98,769, +5.9%.** Iron
+is gone from the pack. Pits end a run holding 300-417 items against 169. The
+first burrows anybody has ever finished appear.
+
+Two things this did *not* buy, said plainly:
+
+- **The packs are still tight** - 90.3% under five units of room - because the
+  cap frees materials and food immediately takes the space. That is the right
+  answer to "where does the food go" only once the tent rung is actually
+  reachable, and it is not yet.
+- **The roof work does not pay yet.** `Build` reaches the top of the drive
+  ladder about **thirty-six times in eight world-years**, so being able to
+  finish a roof has almost nothing to work on: 2 burrows finished of 11 dug.
+  Walking back to a half-dug site was costing more than the roof was worth
+  until the walk was made to wait on the larder rung, the same test
+  `would_a_better_tool_pay` uses. **The Construction drive almost never winning
+  a turn is the next thing in the way of the ladder**, and it is a drive-order
+  question rather than a store question.
+
+`a_settlement_lives_through_a_winter` went green under #174 and is red again
+here, which is where it had sat for a long time before: the standing suite
+failures are 11, as they were.

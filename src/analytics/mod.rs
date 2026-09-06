@@ -905,6 +905,55 @@ impl Simulation {
             return false;
         }
 
+        // A material this one already has a working stock of, or has no use
+        // for at all.
+        //
+        // Both questions are asked here because every way of deciding to
+        // gather anything comes through this gate, and both had no answer
+        // anywhere. Measured over eight seeded world-years, sampling every
+        // living pack once a day: **a pack holds 17.4 units and carries 15.7,
+        // and 89.2% of them had under five units of room.** What was in them
+        // was not food - wood was 25.7% of all the weight anybody carried and
+        // iron 9.4%, against about a third for everything edible put
+        // together. A people who cannot smelt were each carrying half a
+        // pack's worth of iron ore about with them for life.
+        //
+        // And nothing capped it. `WHAT_A_WORKING_STOCK_IS` is twelve, counted
+        // in items, and it governs only the top-up branch; twelve wood at two
+        // units each is **twenty-four units of weight, more than the whole
+        // pack holds**. Two numbers about the same pack that had never been
+        // compared, which is this project's recurring defect in the plainest
+        // form it has yet taken.
+        //
+        // The consequence was not hoarding for its own sake. It was that
+        // every one of 4,983 sampled moments where somebody needed stone or
+        // wood for a tool - every single one, without exception - found the
+        // pack too full to take it, so `Excavate` was refused 9,952 times out
+        // of 10,014 and nobody could dig the store that would have held the
+        // food.
+        //
+        // Somebody who is actually making a thing is exempt. He is not
+        // hoarding, he is short two stone for a knife, and `Errand::to_make`
+        // is where the model already says so.
+        let on_a_making = agent
+            .errand
+            .as_ref()
+            .is_some_and(|errand| errand.to_make.is_some());
+
+        if !food_is_the_point && !on_a_making {
+            let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
+
+            if !crate::environment::making::is_this_any_use_to(named, &knows) {
+                return false;
+            }
+
+            if agent.how_many_i_have(named) as f32 * Self::what_one_of_these_weighs(wanted)
+                >= Self::what_a_working_stock_weighs(agent)
+            {
+                return false;
+            }
+        }
+
         let here = Position::new(agent_position.0, agent_position.1);
         let now = self.current_tick;
         let after_anything_edible = wanted == ResourceType::Food;
@@ -1024,7 +1073,35 @@ impl Simulation {
     /// Enough wood for several fires rather than one, and enough salt to see a
     /// winter's meat put by. Above this an agent has better things to do than
     /// stand at a woodpile.
+    ///
+    /// Counted in items, which is why it wants the weight-denominated
+    /// companion below rather than a bigger number: twelve is right for salt
+    /// at one unit each and absurd for stone at five.
     const WHAT_A_WORKING_STOCK_IS: u32 = 12;
+
+    /// The same question in the units the pack is actually kept in.
+    ///
+    /// A working stock is not a count, it is a share of what a person can
+    /// carry - because the thing a stock competes with is supper, and supper
+    /// is weighed. A third of the pack, so that two thirds are left for a
+    /// day's food and the tools of a trade. On the pack this model gives a
+    /// grown body that is about six units: three lengths of wood, or one
+    /// stone and a little, which is what somebody walking about their own
+    /// country would actually have on them.
+    ///
+    /// Read off the agent's own pack rather than named, so that a child, an
+    /// injured man and somebody with a handcart each get the answer their own
+    /// back gives - and so that this cannot drift away from the pack the way
+    /// the count above did.
+    pub(in crate::analytics) fn what_a_working_stock_weighs(
+        agent: &crate::agents::Agent,
+    ) -> f32 {
+        agent.inventory.max_weight * Self::WHAT_SHARE_OF_A_PACK_MATERIALS_GET
+    }
+
+    /// How much of a pack a person will give up to what they are carrying for
+    /// later, rather than to what they will eat tonight.
+    const WHAT_SHARE_OF_A_PACK_MATERIALS_GET: f32 = 1.0 / 3.0;
 
     /// What a request to gather names, in the world's own terms.
     ///

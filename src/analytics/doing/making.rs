@@ -16,6 +16,64 @@ use crate::world::spatial_planning::SpatialPlanner;
 use log::debug;
 
 impl Simulation {
+    /// How much of a roof one turn of work puts up.
+    ///
+    /// `BuildingType::construction_time` is denominated in ticks - ninety for
+    /// a burrow, which is just under two days on a forty-eight tick day. A
+    /// turn is half an hour, and half an hour with a digging stick does not
+    /// make a dugout, so this is not one tick: it is a solid stretch of a
+    /// morning's work, and a burrow comes to about four turns of it. A tent
+    /// is quicker and a longhouse is the work of a season, which is the
+    /// ordering the table already has and this leaves alone.
+    pub(in crate::analytics) const A_TURN_OF_BUILDING: u32 = 24;
+
+    /// And what that turn teaches the hands that did it.
+    pub(in crate::analytics) const WHAT_A_TURN_OF_BUILDING_TEACHES: u32 = 3;
+
+    /// The middle rung of the ladder: a hole under the floor of a finished
+    /// roof.
+    ///
+    /// "Agents should start by carrying some food on them, then by storing
+    /// some in their tent, and finally by storing extra in the pit." A pack, a
+    /// tent, a pit - three places to go for food instead of one, and the
+    /// middle one is the one this model did not have.
+    ///
+    /// It is a `Pit` rather than a new kind of container on purpose. A burrow
+    /// *is* a hole in the ground and a tent has one under it, and everything a
+    /// store has to do - keep to its own clock, take a lining, be found by
+    /// `nearest_pit_i_remember`, be filled by `putting_food_by` and opened by
+    /// `something_out_of_the_store` - is already written once, for pits. A
+    /// second container with its own arithmetic would be a second answer to
+    /// the same question, which is the defect this project keeps finding.
+    ///
+    /// What makes it the middle rung is not what it is but where it is: under
+    /// the roof somebody sleeps under, rather than wherever the ground
+    /// happened to take a hole.
+    fn dig_the_store_under_the_roof(
+        &mut self,
+        under: crate::world::Position,
+        agent_index: usize,
+        tick_now: u32,
+    ) {
+        if self.world.pit_at(under).is_some() {
+            return;
+        }
+
+        self.world.pits.push(crate::world::Pit {
+            where_it_is: under,
+            holds: Vec::new(),
+            covered: true,
+            dug: tick_now,
+        });
+
+        // And the man who dug it knows where it is, which is the whole of
+        // what `SpatialMemoryType::Storage` is for.
+        self.population.agents[agent_index].memory.remember_location(
+            crate::core::memory::SpatialMemoryType::Storage,
+            (under.x, under.y, 0),
+        );
+    }
+
     /// `Action::Build`.
     pub(in crate::analytics) fn building(&mut self, structure_type: &String, position: &(i32, i32, i32), agent_index: usize, tick_now: u32) -> ActionResult {
         use crate::world::{BuildingType, Building, Position, ResourceType};
@@ -73,6 +131,67 @@ impl Simulation {
                 building_type,
                 missing_resources.join(", ")
             ));
+        }
+
+        // A roof already going up here is carried on with, not started again.
+        //
+        // Nothing in the decision layer had ever finished one. `Build` pushed
+        // a `new_under_construction` and the only caller of
+        // `add_construction_progress` in the whole model is `ConstructionWork`
+        // in the parallel world action system, which this layer does not
+        // issue. So measured over eight seeded world-years, **every one of
+        // the forty-five burrows a settlement dug was still going up when the
+        // last of them died**, and the eight roofs that were ever finished
+        // were the ones the world was seeded with. `seeking_shelter` asks
+        // `is_completed`, so 185,100 turns of `SeekShelter` - 12.2% of every
+        // turn anybody ever took - could only ever be answered by a forest
+        // tile. The weather took between fifteen and nineteen per cent of
+        // everybody who died.
+        //
+        // The materials are taken off the builder on the turn the site is
+        // started, above, which is why this does not go round
+        // `execute_construction_work` and its delivery check: nothing
+        // delivers to a site in this model, and asking would refuse every
+        // turn of work for ever.
+        let here = Position::new(position.0, position.1);
+        if let Some(going_up) = self
+            .world
+            .buildings
+            .iter_mut()
+            .find(|roof| roof.position == here && !roof.is_completed())
+        {
+            let hand = self.population.agents[agent_index]
+                .skills
+                .get_skill_if_exists(crate::agents::skills::SkillType::Construction)
+                .map(|skill| skill.level)
+                .unwrap_or(0);
+
+            let finished = going_up.add_construction_progress(Self::A_TURN_OF_BUILDING, hand);
+            let what = going_up.building_type;
+            let how_far = going_up.construction_progress();
+
+            let agent = &mut self.population.agents[agent_index];
+            agent.skills.practise(
+                crate::agents::skills::SkillType::Construction,
+                Self::WHAT_A_TURN_OF_BUILDING_TEACHES,
+                tick_now,
+            );
+
+            if finished {
+                self.dig_the_store_under_the_roof(here, agent_index, tick_now);
+                return ActionResult::success()
+                    .with_drive_change(DriveType::Construction, -0.4)
+                    .with_energy_cost(20.0)
+                    .with_message(format!("Finished the {what:?}"));
+            }
+
+            return ActionResult::success()
+                .with_drive_change(DriveType::Construction, -0.1)
+                .with_energy_cost(20.0)
+                .with_message(format!(
+                    "Worked on the {what:?} ({:.0}% up)",
+                    how_far * 100.0
+                ));
         }
 
         // Use spatial planning to find optimal build location

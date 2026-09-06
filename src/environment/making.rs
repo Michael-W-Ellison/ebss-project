@@ -1565,6 +1565,40 @@ pub const METAL_SPEAR_FOR_KEEPING_IT_OFF: Tool = Tool {
 };
 
 /// The tools that are any use for a kind of work.
+/// Whether anybody here has a use for a thing.
+///
+/// A stone-age people carried **4,362 units of iron** across eight seeded
+/// world-years - 9.4% of everything anybody carried - and there is not one
+/// step in the whole chain that a man who has never smelted anything can take
+/// with a lump of it. At eight units of weight it is the heaviest thing in the
+/// world and a pack holds seventeen, so **one lump is very nearly half of what
+/// a person can carry**, spent on a stone nobody can do anything with.
+///
+/// `does_it_keep` said iron keeps, which is true and was the wrong question.
+/// This is the right one: is there a step this agent knows that takes it? A
+/// thing with no use is not a store, it is ballast.
+///
+/// Anything not made *of* anything - food, water, a thing gathered and eaten -
+/// comes back true, because the question does not apply to it and a gate that
+/// refused everything it had no recipe for would stop a settlement eating.
+pub fn is_this_any_use_to(
+    what: &str,
+    knows: &impl Fn(&Making) -> bool,
+) -> bool {
+    let wanted_by_something = EVERY_STEP
+        .iter()
+        .any(|step| step.needs.iter().any(|(needed, _)| *needed == what));
+
+    if !wanted_by_something {
+        return true;
+    }
+
+    EVERY_STEP
+        .iter()
+        .filter(|step| step.needs.iter().any(|(needed, _)| *needed == what))
+        .any(knows)
+}
+
 pub fn what_helps_with(trade: SkillType) -> impl Iterator<Item = &'static Tool> {
     EVERY_TOOL.iter().filter(move |tool| tool.helps == trade)
 }

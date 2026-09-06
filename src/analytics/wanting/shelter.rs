@@ -261,6 +261,69 @@ impl Simulation {
     ) -> Option<Action> {
         use crate::world::Position;
 
+        let here = Position::new(agent_position.0, agent_position.1);
+
+        // A roof of one's own that is half up is a reason to go back to it.
+        //
+        // This used to be a flat "there is a building within two paces, so
+        // stop", which was right while nothing could ever finish one and is
+        // exactly wrong now that something can: a man dug a burrow, the site
+        // was then within two paces of him for ever, and he never went back.
+        // Every burrow in every measured world was left half dug for that
+        // reason. An unfinished roof is the job; a finished one is the reason
+        // there is no job.
+        //
+        // Ahead of both gates below, and deliberately. Neither applies to
+        // carrying on: the hole is already open, so the ground has already
+        // answered, and a man who dug half a burrow and then wore his axe out
+        // still has hands. Behind them, a settlement would abandon exactly the
+        // roofs it had spent the most on.
+        let near = self.world.buildings.iter().find(|building| {
+            (building.position.x - here.x).abs() <= Self::HOW_CLOSE_TWO_ROOFS_GET
+                && (building.position.y - here.y).abs() <= Self::HOW_CLOSE_TWO_ROOFS_GET
+        });
+
+        match near {
+            Some(roof) if !roof.is_completed() => {
+                let there = (roof.position.x, roof.position.y, agent_position.2);
+
+                if there == agent_position {
+                    return Some(Action::Build {
+                        structure_type: Self::what_they_call_this_roof(roof.building_type)
+                            .to_string(),
+                        position: agent_position,
+                    });
+                }
+
+                // Walking back to it is a different matter from finishing it
+                // while standing on it, and it waits on supper.
+                //
+                // The same rung `would_a_better_tool_pay` asks about, for the
+                // same reason: a roof pays over a winter, and a winter is no
+                // use to somebody with nothing in for tonight. Measured
+                // without this, over 32 seeded worlds, person-days came out
+                // 98,079 against 99,396 - the walk was costing more than the
+                // roof was worth, because `Build` reaches the top of the drive
+                // ladder about thirty-six times in eight world-years and the
+                // sites were mostly still half dug either way.
+                if agent
+                    .state
+                    .what_the_larder_says
+                    .as_ref()
+                    .is_some_and(|larder| {
+                        larder.rung == crate::agents::provision::HowLongTheFoodLasts::NotTheDay
+                    })
+                {
+                    return None;
+                }
+
+                return Some(Action::Move { target: there });
+            }
+            // A roof already standing here is the reason there is no job.
+            Some(_) => return None,
+            None => {}
+        }
+
         // Something to dig with. The matrix enforces it before the action
         // runs, so choosing this without one spends the turn on a refusal -
         // the pattern that cost a settlement half its winter store three
@@ -272,31 +335,39 @@ impl Simulation {
             return None;
         }
 
-        let here = Position::new(agent_position.0, agent_position.1);
-
         if !self.is_ground_a_pit_will_go_in(here) {
             return None;
         }
 
-        // Not on top of somebody else's roof, and not on top of a hole that
-        // is already there.
-        let already = self
-            .world
-            .buildings
-            .iter()
-            .any(|building| {
-                (building.position.x - here.x).abs() <= Self::HOW_CLOSE_TWO_ROOFS_GET
-                    && (building.position.y - here.y).abs() <= Self::HOW_CLOSE_TWO_ROOFS_GET
-            });
-
-        if already {
-            return None;
-        }
 
         Some(Action::Build {
             structure_type: "burrow".to_string(),
             position: agent_position,
         })
+    }
+
+    /// What the `Build` verb calls a roof of this kind.
+    ///
+    /// The executor takes a string and maps it back to a `BuildingType`, so
+    /// carrying on with a roof that is already up needs the spelling that maps
+    /// to what is standing there. Anything the decision layer never raises is
+    /// not worth a name here and comes back as a tent, which is what the
+    /// executor's own fall-through does with a word it does not know.
+    pub(in crate::analytics) fn what_they_call_this_roof(
+        what: crate::world::BuildingType,
+    ) -> &'static str {
+        use crate::world::BuildingType;
+
+        match what {
+            BuildingType::Burrow => "burrow",
+            BuildingType::SmallHouse => "smallhouse",
+            BuildingType::MediumHouse => "mediumhouse",
+            BuildingType::LargeHouse => "largehouse",
+            BuildingType::Workshop => "workshop",
+            BuildingType::Storehouse => "storehouse",
+            BuildingType::Farm => "farm",
+            _ => "tent",
+        }
     }
 
     /// How near one shelter goes to another.

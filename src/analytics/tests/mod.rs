@@ -62,6 +62,7 @@ mod larder_reach_tests;
 mod off_the_map_tests;
 mod what_a_meal_answers_tests;
 mod several_larders_tests;
+mod a_roof_and_a_pack_tests;
 mod weather_tests;
 pub mod working_tests;
 pub mod barter_tests;
