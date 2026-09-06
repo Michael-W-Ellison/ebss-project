@@ -48,7 +48,7 @@ fn fill_the_pack(simulation: &mut crate::analytics::Simulation, with: &str) {
         "the fixture is meant to leave no room for so much as one berry, got {room}"
     );
     assert!(
-        room < crate::analytics::Simulation::AS_MUCH_AS_ONE_TRIP_WEIGHS,
+        room < crate::analytics::Simulation::what_one_of_these_weighs(ResourceType::Food),
         "the fixture is meant to leave no room for an armful, got {room}"
     );
 }
@@ -239,5 +239,53 @@ fn a_full_pack_of_stone_makes_room_for_the_berries() {
     assert!(
         simulation.world.dropped.len() > on_the_ground_before,
         "the stone was destroyed rather than set down"
+    );
+}
+
+/// The gate and the executor weigh a stone the same.
+///
+/// They did not. The executor charged five for a stone, eight for iron and
+/// two for wood, and the gate asked only whether there was one unit of room -
+/// so a pack with a unit and a half left passed the gate for stone and was
+/// refused by `take_what_fits` the instant the turn was spent, and passed it
+/// again the next turn, and the next. Measured over eight seeded world-years,
+/// `Gather: Inventory full` came to **241,191 refusals, 79.7% of every
+/// refusal in the model**, against 23,293 person-days: ten of the forty-eight
+/// turns in everybody's day.
+#[test]
+fn the_gate_weighs_a_stone_the_same_as_the_pack_does() {
+    let mut simulation = a_full_pack_on_a_berry_patch();
+
+    let here = simulation.population.agents[0].state.position;
+    simulation.world.resources.push(ResourceNode::new(
+        ResourceType::Stone,
+        Position::new(here.0, here.1),
+        500,
+    ));
+
+    // Room for an item and a half, which is a unit and a half - enough for
+    // the old gate and never enough for a stone.
+    let room_for_no_stone = crate::analytics::Simulation::what_one_of_these_weighs(
+        ResourceType::Stone,
+    ) - 0.5;
+    let load = simulation.population.agents[0].inventory.max_weight - room_for_no_stone;
+    simulation.population.agents[0].inventory.current_weight = load;
+
+    let agent = simulation.population.agents[0].clone();
+    assert!(
+        !simulation.could_this_gather_come_to_anything(&agent, agent.state.position, "stone"),
+        "the decision let him set off for a stone he had no room for"
+    );
+
+    // And the executor agrees, which is the point: one table, two readers.
+    let result = simulation.execute_action(
+        &Action::Gather {
+            resource_type: "stone".to_string(),
+        },
+        0,
+    );
+    assert!(
+        !result.success,
+        "the executor took a stone the decision said would not fit"
     );
 }

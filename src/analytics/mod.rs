@@ -884,7 +884,7 @@ impl Simulation {
         let food_is_the_point = wanted == ResourceType::Food;
 
         if !food_is_the_point
-            && agent.inventory.weight_capacity_remaining() < Self::AS_MUCH_AS_ONE_TRIP_WEIGHS
+            && agent.inventory.weight_capacity_remaining() < Self::what_one_of_these_weighs(wanted)
         {
             return false;
         }
@@ -915,9 +915,36 @@ impl Simulation {
         })
     }
 
-    /// What one trip out brings back, as near as makes no difference. Below
-    /// this much room in the pack there is no point setting off.
-    const AS_MUCH_AS_ONE_TRIP_WEIGHS: f32 = 1.0;
+    /// What one of a thing weighs once it is in a pack.
+    ///
+    /// One table, because it was two and they disagreed. The executor charged
+    /// **five for a stone, eight for iron, two for wood** and the decision
+    /// asked only whether there was `AS_MUCH_AS_ONE_TRIP_WEIGHS` - a flat
+    /// **one** - of room. So a pack with a unit and a half of space left
+    /// passed the gate for stone and was refused by `take_what_fits` the
+    /// instant the turn was spent, and passed it again the next turn, and the
+    /// next, for the rest of that agent's life.
+    ///
+    /// Measured over eight seeded world-years: `Gather: Inventory full -
+    /// cannot carry more` was **241,191 refusals, 79.7% of every refusal in
+    /// the model**, against 23,293 person-days - **better than ten of the
+    /// forty-eight turns in everybody's day, spent asking for something the
+    /// executor was always going to refuse.** This is the same fault as #243
+    /// with different numbers on it: one question answered in two places that
+    /// do not agree.
+    pub(in crate::analytics) fn what_one_of_these_weighs(
+        what: crate::world::ResourceType,
+    ) -> f32 {
+        use crate::world::ResourceType;
+
+        match what {
+            ResourceType::Wood => 2.0,  // Wood is light but bulky
+            ResourceType::Stone => 5.0, // Stone is heavy
+            ResourceType::Iron => 8.0,  // Iron is very heavy
+            ResourceType::Food => crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,
+            _ => 1.0,
+        }
+    }
 
     /// Something worth taking while this one is standing here anyway.
     ///

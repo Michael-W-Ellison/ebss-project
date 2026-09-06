@@ -11654,3 +11654,68 @@ on which is the shorter walk. A bush underfoot still beats a hole in the
 ground — that ordering was measured in #43 and is not being changed — and a
 pit five paces off beats a patch across the valley. The store's own gates are
 untouched.
+
+### 170. The gate weighed a stone at one and the pack weighed it at five, and that was ten turns of every day
+
+Straight after #169, with `Gather: Inventory full` supposedly mended, the
+refusal was still there and *larger*: measured over eight seeded world-years,
+**241,191 refusals, 79.7% of every refusal in the model**, against 23,293
+person-days. **Better than ten of the forty-eight turns in everybody's day.**
+
+They were not food gathers - #169 saw to that. They were stone, iron, wood and
+clay, and the reason is a straight disagreement between two places that answer
+the same question:
+
+| | what a stone weighs |
+|---|---|
+| `gathering`, the executor | **5.0** (iron 8.0, wood 2.0) |
+| `could_this_gather_come_to_anything`, the decision | `AS_MUCH_AS_ONE_TRIP_WEIGHS` = **1.0**, for everything |
+
+So a pack with a unit and a half of room passed the gate for a stone,
+`take_what_fits` refused it the instant the turn was spent, and the same agent
+asked again the next turn, and the next, for the rest of its life. The same
+fault as #243 with bigger numbers on it.
+
+The weights are one table now - `Simulation::what_one_of_these_weighs` - and
+the gate asks for room for one of the thing actually wanted.
+
+#### What it bought, and what it did not
+
+Over the same eight seeded world-years:
+
+| | before | after |
+|---|---|---|
+| refusals, all causes | 302,459 | **126,395** |
+| `Gather: Inventory full` | 241,191 | **0** |
+| food into packs | 83,192 | **124,160** |
+| turns spent eating | 133,707 | 164,994 |
+| person-days | 23,293 | 23,351 |
+
+**Every refusal in the model down by fifty-eight per cent, half again as much
+food carried home, a quarter more meals eaten - and the person-days do not
+move.** Over 32 seeded worlds, two years, twelve founders: 97,272 person-days
+and 1/32 through the first winter before, 93,055 and 2/32 after. Both inside
+the ten per cent noise.
+
+That is now three separate bottlenecks removed - the pack refusing food, the
+larder being unreachable, the gate and the executor disagreeing - each of
+which was real and large, and none of which moved the population. Whatever
+kills these settlements is not in the getting of food.
+
+#### The next thing in the way
+
+The refusal that took its place, in the same run:
+
+```
+Move: No passable route toward destination     63,922    50.6%
+```
+
+Up from 15,523, because the freed turns went into walking. **One Move in five
+is refused**, which is 2.7 turns a person-day spent failing to set off - and
+it lands hardest on the food branch, which since the range came off sends
+people clear across the map. `Attack: Target too far away (distance: 42,
+weapon range: 1)` is in the same list, which is the same fault wearing a
+different coat: a decision that names a destination the mover cannot reach.
+ISSUES #235 - "nobody owns pathfinding: an unused A* and two coordinate
+nudges" - is the entry for it, and it is now the largest single refusal in the
+model.

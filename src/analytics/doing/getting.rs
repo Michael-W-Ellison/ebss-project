@@ -501,18 +501,14 @@ impl Simulation {
                 // added, and clay would have done the same.
                 let item_id = Self::gathered_as(resource_type_enum).unwrap_or("generic");
 
+                // One table for what a thing weighs, shared with the decision
+                // that asks whether there is room for it - see
+                // `what_one_of_these_weighs`. There were two, and the gate's
+                // said one for everything.
                 let mut item = InventoryItem::new_with_weight(
                     item_id.to_string(),
                     harvested,
-                    match resource_type_enum {
-                        ResourceType::Wood => 2.0,     // Wood is light but bulky
-                        ResourceType::Stone => 5.0,    // Stone is heavy
-                        ResourceType::Iron => 8.0,     // Iron is very heavy
-                        ResourceType::Food => {
-                            crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS
-                        }
-                        _ => 1.0,
-                    }
+                    Self::what_one_of_these_weighs(resource_type_enum),
                 );
 
                 // Gathered food carries nutrition and spoils over time
