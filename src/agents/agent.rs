@@ -1862,6 +1862,24 @@ impl Agent {
             .map(|(name, _)| name.clone())
     }
 
+    /// Whether another handful would go in the pack, counting what this one
+    /// would set down to make room for it.
+    ///
+    /// The read-only twin of `set_down_what_is_worth_less_than_food`, and it
+    /// exists so that the decision and the executor answer one question. The
+    /// store branch used to offer `PickUp` whenever somebody stood on a pit,
+    /// and the executor refused it for want of room: **127,477 refusals of
+    /// "No room in the pack for what is in the store", 71% of every refusal
+    /// in the model**, a man standing on his own larder asking for it every
+    /// turn and being told no.
+    ///
+    /// One handful is all it has to decide, so it does not need to know how
+    /// much would come off - only whether anything would.
+    pub fn could_i_take_another_handful(&self, each: f32) -> bool {
+        self.inventory.weight_capacity_remaining() >= each
+            || self.what_i_would_set_down().is_some()
+    }
+
     /// How much of this one goes on the grass, once it has been decided that
     /// some of it should.
     ///

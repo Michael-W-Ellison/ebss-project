@@ -348,38 +348,79 @@ impl Simulation {
         // not a separate verb: a person opening a store and closing it
         // again is one act, and the matrix already has stooping for a
         // thing underfoot.
-        if let Some(from_the_pit) = self
-            .world
-            .pit_at_mut(here)
-            .and_then(|pit| {
-                if matches!(what.as_str(), "bowl" | "basket") {
-                    return None;
-                }
+        // What is in the pit here, and what one of them weighs - asked before
+        // anything is lifted out of it.
+        //
+        // This used to take eight out of the pit and hand them to
+        // `add_item` without looking at what came back. `add_item` returns
+        // false when the pack is too heavy or has no free slot, and **almost
+        // every caller ignores it**, so the food had already left the ground
+        // and never arrived anywhere: the store was drained and nobody was
+        // fed, and the action reported success while it happened.
+        //
+        // Directly: a man with half a unit of room standing on a pit of sixty
+        // took the pit to fifty-two, his pack stayed at nought, and the model
+        // said "Took 8 food out of the pit". That is the whole of the gap
+        // between `PickUp` at 1.9% of a starving body's turns and `Eat` at
+        // 0.4% - they open the store, and what they take out stops existing.
+        //
+        // The branch below it, for a thing lying on the ground, has always
+        // asked first and put the thing back if it would not go in. A store
+        // is not different.
+        let in_the_pit = self.world.pit_at(here).and_then(|pit| {
+            if matches!(what.as_str(), "bowl" | "basket") {
+                return None;
+            }
+            pit.holds
+                .iter()
+                .find(|held| held.item_id == *what && held.quantity > 0)
+                .cloned()
+        });
 
-                let wanted = pit
-                    .holds
-                    .iter()
-                    .find(|held| held.item_id == *what && held.quantity > 0)
-                    .cloned()?;
+        if let Some(wanted) = in_the_pit {
+            // A pack full of stone makes room for supper, the same way it does
+            // at a bush - see `set_down_what_is_worth_less_than_food`. This is
+            // the same situation and it should not have two answers.
+            let each = wanted.weight_per_unit.max(f32::EPSILON);
+            let asking_for = Self::WHAT_A_PERSON_TAKES_OUT.min(wanted.quantity);
+            // `set_down_what_is_worth_less_than_food` answers with the room it
+            // *made*, which is nought for a pack that had room already and
+            // needed to shed nothing. What is wanted here is the room there
+            // is, so it is asked for afterwards.
+            let _ = self.set_down_what_is_worth_less_than_food(
+                agent_index,
+                each * asking_for as f32,
+            );
+            let room = self.population.agents[agent_index]
+                .inventory
+                .weight_capacity_remaining();
 
-                let taking = Self::WHAT_A_PERSON_TAKES_OUT.min(wanted.quantity);
+            let will_fit = (room / each).floor() as u32;
+            let taking = asking_for.min(will_fit);
+
+            if taking == 0 {
+                return ActionResult::failure(
+                    "No room in the pack for what is in the store".to_string(),
+                );
+            }
+
+            if let Some(pit) = self.world.pit_at_mut(here) {
                 pit.take_out(what, taking);
+            }
 
-                let mut got = wanted;
-                got.quantity = taking;
-                Some(got)
-            })
-        {
-            let how_many = from_the_pit.quantity;
+            let mut got = wanted;
+            got.quantity = taking;
+
             let agent = &mut self.population.agents[agent_index];
-            agent.inventory.add_item(from_the_pit);
+            let went_in = agent.inventory.add_item(got);
+            debug_assert!(went_in, "the room was measured a line ago");
 
-            debug!("Agent {} took {how_many} {what} out of the pit", agent.id);
+            debug!("Agent {} took {taking} {what} out of the pit", agent.id);
 
             return ActionResult::success()
                 .with_drive_change(DriveType::Hunger, -0.1)
                 .with_energy_cost(1.5)
-                .with_message(format!("Took {how_many} {what} out of the pit"));
+                .with_message(format!("Took {taking} {what} out of the pit"));
         }
 
         let Some(item) = self.world.take_off_the_ground(&here, what) else {

@@ -458,7 +458,20 @@ impl Simulation {
         // primary drives by how fast each would kill". A man merely cold and
         // fed still goes to the roof. A man a few days from starving, who
         // knows where the food is, goes and gets it.
-        if Self::is_the_body_eating_itself(agent) {
+        // The pack first, then the store. Somebody with supper about them does
+        // not open the larder for more of it - he eats what he has, which is
+        // the ladder this whole line of work is about and is `food_action`'s
+        // job a few lines down.
+        //
+        // Without this the override sent a man standing on a pit to `PickUp`
+        // every turn whether or not he had anything to eat and whether or not
+        // his pack could take another handful, and the executor refused him:
+        // **168,915 refusals of "No room in the pack for what is in the
+        // store", 76.5% of every refusal in the model.** A decision that
+        // promises what the executor will not do is the fault this project
+        // keeps finding, and it is worse when the decision sits above every
+        // drive there is.
+        if Self::is_the_body_eating_itself(agent) && !agent.has_edible_food() {
             if let Some(from_the_store) = self.something_out_of_the_store(agent, agent_position) {
                 return (from_the_store, false);
             }

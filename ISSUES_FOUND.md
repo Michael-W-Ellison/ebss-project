@@ -12414,3 +12414,84 @@ measured no effect at all (#176). And **`Eat` is 0.4% while `PickUp` is 1.9%**:
 they take food out of the store and the turn after that they are still not
 eating it, which is a smaller and sharper question than any of the above and is
 where the next look should start.
+
+### 180. They opened the store, took eight out, and it stopped existing
+
+`PickUp` was 1.9% of a starving body's turns and `Eat` was 0.4%. They reached
+the larder and did not eat. This is what was between the two.
+
+#### A return value nobody read
+
+`Inventory::add_item` returns `false` when the pack is too heavy or has no free
+slot. The pit branch of `picking_up` took eight items **out of the pit first**
+and then handed them to `add_item` without looking at what came back. The food
+had already left the ground and never arrived anywhere.
+
+Directly, with a man half a unit of room short:
+
+```
+room in the pack: 0.50
+result: success=true  msg="Took 8 food out of the pit"
+pit:  60 -> 52
+pack:  0 -> 0
+```
+
+**The store is drained, nobody is fed, and the model reports success.** The
+branch immediately below it - for a thing lying on the ground - has always
+asked first and left the thing where it was. A store is not different.
+
+The struct's own docstring has said since ISSUES #65 that "almost every caller
+ignores it, so the food simply stops existing", and `what_would_not_go_in`
+exists to count it. It counted this and nobody read that either.
+
+It now measures the room first - shedding what is worth less than food, the
+same as at a bush - takes only what will fit, and refuses honestly when nothing
+will.
+
+#### Then the refusal it turned into
+
+Fixing the sink made the decision's optimism audible: **168,915 refusals of
+"No room in the pack for what is in the store", 76.5% of every refusal in the
+model.** A decision that promises what the executor will not do is this
+project's standing fault, and it is worse where the decision sits above every
+drive there is. Two gates close it:
+
+- **The pack before the store.** Somebody carrying supper eats it rather than
+  opening the larder for more - the ladder this whole line of work is about.
+- **`could_i_take_another_handful`,** the read-only twin of the executor's own
+  shedding, so the store branch and the store executor answer one question.
+
+And one arithmetic slip of my own, worth recording because it looked like the
+model's fault for two runs: `set_down_what_is_worth_less_than_food` answers
+with the room it **made**, which is nought for a pack that needed to shed
+nothing. Using that as the room there *is* refused every man who already had
+space. Refusals only fell from 168,915 to 105,280 until that was asked properly.
+
+#### What it came to
+
+| | before | after |
+|---|---|---|
+| refusals, all causes, 8 world-years | 61,525 | **56,349** |
+| ...of which "no room for what is in the store" | — | 4,259 |
+| what the pits held at the end of a year | 288 | **13,077** |
+| `Eat`, all turns | 11.9% | **14.0%** |
+| person-days, 32 seeded worlds | 96,961 | **99,429** |
+| out of the first winter | 1/32 | **5/32** |
+| **worlds emptied** | **32/32** | **27/32** |
+| **alive at the end of two years** | **0** | **5** |
+| starvation | 11.8% of deaths | **5.0%** |
+
+**Five settlements out of thirty-two still had somebody alive after two
+years.** Every arm measured in this whole line of work before this one ended
+with `alive at the end` a row of zeros. Starvation, which took 28.2% of
+everybody who died when this session started, now takes 5.0% and is the
+seventh cause of death.
+
+They are not thriving - the survivors are single people, the month-24 mean is
+back to nought, and hunger is still 32.7% of deaths with dehydration second at
+23.4%. But a settlement can now get through a winter, which it could not before.
+
+The same ignored return value is at a dozen other `add_item` callers - the
+fishing catches, the gather paths, `TakeFrom` - and each is the same silent
+destruction wherever the pack happens to be full. They are not touched here and
+they should be.

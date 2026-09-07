@@ -313,3 +313,132 @@ fn nobody_digs_on_top_of_a_hole_that_is_still_going_spare() {
         "across the camp is somewhere else"
     );
 }
+
+// --------------------------------------------------------------------------
+// Taking food out of a store
+// --------------------------------------------------------------------------
+
+/// One person on a full pit, with a pack that can be made room in.
+fn somebody_standing_on_a_full_pit() -> crate::analytics::Simulation {
+    use crate::world::{ItemType, Pit};
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation =
+        crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    simulation.population.agents[0].state.position = (25, 25, 0);
+    simulation.world.pits.clear();
+
+    let mut buried = InventoryItem::new_with_weight("food".to_string(), 60, 0.5);
+    buried.food_data = simulation
+        .food_database
+        .create_food_data(&ItemType::Food, 0);
+    let mut pit = Pit {
+        where_it_is: Position::new(25, 25),
+        holds: Vec::new(),
+        covered: true,
+        dug: 0,
+    };
+    pit.put_in(buried);
+    simulation.world.pits.push(pit);
+    simulation
+}
+
+/// Fill a pack with something nobody would set down for food.
+fn a_pack_with_no_room_and_nothing_to_shed(simulation: &mut crate::analytics::Simulation) {
+    // A tool is never set down for supper - see `what_i_would_set_down` - so
+    // this is a pack that genuinely cannot take another handful.
+    while simulation.population.agents[0]
+        .inventory
+        .weight_capacity_remaining()
+        >= 0.5
+    {
+        if !simulation.population.agents[0]
+            .inventory
+            .add_item(InventoryItem::new_with_weight("handaxe".to_string(), 1, 0.5))
+        {
+            break;
+        }
+    }
+}
+
+/// What comes out of the store arrives in the pack, or it stays in the ground.
+///
+/// It used to do neither. `add_item` returns false when the pack is too heavy
+/// and almost every caller ignores it, so eight items left the pit and never
+/// arrived: measured directly, a pit of sixty went to fifty-two, the pack
+/// stayed at nought, and the action reported "Took 8 food out of the pit".
+#[test]
+fn what_will_not_go_in_the_pack_stays_in_the_ground() {
+    let mut simulation = somebody_standing_on_a_full_pit();
+    a_pack_with_no_room_and_nothing_to_shed(&mut simulation);
+
+    let in_the_pit_before = simulation.world.pits[0].how_much_is_in_it();
+
+    let result = simulation.execute_action(
+        &Action::PickUp {
+            what: "food".to_string(),
+        },
+        0,
+    );
+
+    assert!(!result.success, "there is nowhere to put it: {:?}", result.message);
+    assert_eq!(
+        simulation.world.pits[0].how_much_is_in_it(),
+        in_the_pit_before,
+        "and so it is still in the ground"
+    );
+    assert_eq!(
+        simulation.population.agents[0].how_many_i_have("food"),
+        0,
+        "and nowhere else"
+    );
+}
+
+/// What does go in is exactly what left the pit.
+#[test]
+fn what_comes_out_of_the_store_is_what_arrives() {
+    let mut simulation = somebody_standing_on_a_full_pit();
+
+    let in_the_pit_before = simulation.world.pits[0].how_much_is_in_it();
+
+    let result = simulation.execute_action(
+        &Action::PickUp {
+            what: "food".to_string(),
+        },
+        0,
+    );
+
+    assert!(result.success, "{:?}", result.message);
+
+    let taken = in_the_pit_before - simulation.world.pits[0].how_much_is_in_it();
+    assert!(taken > 0, "he took something");
+    assert_eq!(
+        simulation.population.agents[0].how_many_i_have("food"),
+        taken,
+        "and every one of them is in his pack: nothing stopped existing on the way"
+    );
+}
+
+/// And the decision does not offer what the executor will refuse.
+#[test]
+fn nobody_is_offered_a_store_they_cannot_carry_away_from() {
+    let mut simulation = somebody_standing_on_a_full_pit();
+    simulation.population.agents[0]
+        .memory
+        .remember_how_much_is_there(
+            crate::core::memory::SpatialMemoryType::Storage,
+            (25, 25, 0),
+            60,
+        );
+    a_pack_with_no_room_and_nothing_to_shed(&mut simulation);
+
+    let here = simulation.population.agents[0].state.position;
+    assert!(
+        simulation
+            .something_out_of_the_store(&simulation.population.agents[0], here)
+            .is_none(),
+        "offering a man his own larder and then refusing him is worse than not \
+         offering: this branch sits above every drive there is"
+    );
+}

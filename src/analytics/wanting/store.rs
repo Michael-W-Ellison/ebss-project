@@ -701,6 +701,19 @@ impl Simulation {
         let standing_on_it = self.world.pit_at(where_it_is);
         if paces == 0 {
             let what = standing_on_it?.something_to_eat()?.to_string();
+
+            // And a pack that will not take it. The executor asks this and
+            // used to be the only one asking - see
+            // `could_i_take_another_handful`. Offering a man his own larder
+            // and then refusing him is worse than not offering, because this
+            // branch sits above every drive there is and he spends the turn on
+            // it either way.
+            if !agent.could_i_take_another_handful(
+                crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,
+            ) {
+                return None;
+            }
+
             return Some(Action::PickUp { what });
         }
 
