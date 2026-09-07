@@ -12495,3 +12495,176 @@ The same ignored return value is at a dozen other `add_item` callers - the
 fishing catches, the gather paths, `TakeFrom` - and each is the same silent
 destruction wherever the pack happens to be full. They are not touched here and
 they should be.
+
+### 181. Nobody died of thirst. Ninety-three men drank the sea
+
+Entry #176 left dehydration as the second biggest killer at 23.4% of deaths,
+doubled from 12.8%, with a note that the one correction written for a stale
+water memory measured byte-identical over thirty-two worlds and that whatever
+was killing them was therefore not that. This is what it was, and it is not a
+thirst problem at all.
+
+#### The first two guesses were wrong, and the instrument said so
+
+**Guess one: a spring at its springline.** `ResourceNode::what_can_be_taken`
+holds back a pass's worth of flow, and the decision layer's `drinkable` closure
+refuses any source with nothing takeable — while the executor, three hundred
+lines away in `Simulation::gathering`, cheerfully serves
+`a_mouthful_from_the_flow` at exactly that source. A decision refusing what the
+executor would allow is this project's signature defect, so it looked certain.
+
+Measured over sixteen world-years, sampling every living body once a day and
+asking both questions of every water node within `FORAGE_RADIUS`:
+
+| state | samples | carrying water | decision says yes | executor would serve | **the gap** | nearest water |
+|---|---|---|---|---|---|---|
+| content | 45,865 | 0% | 100% | 100% | **0.0%** | 8.9 paces |
+| thirsty | 1,372 | 0% | 100% | 100% | **0.0%** | 7.9 |
+| dehydrated | 11 | 0% | 100% | 100% | **0.0%** | 7.4 |
+
+The gap is zero everywhere. Water is eight paces away from everybody, always,
+and the decision always accepts it. The asymmetry is real and it has never once
+bound.
+
+**Guess two: the thirst clock and the body's clock disagree.** They do not —
+`is_dehydrated()` reads `physiology::is_parched()`, and there is only one
+hydration field with six writers in the whole project.
+
+What the same table did say, and what nobody had asked, is the third column:
+**eleven dehydrated samples in 47,248.** A quarter of deaths cannot come out of
+a state that occurs two hundredths of one per cent of the time unless death is
+sudden. So the next instrument sampled hydration every tick and kept the last
+twenty-four ticks of anybody who went.
+
+#### A man at full health, one quarter down, dead in half an hour
+
+```
+   tick  hydration  thirst-drive        salt
+  12978      0.760         0.980        0.00
+  12979      0.757         0.985        0.00
+  12980      0.753         0.990        0.00   <- in danger
+  12981      0.000         0.000        1.00
+```
+
+A body cannot lose three quarters of its water in half an hour. The most a turn
+of drying can take is `MINUTES_PER_TURN / MINUTES_TO_DIE_OF_THIRST` at the
+hardest work a body does, which is 0.0104. **Fifty-eight bodies over twelve
+worlds lost more than a turn of drying can explain**, and every single one of
+them was carrying `salt_in_me` at 1.0 — the cap — having had none at all the
+tick before. `WHAT_ONE_DRINK_OF_THE_SEA_LEAVES` is 0.35, so going from nothing
+to the cap in one tick takes at least three drinks, and the water lost takes
+five.
+
+Five mouthfuls of the sea in half an hour. The man at the top of that table was
+at 99.3 health.
+
+#### Four places answer what a mouthful of the sea does, and all four disagree
+
+1. **Who takes one.** `would_i_drink_the_sea()` was `is_dehydrated()`, which is
+   `is_parched()`, which is `hydration <= FIRST_BAND` — and `FIRST_BAND` is
+   **0.75**. A quarter *down*, capability still 1.00, a state every working body
+   passes through between one drink and the next. Its own docstring says the
+   rule breaks "when somebody is three days dry". So the sentence "everybody
+   knows better than to drink the sea" was suspended for everybody, daily. It is
+   now the bottom band of `Physiology::capability`, 0.25 — a quarter of a man,
+   dead inside the day, which is what the docstring always described.
+
+2. **How many mouthfuls one turn buys.** `everybody_takes_a_turn` gives an agent
+   in danger its turn again once a simulated minute until the half hour is out —
+   the danger cadence of #287 — and every one of those is a full
+   `one_persons_turn` with a full turn's body costs. The comment above that loop
+   already worries about exactly this for `Move` ("a `Move` is one tile, whatever
+   the turn is worth in minutes") and closes it only for predators. Every one of
+   the fifty-eight was in danger. **This is the amplifier and it is not fixed
+   here**; it is recorded as #182 below, because it is a change to a deliberate
+   mechanism and wants its own arm. With the gate mended it has nothing lethal
+   left to multiply.
+
+3. **What the drink is worth.** The executor took `A_DRINK_IS_WORTH * 0.5` — a
+   sixth of a body — straight *off* the hydration and put nothing in. Both
+   docstrings on the salt describe the opposite: a drink that "gives a third and
+   takes rather more than a third back over the two and a half days it takes to
+   be rid of". Sea water does put water into a body; what it does not do is
+   leave it there. It now goes down like any other drink and the salt does all
+   the taking, so there is one reckoning of the cost instead of two.
+
+4. **What the salt costs.** `WHAT_THE_SALT_COSTS_IN_WATER` was `0.0007`, and the
+   docstring beside it states the arithmetic it was supposed to satisfy: 0.35 of
+   a skin over the twenty-nine ticks a load takes to clear. At 0.0007 the actual
+   cost of a mouthful is **0.0036** — a hundredth of the stated figure, which is
+   to say nothing at all. The constant is now derived from that sentence rather
+   than guessed: a load of `s` is carried for `s / HOW_FAST_SALT_GOES` ticks and
+   the sum of what is carried over them is `s^2 / (2 * HOW_FAST_SALT_GOES) +
+   s / 2`, so the rate is the cost divided by that sum and the docstring is what
+   the code performs.
+
+So the sea was not tempting and worse than nothing. It was a fast poison, priced
+in the wrong place, at a hundred times the wrong rate, offered to everybody who
+was slightly thirsty, and served up to thirty times in a tick to anybody who was
+frightened.
+
+#### Measured, 32 seeded worlds, two years, twelve founders
+
+| | before | after |
+|---|---|---|
+| person-days | 99,429 | **104,341** (+4.9%) |
+| out of the first winter | 5/32 | **9/32** |
+| worlds emptied | 27/32 | **25/32** |
+| alive at the end | 5 | **8** |
+| **dehydration** | **93 (23.4%)** | **0** |
+| thirst | 14 (3.5%) | 19 (4.9%) |
+| hunger | 130 (32.7%) | 121 (31.5%) |
+| starvation | 20 (5.0%) | 100 (26.0%) |
+| the weather | 73 (18.4%) | 79 (20.6%) |
+| total deaths | 397 | 384 |
+
+And on the instrument that found it, over twelve worlds: **falls larger than a
+turn of drying can explain, 58 to 0**, with no body-tick anywhere below 0.60 of
+a skin where before there were ninety-three below 0.60 and seventy-eight of
+those below 0.10. Two worlds now run past the first year, to days 551 and 701.
+
+Dehydration is not reduced. It is gone: there is no longer any mechanism in the
+model by which a body reaches nought water, because the only one there ever was
+was the sea.
+
+What replaces it is starvation, five times over — 20 deaths to 100 — and that is
+the honest reading of this result rather than a disappointment. The ninety-three
+who used to be dead of salt by month nine now live to month twelve and run out
+of food, which is where entries #177 and #193 already say the binding constraint
+is. Total deaths fell, person-days rose, and four more settlements got through a
+winter.
+
+#### And a lesson written to a book nobody reads
+
+`drank_salt_water` records `DRINKING_THE_SEA` against the doing of it, with the
+comment "so that somebody who has done it twice knows better". Nothing reads it
+outside its own test. That is a store with a writer and no reader, which is the
+other half of this project's signature defect, and it is left alone here
+deliberately: making it load-bearing changes the gate a second time and would
+confound the arm above. Recorded, not fixed.
+
+### 182. Half an hour of danger buys thirty turns, at full price each
+
+Found while measuring #181 and separated from it because it is a change to a
+mechanism that was built on purpose.
+
+`everybody_takes_a_turn` gives anybody in danger their turn again once a
+simulated minute until the half hour is out. The intent is right and the
+specification asks for it: "this does not apply if an agent encounters a
+dangerous situation, as they must then make decisions minute by minute to
+enhance their survival odds." The comment above the loop already identifies the
+hazard — "a `Move` is one tile, whatever the turn is worth in minutes" — and
+closes it for exactly one thing, by giving the predator its minutes too.
+
+Everything else is still priced by the turn. A frightened man does not walk
+twenty-nine tiles any more, but he can still gather twenty-nine times, make
+twenty-nine attempts at a tool, and eat twenty-nine meals, each costing and
+yielding what half an hour of it would. #181 is what that looks like when the
+thing being repeated is lethal: five mouthfuls of the sea inside one tick.
+
+The fix is not to remove the fast clock but to denominate what a turn taken on
+it costs and yields — a minute's worth rather than half an hour's — which is the
+same correction #288 made to the exposure rates and #143 made to the food clock.
+It is a sweep across every executor, so it wants its own arm and its own
+measurement, and with #181's gate mended there is nothing lethal left for it to
+multiply in the meantime.

@@ -2021,6 +2021,26 @@ impl Agent {
         }
     }
 
+    /// How dry a body has to be before the sea stops looking like poison and
+    /// starts looking like water.
+    ///
+    /// The bottom band of `Physiology::capability`: a man down to a quarter of
+    /// his water, working at a quarter of himself, who will be dead inside the
+    /// day. That is the state the docstring below has always described.
+    ///
+    /// **It was `is_dehydrated()`, which is `hydration <= 0.75`** - a quarter
+    /// *down*, capability still whole, a state every working body passes
+    /// through between one drink and the next. So the rule that everybody
+    /// knows better than to drink the sea was suspended for everybody, daily,
+    /// and what it cost was not one mouthful but a tickful: an agent in danger
+    /// takes its turn again once a simulated minute (see
+    /// `everybody_takes_a_turn`), so a frightened man a quarter dry drank the
+    /// sea five times inside one tick and was dead at the end of it, at full
+    /// health, with a full load of salt. Measured over twelve worlds: **58
+    /// bodies lost a whole quarter of their water in a single tick**, every
+    /// one of them in danger, every one of them at `salt_in_me` 1.0.
+    const SO_DRY_THE_SEA_LOOKS_LIKE_WATER: f32 = 0.25;
+
     /// Whether this one knows better than to drink the sea.
     ///
     /// Everybody does. This is not a discovery - a mouthful of sea water
@@ -2028,7 +2048,7 @@ impl Agent {
     /// that ever lived beside one knew. What it is not is a rule that holds
     /// when somebody is three days dry.
     pub fn would_i_drink_the_sea(&self) -> bool {
-        self.state.is_dehydrated()
+        self.state.physiology.hydration <= Self::SO_DRY_THE_SEA_LOOKS_LIKE_WATER
     }
 
     /// A tick of having drunk the sea: the thirst comes back worse, and the
@@ -2070,19 +2090,36 @@ impl Agent {
     /// And the most anybody can be carrying at once.
     const AS_SALT_AS_ANYBODY_GETS: f32 = 1.0;
 
-    /// How much water a full load of salt costs the body every tick.
+    /// What one mouthful of the sea costs a body in water, all told.
     ///
     /// The drink itself is worth `physiology::A_DRINK_IS_WORTH`, a third of a
-    /// skin. One drink of the sea leaves 0.35 of salt, which goes at
-    /// `HOW_FAST_SALT_GOES` a tick and so takes about twenty-nine ticks to
-    /// clear, and over those ticks the salt in it costs about 0.35 of a skin
-    /// in water at this rate.
+    /// skin, and it goes in like any other drink. Getting the salt back out
+    /// costs this - rather more than the drink brought in - which is the whole
+    /// of "tempting, and worse than nothing".
+    const WHAT_A_MOUTHFUL_OF_THE_SEA_COSTS: f32 = physiology::A_DRINK_IS_WORTH * 1.05;
+
+    /// How much water a full load of salt costs the body every tick.
     ///
-    /// So a drink of the sea gives a third and takes rather more than a third
-    /// back over the two and a half days it takes to be rid of, which is what
-    /// "worse than nothing" means and is why it is a thing a desperate man
-    /// does and a sensible one does not.
-    const WHAT_THE_SALT_COSTS_IN_WATER: f32 = 0.0007;
+    /// Derived, rather than guessed at, so that the sentence above is the one
+    /// the arithmetic actually performs. A load of `s` goes at
+    /// `HOW_FAST_SALT_GOES` a tick and so is carried for `s /
+    /// HOW_FAST_SALT_GOES` ticks; the sum of what is carried over them is
+    /// `s^2 / (2 * HOW_FAST_SALT_GOES) + s / 2`. The rate is the cost divided
+    /// by that sum.
+    ///
+    /// **It was 0.0007, which is a hundredth of what the docstring beside it
+    /// claimed.** The sentence "over those ticks the salt in it costs about
+    /// 0.35 of a skin" was right about the intent and wrong about the number:
+    /// at 0.0007 a drink of the sea cost 0.0036 of a skin in salt, which is
+    /// nothing at all. The whole cost was instead being taken up front in the
+    /// executor, off the top of the drink, so the sea gave a body nothing and
+    /// charged it a sixth on the spot - a fast poison rather than a slow one.
+    /// Two places answering what a mouthful of the sea does, disagreeing with
+    /// each other and with both of their own docstrings.
+    const WHAT_THE_SALT_COSTS_IN_WATER: f32 = Self::WHAT_A_MOUTHFUL_OF_THE_SEA_COSTS
+        / (Self::WHAT_ONE_DRINK_OF_THE_SEA_LEAVES * Self::WHAT_ONE_DRINK_OF_THE_SEA_LEAVES
+            / (2.0 * Self::HOW_FAST_SALT_GOES)
+            + Self::WHAT_ONE_DRINK_OF_THE_SEA_LEAVES / 2.0);
 
     /// And how fast the body gets rid of it.
     const HOW_FAST_SALT_GOES: f32 = 0.012;

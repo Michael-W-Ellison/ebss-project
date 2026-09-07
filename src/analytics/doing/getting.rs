@@ -453,17 +453,20 @@ impl Simulation {
                     agent.state.last_drank_tick = self.current_tick;
                     agent.state.ticks_without_water = 0;
 
-                    if salt {
-                        // Salt water takes more water out of a body
-                        // than it puts in, and the body finds that out
-                        // twenty minutes later like any other drink.
-                        agent.state.physiology.hydration =
-                            (agent.state.physiology.hydration
-                                - physiology::A_DRINK_IS_WORTH * 0.5)
-                                .max(0.0);
-                    } else {
-                        agent.state.physiology.drink(physiology::A_DRINK_IS_WORTH);
-                    }
+                    // Salt water goes down like any other drink, and the body
+                    // finds out what it was over the days it takes to get the
+                    // salt back out - see `Agent::tick_salt` and
+                    // `WHAT_A_MOUTHFUL_OF_THE_SEA_COSTS`. That is the one
+                    // place the cost of the sea is reckoned.
+                    //
+                    // **This took a sixth of a body off on the spot and gave
+                    // nothing back**, which is a second answer to the question
+                    // `tick_salt` already answers, and a harsher one than
+                    // either docstring described: a man who drank the sea was
+                    // not slowly poisoned, he was immediately a sixth drier
+                    // for it. Sea water does put water into a body. What it
+                    // does not do is leave it there.
+                    agent.state.physiology.drink(physiology::A_DRINK_IS_WORTH);
 
                     if salt {
                         // "Even if it seems to temporarily satiate

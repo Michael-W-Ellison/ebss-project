@@ -15,7 +15,7 @@ use crate::analytics::Simulation;
 use crate::core::DriveType;
 use crate::environment::Action;
 use crate::world::nutrition::{FoodDatabase, PreparationState};
-use crate::world::{ItemType, Position, ResourceType, TerrainType, World, WorldConfig};
+use crate::world::{ItemType, Position, ResourceNode, ResourceType, TerrainType, World, WorldConfig};
 
 fn a_meal(of: ItemType, called: &str, how_many: u32) -> InventoryItem {
     let database = FoodDatabase::new();
@@ -163,8 +163,10 @@ fn the_sea_costs_more_than_it_gives() {
     ///
     /// The mouthful of water a sea drink brings with it is not here on
     /// purpose - it is handled where the drinking happens, in
-    /// `Simulation::gathering`, which takes half a drink's worth straight off
-    /// the hydration and then calls `drank_salt_water` for the rest.
+    /// `Simulation::gathering`, which puts the drink in like any other and
+    /// leaves the whole of the cost to the salt. It used to take half a
+    /// drink's worth straight off the hydration *as well*, which was a second
+    /// answer to the question this test asks; see `the_sea_is_a_slow_poison`.
     fn water_left_after_three_days(drinks_the_sea: bool) -> f32 {
         let mut agent = Agent::new(AgentConfig::default());
         agent.state.physiology.hydration = 1.0;
@@ -226,6 +228,196 @@ fn drinking_the_sea_is_recorded_against_it() {
     agent.drank_salt_water(0);
 
     assert!(agent.lessons.tried_this(Agent::DRINKING_THE_SEA) > before);
+}
+
+/// A quarter down is not a reason to drink the sea.
+///
+/// This is the gate that was wrong, and it was wrong in the direction that
+/// kills. `would_i_drink_the_sea` asked `is_dehydrated()`, which is
+/// `Physiology::is_parched` at `FIRST_BAND` - `hydration <= 0.75`, a quarter
+/// down, capability still whole. Every working body passes through that state
+/// between one drink and the next, so everybody was willing to drink the sea,
+/// every day of their lives.
+#[test]
+fn a_quarter_down_is_not_dying_of_thirst() {
+    let mut simulation = one_person();
+    let agent = &mut simulation.population.agents[0];
+
+    agent.state.physiology.hydration = 0.70;
+
+    assert!(
+        agent.state.is_dehydrated(),
+        "a quarter down is what this model calls parched, and it should stay \
+         calling it that - the bands are what capability is priced off"
+    );
+    assert_eq!(
+        agent.state.physiology.capability(),
+        0.75,
+        "and he is still worth three quarters of himself"
+    );
+    assert!(
+        !agent.would_i_drink_the_sea(),
+        "a man three quarters full who can still do three quarters of a day's \
+         work has every choice in the world, and leaves the sea alone"
+    );
+}
+
+/// Down to the last quarter, he takes it.
+#[test]
+fn a_man_on_his_last_quarter_takes_what_there_is() {
+    let mut simulation = one_person();
+    let agent = &mut simulation.population.agents[0];
+
+    agent.state.physiology.hydration = 0.20;
+
+    assert_eq!(
+        agent.state.physiology.capability(),
+        0.25,
+        "the bottom band: a quarter of a man"
+    );
+    assert!(
+        agent.would_i_drink_the_sea(),
+        "and everybody stops knowing better at the bottom"
+    );
+}
+
+/// A mouthful of the sea is a drink now and rather more than a drink gone by
+/// the time the salt is out.
+///
+/// The quantified form of `the_sea_costs_more_than_it_gives`, which could only
+/// say "less". Both of these bodies start full and neither drinks; the only
+/// difference between them is the salt, and what it comes to is the number in
+/// `WHAT_A_MOUTHFUL_OF_THE_SEA_COSTS`.
+#[test]
+fn the_sea_is_a_slow_poison() {
+    fn water_left(drinks_the_sea: bool, ticks: u32) -> f32 {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.physiology.hydration = 1.0;
+        agent.state.health = 100.0;
+
+        if drinks_the_sea {
+            agent.drank_salt_water(0);
+        }
+
+        for tick in 1..=ticks {
+            agent.state.last_ate_tick = tick;
+            agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
+            agent.tick_with_percepts(tick);
+            agent.process_survival_tick(tick);
+        }
+
+        agent.state.physiology.hydration
+    }
+
+    // Long enough for one drink's worth of salt to be all the way out: it goes
+    // at `HOW_FAST_SALT_GOES` a tick from `WHAT_ONE_DRINK_OF_THE_SEA_LEAVES`.
+    let long_enough = 40;
+    let cost = water_left(false, long_enough) - water_left(true, long_enough);
+
+    assert!(
+        cost > 0.25 && cost < 0.45,
+        "one mouthful of the sea should cost a body rather more than the third \
+         of a skin it brought in, once the salt is out of it; this cost \
+         {cost:.3}"
+    );
+}
+
+/// And it is tempting, which is the other half of the claim: the drink itself
+/// goes in like any other.
+///
+/// The executor took half a drink's worth straight *off* the hydration and put
+/// nothing in, so the sea was not a temptation at all - it was a fast poison
+/// that a body could not tell it had swallowed, because the thirst it was
+/// supposed to slake went down while the water went down with it. Two places
+/// reckoning the cost of one mouthful, and neither of them the one the
+/// docstrings described.
+#[test]
+fn the_sea_goes_down_like_water_and_the_thirst_goes_with_it() {
+    let mut simulation = one_person();
+    let where_he_stands = Position::new(25, 25);
+    a_sea_at(&mut simulation, where_he_stands);
+    simulation.world.resources.clear();
+    simulation.world.resources.push(ResourceNode::new(
+        ResourceType::Water,
+        where_he_stands,
+        100,
+    ));
+
+    {
+        let agent = &mut simulation.population.agents[0];
+        // Dry enough that he will touch it at all.
+        agent.state.physiology.hydration = 0.20;
+    }
+
+    let before = simulation.population.agents[0].state.physiology.hydration;
+    let result = simulation.execute_action(
+        &Action::Gather { resource_type: "water".to_string() },
+        0,
+    );
+    assert!(result.success, "there is water in front of him: {result:?}");
+
+    // The swallow tells a little later, like every other drink in this model:
+    // `MINUTES_FOR_A_DRINK_TO_TELL` after it went down.
+    for tick in 1..=2 {
+        simulation.population.agents[0].state.last_ate_tick = tick;
+        simulation.population.agents[0].tick_with_percepts(tick);
+        simulation.population.agents[0].process_survival_tick(tick);
+    }
+    let after = simulation.population.agents[0].state.physiology.hydration;
+
+    assert!(
+        after > before,
+        "the sea is water, and it goes in: {before:.3} -> {after:.3}"
+    );
+    assert!(
+        simulation.population.agents[0].state.salt_in_me > 0.0,
+        "and it leaves the salt that will take it back out again"
+    );
+}
+
+/// The regression that this whole entry is: a frightened man a quarter dry,
+/// standing beside the sea, is not dead at the end of the tick.
+///
+/// An agent in danger takes its turn again once a simulated minute until the
+/// half hour is out - see `everybody_takes_a_turn` - so whatever it decides to
+/// do, it can do up to thirty times in one tick, at a full turn's cost each
+/// time. Measured over twelve worlds before this was mended: fifty-eight
+/// bodies lost a quarter or more of their water inside a single tick, every
+/// one of them in danger and every one of them carrying a full load of salt.
+/// They had drunk the sea five times in half an hour.
+#[test]
+fn a_frightened_man_beside_the_sea_lives_out_the_tick() {
+    let mut simulation = one_person();
+    let where_he_stands = Position::new(25, 25);
+    a_sea_at(&mut simulation, where_he_stands);
+    simulation.world.resources.clear();
+    simulation.world.resources.push(ResourceNode::new(
+        ResourceType::Water,
+        where_he_stands,
+        100,
+    ));
+
+    {
+        let agent = &mut simulation.population.agents[0];
+        agent.state.physiology.hydration = 0.70;
+        agent.emotions.fear = 1.0;
+    }
+
+    simulation.tick();
+
+    let Some(agent) = simulation.population.agents.first() else {
+        panic!("a man a quarter down beside the sea was gone inside one tick");
+    };
+    assert!(
+        agent.state.is_alive,
+        "a man a quarter down beside the sea died inside one tick"
+    );
+    assert!(
+        agent.state.physiology.hydration > 0.5,
+        "and he should not have drunk half of himself away in half an hour: \
+         {:.3}",
+        agent.state.physiology.hydration
+    );
 }
 
 // --------------------------------------------------------------------------
