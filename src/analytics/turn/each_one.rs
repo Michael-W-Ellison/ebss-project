@@ -596,8 +596,10 @@ impl Simulation {
             .entry(Self::what_to_book(&action, running_away))
             .or_insert(0) += 1;
 
+
         action
     }
+
 
 
     /// What came of it: the body's bill, the tally, the lesson, and the plan.

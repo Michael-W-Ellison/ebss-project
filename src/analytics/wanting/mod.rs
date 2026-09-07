@@ -433,6 +433,37 @@ impl Simulation {
             return (action, false);
         }
 
+        // Before that: a body eating into its own reserve, with a store it can
+        // find.
+        //
+        // The shelter override below outranks every drive there is, Hunger
+        // included, and it fires on `needs_shelter` - being cold at all - so
+        // from the first frost it answers the turn for everybody, for ever.
+        // Measured over the 103,498 turns taken by a body under a quarter of
+        // its reserve: **the store branch has an answer ready in 72.1% of
+        // them, and what those bodies actually do is SeekShelter 44.7% and
+        // Eat 0.4%.**
+        //
+        // Narrowing the override itself was tried before the memory fix of
+        // #176 and made things worse - see the note below it, which is kept.
+        // That result does not carry, because its premise is gone: at the time
+        // **0.6% of those bodies could remember where a store was**, so taking
+        // the turn off shelter only freed it to wander to a bare hedgerow.
+        // With `SpatialMemoryType::Storage` no longer forgotten in an
+        // afternoon, 75.6% of them now know where a store is and the distances
+        // they remember match the real pits almost exactly.
+        //
+        // So this is not a weakening of the shelter rule; it is a narrow
+        // exception to it, on the drive hierarchy's own terms - "rank the
+        // primary drives by how fast each would kill". A man merely cold and
+        // fed still goes to the roof. A man a few days from starving, who
+        // knows where the food is, goes and gets it.
+        if Self::is_the_body_eating_itself(agent) {
+            if let Some(from_the_store) = self.something_out_of_the_store(agent, agent_position) {
+                return (from_the_store, false);
+            }
+        }
+
         // And freezing, where there is a roof within reach.
         //
         // *Freezing*, not cold. This asked `needs_shelter`, which is

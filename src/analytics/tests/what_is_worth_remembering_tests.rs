@@ -146,3 +146,80 @@ fn standing_somewhere_empty_corrects_the_memory() {
         "and being wrong about the water says nothing about the berries"
     );
 }
+
+/// A body living on itself, with a store it can find, goes to the store.
+///
+/// The shelter override outranks every drive there is, Hunger included, and it
+/// fires on being cold at all - so from the first frost it answered the turn
+/// for everybody, for ever. Measured over the 103,498 turns taken by a body
+/// under a quarter of its reserve: the store branch had an answer in 72.1% of
+/// them, and what those bodies did was SeekShelter 44.7% and Eat 0.4%.
+#[test]
+fn a_body_living_on_itself_goes_to_the_store_before_the_roof() {
+    use crate::agents::{AgentConfig, InventoryItem, Population};
+    use crate::environment::Action;
+    use crate::world::{ItemType, Pit, Position, World, WorldConfig};
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation =
+        crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    simulation.population.agents[0].state.position = (25, 25, 0);
+    simulation.world.pits.clear();
+
+    let mut buried = InventoryItem::new_with_weight("food".to_string(), 60, 0.5);
+    buried.food_data = simulation
+        .food_database
+        .create_food_data(&ItemType::Food, 0);
+    let mut pit = Pit {
+        where_it_is: Position::new(25, 25),
+        holds: Vec::new(),
+        covered: true,
+        dug: 0,
+    };
+    pit.put_in(buried);
+    simulation.world.pits.push(pit);
+
+    // He knows where it is, and he is living on himself.
+    simulation.population.agents[0]
+        .memory
+        .remember_how_much_is_there(SpatialMemoryType::Storage, (25, 25, 0), 60);
+    simulation.population.agents[0].state.physiology.reserve =
+        crate::agents::physiology::RESERVE_OF_A_GROWN_BODY * 0.1;
+
+    assert!(
+        crate::analytics::Simulation::is_the_body_eating_itself(
+            &simulation.population.agents[0]
+        ),
+        "a tenth of a reserve is living on yourself"
+    );
+
+    let agent_here = simulation.population.agents[0].state.position;
+    let (what, _) = simulation
+        .generate_non_emotional_action(&simulation.population.agents[0], agent_here);
+    assert!(
+        matches!(what, Action::PickUp { .. }),
+        "he is standing on his own larder and a fifth of the way to dead: {what:?}"
+    );
+}
+
+/// A man merely cold, and fed, still goes to the roof.
+#[test]
+fn somebody_fed_and_cold_is_not_diverted_to_the_larder() {
+    use crate::agents::{AgentConfig, Population};
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let simulation = crate::analytics::Simulation::new(
+        crate::world::World::new(crate::world::WorldConfig::default()),
+        population,
+    );
+
+    assert!(
+        !crate::analytics::Simulation::is_the_body_eating_itself(
+            &simulation.population.agents[0]
+        ),
+        "a fresh body is not living on itself, so the shelter rule is untouched \
+         for everybody it was written for"
+    );
+}

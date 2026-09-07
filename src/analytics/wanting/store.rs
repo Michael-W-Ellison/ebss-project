@@ -226,6 +226,27 @@ impl Simulation {
     /// How near one hole goes to another.
     pub(in crate::analytics) const HOW_CLOSE_TWO_HOLES_GET: u32 = 2;
 
+    /// Whether this body is living on itself rather than on its food.
+    ///
+    /// A quarter of the reserve. `is_starving` is three days into it, which is
+    /// far too late to be the line at which a man goes to the larder rather
+    /// than to the roof: measured, only 30.6% of the turns taken by a body
+    /// under a quarter of its reserve were `is_starving`, so a rule written on
+    /// that line leaves the other seven turns in ten to whatever else is
+    /// pressing.
+    ///
+    /// A quarter is the same line every measurement in ISSUES #173 through
+    /// #178 is drawn at, which is the point of naming it here: one line, read
+    /// by the decision and by the instrument that judges it.
+    pub(in crate::analytics) fn is_the_body_eating_itself(agent: &crate::agents::Agent) -> bool {
+        agent.state.physiology.reserve
+            / crate::agents::physiology::RESERVE_OF_A_GROWN_BODY
+            < Self::WHAT_IS_LEFT_WHEN_A_BODY_IS_LIVING_ON_ITSELF
+    }
+
+    /// The share of a reserve below which a body is spending itself.
+    pub(in crate::analytics) const WHAT_IS_LEFT_WHEN_A_BODY_IS_LIVING_ON_ITSELF: f32 = 0.25;
+
     /// How many living people this store has to see through the winter.
     pub(in crate::analytics) fn how_many_mouths_about(&self, here: crate::world::Position) -> u32 {
         self.population

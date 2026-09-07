@@ -12330,3 +12330,87 @@ The suite stands at 10 against the historical 11, having touched 9 under #177:
 `a_settlement_works_things_out_that_nobody_wrote_down` are both whole-settlement
 tests on a knife edge, and they trade places between arms. No failure new to
 this session survives in either direction.
+
+### 179. They could reach the food all along; something else was taking the turn
+
+Asked to fix the movement so a starving settlement could reach its larder. The
+first hypothesis was that walks never complete - `a_long_walk` is computed as
+`how_far_it_was(here) * 3`, which is the **remaining** distance recomputed
+every turn while `turns_on_it` climbs, so a twenty-pace walk starts with a
+budget of sixty turns and has twelve left when it is one pace away. Patience
+decreasing as you approach is a real oddity and it is **not** what is
+happening. The errand tallies say so directly:
+
+| of 53,279 errands set out | |
+|---|---|
+| **got there** | **92.1%** |
+| gave up on it | 7.3% |
+| set aside for something that would not wait | 98.1% |
+
+**The walks arrive.** The movement was never broken.
+
+#### What the memory fix uncovered
+
+With `SpatialMemoryType::Storage` no longer forgotten in an afternoon - see
+#176 - the same 103,498 turns taken by a body under a quarter of its reserve
+now read:
+
+| | |
+|---|---|
+| remembers a store | **75.6%** (was 0.6%) |
+| the store branch has an answer ready | **72.1%** |
+| ...and what it actually did: `SeekShelter` | **44.7%** |
+| `Move` | 41.4% |
+| **`Eat`** | **0.4%** |
+
+The remembered distances track the real pits almost exactly - 4.1/25.3/15.4
+against 4.1/25.3/15.4 - so the memory is not merely present, it is right.
+
+**The store had an answer in seven turns out of ten and the shelter override
+took four and a half of them.** `needs_shelter()` is `is_critical() ||
+!active_exposures.is_empty()` - cold at all - and it sits above every drive
+there is.
+
+#### Why the earlier attempt at this failed, and why it does not now
+
+#176 records narrowing that override to `is_critical` and reverting it: it
+halved `SeekShelter`, did not move `Eat` at all, and cost person-days 98,769 to
+94,879. That result is kept and it does not carry, **because its premise is
+gone**. At the time 0.6% of those bodies could remember where a store was, so
+taking the turn off shelter only freed it to wander to a bare hedgerow. There
+is somewhere worth going now.
+
+So the override is not weakened. A narrow exception is put in front of it, on
+the drive hierarchy's own stated terms - rank the primary drives by how fast
+each would kill: **a body under a quarter of its reserve, with a store it can
+find, goes and gets it.** A man merely cold and fed still goes to the roof, and
+`is_the_body_eating_itself` names the quarter that every measurement in #173
+through #178 is already drawn at, so the decision and the instrument that
+judges it read one line.
+
+#### What it came to
+
+| | before | after |
+|---|---|---|
+| `SeekShelter`, thin bodies | 44.7% | **33.0%** |
+| `PickUp`, thin bodies | 0.5% | **1.9%** |
+| turns spent under a quarter reserve | 103,498 | 93,327 |
+| starvation | 14.3% of deaths | **11.8%** |
+| person-days, 32 seeded worlds | 97,203 | 96,961 |
+
+Person-days flat inside noise again, and 1/32 out of the first winter either
+way. Across this whole session **starvation has gone from 28.2% of deaths to
+11.8%** - it is now the fifth cause, behind hunger, thirst, the weather and a
+blow - while dehydration has gone from 12.8% to 24.1%.
+
+The suite stands at 10 against the historical 11, with
+`a_settlement_lives_through_a_winter` green again and no failure new to this
+session in either direction.
+
+Two threads are named and open. **Dehydration has doubled** and is now the
+second biggest killer: the memory that lets a man find a store also lets him
+walk further from water, and the one correction for a stale water memory
+measured no effect at all (#176). And **`Eat` is 0.4% while `PickUp` is 1.9%**:
+they take food out of the store and the turn after that they are still not
+eating it, which is a smaller and sharper question than any of the above and is
+where the next look should start.
