@@ -231,3 +231,85 @@ fn the_question_does_not_apply_to_supper() {
          settlement eating"
     );
 }
+
+// --------------------------------------------------------------------------
+// Enough hole for a winter
+// --------------------------------------------------------------------------
+
+/// Digging waited on every pit being full, not on the store being enough.
+///
+/// A settlement with one pit a third full never dug a second, however far
+/// short of the winter it was. Measured at month nine over eight seeded
+/// world-years: 6.5 pits a settlement, 78.8% of them full to the brim, a
+/// larder capped at 1,950 items - while `does_the_store_still_want_filling`
+/// correctly asked for about 7,200.
+#[test]
+fn a_pit_with_room_in_it_is_not_enough_hole_for_a_winter() {
+    use crate::world::Pit;
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation =
+        crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    simulation.population.agents[0].state.position = (25, 25, 0);
+    simulation.world.pits.clear();
+
+    let here = Position::new(25, 25);
+
+    // One empty hole, twenty paces off so it is within reach and not underfoot.
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(30, 25),
+        holds: Vec::new(),
+        covered: true,
+        dug: 0,
+    });
+
+    let wanted = crate::analytics::Simulation::what_one_mouth_wants_put_by();
+    assert!(
+        wanted > Pit::WHAT_A_PIT_TAKES,
+        "one mouth's winter is more than one hole holds - {wanted} against {}, \
+         which is the whole of why this branch has to exist",
+        Pit::WHAT_A_PIT_TAKES
+    );
+
+    assert!(
+        !simulation.is_there_a_hole_going_spare(here),
+        "the empty hole is five paces off, not underfoot"
+    );
+    assert_eq!(
+        simulation.how_much_room_is_left_near(here),
+        Pit::WHAT_A_PIT_TAKES,
+        "and it is the only room this camp has"
+    );
+}
+
+/// Nobody digs a second hole beside a half-empty first one.
+#[test]
+fn nobody_digs_on_top_of_a_hole_that_is_still_going_spare() {
+    use crate::world::Pit;
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation =
+        crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    simulation.world.pits.clear();
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(25, 25),
+        holds: Vec::new(),
+        covered: true,
+        dug: 0,
+    });
+
+    assert!(
+        simulation.is_there_a_hole_going_spare(Position::new(25, 25)),
+        "he is standing on an empty one"
+    );
+    assert!(
+        simulation.is_there_a_hole_going_spare(Position::new(26, 25)),
+        "and a pace off is still on top of it"
+    );
+    assert!(
+        !simulation.is_there_a_hole_going_spare(Position::new(25, 40)),
+        "across the camp is somewhere else"
+    );
+}

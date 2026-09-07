@@ -190,6 +190,42 @@ impl Simulation {
         put_by < mouths * Self::what_one_mouth_wants_put_by()
     }
 
+    /// How much more this settlement's pits could take, within reach.
+    ///
+    /// The other half of "is there enough store": what is in the ground says
+    /// how far along the settlement is, and this says how much further the
+    /// holes it has already dug will carry it.
+    pub(in crate::analytics) fn how_much_room_is_left_near(
+        &self,
+        here: crate::world::Position,
+    ) -> u32 {
+        self.world
+            .pits
+            .iter()
+            .filter(|pit| here.distance_to(&pit.where_it_is) <= Self::WORTH_WALKING_TO_THE_STORE)
+            .map(|pit| {
+                crate::world::Pit::WHAT_A_PIT_TAKES.saturating_sub(pit.how_much_is_in_it())
+            })
+            .sum()
+    }
+
+    /// Whether there is a hole underfoot that is not worth adding to.
+    ///
+    /// Two paces, the same spacing roofs keep. A settlement that digs a second
+    /// pit beside a half-empty first one has spent a morning for nothing, and
+    /// without this the branch above would dig one every turn for ever.
+    pub(in crate::analytics) fn is_there_a_hole_going_spare(
+        &self,
+        here: crate::world::Position,
+    ) -> bool {
+        self.world.pits.iter().any(|pit| {
+            here.distance_to(&pit.where_it_is) <= Self::HOW_CLOSE_TWO_HOLES_GET && pit.has_room()
+        })
+    }
+
+    /// How near one hole goes to another.
+    pub(in crate::analytics) const HOW_CLOSE_TWO_HOLES_GET: u32 = 2;
+
     /// How many living people this store has to see through the winter.
     pub(in crate::analytics) fn how_many_mouths_about(&self, here: crate::world::Position) -> u32 {
         self.population
@@ -440,6 +476,51 @@ impl Simulation {
                 return Some(Action::Cover { what });
             }
 
+            // A hole with room in it is not the same as enough hole for a
+            // winter, and only the first of those was ever asked.
+            //
+            // Digging sat behind "is there any pit anywhere within reach with
+            // any room in it", so a settlement with one pit a third full never
+            // dug a second, however far short of the winter it was. What that
+            // came to, measured at month nine over eight seeded world-years:
+            // **6.5 pits a settlement, 78.8% of them full to the brim**, and a
+            // larder capped at 1,950 items. `does_the_store_still_want_filling`
+            // - three lines up, and read every time anybody decides to gather
+            // for the store - correctly asks for a mouth's winter eating times
+            // the mouths, which at eight mouths is about **7,200**. The
+            // settlement knew what it needed and the digging decision never
+            // asked. Every world empties between day 315 and day 350 with its
+            // pits full.
+            //
+            // So: walk to a pit with room only while the ground round here
+            // holds enough to be worth walking to. Past that the answer is
+            // another hole.
+            let enough_hole_for_the_winter = self
+                .world
+                .how_much_is_in_the_ground_near(here, Self::WORTH_WALKING_TO_THE_STORE)
+                + self.how_much_room_is_left_near(here)
+                >= self.how_many_mouths_about(here).max(1) * Self::what_one_mouth_wants_put_by();
+
+            if enough_hole_for_the_winter {
+                if let Some((pit, _)) = self
+                    .world
+                    .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
+                {
+                    return Some(Action::Move {
+                        target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+                    });
+                }
+            }
+
+            // Dig - but only where a hole will go, and not on top of one that
+            // is still half empty. The first cut asked for one wherever
+            // somebody happened to be standing, and the executor refused most
+            // of them: measured at 100 attempts a world for 1.7 pits, which is
+            // ninety-eight turns spent trying to dig a hole in a lake.
+            if self.is_ground_a_pit_will_go_in(here) && !self.is_there_a_hole_going_spare(here) {
+                return Some(Action::Excavate);
+            }
+
             if let Some((pit, _)) = self
                 .world
                 .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
@@ -447,15 +528,6 @@ impl Simulation {
                 return Some(Action::Move {
                     target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
                 });
-            }
-
-            // Nowhere to put it. Dig - but only where a hole will go. The
-            // first cut asked for one wherever somebody happened to be
-            // standing, and the executor refused most of them: measured at
-            // 100 attempts a world for 1.7 pits, which is ninety-eight turns
-            // spent trying to dig a hole in a lake.
-            if self.is_ground_a_pit_will_go_in(here) {
-                return Some(Action::Excavate);
             }
         }
 

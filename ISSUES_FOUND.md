@@ -12180,3 +12180,75 @@ unable to reach the store was, and now that he can remember where it is, what
 stands there is the walk itself: 82.2% of a thin body's turns go on `Move`, and
 nothing in the model prices a journey against what is at the end of it. That is
 entry #193, still open, and it is now the top of the list.
+
+### 177. The settlement knew it wanted seven thousand and never dug the holes
+
+Entry #176 mended what a person can remember and left the cliff standing:
+everybody still dead between day 315 and day 350. This is the cliff, and it is
+arithmetic rather than judgement.
+
+#### The larder is capped by the number of holes, and the holes are not enough
+
+A grown body gets through about fifteen items a day and the land gives nothing
+for seventy-five days running, so `what_one_mouth_wants_put_by` comes to about
+**864 items a mouth** - roughly 7,000 for the eight who reach autumn. A pit
+holds 300. **A settlement therefore needs about twenty-four holes and digs six
+and a half.**
+
+Measured at month nine over eight seeded world-years:
+
+| | |
+|---|---|
+| pits a settlement | **6.5** |
+| of them full to the brim | **78.8%** |
+| larder that caps at | **1,950 items** |
+| what the store's own gate asks for | **~7,000 items** |
+
+And the larder observed at its autumn peak was 2,014. The store is not short
+because anybody decided it should be; it is short because there is nowhere left
+to put anything.
+
+#### One question with an answer, and the branch that needed it never asked
+
+`does_the_store_still_want_filling` computes exactly the right number and is
+read every time anybody decides whether to gather for the store. The *digging*
+decision, three lines below it in the same function, asked something else
+entirely: "is there any pit anywhere within reach with any room in it". So a
+settlement with one pit a third full never dug a second, however far short of
+the winter it was - and once every pit was brim full,
+`is_this_lot_for_the_store` (which also wants `nearest_pit_with_room`) stopped
+anybody gathering for the store at all.
+
+The answer existed. The branch that needed it never asked. That is this
+project's recurring defect in its cheapest form yet: not two spellings that
+disagree, but one spelling with a reader missing.
+
+Digging now waits on whether the ground round here holds - and has room to hold
+- what the winter wants, and refuses only where a hole would go on top of one
+that is still going spare, two paces being the same spacing roofs keep.
+
+#### What it came to
+
+| | before | after |
+|---|---|---|
+| pits a settlement | 6.5 | **10.9** |
+| the larder at month nine | 2,014 | **3,122** |
+| person-days, 32 seeded worlds | 98,769 | **99,862** |
+| out of the first winter | 0/32 | **1/32** |
+| starvation | 28.2% of deaths | 19.3% |
+| the weather | 18.5% | 16.2% |
+| dehydration | 12.8% | 21.9% |
+
+The winter store is up 55% and person-days are the best this line of work has
+produced. **It is still not enough**: 86.2% of the pits are full to the brim at
+month nine, so the larder is still capped by digging - eleven holes where
+twenty-four are wanted - and everybody is still dead by month twelve.
+
+What caps the digging is named and not fixed here: `Excavate` is refused 9,952
+times out of 10,014 for want of a tool for Mining, which is entry #243 and now
+the thing standing between this settlement and its winter.
+
+The suite goes from **11 standing failures to 9**, the fewest this project has
+recorded: `a_settlement_lives_through_a_winter` passes, and so does
+`a_settlement_works_things_out_that_nobody_wrote_down` - a settlement that can
+keep its people alive long enough has time to find things out.
