@@ -1138,22 +1138,38 @@ impl Simulation {
 
         // What would answer it. A free hand is somebody else's problem - see
         // `free_a_hand_for` - and bare hands are never missing.
-        let wanted: &str = match missing {
-            Wants::ThisInHand(what) => what,
-            Wants::AToolFor(trade) => match agent.what_i_would_rather_have(trade) {
-                Some(tool) => tool.called,
-                None => return action,
-            },
-            Wants::AVessel | Wants::AFreeHand | Wants::BareHands => return action,
-        };
-
         // Only a step that can actually be carried out, and failing that the
         // raw thing the chain is short of. Naming a step that cannot be taken
         // is worse than the refusal it replaces: the refusal goes into the
         // record and the man learns from it that making knives does not work.
         // See `how_i_would_come_by`.
-        let wanted = wanted.to_string();
-        let Some(instead) = self.how_i_would_come_by(&wanted, agent) else {
+        //
+        // Every tool the trade has, best first, and the first one there is a
+        // step towards. It used to be `what_i_would_rather_have` alone, which
+        // is `max_by(how_much_better)` - one candidate, the best there is, and
+        // no second thought if its chain happens to be out of reach.
+        //
+        // A settlement's founders start with a handaxe. It wears out.
+        // Digging, building, leatherworking and crafting all then want a tool
+        // nobody has, and the best Mining tool anybody knows of is a *shovel*
+        // - so the whole settlement spent the rest of its life failing to
+        // begin a shovel while a handaxe, which it knew how to make and had
+        // the makings for, sat one step away. Measured over eight seeded
+        // world-years, **every one of the 9,952 refusals reached "no step
+        // towards shovel" and not one said "towards handaxe"**; `Excavate` was
+        // refused 15,758 times out of 15,836 - 99.5%, the largest single
+        // refusal in the model - and the winter store is capped by the holes
+        // that never got dug.
+        let candidates: Vec<String> = match missing {
+            Wants::ThisInHand(what) => vec![what.to_string()],
+            Wants::AToolFor(trade) => agent.what_i_would_settle_for(trade),
+            Wants::AVessel | Wants::AFreeHand | Wants::BareHands => return action,
+        };
+
+        let Some((wanted, instead)) = candidates.into_iter().find_map(|what| {
+            self.how_i_would_come_by(&what, agent)
+                .map(|step| (what, step))
+        }) else {
             return action;
         };
 

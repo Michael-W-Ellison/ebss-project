@@ -12252,3 +12252,81 @@ The suite goes from **11 standing failures to 9**, the fewest this project has
 recorded: `a_settlement_lives_through_a_winter` passes, and so does
 `a_settlement_works_things_out_that_nobody_wrote_down` - a settlement that can
 keep its people alive long enough has time to find things out.
+
+### 178. The first tool for digging should be a stick
+
+Entry #177 raised the larder from 1,950 to 3,122 and left it capped by digging:
+eleven holes where twenty-four are wanted, with `Excavate` refused **15,758
+times out of 15,836 - 99.5%, the largest single refusal in the model**. This is
+that refusal.
+
+#### An agent fixates on the best tool it knows and never falls back
+
+A settlement's founders arrive carrying a handaxe. It wears out. Digging,
+building, leatherworking and crafting then all want a Mining tool nobody has,
+and `make_what_this_wants` asked `what_i_would_rather_have`, which is
+`max_by(how_much_better)` - **one candidate, the best there is, and no second
+thought if its chain happens to be out of reach.**
+
+The best Mining tool anybody knows of is a *shovel*. So a settlement spent the
+rest of its life failing to begin a shovel while a handaxe, which it knew how
+to make, sat one step away. Measured: **every one of the 9,952 refusals reached
+"no step towards shovel" and not one said "towards handaxe".**
+
+`what_i_would_settle_for` returns every tool for a trade worth having, best
+first, and the making takes the first one there is actually a step towards.
+
+#### And the ladder had no bottom rung
+
+Mining had a shovel, a handaxe and a metal axe. **A hole in the ground is dug
+with a stick before anybody owns an axe**, and the stick was already in the
+model - `STICK_FOR_DIGGING` gets a root out of the ground and
+`STICK_FOR_FARMING` breaks a field - but the one thing it was never allowed to
+do was dig a hole. `STICK_FOR_DIGGING_HOLES` costs one length of wood, which is
+the point: the first rung has to be one a people can afford on their first
+afternoon.
+
+#### What it came to, and what it did not
+
+| | #177 | + fallback | + the stick |
+|---|---|---|---|
+| the larder at the end of a year | 382 | 5,594 | **7,243** |
+| pits, 8 worlds | 54 | 99 | 93 |
+| burrows finished | 0 | 5 | 4 |
+| person-days, 32 seeded worlds | 99,862 | 96,751 | 97,203 |
+| out of the first winter | 1/32 | **5/32** | 1/32 |
+| starvation | 19.3% of deaths | 14.2% | **14.3%** |
+
+**The larder is now at the number the winter actually wants** - a mouth wants
+864 items and eight mouths want about 7,000 - having been 382 three changes
+ago, which is nineteen times over.
+
+The stick was first given `how_long_it_lasts: 20.0` while the same stick
+already lasted 30.0 at rooting and at breaking a field - three numbers for one
+object, which is the fault this whole file is about, and it cost a settlement
+turns spent remaking a stick it had just worn out: 96,797 person-days and 0/32
+out of the winter against 97,203 and 1/32 once it was one number.
+
+And person-days did not follow. They are flat inside the ten per cent this
+harness moves by between blocks, and everybody is still dead by month twelve.
+What *has* moved, across this whole session, is what kills them: **starvation
+went from 28.2% of deaths to 14.3%** as the store was mended, and dehydration
+from 12.8% to 23.3% as it was not.
+That is the finding: **the store is no longer the binding constraint.** A
+settlement now banks what it needs and dies anyway, with hunger and starvation
+still 43.6% of deaths and 7,243 items in the ground.
+
+What remains is access, and it is measured in #176: 82.2% of the turns taken by
+a body under a quarter of its reserve go on `Move`, and nothing in this model
+prices a journey against what is at the end of it. That is entry #193, and it
+is now the whole of the problem rather than part of it.
+
+`Excavate` is still refused 99.2% - the stick wants a stone knife in hand to
+make, and stone knives wear out too - so the tool ladder has a bottom rung now
+and still no reliable way onto it. That is the other open thread.
+
+The suite stands at 10 against the historical 11, having touched 9 under #177:
+`a_settlement_lives_through_a_winter` and
+`a_settlement_works_things_out_that_nobody_wrote_down` are both whole-settlement
+tests on a knife edge, and they trade places between arms. No failure new to
+this session survives in either direction.

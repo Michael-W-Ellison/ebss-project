@@ -1430,6 +1430,34 @@ pub const AXE_FOR_STONE: Tool = Tool {
     how_long_it_lasts: 40.0,
 };
 
+/// And a hole in the ground is dug with a stick, before anybody owns an axe.
+///
+/// The first tool for digging is a stick. This one was already in the model,
+/// as `STICK_FOR_DIGGING` and `STICK_FOR_FARMING` - a root is got out of the
+/// ground with it and a field is broken with it - and the one thing it was
+/// never allowed to do was dig a hole. Mining had a shovel, a handaxe and a
+/// metal axe and no bottom rung, so a people whose founders' handaxes had worn
+/// out could not dig at all.
+///
+/// What that cost: **`Excavate` refused 15,758 times out of 15,836 - 99.5%,
+/// the largest single refusal in the model** - and the winter store is capped
+/// by the holes that get dug, so the whole settlement starved on it. A pit
+/// holds 300 items, a mouth wants 864 for a winter, and the settlement dug six
+/// and a half holes where it wanted twenty-four.
+///
+/// Modest against the shovel and the axe, as it should be: it is a stick. Its
+/// importance is that it costs one length of wood and can therefore be had on
+/// the first afternoon, which is what a bottom rung is for.
+/// Thirty, the same as the stick lasts at rooting and at breaking a field.
+/// One stick, one working life: three numbers for one object would be three
+/// answers to one question, which is the fault this project keeps finding.
+pub const STICK_FOR_DIGGING_HOLES: Tool = Tool {
+    called: "diggingstick",
+    helps: SkillType::Mining,
+    how_much_better: 1.2,
+    how_long_it_lasts: 30.0,
+};
+
 /// A spear is the whole of stone-age hunting.
 pub const SPEAR_FOR_HUNTING: Tool = Tool {
     called: "spear",
@@ -1531,6 +1559,7 @@ pub const METAL_SPEAR_FOR_FISHING: Tool = Tool {
 pub const EVERY_TOOL: &[Tool] = &[
     AXE_FOR_WOOD,
     AXE_FOR_STONE,
+    STICK_FOR_DIGGING_HOLES,
     AXE_FOR_BUTCHERING,
     STICK_FOR_DIGGING,
     STICK_FOR_FARMING,

@@ -2879,6 +2879,40 @@ impl Agent {
             })
     }
 
+    /// Every tool for a trade this one would rather have than what it has,
+    /// best first.
+    ///
+    /// `what_i_would_rather_have` answers with the single best and is right
+    /// for weighing whether an upgrade pays. It is wrong for *making* one,
+    /// because the best tool a man knows of and the best tool he can actually
+    /// begin are different questions, and taking the first answer for the
+    /// second is how a settlement comes to spend its life failing to start a
+    /// shovel with the makings of a handaxe in its pack. See
+    /// `make_what_this_wants`.
+    pub fn what_i_would_settle_for(&self, trade: super::SkillType) -> Vec<String> {
+        let good_enough = self
+            .what_i_have_to_work_with(trade)
+            .map(|tool| tool.how_much_better)
+            .unwrap_or(1.0);
+
+        let mut worth_having: Vec<&'static crate::environment::making::Tool> =
+            crate::environment::making::what_helps_with(trade)
+                .filter(|tool| self.knows_how_to_make(tool.called))
+                .filter(|tool| tool.how_much_better > good_enough)
+                .collect();
+
+        worth_having.sort_by(|a, b| {
+            b.how_much_better
+                .partial_cmp(&a.how_much_better)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        worth_having
+            .into_iter()
+            .map(|tool| tool.called.to_string())
+            .collect()
+    }
+
     /// Something this agent has found out how to do and could do right now.
     ///
     /// A man who has just worked out what a fire does to a bright stone will
