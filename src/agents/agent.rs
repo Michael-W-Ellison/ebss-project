@@ -1399,6 +1399,16 @@ pub struct Agent {
     #[serde(default)]
     pub lessons: super::practices::Lessons,
 
+    /// What this one has just been doing, most recent last.
+    ///
+    /// The whole reason a pattern can be a composition rather than a single
+    /// act: without a run there is nothing to compose. Deliberately short -
+    /// see `A_RUN_WORTH_KEEPING` - because the useful compositions in a life
+    /// like this are two or three steps long and a longer memory only adds
+    /// coincidences to be reinforced.
+    #[serde(default)]
+    pub lately: std::collections::VecDeque<String>,
+
     /// How often this one does the things that have a how-often.
     ///
     /// Keyed by `Undertaking` because a rhythm belongs to a kind of work
@@ -1529,6 +1539,7 @@ impl Agent {
             practices: super::practices::Practices::new(),
             lessons: super::practices::Lessons::new(),
             rhythms: std::collections::BTreeMap::new(),
+            lately: std::collections::VecDeque::new(),
             hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
@@ -6079,6 +6090,16 @@ impl Agent {
         let turns = self.how_long_that_took();
         let mut answered_anything = false;
 
+        // And the run that led here, which is what makes this a pattern
+        // rather than an episode. The specification says an agent "links its
+        // **previous actions** taken to the drive satisfaction" - plural -
+        // and until now the only thing linked was the one act that happened
+        // to produce the drive change. So `Did("eat")` took all the credit
+        // for hunger coming off and the gathering that filled the pack took
+        // none, and the composition that actually feeds a man - go, gather,
+        // eat - could not be represented at all, let alone learned.
+        let runs = self.what_led_up_to_this(action);
+
         for (need, change) in &action_result.drive_changes {
             if *change <= -Patterns::ENOUGH_TO_NOTICE {
                 // Efficiency, not the bare fact of it: how much demand came
@@ -6088,6 +6109,16 @@ impl Agent {
                 // another rather than merely possible.
                 let efficiency = -*change / turns as f32;
                 self.patterns.it_worked(*need, &elements, efficiency, now);
+
+                // The runs go down beside the atoms and on the same terms, so
+                // the composition and its halves compete: where the pair is
+                // what matters it is there every time and outruns either half,
+                // and where only the last act matters the pairs vary and the
+                // atom wins. Arithmetic decides, which is how the rest of this
+                // module already works.
+                if !runs.is_empty() {
+                    self.patterns.it_worked(*need, &runs, efficiency, now);
+                }
 
                 // And the area goes down as a place that answers this, which
                 // is the half of it that keeps for years. The trail above is
@@ -6155,6 +6186,63 @@ impl Agent {
 
         elements
     }
+
+    /// How much of a run is worth keeping.
+    ///
+    /// Three, which holds a pair and the step before it. Longer runs are
+    /// mostly coincidence: a man who ate at noon did also sleep the previous
+    /// night, and nothing is learned by writing that down every time.
+    pub const A_RUN_WORTH_KEEPING: usize = 3;
+
+    /// The runs that end in what was just done.
+    ///
+    /// One `Element::Then` for each step back through what he has lately been
+    /// doing, so that "gather then eat" and "move then eat" are both offered
+    /// to the arithmetic and the one that is there every time wins.
+    pub fn what_led_up_to_this(&self, action: &Action) -> Vec<super::patterns::Element> {
+        use super::patterns::Element;
+
+        let now = Self::just_the_verb(&Self::what_was_tried(action));
+
+        self.lately
+            .iter()
+            .rev()
+            .take(Self::A_RUN_WORTH_KEEPING)
+            .map(|before| Element::Then(Self::just_the_verb(before), now.clone()))
+            // A thing that follows itself is a man doing the same thing twice
+            // and teaches nothing about order.
+            .filter(|run| !matches!(run, Element::Then(first, next) if first == next))
+            .collect()
+    }
+
+    /// The verb out of a `what_was_tried` string, which writes "gather:Berries".
+    fn just_the_verb(tried: &str) -> String {
+        tried
+            .split_once(':')
+            .map(|(verb, _)| verb.to_string())
+            .unwrap_or_else(|| tried.to_string())
+    }
+
+    /// Note what was just done, so the next success has a run to credit.
+    pub fn that_is_what_i_just_did(&mut self, action: &Action) {
+        self.lately.push_back(Self::what_was_tried(action));
+        while self.lately.len() > Self::A_RUN_WORTH_KEEPING {
+            self.lately.pop_front();
+        }
+    }
+
+    /// What has answered this need after what he has just been doing.
+    ///
+    /// The reader for the compositions. Empty until an agent has walked the
+    /// same run often enough for it to be a habit - see
+    /// `Patterns::what_follows`.
+    pub fn what_usually_comes_next(&self, need: DriveType) -> Option<&str> {
+        let last = self.lately.back()?;
+        self.patterns
+            .what_follows(need, &Self::just_the_verb(last))
+    }
+
+    /// Read the felt total of what this one expects its habits to cost it.
 
     /// Read the felt total of what this one expects its habits to cost it.
     ///

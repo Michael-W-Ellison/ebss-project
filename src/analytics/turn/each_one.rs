@@ -681,6 +681,11 @@ impl Simulation {
         let now = self.current_tick;
         agent.link_what_worked(&action, &action_result, drive_type, where_it_was, now);
 
+        // And this act joins the run, *after* the linking, so that a run is
+        // always what led up to the thing being credited rather than
+        // including it. See `Agent::what_led_up_to_this`.
+        agent.that_is_what_i_just_did(&action);
+
         // Apply trait-based happiness rewards for successful actions
         if action_result.success {
             agent.apply_trait_action_rewards(&action);

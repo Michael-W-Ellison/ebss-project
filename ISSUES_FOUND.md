@@ -13061,3 +13061,120 @@ per-agent: twelve people who each keep their own line rediscover the same
 cadence twelve times over, where a settlement that talked to itself would
 learn it once. Neither is hard now that there is a type to hang it on, which
 was the whole difficulty.
+
+### 186. The pattern layer had no readers, and a pattern was one act long
+
+"Patterns should be compositions of smaller actions. Agents should explore the
+various smaller action compositions to discover the overall patterns which
+satisfy drive demand."
+
+Two things were wrong and the second is the larger.
+
+#### A pattern was one act, against the specification's own words
+
+The specification says an agent "links its **previous actions** taken to the
+drive satisfaction to form a pattern" - plural, and the worked example in it is
+a composition: "travel to + specific location = water". `link_what_worked` is
+called once per action with that action's own result, and built its elements
+out of that single act. So when hunger came off, `Did("eat")` took all of the
+credit and the gathering that filled the pack took none. The composition that
+actually feeds a man - go, gather, eat - could not be *represented*, let alone
+learned.
+
+`Element::Then(first, next)` is the composition, and `Agent::lately` is the
+short run it is read off. When a need is answered, every run ending in what was
+just done goes into the record beside the atoms and on the same terms - so the
+pair and its halves compete, and the module's existing arithmetic sorts them
+without anybody deciding which mattered: where the pair is what matters it is
+there every time and outruns either half; where only the last act matters the
+pairs vary and the atom wins.
+
+Measured over twelve worlds, summing trail worth across the bodies that lived
+out the year:
+
+| for | run | worth | | for | act | worth |
+|---|---|---|---|---|---|---|
+| Hunger | **gather > eat** | **81.4** | | Hunger | eat | 71.5 |
+| Thirst | move > gather | 80.7 | | Thirst | gather | 356.6 |
+| Hunger | move > pickup | 9.0 | | Hunger | pickup | 4.6 |
+| Hunger | pickup > eat | 9.2 | | | | |
+
+Both halves of the mechanism show in that table. **For hunger the composition
+beats the bare act** - 81.4 against 71.5 - which is correct: eating answers
+hunger *because gathering came first*, and an agent that has learned "eat" and
+not "gather then eat" has learned the half that does not feed him. **For thirst
+the atom wins by a mile** - 356.6 against 80.7 - which is also correct, because
+drinking answers thirst whether or not a walk came first, and following the
+walk would be a superstition. Nobody wrote either verdict down.
+
+`move > pickup` and `pickup > eat` are the store: go to the hole, take food out,
+eat it. Three steps, learned as two overlapping pairs, never written anywhere.
+
+#### And the whole layer had no readers at all
+
+`what_answers`, `something_like_it`, `where_it_worked`, `which_way_it_lies`,
+`places_worth_the_walk`, `how_alike` and `strength` have **no callers anywhere
+outside the module and its own tests**. Nine hundred lines that record
+beautifully and change nothing an agent does. It is this project's signature
+defect at the largest scale it appears.
+
+Half of that is deliberate and well argued: `somewhere_that_answered` carries a
+measurement showing that walking to a remembered place makes a settlement
+*worse*, because an errand is priced at the work and not at the walk (#189,
+task #193), and it is switched off until that is mended. That reasoning is
+sound and is left alone.
+
+But it only covers the readers that send somebody somewhere. "Which run of acts
+answers this need" involves no walk at all, and `Patterns::what_follows` is
+that reader: an agent that has just gathered and is still hungry asks what has
+followed gathering, gets back "eat", and does that instead of working down the
+fixed list from the top again.
+
+It is guarded twice, and both guards earn their place. A run must be worn past
+`WORN_ENOUGH_TO_FOLLOW` - about four ordinary successes - so one lucky
+afternoon is not a habit. And it must beat what its own second half scores
+alone, which is what stops thirst's `move > gather` displacing the plain
+`gather` that is doing the work.
+
+It can only ever choose among candidates the drive's own list has already
+produced. It does not invent an action, which is what keeps a learned habit
+from proposing something the world will refuse - and it is why the list is now
+gathered in full on the turns where a run is worn enough to choose, instead of
+being cut off at the first answer.
+
+#### Measured, 32 seeded worlds, two years
+
+| | before | after |
+|---|---|---|
+| person-days | 105,933 | **108,235** |
+| alive at the end | 7 | **11** |
+| out of the first winter | 8/32 | **9/32** |
+| population at month three | 11.0 | **11.1** |
+| population at month six | 10.9 | **11.0** |
+| population at month nine | 8.0 | **8.1** |
+| population at month fifteen | 0.3 | **0.4** |
+| deaths | 384 | **380** |
+| worlds emptied | 24/32 | 25/32 |
+
+Up 2.2% on person-days and up on seven of the eight other measures. The best
+single result of this run of work, and the first change in it whose gain is
+larger than the block noise on more than one measure at once.
+
+Across this session - #181, #183, #184, #185 and this - person-days go
+**99,429 to 108,235 (+8.9%)**, deaths by salt water go from 93 to none, and the
+month-nine population goes 7.3 to 8.1.
+
+#### What this does not do
+
+A run is two acts. Three-step compositions are learned only as overlapping
+pairs - `move > pickup` and `pickup > eat` - which is enough to walk the chain
+one step at a time but is not the same as holding "go, take, eat" as one thing
+that could be planned against. The plan machinery that would hold it is
+`ActionPlan`, and ISSUES #238 records that its branch of the decision ladder is
+unreachable.
+
+And an agent explores compositions only in the sense that #184 gave it: it
+varies which rung it takes when a need has gone unanswered, and whatever run
+results gets recorded. It does not deliberately try an *unfamiliar order* to
+find out what happens. That would be exploration over compositions proper, and
+it wants the plan branch first.

@@ -631,6 +631,10 @@ impl Simulation {
         }
     }
 
+    /// How many rungs the hunger list has, which is how far a learned run may
+    /// look for something it can actually do now.
+    pub(in crate::analytics) const HOW_MANY_WAYS_A_HUNGRY_MAN_HAS: usize = 6;
+
     /// Whether an answer is one there is nothing to find out about.
     ///
     /// Eating what you are carrying and taking a rabbit out of the snare you
@@ -836,7 +840,21 @@ impl Simulation {
                 // does when it stops working: he tries the next thing. See
                 // `how_far_down_the_list_to_look`.
                 let past_the_habit = Self::how_far_down_the_list_to_look(agent, drive_type);
-                let wanted = past_the_habit + 1;
+
+                // What he has learned follows what he has just been doing, if
+                // anything has. When there is one, the whole list is asked
+                // rather than only as far as the habit - because a
+                // composition can only choose between candidates that exist,
+                // and a list cut off at the first answer offers it nothing to
+                // choose. That costs the extra lookups only on the turns
+                // where a run is worn deep enough to be worth following.
+                let following = agent.what_usually_comes_next(drive_type).map(str::to_string);
+
+                let wanted = if following.is_some() {
+                    Self::HOW_MANY_WAYS_A_HUNGRY_MAN_HAS
+                } else {
+                    past_the_habit + 1
+                };
                 let mut found: Vec<Action> = Vec::new();
 
                 // Each rung is asked only until enough of them have answered,
@@ -907,6 +925,38 @@ impl Simulation {
                     || enough(self.walking_to_a_catch(agent, agent_position), &mut found)
                     || enough(self.fishing_action(agent, agent_position), &mut found)
                     || enough(self.hunting_action(agent, agent_position), &mut found);
+
+                // And before taking the habitual answer, what he has learned
+                // *follows* what he has just been doing.
+                //
+                // This is the reader for `Element::Then`, and it is the whole
+                // use of keeping runs. The list below is a fixed order
+                // somebody wrote; a composition is an order the agent found
+                // out, and where one is worn deep enough it decides between
+                // the candidates the list produced. It can only ever pick
+                // something already on the list - it does not invent an
+                // action, it chooses among the ones that are available now -
+                // which is what keeps a learned habit from proposing
+                // something the world will refuse.
+                if let Some(next) = following {
+                    if let Some(learned) = found
+                        .iter()
+                        .find(|doing| {
+                            crate::agents::Agent::what_was_tried(doing)
+                                .split(':')
+                                .next()
+                                == Some(next.as_str())
+                        })
+                        .cloned()
+                    {
+                        return Some(learned);
+                    }
+                    // Nothing the run names is available now, so he falls back
+                    // to the head of the list rather than to the tail of it:
+                    // the extra rungs were gathered to give the composition a
+                    // choice, not to change what he does when it has none.
+                    return found.into_iter().next();
+                }
 
                 // The last one reached: the habitual answer when nothing is
                 // being passed over, and the next thing down when something

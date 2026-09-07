@@ -158,6 +158,22 @@ pub enum Element {
     Toward(Bearing),
     /// The time of year it was done in.
     When(Season),
+    /// **Two things done in order.** "gather then eat", "move then drink".
+    ///
+    /// The element that makes a pattern a composition rather than a single
+    /// act. Everything else here is a fact about one doing; this is the only
+    /// one that is about two, and it is what lets an agent find out that
+    /// eating answers hunger *because gathering came first* - which neither
+    /// `Did("gather")` nor `Did("eat")` can say on its own.
+    ///
+    /// It costs nothing extra to discover. A run is written down with its
+    /// parts beside it and every one of them is reinforced together, so the
+    /// composition and its atoms compete on the same terms: where the pair is
+    /// what matters, the pair is there every time and outruns either half;
+    /// where only the last act matters, the pairs vary and the atom wins.
+    /// That is the same arithmetic that already sorts a place from a bearing,
+    /// pointed at order instead of at circumstance.
+    Then(String, String),
 }
 
 impl Element {
@@ -191,6 +207,7 @@ impl fmt::Display for Element {
             Element::At((x, y, z)) => write!(f, "at:{},{},{}", x, y, z),
             Element::Toward(bearing) => write!(f, "toward:{}", bearing.as_str()),
             Element::When(season) => write!(f, "when:{:?}", season),
+            Element::Then(first, next) => write!(f, "then:{}>{}", first, next),
         }
     }
 }
@@ -228,6 +245,12 @@ impl TryFrom<String> for Element {
                 "Fall" => Ok(Element::When(Season::Fall)),
                 "Winter" => Ok(Element::When(Season::Winter)),
                 _ => Err(format!("not a season: {}", rest)),
+            },
+            "then" => match rest.split_once('>') {
+                Some((first, next)) => {
+                    Ok(Element::Then(first.to_string(), next.to_string()))
+                }
+                None => Err(format!("not a run: {}", rest)),
             },
             _ => Err(format!("not an element: {}", written)),
         }
@@ -852,6 +875,60 @@ impl Patterns {
                     .then_with(|| left_what.cmp(right_what))
             })
     }
+
+    /// What has answered this need after doing that, if anything has.
+    ///
+    /// The reader for `Element::Then`, and the whole point of keeping runs.
+    /// An agent that has just gathered and is still hungry asks this, gets
+    /// back "eat", and does that rather than working down the fixed list
+    /// again from the top. Nobody wrote the pair down: it is there because it
+    /// was there every time the need came off.
+    ///
+    /// Only a run worn deep enough to be a habit rather than an accident, and
+    /// only one that beats what the atom on its own would say - otherwise a
+    /// composition that is merely present would displace the plain answer
+    /// that is actually doing the work.
+    pub fn what_follows(&self, need: DriveType, after: &str) -> Option<&str> {
+        let trails = self.against.get(&need)?;
+
+        let (best, worth) = trails
+            .iter()
+            .filter_map(|(element, trail)| match element {
+                Element::Then(first, next) if first == after => {
+                    Some((next.as_str(), trail.worth()))
+                }
+                _ => None,
+            })
+            .max_by(|(left_next, left), (right_next, right)| {
+                left.partial_cmp(right)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| left_next.cmp(right_next))
+            })?;
+
+        if worth < Self::WORN_ENOUGH_TO_FOLLOW {
+            return None;
+        }
+
+        // And it has to beat what its own second half says on its own. Where
+        // the atom is what matters, the atom is what an agent should do,
+        // whatever order it happened to come in.
+        let alone = trails
+            .get(&Element::Did(best.to_string()))
+            .map(|trail| trail.worth())
+            .unwrap_or(0.0);
+
+        if worth > alone {
+            Some(best)
+        } else {
+            None
+        }
+    }
+
+    /// How worn a run has to be before an agent follows it.
+    ///
+    /// Above the noise of a single lucky afternoon. A run that has answered
+    /// once is a coincidence; this is about four ordinary successes deep.
+    pub const WORN_ENOUGH_TO_FOLLOW: f32 = 0.4;
 
     /// Ground worth going back to for a need, if there is any.
     ///
