@@ -12964,3 +12964,100 @@ The trapline's real answer - go round every morning rather than every four days
 one of the things a drive can offer; the list is over actions, not over
 cadences. Making a cadence something an agent can vary and settle is the next
 piece, and it is what #183's closing note asks for.
+
+### 185. How often, which nothing in the model could hold
+
+Entry #184 closed by naming what it could not do: it searches one step down a
+list somebody else wrote, and the trapline's real answer - go round every
+morning rather than every four days - is not on that list at all, "because
+*how often* to do a thing is not one of the things a drive can offer; the list
+is over actions, not over cadences." This is the cadence.
+
+#### What the type is, and what it climbs
+
+`agents::rhythm::Rhythm` is one number - ticks between doings - and the
+evidence for it. `Agent::rhythms` keys them by `Undertaking`, because a rhythm
+belongs to a kind of work rather than to a single action: going round the line
+is one rhythm however many snares are on it.
+
+What it climbs is **what one doing brings back**. Not what it brings in a day
+- that measure is maximised by going round constantly and would drive every
+rhythm to its floor - but what the *turn* buys, which is the question the
+decision layer has to answer against every other use of the turn.
+
+That measure has a knee in it, and the knee is the answer. Leaving a line
+longer brings back more per round, but only until what was caught first is
+gone again; past that the extra wait buys nothing and costs the same turn. So
+an agent climbing it settles near the span the country takes to rob a snare -
+a number that lives in `SmallLife::WHAT_A_QUIET_COUNTRY_TAKES` and would move
+if that did. That property is the point: **the cadence tracks the world rather
+than a constant in the file**, and `the_cadence_follows_the_world_and_not_a_constant`
+is the test that holds it there - a country five times slower to take the
+catch is walked less often, and nobody wrote either number down.
+
+`WORTH_THE_WAIT` is why it sits at the knee rather than wandering the plateau:
+the curve saturates, so a longer rhythm has to be a tenth better to be kept.
+That is also the right prejudice - food in hand today beats the same food on
+Thursday.
+
+#### And the round itself, which did not exist
+
+`a_catch_at_my_feet` and `walking_to_a_catch` both ask whether a snare is
+*holding something*. The agent only ever went to a snare it already knew had a
+rabbit in it, and only once hunger had been refused by everything above them.
+A man does not know his snare has caught anything until he walks out and
+looks. `going_round_is_due` is the walk out: it fires when the rhythm says so,
+whether or not anything is known to be in the line, and it sits behind eating
+what is carried, behind the ground in front of him, and ahead of the store -
+and in the Preparedness arm ahead of setting more string, which is the order a
+trapper does them in.
+
+Rounds went from **3.8 a lifetime to 10.5**, and the cadence settled at
+**2.29 days** from a first guess of three.
+
+#### Measured, 32 seeded worlds, two years
+
+| | before | after |
+|---|---|---|
+| person-days | 106,631 | 105,933 |
+| worlds emptied | 27/32 | **24/32** |
+| alive at the end | 5 | **7** |
+| out of the first winter | 7/32 | **8/32** |
+| population at month six | 10.8 | **10.9** |
+| population at month nine | 8.3 | 8.0 |
+
+Person-days down 0.7% and three of the other four measures up, all of it well
+inside the ten per cent this measurement moves block to block. **It is about
+neutral and is shipped for the capability rather than for the number.** What
+the settlement does with the capability, on this ecology's arithmetic, is
+discover that trapping is a poor use of a turn: a round at the settled cadence
+brings back about half an item where a turn of gathering brings back several.
+Belief in trapping falls and most agents stop. That is the search working and
+reaching a true answer about a thin trapline, not the search failing.
+
+#### The arm that was measured and refused
+
+The obvious next move is to shelter a searching rhythm from `Lessons`: while
+the cadence is still moving, an empty round says he went at the wrong time,
+not that trapping does not feed him, so the coarse book should not hear about
+it. It is a good argument and it is wrong, because **the coarse book is also
+the brake**.
+
+Sheltered, over the same 32 worlds: rounds went 10.5 a lifetime to **43.6** at
+a 15% success rate, the cadence drifted *out* to three and a half days instead
+of in, and person-days fell **105,933 to 101,733** with worlds emptied 24 to
+29. Taking the brake off a search that is not converging does not buy
+convergence; it buys a settlement that spends its winter walking an empty
+line. `Rhythm::still_finding_it` is kept and readable, because it is what the
+search knows about itself, and deliberately unread - with the numbers in its
+docstring so nobody spends the afternoon again.
+
+#### What is still missing
+
+One undertaking has a rhythm. Fishing a reach, drawing on the store and going
+round the fields all have a how-often and none of them has been given one,
+because each wants its own yield signal and its own arm. And the rhythm is
+per-agent: twelve people who each keep their own line rediscover the same
+cadence twelve times over, where a settlement that talked to itself would
+learn it once. Neither is hard now that there is a type to hang it on, which
+was the whole difficulty.

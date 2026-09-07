@@ -1496,6 +1496,13 @@ impl Simulation {
             agent
                 .skills
                 .practise(crate::agents::SkillType::Hunting, 3, tick_now);
+            // An empty round is evidence about the rhythm too, and the
+            // important half of it: a line walked too often comes back empty.
+            agent.that_is_done(
+                crate::agents::practices::Undertaking::Trapping,
+                tick_now,
+                0.0,
+            );
             return ActionResult::failure("Empty".to_string())
                 .with_energy_cost(Self::WHAT_A_ROUND_COSTS);
         }
@@ -1547,6 +1554,14 @@ impl Simulation {
         agent
             .skills
             .practise(crate::agents::SkillType::Hunting, 12, tick_now);
+
+        // And what the round brought back, which is what the rhythm is
+        // climbing. See `crate::agents::rhythm`.
+        agent.that_is_done(
+            crate::agents::practices::Undertaking::Trapping,
+            tick_now,
+            carrying as f32,
+        );
 
         ActionResult::success()
             .with_drive_change(DriveType::Hunger, -0.15)

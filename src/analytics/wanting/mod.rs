@@ -886,6 +886,13 @@ impl Simulation {
                     // because everything taken out was put back in by
                     // somebody a day earlier. Efficiency did not move.
                     // See ISSUES_FOUND #43.
+                    // Then the round, if it is due. It sits behind eating
+                    // what is carried and behind the ground in front of him,
+                    // and it fires at most once a rhythm - so it cannot
+                    // become the thing a hungry man does with every turn,
+                    // which is what the measurement behind `walking_to_a_catch`
+                    // was about. See `going_round_is_due`.
+                    || enough(self.going_round_is_due(agent, agent_position), &mut found)
                     || enough(
                         self.something_out_of_the_store(agent, agent_position),
                         &mut found,
@@ -1179,6 +1186,11 @@ impl Simulation {
                 // quarter. Trapping is what you do when there is nothing
                 // better to do with the turn, and that is the honest place
                 // for it - a supplement, which is what a trapline was.
+                // And walking the line you have comes before making it
+                // longer, which is the order a trapper does them in and the
+                // order the yield asks for: a twelfth snare is worth nothing
+                // if the eleven are never visited.
+                .or_else(|| self.going_round_is_due(agent, agent_position))
                 .or_else(|| self.lengthening_the_line(agent, agent_position)),
 
             // Nothing in the world is fine enough to want yet - see

@@ -1398,6 +1398,19 @@ pub struct Agent {
     /// hunting.
     #[serde(default)]
     pub lessons: super::practices::Lessons,
+
+    /// How often this one does the things that have a how-often.
+    ///
+    /// Keyed by `Undertaking` because a rhythm belongs to a kind of work
+    /// rather than to a single action: going round the line is one rhythm
+    /// however many snares are on it. Only `Trapping` has one today, which is
+    /// the only undertaking in the model whose yield depends on how long you
+    /// leave it - see [`crate::agents::rhythm`].
+    #[serde(default)]
+    pub rhythms: std::collections::BTreeMap<
+        super::practices::Undertaking,
+        super::rhythm::Rhythm,
+    >,
     /// Questions this one has put to the world and is waiting on the answer
     /// to - see [`super::wondering::Wondering`].
     ///
@@ -1515,6 +1528,7 @@ impl Agent {
             parent_ids: Vec::new(),
             practices: super::practices::Practices::new(),
             lessons: super::practices::Lessons::new(),
+            rhythms: std::collections::BTreeMap::new(),
             hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
@@ -5922,6 +5936,36 @@ impl Agent {
     /// the action having an opinion about which of them matter. Which of them
     /// matter is the thing the agent works out - see
     /// [`super::practices::Lessons::what_this_changes`].
+    /// How often this one goes round at a kind of work, found out rather than
+    /// written down. See [`crate::agents::rhythm`].
+    pub fn how_often_i(&self, what: super::practices::Undertaking) -> super::rhythm::Rhythm {
+        self.rhythms
+            .get(&what)
+            .cloned()
+            .unwrap_or_else(super::rhythm::Rhythm::unfound)
+    }
+
+    /// Whether it is time he did it again.
+    pub fn is_it_time_i(&self, what: super::practices::Undertaking, now: u32) -> bool {
+        self.rhythms
+            .get(&what)
+            .map(|rhythm| rhythm.is_it_due(now))
+            .unwrap_or(true)
+    }
+
+    /// He did it, and this is what it brought back. The rhythm is judged here.
+    pub fn that_is_done(
+        &mut self,
+        what: super::practices::Undertaking,
+        now: u32,
+        brought_back: f32,
+    ) {
+        self.rhythms
+            .entry(what)
+            .or_insert_with(super::rhythm::Rhythm::unfound)
+            .how_it_went(now, brought_back);
+    }
+
     pub fn learn_from_this_here(
         &mut self,
         action: &Action,
@@ -5966,6 +6010,7 @@ impl Agent {
             // came back empty from four rounds in six, and concluded he was a
             // trapper. The fine record keeps "setsnare" either way, above.
             Action::SetSnare => return,
+
             Action::CheckSnares => Undertaking::Trapping,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
