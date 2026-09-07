@@ -96,3 +96,4 @@ pub mod growing_up_tests;
 pub mod anticipation_tests;
 pub mod ecology_tests;
 pub mod trapline_tests;
+pub mod trying_something_else_tests;

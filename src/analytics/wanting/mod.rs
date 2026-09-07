@@ -631,6 +631,87 @@ impl Simulation {
         }
     }
 
+    /// Whether an answer is one there is nothing to find out about.
+    ///
+    /// Eating what you are carrying and taking a rabbit out of the snare you
+    /// are standing on both cost no walk and cannot come back empty. There is
+    /// no experiment to run on them, and passing over one to go and try
+    /// something else is not curiosity, it is starving with your dinner in
+    /// your hand.
+    fn is_it_already_in_his_hand(doing: &Action) -> bool {
+        matches!(doing, Action::Eat { .. } | Action::CheckSnares)
+    }
+
+    /// How long a need goes unanswered before an agent stops taking its own
+    /// first answer and tries the next thing down the list.
+    ///
+    /// Two days of the world's calendar of asking and not being fed.
+    pub(in crate::analytics) const LONG_ENOUGH_TO_TRY_SOMETHING_ELSE: f32 =
+        2.0 * crate::environment::seasons::TICKS_PER_DAY as f32;
+
+    /// And the most of his turns a man will ever spend on the other thing.
+    ///
+    /// He does not abandon what he knows: he keeps doing it most of the time
+    /// and spends the rest finding out whether something else would have been
+    /// better. Set low on purpose - the habit is usually right, and an agent
+    /// that spends half its winter experimenting starves in a different way.
+    pub(in crate::analytics) const WHAT_SHARE_OF_TURNS_GO_ON_TRYING_SOMETHING_ELSE: f32 = 0.3;
+
+    /// How far past its habit a drive looks this turn.
+    ///
+    /// **This is the whole of "try something else when what you are doing is
+    /// not working", and until now there was nothing of it anywhere.** Every
+    /// drive answers with an ordered list and always took the first rung that
+    /// would answer, for ever, however badly that rung was going. `Lessons`
+    /// could slacken a *particular* thing until the drive stood aside
+    /// altogether - which makes a man do less, not differently - and the
+    /// coarse `Undertaking` book could not see the difference between two
+    /// rungs of the same list at all.
+    ///
+    /// What decides it is how long the need has been asking without being
+    /// met. `DriveState::denied_ticks` has counted exactly that since drives
+    /// were given pressure, and nothing had ever read it except to make the
+    /// drive shout louder. Shouting louder does not help a man whose hedgerow
+    /// is bare; walking past it to the river does.
+    ///
+    /// It is a share of turns rather than a switch, so what he knows stays
+    /// what he mostly does, and the trying is a thing he keeps doing until it
+    /// pays - which is what makes it a search and not a tantrum.
+    pub(in crate::analytics) fn how_far_down_the_list_to_look(
+        agent: &crate::agents::Agent,
+        drive_type: DriveType,
+    ) -> usize {
+        use rand::Rng;
+
+        let Some(drive) = agent.drives.get(drive_type) else {
+            return 0;
+        };
+
+        let denied = drive.denied_ticks() as f32;
+        if denied < Self::LONG_ENOUGH_TO_TRY_SOMETHING_ELSE {
+            return 0;
+        }
+
+        // How restless this has made him, up to the cap. A man three days
+        // hungry tries the other thing oftener than one who missed lunch.
+        let restless = ((denied / Self::LONG_ENOUGH_TO_TRY_SOMETHING_ELSE - 1.0) * 0.5)
+            .clamp(0.0, Self::WHAT_SHARE_OF_TURNS_GO_ON_TRYING_SOMETHING_ELSE);
+
+        // And a curious man tries the other thing sooner, which is what
+        // curiosity is for and the one place a personality bears on a search.
+        let leaning = if agent.traits.has(crate::core::traits::Trait::Curious) {
+            1.5
+        } else {
+            1.0
+        };
+
+        if crate::core::dice::roll().gen::<f32>() < restless * leaning {
+            1
+        } else {
+            0
+        }
+    }
+
     /// How many turns this piece of work would take, as near as the agent can
     /// tell before starting it.
     ///
@@ -748,8 +829,51 @@ impl Simulation {
                 // different question and sits below the ground in front of
                 // him - see `walking_to_a_catch`, which was measured the
                 // wrong way round first and cost a third of every settlement.
-                self.a_catch_at_my_feet(agent, agent_position)
-                    .or_else(|| self.food_action(agent, agent_position, starving))
+                // How far down its own list a long-denied drive looks.
+                //
+                // The order below is a habit, and a habit is the right thing
+                // to have while it is working. What was missing is what a man
+                // does when it stops working: he tries the next thing. See
+                // `how_far_down_the_list_to_look`.
+                let past_the_habit = Self::how_far_down_the_list_to_look(agent, drive_type);
+                let wanted = past_the_habit + 1;
+                let mut found: Vec<Action> = Vec::new();
+
+                // Each rung is asked only until enough of them have answered,
+                // so an agent doing what it always does pays for exactly the
+                // one lookup it used to.
+                //
+                // **Nothing is ever passed over that is already in his hand.**
+                // A search is for finding out whether the walk you keep taking
+                // is worth taking; the supper in your own pack is not a
+                // hypothesis. Without this a frightened man with food on him
+                // walked past it - see
+                // `fear_of_running_short_comes_out_as_answering_the_need`,
+                // which is the test that caught it.
+                let mut enough = |what: Option<Action>, found: &mut Vec<Action>| {
+                    let Some(doing) = what else {
+                        return false;
+                    };
+                    if Self::is_it_already_in_his_hand(&doing) {
+                        found.clear();
+                        found.push(doing);
+                        return true;
+                    }
+                    found.push(doing);
+                    found.len() >= wanted
+                };
+
+                // A catch in a snare the agent is standing on comes first
+                // of everything, because it costs nothing: no walk, no
+                // weighing, take it. The *walk* to one further off is a
+                // different question and sits below the ground in front of
+                // him - see `walking_to_a_catch`, which was measured the
+                // wrong way round first and cost a third of every settlement.
+                let _ = enough(self.a_catch_at_my_feet(agent, agent_position), &mut found)
+                    || enough(
+                        self.food_action(agent, agent_position, starving),
+                        &mut found,
+                    )
                     // A store within reach beats a walk out to a berry bush,
                     // which is the whole of what digging one buys.
                     //
@@ -762,7 +886,10 @@ impl Simulation {
                     // because everything taken out was put back in by
                     // somebody a day earlier. Efficiency did not move.
                     // See ISSUES_FOUND #43.
-                    .or_else(|| self.something_out_of_the_store(agent, agent_position))
+                    || enough(
+                        self.something_out_of_the_store(agent, agent_position),
+                        &mut found,
+                    )
                     // Then the walk out to a catch. Setting *more* string is
                     // not here at all: a snare set now feeds you in four
                     // days, which is no answer to being hungry today, and
@@ -770,9 +897,15 @@ impl Simulation {
                     // that reason. Offering it from the hunger arm as well
                     // had hungry men spending their turns on string - six
                     // worlds went from 23,733 person-days to 20,337.
-                    .or_else(|| self.walking_to_a_catch(agent, agent_position))
-                    .or_else(|| self.fishing_action(agent, agent_position))
-                    .or_else(|| self.hunting_action(agent, agent_position))
+                    || enough(self.walking_to_a_catch(agent, agent_position), &mut found)
+                    || enough(self.fishing_action(agent, agent_position), &mut found)
+                    || enough(self.hunting_action(agent, agent_position), &mut found);
+
+                // The last one reached: the habitual answer when nothing is
+                // being passed over, and the next thing down when something
+                // is. If the list ran out before it got that far he takes
+                // what there was, because standing still is not an experiment.
+                found.pop()
             }
 
             DriveType::Rest => {

@@ -12817,3 +12817,150 @@ population "trebles in a season" and would give it six hundredfold if the
 logistic did not stop it. They are left alone because they set the whole
 ecology's carrying capacity rather than the trapline's, and moving them is an
 arm of its own.
+
+### 184. He set twelve snares, walked the line six times, and concluded he was a trapper
+
+"Agents need to try new things if an action is not working. If setting traps
+and walking the line every four days is not working, agents should change what
+they are doing until the proper pattern is discovered."
+
+Three separate things had to be true for an agent to be unable to discover
+that, and all three were.
+
+#### One: the book credited the half that cannot fail
+
+`Action::SetSnare | Action::CheckSnares => Undertaking::Trapping`. A snare goes
+into the ground whenever an agent decides to put one there, so `SetSnare` never
+fails. The round is the half that comes back empty and the only half that
+produces food. Measured over twelve worlds, once a day per living body:
+
+| season | belief | tries | wins | win rate | of which sets | of which rounds |
+|---|---|---|---|---|---|---|
+| Spring | 0.88 | 10.4 | 9.5 | 91% | 8.2 | 2.1 |
+| Summer | 0.96 | 16.6 | 13.6 | 82% | 11.7 | 4.8 |
+| Fall | 0.95 | 17.5 | 13.9 | 80% | 11.8 | 5.8 |
+| **Winter** | **0.93** | **18.6** | **14.2** | **76%** | **11.8** | **6.8** |
+
+A man in February believes trapping works at 0.93. He has twelve snares in the
+ground, he has walked the line six times, he came back empty from four of those
+six, and he thinks he is a trapper - because eleven point eight of his eighteen
+"attempts at trapping" were the act of tying string to a stick.
+
+`SetSnare` now teaches nothing coarse, the same way `Action::Freeze` already
+did. The fine record keeps `setsnare` either way, because whether he can set a
+snare is a real question with a real answer; it is just not the question
+"does trapping feed me".
+
+Afterwards, on the same twelve worlds: **belief 0.93 to 0.59**, tries 18.6 to
+3.8, and tries now equal rounds exactly. The picture is honest. Note what it
+says: a round that pays three times in five is *worth doing*. He was never
+wrong to trap. He was wrong about how often to go.
+
+#### Two: the fine book could never speak
+
+`Lessons::A_FAIR_GO` is 12 - twelve goes before a particular thing may be
+judged - and `how_likely_to_try_this` returns `NEVER_QUITE_CERTAIN` until then.
+Rounds are walked **6.8 times in a whole winter lifetime**. So `checksnares`
+sat at 0.91 to 0.94 in every season of every world: not because it was going
+well, but because it had never been done often enough to be judged at all.
+
+A thing done too rarely to be judged is never judged, so nothing changes, so it
+goes on being done too rarely. It is left at 12 here rather than lowered,
+because lowering it moves every particular lesson in the model at once and
+wants its own arm - but it is the reason the fine book was silent and it is
+recorded as such.
+
+#### Three: and nothing in the model varied *how* a thing was done
+
+This is the real gap and it was total. Every drive answers with an ordered list
+- for hunger: the catch at your feet, then the ground in front of you, then the
+store, then the walk out to a snare, then the river, then the deer - and it
+took the first rung that would answer, for ever, however badly that rung was
+going.
+
+`Lessons` can slacken a particular thing until the drive stands aside
+altogether. That makes a man do **less**, not **differently**: a starving man
+who has learned that gathering is not working stops taking a turn at all rather
+than spending it on the river. And the coarse `Undertaking` book cannot tell
+two rungs of the same list apart, so it could not have chosen between them.
+
+`Simulation::how_far_down_the_list_to_look` is the missing piece. A need that
+has gone unanswered for `LONG_ENOUGH_TO_TRY_SOMETHING_ELSE` - two days of
+asking and not being fed - starts spending a share of its turns on the *next*
+rung instead of the first. The share rises with how long it has been denied,
+caps at `WHAT_SHARE_OF_TURNS_GO_ON_TRYING_SOMETHING_ELSE` (0.3), and is bent by
+`Trait::Curious`, which is what curiosity is for.
+
+What it reads is `DriveState::denied_ticks`, which has counted exactly this
+since drives were given pressure and which nothing had ever read except to make
+the drive shout louder. Shouting louder does not help a man whose hedgerow is
+bare. Walking past it to the river does.
+
+Three properties, all deliberate:
+
+- **One rung, not the bottom of the list.** A starving man who skipped every
+  rung he knew would end up hunting a deer with his hands.
+- **A share of turns, not a switch.** What he knows stays what he mostly does.
+  An agent that reconsiders from first principles every turn is not adaptive,
+  it is incoherent.
+- **It keeps happening while the need keeps going unmet**, which is what makes
+  it a search rather than a tantrum. When the other thing starts feeding him
+  the denial falls and the habit reasserts itself - so the pattern that is
+  discovered is the one that pays, and nothing had to write down which one it
+  would be.
+
+#### And the first cut of it walked a hungry man past his own supper
+
+The rule as first written passed over whatever the first rung offered,
+including `Eat`. A frightened man with food in his pack went for a walk. The
+suite caught it -
+`fear_of_running_short_comes_out_as_answering_the_need` - and it is a real
+defect in the rule rather than a stale expectation: a search is for finding out
+whether the walk you keep taking is worth taking, and the supper in your own
+pack is not a hypothesis. `is_it_already_in_his_hand` now exempts eating what
+you carry and taking a rabbit out of the snare you are standing on, both of
+which cost no walk and cannot come back empty.
+
+It is worth recording what that correction cost, because it was most of the
+gain. Uncorrected - with men experimenting past their own food - the 32 worlds
+read 107,672 person-days, 24 emptied and nine alive at the end. Corrected they
+read 106,631, 27 emptied and five. Some of what looked like adaptation paying
+was agents skipping meals, and the honest number is the smaller one.
+
+#### Measured, 32 seeded worlds, two years
+
+| | before | after |
+|---|---|---|
+| person-days | 105,497 | **106,631** |
+| population at month nine | 7.8 | **8.3** |
+| out of the first winter | 10/32 | 7/32 |
+| worlds emptied | 27/32 | 27/32 |
+| alive at the end | 6 | 5 |
+| deaths | 381 | 384 |
+
+**This is about neutral and it is reported as such.** Person-days are up 1.1%,
+which is well inside the ten per cent this measurement moves block to block;
+month nine - the last month before the winter cliff, and the one with the most
+bodies in it - is up half a person; and "out of the first winter" is down three
+worlds out of thirty-two, which is inside binomial noise at this sample but is
+down. No claim is made that trying something else saves settlements. What is
+claimed is that they now do it at all.
+
+The turns do move, which is the mechanism working: over twelve worlds `Gather`
+falls from 530.0 to 516.8 a thousand person-ticks in summer and from 532.9 to
+508.7 in autumn, while `PickUp` rises 6.29 to 8.06 and 7.10 to 7.91. Nobody
+wrote that down. It is agents whose gathering had stopped paying spending some
+of their turns on the store instead.
+
+Across the three entries of this session - #181, #183 and this one - person-days
+go **99,429 to 106,631 (+7.2%)**, starvation replaces death by salt water
+entirely, and month-nine population goes 7.3 to 8.3.
+
+#### What this does not do
+
+It searches one step down a list somebody else wrote. It cannot invent a rung.
+The trapline's real answer - go round every morning rather than every four days
+- is not on the hunger list at all, because *how often* to do a thing is not
+one of the things a drive can offer; the list is over actions, not over
+cadences. Making a cadence something an agent can vary and settle is the next
+piece, and it is what #183's closing note asks for.
