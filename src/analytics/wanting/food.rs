@@ -625,6 +625,20 @@ impl Simulation {
                 let here = crate::world::Position::new(agent_position.0, agent_position.1);
                 let looking_for_food = wanted == crate::world::ResourceType::Food;
 
+                // And whether the thing remembered can be bearing today.
+                //
+                // `known_resources` holds every patch anybody ever walked
+                // past, for ever, and nothing asked the calendar of it - so
+                // from the first frost a hungry man was still being sent to
+                // the bramble he found in September. It is the same defect as
+                // a memory of a spring that has dried up: a decision offering
+                // food the world will not give. Measured over twelve worlds,
+                // `Gather` is refused 14.6 times a thousand person-ticks in
+                // winter and **0.0 in every other season** - every one of
+                // those a turn spent walking to an empty hedgerow in the one
+                // season when there is nothing to spare. See ISSUES #183.
+                let today = self.world.climate.calendar.day_of_year;
+
                 agent
                     .exploration_knowledge
                     .known_resources
@@ -634,7 +648,7 @@ impl Simulation {
                         // resource called Food - which is the same question
                         // `is_it_food` answers everywhere else.
                         if looking_for_food {
-                            what.is_it_food()
+                            what.is_it_food() && what.is_it_bearing(today)
                         } else {
                             **what == wanted
                         }

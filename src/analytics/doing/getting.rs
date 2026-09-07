@@ -1504,11 +1504,46 @@ impl Simulation {
             .food_database
             .create_food_data(&crate::world::inventory::ItemType::Meat, self.current_tick);
 
+        // Room for it before the snares are emptied, and only as much as
+        // there is room for. **`add_item` returns whether the thing went in
+        // and this threw the answer away**, so a man with a full pack took
+        // the catch out of the snare and it stopped existing - the same
+        // defect as the store in #180, at the call site that entry named and
+        // did not fix. What will not fit stays in the snare, where it is at
+        // least still there when he comes back with room.
+        let each = 1.2f32;
+        let _ = self.set_down_what_is_worth_less_than_food(agent_index, each * took as f32);
+        let agent = &mut self.population.agents[agent_index];
+        let room = agent.inventory.weight_capacity_remaining();
+        let carrying = took.min((room / each).floor().max(0.0) as u32);
+
+        if carrying == 0 {
+            // Put them back: the snare held it and the snare can go on
+            // holding it.
+            let mut left = took;
+            for snare in self.world.snares.iter_mut() {
+                if left == 0 {
+                    break;
+                }
+                if snare.set_by == agent_id && snare.caught_at.is_none() {
+                    let reach = (snare.at.0 - at.0).abs().max((snare.at.1 - at.1).abs());
+                    if reach <= Self::CLOSE_ENOUGH_TO_A_SNARE {
+                        snare.caught_at = Some(tick_now);
+                        left -= 1;
+                    }
+                }
+            }
+            self.world.animals.small_life.snare_tally.taken -= (took - left) as u64;
+            return ActionResult::failure("No room in the pack for the catch".to_string())
+                .with_energy_cost(Self::WHAT_A_ROUND_COSTS);
+        }
+
         let agent = &mut self.population.agents[agent_index];
         let mut catch =
-            crate::agents::InventoryItem::new_with_weight("meat".to_string(), took, 1.2);
+            crate::agents::InventoryItem::new_with_weight("meat".to_string(), carrying, each);
         catch.food_data = food_data;
-        agent.inventory.add_item(catch);
+        let went_in = agent.inventory.add_item(catch);
+        debug_assert!(went_in, "the room was measured a line ago");
         agent
             .skills
             .practise(crate::agents::SkillType::Hunting, 12, tick_now);
@@ -1517,6 +1552,6 @@ impl Simulation {
             .with_drive_change(DriveType::Hunger, -0.15)
             .with_drive_change(DriveType::Sustenance, -0.1)
             .with_energy_cost(Self::WHAT_A_ROUND_COSTS)
-            .with_message(format!("Took {took} out of the snares"))
+            .with_message(format!("Took {carrying} out of the snares"))
     }
 }

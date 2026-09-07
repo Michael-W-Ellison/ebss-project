@@ -12668,3 +12668,152 @@ same correction #288 made to the exposure rates and #143 made to the food clock.
 It is a sweep across every executor, so it wants its own arm and its own
 measurement, and with #181's gate mended there is nothing lethal left for it to
 multiply in the meantime.
+
+### 183. Winter catches more than spring, and the fox gets all of it
+
+"Certain food sources, such as trapping, should still work in the winter but
+at a greatly reduced rate." The first thing the instrument said was that the
+premise was half wrong in an interesting way: **winter is the best trapping
+season in the model, and it delivers nothing.**
+
+#### What a settlement gets, and from where
+
+Twelve worlds, one year, everything counted per thousand person-ticks lived in
+that season so the seasons compare:
+
+| | Spring | Summer | Fall | Winter |
+|---|---|---|---|---|
+| `Gather` | 326.4 | 529.4 | 515.5 | 246.2 |
+| `CheckSnares` | 0.42 | 0.08 | 0.03 | **0.08** |
+| `SetSnare` | 2.72 | 0.12 | 0.04 | **0.00** |
+| `Hunt` | 0.08 | 0.00 | 0.03 | 0.07 |
+| `Fish` | 1.37 | 0.00 | 0.02 | 0.05 |
+| `PickUp` | 5.3 | 7.1 | 5.2 | 195.5 |
+
+And what the snares actually did:
+
+| season | caught | robbed | carried home | robbed |
+|---|---|---|---|---|
+| Spring | 660 | 400 | 252 | 60.6% |
+| Summer | 484 | 433 | 44 | 89.5% |
+| Fall | 488 | 482 | 12 | 98.8% |
+| **Winter** | **816** | **789** | **21** | **96.7%** |
+
+Winter takes **816 head, more than any other season** - the line is longest by
+then and the small life is still there, thinned to 0.45 by
+`what_a_hectare_of_this_is_worth` and no further. The reduced winter rate the
+task asks for was already in the world. What the settlement carried home out of
+those 816 was **twenty-one**, across twelve world-winters: under two rabbits a
+settlement a winter.
+
+#### Two guesses were wrong before the right one
+
+**`SetSnare` at exactly 0.00 in winter** looks like a seasonal gate and is not
+one. `SetSnare` hangs off Preparedness, and Preparedness is chained behind
+Hunger, so the obvious reading is that a starving settlement never gets to want
+a snare - which is the failure `drives.rs` already carries a note about for
+storing. Probed directly, gate by gate, once a day per living body:
+
+| season | hunger | put-by | gave up | nothing pressing | **line full** | ground bare | would set |
+|---|---|---|---|---|---|---|---|
+| Spring | 0.27 | 3.32 | 0.0% | 0.0% | 44.6% | 0.0% | 55.4% |
+| Winter | 3.44 | 1.64 | 0.0% | 2.5% | **92.8%** | 0.0% | 4.8% |
+
+Preparedness stands at 1.64 in winter against a threshold of 0.25. Nobody has
+given up on trapping and no ground is bare. **Everybody already has twelve
+snares out**, which is `A_LINE_OF_SNARES`, and that is the whole of why nobody
+sets a thirteenth. Setting was never the problem.
+
+#### The trapping rates are on a twelve-tick day and this world keeps forty-eight
+
+`WHAT_A_SNARE_TAKES_ON_FULL_GROUND` was `0.02` a tick, and the docstring above
+it read: *"Twelve ticks to the day, so this is about a fifth of a chance a day
+and something in the snare inside four or five days."* `TICKS_PER_DAY` is
+**48**. The snare took four fifths of a chance a day.
+
+`WHAT_A_QUIET_COUNTRY_TAKES` was `0.01` a tick, and its docstring read *"Most of
+a week before something finds it in a country with plenty in it, which is what
+makes a trapline worth keeping at all."* At 48 ticks a day that is a catch
+half gone in a day and a half, not most of a week.
+
+Both are now written per day - the number the sentence states - and divided by
+`TICKS_PER_DAY`, so the docstring is the arithmetic. It is the same defect as
+#143 (the food clock) and #288 (the exposure rates): a rate calibrated on a
+calendar the world has since stopped keeping, with its own prose left standing
+as the record of what it was supposed to be.
+
+Note which way each error cut. Catching four times too often did not help,
+because a long line is capped by `WHAT_A_GROUND_GIVES_A_LINE` rather than by
+the snare - twelve people at twelve snares each share one ground - so the extra
+rate was thrown away. Robbing four times too fast was pure loss.
+
+#### Two more, found on the way
+
+**A man was still being sent to a bramble he found in September.**
+`ExplorationKnowledge::known_resources` holds every patch anybody ever walked
+past, for ever, and `known_source_position` never asked the calendar of it.
+`ResourceType::is_it_bearing` has existed the whole time and had no caller
+here. The tell is in the table above: `Gather` is refused **14.6 times a
+thousand person-ticks in winter and 0.00 in every other season** - every one of
+those a turn spent walking to an empty hedgerow in the one season with no turns
+to spare. Same shape as a memory of a spring that has dried up.
+
+**And the catch stopped existing if the pack was full.**
+`going_round_the_line` cleared `caught_at` and then called
+`agent.inventory.add_item(catch)` **ignoring the bool** - the identical defect
+to the store in #180, at one of the call sites that entry named and did not
+fix. What will not fit now stays in the snare, where it is still there when he
+comes back with room, and the tally is decremented rather than counting a catch
+nobody ate.
+
+#### Measured, 32 seeded worlds, two years
+
+| | before | after |
+|---|---|---|
+| person-days | 104,341 | **105,497** |
+| out of the first winter | 9/32 | **10/32** |
+| population at month nine | 7.4 | **7.8** |
+| worlds running past the first year | 2 | **4** |
+| deaths | 384 | 381 |
+
+And on the trapline itself, over twelve world-winters:
+
+| | before | after |
+|---|---|---|
+| snares holding at any moment | 0.87% | **3.14%** |
+| `CheckSnares`, per thousand person-ticks | 0.08 | **1.05** |
+| carried home | 21 | **31** |
+| robbed | 96.7% | 94.5% |
+
+Person-days is inside the block noise of about ten per cent on its own; what
+carries it is that four separate measures move the same way, and that the
+trapline numbers - which are what the task was about - move by three and
+thirteen times.
+
+#### What is still wrong, stated rather than buried
+
+**94.5% is still robbed, and the reason is not the rate any more.** A catch now
+survives about a day. The line is walked about once every four days:
+`CheckSnares` at 1.05 a thousand person-ticks over a winter of 228,721 comes to
+twenty-three rounds a world across ninety days. A trapline is a thing you walk
+every morning, and nothing in this model expresses that - going round the line
+is only ever reached when hunger has already been refused by the ground in
+front of the agent and by the store, which in winter is most of the way to
+being dead.
+
+That is the next thing for trapping, and it is a decision-layer change rather
+than a rate: **walking the line wants to be a round, on its own clock, the way
+a man who has set string actually behaves** - not the last option in the hunger
+chain. It is filed here rather than done because the comment on
+`walking_to_a_catch` records that putting it in front of ordinary food cost a
+third of every settlement when it was tried globally, and the narrow version -
+in front of food only when the ground is out of season - wants its own arm and
+its own measurement.
+
+`WHAT_A_GROUND_GIVES_A_LINE` and `HOW_FAST_THE_GRAZERS_COME_BACK` are on the
+same twelve-tick day as the two rates mended here: the first glosses itself as
+"two and a quarter a day" and comes to nine, and the second says a rabbit
+population "trebles in a season" and would give it six hundredfold if the
+logistic did not stop it. They are left alone because they set the whole
+ecology's carrying capacity rather than the trapline's, and moving them is an
+arm of its own.
