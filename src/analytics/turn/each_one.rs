@@ -584,6 +584,13 @@ impl Simulation {
         // the tool instead.
         let action = self.make_what_this_wants(action, agent_index);
 
+        // And a making somebody simply decided on: hold on to it, the
+        // way the two diversions above already do. This is the last
+        // path into `Errand::to_make` and it was the one missing, so
+        // the only makings anybody ever finished were the ones they
+        // were pushed into. See `hold_on_to_the_making`.
+        let action = self.hold_on_to_the_making(action, agent_index);
+
         // And a job this one *could* do now, but would do faster with
         // a tool worth stopping for. The turn was going to be work; it
         // goes on the tool because the tool buys back more work than

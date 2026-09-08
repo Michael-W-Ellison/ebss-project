@@ -3390,6 +3390,35 @@ impl Agent {
             .map(|step| step.makes.to_string())
     }
 
+    /// And the thing that making is a step *towards*.
+    ///
+    /// `what_i_would_make` returns the step that can be taken now - a knapped
+    /// tip, a length of lashing - and throws away what it was a step towards,
+    /// which is the only thing that makes the next two turns follow from this
+    /// one. A spear is a tip, then a lashing, then the three parts put
+    /// together; an agent that remembers only the tip decides again from
+    /// scratch the moment it is in the pack. See `Errand::to_make`.
+    pub fn what_i_am_working_towards(&self, a_fire_is_to_hand: bool) -> Option<&'static str> {
+        let holding = |what: &str| self.how_many_i_have(what);
+        let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
+        let in_hand = |what: &str| self.how_many_i_have(what) > 0;
+
+        Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
+            .iter()
+            .filter_map(|trade| self.what_i_would_rather_have(*trade))
+            .find(|want| {
+                crate::environment::making::what_to_do_first_that_can_be_done(
+                    want.called,
+                    &holding,
+                    &knows,
+                    &in_hand,
+                    a_fire_is_to_hand,
+                )
+                .is_some()
+            })
+            .map(|want| want.called)
+    }
+
     /// How many usable ones of a named thing are in the pack.
     ///
     /// A worn-through tool does not count. A broken axe is not an axe: it is
@@ -6208,16 +6237,28 @@ impl Agent {
     pub fn what_led_up_to_this(&self, action: &Action) -> Vec<super::patterns::Element> {
         use super::patterns::Element;
 
-        let now = Self::just_the_verb(&Self::what_was_tried(action));
+        let tried = Self::what_was_tried(action);
+        let now = Self::just_the_verb(&tried);
 
         self.lately
             .iter()
             .rev()
             .take(Self::A_RUN_WORTH_KEEPING)
+            // A man doing the same thing twice teaches nothing about order,
+            // and *the same thing* is the whole of what was done rather than
+            // the name the pattern layer files it under.
+            //
+            // **This is where the tool ladder lives.** A spear is a knapped
+            // tip, then a length of lashing, then the three parts put
+            // together - three separate makings in a row, and under the
+            // family name they are all `craft`. Comparing the folded verbs
+            // threw every one of them away as repetition, so the one
+            // composition this world is actually built out of could not be
+            // learned. Comparing what was tried keeps `craft:knappedtip >
+            // craft:spear` and still drops `gather:berries >
+            // gather:berries`, which is a man picking berries for an hour.
+            .filter(|before| before.as_str() != tried)
             .map(|before| Element::Then(Self::just_the_verb(before), now.clone()))
-            // A thing that follows itself is a man doing the same thing twice
-            // and teaches nothing about order.
-            .filter(|run| !matches!(run, Element::Then(first, next) if first == next))
             .collect()
     }
 

@@ -248,3 +248,155 @@ fn a_deep_drive_keeps_the_bar_it_had() {
         "eating is what follows gathering; looking at it is not"
     );
 }
+
+/// A verb that follows itself is two stages of one thing, where the thing has
+/// stages.
+///
+/// This is what a spear is: a knapped tip, then a length of lashing, then the
+/// three parts put together. All three are `craft` once the family is folded,
+/// so a chain that refuses to walk `craft > craft` cannot represent the one
+/// composition the tool ladder is built out of.
+#[test]
+fn making_twice_running_is_two_stages_and_not_a_circle() {
+    let mut patterns = Patterns::default();
+    let get = Element::Then("gather".to_string(), "craft".to_string());
+    let again = Element::Then("craft".to_string(), "craft".to_string());
+
+    wear(&mut patterns, DriveType::Utility, &get, 6, 0.5);
+    wear(&mut patterns, DriveType::Utility, &again, 6, 0.5);
+
+    // Out to the cap, which is what a spear is: get the stone, knap the tip,
+    // twist the lashing, put the three parts together.
+    assert_eq!(
+        patterns.the_chain_that_answers(DriveType::Utility, "gather"),
+        vec!["craft".to_string(); Patterns::AS_LONG_A_CHAIN_AS_ANYBODY_HOLDS],
+        "a making that follows a making is a stage, and it may go on staging"
+    );
+}
+
+/// And everywhere else it is one thing done twice, which teaches nothing.
+///
+/// **Measured**: with the latitude given to every verb,
+/// `gather > gather > gather` took over - Thirst went to a hundred per cent of
+/// bodies holding it as their longest run, and Hunger's `gather > eat` fell
+/// from fifty-eight per cent to three.
+#[test]
+fn gathering_twice_running_is_a_man_picking_berries() {
+    let mut patterns = Patterns::default();
+    let twice = Element::Then("gather".to_string(), "gather".to_string());
+    let eat = Element::Then("gather".to_string(), "eat".to_string());
+
+    wear(&mut patterns, DriveType::Hunger, &twice, 20, 0.9);
+    wear(&mut patterns, DriveType::Hunger, &eat, 20, 0.9);
+
+    assert_eq!(
+        patterns.the_chain_that_answers(DriveType::Hunger, "gather"),
+        vec!["eat".to_string()],
+        "however worn the repetition is, it is not a step"
+    );
+    assert!(!making::does_it_come_in_stages("gather"));
+    assert!(making::does_it_come_in_stages("craft"));
+}
+
+/// The run between two makings survives being written down, because what was
+/// done is the whole of what was tried and not the family it is filed under.
+#[test]
+fn two_different_makings_in_a_row_are_a_run() {
+    let mut agent = Agent::new(AgentConfig::default());
+
+    let tip = Action::Craft {
+        item_type: "knappedtip".to_string(),
+    };
+    let spear = Action::Craft {
+        item_type: "spear".to_string(),
+    };
+
+    agent.that_is_what_i_just_did(&tip);
+    let runs = agent.what_led_up_to_this(&spear);
+    assert!(
+        runs.contains(&Element::Then("craft".to_string(), "craft".to_string())),
+        "knapping a tip and hafting a spear are two makings, not one twice"
+    );
+
+    // And the same making twice really is the same making twice.
+    let mut agent = Agent::new(AgentConfig::default());
+    agent.that_is_what_i_just_did(&tip);
+    assert!(
+        agent.what_led_up_to_this(&tip).is_empty(),
+        "a second identical tip teaches nothing about order"
+    );
+}
+
+/// And a making somebody decided on is held across the turns it takes.
+///
+/// The turn after a craft, `Errand::to_make` is what makes the next stage
+/// follow from this one instead of the whole decision being taken again. Both
+/// *diversion* paths into a making set it; the path where somebody simply
+/// wanted the thing did not, so the only makings anybody ever finished were
+/// the ones they were pushed into. See `hold_on_to_the_making`.
+#[test]
+fn a_making_somebody_chose_is_held_on_to() {
+    use crate::agents::{InventoryItem, Population, PopulationConfig};
+    use crate::world::{World, WorldConfig};
+
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+    let mut population = Population::with_config(PopulationConfig::default());
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = crate::analytics::Simulation::new(world, population);
+
+    {
+        let agent = &mut simulation.population.agents[0];
+        agent.state.position = (25, 25, 0);
+        agent.inventory.get_all_items_mut().clear();
+        // Enough stone and wood that the first stage of something is doable.
+        for what in ["stone", "wood", "fibre"] {
+            agent
+                .inventory
+                .add_item(InventoryItem::new_with_weight(what.to_string(), 8, 0.5));
+        }
+        agent.inventory.recalculate_weight();
+        agent.errand = None;
+        // Something has to be pressing for an errand to be set out on, and in
+        // the live model the arm was reached because this one was.
+        if let Some(utility) = agent.drives.get_mut(DriveType::Utility) {
+            utility.value = 1.0;
+        }
+    }
+
+    let step = simulation.population.agents[0]
+        .what_i_would_make(false)
+        .expect("a stone-age hand with stone and wood has something to make");
+
+    assert!(
+        simulation.population.agents[0]
+            .what_i_am_working_towards(false)
+            .is_some(),
+        "there is something the step is a step towards"
+    );
+    let held = simulation.hold_on_to_the_making(
+        Action::Craft {
+            item_type: step.clone(),
+        },
+        0,
+    );
+
+    assert!(
+        matches!(held, Action::Craft { ref item_type } if *item_type == step),
+        "holding on to it does not change the turn, only what follows it"
+    );
+
+    let errand = simulation.population.agents[0]
+        .errand
+        .as_ref()
+        .expect("the making is now an errand");
+    let towards = errand
+        .to_make
+        .as_deref()
+        .expect("and the errand is a making");
+    assert_ne!(
+        towards, step,
+        "the errand is what the step is a step towards, not the step - \
+         otherwise it ends the moment the first stage is in the pack"
+    );
+}

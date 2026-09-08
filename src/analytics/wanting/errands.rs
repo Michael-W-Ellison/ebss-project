@@ -1187,6 +1187,63 @@ impl Simulation {
         instead
     }
 
+    /// Hold on to a making that was chosen off the drive's own arm, so it is
+    /// carried through rather than re-decided the moment the first step is
+    /// done.
+    ///
+    /// **The third step of the crafting composition, and it is a hole rather
+    /// than a knob.** `Errand::to_make` exists for exactly this and says so in
+    /// its own docstring - "a diversion buys the next step in a chain, a
+    /// length of cordage, a knapped edge, and the turn after that the whole
+    /// decision was made again from scratch". Both *diversion* paths take the
+    /// making on: `make_what_this_wants`, where the turn was going to be a
+    /// refusal, and `would_a_better_tool_pay`, where it was going to be work.
+    /// The path where somebody simply decides to make something did not, so
+    /// the one making anybody chooses on purpose was the one nobody finished.
+    ///
+    /// What that cost is a composition, not a tool. A spear is three makings
+    /// in a row - tip, lashing, the three parts put together - and all three
+    /// are `craft` to the layer that learns, so a man who finished one would
+    /// hold `craft > craft` and the run `gather > craft > craft`. **Measured
+    /// over eight worlds and sixty-nine bodies: `craft > craft` did not occur
+    /// once.** Two makings never happened on consecutive turns, because
+    /// Utility presses on 2.1% of turns and the second step waited on it
+    /// coming round again.
+    pub(in crate::analytics) fn hold_on_to_the_making(
+        &mut self,
+        action: Action,
+        agent_index: usize,
+    ) -> Action {
+        if !matches!(action, Action::Craft { .. }) {
+            return action;
+        }
+
+        let agent = &self.population.agents[agent_index];
+        if agent.errand.is_some() {
+            return action;
+        }
+
+        let here = agent.state.position;
+        let a_fire_is_to_hand = self
+            .nearest_fire_from(here, Self::FIRE_REACH, true)
+            .is_some();
+
+        let Some(want) = self.population.agents[agent_index]
+            .what_i_am_working_towards(a_fire_is_to_hand)
+        else {
+            return action;
+        };
+
+        // Already got one. The step is being taken for some other reason and
+        // there is nothing to hold on to.
+        if self.population.agents[agent_index].how_many_i_have(want) > 0 {
+            return action;
+        }
+
+        self.take_the_making_on(want, agent_index);
+        action
+    }
+
     /// Take a making on as an errand, so that a chain several turns long is
     /// walked rather than restarted.
     fn take_the_making_on(&mut self, wanted: &str, agent_index: usize) {

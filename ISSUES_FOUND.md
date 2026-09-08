@@ -13404,3 +13404,114 @@ it did appear - `gather > craft > pickup`, held by one body in seventy-seven -
 but not at a bar that leaves Hunger's compositions intact. That is the next
 thing to look at, and it is a question about what making is worth, not about
 the composition machinery.
+
+### 189. The third crafting step: two holes and a refuted guess
+
+#188 left crafting holding a two-verb composition - `gather > craft`, across 59
+bodies in 71 - and no third step. The obvious third step turned out to be the
+wrong one, and finding the right one turned up two more holes.
+
+#### The refuted guess: taking the tool in hand
+
+`Action::Equip` has exactly one caller in this model - `get_the_tool_out_for`,
+which fires as a prefix to a job that already wants a tool - so a man who
+knapped a blade put it in his pack and forgot it. Making that a step of its own
+after a craft seemed obviously right, and it was measured and refused.
+
+It fires: equipping went from essentially never to 229 turns in eight worlds.
+It produces nothing: **no `craft > equip` run formed on any body.** The reason
+is the same gate that blocked everything else, and `each_one.rs` had already
+written it down about this exact action - "reaching for a tool is not what
+somebody does with a spare moment, it is what they do just before using it".
+The Utility arm is only entered when Utility is the pressing drive, and Utility
+presses on **2.1% of turns**, so the turn after a making is essentially never
+another Utility turn. Reverted.
+
+That measurement is the finding: **a composition whose steps are all answered
+by one drive can only form if that drive presses on consecutive turns.** Hunger
+does (4.6% of turns, and gathering is 41% of everything). Utility does not.
+
+#### Hole one: the run between two makings was filtered out
+
+The real third step is not a different verb at all. **A spear is three makings
+in a row**: a knapped tip, a length of lashing, then the three parts put
+together. Under the family name from #188 all three are `craft`.
+
+And `what_led_up_to_this` dropped them: "a thing that follows itself is a man
+doing the same thing twice and teaches nothing about order". That is true of
+`gather:berries > gather:berries` and false of `craft:knappedtip >
+craft:spear`. The filter compared the folded verbs, so folding made the one
+composition the tool ladder is built out of invisible.
+
+It now compares what was actually tried. `craft:knappedtip > craft:spear`
+survives; `gather:berries > gather:berries` still does not.
+
+#### Hole two: the making nobody was pushed into was the one nobody finished
+
+`Errand::to_make` exists for precisely this and says so in its own docstring -
+"a diversion buys the next step in a chain, a length of cordage, a knapped
+edge, and the turn after that the whole decision was made again from scratch,
+so the settlement collected half-finished tools it never picked up again".
+
+Both *diversion* paths take the making on as an errand:
+`make_what_this_wants`, where the turn was going to be a refusal, and
+`would_a_better_tool_pay`, where it was going to be work. **The path where
+somebody simply decides to make something did not.** So the only makings anyone
+ever finished were the ones they were pushed into, and a man who wanted a spear
+knapped a tip and then decided again from scratch.
+
+`hold_on_to_the_making` closes it. It also needed
+`Agent::what_i_am_working_towards`: `what_i_would_make` returns the step that
+can be taken now and throws away what it is a step *towards*, and the errand
+has to be set on the want or it ends the moment the first stage is in the pack.
+
+**Measured**: `Utility: craft > craft` went from not occurring at all - eight
+worlds, sixty-nine bodies, not once - to 0.187 across 9 bodies.
+
+#### Hole three, half of one: the cycle guard
+
+A chain builder that refuses to walk a verb twice cannot walk a recipe with
+stages. Allowed - and then measured with the latitude given to *every* verb,
+which was ruinous: `gather > gather > gather` took over, Thirst went to 100% of
+bodies holding it as their longest run and Industry to 92%, and Hunger's real
+composition `gather > eat` fell from 58% of bodies to 3%. A man picking berries
+for an hour and a half is not following a plan.
+
+Narrowed to `making::does_it_come_in_stages`, which is true of making and
+nothing else, because making is the only act in this world whose product is
+what the next act of the same name is done to.
+
+#### Measured, and it is honestly a wash
+
+Two blocks of 32 seeded worlds, two years, against #188:
+
+| | seeds 0-31 | seeds 32-63 |
+|---|---|---|
+| person-days | 107,362 → **105,429** (-1.8%) | 103,852 → **106,661** (+2.7%) |
+| population at month nine | 8.1 → 8.2 | 7.9 → **8.5** |
+| worlds emptied | 26 → 28 | 25 → 28 |
+
+Person-days move opposite ways on the two blocks, which is what noise looks
+like. Population at every month is up on the paired block. Worlds emptied is up
+by two or three on both, and that is the one consistent sign: more people alive
+for longer in the settlements that hold, and a few more settlements that empty.
+That is what committing to a making does - a commitment made at the wrong time
+kills a marginal camp - and it is the cost of the thing being asked for. The
+suite is unchanged at 10 standing failures with no new ones.
+
+#### What is there now, and what is not
+
+Two makings in a row now happen, are recorded, and can be walked as a chain.
+`craft > craft` is held by 9 bodies in 61. It is not yet *worn* enough to be
+followed: Utility's deepest run is `gather > pickup` at 0.745 and the bar is a
+third of that, and `craft > craft` sits at 0.139. So the three-step making
+composition exists in the record and is not yet a habit.
+
+What would make it one is more tool-making, and what caps that is the ordering
+in the Utility arm: `what_i_would_work_on` - the undirected carving and
+scraping that is where bowls and leather come from - stands in front of
+`Action::Craft` and almost always answers, so crafting a tool happens on 0.07%
+of turns. Demoting the pottering was measured before and cost a settlement two
+thirds of its vessels (see the comment at `wanting/mod.rs`), so the answer is
+not to swap them. It is to give the tool a reason to be wanted that the
+pottering cannot satisfy, which is #196 and #199 rather than anything here.

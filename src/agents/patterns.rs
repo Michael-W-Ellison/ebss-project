@@ -1041,8 +1041,17 @@ impl Patterns {
 
         for (next, worth) in self.everything_that_has_followed(need, here) {
             // A run that comes back to where it started, or doubles back on
-            // itself, is not a plan.
-            if next == started_at || chain.iter().any(|step| step == next) {
+            // itself, is not a plan - except where a verb following itself is
+            // two stages of one thing rather than one thing twice, which in
+            // this world is making and nothing else. A spear is a knapped
+            // tip, then a lashing, then the three parts put together. See
+            // `making::does_it_come_in_stages`, whose docstring carries what
+            // happened when the same latitude was given to every verb.
+            let a_stage_of_the_same_thing =
+                next == here && crate::environment::making::does_it_come_in_stages(here);
+            if !a_stage_of_the_same_thing
+                && (next == started_at || chain.iter().any(|step| step == next))
+            {
                 continue;
             }
             chain.push(next.to_string());

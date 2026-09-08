@@ -1024,6 +1024,26 @@ pub fn what_making_is_called(verb: &str) -> &str {
 /// it before any of the rest were written.
 pub const WHAT_THE_WHOLE_FAMILY_IS_CALLED: &str = "craft";
 
+/// Whether doing this twice running is two stages of one thing rather than
+/// one thing done twice.
+///
+/// Making is the only act in this world whose product is what the next act of
+/// the same name is done to. A spear is a knapped tip, then a length of
+/// lashing, then the three parts put together - three makings in a row, all
+/// of them `craft` once the family is folded - so `craft > craft` is a
+/// recipe with stages in it and the chain builder must be allowed to walk it.
+///
+/// **Everything else is one thing done twice, and letting it through is
+/// ruinous.** Measured with the rule applied to every verb, eight worlds:
+/// `gather > gather > gather` took over. Thirst went to a hundred per cent of
+/// bodies holding that as its longest run and Industry to ninety-two, and
+/// Hunger's real composition - `gather > eat`, which is how anybody eats -
+/// fell from fifty-eight per cent of bodies to three. A man picking berries
+/// for an hour and a half is not following a plan.
+pub fn does_it_come_in_stages(verb: &str) -> bool {
+    verb == WHAT_THE_WHOLE_FAMILY_IS_CALLED
+}
+
 /// Every verb in the model that turns material into an object.
 pub const THE_SHAPING_VERBS: &[&str] = &[
     "craft", "cut", "carve", "scrape", "smash", "crush", "mold", "weave",
