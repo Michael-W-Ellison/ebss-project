@@ -924,6 +924,43 @@ impl Patterns {
         }
     }
 
+    /// The whole chain that answers a need, followed out from what was just
+    /// done.
+    ///
+    /// `what_follows` gives one step. A three-step composition is held as two
+    /// overlapping pairs - `move > pickup` and `pickup > eat` - and this is
+    /// what joins them back up: follow the pairs while they keep answering,
+    /// and what comes out is the run the agent worked out, which nobody wrote
+    /// down anywhere.
+    ///
+    /// Stops at `AS_LONG_A_CHAIN_AS_ANYBODY_HOLDS`, and stops at a verb
+    /// already in the chain, because a plan that comes back to where it
+    /// started is not a plan.
+    pub fn the_chain_that_answers(&self, need: DriveType, after: &str) -> Vec<String> {
+        let mut chain: Vec<String> = Vec::new();
+        let mut here = after.to_string();
+
+        while chain.len() < Self::AS_LONG_A_CHAIN_AS_ANYBODY_HOLDS {
+            let Some(next) = self.what_follows(need, &here) else {
+                break;
+            };
+            if next == after || chain.iter().any(|step| step == next) {
+                break;
+            }
+            chain.push(next.to_string());
+            here = next.to_string();
+        }
+
+        chain
+    }
+
+    /// How many steps of a learned chain an agent will hold at once.
+    ///
+    /// Three, which is the length of the compositions this model actually
+    /// throws up - go, take out of the store, eat - and short enough that a
+    /// plan is still recognisably about the need that started it.
+    pub const AS_LONG_A_CHAIN_AS_ANYBODY_HOLDS: usize = 3;
+
     /// How worn a run has to be before an agent follows it.
     ///
     /// Above the noise of a single lucky afternoon. A run that has answered

@@ -13178,3 +13178,106 @@ varies which rung it takes when a need has gone unanswered, and whatever run
 results gets recorded. It does not deliberately try an *unfamiliar order* to
 find out what happens. That would be exploration over compositions proper, and
 it wants the plan branch first.
+
+### 187. The plan branch was dead, and the deadness was load-bearing
+
+"Make the plan branch reachable so three-step compositions can be planned
+against." ISSUES #238 has recorded the branch as unreachable without saying
+why. This is why, and what happened on turning it on.
+
+#### The counter that locked it shut
+
+`should_execute_plan` has three gates: there must be a plan, hunger and thirst
+must not be pressing, and the current step must not have taken more than three
+times its allowance. Measured over twelve worlds, once a day per living body:
+
+| | |
+|---|---|
+| has a goal at all | 98.6% |
+| has an active plan | 98.5% |
+| hungry or thirsty | 9.5% |
+| **would run the plan** | **1.3%** |
+
+Ninety-eight and a half per cent hold a plan and only nine and a half per cent
+are pressed by a survival drive, so about eighty-nine per cent should be
+eligible. One point three are. **The step timeout eats the other
+eighty-eight**, and the reason is a counter answering two questions:
+`plan_step_ticks` was ticked *every turn whether or not the plan ran* - the
+comment beside it says "this allows plans to timeout if agent keeps getting
+interrupted".
+
+That is a lock. The step counter is the only thing staleness is measured by, so
+a plan the ladder never reaches ages out of its allowance, and once it has it
+is "stuck" and can never be reached. It times out because it is not run, and is
+not run because it timed out. A plan nobody has worked is not stuck on a step;
+it is waiting, and how long it has been waiting is what `created_at` already
+records. The tick now happens only on turns actually spent on the plan.
+
+**1.3% to 88.8%.** The branch is reachable.
+
+#### And what came through it cost five per cent
+
+What the branch made reachable was the goal planner, and its steps are built
+against hard-coded coordinates - `create_plan_for_goal` is handed `(50, 50, 0)`
+as "the resource" on a fifty-square map, and `(0, 0, 0)` as "home". Its
+vocabulary is a second enum of ten kinds with no `Eat` among them, which is the
+last step of the only composition in this model that feeds anybody. Over 32
+seeded worlds:
+
+| | branch dead | branch open to the goal planner |
+|---|---|---|
+| person-days | 108,235 | **102,708** |
+| worlds emptied | 25/32 | 28/32 |
+| alive at the end | 11 | 5 |
+| population at month six | 11.0 | 10.4 |
+
+**Minus 5.1%.** The branch was dead and the deadness was holding the model up.
+That is worth saying plainly: an unreachable branch is not always a bug waiting
+to be fixed, and "make it reachable" is only half an instruction - the other
+half is what it should carry.
+
+#### What it carries now
+
+A run out of `Patterns`. `the_chain_that_answers` joins the overlapping pairs
+of #186 back into a chain - `move > pickup` and `pickup > eat` become "go to
+the store, take something out, eat it" - and `plan_the_run_that_answers` lays
+that down as an `ActionPlan` whose steps are `PlanActionType::AsLearned`,
+carrying a verb from the vocabulary the model actually acts in. The decision
+layer resolves each verb against the candidates the drive produced, so a plan
+can never propose something the world will refuse.
+
+It is the opposite of the goal planner in every way that mattered above: the
+steps are real verbs, the order was found out rather than written down, and it
+is a plan *for a need* rather than for a goal nobody set. `should_execute_plan`
+now requires the plan to be one of these, which leaves the goal planner's plans
+exactly where they were - laid down and not executed - and for a reason that is
+now written down and measured rather than accidental.
+
+Over the same 32 worlds, against the branch dead: person-days 108,235 to
+**107,181** (-1.0%, inside the noise), worlds emptied 25/32 to **23/32**, alive
+at the end 11 to **12**, out of the first winter 9/32 to **10/32**, deaths 380
+to **375**.
+
+#### And the honest part: it is reachable and nearly idle
+
+**Chains of two or more steps occur in about 0.0% of body-days.** The branch is
+open, the machinery works, and almost nothing comes through it.
+
+The reason is in #186's own table. `gather > eat` is worn deep and beats the
+bare `eat`, so the *first* link is there - but the second link has to clear the
+same two guards, and `eat > pickup` scores 1.72 against `pickup` alone at 4.61.
+It fails the beat-the-atom test, correctly, because pickup answers hunger
+whether or not eating came first. **The compositions this world throws up are
+two acts long**, and two-act runs are already handled by the reactive reader
+from #186 without needing a plan at all.
+
+So what is shipped is: a real defect fixed (the self-locking counter), the
+branch reachable, a measurement showing why it must not carry the old planner,
+and the composition machinery waiting behind it for chains that the record does
+not yet contain at planning strength. Three-step compositions can now be
+planned against. There are not yet three-step compositions worth planning.
+
+What would produce them is a world with longer causal chains in it - the tool
+ladder (#195) has four- and five-step makings in it already, and `Undertaking::
+Crafting` is where a run of three would first appear. That is where to look
+next, and it is an arm of its own rather than a change to this machinery.

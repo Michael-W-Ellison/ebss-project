@@ -41,10 +41,38 @@ fn test_should_execute_plan_when_not_hungry() {
         thirst.value = 0.2;
     }
 
-    // Create a plan
+    // A plan out of the goal planner is *not* what the branch carries. Its
+    // steps are built against hard-coded coordinates - (50, 50, 0) on a
+    // fifty-square map - and letting the branch run them cost 108,235
+    // person-days to 102,708 over 32 seeded worlds. See ISSUES_FOUND.md #187.
     agent.create_gather_plan("wood", 5, (50, 50, 0), (0, 0, 0), 100);
+    assert!(agent.has_active_plan());
+    assert!(!agent.should_execute_plan());
 
-    assert!(agent.should_execute_plan());
+    // A run the agent worked out for itself is.
+    a_run_this_one_worked_out(&mut agent);
+    assert!(
+        agent.should_execute_plan(),
+        "not being hungry is not what stops a plan; being the wrong sort of \
+         plan is"
+    );
+}
+
+/// Teach an agent a two-step run and lay it down as a plan.
+fn a_run_this_one_worked_out(agent: &mut Agent) {
+    use crate::agents::patterns::Element;
+    use crate::environment::Action;
+
+    for (first, next) in [("move", "pickup"), ("pickup", "eat")] {
+        let run = Element::Then(first.to_string(), next.to_string());
+        for round in 0..14u32 {
+            agent
+                .patterns
+                .it_worked(DriveType::Hunger, &[run.clone()], 0.5, round);
+        }
+    }
+    agent.that_is_what_i_just_did(&Action::Move { target: (1, 1, 0) });
+    assert!(agent.plan_the_run_that_answers(DriveType::Hunger, 0));
 }
 
 #[test]
@@ -147,8 +175,9 @@ fn test_plan_step_timeout() {
         thirst.value = 0.2;
     }
 
-    // Create a plan
-    agent.create_gather_plan("wood", 5, (50, 50, 0), (0, 0, 0), 100);
+    // A run the agent worked out, which is what the branch carries now -
+    // see ISSUES_FOUND.md #187.
+    a_run_this_one_worked_out(&mut agent);
     assert!(agent.should_execute_plan());
 
     // Simulate many ticks on the same step (timeout)

@@ -850,7 +850,7 @@ impl Simulation {
                 // where a run is worn deep enough to be worth following.
                 let following = agent.what_usually_comes_next(drive_type).map(str::to_string);
 
-                let wanted = if following.is_some() {
+                let wanted = if following.is_some() || agent.is_the_plan_for(drive_type) {
                     Self::HOW_MANY_WAYS_A_HUNGRY_MAN_HAS
                 } else {
                     past_the_habit + 1
@@ -938,6 +938,30 @@ impl Simulation {
                 // action, it chooses among the ones that are available now -
                 // which is what keeps a learned habit from proposing
                 // something the world will refuse.
+                // The plan first, where there is one for this need: a
+                // learned run is held across turns, so it can carry the agent
+                // through a step that is not the best thing to do on its own -
+                // walking to the store is worth nothing until you take
+                // something out of it. That is the whole difference between
+                // planning against a composition and reacting one step at a
+                // time.
+                if agent.is_the_plan_for(drive_type) && agent.should_execute_plan() {
+                    if let Some(step) = agent.what_the_plan_wants_next() {
+                        if let Some(doing) = found
+                            .iter()
+                            .find(|doing| {
+                                crate::agents::Agent::what_was_tried(doing)
+                                    .split(':')
+                                    .next()
+                                    == Some(step)
+                            })
+                            .cloned()
+                        {
+                            return Some(doing);
+                        }
+                    }
+                }
+
                 if let Some(next) = following {
                     if let Some(learned) = found
                         .iter()

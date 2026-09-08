@@ -99,3 +99,4 @@ pub mod trapline_tests;
 pub mod trying_something_else_tests;
 pub mod cadence_tests;
 pub mod composition_tests;
+pub mod planning_reach_tests;

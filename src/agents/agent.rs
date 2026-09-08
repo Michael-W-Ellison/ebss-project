@@ -6242,7 +6242,92 @@ impl Agent {
             .what_follows(need, &Self::just_the_verb(last))
     }
 
-    /// Read the felt total of what this one expects its habits to cost it.
+    /// Lay down the run this agent has worked out for a need, as a plan.
+    ///
+    /// **This is what makes the plan branch worth reaching.** The planner it
+    /// already had builds steps out of goals and hard-coded coordinates -
+    /// `create_plan_for_goal` is handed (50, 50, 0) as "the resource" on a
+    /// fifty-square map - and writes them in a vocabulary with no `Eat` in it,
+    /// which is the last step of the only composition that feeds anybody. A
+    /// chain out of `Patterns` is the opposite in every way: the steps are
+    /// verbs the model acts in, the order was found out rather than written
+    /// down, and it is a plan *for a need* rather than for a goal nobody set.
+    ///
+    /// Returns whether one was laid down. Nothing happens where the agent has
+    /// not yet worked out a chain, which is most agents for most of a first
+    /// season.
+    pub fn plan_the_run_that_answers(&mut self, need: DriveType, now: u32) -> bool {
+        use crate::core::planning::{ActionPlan, PlanActionType, PlanStep};
+
+        // A run already in hand for this need is not replaced part-way
+        // through - that would be re-deciding every turn, which is what a
+        // plan exists not to do.
+        if self.is_the_plan_for(need) {
+            return false;
+        }
+
+        let Some(last) = self.lately.back().cloned() else {
+            return false;
+        };
+        let chain = self
+            .patterns
+            .the_chain_that_answers(need, &Self::just_the_verb(&last));
+
+        // One step is not a plan. `what_usually_comes_next` already answers
+        // that case, and routing it through the plan machinery as well would
+        // be two answers to one question.
+        if chain.len() < 2 {
+            return false;
+        }
+
+        let answering = format!("{need:?}");
+        let steps: Vec<PlanStep> = chain
+            .iter()
+            .map(|verb| PlanStep {
+                action: PlanActionType::AsLearned {
+                    verb: verb.clone(),
+                    answering: answering.clone(),
+                },
+                estimated_ticks: 1,
+                required_tool: None,
+                required_resources: Vec::new(),
+                target_location: None,
+                confidence: 1.0,
+            })
+            .collect();
+
+        self.current_plan = Some(ActionPlan::new(
+            format!("what has answered {answering}: {}", chain.join(", ")),
+            steps,
+            now,
+            "worked out".to_string(),
+        ));
+        self.plan_step_ticks = 0;
+        true
+    }
+
+    /// The verb the plan wants next, if the plan is a learned run.
+    pub fn what_the_plan_wants_next(&self) -> Option<&str> {
+        use crate::core::planning::PlanActionType;
+
+        match &self.current_plan.as_ref()?.current_step()?.action {
+            PlanActionType::AsLearned { verb, .. } => Some(verb.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Whether the plan in hand is a run this agent worked out for this need.
+    pub fn is_the_plan_for(&self, need: DriveType) -> bool {
+        use crate::core::planning::PlanActionType;
+
+        matches!(
+            self.current_plan.as_ref().and_then(|plan| plan.current_step()),
+            Some(step) if matches!(
+                &step.action,
+                PlanActionType::AsLearned { answering, .. } if *answering == format!("{need:?}")
+            )
+        )
+    }
 
     /// Read the felt total of what this one expects its habits to cost it.
     ///
@@ -7958,6 +8043,29 @@ impl Agent {
             return false;
         }
 
+        // And it has to be a plan worth executing.
+        //
+        // **Measured, and this is the whole of what #238 turned out to be.**
+        // Fixing the step counter made the branch reachable - agents that
+        // would run a plan went from 1.3% to 88.8% - and what it made
+        // reachable was the goal planner, whose steps are built against
+        // hard-coded coordinates: `create_plan_for_goal` is handed (50, 50, 0)
+        // as "the resource" on a fifty-square map, and its vocabulary has no
+        // `Eat` in it. Over 32 seeded worlds that cost **108,235 person-days
+        // to 102,708**, with worlds emptied 25 of 32 to 28. The branch was
+        // dead and the deadness was load-bearing.
+        //
+        // So the branch is reachable and what it carries is a run the agent
+        // worked out - see `plan_the_run_that_answers`. The goal planner
+        // still lays its plans down and they are still not executed, which is
+        // where they were before, and now for a reason that is written down.
+        if !matches!(
+            self.current_plan.as_ref().and_then(|plan| plan.current_step()),
+            Some(step) if matches!(step.action, crate::core::planning::PlanActionType::AsLearned { .. })
+        ) {
+            return false;
+        }
+
         // Check for plan step timeout (stuck too long on one step)
         if let Some(plan) = &self.current_plan {
             if let Some(step) = plan.current_step() {
@@ -8091,6 +8199,13 @@ impl Agent {
             PlanActionType::MoveTo { location } => {
                 Some(Action::Move { target: *location })
             }
+
+            // A learned step is a verb, not an action: what "gather" means
+            // this turn depends on what is standing in front of the agent,
+            // and that is a question only the decision layer can answer. It
+            // resolves it against the candidates the drive produced - see
+            // `Simulation::the_step_of_the_plan_that_can_be_taken`.
+            PlanActionType::AsLearned { .. } => None,
             PlanActionType::EquipItem { item: _ } => {
                 // Equipment is handled internally, return None to skip
                 // The step will be marked complete when equipment is applied
@@ -8909,6 +9024,9 @@ impl Agent {
                 match &step.action {
                     PlanActionType::MoveTo { location } => {
                         format!("Moving to {:?}", location)
+                    }
+                    PlanActionType::AsLearned { verb, answering } => {
+                        format!("{verb}, which has answered {answering}")
                     }
                     PlanActionType::GatherResource { resource, amount } => {
                         format!("Gathering {} {}", amount, resource)

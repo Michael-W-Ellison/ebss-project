@@ -74,6 +74,16 @@ pub enum PlanActionType {
     Rest { duration: u32 },
     /// Learn a skill or recipe
     LearnSkill { skill: String },
+    /// A step of a run the agent worked out for itself.
+    ///
+    /// Every other kind here is a thing somebody wrote down when the planner
+    /// was built, and the vocabulary it is written in is not the one the model
+    /// acts in - there is no `Eat` among them, which is the last step of the
+    /// only composition that actually feeds anybody. This carries a verb from
+    /// the action vocabulary instead, and the decision layer resolves it
+    /// against what the world affords this turn. See
+    /// [`crate::agents::patterns::Patterns::the_chain_that_answers`].
+    AsLearned { verb: String, answering: String },
 }
 
 /// A complete action plan with sub-tasks
