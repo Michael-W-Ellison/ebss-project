@@ -990,14 +990,21 @@ pub fn what_comes_of_swapping(
     })
 }
 
-/// The one name every shaping act goes by, once the pattern layer has it.
+/// The one name every shaping act goes by, when the question is about order.
 ///
 /// A man who knaps a core on Monday, scrapes a hide on Tuesday and carves a
-/// bowl on Wednesday has spent three days making things. The verb matrix has
-/// good reason to keep those apart - they want different materials and a
-/// different hand - but the layer that learns what answers a need has none,
-/// and keeping them apart is what stopped it learning anything about making
-/// at all.
+/// bowl on Wednesday has spent three days making things, and to the question
+/// "what order of acts answers this need" those three days are the same beat.
+///
+/// **It is only that question.** The dozen making verbs are not an accident
+/// to be tidied away: they exist so that applying a *different* act to a
+/// known material can produce a different result, which is how a people find
+/// out something they did not know. Everything that asks what a particular
+/// act achieves keeps the particular verb - `Element::Did`, the lessons store
+/// keyed on "verb:target" as tried, `what_working_i_would_try_out` picking an
+/// experiment. This name is for the composition layer and for nothing else;
+/// `Element::Kind` is where it lands, alongside the `Did` that stays
+/// particular.
 ///
 /// **Measured.** Eight worlds, sixty-six bodies, three quarters through the
 /// first year. Against Utility the store held `gather > craft` at 0.242,

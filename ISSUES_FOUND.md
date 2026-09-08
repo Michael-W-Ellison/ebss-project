@@ -13515,3 +13515,66 @@ of turns. Demoting the pottering was measured before and cost a settlement two
 thirds of its vessels (see the comment at `wanting/mod.rs`), so the answer is
 not to swap them. It is to give the tool a reason to be wanted that the
 pottering cannot satisfy, which is #196 and #199 rather than anything here.
+
+### 190. The fold in #188 threw away the innovation record
+
+The many making verbs are not an untidiness. They are there so that applying a
+*different* act to a known material can produce a different result - scraping a
+hide gives leather, smashing a core gives flakes - which is how a people find
+out something they did not know. #188 folded all of them into `craft` inside
+the pattern layer, and in doing so folded `Element::Did`, which is the record
+of what a particular act achieves. After that, nothing in the trails could tell
+scraping from smashing, so no agent could ever notice that the new act it tried
+had done something the old one did not.
+
+The composition argument in #188 was right about its own question. A run is
+about *order*, and to "what order of acts answers this need" knapping and
+carving are the same beat. But that is one question about a doing, and the
+layer had been recording only one thing per doing.
+
+An episode now writes both:
+
+- `Element::Did("scrape")` - the particular act, kept exactly as tried.
+- `Element::Kind("craft")` - the family, and only where there is one. Making
+  is the only act in this world with siblings.
+
+They compete on the same terms as everything else in the bundle, which is what
+`it_worked` already does: where the family is what matters the family is there
+every time, and where the particular act is what matters the family is diluted
+by its siblings and the atom wins. Runs stay on the family, so a composition is
+still about making rather than about knapping. The beat-the-atom guard now
+reads whichever atom the name in the run belongs to.
+
+`just_the_verb` is documented as what it actually is: the composition layer's
+vocabulary and nothing else. So a run that says `craft` says "and then make
+something", and *which* making is a question for the machinery that knows about
+materials and recipes.
+
+#### What was and was not damaged
+
+The discovery machinery itself never went through the fold, which is worth
+recording so the scope of the mistake is clear rather than overstated.
+`what_working_i_would_try_out` picks an experiment by the particular working;
+`Lessons` is keyed on "verb:target" exactly as tried; `found_out` holds
+products. Those are what actually turn a new act on a known material into new
+knowledge, and they were untouched. What the fold destroyed was the *pattern
+layer's* record - the part that would let an agent weigh scraping against
+carving by what each has paid - and `what_answers` now returns the particular
+act again rather than a family name that is not an action anybody can take.
+
+#### Measured: it costs nothing
+
+Two blocks of 32 seeded worlds, two years, against #189: person-days
+**105,429** and **106,661**, worlds emptied 28 and 28, month-nine population
+8.2 and 8.5 - identical on every figure, both blocks. The split changes what is
+written down, and the only read that changed is the beat-the-atom guard, which
+takes whichever of `Did` and `Kind` is larger and so sees exactly what it saw
+before. The record is given back for nothing.
+
+Three new tests, fifteen in the file. The suite reported eleven failures on
+this run against ten on the last, and the difference is
+`a_settlement_lives_through_a_winter`, which **passes when run on its own**: it
+seeds the global `dice` and asserts that one settlement in thirty-two comes
+through, so under the parallel runner it races another test's seeding. It has
+been in and out of the standing set all session for that reason. Worth fixing
+as its own thing - the shared global seed is the defect, not the winter.

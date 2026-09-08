@@ -130,7 +130,8 @@ fn a_week_of_making_different_things_wears_one_run() {
 fn the_chain_is_not_stopped_by_the_atom() {
     let mut patterns = Patterns::default();
     let run = Element::Then("gather".to_string(), "craft".to_string());
-    let alone = Element::Did("craft".to_string());
+    // The atom a real making writes: the family, beside the particular verb.
+    let alone = Element::Kind("craft".to_string());
 
     wear(&mut patterns, DriveType::Utility, &run, 6, 0.5);
     // And the act on its own is worth far more than the run, which is the
@@ -399,4 +400,103 @@ fn a_making_somebody_chose_is_held_on_to() {
         "the errand is what the step is a step towards, not the step - \
          otherwise it ends the moment the first stage is in the pack"
     );
+}
+
+/// A different act on a known material is a different thing, and stays one.
+///
+/// This is why there are a dozen making verbs and not one: scraping a hide
+/// gives leather and smashing a core gives flakes, and a people find out
+/// something new by trying the other act on a material they already have. If
+/// the two went into the record under one name, nothing could ever notice
+/// that they did different things.
+#[test]
+fn a_new_act_on_a_known_material_is_told_apart() {
+    let mut agent = Agent::new(AgentConfig::default());
+    let hides = (25, 25, 0);
+
+    let scraping = Action::Work {
+        verb: "scrape".to_string(),
+        to: "hides".to_string(),
+    };
+    let smashing = Action::Work {
+        verb: "smash".to_string(),
+        to: "hides".to_string(),
+    };
+
+    // The same material, two different acts, and one of them pays.
+    for round in 0..8u32 {
+        let elements = agent.what_this_episode_was_made_of(&scraping, hides, round);
+        agent.patterns.it_worked(DriveType::Utility, &elements, 0.5, round);
+    }
+    for round in 8..16u32 {
+        let elements = agent.what_this_episode_was_made_of(&smashing, hides, round);
+        agent.patterns.it_worked(DriveType::Utility, &elements, 0.05, round);
+    }
+
+    let scraped = agent
+        .patterns
+        .trail(DriveType::Utility, &Element::Did("scrape".to_string()))
+        .map(|trail| trail.worth())
+        .unwrap_or(0.0);
+    let smashed = agent
+        .patterns
+        .trail(DriveType::Utility, &Element::Did("smash".to_string()))
+        .map(|trail| trail.worth())
+        .unwrap_or(0.0);
+
+    assert!(
+        scraped > smashed,
+        "the act that paid is the act that is worn: {scraped:.2} against \
+         {smashed:.2}"
+    );
+    assert_eq!(
+        agent.patterns.what_answers(DriveType::Utility).map(|(what, _)| what),
+        Some("scrape"),
+        "and it is the particular act that comes back, not the family"
+    );
+}
+
+/// And the family is written down beside it, not instead of it.
+#[test]
+fn the_family_goes_in_beside_the_act_and_not_instead_of_it() {
+    let agent = Agent::new(AgentConfig::default());
+
+    let carving = Action::Work {
+        verb: "carve".to_string(),
+        to: "wood".to_string(),
+    };
+    let elements = agent.what_this_episode_was_made_of(&carving, (25, 25, 0), 0);
+
+    assert!(
+        elements.contains(&Element::Did("carve".to_string())),
+        "the particular act: {elements:?}"
+    );
+    assert!(
+        elements.contains(&Element::Kind("craft".to_string())),
+        "and the family it belongs to: {elements:?}"
+    );
+    assert!(
+        elements.contains(&Element::On("wood".to_string())),
+        "and what it was done to: {elements:?}"
+    );
+
+    // Gathering has no family - it is only ever itself.
+    let gathering = Action::Gather {
+        resource_type: "berries".to_string(),
+    };
+    let elements = agent.what_this_episode_was_made_of(&gathering, (25, 25, 0), 0);
+    assert!(elements.contains(&Element::Did("gather".to_string())));
+    assert!(
+        !elements.iter().any(|e| matches!(e, Element::Kind(_))),
+        "nothing but making has siblings: {elements:?}"
+    );
+}
+
+/// A family element survives being written down, like any other.
+#[test]
+fn the_family_element_round_trips() {
+    let family = Element::Kind("craft".to_string());
+    let written: String = family.clone().into();
+    assert_eq!(written, "kind:craft");
+    assert_eq!(Element::try_from(written).unwrap(), family);
 }

@@ -6195,17 +6195,22 @@ impl Agent {
         // pays without concluding that berries are the only thing worth
         // gathering.
         //
-        // The verb goes in under the name the whole family shares, so that
-        // the atom and the runs are about the same thing - see
-        // `making::what_making_is_called`. `On` keeps the particular
-        // material, which is where the difference between knapping a core and
-        // carving a bowl is still written down.
-        match tried.split_once(':') {
-            Some((verb, subject)) => {
-                elements.push(Element::Did(Self::just_the_verb(verb)));
-                elements.push(Element::On(subject.to_string()));
-            }
-            None => elements.push(Element::Did(Self::just_the_verb(&tried))),
+        // The verb goes in twice where it belongs to a family: once as the
+        // particular act, which is what says that scraping a hide and
+        // smashing a core do different things, and once as the family, which
+        // is what lets a composition be about making rather than about
+        // knapping. See `Element::Did` and `Element::Kind`.
+        let (verb, subject) = match tried.split_once(':') {
+            Some((verb, subject)) => (verb, Some(subject)),
+            None => (tried.as_str(), None),
+        };
+        elements.push(Element::Did(verb.to_string()));
+        if let Some(subject) = subject {
+            elements.push(Element::On(subject.to_string()));
+        }
+        let family = crate::environment::making::what_making_is_called(verb);
+        if family != verb {
+            elements.push(Element::Kind(family.to_string()));
         }
 
         elements.push(Element::At(where_it_was));
@@ -6263,7 +6268,22 @@ impl Agent {
     }
 
     /// The verb out of a `what_was_tried` string, which writes "gather:Berries",
-    /// under the name the pattern layer knows it by.
+    /// under the name the *composition* layer knows it by.
+    ///
+    /// This folds the making verbs into one - see
+    /// `making::what_making_is_called` - and it is used only where the
+    /// question is about order: the runs, the reader that follows them, and
+    /// the matching that decides whether an action satisfies a step a run
+    /// named. Nothing that asks what a particular act achieves goes through
+    /// here. `Element::Did` keeps the verb it was given, the lessons store is
+    /// keyed on "verb:target" as tried, and `what_working_i_would_try_out`
+    /// picks its experiments by the particular working - all of which is what
+    /// makes trying a new act on a known material a thing an agent can learn
+    /// from.
+    ///
+    /// So a run that says `craft` says "and then make something", and which
+    /// making is a question for the machinery that knows about materials and
+    /// recipes, not for the machinery that knows about order.
     pub fn just_the_verb(tried: &str) -> String {
         let verb = tried
             .split_once(':')

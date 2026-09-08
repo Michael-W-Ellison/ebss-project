@@ -148,8 +148,34 @@ impl Bearing {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(into = "String", try_from = "String")]
 pub enum Element {
-    /// What was done. "hunt", "gather", "drink".
+    /// What was done. "hunt", "gather", "drink" - and "scrape", "carve",
+    /// "smash", each of them the particular act it was and not the family it
+    /// belongs to.
+    ///
+    /// **This is where innovation lives, and folding it was a mistake worth
+    /// writing down.** The reason there are a dozen making verbs rather than
+    /// one is that applying a *different* act to a known material is how a
+    /// people find out something new: scraping a hide gives leather, smashing
+    /// a core gives flakes, and if the two were one word in here then a man
+    /// who tried the other thing could never learn that it did something
+    /// else. `Did` is the record of what a particular act achieves. It stays
+    /// particular. See `Kind` for the other half.
     Did(String),
+    /// And the family that doing belongs to, where it belongs to one.
+    ///
+    /// Only the makings have a family: shaping a thing is the one act in this
+    /// world whose spellings all answer the same need in the same way and
+    /// whose product feeds the next one. The composition layer asks "what
+    /// order of acts answers this", and to that question knapping and carving
+    /// are the same beat - which is why runs are kept on the family - while
+    /// "what does this act achieve" is a question only the particular verb
+    /// can answer.
+    ///
+    /// Both are written down for the same doing, and they compete on the same
+    /// terms as everything else here: where the family is what matters the
+    /// family is there every time, and where the particular act is what
+    /// matters the family is diluted by its siblings and the atom wins.
+    Kind(String),
     /// What it was done to, or with. "Deer", "Berries", "spear".
     On(String),
     /// The ground it was done on.
@@ -203,6 +229,7 @@ impl fmt::Display for Element {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Element::Did(what) => write!(f, "did:{}", what),
+            Element::Kind(what) => write!(f, "kind:{}", what),
             Element::On(what) => write!(f, "on:{}", what),
             Element::At((x, y, z)) => write!(f, "at:{},{},{}", x, y, z),
             Element::Toward(bearing) => write!(f, "toward:{}", bearing.as_str()),
@@ -228,6 +255,7 @@ impl TryFrom<String> for Element {
 
         match kind {
             "did" => Ok(Element::Did(rest.to_string())),
+            "kind" => Ok(Element::Kind(rest.to_string())),
             "on" => Ok(Element::On(rest.to_string())),
             "at" => {
                 let mut legs = rest.split(',').map(|leg| leg.parse::<i32>());
@@ -910,10 +938,18 @@ impl Patterns {
         // It has to beat what it says on its own. Where the atom is what
         // matters, the atom is what an agent should do, whatever order it
         // happened to come in.
-        let alone = trails
-            .get(&Element::Did(best.to_string()))
-            .map(|trail| trail.worth())
-            .unwrap_or(0.0);
+        // Against whichever atom that name is. A run ending in `craft` is up
+        // against what making in general is worth, which is `Kind`; one
+        // ending in `eat` is up against `Did`. Taking the larger asks the
+        // question the guard is for either way.
+        let alone = [
+            Element::Did(best.to_string()),
+            Element::Kind(best.to_string()),
+        ]
+        .iter()
+        .filter_map(|atom| trails.get(atom))
+        .map(|trail| trail.worth())
+        .fold(0.0f32, f32::max);
 
         if worth > alone {
             Some(best)
