@@ -353,6 +353,13 @@ fn a_settlement_lives_through_a_winter() {
     let mut reached_winter = 0;
     let mut came_out_of_it = 0;
     let mut saw_the_second_spring = 0;
+    // What each world actually did, so that a failure names the seed instead
+    // of saying "none of thirty-two" and leaving half an hour of re-running to
+    // whoever reads it. The roll count is the instrument from
+    // `repeatable_tests`: two runs that part company on it took a branch on an
+    // input the seed does not fix, which is a different fault and a different
+    // place to look from a world that merely went badly.
+    let mut what_each_world_did: Vec<String> = Vec::new();
 
     for seed in 0..WORLDS {
         crate::core::dice::seed(seed);
@@ -391,31 +398,42 @@ fn a_settlement_lives_through_a_winter() {
             "the run should have come out into spring"
         );
 
+        let after = alive(&simulation);
+        what_each_world_did.push(format!(
+            "seed {seed}: {at_the_gate} at the gate, {after} after, \
+             {} rolls",
+            crate::core::dice::draws_taken()
+        ));
+
         if at_the_gate > 0 {
             reached_winter += 1;
-            if alive(&simulation) > 0 {
+            if after > 0 {
                 came_out_of_it += 1;
             }
         }
-        if alive(&simulation) > 0 {
+        if after > 0 {
             saw_the_second_spring += 1;
         }
     }
 
+    let what_happened = what_each_world_did.join("\n  ");
+
     assert!(
         reached_winter > 0,
-        "no settlement of {WORLDS} even reached the winter, so this says nothing about winters"
+        "no settlement of {WORLDS} even reached the winter, so this says \
+         nothing about winters:\n  {what_happened}"
     );
 
     assert!(
         saw_the_second_spring > 0,
-        "not one settlement of {WORLDS} came out the far side of the winter"
+        "not one settlement of {WORLDS} came out the far side of the \
+         winter:\n  {what_happened}"
     );
 
     assert!(
         came_out_of_it > 0,
-        "of the {reached_winter} settlements that reached winter with people in them, \
-         not one came out of it"
+        "of the {reached_winter} settlements that reached winter with people \
+         in them, not one came out of it:\n  {what_happened}"
     );
 }
 

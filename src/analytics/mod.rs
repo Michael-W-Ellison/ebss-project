@@ -182,8 +182,6 @@ pub struct Simulation {
 /// Configuration for simulation behavior and limits
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
-    /// Random seed for deterministic simulations (None = random)
-    pub random_seed: Option<i64>,
     /// Maximum number of ticks before simulation auto-stops (None = unlimited)
     pub max_ticks: Option<u32>,
     /// Enable logging output
@@ -196,16 +194,7 @@ pub struct SimulationConfig {
 
 impl Default for SimulationConfig {
     fn default() -> Self {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        // Generate a random seed from system time
-        let seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .ok()
-            .map(|d| d.as_secs() as i64);
-
         Self {
-            random_seed: seed,
             max_ticks: None,
             enable_logging: true,
             enable_metrics: true,
@@ -215,11 +204,16 @@ impl Default for SimulationConfig {
 }
 
 impl SimulationConfig {
-    /// Set a specific random seed for deterministic simulations
-    pub fn with_seed(mut self, seed: i64) -> Self {
-        self.random_seed = Some(seed);
-        self
-    }
+    /// Fixing a run is `core::dice::seed`, and this is where the note about
+    /// it lives.
+    ///
+    /// There used to be a `random_seed` on this config, set from
+    /// `SystemTime::now()` and **read by nothing at all** - a store with a
+    /// writer and no reader, and the writer was the wall clock, in a model
+    /// whose whole cost of repeatability had already been paid next door in
+    /// `core::dice`. Anybody reaching for "the seed" would have found it,
+    /// set it, and got a world it had no effect on. See
+    /// `crate::core::dice::seed`, which is the one that works.
 
     /// Set maximum number of ticks
     pub fn with_max_ticks(mut self, max_ticks: u32) -> Self {

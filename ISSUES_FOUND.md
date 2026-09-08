@@ -13578,3 +13578,80 @@ seeds the global `dice` and asserts that one settlement in thirty-two comes
 through, so under the parallel runner it races another test's seeding. It has
 been in and out of the standing set all session for that reason. Worth fixing
 as its own thing - the shared global seed is the defect, not the winter.
+
+### 191. There was no seed race, and there was a clock in the config
+
+I said last time that `a_settlement_lives_through_a_winter` races another
+test's seeding of the global `dice` stream. **That was wrong.** `THE_STREAM` is
+a `thread_local!`, and the test runner gives every test a thread of its own, so
+no test can reach another's stream. The diagnosis was a guess offered as a
+finding and it should not have been.
+
+What is true is that the test does flip: over three runs of the identical
+binary it failed once and passed twice. So there is something, and this is what
+looking for it found.
+
+#### What was ruled out, and how
+
+- **The dice stream.** Thread-local, and the test seeds it at the top of every
+  one of its thirty-two worlds.
+- **Unordered tables.** There is not one `HashMap` or `HashSet` left in the
+  model; `nothing_decides_anything_by_walking_an_unordered_table` already
+  guards it.
+- **Randomness outside the stream.** No `thread_rng`, `rand::random` or
+  `Uuid::new_v4` anywhere in the model, guarded at source level by
+  `every_roll_comes_from_the_one_stream`.
+- **Statics, `unsafe`, spawned threads, environment variables, pointer
+  ordering.** None in the model. The only process-global is
+  `how_long_the_land_gives_nothing`, whose `OnceLock` holds a pure function of
+  the calendar.
+- **The wall clock in the tick.** `Instant::now` appears only in
+  `analytics::performance`, which nothing reads.
+- **The model itself.** Thirty-two worlds run as a plain binary came out
+  **byte-identical across three concurrent processes**; one world came out
+  identical over fifteen processes at a hundred and twenty ticks and eight
+  processes at a whole year.
+
+So the model is repeatable, and the flake was not reproduced.
+
+#### What was found: a seed taken from the clock
+
+`SimulationConfig::default()` set `random_seed` from
+`SystemTime::now().as_secs()`. It is **read by nothing at all** - a store with
+a writer and no reader, where the writer is the wall clock, in a model whose
+whole cost of repeatability had already been paid next door in `core::dice`.
+It was not the cause of anything, because nothing consulted it. It was a trap:
+anybody reaching for "the seed" would have found it, set it with `with_seed`,
+and got a world it had no effect on.
+
+Removed, along with `with_seed`, and the four config tests that asserted the
+field exists now assert the thing that is actually true - that
+`core::dice::seed` is what fixes a run.
+
+#### And the instrument, which is the part that will settle it
+
+The reason this took a day is that the only thing that reported the fault was a
+half-hour test whose whole message was "not one settlement of 32 came out the
+far side of the winter". That says nothing about which world, or whether the
+world was even a different one.
+
+Two things now:
+
+- `a_fixed_world_rolls_a_recorded_number_of_times` and its whole-year
+  companion assert `dice::draws_taken()` against a **recorded constant**
+  - 8,786 for seed 4242 at a hundred and twenty ticks, 876,050 for seed 0 over
+  a year. The existing repeatability test runs both of its worlds in one
+  process and so cannot see drift *between* runs; these can. The short one
+  costs a third of a second, so a drift that used to take half an hour to
+  surface now surfaces in the time it takes to run one test. When the model is
+  changed on purpose the number changes with it and the new one goes in the
+  constant, which is the point: it is a fact about the model and should have to
+  be restated when the model is.
+- The winter test now reports, on failure, what every one of its thirty-two
+  worlds did and how many times each rolled. If the roll counts match a good
+  run, the worlds were the same and the fault is not repeatability at all; if
+  they part company, the seed at which they part is named.
+
+**This is not a fix.** The flake is real, it was not reproduced in eleven
+attempts, and what is shipped is the thing that will name it the next time it
+happens rather than another half-hour of "none of thirty-two".
