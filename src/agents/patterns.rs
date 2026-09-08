@@ -849,6 +849,21 @@ impl Patterns {
         self.against.get(&need)?.get(element)
     }
 
+    /// Everything this agent has learned against a need, with the trail each
+    /// one has worn.
+    ///
+    /// `trail` answers about an element somebody already has in mind. This is
+    /// for asking what is in there at all, which is the only way to find a
+    /// verb nobody thought to ask about - the making verbs are written down
+    /// as `cut`, `scrape` and `carve`, and a reader that goes looking for
+    /// `craft` finds nothing and concludes wrongly that nothing was learned.
+    pub fn everything_learned(
+        &self,
+        need: DriveType,
+    ) -> impl Iterator<Item = (&Element, &Trail)> {
+        self.against.get(&need).into_iter().flatten()
+    }
+
     /// How often a particular thing has answered a particular need.
     pub fn how_often(&self, need: DriveType, what: &str) -> u32 {
         self.against
@@ -890,28 +905,11 @@ impl Patterns {
     /// that is actually doing the work.
     pub fn what_follows(&self, need: DriveType, after: &str) -> Option<&str> {
         let trails = self.against.get(&need)?;
+        let (best, worth) = self.what_has_followed(need, after)?;
 
-        let (best, worth) = trails
-            .iter()
-            .filter_map(|(element, trail)| match element {
-                Element::Then(first, next) if first == after => {
-                    Some((next.as_str(), trail.worth()))
-                }
-                _ => None,
-            })
-            .max_by(|(left_next, left), (right_next, right)| {
-                left.partial_cmp(right)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| left_next.cmp(right_next))
-            })?;
-
-        if worth < Self::WORN_ENOUGH_TO_FOLLOW {
-            return None;
-        }
-
-        // And it has to beat what its own second half says on its own. Where
-        // the atom is what matters, the atom is what an agent should do,
-        // whatever order it happened to come in.
+        // It has to beat what it says on its own. Where the atom is what
+        // matters, the atom is what an agent should do, whatever order it
+        // happened to come in.
         let alone = trails
             .get(&Element::Did(best.to_string()))
             .map(|trail| trail.worth())
@@ -924,10 +922,68 @@ impl Patterns {
         }
     }
 
+    /// What has come after that, worn deep enough to be a habit, without
+    /// asking whether it beats itself.
+    ///
+    /// The difference from `what_follows` is the question being asked. That
+    /// one asks "what should I do instead of the obvious thing", and a run
+    /// that does not beat its own second half is no reason to depart from the
+    /// obvious thing. This one asks "what came next", which is a question
+    /// about the order, and the order is exactly what a chain is made of.
+    ///
+    /// The two came apart the first time anything was measured through them.
+    /// The middle of nearly every run is `gather`, and `gather` on its own
+    /// carries the biggest trail any drive holds - thirst put it at thirty
+    /// thousand against the four-tenths a worn run needs. Nothing could ever
+    /// beat that, so under the guard no chain of two ever formed, on any
+    /// drive, in any world: twelve worlds, a hundred and two bodies, not one.
+    /// The guard is right for the reader and wrong for the chain.
+    fn what_has_followed(&self, need: DriveType, after: &str) -> Option<(&str, f32)> {
+        self.everything_that_has_followed(need, after).pop()
+    }
+
+    /// Every worn run out of that verb, worst first.
+    ///
+    /// `what_has_followed` is this and then the last one. A chain wants the
+    /// whole list, because the fattest single step is not always the step
+    /// that goes anywhere: on Utility, `gather > pickup` carries more than
+    /// half again what `gather > craft` does, and picking a thing up leads
+    /// nowhere while making something is the start of a trade.
+    fn everything_that_has_followed(&self, need: DriveType, after: &str) -> Vec<(&str, f32)> {
+        let Some(trails) = self.against.get(&need) else {
+            return Vec::new();
+        };
+
+        let deep_enough = self.how_worn_a_run_has_to_be(need);
+
+        let mut out: Vec<(&str, f32)> = trails
+            .iter()
+            .filter_map(|(element, trail)| match element {
+                Element::Then(first, next) if first == after => {
+                    Some((next.as_str(), trail))
+                }
+                _ => None,
+            })
+            .filter(|(_, trail)| {
+                trail.times >= Self::ENOUGH_TIMES_TO_BE_A_HABIT
+                    && trail.worth() >= deep_enough
+            })
+            .map(|(next, trail)| (next, trail.worth()))
+            .collect();
+
+        out.sort_by(|(left_next, left), (right_next, right)| {
+            left.partial_cmp(right)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left_next.cmp(right_next))
+        });
+
+        out
+    }
+
     /// The whole chain that answers a need, followed out from what was just
     /// done.
     ///
-    /// `what_follows` gives one step. A three-step composition is held as two
+    /// `what_has_followed` gives one step. A three-step composition is held as two
     /// overlapping pairs - `move > pickup` and `pickup > eat` - and this is
     /// what joins them back up: follow the pairs while they keep answering,
     /// and what comes out is the run the agent worked out, which nobody wrote
@@ -938,20 +994,69 @@ impl Patterns {
     /// started is not a plan.
     pub fn the_chain_that_answers(&self, need: DriveType, after: &str) -> Vec<String> {
         let mut chain: Vec<String> = Vec::new();
-        let mut here = after.to_string();
+        let mut best: Vec<String> = Vec::new();
+        let mut best_worth = 0.0f32;
+        self.follow_it_out(
+            need,
+            after,
+            after,
+            0.0,
+            &mut chain,
+            &mut best,
+            &mut best_worth,
+        );
+        best
+    }
 
-        while chain.len() < Self::AS_LONG_A_CHAIN_AS_ANYBODY_HOLDS {
-            let Some(next) = self.what_follows(need, &here) else {
-                break;
-            };
-            if next == after || chain.iter().any(|step| step == next) {
-                break;
-            }
-            chain.push(next.to_string());
-            here = next.to_string();
+    /// Work out from a verb along every worn run, and keep the run that goes
+    /// furthest.
+    ///
+    /// Taking the fattest step each time is not the same as finding the
+    /// longest run, and on the making drives it is the difference between a
+    /// composition and nothing. A body that has learned `gather > pickup` at
+    /// six-tenths and `gather > craft` at two-tenths, and has learned
+    /// something that follows crafting and nothing that follows picking up,
+    /// gets no chain at all from the greedy walk: it steps onto the fatter
+    /// pair and stops there. Length first, then what the run is worth,
+    /// because a longer run is a composition and a shorter one is a habit.
+    #[allow(clippy::too_many_arguments)]
+    fn follow_it_out(
+        &self,
+        need: DriveType,
+        started_at: &str,
+        here: &str,
+        worth_so_far: f32,
+        chain: &mut Vec<String>,
+        best: &mut Vec<String>,
+        best_worth: &mut f32,
+    ) {
+        if chain.len() > best.len() || (chain.len() == best.len() && worth_so_far > *best_worth) {
+            *best = chain.clone();
+            *best_worth = worth_so_far;
         }
 
-        chain
+        if chain.len() >= Self::AS_LONG_A_CHAIN_AS_ANYBODY_HOLDS {
+            return;
+        }
+
+        for (next, worth) in self.everything_that_has_followed(need, here) {
+            // A run that comes back to where it started, or doubles back on
+            // itself, is not a plan.
+            if next == started_at || chain.iter().any(|step| step == next) {
+                continue;
+            }
+            chain.push(next.to_string());
+            self.follow_it_out(
+                need,
+                started_at,
+                next,
+                worth_so_far + worth,
+                chain,
+                best,
+                best_worth,
+            );
+            chain.pop();
+        }
     }
 
     /// How many steps of a learned chain an agent will hold at once.
@@ -965,7 +1070,63 @@ impl Patterns {
     ///
     /// Above the noise of a single lucky afternoon. A run that has answered
     /// once is a coincidence; this is about four ordinary successes deep.
+    ///
+    /// It is a ceiling on the bar rather than the bar, because it is a number
+    /// with units in it - see `WHAT_SHARE_OF_THE_DEEPEST_RUN`.
     pub const WORN_ENOUGH_TO_FOLLOW: f32 = 0.4;
+
+    /// Or a share of the deepest run this body already holds for the same
+    /// need, if that is the lower bar.
+    ///
+    /// **The fixed number was wrong in a way worth writing down.** A trail is
+    /// fed with `efficiency` - demand off the drive per turn spent - so what
+    /// one success is worth is denominated in the drive it answered. A meal
+    /// takes nine-tenths off Hunger; making a thing takes two-tenths off
+    /// Utility. Four-tenths therefore means "about four successes" on the
+    /// drive it was calibrated against and "about eighteen" on the making
+    /// drives, and eighteen is more makings than a stone-age life has
+    /// occasion for. Measured, eight worlds: fifty-two bodies in seventy held
+    /// `gather > craft` against Utility - nearly everybody - and not one of
+    /// them was over the bar, so not one of them could follow it. The
+    /// threshold was in units of hunger.
+    ///
+    /// A share of the drive's own deepest run has no units, so it asks the
+    /// same question of every drive. **Whichever bar is lower wins**, which
+    /// makes this strictly a loosening: a drive whose runs are already deep
+    /// keeps exactly the runs the fixed number admitted, and a drive whose
+    /// runs are all shallow stops being held to another drive's yardstick.
+    /// Taking the share on its own instead was measured and refused - it
+    /// raises the bar on the deep drives, and Hunger went from fifty-six
+    /// bodies in a hundred holding a three-step composition to twelve.
+    pub const WHAT_SHARE_OF_THE_DEEPEST_RUN: f32 = 0.35;
+
+    /// And how many times it has to have worked, whatever it is worth.
+    ///
+    /// The unit-free half of the same question, and the one that keeps the
+    /// share honest: the first run an agent ever records is trivially the
+    /// deepest one it holds, and without a count it would be followed on the
+    /// strength of a single afternoon. Trails that go cold are dropped
+    /// outright rather than faded to nothing, so this is a count of successes
+    /// since the run was last a live thing, which is what it should be.
+    pub const ENOUGH_TIMES_TO_BE_A_HABIT: u32 = 3;
+
+    /// How deep a run has to be on this need: four ordinary successes, or a
+    /// real share of the deepest run there is, whichever asks less.
+    fn how_worn_a_run_has_to_be(&self, need: DriveType) -> f32 {
+        let deepest = self
+            .against
+            .get(&need)
+            .map(|trails| {
+                trails
+                    .iter()
+                    .filter(|(element, _)| matches!(element, Element::Then(_, _)))
+                    .map(|(_, trail)| trail.worth())
+                    .fold(0.0f32, f32::max)
+            })
+            .unwrap_or(0.0);
+
+        (deepest * Self::WHAT_SHARE_OF_THE_DEEPEST_RUN).min(Self::WORN_ENOUGH_TO_FOLLOW)
+    }
 
     /// Ground worth going back to for a need, if there is any.
     ///

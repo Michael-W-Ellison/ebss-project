@@ -740,7 +740,7 @@ impl Simulation {
         // about who chose it.
         {
             let taken = crate::agents::Agent::what_was_tried(&action);
-            let verb = taken.split(':').next().unwrap_or("").to_string();
+            let verb = crate::agents::Agent::just_the_verb(&taken);
             let agent = &mut self.population.agents[agent_index];
             if let Some(wanted) = agent.what_the_plan_wants_next() {
                 if wanted == verb {

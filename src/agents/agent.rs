@@ -6165,12 +6165,18 @@ impl Agent {
         // independently, which is what lets an agent learn that gathering
         // pays without concluding that berries are the only thing worth
         // gathering.
+        //
+        // The verb goes in under the name the whole family shares, so that
+        // the atom and the runs are about the same thing - see
+        // `making::what_making_is_called`. `On` keeps the particular
+        // material, which is where the difference between knapping a core and
+        // carving a bowl is still written down.
         match tried.split_once(':') {
             Some((verb, subject)) => {
-                elements.push(Element::Did(verb.to_string()));
+                elements.push(Element::Did(Self::just_the_verb(verb)));
                 elements.push(Element::On(subject.to_string()));
             }
-            None => elements.push(Element::Did(tried)),
+            None => elements.push(Element::Did(Self::just_the_verb(&tried))),
         }
 
         elements.push(Element::At(where_it_was));
@@ -6215,12 +6221,14 @@ impl Agent {
             .collect()
     }
 
-    /// The verb out of a `what_was_tried` string, which writes "gather:Berries".
-    fn just_the_verb(tried: &str) -> String {
-        tried
+    /// The verb out of a `what_was_tried` string, which writes "gather:Berries",
+    /// under the name the pattern layer knows it by.
+    pub fn just_the_verb(tried: &str) -> String {
+        let verb = tried
             .split_once(':')
-            .map(|(verb, _)| verb.to_string())
-            .unwrap_or_else(|| tried.to_string())
+            .map(|(verb, _)| verb)
+            .unwrap_or(tried);
+        crate::environment::making::what_making_is_called(verb).to_string()
     }
 
     /// Note what was just done, so the next success has a run to credit.

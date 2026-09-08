@@ -990,6 +990,46 @@ pub fn what_comes_of_swapping(
     })
 }
 
+/// The one name every shaping act goes by, once the pattern layer has it.
+///
+/// A man who knaps a core on Monday, scrapes a hide on Tuesday and carves a
+/// bowl on Wednesday has spent three days making things. The verb matrix has
+/// good reason to keep those apart - they want different materials and a
+/// different hand - but the layer that learns what answers a need has none,
+/// and keeping them apart is what stopped it learning anything about making
+/// at all.
+///
+/// **Measured.** Eight worlds, sixty-six bodies, three quarters through the
+/// first year. Against Utility the store held `gather > craft` at 0.242,
+/// `gather > cut` at 0.185, `gather > carve` at 0.305, `gather > smash` at
+/// 0.392 and `gather > mold` at 0.214 - five spellings of "get the stuff,
+/// then make the thing", every one of them under the four-tenths a run needs
+/// before anybody will follow it, and so not one body in sixty-six held a
+/// composition for making. Folded, they are one run and well over it.
+///
+/// Only the shaping verbs. Drying, salting, boiling and fermenting are
+/// preservation and answer Preparedness, where `dry > cover` is already the
+/// deepest run in the model and wants no help; building a shelter is not
+/// making a tool. What is folded here is the family that turns material into
+/// an object.
+pub fn what_making_is_called(verb: &str) -> &str {
+    if THE_SHAPING_VERBS.contains(&verb) {
+        WHAT_THE_WHOLE_FAMILY_IS_CALLED
+    } else {
+        verb
+    }
+}
+
+/// The name the family goes under, which is the one an agent already had for
+/// it before any of the rest were written.
+pub const WHAT_THE_WHOLE_FAMILY_IS_CALLED: &str = "craft";
+
+/// Every verb in the model that turns material into an object.
+pub const THE_SHAPING_VERBS: &[&str] = &[
+    "craft", "cut", "carve", "scrape", "smash", "crush", "mold", "weave",
+    "sew", "makeclothing",
+];
+
 /// How a try at a substitution is written down, so that nobody spends a life
 /// putting the same wrong thing in the same right place.
 pub fn what_that_swap_is_called(

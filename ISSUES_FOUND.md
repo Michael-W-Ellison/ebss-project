@@ -13281,3 +13281,126 @@ What would produce them is a world with longer causal chains in it - the tool
 ladder (#195) has four- and five-step makings in it already, and `Undertaking::
 Crafting` is where a run of three would first appear. That is where to look
 next, and it is an arm of its own rather than a change to this machinery.
+
+### 188. Crafting could not compose, and it was four things at once
+
+#187 ended by saying that `Undertaking::Crafting` was where a run of three
+would first appear, and that this was where to look next. It was. What was
+there was worse than a missing feature: the composition layer built over #186
+and #187 was returning **no chain of two or more steps, on any drive, in any
+world.** Twelve worlds, a hundred and two bodies, sampled three quarters
+through the year - not one.
+
+It was not one defect. It was four, each of which alone was enough to produce
+that zero, so each had to be found and fixed before the next became visible.
+
+#### One: the guard that belongs on the reader, not on the chain
+
+`Patterns::what_follows` served two callers with opposite questions. The
+reactive reader asks *what should I do instead of the obvious thing*, and the
+beat-the-atom test is right for it: a run that does not beat its own second
+half is no reason to depart from the plain answer. The chain builder asks *what
+came next*, which is a question about order.
+
+The middle of nearly every run is `gather`, and `gather` on its own carries the
+biggest trail any drive holds - thirst put it at 30,498 against the
+four-tenths a worn run needs to clear. Nothing could beat that, so the chain
+died at its first step every time.
+
+Split into a guarded reader and an unguarded `what_has_followed` for chaining.
+Chains appeared immediately on four drives.
+
+#### Two: the fattest step is not the step that goes anywhere
+
+The chain walk took the best successor at each step. On Utility,
+`gather > pickup` carries more than half again what `gather > craft` does, and
+picking a thing up leads nowhere while making something is the start of a
+sequence. The greedy walk stepped onto the fatter pair and stopped.
+
+Replaced with a bounded search over every worn successor, keeping the run that
+goes furthest and breaking ties on worth. Hunger's three-step compositions went
+from 47% of bodies to 65%, Preparedness 38% to 57%, and Social found
+`gather > shareinformation > socialize` where it had held nothing.
+
+#### Three: one act, ten names
+
+Then crafting specifically. The making verbs are `craft`, `cut`, `carve`,
+`scrape`, `smash`, `crush`, `mold`, `weave`, `sew` and `makeclothing` - ten
+spellings of *turn material into an object*. The verb matrix has good reason to
+keep them apart; the layer that learns what answers a need has none.
+
+Against Utility the store held `gather > craft` at 0.242, `gather > cut` at
+0.185, `gather > carve` at 0.305, `gather > smash` at 0.392 and
+`gather > mold` at 0.214 - five spellings of one habit, every one of them under
+the bar, so a man who knapped a core on Monday, scraped a hide on Tuesday and
+carved a bowl on Wednesday had made three things and learned nothing.
+
+`making::what_making_is_called` folds them, in the pattern layer only. `On`
+keeps the particular material, so the difference between knapping and carving
+is still written down where it belongs. Preservation is deliberately not folded
+in: drying and salting answer Preparedness, and `dry > cover` is already the
+deepest run in the model. `gather > craft` went from 31 bodies to 52.
+
+**This is the project's recurring defect in a new dress:** one question
+answered in ten places that could not agree because nothing had ever asked them
+to.
+
+#### Four: the threshold was in units of hunger
+
+And it still would not clear the bar. A trail is fed with `efficiency` - demand
+off the drive per turn spent - so what one success is worth is denominated in
+the drive it answered. A meal takes nine-tenths off Hunger; a making takes
+two-tenths off Utility. `WORN_ENOUGH_TO_FOLLOW = 0.4` therefore means "about
+four successes" on the drive it was calibrated against and "about eighteen" on
+the making drives, and eighteen is more makings than a stone-age life has
+occasion for. Fifty-two bodies in seventy held `gather > craft` - nearly
+everybody - and not one was over the bar.
+
+A rate calibrated on a scale the rest of the model does not keep. #143, #288,
+the trapping rates, and now this.
+
+The bar is now the **lower** of the fixed number and a share of the deepest run
+that body holds for that same need, plus a count - three successes - which is
+the unit-free half of the same question and what keeps the share honest. Taking
+the share on its own was measured and refused: it raises the bar on the deep
+drives, and Hunger went from 56% of bodies holding a three-step composition to
+12%. Lower-of-the-two makes it strictly a loosening.
+
+#### Measured: 8 worlds, one year, bodies sampled three quarters through
+
+| drive | held no run, before | held no run, after |
+|---|---|---|
+| Utility | 100% | **4%** |
+| Curiosity | 87% | **0%** |
+| Sustenance | 100% | **6%** |
+| Safety | 100% | **0%** |
+| Industry | 100% | **8%** |
+| Social | 100% | **0%** |
+
+And the compositions of three verbs, which did not exist at all before:
+`gather > dry > cover` held by 45 bodies, `sleep > gather > eat` by 36,
+`gather > shareinformation > socialize` by 32. Crafting holds `gather > craft`
+across 59 bodies in 71, where it held nothing.
+
+#### And the honest part: it costs nothing and buys nothing, yet
+
+Over the 32 seeded worlds, two years: person-days 107,181 to **107,362**
+(+0.2%, deep inside the block noise), month-nine population 8.1 to 8.1, worlds
+emptied 23/32 to 26/32. The suite goes from 11 standing failures to **10**, with
+no new ones - `a_settlement_lives_through_a_winter` now passes.
+
+So: the composition layer went from returning nothing to returning
+compositions on six drives, and the settlements are exactly as likely to die.
+That is the truthful result and it should not be dressed up. What an agent
+knows is now richer than what its survival depends on, because the things it
+has learned to compose - making a tool, sharing news - are not yet the things
+that carry it through a winter. The making that would be worth composing is the
+tool ladder (#195), whose four- and five-step recipes exist in the world and
+which nobody in a settlement has yet lived long enough to climb.
+
+The third step of the crafting composition is the one that is still missing:
+`craft > pickup` sits just under the bar, and under the looser share-only rule
+it did appear - `gather > craft > pickup`, held by one body in seventy-seven -
+but not at a bar that leaves Hunger's compositions intact. That is the next
+thing to look at, and it is a question about what making is worth, not about
+the composition machinery.

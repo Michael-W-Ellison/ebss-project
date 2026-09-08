@@ -678,6 +678,16 @@ impl Simulation {
     /// drive shout louder. Shouting louder does not help a man whose hedgerow
     /// is bare; walking past it to the river does.
     ///
+    /// Whether that action is the verb a learned run or a plan step names.
+    ///
+    /// Through `just_the_verb`, so that both sides speak the vocabulary the
+    /// pattern layer uses: a run that says `craft` is answered by a turn spent
+    /// carving or knapping or scraping, which is the point of giving the
+    /// shaping verbs one name - see `making::what_making_is_called`.
+    fn is_that_the_verb(doing: &Action, verb: &str) -> bool {
+        crate::agents::Agent::just_the_verb(&crate::agents::Agent::what_was_tried(doing)) == verb
+    }
+
     /// It is a share of turns rather than a switch, so what he knows stays
     /// what he mostly does, and the trying is a thing he keeps doing until it
     /// pays - which is what makes it a search and not a tantrum.
@@ -949,12 +959,7 @@ impl Simulation {
                     if let Some(step) = agent.what_the_plan_wants_next() {
                         if let Some(doing) = found
                             .iter()
-                            .find(|doing| {
-                                crate::agents::Agent::what_was_tried(doing)
-                                    .split(':')
-                                    .next()
-                                    == Some(step)
-                            })
+                            .find(|doing| Self::is_that_the_verb(doing, step))
                             .cloned()
                         {
                             return Some(doing);
@@ -965,12 +970,7 @@ impl Simulation {
                 if let Some(next) = following {
                     if let Some(learned) = found
                         .iter()
-                        .find(|doing| {
-                            crate::agents::Agent::what_was_tried(doing)
-                                .split(':')
-                                .next()
-                                == Some(next.as_str())
-                        })
+                        .find(|doing| Self::is_that_the_verb(doing, &next))
                         .cloned()
                     {
                         return Some(learned);
