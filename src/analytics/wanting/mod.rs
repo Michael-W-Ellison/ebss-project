@@ -632,9 +632,6 @@ impl Simulation {
         }
     }
 
-    /// How many rungs the hunger list has, which is how far a learned run may
-    /// look for something it can actually do now.
-    pub(in crate::analytics) const HOW_MANY_WAYS_A_HUNGRY_MAN_HAS: usize = 6;
 
     /// Whether an answer is one there is nothing to find out about.
     ///
@@ -856,160 +853,25 @@ impl Simulation {
             // fresh ranker in front of all that would throw those away to buy
             // an ordering. Moving hunger over means moving them over with it,
             // which is its own piece of work and its own measurement.
-            DriveType::Hunger => {
-                let starving = agent.state.is_starving() || agent.nutrition.is_starving();
-
-                // A catch in a snare the agent is standing on comes first
-                // of everything, because it costs nothing: no walk, no
-                // weighing, take it. The *walk* to one further off is a
-                // different question and sits below the ground in front of
-                // him - see `walking_to_a_catch`, which was measured the
-                // wrong way round first and cost a third of every settlement.
-                // How far down its own list a long-denied drive looks.
-                //
-                // The order below is a habit, and a habit is the right thing
-                // to have while it is working. What was missing is what a man
-                // does when it stops working: he tries the next thing. See
-                // `how_far_down_the_list_to_look`.
-                let past_the_habit = Self::how_far_down_the_list_to_look(agent, drive_type);
-
-                // What he has learned follows what he has just been doing, if
-                // anything has. When there is one, the whole list is asked
-                // rather than only as far as the habit - because a
-                // composition can only choose between candidates that exist,
-                // and a list cut off at the first answer offers it nothing to
-                // choose. That costs the extra lookups only on the turns
-                // where a run is worn deep enough to be worth following.
-                let following = agent.what_usually_comes_next(drive_type).map(str::to_string);
-
-                let wanted = if following.is_some() || agent.is_the_plan_for(drive_type) {
-                    Self::HOW_MANY_WAYS_A_HUNGRY_MAN_HAS
-                } else {
-                    past_the_habit + 1
-                };
-                let mut found: Vec<Action> = Vec::new();
-
-                // Each rung is asked only until enough of them have answered,
-                // so an agent doing what it always does pays for exactly the
-                // one lookup it used to.
-                //
-                // **Nothing is ever passed over that is already in his hand.**
-                // A search is for finding out whether the walk you keep taking
-                // is worth taking; the supper in your own pack is not a
-                // hypothesis. Without this a frightened man with food on him
-                // walked past it - see
-                // `fear_of_running_short_comes_out_as_answering_the_need`,
-                // which is the test that caught it.
-                let mut enough = |what: Option<Action>, found: &mut Vec<Action>| {
-                    let Some(doing) = what else {
-                        return false;
-                    };
-                    if Self::is_it_already_in_his_hand(&doing) {
-                        found.clear();
-                        found.push(doing);
-                        return true;
-                    }
-                    found.push(doing);
-                    found.len() >= wanted
-                };
-
-                // A catch in a snare the agent is standing on comes first
-                // of everything, because it costs nothing: no walk, no
-                // weighing, take it. The *walk* to one further off is a
-                // different question and sits below the ground in front of
-                // him - see `walking_to_a_catch`, which was measured the
-                // wrong way round first and cost a third of every settlement.
-                let _ = enough(self.a_catch_at_my_feet(agent, agent_position), &mut found)
-                    || enough(
-                        self.food_action(agent, agent_position, starving),
-                        &mut found,
-                    )
-                    // A store within reach beats a walk out to a berry bush,
-                    // which is the whole of what digging one buys.
-                    //
-                    // It stays *behind* the ordinary food branch, which was
-                    // measured both ways. In front, the store is drawn on
-                    // five times as often and the rot in the pits halves -
-                    // and it costs a fifth of all the food anybody eats and
-                    // six of the people in a settlement, because a meal out
-                    // of a hole costs two turns where a berry costs one, and
-                    // because everything taken out was put back in by
-                    // somebody a day earlier. Efficiency did not move.
-                    // See ISSUES_FOUND #43.
-                    // Then the round, if it is due. It sits behind eating
-                    // what is carried and behind the ground in front of him,
-                    // and it fires at most once a rhythm - so it cannot
-                    // become the thing a hungry man does with every turn,
-                    // which is what the measurement behind `walking_to_a_catch`
-                    // was about. See `going_round_is_due`.
-                    || enough(self.going_round_is_due(agent, agent_position), &mut found)
-                    || enough(
-                        self.something_out_of_the_store(agent, agent_position),
-                        &mut found,
-                    )
-                    // Then the walk out to a catch. Setting *more* string is
-                    // not here at all: a snare set now feeds you in four
-                    // days, which is no answer to being hungry today, and
-                    // `Action::SetSnare` answers Preparedness for exactly
-                    // that reason. Offering it from the hunger arm as well
-                    // had hungry men spending their turns on string - six
-                    // worlds went from 23,733 person-days to 20,337.
-                    || enough(self.walking_to_a_catch(agent, agent_position), &mut found)
-                    || enough(self.fishing_action(agent, agent_position), &mut found)
-                    || enough(self.hunting_action(agent, agent_position), &mut found);
-
-                // And before taking the habitual answer, what he has learned
-                // *follows* what he has just been doing.
-                //
-                // This is the reader for `Element::Then`, and it is the whole
-                // use of keeping runs. The list below is a fixed order
-                // somebody wrote; a composition is an order the agent found
-                // out, and where one is worn deep enough it decides between
-                // the candidates the list produced. It can only ever pick
-                // something already on the list - it does not invent an
-                // action, it chooses among the ones that are available now -
-                // which is what keeps a learned habit from proposing
-                // something the world will refuse.
-                // The plan first, where there is one for this need: a
-                // learned run is held across turns, so it can carry the agent
-                // through a step that is not the best thing to do on its own -
-                // walking to the store is worth nothing until you take
-                // something out of it. That is the whole difference between
-                // planning against a composition and reacting one step at a
-                // time.
-                if agent.is_the_plan_for(drive_type) && agent.should_execute_plan() {
-                    if let Some(step) = agent.what_the_plan_wants_next() {
-                        if let Some(doing) = found
-                            .iter()
-                            .find(|doing| Self::is_that_the_verb(doing, step))
-                            .cloned()
-                        {
-                            return Some(doing);
-                        }
-                    }
-                }
-
-                if let Some(next) = following {
-                    if let Some(learned) = found
-                        .iter()
-                        .find(|doing| Self::is_that_the_verb(doing, &next))
-                        .cloned()
-                    {
-                        return Some(learned);
-                    }
-                    // Nothing the run names is available now, so he falls back
-                    // to the head of the list rather than to the tail of it:
-                    // the extra rungs were gathered to give the composition a
-                    // choice, not to change what he does when it has none.
-                    return found.into_iter().next();
-                }
-
-                // The last one reached: the habitual answer when nothing is
-                // being passed over, and the next thing down when something
-                // is. If the list ran out before it got that far he takes
-                // what there was, because standing still is not an experiment.
-                found.pop()
-            }
+            // Every way a hungry man has, costed against the others, with
+            // the plan and the run deciding over the top of the costs.
+            //
+            // This was the longest arm in the model and the last to move: it
+            // carried the in-hand pre-empt, the plan reader and the composition
+            // reader, and none of those were about hunger. They were about
+            // choosing among things you could do, which is what
+            // `analytics::wanting::strategy` is, so they went with it and
+            // thirst and shelter got them too - neither could hold a plan or
+            // follow a run before.
+            //
+            // What is lost is the early exit. The old arm asked each rung only
+            // until enough had answered, so a man doing what he always does
+            // paid for one lookup; a ranking has to price everything it ranks,
+            // so now he pays for all of them. That is the cost of the ordering
+            // being a consequence of anything.
+            DriveType::Hunger => self
+                .the_way_to_answer(DriveType::Hunger, agent, agent_position)
+                .map(|way| way.doing),
 
             DriveType::Rest => {
                 // Something for it first, and then lie down. A remedy costs a

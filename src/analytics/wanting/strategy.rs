@@ -48,6 +48,7 @@ pub enum Strategy {
     EatStoredFood,
     GatherWildFood,
     ScavengeWhatIsLyingAbout,
+    WalkTheTrapline,
     FishLocalWaters,
     HuntLocalAnimals,
     TradeForFood,
@@ -120,6 +121,7 @@ impl Strategy {
             Strategy::EatStoredFood => "eat-stored",
             Strategy::GatherWildFood => "gather-wild",
             Strategy::ScavengeWhatIsLyingAbout => "scavenge",
+            Strategy::WalkTheTrapline => "walk-the-line",
             Strategy::FishLocalWaters => "fish",
             Strategy::HuntLocalAnimals => "hunt",
             Strategy::TradeForFood => "trade-for-food",
@@ -150,6 +152,12 @@ impl Strategy {
             | Strategy::DrinkFromLocalSource
             | Strategy::EatCarriedFood
             | Strategy::EatStoredFood
+            // Gathering is not preparation here, whatever it is elsewhere.
+            // `food_action` walks to a bush within reach and eats what it
+            // picks, so the payoff is this turn - and calling it short-term
+            // cost a settlement three quarters of its person-days, because a
+            // starving man was left with nothing but his own empty pack.
+            | Strategy::GatherWildFood
             | Strategy::ScavengeWhatIsLyingAbout
             | Strategy::UseOwnedShelter
             | Strategy::UseHouseholdShelter
@@ -160,7 +168,7 @@ impl Strategy {
             Strategy::FetchFromKnownSource
             | Strategy::AskOrFollowAnotherToWater
             | Strategy::ExploitRainCatchment
-            | Strategy::GatherWildFood
+            | Strategy::WalkTheTrapline
             | Strategy::FishLocalWaters
             | Strategy::HuntLocalAnimals
             | Strategy::TradeForFood
@@ -187,6 +195,7 @@ impl Strategy {
             | Strategy::EatStoredFood
             | Strategy::GatherWildFood
             | Strategy::ScavengeWhatIsLyingAbout
+            | Strategy::WalkTheTrapline
             | Strategy::FishLocalWaters
             | Strategy::HuntLocalAnimals
             | Strategy::TradeForFood
@@ -250,10 +259,22 @@ impl Strategy {
                 Strategy::DigOrRepairWell,
                 Strategy::RelocateTowardWater,
             ],
+            // The order is the one the old arm was measured into, not a
+            // tidier one. **The store sits behind the ordinary food branch**,
+            // and that placement was measured both ways: in front, the store
+            // is drawn on five times as often and the rot in the pits halves -
+            // and it costs a fifth of all the food anybody eats and six of the
+            // people in a settlement, because a meal out of a hole costs two
+            // turns where a berry costs one, and because everything taken out
+            // was put back in by somebody a day earlier. See ISSUES_FOUND #43.
+            //
+            // Writing it second here, which is what I did first, cost the
+            // month-nine population 0.4 and 0.7 of a body across two blocks.
             DriveType::Hunger => &[
                 Strategy::EatCarriedFood,
-                Strategy::EatStoredFood,
                 Strategy::GatherWildFood,
+                Strategy::WalkTheTrapline,
+                Strategy::EatStoredFood,
                 Strategy::ScavengeWhatIsLyingAbout,
                 Strategy::FishLocalWaters,
                 Strategy::HuntLocalAnimals,
@@ -386,21 +407,20 @@ impl crate::analytics::Simulation {
     /// And how hard it has to press before the long work is set aside too.
     pub(in crate::analytics) const WHEN_A_SEASON_IS_TOO_FAR_OFF: f32 = 0.3;
 
-    /// Which way this agent answers this need, this turn.
+    /// Every way that is open to this agent now, dearest first.
     ///
-    /// Every way that can be reached, is open, and is worth taking on this
-    /// horizon is costed, and the best score wins. `None` when the drive has no
-    /// ways declared yet, or when none of them can be taken - and the drive's
-    /// own arm answers as it always did.
-    pub(in crate::analytics) fn the_way_to_answer(
+    /// Reachable, on a horizon he can afford, preconditions met, and costed.
+    /// The list rather than the winner, because three different rules want to
+    /// pick out of it - see `the_way_to_answer`.
+    pub(in crate::analytics) fn the_ways_open(
         &self,
         need: DriveType,
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
-    ) -> Option<TheWayItWasDone> {
+    ) -> Vec<(Strategy, Action, Utility)> {
         let ways = Strategy::all_for(need);
         if ways.is_empty() {
-            return None;
+            return Vec::new();
         }
 
         let pressing = agent.how_hard_it_presses(need);
@@ -412,25 +432,78 @@ impl crate::analytics::Simulation {
             Horizon::LongTerm
         };
 
-        let mut open: Vec<(Strategy, Action, Utility)> = ways
-            .iter()
-            .filter(|way| matches!(way.reach(), Reach::Now))
-            .filter(|way| way.horizon() <= as_far_ahead_as_he_can_afford)
-            .filter_map(|way| {
-                self.can_this_way_be_taken(*way, agent, agent_position)
-                    .map(|doing| {
-                        let worth = self.what_this_way_is_worth(*way, need, agent, &doing);
-                        (*way, doing, worth)
-                    })
-            })
-            .collect();
+        // **The horizon is a preference, not a prohibition, and getting that
+        // wrong cost three quarters of everything.** Built as a hard filter it
+        // could empty the list: a starving man with an empty pack and no store
+        // had no immediate way of eating, so hunger answered nothing at all and
+        // he stood beside a berry bush until he died. Measured, 32 worlds:
+        // person-days 105,429 to 24,846, population at month three 11.0 to 1.5,
+        // every world emptied.
+        //
+        // "A man dying of thirst does not dig a well" is a thing to say about a
+        // man who has water to drink. With nothing nearer, digging is what
+        // there is. So the near horizon is tried first and the reach widens
+        // until something is open.
+        let mut open = Vec::new();
+        for horizon in [Horizon::Immediate, Horizon::ShortTerm, Horizon::LongTerm] {
+            if horizon > as_far_ahead_as_he_can_afford && !open.is_empty() {
+                break;
+            }
+            open = ways
+                .iter()
+                .filter(|way| matches!(way.reach(), Reach::Now))
+                .filter(|way| way.horizon() <= horizon)
+                .filter_map(|way| {
+                    self.can_this_way_be_taken(*way, agent, agent_position)
+                        .map(|doing| {
+                            let worth = self.what_this_way_is_worth(*way, need, agent, &doing);
+                            (*way, doing, worth)
+                        })
+                })
+                .collect();
 
-        if open.is_empty() {
-            return None;
+            if !open.is_empty() && horizon >= as_far_ahead_as_he_can_afford {
+                break;
+            }
         }
 
         // Best score first. `sort_by` is stable, so the written order breaks
         // ties - which is what decides between two ways nothing can tell apart.
+        //
+        // **What the sort is worth was measured, and the answer is: nothing
+        // either way.** Ranking against taking the ways in written order, two
+        // blocks of 32 worlds over two years, against the hand-ordered ladder
+        // this replaced:
+        //
+        // |                | person-days       | emptied | month nine |
+        // |----------------|-------------------|---------|------------|
+        // | the old arm    | 105,429 / 106,431 | 28 / 28 | 8.2 / 8.5  |
+        // | ranked         | 105,746 / 103,600 | 25 / 27 | 7.8 / 7.8  |
+        // | written order  | 108,396 / 102,780 | 24 / 28 | 8.2 / 7.6  |
+        //
+        // Written order won the first block and lost the second by as much. Over
+        // all 64 worlds the two come to 209,346 and 211,176 person-days, which
+        // is a spread of under one per cent on a measure whose block-to-block
+        // noise is about ten. So the sort is kept, because the specification
+        // asks for the ways to be priced and chosen on the price, and because
+        // nothing measured argues against it.
+        //
+        // It is kept knowing what it currently does, which is less than it
+        // looks. Within one need every way relieves the same need by the same
+        // amount, so `relief` is common to all of them and cancels; what is
+        // left to tell two ways apart is the cost spread, and the whole spread
+        // from reaching into your own pack to going hunting is about a fifth of
+        // a point. The uncertainty term is `relief * (1 - confidence)` and runs
+        // to a full one. **The price of everything the ways differ in is a
+        // fifth of the price of the one thing they do not**, so this sort is
+        // very nearly a sort on `Lessons`' confidence with the walk and the
+        // work as rounding error. Dropping the doubt term and ranking on cost
+        // alone was measured too - 107,982 / 102,270 - and is the same nothing.
+        //
+        // Making the price mean something is denominating a walk and a doubt in
+        // one currency, and that is its own piece of work with its own
+        // measurement. `a_doubt_outweighs_every_cost_put_together` holds the
+        // arithmetic still until it is done.
         open.sort_by(|(_, _, left), (_, _, right)| {
             right
                 .score()
@@ -438,8 +511,96 @@ impl crate::analytics::Simulation {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        let (by, doing, worth) = open.swap_remove(0);
-        Some(TheWayItWasDone { doing, by, worth })
+        open
+    }
+
+    /// Which way this agent answers this need, this turn.
+    ///
+    /// Four rules over the open ways, in this order, and each one is here
+    /// because something was measured:
+    ///
+    /// 1. **Anything already in his hand.** A search is for finding out whether
+    ///    the walk you keep taking is worth taking; the supper in your own pack
+    ///    is not a hypothesis. Without this a frightened man with food on him
+    ///    walked past it - see
+    ///    `fear_of_running_short_comes_out_as_answering_the_need`.
+    /// 2. **The plan**, where there is one for this need. A learned run is held
+    ///    across turns, so it can carry an agent through a step that is worth
+    ///    nothing on its own - walking to the store buys nothing until you take
+    ///    something out of it. See #187.
+    /// 3. **The run**, where one is worn deep enough. This is the reader for
+    ///    `Element::Then` and the whole use of keeping runs. See #188.
+    /// 4. **Utility**, and a share of turns on the next one down.
+    ///
+    /// The first three used to live inside the hunger arm and nowhere else,
+    /// which meant thirst and shelter had no way of holding a plan or following
+    /// a run. They are not about hunger; they are about choosing among things
+    /// you could do, which is what this layer is. What changed when they moved
+    /// is that they now pick out of a list ranked by cost rather than one
+    /// ranked by where a line sits in a file.
+    ///
+    /// `None` when the drive has no ways declared, or none of them can be
+    /// taken - and the drive's own arm answers as it always did.
+    pub(in crate::analytics) fn the_way_to_answer(
+        &self,
+        need: DriveType,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<TheWayItWasDone> {
+        let mut open = self.the_ways_open(need, agent, agent_position);
+        if open.is_empty() {
+            return None;
+        }
+
+        let take = |open: &mut Vec<(Strategy, Action, Utility)>, at: usize| {
+            let (by, doing, worth) = open.swap_remove(at);
+            Some(TheWayItWasDone { doing, by, worth })
+        };
+
+        // 1. What is already in his hand.
+        if let Some(at) = open
+            .iter()
+            .position(|(_, doing, _)| Self::is_it_already_in_his_hand(doing))
+        {
+            return take(&mut open, at);
+        }
+
+        // 2. The plan, where one is running for this need.
+        if agent.is_the_plan_for(need) && agent.should_execute_plan() {
+            if let Some(step) = agent.what_the_plan_wants_next() {
+                if let Some(at) = open
+                    .iter()
+                    .position(|(_, doing, _)| Self::is_that_the_verb(doing, step))
+                {
+                    return take(&mut open, at);
+                }
+            }
+        }
+
+        // 3. What he has found usually comes next after what he has just done.
+        if let Some(next) = agent.what_usually_comes_next(need) {
+            if let Some(at) = open
+                .iter()
+                .position(|(_, doing, _)| Self::is_that_the_verb(doing, next))
+            {
+                return take(&mut open, at);
+            }
+            // Nothing the run names is open now, so he falls back to the best
+            // of what is - not to the tail. The extra ways were costed to give
+            // the run a choice, not to change what he does when it has none.
+            return take(&mut open, 0);
+        }
+
+        // 4. The best of them, and a share of turns on the next one down.
+        //
+        // In the hunger arm this was a *truncation* - gather only as many
+        // candidates as you mean to consider - which worked because the list
+        // was in a fixed order. Ranked by cost there is nothing to truncate, so
+        // the same rule reads as taking the second best instead of the best,
+        // which is what it always meant.
+        let past_the_habit = Self::how_far_down_the_list_to_look(agent, need);
+        let taken = past_the_habit.min(open.len() - 1);
+        take(&mut open, taken)
     }
 
     /// What this way is worth to this agent, here, now.
@@ -502,6 +663,11 @@ impl crate::analytics::Simulation {
             }
             Strategy::GatherWildFood | Strategy::ScavengeWhatIsLyingAbout => {
                 worth.effort += 2.0;
+            }
+            // The round is a walk with several stops on it, and it is charged
+            // for as one - the turns come from the `Move` above.
+            Strategy::WalkTheTrapline => {
+                worth.effort += 3.0;
             }
             Strategy::FetchFromKnownSource => {
                 worth.effort += 2.0;
@@ -577,12 +743,27 @@ impl crate::analytics::Simulation {
             // ---- hunger -----------------------------------------------
             Strategy::EatCarriedFood => self.a_catch_at_my_feet(agent, agent_position),
             Strategy::EatStoredFood => self.something_out_of_the_store(agent, agent_position),
-            Strategy::GatherWildFood => self.food_action(agent, agent_position, false),
+            // Whether he is desperate is a fact about the man, so it is asked
+            // here rather than passed in from four levels up.
+            Strategy::GatherWildFood => {
+                let starving = agent.state.is_starving() || agent.nutrition.is_starving();
+                self.food_action(agent, agent_position, starving)
+            }
+            Strategy::WalkTheTrapline => self.going_round_is_due(agent, agent_position),
             Strategy::ScavengeWhatIsLyingAbout => {
                 self.walking_to_a_catch(agent, agent_position)
             }
             Strategy::FishLocalWaters => self.fishing_action(agent, agent_position),
             Strategy::HuntLocalAnimals => self.hunting_action(agent, agent_position),
+            // **Never once fires.** Dropping this arm entirely and running 32
+            // worlds for two years gave a byte-identical result - the same
+            // person-days, the same worlds emptied on the same days - so
+            // `somebody_to_trade_with` never answers for a hungry man in a live
+            // settlement. It is left here rather than marked `NotYet`, because
+            // the machinery is all present and something upstream of it is not;
+            // finding out what is the work, and a way that is named and silent
+            // is a thing somebody can go and count. Compare #226, where theft
+            // sits at the tail of a chain almost nobody reaches.
             Strategy::TradeForFood => self
                 .somebody_to_trade_with(agent, agent_position)
                 .map(|with| Action::Trade { with }),

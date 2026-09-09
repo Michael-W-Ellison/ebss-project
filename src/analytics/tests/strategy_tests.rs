@@ -1,10 +1,10 @@
 // src/analytics/tests/strategy_tests.rs
-//! Layer 3: the ways of answering a drive, named and ranked.
+//! Layer 3: the ways of answering a drive, named and priced.
 //!
-//! See `SATISFACTION.md`. What is asserted here is the first step: the ways
-//! exist, they are told apart, they are learnable, and the written order still
-//! decides for a body that has learned nothing - which is what makes this step
-//! behaviour-neutral and so measurable on its own.
+//! See `SATISFACTION.md`. What is asserted here is that the ways exist, that
+//! they are told apart, that they are learnable, and that they are priced -
+//! and, in `a_doubt_outweighs_every_cost_put_together`, how little of that
+//! price the sort is currently reading.
 
 use crate::agents::patterns::{Element, Patterns};
 use crate::agents::{AgentConfig, Population};
@@ -78,12 +78,10 @@ fn a_drive_with_no_ways_yet_answers_as_it_always_did() {
         "no ways means no answer from this layer, and the old ladder runs"
     );
 
-    // Hunger's ways *are* declared, and its arm is still deliberately not
-    // wired to them - the arm carries the plan and composition readers that
-    // #188 to #190 measured into it. Declared and not yet wired is a state
-    // worth asserting, so that wiring it is a decision somebody makes rather
-    // than something that happens by accident.
-    assert!(!Strategy::all_for(DriveType::Hunger).is_empty());
+    // And the three drives that are wired have ways.
+    for need in [DriveType::Thirst, DriveType::Hunger, DriveType::Shelter] {
+        assert!(!Strategy::all_for(need).is_empty(), "{need:?}");
+    }
 }
 
 /// A way whose preconditions are unmet is not a candidate.
@@ -295,4 +293,177 @@ fn no_relief_is_large_enough_to_buy_a_well_when_the_need_is_now() {
             );
         }
     }
+}
+
+// --- what came over with hunger -------------------------------------------
+
+/// The plan and the run decide over the top of the costs, not under them.
+///
+/// These two readers used to live inside the hunger arm and nowhere else,
+/// which meant thirst and shelter could neither hold a plan nor follow a run.
+/// They are not about hunger - they are about choosing among things you could
+/// do - so they came over with it, and the order they are applied in is the
+/// order they were applied in before: what is in his hand, then the plan, then
+/// the run, then the cost.
+#[test]
+fn the_plan_and_the_run_are_asked_before_the_costs_are() {
+    // Asserted on the source rather than by arranging a world with a live
+    // plan, a worn run and three open ways at once - which needs half a
+    // settlement's worth of fixture and asserts the fixture as much as the
+    // rule. What matters is that the four rules are in this order, and that is
+    // a fact about one function.
+    let source = include_str!("../wanting/strategy.rs");
+    let where_it_is = |what: &str| {
+        source
+            .find(what)
+            .unwrap_or_else(|| panic!("{what} is not in the chooser any more"))
+    };
+
+    let in_hand = where_it_is("is_it_already_in_his_hand");
+    let the_plan = where_it_is("what_the_plan_wants_next");
+    let the_run = where_it_is("what_usually_comes_next");
+    let the_cost = where_it_is("how_far_down_the_list_to_look");
+
+    assert!(
+        in_hand < the_plan && the_plan < the_run && the_run < the_cost,
+        "the four rules are out of order: {in_hand} {the_plan} {the_run} {the_cost}"
+    );
+}
+
+/// And every drive that has ways now gets them, not only hunger.
+#[test]
+fn thirst_and_shelter_can_hold_a_plan_too() {
+    // The readers are asked for whatever need is being answered, so this is a
+    // question about the signature rather than about a world: `the_way_to_answer`
+    // takes the need and passes it to both readers.
+    let source = include_str!("../wanting/strategy.rs");
+    assert!(
+        source.contains("agent.is_the_plan_for(need)"),
+        "the plan is asked about the need being answered, whichever it is"
+    );
+    assert!(
+        source.contains("agent.what_usually_comes_next(need)"),
+        "and so is the run"
+    );
+}
+
+/// Hunger's ways cover every rung its old arm had.
+///
+/// The arm is gone; if a rung did not come over with it, that is a way of
+/// answering hunger this world quietly lost.
+#[test]
+fn every_rung_of_the_old_hunger_arm_came_over() {
+    let ways: Vec<&str> = Strategy::all_for(DriveType::Hunger)
+        .iter()
+        .map(|way| way.called())
+        .collect();
+
+    // One for each rung the arm used to try, in its own words: what is at his
+    // feet, the ordinary food branch, the round if it is due, the store, the
+    // walk out to a catch, the water, and the animal.
+    for rung in [
+        "eat-carried",
+        "gather-wild",
+        "walk-the-line",
+        "eat-stored",
+        "scavenge",
+        "fish",
+        "hunt",
+    ] {
+        assert!(ways.contains(&rung), "{rung} did not come over");
+    }
+}
+
+/// The horizon is a preference, not a prohibition.
+///
+/// **This is the one that cost three quarters of everything.** Built as a hard
+/// filter, the gate could empty the candidate list: a starving man with an
+/// empty pack and no store had no *immediate* way of eating, so hunger answered
+/// nothing at all and he stood beside a berry bush until he died. Measured over
+/// 32 worlds: person-days 105,429 to 24,846, population at month three 11.0 to
+/// 1.5, every world emptied.
+#[test]
+fn a_need_that_will_not_wait_still_gets_an_answer_when_nothing_is_immediate() {
+    let simulation = one_person();
+    let agent = &simulation.population.agents[0];
+
+    // Whatever the world is like, a drive with reachable ways answers with
+    // *something*. The list is allowed to be short; it is not allowed to be
+    // empty while a way is open at any horizon.
+    for need in [DriveType::Thirst, DriveType::Hunger, DriveType::Shelter] {
+        let anything_open = Strategy::all_for(need).iter().any(|way| {
+            matches!(way.reach(), crate::analytics::wanting::strategy::Reach::Now)
+                && simulation
+                    .can_this_way_be_taken(*way, agent, agent.state.position)
+                    .is_some()
+        });
+
+        if anything_open {
+            assert!(
+                simulation
+                    .the_way_to_answer(need, agent, agent.state.position)
+                    .is_some(),
+                "{need:?} had a way open and the gate swallowed it"
+            );
+        }
+    }
+}
+
+/// And gathering answers hunger now, because in this world you eat what you
+/// pick.
+#[test]
+fn gathering_is_how_a_hungry_man_eats_not_how_he_prepares() {
+    use crate::analytics::wanting::strategy::Horizon;
+
+    assert_eq!(Strategy::GatherWildFood.horizon(), Horizon::Immediate);
+    assert_eq!(Strategy::EatCarriedFood.horizon(), Horizon::Immediate);
+    // A hunt is turns of work before anything is eaten, so it is not.
+    assert_eq!(Strategy::HuntLocalAnimals.horizon(), Horizon::ShortTerm);
+}
+
+/// **The price of everything the ways differ in is a fifth of the price of the
+/// one thing they do not.**
+///
+/// This is the arithmetic behind what the sort in `the_ways_open` actually
+/// reads. Within one need every way relieves the same need by the same amount,
+/// so `relief` is common to all of them and cancels; what is left to tell two
+/// ways apart is their costs. The whole cost spread between reaching into your
+/// own pack and going hunting is about a fifth of a point, and the uncertainty
+/// term - `relief * (1 - confidence)` - runs to a full one. So ranking by score
+/// is very nearly ranking by how sure the agent is, with the walk and the work
+/// as rounding error.
+///
+/// It measures as neither better nor worse than taking the ways in the order
+/// somebody wrote - 209,346 person-days against 211,176 over 64 worlds, which
+/// is under a per cent on a measure that swings ten - so the sort stays, and
+/// this test holds the arithmetic still until a walk and a doubt are
+/// denominated in one currency.
+#[test]
+fn a_doubt_outweighs_every_cost_put_together() {
+    use crate::analytics::wanting::strategy::Utility;
+
+    let pressing = 1.0;
+
+    // The dearest way there is: a hunt, three squares off, with a worn spear.
+    let mut dearest = Utility::a_sure_thing(pressing);
+    dearest.turns += 3.0;
+    dearest.effort += 12.0;
+    dearest.wear += 1.0;
+
+    // The cheapest: your own pack, certain.
+    let cheapest = Utility::a_sure_thing(pressing);
+
+    let the_whole_cost_spread = cheapest.score() - dearest.score();
+
+    // And the same cheapest way, half believed in.
+    let mut half_believed = Utility::a_sure_thing(pressing);
+    half_believed.confidence = 0.5;
+    let what_a_doubt_costs = cheapest.score() - half_believed.score();
+
+    assert!(
+        what_a_doubt_costs > the_whole_cost_spread * 2.0,
+        "a half-doubt costs {what_a_doubt_costs}, the whole spread from pack to \
+         hunt costs {the_whole_cost_spread} - if that is no longer true the sort \
+         can come back, and be measured again"
+    );
 }

@@ -106,6 +106,51 @@ Each term comes from the thing in the model that already knows it - dread from
 the trails, confidence from the lessons, turns from the distance actually being
 walked - rather than from a table of guesses.
 
+#### What the price is currently worth, which is less than it looks
+
+All three drives now choose through this layer, hunger last and hardest: its
+arm was the longest in the model and carried the in-hand pre-empt, the plan
+reader and the composition reader, none of which were about hunger. They went
+with it, so thirst and shelter have them too.
+
+Ranking on the price was then measured against simply taking the ways in the
+order they are written, two blocks of 32 worlds over two years, against the
+hand-ordered ladder the layer replaced:
+
+|                   | person-days       | emptied | month nine |
+|-------------------|-------------------|---------|------------|
+| the old ladder    | 105,429 / 106,431 | 28 / 28 | 8.2 / 8.5  |
+| ranked by price   | 105,746 / 103,600 | 25 / 27 | 7.8 / 7.8  |
+| in written order  | 108,396 / 102,780 | 24 / 28 | 8.2 / 7.6  |
+| price, no doubt   | 107,982 / 102,270 | 26 / 29 | 8.2 / 7.6  |
+
+Written order won the first block and lost the second by as much. Over all 64
+worlds the four come to 211,860, 209,346, 211,176 and 210,252 person-days: a
+spread of about one per cent on a measure whose block-to-block noise is ten. So
+**the price is not yet deciding anything**, and the reason is the scaling
+rather than the shape.
+
+Within one need every way relieves the same need by the same amount, so
+`relief` is common to all of them and cancels. What is left to tell two ways
+apart is the cost spread, and the whole spread from reaching into your own pack
+to going hunting is about a fifth of a point. Uncertainty is
+`relief * (1 - confidence)` and runs to a full one. **The price of everything
+the ways differ in is a fifth of the price of the one thing they do not**, so
+the sort is very nearly a sort on `Lessons`' confidence with the walk and the
+work as rounding error.
+
+Denominating a walk and a doubt in one currency is therefore the next piece of
+work on this layer, and it is the same complaint #193 makes about errands. The
+sort stays meanwhile, because the specification asks for the ways to be priced
+and chosen on the price and because nothing measured argues against it;
+`a_doubt_outweighs_every_cost_put_together` holds the arithmetic still until it
+is done.
+
+One way is named, reachable and silent: **`TradeForFood` has never once
+fired.** Removing the arm entirely gave a byte-identical 32 worlds - same
+person-days, same worlds emptied on the same days - so `somebody_to_trade_with`
+never answers a hungry man in a live settlement. Compare #226.
+
 ### Horizon
 
 Immediate, short-term, long-term. **A man dying of thirst does not dig a well,
