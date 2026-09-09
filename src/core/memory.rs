@@ -429,12 +429,39 @@ impl Memory {
         // Prune weak memories
         self.spatial_memories.retain(|m| m.confidence > self.config.forget_threshold);
 
-        // Enforce max memory limit if set
+        // Enforce max memory limit if set.
+        //
+        // **What goes off a full shelf is decided by what a place is worth,
+        // not only by how lately it was seen.** This sorted on confidence
+        // alone, so a berry bush glanced at this morning outranked the pit a
+        // man dug in the autumn and filled with his winter food -
+        // `how_much_this_matters` set how fast each *fades* and had no say in
+        // who was evicted. That is the table-with-half-its-readers fault this
+        // project keeps finding, at the call site that most needed it.
+        //
+        // It does not bind today and this changes nothing measurable: the
+        // store holds only food, water, pits and roofs, and never comes near a
+        // thousand. It was found by filling it - teaching the sight pass to
+        // notice stone and timber as well put every tree in view in
+        // competition for the same slots - and it is fixed here rather than
+        // left for whoever fills it next.
         if let Some(max) = self.config.max_memories {
             if self.spatial_memories.len() > max {
-                // Sort by confidence and keep the strongest
                 self.spatial_memories.sort_by(|a, b| {
-                    b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal)
+                    let worth = |m: &SpatialMemory| {
+                        m.memory_type.how_much_this_matters().decay_multiplier()
+                    };
+
+                    // Lower multiplier is a place that matters more, so it
+                    // sorts first; confidence breaks the tie within a band.
+                    worth(a)
+                        .partial_cmp(&worth(b))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| {
+                            b.confidence
+                                .partial_cmp(&a.confidence)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        })
                 });
                 self.spatial_memories.truncate(max);
             }

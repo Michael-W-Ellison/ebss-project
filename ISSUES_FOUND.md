@@ -13833,3 +13833,56 @@ The other thing still missing is the same one #192 ended on: `Element::By` is
 not written at the end of a turn, so nothing learns which way paid. The costs
 are computed; the confidence term reads `Lessons`, which *is* learned, so the
 formula is not entirely blind - but the way itself has no trail yet.
+
+---
+
+### 194. Map memory has no specificity, and two of its seven kinds of place have never been written
+
+A specification for map memory - generic against specific, retention by how
+the place was learned, graded decay from a named thing to a vague area - was
+surveyed against what the model has, and most of it is genuinely absent. What
+is there and well-formed is the confidence decay with importance bands per
+kind of place, `value` for how much is there, and refresh on re-sighting.
+
+The largest absence is underneath the specification rather than in it. The
+sight pass filed food and water and had `return None` for everything else, so
+`SpatialMemoryType::Resource` and `SpatialMemoryType::Tool` have sat in the
+memory since memories were written with **nothing to write them and nothing to
+read them**. Nobody in this model has ever remembered where clay, flint, stone,
+reeds or good timber were. Every making wants a material, and `Action::Gather`
+takes what is under the agent's feet - so "he is short of wood, let him gather
+wood" has always meant "let him scratch at the ground where he stands".
+
+**Building it was measured five times and it does not pay yet.** A memory
+gained a name written only by an agent who knows what the stuff is for
+(`is_a_familiar_thing` plus `knows_how_to`), the name faded before the place
+did, and the sight pass filed what it saw. Against 108,344 / 22 emptied / 12
+out of the first winter and 106,989 / 25 / 10:
+
+- **Fetching what you remember, from the roof path**: 107,116 / 26 / 9 and
+  104,717 / 23 / 11, and over 8 worlds in a year **finished burrows 22 to 5 and
+  the larder 30,745 items to 12,340**. A tent wants eight wood and four hides;
+  a burrow wants nothing at all, and twenty paces spent on tent timber is
+  twenty paces not spent digging the hole the store goes under.
+- **Fetching as a strict fallback on the making path**: worse still, 100,245
+  and 101,532. `make_what_this_wants` wraps every action, so a fetch-before-do
+  rule reaches the roof again by another door. **In this model the thing worth
+  doing is nearly always the thing under your feet, and a walk displaces it.**
+- **The record alone, no fetching**: roofs and larder recover exactly - 22
+  finished, 162 pits, 30,479 items - and the two-year measure settles at
+  105,980 / 25 / 9 and 106,245 / 28 / 9. A consistent small cost: person-days
+  215,333 to 212,225, worlds emptied 47 to 53, first winters survived 22 to 18.
+- **Filing only what a man can name** changed nothing at all, because nearly
+  everything in these worlds is nameable by a stone-age agent.
+
+So the record costs about one and a half per cent and buys nothing, because
+the only reader that used the name was refuted. It is substrate for #171-#173 -
+upgrade, innovation and discovery all want to know where a material is - and it
+should go in when one of those is built to read it, not before. The work is
+kept as a patch rather than committed.
+
+One thing did come out of it and is fixed here: `Memory::batch_decay_and_prune`
+evicted from a full shelf **by confidence alone**, so a bush seen this morning
+outranked a winter store. The cap is a thousand and the store never comes near
+it today, so this changes nothing measurable - it was found by filling the
+store and it is fixed rather than left for whoever fills it next.
