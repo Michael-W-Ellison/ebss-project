@@ -50,7 +50,17 @@ The distinct ways of reaching a goal. For hydration:
 5. trade for water
 6. follow an agent who knows where water is
 
-**In the model: nothing.** This is the absent layer.
+**In the model: `analytics::wanting::strategy`.** Built. Thirst, Hunger and
+Shelter have their ways declared - twenty-four of them - each with a name, a
+horizon, a reachability, preconditions, and a cost.
+
+Thirst and Shelter choose through it. **Hunger declares its ways and its arm is
+deliberately not wired to them**: that arm carries the plan reader, the
+composition reader and the search that #188 to #190 measured into it, and
+putting a fresh ranker in front of all that would throw them away to buy an
+ordering. Moving hunger over means moving those over with it.
+
+What was there before, and what it cost:
 
 The ranking exists - but as **seventeen hand-written `.or_else()` chains** in
 `analytics::wanting`, where the order is source order and the source keeps
@@ -72,6 +82,46 @@ test is `carrying_water || water_in_reach`, so *drink what you carry* and
 are not the same strategy: one runs out and has to be refilled, the other does
 not and cannot be carried. Nothing in the model can tell them apart, so nothing
 can learn the difference between them.
+
+---
+
+### Utility
+
+```text
+utility = relief - time - effort - danger - wear - uncertainty
+```
+
+**All six terms in one currency: drive demand.** A formula that subtracts turns
+from demand and energy from both is arithmetic on three different things, so
+every cost is converted before it is taken off. That the currency is drive
+demand is not arbitrary - it is what the pattern layer is already denominated
+in, and #188 is a long note about what happens when one part of this model
+quietly starts keeping a second set of books.
+
+Uncertainty discounts the relief rather than being subtracted beside it: a
+half-believed mouthful is worth half a mouthful. Priced flat, a big enough
+relief would swamp any doubt at all.
+
+Each term comes from the thing in the model that already knows it - dread from
+the trails, confidence from the lessons, turns from the distance actually being
+walked - rather than from a table of guesses.
+
+### Horizon
+
+Immediate, short-term, long-term. **A man dying of thirst does not dig a well,
+however good a well is** - and that is not the well being worth less, since
+over a season it is worth far more than a mouthful. So the horizon is a *gate*
+applied before utility decides within it, not another term subtracted from the
+score. A cost that is subtracted can always be outweighed by a big enough
+number; this must not be.
+
+### Reach
+
+Seven of the twenty-four ways are declared and cannot fire: no rain catchment,
+no water table to sink a well into, no settlement object to ask for a share, no
+owner on a shelter, no condition to mend. Each says so. A named gap is one
+somebody can count and go and fill; an unnamed one is a gap nobody knows is
+there.
 
 ---
 

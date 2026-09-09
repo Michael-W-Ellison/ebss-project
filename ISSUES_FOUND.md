@@ -13739,3 +13739,97 @@ rankable. Nothing ranks them yet. The wire is the next piece of work and it is a
 plumbing decision - thread the chosen way out through four signatures, or give
 the two ways that share a verb two different actions, which is the satisfier-
 and-enabler distinction arriving through the front door.
+
+### 193. Explicit strategies, a price on each, and a horizon that is not a price
+
+#192 put one drive through a strategy layer with three ways in it and no
+ranking. This is the rest: every way declared for the three drives the
+specification names, a cost on each, and a rule about when a way is worth
+taking at all that is deliberately *not* a cost.
+
+#### Twenty-four ways, and seven of them cannot fire
+
+Thirst, Hunger and Shelter now declare their ways in full - including the ones
+this world has no machinery for. `Reach::NotYet` carries the reason, and there
+are seven:
+
+| way | what is missing |
+|---|---|
+| follow somebody to water | knowing where a man is going is not askable |
+| catch rain | rain falls; nothing catches it |
+| dig a well | the water table is not modelled |
+| move camp to water | moving house never fires - #237 |
+| steal food | theft sits at the tail of a chain almost nobody reaches - #226 |
+| ask for a share | there is no settlement object to ask - #11 |
+| mend a shelter | a shelter has no condition to mend |
+
+Declaring them costs a match arm and buys a countable gap. A way that is named
+and unreachable is one somebody can go and fill; a way that was never named is
+a gap nobody knows is there. Three of the seven already have issue numbers
+against them, which is the point.
+
+#### The formula, in one currency
+
+```text
+utility = relief - time - effort - danger - wear - uncertainty
+```
+
+Written as the specification writes it, and **every term converted into drive
+demand before it is subtracted**. Subtracting turns from demand and energy from
+both is arithmetic on three different things. The currency is drive demand
+because that is what the pattern layer is already denominated in - #190 is a
+long note about what happens when one part of this model quietly starts keeping
+a second set of books.
+
+Each term comes from whatever already knows it rather than a table of guesses:
+danger from `Patterns::what_i_dread`, confidence from `Lessons`, turns from the
+distance actually being walked - which is #193's complaint, that an errand
+costs the walk as well as the work and nothing was charging for the walk.
+
+**Uncertainty discounts the relief rather than being subtracted beside it.** A
+half-believed mouthful is worth half a mouthful. Priced flat, a large enough
+relief would swamp any doubt at all, and the thing doubt should do is make a
+big prize look smaller, not lose to it.
+
+#### The horizon is a gate, not a term
+
+Immediate, short-term, long-term. **A man dying of thirst does not dig a well,
+however good a well is** - and that is not the well being worth less, because
+over a season it is worth far more than a mouthful. So urgency chooses the
+horizon first and utility decides within it. A cost that is subtracted can
+always be outweighed by a big enough number; this must not be, so it is not
+one.
+
+#### Measured: it fires, and it mostly agrees
+
+Two blocks of 32 seeded worlds, two years, against #192:
+
+| | seeds 0-31 | seeds 32-63 |
+|---|---|---|
+| person-days | 105,429 → **105,429** | 106,661 → **106,431** (-0.2%) |
+| worlds emptied | 28 → 28 | 28 → 28 |
+| month-nine population | 8.2 → 8.2 | 8.5 → 8.5 |
+
+One block identical, the other moved a fifth of a per cent. So the scoring does
+fire - a block that changed proves it - and **it almost always picks what the
+hand-written order picked**. That is worth saying plainly rather than dressing
+up: for thirst, reaching into your own pack is one turn with no walk and no
+doubt, which scores highest and was also written first. The ranking has not
+bought anything yet. What it has bought is that the ordering is now a
+consequence of costs somebody can argue with, rather than of where a line sits
+in a file.
+
+Suite unchanged at 10 standing failures, no new ones. Twelve tests.
+
+#### Hunger is declared and deliberately not wired
+
+Its arm carries the plan reader, the composition reader and the search that
+#188 to #190 measured into it. Putting a fresh ranker in front of all that
+would throw them away to buy an ordering that, on the evidence above, is worth
+about a fifth of a per cent. Moving hunger over means moving those over with
+it, and that is its own piece of work and its own measurement.
+
+The other thing still missing is the same one #192 ended on: `Element::By` is
+not written at the end of a turn, so nothing learns which way paid. The costs
+are computed; the confidence term reads `Lessons`, which *is* learned, so the
+formula is not entirely blind - but the way itself has no trail yet.

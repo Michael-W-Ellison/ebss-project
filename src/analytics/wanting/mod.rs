@@ -848,6 +848,14 @@ impl Simulation {
 
             // Eat what is carried, go and get what is not, and failing both
             // stand in a river or go after an animal
+            //
+            // **Hunger's ways are declared in `strategy` and this arm is not
+            // wired to them yet, on purpose.** What is below is not only a
+            // ladder: it carries the plan reader, the composition reader and
+            // the search that #188 to #190 measured into it, and putting a
+            // fresh ranker in front of all that would throw those away to buy
+            // an ordering. Moving hunger over means moving them over with it,
+            // which is its own piece of work and its own measurement.
             DriveType::Hunger => {
                 let starving = agent.state.is_starving() || agent.nutrition.is_starving();
 
@@ -1125,6 +1133,14 @@ impl Simulation {
             // a turn only when the weather is actually doing something.
             DriveType::Shelter => self
                 .clothing_action(agent, agent_position, true)
+                // Then the ways of getting under a roof, costed against each
+                // other - see `analytics::wanting::strategy`. Clothing stays in
+                // front of it: putting a coat on is not one of the ways of
+                // finding shelter, it is the other answer to being cold.
+                .or_else(|| {
+                    self.the_way_to_answer(DriveType::Shelter, agent, agent_position)
+                        .map(|way| way.doing)
+                })
                 .or_else(|| {
                     let worth_going_in = agent.needs_shelter()
                         || agent.body_temperature.is_too_cold()
