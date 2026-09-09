@@ -1408,6 +1408,15 @@ pub struct Agent {
     /// coincidences to be reinforced.
     #[serde(default)]
     pub lately: std::collections::VecDeque<String>,
+    /// The way of answering the need that this turn's action was chosen under.
+    ///
+    /// Set where the strategy is picked and read where the episode is written
+    /// down, which are two different layers a turn apart - see
+    /// `Element::By` and `analytics::wanting::strategy`. `None` for a drive
+    /// whose arm has no strategies yet, and for every action that comes from
+    /// somewhere other than a drive's own answer.
+    #[serde(default)]
+    pub by_what_way: Option<String>,
 
     /// How often this one does the things that have a how-often.
     ///
@@ -1540,6 +1549,7 @@ impl Agent {
             lessons: super::practices::Lessons::new(),
             rhythms: std::collections::BTreeMap::new(),
             lately: std::collections::VecDeque::new(),
+            by_what_way: None,
             hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
@@ -6211,6 +6221,11 @@ impl Agent {
         let family = crate::environment::making::what_making_is_called(verb);
         if family != verb {
             elements.push(Element::Kind(family.to_string()));
+        }
+
+        // And the way this was arrived at, where a drive's arm named one.
+        if let Some(way) = &self.by_what_way {
+            elements.push(Element::By(way.clone()));
         }
 
         elements.push(Element::At(where_it_was));

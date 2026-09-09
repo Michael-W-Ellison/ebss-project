@@ -161,6 +161,25 @@ pub enum Element {
     /// else. `Did` is the record of what a particular act achieves. It stays
     /// particular. See `Kind` for the other half.
     Did(String),
+    /// **The way of answering the need that this doing was taken under.**
+    ///
+    /// A drive has several distinct ways of being answered - drink what you
+    /// carry, drink from the water in front of you, walk to water you
+    /// remember - and which one was taken is a fact about the episode that no
+    /// other element here records. `Did` says what the hands did; two
+    /// strategies can produce the same verb and be quite different bets, so
+    /// `Did("gather")` cannot tell them apart.
+    ///
+    /// Until this existed the ranking of those ways was **source order**:
+    /// seventeen hand-written `.or_else()` chains in `analytics::wanting`,
+    /// whose own comments say what that cost - "the order of a hand-written
+    /// list decided what a whole people ever made", and "nobody ever fermented
+    /// anything, because somebody always had flax". Written down as an
+    /// element, the way is ranked by the same arithmetic that already ranks
+    /// verbs, places and runs, and the ranking is the agent's own.
+    ///
+    /// See `analytics::wanting::strategy`.
+    By(String),
     /// And the family that doing belongs to, where it belongs to one.
     ///
     /// Only the makings have a family: shaping a thing is the one act in this
@@ -230,6 +249,7 @@ impl fmt::Display for Element {
         match self {
             Element::Did(what) => write!(f, "did:{}", what),
             Element::Kind(what) => write!(f, "kind:{}", what),
+            Element::By(what) => write!(f, "by:{}", what),
             Element::On(what) => write!(f, "on:{}", what),
             Element::At((x, y, z)) => write!(f, "at:{},{},{}", x, y, z),
             Element::Toward(bearing) => write!(f, "toward:{}", bearing.as_str()),
@@ -256,6 +276,7 @@ impl TryFrom<String> for Element {
         match kind {
             "did" => Ok(Element::Did(rest.to_string())),
             "kind" => Ok(Element::Kind(rest.to_string())),
+            "by" => Ok(Element::By(rest.to_string())),
             "on" => Ok(Element::On(rest.to_string())),
             "at" => {
                 let mut legs = rest.split(',').map(|leg| leg.parse::<i32>());

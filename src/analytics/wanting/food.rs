@@ -177,6 +177,41 @@ impl Simulation {
         None
     }
 
+    /// Whether there is water within reach that this one would actually drink.
+    ///
+    /// The same question `water_action` asks itself, given a name so that the
+    /// strategy layer asks it too rather than growing a second opinion about
+    /// what counts as a drink. Not the sea unless he is far enough gone to
+    /// stop knowing better, and not a spring that has already given what it
+    /// has this hour.
+    pub(in crate::analytics) fn drinkable_water_within_reach(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> bool {
+        use crate::world::ResourceType;
+
+        let would_drink_the_sea = agent.would_i_drink_the_sea();
+
+        self.nearest_resource_within(agent_position, Self::FORAGE_RADIUS, |resource| {
+            if resource.resource_type != ResourceType::Water {
+                return false;
+            }
+            if resource.what_can_be_taken() == 0 {
+                return false;
+            }
+            if would_drink_the_sea {
+                return true;
+            }
+            !self
+                .world
+                .grid
+                .get_tile(&resource.position)
+                .is_some_and(|tile| tile.terrain.is_the_water_salt())
+        })
+        .is_some()
+    }
+
     /// How a hungry agent gets a meal, if it can.
     ///
     /// `desperate` marks an agent starving badly enough that finding food is

@@ -27,6 +27,7 @@
 //! The move was behaviour-neutral, and proved so: three seeds run six hundred
 //! ticks give byte-identical worlds either side of it.
 
+pub mod strategy;
 pub mod camp;
 pub mod errands;
 pub mod food;
@@ -828,9 +829,22 @@ impl Simulation {
             // Water first of the two, always, because it runs out first - but
             // that is now decided by the clocks in `how_hard_it_presses`
             // rather than written down here
-            DriveType::Thirst => {
-                self.water_action(agent, agent_position, agent.state.is_dehydrated())
-            }
+            // The first drive to go through the strategy layer. Which way a
+            // thirsty man answers it - the skin, the water in front of him, or
+            // a walk to water he knows - is now a thing he can be right or
+            // wrong about and learn from, rather than the order these were
+            // typed in. See `analytics::wanting::strategy` and
+            // `SATISFACTION.md`.
+            //
+            // `water_action` is still the tail: nowhere known to drink, and
+            // striking out blind when it has come to that. Those are not
+            // strategies anybody chooses between, they are what is left.
+            DriveType::Thirst => self
+                .the_way_to_answer(DriveType::Thirst, agent, agent_position)
+                .map(|way| way.doing)
+                .or_else(|| {
+                    self.water_action(agent, agent_position, agent.state.is_dehydrated())
+                }),
 
             // Eat what is carried, go and get what is not, and failing both
             // stand in a river or go after an animal

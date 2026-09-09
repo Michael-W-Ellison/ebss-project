@@ -13655,3 +13655,87 @@ Two things now:
 **This is not a fix.** The flake is real, it was not reproduced in eleven
 attempts, and what is shipped is the thing that will name it the next time it
 happens rather than another half-hour of "none of thirty-two".
+
+### 192. Layer 3: the ways of answering a drive were the order somebody typed
+
+A five-layer specification arrived - drives, goals, strategies, actions,
+capabilities - and the first thing worth recording is how much of it this model
+already has. Four of the five layers exist; three of them under other names,
+one on a different axis. `SATISFACTION.md` holds the whole mapping. In short:
+
+- **Drives** are `DriveType`, sixteen of them, near enough one-to-one.
+- **Goals** are `core::goals` and are the wrong shape - emotions and property,
+  not "obtain potable water" - and #187 already measured the branch carrying
+  them as nearly dead.
+- **Actions** are the `Action` enum and the verb matrix, which is already
+  preconditions-as-data through `Wants`.
+- **Capabilities** are `making::Tool`, which is already a capability table with
+  coefficients - shovel/Mining **1.9**, handaxe/Mining **1.5**, diggingstick/
+  Mining **1.2**, which is `digging_tool 1.0 / 0.7 / 0.3` in another
+  normalisation - but keyed on the **trade** rather than the capability. The
+  two coincide for digging, mining and fishing and come apart for cutting
+  (smeared across three trades), for weapons, and for containers, which are not
+  in the table at all and run through `Wants::AVessel` instead.
+
+**Strategies were the absent layer**, and their absence is what seventeen
+hand-written `.or_else()` chains in `analytics::wanting` are. The ranking was
+always there; it was source order, and the source keeps apologising for it -
+*"the order of a hand-written list decided what a whole people ever made"*,
+*"nobody ever fermented anything, because somebody always had flax"*. Two
+places work around it with the same trick, `self.id.as_u128() % could.len()`, a
+per-agent rotation standing in for a ranking nobody could learn.
+
+And the rungs were not one strategy each. The hydration arm's first test is
+`carrying_water || water_in_reach`, so **drinking out of your own skin and
+drinking from the river in front of you were one rung producing one action**.
+They are not the same bet: a skin runs out and has to be refilled, a river does
+not and cannot be carried away from. `Did("gather")` cannot tell them apart, so
+nothing could ever learn the difference.
+
+#### What is here now
+
+`Element::By` - the way an episode was answered, written down beside `Did`,
+`On`, `At`, `When` and `Then`, and ranked by the same arithmetic that already
+ranks verbs, places and runs. No second learning mechanism.
+
+`analytics::wanting::strategy` - `Strategy`, its written order per drive, and
+one place where a way's **preconditions and its action are the same question**:
+a way that cannot name what to do now has not met its preconditions.
+
+Thirst is the first drive through it, split into the three ways the
+specification's own worked example names - `drink-carried`, `drink-here`,
+`walk-to-water`. `water_action` stays as the tail: nowhere known to drink, and
+striking out blind. Those are not ways anybody chooses between, they are what
+is left. And the question *is there a drink within reach* now has one
+implementation that both the old arm and the new layer ask, rather than two
+that could drift apart.
+
+#### Measured: it changes nothing, on purpose
+
+Two blocks of 32 seeded worlds, two years: person-days **105,429** and
+**106,661**, worlds emptied 28 and 28, month-nine population 8.2 and 8.5 -
+identical to #190 on every figure, both blocks. Suite unchanged at 10 standing
+failures, no new ones. Six new tests.
+
+That is the point of the step. With nothing learned every way is worth zero,
+the sort is stable, and the written order returns exactly what it returned
+before - so the machinery lands without a behaviour change to argue about.
+
+#### And the wire that is not in yet
+
+**`Element::By` is not written at the end of a turn.** The decision layer is
+`&self` on the Simulation and `&Agent` all the way down - four levels between
+`the_way_to_answer` and the place an episode is recorded - so the way chosen
+has no route out to the learning layer.
+
+Exploration is deliberately left out until it does. The obvious next thing is
+the rule the hunger arm already uses, a share of turns on the next way down, so
+the first way that ever worked does not become the only way ever tried again.
+Putting it in now would spend real turns choosing between ways nobody can learn
+about, which is not a search, it is noise.
+
+So the honest state: the ways exist, are told apart, have preconditions, and are
+rankable. Nothing ranks them yet. The wire is the next piece of work and it is a
+plumbing decision - thread the chosen way out through four signatures, or give
+the two ways that share a verb two different actions, which is the satisfier-
+and-enabler distinction arriving through the front door.

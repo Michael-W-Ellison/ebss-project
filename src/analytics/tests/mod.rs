@@ -101,3 +101,4 @@ pub mod cadence_tests;
 pub mod composition_tests;
 pub mod planning_reach_tests;
 pub mod crafting_composition_tests;
+pub mod strategy_tests;
