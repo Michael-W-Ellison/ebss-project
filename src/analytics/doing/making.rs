@@ -171,9 +171,26 @@ impl Simulation {
                 .map(|skill| skill.level)
                 .unwrap_or(0);
 
+            let who = self.population.agents[agent_index].id;
+            going_up.a_hand_on_it(who);
+
             let finished = going_up.add_construction_progress(Self::A_TURN_OF_BUILDING, hand);
             let what = going_up.building_type;
             let how_far = going_up.construction_progress();
+
+            // And a man knows where he worked.
+            //
+            // `SpatialMemoryType::Shelter` has been in the memory since
+            // memories were written and **had no writer at all** - the same
+            // shape of fault as the pit before the sight pass was taught to
+            // notice one, and the reason nobody has ever gone back to a roof
+            // he could not see from where he stood. Written here and where a
+            // site is started, so a camp's job is a thing its people can
+            // remember rather than a thing the world knows.
+            self.population.agents[agent_index].memory.remember_location(
+                crate::core::memory::SpatialMemoryType::Shelter,
+                (here.x, here.y, 0),
+            );
 
             let agent = &mut self.population.agents[agent_index];
             agent.skills.practise(
@@ -249,6 +266,13 @@ impl Simulation {
 
         // Add building to world
         self.world.add_building(building);
+
+        // The man who put the first turn into it knows where it is - see the
+        // note on `SpatialMemoryType::Shelter` below.
+        self.population.agents[agent_index].memory.remember_location(
+            crate::core::memory::SpatialMemoryType::Shelter,
+            (build_pos.x, build_pos.y, 0),
+        );
 
         // Emit building started event for timeline
         #[cfg(feature = "gui")]

@@ -224,8 +224,9 @@ impl Strategy {
                     almost nobody reaches - see ISSUES_FOUND #226")
             }
             Strategy::RequestCommunalAllocation => {
-                Reach::NotYet("there is no settlement object to ask - see \
-                    ISSUES_FOUND #11")
+                Reach::NotYet("there is no settlement to ask: a camp \
+                    is derived from its common ground and its people, and \
+                    has no voice of its own")
             }
             Strategy::ProcessStoredRawFood => {
                 Reach::NotYet("portioning is a making, and is chosen by the \

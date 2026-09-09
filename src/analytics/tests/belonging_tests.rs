@@ -282,7 +282,7 @@ fn every_tile_that_was_cover_is_still_cover_to_somebody() {
 /// `AKinsmans` and not `TheSettlements`. It is still cover - `is_shelter_tile`
 /// says so and `SeekShelter` walks to it - but no *way* names it, so nothing
 /// in the record ever claims he had a right to be there. That is the honest
-/// shape of it until there is a settlement to ask; see ISSUES_FOUND #11.
+/// shape of it until there is a settlement to ask.
 #[test]
 fn a_strangers_roof_is_nobodys_way_in() {
     let mut simulation = two_people();

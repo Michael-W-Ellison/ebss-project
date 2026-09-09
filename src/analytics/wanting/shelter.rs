@@ -268,6 +268,85 @@ impl Simulation {
         }
     }
 
+    /// How far a man will walk to lend a hand to a job already going.
+    ///
+    /// Bounded, and bounded because the walk was measured. Sending somebody
+    /// back to a roof unconditionally cost 98,079 person-days against 99,396
+    /// over 32 seeded worlds - see `digging_in` - so a job the far side of the
+    /// map is not a job, it is a morning gone. This is about a camp, and a
+    /// camp is what you can see the smoke of.
+    pub(in crate::analytics) const HOW_FAR_TO_LEND_A_HAND: i32 = 20;
+
+    /// **The job this camp has going.**
+    ///
+    /// Nobody in this model has ever joined a job somebody else started. The
+    /// only lookup for a half-built roof was "is there one within two paces of
+    /// where I am standing", so a man dug his own burrow beside another man's
+    /// half-dug burrow and neither was ever finished; `workers` has sat on
+    /// `BuildingState::UnderConstruction` since buildings were written with
+    /// nothing to write it, and `SpatialMemoryType::Shelter` has sat in the
+    /// memory with no writer either. Those are the same absence seen from
+    /// three sides: there was no such thing as *our* job.
+    ///
+    /// Three rules, and each is doing something:
+    ///
+    /// 1. **From memory, not from the world.** He goes to a roof he knows
+    ///    about - one he started, one he has worked on. Asking the world would
+    ///    be the omniscience `nearest_full_pit` was taken out for.
+    /// 2. **One he may work on**, by `world::belonging`: his own, his kin's,
+    ///    or the camp's. In practice everything the decision layer can raise
+    ///    is the camp's, because `is_residential` names only the grand houses
+    ///    it cannot build - so this is nearly always yes, and it is here so
+    ///    that it stops being yes the day somebody builds a house.
+    /// 3. **The one furthest along.** This is the whole of the coordination
+    ///    and it is worth being plain about why: a camp that always takes the
+    ///    nearest job finishes nothing, and a camp that always takes the one
+    ///    nearest done finishes one roof, then the next. Nobody agrees to
+    ///    anything and nobody is told what to do - the half-built roof itself
+    ///    is what they coordinate through.
+    pub(in crate::analytics) fn the_job_this_camp_has_going(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        use crate::core::memory::SpatialMemoryType;
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+
+        agent
+            .memory
+            .recall_locations(SpatialMemoryType::Shelter)
+            .into_iter()
+            .filter_map(|remembered| {
+                let there = Position::new(remembered.position.0, remembered.position.1);
+
+                if (there.x - here.x).abs() > Self::HOW_FAR_TO_LEND_A_HAND
+                    || (there.y - here.y).abs() > Self::HOW_FAR_TO_LEND_A_HAND
+                {
+                    return None;
+                }
+
+                let roof = self
+                    .world
+                    .buildings
+                    .iter()
+                    .find(|building| building.position == there)?;
+
+                if roof.is_completed() || !agent.may_i_use(&roof.belongs()).is_mine_to_use() {
+                    return None;
+                }
+
+                // Furthest along first, nearest second. The ordering is the
+                // point; the distance only breaks a tie between two jobs at
+                // the same stage.
+                let how_far_along = (roof.construction_progress() * 1000.0) as i32;
+                Some((there, how_far_along, here.distance_to(&there)))
+            })
+            .max_by_key(|(_, how_far_along, paces)| (*how_far_along, -(*paces as i32)))
+            .map(|(there, _, _)| there)
+    }
+
     /// Digging yourself in, for want of anything to build with.
     ///
     /// Worse than a tent in every way except that it can be done. It wants
@@ -342,6 +421,52 @@ impl Simulation {
             // A roof already standing here is the reason there is no job.
             Some(_) => return None,
             None => {}
+        }
+
+        // **And a job the camp already has going, further off than two paces.**
+        //
+        // This is what was missing: the lookup above sees only the ground a
+        // man is standing on, so two men three paces apart dug two burrows and
+        // finished neither. Measured over eight seeded world-years before
+        // anything could finish a roof at all, forty-five burrows were dug and
+        // forty-five were still going up when the last of the diggers died -
+        // and finishing them one at a time was only half the answer, because
+        // one man alone still starts a second before he has finished the
+        // first.
+        //
+        // Behind the same supper gate as the walk above, and for the same
+        // measured reason: a roof pays over a winter and a winter is no use to
+        // somebody with nothing in for tonight.
+        if let Some(going_up) = self.the_job_this_camp_has_going(agent, agent_position) {
+            let there = (going_up.x, going_up.y, agent_position.2);
+
+            if there == agent_position {
+                let what = self
+                    .world
+                    .buildings
+                    .iter()
+                    .find(|roof| roof.position == going_up)
+                    .map(|roof| Self::what_they_call_this_roof(roof.building_type))
+                    .unwrap_or("burrow");
+
+                return Some(Action::Build {
+                    structure_type: what.to_string(),
+                    position: agent_position,
+                });
+            }
+
+            if agent
+                .state
+                .what_the_larder_says
+                .as_ref()
+                .is_some_and(|larder| {
+                    larder.rung == crate::agents::provision::HowLongTheFoodLasts::NotTheDay
+                })
+            {
+                return None;
+            }
+
+            return Some(Action::Move { target: there });
         }
 
         // Something to dig with. The matrix enforces it before the action

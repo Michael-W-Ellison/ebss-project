@@ -2050,6 +2050,42 @@ impl Population {
                 }
             }
 
+            // And a roof going up, which is how a job becomes *ours*.
+            //
+            // `SpatialMemoryType::Shelter` had a reader and **no writer at
+            // all** - the same shape of fault as the pit above, and with the
+            // same consequence: a man could only ever go back to a roof he
+            // could see from where he stood, so two men three paces apart dug
+            // two burrows and finished neither. Seeing somebody else's
+            // half-built roof is how he comes to know there is a job on.
+            //
+            // Only what is still going up. A finished roof is not a job, and
+            // remembering it as one would have a camp walking to a roof to
+            // work on it for ever. It is forgotten on the turn it is finished,
+            // on the same terms as a pit seen empty.
+            let roofs_in_view: Vec<((i32, i32, i32), bool)> = world
+                .buildings
+                .iter()
+                .filter(|roof| {
+                    let dx = roof.position.x - agent_pos.x;
+                    let dy = roof.position.y - agent_pos.y;
+                    dx * dx + dy * dy <= sight * sight
+                })
+                .map(|roof| ((roof.position.x, roof.position.y, 0), roof.is_completed()))
+                .collect();
+
+            for (where_it_is, finished) in roofs_in_view {
+                if finished {
+                    agent
+                        .memory
+                        .forget_location(SpatialMemoryType::Shelter, where_it_is);
+                } else {
+                    agent
+                        .memory
+                        .remember_location(SpatialMemoryType::Shelter, where_it_is);
+                }
+            }
+
             // Learn skills from discovered buildings, on the tick of finding
             // them and not on the nine after it - see above
             for (pos, building_type) in &agent.exploration_knowledge.known_buildings {

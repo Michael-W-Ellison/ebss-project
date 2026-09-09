@@ -1558,7 +1558,38 @@ impl Simulation {
             crate::agents::InventoryItem::new_with_weight("meat".to_string(), carrying, each);
         catch.food_data = food_data;
         let went_in = agent.inventory.add_item(catch);
-        debug_assert!(went_in, "the room was measured a line ago");
+
+        // And if it still will not go in, it goes back in the snare.
+        //
+        // The room above is measured in *weight*, and weight is not the only
+        // thing `add_item` refuses on: a pack already holding its full number
+        // of kinds of thing turns away a new kind however light it is. So the
+        // line above asserted an invariant it did not have, and the assertion
+        // was right to fire - a man with a full pack of kinds took the catch
+        // out of the snare and it stopped existing, which is exactly the
+        // defect the comment forty lines up says it was fixing, one step
+        // further in and still there. Same answer as no room at all: what
+        // will not fit stays where it was caught.
+        if !went_in {
+            let mut left = took;
+            for snare in self.world.snares.iter_mut() {
+                if left == 0 {
+                    break;
+                }
+                if snare.set_by == agent_id && snare.caught_at.is_none() {
+                    let reach = (snare.at.0 - at.0).abs().max((snare.at.1 - at.1).abs());
+                    if reach <= Self::CLOSE_ENOUGH_TO_A_SNARE {
+                        snare.caught_at = Some(tick_now);
+                        left -= 1;
+                    }
+                }
+            }
+            self.world.animals.small_life.snare_tally.taken -= (took - left) as u64;
+            return ActionResult::failure("No room in the pack for the catch".to_string())
+                .with_energy_cost(Self::WHAT_A_ROUND_COSTS);
+        }
+
+        let agent = &mut self.population.agents[agent_index];
         agent
             .skills
             .practise(crate::agents::SkillType::Hunting, 12, tick_now);

@@ -834,6 +834,32 @@ impl Building {
         }
     }
 
+    /// Somebody has put a turn of work into this.
+    ///
+    /// `workers` has been on `BuildingState::UnderConstruction` since
+    /// buildings were written and **nothing has ever written it** - it was
+    /// initialised empty and read only by the inspectors, so the answer to
+    /// "how many hands are on this job" was always none. It is a set in
+    /// spirit, so a man who works on the same roof for a week counts once.
+    pub fn a_hand_on_it(&mut self, who: uuid::Uuid) {
+        if let BuildingState::UnderConstruction { workers, .. } = &mut self.state {
+            if !workers.contains(&who) {
+                workers.push(who);
+            }
+        }
+    }
+
+    /// How many people have put work into this one.
+    ///
+    /// Nought for a roof that is finished: the question is about a job, and a
+    /// finished job is not one.
+    pub fn how_many_hands(&self) -> usize {
+        match &self.state {
+            BuildingState::UnderConstruction { workers, .. } => workers.len(),
+            BuildingState::Completed => 0,
+        }
+    }
+
     /// Whose roof it is.
     pub fn belongs(&self) -> crate::world::belonging::Belongs {
         self.belongs

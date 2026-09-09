@@ -34,7 +34,8 @@ use uuid::Uuid;
 ///
 /// Three cases, and the model has no fourth: it either has no claim on it, or
 /// one person's, or the settlement's. There is no settlement *object* to hold
-/// the last of those - see ISSUES_FOUND #11 - so `ToUsAll` is what a thing put
+/// the last of those - a camp is derived from its common ground and its
+/// people and has no voice of its own - so `ToUsAll` is what a thing put
 /// up in common is marked, and it means "anybody here may use it" rather than
 /// naming a body that owns it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

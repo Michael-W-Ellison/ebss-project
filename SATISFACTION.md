@@ -215,7 +215,7 @@ What it buys today:
 
 What is still missing is the thing `RequestCommunalAllocation` wants: there is
 no settlement to *ask*, so `ToUsAll` means "anybody here may use it" rather
-than naming a body that owns it. See ISSUES_FOUND #11. Multi-agent
+than naming a body that owns it. Multi-agent
 coordination sits on top of this and is much the larger piece.
 
 ### Reach
