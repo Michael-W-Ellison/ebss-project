@@ -200,6 +200,8 @@ impl Strategy {
             | Strategy::HuntLocalAnimals
             | Strategy::TradeForFood
             | Strategy::UseOwnedShelter
+            | Strategy::UseHouseholdShelter
+            | Strategy::ShareCommunalShelter
             | Strategy::RelocateToNaturalShelter => Reach::Now,
 
             Strategy::AskOrFollowAnotherToWater => {
@@ -229,12 +231,9 @@ impl Strategy {
                 Reach::NotYet("portioning is a making, and is chosen by the \
                     Utility arm rather than by hunger")
             }
-            Strategy::UseHouseholdShelter | Strategy::ShareCommunalShelter => {
-                Reach::NotYet("shelter has no owner, so somebody else's is not \
-                    a different thing from one's own")
-            }
             Strategy::RepairDamagedShelter => {
-                Reach::NotYet("a shelter has no condition to mend")
+                Reach::NotYet("a building has a condition and nothing mends \
+                    one, so there is no repair to choose")
             }
             Strategy::BuildTemporaryShelter | Strategy::BuildDurableShelter => {
                 Reach::NotYet("building is answered by Construction rather than \
@@ -769,14 +768,42 @@ impl crate::analytics::Simulation {
                 .map(|with| Action::Trade { with }),
 
             // ---- shelter ----------------------------------------------
-            Strategy::UseOwnedShelter | Strategy::RelocateToNaturalShelter => {
+            //
+            // Four ways of getting under a roof, told apart by whose it is.
+            // They all come out as `Action::SeekShelter`, which walks its own
+            // way to cover, so **which one fires does not change where he
+            // goes** - it changes what goes in the record. That is the point:
+            // `Element::By` can now hold "own-shelter" against
+            // "household-shelter", and the pattern layer can find out that one
+            // of them keeps working and the other stops when a brother dies.
+            // Before this, all three were one arm and there was nothing to
+            // tell apart.
+            //
+            // The union of the four is exactly what the single arm accepted -
+            // a completed building or a wood - so no cover is taken from
+            // anybody by naming it. See `world::belonging`.
+            Strategy::UseOwnedShelter
+            | Strategy::UseHouseholdShelter
+            | Strategy::ShareCommunalShelter
+            | Strategy::RelocateToNaturalShelter => {
+                use crate::analytics::wanting::shelter::WhoseRoof;
+
                 let worth_going_in = agent.needs_shelter()
                     || agent.body_temperature.is_too_cold()
                     || agent.surroundings.foul_weather;
 
-                (worth_going_in && !agent.surroundings.under_shelter)
-                    .then(|| self.nearest_shelter_from(agent_position))
-                    .flatten()
+                if !worth_going_in || agent.surroundings.under_shelter {
+                    return None;
+                }
+
+                let which = match way {
+                    Strategy::UseOwnedShelter => WhoseRoof::HisOwn,
+                    Strategy::UseHouseholdShelter => WhoseRoof::AKinsmans,
+                    Strategy::ShareCommunalShelter => WhoseRoof::TheSettlements,
+                    _ => WhoseRoof::Natural,
+                };
+
+                self.nearest_roof_of_this_kind(agent, agent_position, which)
                     .map(|_| Action::SeekShelter)
             }
 

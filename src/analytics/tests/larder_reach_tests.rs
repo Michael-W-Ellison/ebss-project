@@ -47,6 +47,7 @@ fn one_bush_and_a_full_pit(bush_at: (i32, i32)) -> crate::analytics::Simulation 
         holds: Vec::new(),
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     };
     pit.put_in(buried);
     simulation.world.pits.push(pit);

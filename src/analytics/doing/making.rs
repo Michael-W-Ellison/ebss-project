@@ -59,11 +59,16 @@ impl Simulation {
             return;
         }
 
+        // A store dug under the roof the settlement sleeps under is the
+        // settlement's, not the digger's - which is the one place in this
+        // model where `ToUsAll` is the truthful answer rather than a
+        // convenience. See `world::belonging`.
         self.world.pits.push(crate::world::Pit {
             where_it_is: under,
             holds: Vec::new(),
             covered: true,
             dug: tick_now,
+            belongs: crate::world::Belongs::ToUsAll,
         });
 
         // And the man who dug it knows where it is, which is the whole of
@@ -229,7 +234,18 @@ impl Simulation {
         }
 
         // Create new building (under construction)
-        let building = Building::new_under_construction(building_type, build_pos);
+        // Whose roof it is. A dwelling is the man's who put it up; a
+        // storehouse, a workshop or a shrine is the settlement's, because
+        // nobody builds one of those to live in. See `world::belonging` -
+        // and note that until this line the owner field was written by
+        // nothing at all, so `owns_house` in the goal world-state has always
+        // been false for everybody in every world.
+        let mut building = Building::new_under_construction(building_type, build_pos);
+        building.now_belongs_to(if building_type.is_residential() {
+            crate::world::Belongs::To(self.population.agents[agent_index].id)
+        } else {
+            crate::world::Belongs::ToUsAll
+        });
 
         // Add building to world
         self.world.add_building(building);

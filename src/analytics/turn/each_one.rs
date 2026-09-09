@@ -272,7 +272,7 @@ impl Simulation {
 
             // Check if agent owns a house by checking actual building ownership
             let owns_house = self.world.buildings.iter().any(|b| {
-                b.owner == Some(agent_id) &&
+                b.owner() == Some(agent_id) &&
                 b.is_completed() &&
                 b.building_type.is_residential()
             });

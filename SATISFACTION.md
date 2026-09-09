@@ -160,13 +160,76 @@ applied before utility decides within it, not another term subtracted from the
 score. A cost that is subtracted can always be outweighed by a big enough
 number; this must not be.
 
+### Access - what may I use?
+
+The fourth of the six questions, and the one that had no answer anywhere in
+this model. There were two owner fields. `Territory` has one and nothing
+outside its own file has ever read it. `Building` has one, `owns_house` in the
+goal world-state reads it, and **nothing has ever written it** - so every agent
+in every world has always been told it owns no house. Neither was a claim
+anybody could act on.
+
+`world::belonging` holds it now, and it is deliberately two things rather than
+one:
+
+- **`Belongs`** is a fact about a thing, and it lives on the thing.
+  `ToNobody`, `To(somebody)`, `ToUsAll`. A pit belongs to whoever dug it; a pit
+  dug under the common roof is the settlement's; a hut to whoever put it up if
+  it is a dwelling and to the settlement if it is a workshop; a berry bush to
+  nobody, which is the honest answer for most of what a stone-age settlement
+  uses.
+- **`Access`** is what a *particular person* may do with it, which is not a
+  fact about the thing at all - the same hut is a man's own, his brother's, or
+  a stranger's, depending entirely on who is asking. `Agent::may_i_use`
+  answers it, and answers it out of the `RelationshipMap` the model has kept
+  since the relationship graph was built. **There is no household object and
+  there does not need to be one**: a household is who you are kin to - parent,
+  child, sibling, partner - and that has been written down all along without
+  anything ever asking it a question. A friend is not kin, on purpose:
+  friendship is who you would help, kinship is whose store you would open
+  without asking, and widening it to friends would make the distinction a
+  formality in a camp of twelve.
+
+**A claim orders what a man reaches for. It never refuses him.** A stranger's
+pit is still the answer when it is the only one he remembers, and every tile
+that was cover before is cover to somebody now. Hunger and the weather take
+four deaths in five here; a rule that let a man starve beside a full larder, or
+freeze outside a hut, over whose it was would cost far more than it bought.
+Two tests hold that in both directions and they are the two worth keeping if
+the rest went.
+
+What it buys today:
+
+- `UseHouseholdShelter` and `ShareCommunalShelter` were declared
+  `NotYet("shelter has no owner, so somebody else's is not a different thing
+  from one's own")`. That sentence is now untrue, and shelter is four ways -
+  his own, a kinsman's, the settlement's, and a wood - which between them
+  accept exactly the tiles the single arm accepted. They all come out as
+  `SeekShelter`, so which fires does not change where he goes; it changes what
+  `Element::By` records, and the pattern layer can now find out that one of
+  them keeps working and another stops when a brother dies.
+- A man walks to his own store, his kin's, or the settlement's before he walks
+  to one somebody else sank. This is the first place in the model where access
+  decides anything.
+- `owns_house` starts being true for somebody.
+
+What is still missing is the thing `RequestCommunalAllocation` wants: there is
+no settlement to *ask*, so `ToUsAll` means "anybody here may use it" rather
+than naming a body that owns it. See ISSUES_FOUND #11. Multi-agent
+coordination sits on top of this and is much the larger piece.
+
 ### Reach
 
-Seven of the twenty-four ways are declared and cannot fire: no rain catchment,
-no water table to sink a well into, no settlement object to ask for a share, no
-owner on a shelter, no condition to mend. Each says so. A named gap is one
-somebody can count and go and fill; an unnamed one is a gap nobody knows is
-there.
+Ten of the twenty-five ways are declared and cannot fire: no rain catchment, no
+water table to sink a well into, no settlement object to ask for a share, no
+condition to mend, and building answered by Construction rather than by
+Shelter. Each says so. A named gap is one somebody can count and go and fill;
+an unnamed one is a gap nobody knows is there.
+
+Two of them have already been filled by being counted. "No owner on a shelter"
+was the reason `UseHouseholdShelter` and `ShareCommunalShelter` could not fire,
+and it is a sentence somebody could read and act on - which is the whole
+argument for declaring a way you cannot yet take.
 
 ---
 

@@ -189,6 +189,7 @@ fn burying_something_opens_the_question() {
         holds: Vec::new(),
         covered: false,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
     simulation.population.agents[0]
         .inventory

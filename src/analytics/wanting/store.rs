@@ -740,6 +740,17 @@ impl Simulation {
 
         let here = Position::new(agent_position.0, agent_position.1);
 
+        // Whose hole it is, before how far off it is.
+        //
+        // **This is the first place in the model where access decides
+        // anything.** A pit belongs to whoever dug it, or to the settlement
+        // where it was dug under the common roof - see `world::belonging` -
+        // and a man walks to his own, his kin's, or the settlement's before he
+        // walks to one somebody else sank. Nothing is refused: a stranger's
+        // pit is still the answer when it is the only one he remembers,
+        // because a rule that let a man starve beside a full larder over whose
+        // hole it was would cost more than it bought. It is an order, not a
+        // gate.
         agent
             .memory
             .recall_locations(SpatialMemoryType::Storage)
@@ -748,9 +759,15 @@ impl Simulation {
             .map(|remembered| {
                 let there = Position::new(remembered.position.0, remembered.position.1);
                 let paces = here.distance_to(&there);
-                (there, paces)
+                let somebody_elses = self
+                    .world
+                    .pit_at(there)
+                    .map(|pit| !agent.may_i_use(&pit.belongs).is_mine_to_use())
+                    .unwrap_or(false);
+                (there, paces, somebody_elses)
             })
-            .min_by_key(|(_, paces)| *paces)
+            .min_by_key(|(_, paces, somebody_elses)| (*somebody_elses, *paces))
+            .map(|(there, paces, _)| (there, paces))
     }
 
     /// How much food in the pack is enough that a person leaves the store

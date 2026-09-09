@@ -176,6 +176,7 @@ fn a_body_living_on_itself_goes_to_the_store_before_the_roof() {
         holds: Vec::new(),
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     };
     pit.put_in(buried);
     simulation.world.pits.push(pit);

@@ -1188,11 +1188,19 @@ impl Simulation {
             return ActionResult::failure("Nothing to dig here".to_string());
         }
 
+        // Whose hole it is: the man with the shovel. Nothing refuses anybody
+        // a pit on the strength of this - see `world::belonging` - but it is
+        // what lets a man tell his own store from the one across the camp,
+        // and it is the first claim anybody in this model has ever made on
+        // anything.
+        let whose = self.population.agents[agent_index].id;
+
         self.world.pits.push(Pit {
             where_it_is: here,
             holds: Vec::new(),
             covered: false,
             dug: tick_now,
+            belongs: crate::world::Belongs::To(whose),
         });
 
         // What comes out of a hole. The matrix says excavating changes

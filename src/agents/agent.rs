@@ -9737,6 +9737,56 @@ impl Agent {
         DriveType::Preparedness
     }
 
+    /// **What may I use?** - the fourth of the six questions, and the one that
+    /// had no answer anywhere in this model until now.
+    ///
+    /// The claim is a fact about the thing and lives on the thing
+    /// (`world::belonging::Belongs`). What that claim *permits* is not a fact
+    /// about the thing at all: the same hut is a man's own, his brother's, or
+    /// a stranger's, depending entirely on who is asking. So the asker answers
+    /// it, and he answers it out of the `RelationshipMap` he has carried since
+    /// the relationship graph was built - parents, children, siblings and a
+    /// partner. **There is no household object in this model and there does
+    /// not need to be one**: a household is who you are kin to, and that has
+    /// been written down all along without anything ever asking it a question.
+    ///
+    /// Nothing here refuses. `Access` says what the claim is; whether to stop
+    /// is the decision layer's to make, one way at a time, and today it stops
+    /// at nothing - see `world::belonging` for why a rule that left a man
+    /// outside in the weather would cost more than it bought.
+    pub fn may_i_use(&self, belongs: &crate::world::belonging::Belongs) -> crate::world::belonging::Access {
+        use crate::world::belonging::{Access, Belongs};
+
+        match belongs {
+            Belongs::ToNobody => Access::Freely,
+            Belongs::ToUsAll => Access::InCommon,
+            Belongs::To(whose) if *whose == self.id => Access::Freely,
+            Belongs::To(whose) if self.is_this_my_kin(*whose) => Access::ByKinship(*whose),
+            Belongs::To(whose) => Access::NotMine(*whose),
+        }
+    }
+
+    /// Whether this is somebody whose things are as good as one's own.
+    ///
+    /// Parent, child, sibling, partner. A friend is not kin - the model has a
+    /// `Friend` bond and it is the wrong one for this: friendship is who you
+    /// would help, kinship is whose store you would open without asking.
+    pub fn is_this_my_kin(&self, who: uuid::Uuid) -> bool {
+        use super::RelationshipType;
+
+        self.relationships
+            .get_relationship(&who)
+            .is_some_and(|bond| {
+                matches!(
+                    bond.relationship_type,
+                    RelationshipType::Parent
+                        | RelationshipType::Child
+                        | RelationshipType::Sibling
+                        | RelationshipType::Partner
+                )
+            })
+    }
+
     /// What taking a thing would actually be worth to this agent.
     ///
     /// The specification asks for theft to be decided on drive demand rather

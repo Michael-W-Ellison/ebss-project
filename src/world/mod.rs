@@ -71,10 +71,12 @@ pub mod territory;
 pub mod resource_spawning;
 pub mod nutrition;
 pub mod soil;
+pub mod belonging;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
 pub use soil::Soil;
+pub use belonging::{Access, Belongs};
 pub use resources::{Bearing, Resource, ResourceType, ResourceNode};
 pub use buildings::{Building, BuildingType, BuildingState};
 pub use inventory::{Inventory, Item, ItemType};
@@ -264,6 +266,11 @@ pub struct Pit {
     pub covered: bool,
     /// The tick it was dug, which is what the ground counts from
     pub dug: u32,
+    /// Whose hole it is. The man with the shovel, ordinarily - see
+    /// `world::belonging`. `ToNobody` for a pit nobody remembers digging,
+    /// which is what a world starts with.
+    #[serde(default)]
+    pub belongs: crate::world::belonging::Belongs,
 }
 
 impl Pit {

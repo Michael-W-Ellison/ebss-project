@@ -76,6 +76,7 @@ pub mod errand_tests;
 pub mod tool_planning_tests;
 pub mod bearing_tests;
 pub mod beast_tests;
+pub mod belonging_tests;
 pub mod keeping_tests;
 pub mod larder_tests;
 pub mod sacrifice_tests;

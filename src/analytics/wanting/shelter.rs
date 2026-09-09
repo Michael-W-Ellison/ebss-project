@@ -7,6 +7,26 @@
 //! Part of the decision layer - see [`super`]. Nothing here does anything: it
 //! answers what would be worth doing, and hands that answer back up the ladder.
 
+
+/// Whose roof a body is looking for.
+///
+/// Four kinds, and between them they are exactly what `is_shelter_tile`
+/// already accepted - a completed building or a wood - so naming them takes
+/// no cover away from anybody. See `world::belonging`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum WhoseRoof {
+    /// His own: he put it up.
+    HisOwn,
+    /// A parent's, a child's, a sibling's or a partner's.
+    AKinsmans,
+    /// The settlement's, or nobody's - which come to the same thing to walk
+    /// into.
+    TheSettlements,
+    /// No roof at all: a wood, which is what cover was before anybody built
+    /// anything.
+    Natural,
+}
+
 use super::super::Simulation;
 use crate::environment::Action;
 
@@ -553,6 +573,105 @@ impl Simulation {
             .unwrap_or(false);
 
         in_building || in_woodland
+    }
+
+    /// Whether this tile is cover of a particular kind: whose roof it is.
+    ///
+    /// The same walk as `is_shelter_tile`, asked with a claim in mind. Four
+    /// answers between them cover exactly what `is_shelter_tile` covered - a
+    /// completed building or a wood - so splitting them takes nothing away
+    /// from anybody; what it buys is that `UseOwnedShelter`,
+    /// `UseHouseholdShelter` and `ShareCommunalShelter` stop being three names
+    /// for one thing. All three were declared `NotYet("shelter has no owner,
+    /// so somebody else's is not a different thing from one's own")`, and that
+    /// is the sentence this makes untrue.
+    pub(in crate::analytics) fn is_this_roof_mine_to_use(
+        &self,
+        agent: &crate::agents::Agent,
+        position: &crate::world::Position,
+        which: WhoseRoof,
+    ) -> bool {
+        use crate::world::belonging::{Access, Belongs};
+        use crate::world::TerrainType;
+
+        let roof = self
+            .world
+            .get_building_at(position)
+            .filter(|building| building.is_completed());
+
+        match which {
+            WhoseRoof::Natural => self
+                .world
+                .grid
+                .get_tile(position)
+                .is_some_and(|tile| matches!(tile.terrain.terrain_type, TerrainType::Forest)),
+
+            WhoseRoof::HisOwn => roof
+                .is_some_and(|building| building.belongs() == Belongs::To(agent.id)),
+
+            WhoseRoof::AKinsmans => roof.is_some_and(|building| {
+                matches!(agent.may_i_use(&building.belongs()), Access::ByKinship(_))
+            }),
+
+            // Nobody's and everybody's are one case here: an unclaimed roof
+            // and the settlement's own are the same thing to walk into.
+            WhoseRoof::TheSettlements => roof.is_some_and(|building| {
+                matches!(building.belongs(), Belongs::ToUsAll | Belongs::ToNobody)
+            }),
+        }
+    }
+
+    /// Closest cover of a given kind the agent can walk to.
+    ///
+    /// `nearest_shelter_from` with the claim asked on the way past, so the
+    /// four ways of getting under a roof search the same map and come back
+    /// with different tiles.
+    pub(in crate::analytics) fn nearest_roof_of_this_kind(
+        &self,
+        agent: &crate::agents::Agent,
+        position: (i32, i32, i32),
+        which: WhoseRoof,
+    ) -> Option<crate::world::Position> {
+        use crate::world::Position;
+        use std::collections::{BTreeSet, VecDeque};
+
+        const MAX_VISITED: usize = 4096;
+
+        let start = (position.0, position.1);
+        let mut queue = VecDeque::new();
+        let mut seen = BTreeSet::new();
+
+        queue.push_back(start);
+        seen.insert(start);
+
+        let mut visited = 0usize;
+
+        while let Some(current) = queue.pop_front() {
+            visited += 1;
+            if visited > MAX_VISITED {
+                break;
+            }
+
+            let candidate = Position::new(current.0, current.1);
+
+            if self.is_this_roof_mine_to_use(agent, &candidate, which) {
+                return Some(candidate);
+            }
+
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let next = (current.0 + dx, current.1 + dy);
+
+                if !seen.insert(next) {
+                    continue;
+                }
+
+                if self.is_passable_tile(next.0, next.1) {
+                    queue.push_back(next);
+                }
+            }
+        }
+
+        None
     }
 
     /// Closest cover the agent can actually walk to, by walking distance.

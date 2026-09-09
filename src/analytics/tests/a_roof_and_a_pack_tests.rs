@@ -262,6 +262,7 @@ fn a_pit_with_room_in_it_is_not_enough_hole_for_a_winter() {
         holds: Vec::new(),
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     let wanted = crate::analytics::Simulation::what_one_mouth_wants_put_by();
@@ -298,6 +299,7 @@ fn nobody_digs_on_top_of_a_hole_that_is_still_going_spare() {
         holds: Vec::new(),
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     assert!(
@@ -338,6 +340,7 @@ fn somebody_standing_on_a_full_pit() -> crate::analytics::Simulation {
         holds: Vec::new(),
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     };
     pit.put_in(buried);
     simulation.world.pits.push(pit);

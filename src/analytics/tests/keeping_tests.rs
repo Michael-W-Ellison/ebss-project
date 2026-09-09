@@ -419,6 +419,7 @@ fn a_lined_pit_keeps_better_than_bare_earth() {
             holds,
             covered: true,
             dug: 0,
+            belongs: crate::world::Belongs::ToNobody,
         });
 
         for _ in 0..40 {
@@ -455,6 +456,7 @@ fn the_lining_is_not_stores() {
         holds: vec![InventoryItem::new_with_weight("bowl".to_string(), 1, 1.0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     };
 
     assert!(pit.is_lined(), "there is a bowl in it");
