@@ -430,6 +430,14 @@ impl Inventory {
         self.items.get_mut(item_id)
     }
 
+    /// Whether there is anything here that will hold water.
+    ///
+    /// Layer 5 asked by Layer 2: a man with no vessel is not short of carried
+    /// water, he has no way to carry any. See `wanting::goal`.
+    pub fn has_a_container(&self) -> bool {
+        self.items.values().any(|item| item.is_container())
+    }
+
     /// Get total water available from all containers
     pub fn get_total_water(&self) -> f32 {
         self.items.values()

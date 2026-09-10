@@ -14308,3 +14308,85 @@ re-decides every tick, so a long errand is both expensive and constantly liable
 to be abandoned half-way. **Until an agent can commit to a trip, a better
 answer further off is worse than a poor answer to hand.** See #214, which is
 the same finding from the other end.
+
+### 198. Layer 2 was never absent. It was distributed, and one goal of six was asked by nobody
+
+Building the goals layer turned out to be mostly a matter of finding it. Four
+spellings, none of them called a goal, and between them they cover five of the
+six goals the specification names:
+
+| What | Where it lives | What it answers |
+|---|---|---|
+| The thresholds | `Preparedness`, `Sustenance` - `ENOUGH_FOOD`, `ENOUGH_MATERIALS`, `ENOUGH_TOOLS` | how much is enough |
+| The commitment | `Errand`, `stick_to_the_errand` | holding to it until it is met |
+| The food reckoning | `provision::WhatIsPutBy` | days in hand against a winter |
+| The name `Goal` | `core::goals` | emotions and property, and neither of the above |
+
+The sharpest of these: **"enough put by to see a winter out" is not a goal
+under Hunger in this model. It was promoted to a drive of its own.**
+`Preparedness` *is* `short_of(food_put_by, ENOUGH_FOOD)` and `Sustenance` is
+the food half of the same. That is a design decision rather than an oversight -
+it is why a full man with an empty pit still goes to work - and it is exactly
+why the layer reads as missing when it is mostly standing.
+
+So `wanting::goal::Goal` does not add a fifth mechanism. It names the six
+goals and, for each, says what enough means **and which of the above already
+asks it** (`who_already_asks_it`). Where a threshold exists it is read from
+where it lives rather than restated, and
+`the_goal_table_and_the_drives_cannot_drift` fails if anybody changes one
+without the other - so naming the layer did not fork the model into two
+opinions about what enough is.
+
+`ImproveLocalShelter` is declared and unanswerable, with the reason, on the
+same footing as `Strategy::reach`: a building has a condition and nothing mends
+one, so there is no better roof to be had.
+
+#### The one goal nobody asks, and why it barely fires
+
+**Obtain potable water.** A container is filled as a side effect of drinking at
+a source, and thirst only rises once the body is already dry, so nobody in this
+model has ever filled a skin against tomorrow. A dry spell then empties a
+world - #189.
+
+It is now taken, and deliberately last of all: only on a turn that would
+otherwise have been spent standing still. A goal that can outrank a pressing
+drive is a drive, and this layer is not for making more of those.
+
+**It fires twenty-eight times in a year, in a world of twelve.** That is 0.007%
+of agent-ticks, and the reason is a Layer 5 gap the goal table made countable:
+
+- 5,589 agent-days sampled over four worlds: **68 with a vessel at all**, which
+  is 1.2%.
+- All 68 of them already had water in it, because drinking fills the skin.
+- Nought short of the goal on any sampled day.
+
+So "obtain potable water" is not unmet in this world, it is **unmeetable**:
+almost nobody has anything to carry water in, and `how_short_of` returns nought
+for a man with no vessel rather than asking for ever. That is Layer 5 gating
+Layer 2 doing exactly what it should, and the number is the finding.
+
+#### Free, and a note on how little it takes to move a seeded world
+
+Against 218,588 person-days / 48 worlds emptied / 21 out of the first winter:
+**217,753 / 49 / 21.** Person-days down 0.4% on both blocks, one more world
+emptied, first winters unchanged. Inside the noise on every measure.
+
+Worth recording for the next person: **twenty-eight substituted turns in one
+world moved that world's year draw count by 8%** - 1,064,189 to 982,776 - and
+its emptying day by thirty-three days. The dice stream is shared world-wide, so
+a handful of `Wait`s becoming `Gather`s re-shuffles everything downstream of
+them. A moved draw count is not evidence that a change did much; it is evidence
+that it did anything at all.
+
+#### What is still not built
+
+- **`core::goals` is left where it stands.** It answers a different question
+  badly, #187 has the measurement, and folding it in would be two changes at
+  once.
+- **A threshold nobody can reach is not a goal.** Until a settlement can make a
+  vessel, `ObtainPotableWater` will go on firing twenty-eight times a year.
+  That is a Layer 5 job and it is the obvious next one.
+- **The commitment half is `Errand`'s and stays there.** #197 argues that what
+  blocks three separate reverted changes is an agent's inability to commit to a
+  long trip; a goal with a threshold does not fix that on its own, because the
+  threshold says when to stop and not how long to persist.

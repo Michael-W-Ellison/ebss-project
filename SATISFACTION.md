@@ -27,15 +27,36 @@ What answering the drive would look like. Obtain potable water; obtain edible
 calories; secure a sleeping place; acquire a cutting tool; preserve food;
 improve local shelter.
 
-**In the model: `core::goals`, and it is the wrong shape.** `InternalGoal` is
-about emotions - `IncreaseEmotion`, `ReduceStress`, `SeekEntertainment` - and
-`ExternalGoal` is about property - `OwnHouse`, `StockHouseFood`. Neither says
-"obtain potable water". #187 measured the branch that carries them and found it
-nearly dead: un-gating it cost five per cent of person-days, because what it
-carried was not worth carrying.
+**In the model: `wanting::goal`, and the finding is that the layer was never
+absent - it was distributed.** Four spellings, none of them called a goal:
 
-So the layer exists, is occupied by something else, and the something else does
-not work. It wants rewriting into the shape above rather than extending.
+| What | Where it lives | What it answers |
+|---|---|---|
+| The thresholds | `Preparedness` and `Sustenance` - `ENOUGH_FOOD`, `ENOUGH_MATERIALS`, `ENOUGH_TOOLS` | how much is enough |
+| The commitment | `Errand` and `stick_to_the_errand` | holding to it until it is met |
+| The food reckoning | `provision::WhatIsPutBy` | days in hand against a winter |
+| The name `Goal` | `core::goals` | emotions and property, and neither of the above |
+
+So "enough put by to see a winter out" is not a goal under Hunger here. It was
+**promoted to a drive of its own**, with the threshold as a constant inside it.
+That is a design decision rather than a mistake - it is why a full man with an
+empty pit still goes to work - but it is why the layer reads as missing.
+
+`wanting::goal::Goal` names the six goals and, for each, says what enough means
+and **which of the above already asks it** (`who_already_asks_it`). Where a
+threshold already exists it is read from where it lives rather than restated,
+and `the_goal_table_and_the_drives_cannot_drift` holds it to that, so naming the
+layer did not fork the model into two opinions about what enough is.
+
+Exactly one goal is asked by nobody: **obtain potable water**. A container is
+filled as a side effect of drinking at a source, and thirst only rises once the
+body is already dry, so nobody ever fills a skin against tomorrow. That one is
+now taken, last of all, on a turn that would otherwise have been spent standing
+still - a goal that can outrank a pressing drive is a drive, and this layer is
+not for making more of those.
+
+`core::goals` is left where it stands. It answers a different question badly,
+#187 has the measurement, and folding it in here would be two changes at once.
 
 ---
 
@@ -312,4 +333,6 @@ For hydration:
 3. **Satisfier and enabler**, which is small and which Layer 3 will make
    obvious.
 4. **Layer 2**, last, because it is the largest blast radius and because a
-   goal is worth little until there are strategies underneath it.
+   goal is worth little until there are strategies underneath it. Done: and
+   the blast radius turned out to be small, because three quarters of the
+   layer was already standing under other names. See Layer 2 above.

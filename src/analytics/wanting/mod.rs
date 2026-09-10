@@ -27,6 +27,7 @@
 //! The move was behaviour-neutral, and proved so: three seeds run six hundred
 //! ticks give byte-identical worlds either side of it.
 
+pub mod goal;
 pub mod strategy;
 pub mod camp;
 pub mod errands;
@@ -570,6 +571,16 @@ impl Simulation {
             {
                 return (goal_action, false);
             }
+        }
+
+        // **A turn nobody wanted, spent on something that will be wanted.**
+        //
+        // Layer 2's one goal that nothing else asks: water about him, and not
+        // only water in him. Last of all, so it can never displace a pressing
+        // need - a goal that outranks a drive is a drive, and this layer is
+        // not for making more of those. See `wanting::goal`.
+        if let Some(topping_up) = self.top_up_before_you_need_it(agent, agent_position) {
+            return (topping_up, false);
         }
 
         (Action::Wait, false)
