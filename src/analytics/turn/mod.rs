@@ -69,6 +69,11 @@ impl Simulation {
         // what the fire does to it
         self.somebody_notices_something();
 
+        // And the other way of finding something out: not an accident over a
+        // fire, but a man who knows a job looking at a thing of a kind with
+        // what he uses for it. See `somebody_puts_two_and_two_together`.
+        self.somebody_puts_two_and_two_together();
+
         // And the ground they fouled last season comes up in berries
         self.what_was_dropped_comes_up();
 

@@ -9755,10 +9755,28 @@ impl Agent {
             return true;
         }
 
-        crate::environment::making::EVERY_STEP
+        if crate::environment::making::EVERY_STEP
             .iter()
             .filter(|step| step.makes == what || step.needs.iter().any(|(needs, _)| *needs == what))
             .any(|step| self.knows_how_to(step))
+        {
+            return true;
+        }
+
+        // **And a thing of a kind with something he knows the use of.**
+        //
+        // "That is a stone like the ones I knap." He cannot yet knap *this*
+        // one - flint is a technique he has to work out - but he knows it for
+        // a stone and not for a lump of nothing, and so a bank of it is a
+        // place he can put a name to.
+        //
+        // Recognising a thing and knowing how to work it are two questions,
+        // and this is the line between them. Without it the innovation path
+        // eats its own tail: he could not name the flint until he knew flint
+        // knapping, and he could not work out flint knapping without first
+        // noticing there was flint about. See `making::what_else_is_like_it`.
+        crate::environment::making::what_else_is_like_it(what)
+            .any(|kin| crate::environment::making::is_a_familiar_thing(kin))
     }
 
     /// **What may I use?** - the fourth of the six questions, and the one that

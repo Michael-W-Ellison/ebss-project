@@ -144,7 +144,11 @@ pub const KNAPPED_TIP_FROM_FLINT: Making = Making {
     needs: &[("flint", 1)],
     hands: SkillType::Crafting,
     effort: 4.0,
-    obvious: true,
+    // **Not obvious.** Anybody can knap ordinary stone; that flint takes half
+    // as much and holds a finer edge is the thing a people works out, and it
+    // is the plainest case of one use of a material teaching its siblings.
+    // See `EVERY_FAMILY`.
+    obvious: false,
     over_a_fire: false,
     wants_in_hand: None,
 };
@@ -1162,6 +1166,49 @@ pub fn how_to_make(what: &str) -> Option<&'static Making> {
 /// Every way of making a named thing.
 pub fn every_way_to_make(what: &str) -> impl Iterator<Item = &'static Making> + '_ {
     EVERY_STEP.iter().filter(move |step| step.makes == what)
+}
+
+/// Things of a kind, so that knowing one is a start on the others.
+///
+/// **The innovation path.** A man who knaps ordinary stone into a tip is not
+/// told that flint knaps finer; he works it out, and what lets him work it out
+/// is that flint is *the same sort of thing* as what he already knaps. One use
+/// of a material teaches its siblings.
+///
+/// Kept deliberately short and literal. These are not categories in the sense
+/// `MaterialCategory` means - that table has `Natural` holding wood and iron
+/// and water together, which is no help to anybody trying to guess what else
+/// would take an edge. A family here is what a person would actually mistake
+/// for the thing, or reach for when the thing ran out: a stone that flakes,
+/// something long and stringy you can twist.
+///
+/// The metals are **not** a family. Iron makes a lump and the lump makes a
+/// blade; that is a chain, and each link has to be found out on its own terms
+/// over a fire. Calling them siblings would hand a settlement bronze for
+/// having once picked up a bright stone.
+pub const EVERY_FAMILY: &[&[&str]] = &[
+    // Stone that flakes to an edge. Ordinary stone is what anybody starts
+    // with; flint takes half as much and holds better.
+    &["stone", "flint"],
+    // Something long you can twist into a cord.
+    &["flax", "rettedflax", "cotton"],
+];
+
+/// What else is of a kind with this, not counting itself.
+///
+/// Empty for anything that has no siblings, which is most things: a hide is a
+/// hide and there is nothing else like it in this world.
+pub fn what_else_is_like_it(what: &str) -> impl Iterator<Item = &'static str> + '_ {
+    EVERY_FAMILY
+        .iter()
+        .filter(move |family| family.contains(&what))
+        .flat_map(|family| family.iter().copied())
+        .filter(move |kin| *kin != what)
+}
+
+/// Whether these two are of a kind.
+pub fn are_they_of_a_kind(one: &str, other: &str) -> bool {
+    one != other && what_else_is_like_it(one).any(|kin| kin == other)
 }
 
 /// Whether a named thing is something a person makes rather than finds.

@@ -13905,3 +13905,113 @@ evicted from a full shelf **by confidence alone**, so a bush seen this morning
 outranked a winter store. The cap is a thousand and the store never comes near
 it, so this changes nothing measurable - it was found by filling the store and
 is fixed rather than left for whoever fills it next.
+
+---
+
+### 195. Every sibling material in the model is handed to every founder at birth
+
+The innovation path - "one use of a material teaches its siblings" - had
+nothing to teach. The families are real: `stone` and `flint` both knap to a
+tip, `flax` and `cotton` both twist to a lashing. But `KNAPPED_TIP_FROM_FLINT`
+and `LASHING_FROM_COTTON` were both `obvious: true`, so every founder arrived
+knowing all of them and there was no thought left for anybody to have. The
+craft did not grow; it was inherited entire.
+
+`EVERY_FAMILY` names the likenesses now, and
+`somebody_puts_two_and_two_together` is the second way of finding something
+out. The first, `somebody_notices_something`, is an accident: the right things
+in your pack and a fire in front of you. This one is reasoning - a man who
+knows the job, looking at a thing of a kind with what he uses for it - and it
+does not want the stuff in his hand. **It wants the name on his map.** A
+`SpatialMemory` has carried `what_it_is` since #194 and nothing asked; this is
+the first thing in the model to read it, and it is the whole of the prompt: a
+settlement that never walks past a flint bank never has the thought, and one
+that walks past it daily has it within a season.
+
+Two things had to be settled to make it work.
+
+**Recognising a thing and knowing how to work it are different questions.**
+`do_i_know_what_this_is_for` now also answers yes for a thing of a kind with
+something known - "that is a stone like the ones I knap". Without that the path
+eats its own tail: he cannot name the flint until he knows flint knapping, and
+cannot work out flint knapping without noticing there is flint about.
+
+**And the metals are deliberately not a family.** Iron makes a lump and the
+lump makes a blade: a chain, each link found out on its own terms over a fire.
+Calling them siblings would hand a settlement bronze for having once picked up
+a bright stone.
+
+**Taking flint away is free; taking cotton away is not.** Against 108,160 / 23
+emptied / 11 out of the first winter and 106,989 / 25 / 10:
+
+- **Both made discoveries**: 110,572 / 27 / 9 and 103,655 / 27 / 6. Person-days
+  are noise and disagree in direction, but settlements out of their first
+  winter fall from 21 of 64 to **15** and both blocks agree.
+- **Flint alone**: 112,507 / 21 / 11 and 106,701 / 25 / 9. Person-days 215,149
+  to 219,208, but the blocks disagree - A up 4.0%, B down 0.3% - so that is
+  noise and not a gain. Worlds emptied 48 to 46, first winters 21 to 20.
+  Nothing moves outside the block noise in either direction: **the layer is
+  free.**
+
+Lashing is what fifteen of the steps in this chain want. Taking a fibre away
+from a founding people costs more than the thought is worth, and the difference
+between the two runs is the price of that one line. Flint is the case the
+specification is really about - anybody can knap ordinary stone; that flint
+takes half as much and holds a finer edge is a thing a people works out - and
+it is the one that is in.
+
+An earlier reading of the flint-alone run had it at 217,670 and up on both
+blocks. That run was taken before the stream fix below and does not describe
+this code; the figures above are the re-measurement.
+
+**The pass rolled a die every tick whether or not it had anything to decide.**
+The dice stream is shared world-wide, so a pass that rolls unconditionally
+re-shuffles every seeded outcome downstream of it - the ecology included. It
+knocked over `the_land_will_only_carry_so_many`, which is ten sheep on a
+quarter of a square kilometre and thin enough already: 1 roaming against 5
+penned. No sheep had died differently, the draws had simply moved. The
+candidates are built first now and the dice are not touched unless there is
+one. Deciding nothing costs nothing.
+
+### And the map arm never fires in a live world
+
+The prompt has two halves - the stuff in his pack, or the name on his map -
+and only the first of them does any work today. Over 8 worlds of 12 founders
+run 180 days, 5 of 8 worlds worked flint knapping out, first on days 32, 39,
+119, 122 and 147; 7 of the 96 people who ever lived had the thought. **None of
+them had flint on their map**, and every one of the seven was holding flint
+when he had it.
+
+The reason is that flint is not a thing that lies in the ground. There is no
+`ResourceType::Flint`; flint is *made*, by `SMASH_A_CORE` - a stone core broken
+down into flakes - so no sight pass can ever write it and no map can ever
+carry it. What does get a name, counted as agent-ticks holding one over 6
+worlds of 120 days: fish 7.8M, wood 4.7M, stone 3.3M, flax 1.5M, cotton 1.2M,
+iron 104k.
+
+Cotton is the one that matters in that list. It lies in the ground, it is in a
+family, and it is on a million agent-ticks' worth of maps - so the map arm
+*would* be load-bearing the moment `LASHING_FROM_COTTON` became a discovery.
+That is exactly the run measured above at 15 first winters out of 64 against
+21. So the two halves of this stand in each other's way: **the sibling that is
+cheap to make a discovery is made rather than found, and the one that is found
+rather than made is too dear to make a discovery.**
+
+The reader is real, it is what `knowing_where_the_flint_is_is_what_teaches_him_flint`
+asserts end to end, and it will fire for any ground-lying sibling added after
+this. It is not doing anything in a live world today, and saying otherwise
+would be claiming a measurement that was not taken. Putting flint in the
+ground - a chalk-and-hills deposit, the way flint actually occurs - is what
+would make it live at flint's price instead of cotton's, and that is a change
+to the world's contents rather than to this layer, wanting its own
+measurement.
+
+### What a man knows is a product, not a recipe
+
+`knows_how_to` is `step.obvious || found_out.contains(step.makes)`, so what
+gets written down when somebody works flint out is "he knows knappedtip".
+There are two ways to make a knapped tip and one of them is obvious, so today
+this is exactly right. It stops being right the moment a third way of making
+one is added: whoever works out any one non-obvious route would be handed
+every other route to the same thing for free. The record wants to be per
+recipe before that happens.
