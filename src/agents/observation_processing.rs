@@ -121,7 +121,48 @@ pub fn process_observations(
         // yourself: seeing a thing done tells you it is done, not that it
         // works.
         watch_a_practice(agent, broadcast);
+
+        // And where he saw it done, which is the weakest of the three
+        // footings a map memory stands on.
+        watch_where_the_work_was(agent, broadcast);
     }
+}
+
+/// Where somebody else was taking something out of the ground.
+///
+/// **The specification's first retention level, which had no writer.** "Have I
+/// seen someone use this resource? So-and-so will find this useful, even if I
+/// do not." It is the weakest hold there is and the one that spreads: a man
+/// who will never spin can still say where the flax was, for about a week,
+/// and that is long enough to tell a spinner.
+///
+/// It files a place and never a name. Watching somebody strip a patch tells
+/// you there is something worth having there; it does not tell you what the
+/// stuff is, and if he knew that already he has the place on firmer terms of
+/// his own - `i_know_this_at_least_this_well` refuses to demote him.
+///
+/// `Mining` is what `Action::Gather` broadcasts as, and it carries fifteen
+/// paces, which is about as far as you can see what somebody's hands are
+/// doing.
+fn watch_where_the_work_was(watcher: &mut Agent, broadcast: &BroadcastAction) {
+    use crate::core::memory::{HowIKnow, HowSteady, SpatialMemoryType};
+
+    if !broadcast.success || broadcast.action_type != ActionType::Mining {
+        return;
+    }
+
+    // Steady until he has reason to think otherwise: he has watched a pair of
+    // hands, not examined the ground, so what he takes away is that there was
+    // something here - and a week is too short for the difference between a
+    // seam and a bramble to matter.
+    watcher.memory.remember_what_kind_of_place_this_is(
+        SpatialMemoryType::Resource,
+        broadcast.position,
+        None,
+        1,
+        HowIKnow::SawItUsed,
+        HowSteady::Steady,
+    );
 }
 
 /// Ways of working that spread by being seen.

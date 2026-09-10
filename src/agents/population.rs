@@ -1975,7 +1975,13 @@ impl Population {
             // exploration record, so without this an agent would have a patch
             // catalogued and still starve walking past it.
             let sight = vision_range as i32;
-            let in_view: Vec<(crate::world::Position, SpatialMemoryType, Option<String>, u32)> = world
+            let in_view: Vec<(
+                crate::world::Position,
+                SpatialMemoryType,
+                Option<String>,
+                u32,
+                crate::core::memory::HowSteady,
+            )> = world
                 .resources
                 .iter()
                 .filter(|resource| resource.amount > 0)
@@ -2041,6 +2047,24 @@ impl Population {
                         memory_type,
                         what_it_is,
                         resource.what_can_be_taken(),
+                        // **Whether the stuff will still be there.**
+                        //
+                        // The world has known which is which since the
+                        // hedgerows were given a bearing year, and nothing
+                        // asked. A thing that never bears - stone, clay, a
+                        // river, a standing tree - is where it was. A thing
+                        // with a window in the year is a fact about that
+                        // window, and a man who remembers a bramble patch for
+                        // three years will walk to it in March. See
+                        // `HowSteady`.
+                        if matches!(
+                            resource.resource_type.bearing_window(),
+                            crate::world::Bearing::NeverStops
+                        ) {
+                            crate::core::memory::HowSteady::Steady
+                        } else {
+                            crate::core::memory::HowSteady::Turns
+                        },
                     ))
                 })
                 .collect();
@@ -2049,12 +2073,35 @@ impl Population {
             // exactly as much as any other remembered place, so a man who left
             // camp for want of water walked to whichever waterhole was
             // furthest off rather than to the one he remembered as a spring.
-            for (pos, memory_type, what_it_is, how_much) in in_view {
-                agent.memory.remember_this_here(
+            for (pos, memory_type, what_it_is, how_much, how_steady) in in_view {
+                // **Seeing a thing he knows the use of is the middle footing.**
+                //
+                // Not the weakest - that is watching somebody else work, and
+                // is what he has for a place he has no use for himself. Not
+                // the firmest either: he has taken nothing out of here. It is
+                // "I know what this stuff is for, though I have not worked
+                // it", and the specification gives it a year. See `HowIKnow`.
+                //
+                // Water and food are filed whatever he can name, because
+                // everybody eats and drinks. A thing he could not name is a
+                // place he simply noticed - the fortnight every remembered
+                // place in this model had before the footings existed - and
+                // *not* the weakest footing: that one is for watching
+                // somebody else work, and using it here would have halved the
+                // life of every berry patch anybody walked past.
+                let footing = if what_it_is.is_some() {
+                    crate::core::memory::HowIKnow::UsedThisKind
+                } else {
+                    crate::core::memory::HowIKnow::JustNoticedIt
+                };
+
+                agent.memory.remember_what_kind_of_place_this_is(
                     memory_type,
                     (pos.x, pos.y, 0),
                     what_it_is,
                     how_much,
+                    footing,
+                    how_steady,
                 );
             }
 

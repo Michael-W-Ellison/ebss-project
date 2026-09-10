@@ -14015,3 +14015,194 @@ this is exactly right. It stops being right the moment a third way of making
 one is added: whoever works out any one non-obvious route would be handed
 every other route to the same thing for free. The record wants to be per
 recipe before that happens.
+
+### 196. Map memory had one clock, and nobody ever told anybody where anything was
+
+Two absences, and the second is the larger.
+
+**Every remembered place faded at the same rate.** `SpatialMemory::forget_a_little`
+bent the rate by what *kind* of place it was - a store outlasts a bush - and by
+nothing else, so the clay bank a potter had dug out every week for a year was
+forgotten at exactly the rate of one he had glimpsed over somebody's shoulder.
+The note on `STILL_KNOWS_WHAT_IT_WAS` said as much in as many words: "making it
+depend on *how* the place was learned is the next piece, not this one."
+
+**And a place somebody told you about never reached your map.**
+`InformationType::ResourceLocation` has been in the gossip layer since it was
+written. Agents believe it, `detect_lies_in_knowledge` verifies it, and
+`found_out_i_was_lied_to` prices a lie about it by whether it sent somebody
+somewhere they needed to go. None of that ever put a place on a map. A man
+could be told where the clay was, believe it, be lied to about it, resent the
+liar - and still not know where the clay was. Worse, the only thing anybody
+ever said was the literal string `"generic"` at their own feet, which is not
+news and not a place: the speaker and the listener were standing on it.
+
+#### The three footings
+
+`HowIKnow` is how a man came by a place, and it is what decides how long he
+keeps it. One sentence each, and the specification's own numbers:
+
+| Footing | The thought behind it | How long |
+|---|---|---|
+| `SawItUsed` | so-and-so will find this useful, even if I do not | a week |
+| `UsedThisKind` | I find this useful, though I have not worked it | a year |
+| `WorkedThisPlace(n)` | I find this useful and I have had it out of the ground | three years, and another for every trip |
+
+Read off the decay rather than asserted about the table - see
+`the_three_footings_are_a_week_a_year_and_three_years`. The trip count stops
+telling after four: a settlement lasts about a year in this model, so a memory
+already good for six years is good for ever and counting past it is arithmetic
+nothing can distinguish.
+
+All three have writers, which is the part that was worth checking. The sight
+pass files what he can name on the middle footing and what he cannot on the
+weakest. Harvesting promotes a place he already remembered - the one footing
+earned with the hands. And watching somebody else work a patch files it on the
+weakest, which is the specification's first level exactly: the man who will
+never spin can still tell a spinner where the flax was, for about a week, and
+a week is long enough to walk there.
+
+#### The brake, which is what keeps the rest honest
+
+A clay bank is where it was. A bramble is a fact about last autumn, and a man
+walking half a day in March on a patch he stripped in October has been misled
+by his own good memory. `HowSteady` says which, and the world has known since
+the hedgerows were given a bearing year: anything with a window in
+`ResourceType::bearing_window` turns, anything that never bears never stops.
+
+A turning place is never held *longer* than the ordinary fortnight however well
+he knows it. It is never held shorter either - two systems shortening one
+memory is how a winter store came to be forgotten a fortnight after it was
+buried, and that fault is not being repeated. And none of the footings reach
+`Storage`, `Water`, `Danger` or `Shelter`: a pit a man dug is not a source,
+there is no trip back to count and no season to turn, and those bands were set
+by measuring a settlement starving thirty paces from its own larder.
+
+#### The footings fire, and they cost nothing
+
+Six worlds of twelve founders over a hundred and twenty days: **17,413
+remembered places** among the living, 11,932 on the weakest footings, 4,270 on
+the middle and 1,211 worked by hand over 41,815 trips. All three are populated,
+which is what says the writers are real rather than merely present.
+
+Against 219,208 person-days / 46 worlds emptied / 20 out of the first winter
+over 64 seeded worlds: **111,817 / 23 / 11 and 106,771 / 25 / 10, a total of
+218,588 / 48 / 21.** Person-days disagree in direction between the blocks (A
+down 0.6%, B up 0.1%) and move 0.3% in total; two more worlds empty and one
+more settlement gets out of its first winter. Nothing moves outside the noise
+in either direction: **free**.
+
+**And one fault of my own, caught by a test rather than by reading.** The
+default footing was at first the weakest of the specification's three, which
+silently halved the life of every memory nobody had thought to label - a bush a
+man walked past went in a week rather than a fortnight. That is exactly the
+two-systems-shortening-one-memory fault this layer is careful about everywhere
+else, and it reached every `remember_location` caller in the model.
+`a_bush_somebody_walked_past_is_forgotten_in_a_fortnight` caught it. The default
+is now `JustNoticedIt`, which holds for the fortnight every remembered place in
+this model held before any of this, so a writer that says nothing changes
+nothing. An earlier reading taken before that fix had the layer at
+220,163 / 48 / 21; that build is not this one.
+
+#### The category tier
+
+The name goes first, the *sort of thing* outlasts it, the place outlasts that:
+"flax at that field edge" becomes "fibre in that valley" becomes "somewhere
+over there was worth a look" becomes nothing. `WHAT_SORT_OF_THING` is the
+vocabulary and it is deliberately broader than `EVERY_FAMILY`: a family is what
+will stand in for what in a making, a sort is what a man calls the stuff with
+the name gone. Every family sits inside one sort and a test holds them to it,
+so the two tables cannot come apart.
+
+**Nothing reads it.** The reader it was built for is the next section, and the
+next section is the part that had to come out.
+
+#### Telling somebody where things are: built, measured, and taken out again
+
+`InformationType::ResourceLocation` has been in the gossip layer since it was
+written. Agents believe it, `detect_lies_in_knowledge` verifies it, and
+`found_out_i_was_lied_to` prices a lie about it by whether it sent somebody
+somewhere they needed to go. And **the only thing anybody ever said was the
+literal string `"generic"` at their own feet**, which is not news and not a
+place: the speaker and the listener were standing on it. A man could be told
+where the clay was, believe it, be lied to about it, resent the liar - and
+still not know where the clay was.
+
+What was built: a man tells you the best place he can still put a word to (the
+name while he has it, the sort once it has gone, and nothing below that);
+half of what he says is first-hand and half passed on, so other news is not
+swamped; and a place he is told about goes on his map on the weakest footing
+if he believed it. It worked. Over six worlds of a hundred and twenty days the
+living were carrying **4,274 claims about where things are, 3,956 of them
+believed and none of them the old stub**.
+
+**It cost 6.3% of all person-days and two thirds of the first winters.**
+Against 220,163 / 48 / 21 for the footings alone as they then stood: 104,190 / 28 / 4 and
+102,123 / 31 / 4, a total of 206,313 / 59 / 8. Both blocks agreed on all three
+figures, and the weather rose past starvation to the second cause of death,
+which is what a settlement walking off after rumours looks like from outside.
+
+**Two diagnoses, both refuted by measurement, and they are the useful part of
+this entry.**
+
+The first was confidence. A told place arrived at 1.0, exactly as sure as
+standing in front of the thing, so for the first days of its week a rumour
+outranked everything a man had seen with his own eyes - and the specification
+asks for the opposite in as many words ("heard about berry patch: medium
+confidence, fast decay"). Landing it instead at the confidence the hearer had
+in the teller changed **nothing**: 206,371 / 58 / 9 against 206,313 / 59 / 8.
+
+The second was the map itself. Taking the write out entirely - so a told place
+stays in `KnowledgeBase` and never reaches a map - came back **byte-identical**
+to the run before it: 103,589 / 4 and 102,782 / 5, the same numbers to the
+person-day. Which settles it: the map write never did anything at all. Nothing
+in the decision layer walks on a `SpatialMemoryType::Resource` memory, so
+filing one changes no decision.
+
+So the cost is in what the *claims themselves* now do, and the likeliest seat
+of it is `verify_resource_claim`. It returns `Some(false)` for a place the
+hearer has been to and holds no resource for, and `detect_lies_in_knowledge`
+turns any `false` into a lie **regardless of the roll and regardless of
+`ground_truth`** - so an honest man naming a patch that has since been picked
+over is branded a liar and the grudge machinery fires. Changing what circulates
+from one meaningless string to real, checkable, perishable claims turned that
+from a formality into a settlement-wide falling-out. That is a fault in the
+lie-detection arithmetic rather than in telling people things, and it wants
+fixing before this is tried again.
+
+The whole of it is reverted. What is left behind is the category tier, which
+is correct, tested, and waiting for a consumer that is not this one.
+
+#### What of the specification is still not built
+
+Named here rather than left to be rediscovered:
+
+- **Salience as a product** - usefulness x scarcity x urgency x past success x
+  proximity. Half of it is already in `what_this_patch_is_worth`, which weighs
+  energy, how much is standing, distance and the cost of the trip. Scarcity,
+  present drive pressure and whether the last trip paid are not in it. This one
+  has live readers in foraging and migration and is the biggest thing left.
+- **The exploit-detail tier** - best in the dry season, upper layer poor, the
+  path floods in spring. The tier below a name, and nothing in the world
+  currently varies that way within a single deposit.
+- **Which** season a turning place turns in. `HowSteady` records that it turns,
+  not its window, so a man cannot yet decide to go in October rather than March.
+- **Source split.** `HowIKnow::SawItUsed` covers both watching somebody work and
+  being told, which are the same firmness from different people. The
+  specification asks for self / observed / told as separate facts.
+- **The predictive landscape model** - "clay is often found on cut banks near
+  streams". Level D of the A-B-C-D progression; A, B and C are all in.
+- **Strengthening events are still flat.** `refresh` adds a fifth of confidence
+  whether he glanced at the place or spent the morning digging it.
+- **Telling somebody where things are**, which is the section above: it wants
+  the lie-detection arithmetic fixed first.
+
+And one that is not in the specification but is in the way of it: **nothing in
+the decision layer walks on a `SpatialMemoryType::Resource` memory.** Proved by
+accident here - taking the hearsay map write out came back byte-identical - and
+it is the same finding as the note on `what_forgetting_this_would_cost`, where
+sending a man to fetch a material he remembered cost 215,333 person-days
+against 201,777. Knowing where the clay is is worth having and not worth
+crossing a valley for, so the record exists and nothing acts on it. Until
+something does, every improvement to what a map remembers is an improvement to
+a thing only the craft layer reads.

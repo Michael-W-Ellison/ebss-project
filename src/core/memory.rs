@@ -236,6 +236,163 @@ impl SpatialMemoryType {
     }
 }
 
+/// How a man came by a place, which is what decides how long he keeps it.
+///
+/// **The retention rule the specification asks for, and the thing the memory
+/// layer had no way of saying.** Every remembered place faded at one rate,
+/// bent only by what *kind* of place it was - so the clay bank a potter had
+/// dug out every week for a year was forgotten at exactly the rate of one he
+/// had glimpsed over somebody's shoulder. `STILL_KNOWS_WHAT_IT_WAS` carried a
+/// note saying as much: "making it depend on *how* the place was learned is
+/// the next piece, not this one." This is that piece.
+///
+/// The specification's three, and one more that is the absence of all of them:
+///
+/// - `SawItUsed` - "so-and-so will find this useful, even if I do not". Worth
+///   passing on and not worth keeping.
+/// - `JustNoticedIt` - nothing is recorded but that he saw the place.
+/// - `UsedThisKind` - "I find this useful, though I have not worked it".
+/// - `WorkedThisPlace` - "I find this useful and I have had it out of the
+///   ground". Counted, because every trip back is another year.
+///
+/// **`JustNoticedIt` is the default and it changes nothing.** Every writer in
+/// this model that has nothing to say about how a place was learned gets the
+/// rate every remembered place had before any of this, and that is the point
+/// of it: a fortnight, measured where it stands. Defaulting instead to the
+/// weakest of the specification's three was tried and it silently halved the
+/// life of every memory nobody had thought to label - a berry patch a man
+/// walked past went in a week rather than a fortnight, which is the exact
+/// two-systems-shortening-one-memory fault this layer is careful about
+/// everywhere else. `a_bush_somebody_walked_past_is_forgotten_in_a_fortnight`
+/// caught it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HowIKnow {
+    /// Somebody else was working here and I watched.
+    ///
+    /// The weakest hold there is, and the one that spreads: a man who will
+    /// never spin can still tell a spinner where the flax was, right up until
+    /// he forgets - which on this footing takes about a week.
+    SawItUsed,
+
+    /// He saw the place. Nothing else is written down about it.
+    ///
+    /// Not one of the specification's three, which are all about *why* a man
+    /// keeps a place. This is the case where nothing is known about that, and
+    /// it holds for the fortnight every place in this model held before the
+    /// footings existed.
+    JustNoticedIt,
+
+    /// I know what this stuff is for, though I have not taken any from here.
+    UsedThisKind,
+
+    /// I have had it out of the ground here, and this many times.
+    ///
+    /// The count is what makes a habitual source different from a single
+    /// lucky trip. Each one buys another year, and they stop being worth
+    /// counting after a few - see `HOW_MANY_TRIPS_STILL_TELL`.
+    WorkedThisPlace(u32),
+}
+
+impl Default for HowIKnow {
+    /// The one that changes nothing, so that a writer which has not been
+    /// taught to say leaves the memory exactly as it was before.
+    fn default() -> Self {
+        HowIKnow::JustNoticedIt
+    }
+}
+
+impl HowIKnow {
+    /// Every case, so a match over them can be held exhaustive by a test.
+    pub fn all() -> Vec<HowIKnow> {
+        vec![
+            HowIKnow::SawItUsed,
+            HowIKnow::JustNoticedIt,
+            HowIKnow::UsedThisKind,
+            HowIKnow::WorkedThisPlace(1),
+        ]
+    }
+
+    /// How fast a place learned this way is forgotten, against the ordinary
+    /// rate.
+    ///
+    /// The specification asks for a week, a year and three years for the three
+    /// footings, with a further year for each trip back. Confidence starts at
+    /// 1.0 and `recall_locations` wants it above 0.3, so a multiplier of `m`
+    /// spends the place in `0.7 / (m * HOW_FAST_AN_ORDINARY_PLACE_IS_FORGOTTEN)`
+    /// ticks. The three numbers below are that arithmetic run backwards
+    /// against a 48-tick day and a 360-day year.
+    pub fn how_fast_this_fades(&self) -> f32 {
+        match self {
+            // A week.
+            HowIKnow::SawItUsed => 2.08,
+            // A fortnight: the rate every place in this model had before the
+            // footings existed, so a writer that says nothing changes nothing.
+            HowIKnow::JustNoticedIt => 1.0,
+            // A year.
+            HowIKnow::UsedThisKind => 0.0405,
+            // Three years, and another for each trip back.
+            HowIKnow::WorkedThisPlace(trips) => {
+                let years = 3.0 + trips.min(&Self::HOW_MANY_TRIPS_STILL_TELL).saturating_sub(1) as f32;
+                0.0405 / years
+            }
+        }
+    }
+
+    /// After this many trips a place is as well known as it is going to get.
+    ///
+    /// The specification asks for a year per trip and does not say where it
+    /// stops. Somewhere it has to: a settlement lasts about a year in this
+    /// model, so a memory already good for six is good for ever, and counting
+    /// past that is arithmetic nothing can tell the difference between.
+    pub const HOW_MANY_TRIPS_STILL_TELL: u32 = 4;
+
+    /// Whether this footing is at least as firm as that one.
+    ///
+    /// Used when a place is seen again: watching somebody work a bank you
+    /// have dug yourself does not demote it back to hearsay.
+    pub fn at_least_as_firm_as(&self, other: &HowIKnow) -> bool {
+        self.how_firm() >= other.how_firm()
+    }
+
+    /// Ordered by how long it holds, which is the only ordering that matters:
+    /// a footing is never given up for one that would forget the place sooner.
+    fn how_firm(&self) -> u32 {
+        match self {
+            HowIKnow::SawItUsed => 0,
+            HowIKnow::JustNoticedIt => 1,
+            HowIKnow::UsedThisKind => 2,
+            HowIKnow::WorkedThisPlace(trips) => 3 + trips,
+        }
+    }
+}
+
+/// Whether a place can be relied on to still be there.
+///
+/// **Environmental stability, which the specification calls a major factor and
+/// which this model had nowhere to put.** A clay bank is where it was; a berry
+/// patch is a fact about last autumn. Without this the retention rule above
+/// would have a man walking a day and a half in March to a bramble he stripped
+/// in October, on a memory he was entitled to keep for three years.
+///
+/// The world already knows which is which and has since the hedgerows were
+/// given a bearing year: anything with a window in `ResourceType::bearing_window`
+/// is a growing thing and turns with the season, and anything that never bears
+/// never stops.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HowSteady {
+    /// Stone, clay, a spring, a seam. It will be there.
+    Steady,
+
+    /// A bush, a root patch, a stand of flax. It was there in its season.
+    Turns,
+}
+
+impl Default for HowSteady {
+    fn default() -> Self {
+        HowSteady::Steady
+    }
+}
+
 /// A remembered place, and what was there.
 ///
 /// **What a place is remembered *as* is a fact about the rememberer, not about
@@ -264,6 +421,14 @@ pub struct SpatialMemory {
     /// `what_i_could_name_it`.
     #[serde(default)]
     pub what_it_is: Option<String>,
+
+    /// How he came by this place, which is what decides how long he keeps it.
+    #[serde(default)]
+    pub how_i_know: HowIKnow,
+
+    /// Whether the stuff will still be there, which is what caps that.
+    #[serde(default)]
+    pub how_steady: HowSteady,
 }
 
 impl SpatialMemory {
@@ -275,6 +440,8 @@ impl SpatialMemory {
             confidence: 1.0,
             value: 1.0,
             what_it_is: None,
+            how_i_know: HowIKnow::default(),
+            how_steady: HowSteady::default(),
         }
     }
 
@@ -339,6 +506,47 @@ impl SpatialMemory {
             .flatten()
     }
 
+    /// What sort of thing he could still say was there.
+    ///
+    /// **The category tier**, and the middle of the three the specification
+    /// asks for: "flax grows at this field edge" becomes "fibre plant grows
+    /// in that valley" becomes "that valley has useful plants" becomes
+    /// nothing. Above `STILL_KNOWS_WHAT_IT_WAS` he has the name and this
+    /// returns the sort anyway, because a man who can say flax can certainly
+    /// say fibre.
+    ///
+    /// `None` where he has faded past the sort as well, or where the stuff
+    /// belongs to no sort - see `making::what_sort_of_thing_is_it`.
+    ///
+    /// **Nothing in the decision layer reads this yet, and that is a measured
+    /// state of affairs rather than an oversight.** The reader it was built
+    /// for is telling: what a man can pass on is what he can still put a word
+    /// to, the name while he has it and the sort once it has gone. That
+    /// channel was built, it worked, and it cost 6.3% of all person-days and
+    /// two thirds of the settlements that got out of their first winter. See
+    /// ISSUES_FOUND #196, which records what was tried and what was refuted.
+    /// The tier is correct and it is waiting for a consumer that is not.
+    pub fn what_sort_i_could_say_it_was(&self) -> Option<&'static str> {
+        if self.confidence <= Self::STILL_KNOWS_THE_SORT_OF_THING {
+            return None;
+        }
+        self.what_it_is
+            .as_deref()
+            .and_then(crate::environment::making::what_sort_of_thing_is_it)
+    }
+
+    /// How sure a man has to be to still say what sort of thing it was.
+    ///
+    /// Between the name and the place, which is the only thing the ordering
+    /// requires. The specification's own ratios - a patch for days, its
+    /// category for weeks, the area for a season - do not fit on one clock,
+    /// and the note on `STILL_KNOWS_WHAT_IT_WAS` says why one threshold cannot
+    /// be all three. Set here so the sort lasts about three times the name and
+    /// the place about five: compressed against the specification, ordered as
+    /// it asks, and on one clock so the three tiers cannot disagree about how
+    /// long ago this was.
+    pub const STILL_KNOWS_THE_SORT_OF_THING: f32 = 0.55;
+
     /// How sure a man has to be to still say what was there.
     ///
     /// Set so the name lasts about a fifth as long as the place - a berry
@@ -369,8 +577,71 @@ impl SpatialMemory {
         // much time has passed.
         let spent = ticks as f32
             * Self::HOW_FAST_AN_ORDINARY_PLACE_IS_FORGOTTEN
-            * self.what_forgetting_this_would_cost().decay_multiplier();
+            * self.what_forgetting_this_would_cost().decay_multiplier()
+            * self.how_long_this_footing_holds();
         self.confidence = (self.confidence - spent).max(0.0);
+    }
+
+    /// What the footing does to the rate, once the ground is allowed for.
+    ///
+    /// Two rules, and the second is what keeps the first honest.
+    ///
+    /// **The footing decides how long.** A place watched over somebody's
+    /// shoulder is a week; a kind of stuff he uses is a year; a bank he has
+    /// had it out of is three, and another for each trip back. See `HowIKnow`.
+    ///
+    /// **The ground decides whether that is worth anything.** A clay bank is
+    /// where it was. A bramble is a fact about last autumn, and a man walking
+    /// half a day in March on a memory he stripped in October has been misled
+    /// by his own good memory. So a turning place is never held longer than
+    /// the ordinary rate however well he knows it - he may know exactly where
+    /// the patch is and still have to go and look. Nothing is *shortened* by
+    /// turning: forgetting a bush faster than a rock is what
+    /// `how_much_this_matters` is already for, and two systems shortening the
+    /// same memory is how a store came to be forgotten a fortnight after it
+    /// was buried.
+    ///
+    /// Applied only where taking something is the point. A pit a man dug, the
+    /// water he drinks, a place that hurt him and a roof he worked on are not
+    /// *sources* - there is no trip back to count and no season to turn, and
+    /// their bands were measured where they stand.
+    fn how_long_this_footing_holds(&self) -> f32 {
+        if !matches!(
+            self.memory_type,
+            SpatialMemoryType::Resource | SpatialMemoryType::Tool | SpatialMemoryType::Food
+        ) {
+            return 1.0;
+        }
+
+        let footing = self.how_i_know.how_fast_this_fades();
+
+        match self.how_steady {
+            HowSteady::Steady => footing,
+            HowSteady::Turns => footing.max(1.0),
+        }
+    }
+
+    /// Note that he has had something out of here.
+    ///
+    /// The one event that moves a place up the footings, and the only one that
+    /// counts: watching is not using and using a kind of thing is not working
+    /// a bank. Each trip back is another year - see `HowIKnow`.
+    pub fn i_have_worked_this_place(&mut self) {
+        self.how_i_know = match self.how_i_know {
+            HowIKnow::WorkedThisPlace(trips) => HowIKnow::WorkedThisPlace(trips.saturating_add(1)),
+            _ => HowIKnow::WorkedThisPlace(1),
+        };
+    }
+
+    /// Note how he came by this place, where that is firmer than he had it.
+    ///
+    /// A footing is never demoted by a later, weaker sighting: watching
+    /// somebody else dig a bank you have dug yourself does not turn it back
+    /// into hearsay.
+    pub fn i_know_this_at_least_this_well(&mut self, footing: HowIKnow) {
+        if footing.at_least_as_firm_as(&self.how_i_know) {
+            self.how_i_know = footing;
+        }
     }
 
     /// What a tick costs an ordinary place's confidence.
@@ -667,6 +938,54 @@ impl Memory {
                 && m.position == position
         }) {
             remembered.what_it_is = what_it_is.or(remembered.what_it_is.take());
+        }
+    }
+
+    /// Remember a place, what was there, how much, how he came by it and
+    /// whether it will keep.
+    ///
+    /// The full writer. `remember_this_here` is this one on the default
+    /// footing, kept because most callers have nothing to say about how they
+    /// learned a thing.
+    pub fn remember_what_kind_of_place_this_is(
+        &mut self,
+        memory_type: SpatialMemoryType,
+        position: (i32, i32, i32),
+        what_it_is: Option<String>,
+        how_much: u32,
+        how_i_know: HowIKnow,
+        how_steady: HowSteady,
+    ) {
+        self.remember_this_here(memory_type.clone(), position, what_it_is, how_much);
+
+        if let Some(remembered) = self.spatial_memories.iter_mut().find(|m| {
+            std::mem::discriminant(&m.memory_type) == std::mem::discriminant(&memory_type)
+                && m.position == position
+        }) {
+            remembered.i_know_this_at_least_this_well(how_i_know);
+            remembered.how_steady = how_steady;
+        }
+    }
+
+    /// Note that he has had something out of a place he remembers.
+    ///
+    /// The firmest of the three footings, and the only one a man earns with
+    /// his hands. Returns false where he does not in fact remember the place,
+    /// which is the ordinary case for a patch he walked onto and stripped
+    /// without ever having filed it.
+    pub fn i_have_worked_this_place(
+        &mut self,
+        memory_type: SpatialMemoryType,
+        position: (i32, i32, i32),
+    ) -> bool {
+        if let Some(remembered) = self.spatial_memories.iter_mut().find(|m| {
+            std::mem::discriminant(&m.memory_type) == std::mem::discriminant(&memory_type)
+                && m.position == position
+        }) {
+            remembered.i_have_worked_this_place();
+            true
+        } else {
+            false
         }
     }
 

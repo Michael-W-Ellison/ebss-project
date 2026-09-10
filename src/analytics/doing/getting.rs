@@ -367,6 +367,28 @@ impl Simulation {
                 self.population.agents[agent_index]
                     .exploration_knowledge
                     .found_some_at(where_it_grew);
+
+                // **And he has now had it out of the ground here.**
+                //
+                // The firmest of the three footings a map memory can stand
+                // on, and the only one earned with the hands: watching is not
+                // using, and using a kind of stuff is not working a bank. The
+                // specification gives this three years and another for every
+                // trip back, against a year for knowing what the stuff is for
+                // and a week for having watched somebody else. See
+                // `core::memory::HowIKnow`.
+                //
+                // A man who walks onto a patch and strips it without ever
+                // having filed it has nothing to promote, which is the
+                // ordinary case and why this says nothing about failure.
+                let kind = if Self::edible_item_for(resource_type_enum).is_some() {
+                    crate::core::memory::SpatialMemoryType::Food
+                } else {
+                    crate::core::memory::SpatialMemoryType::Resource
+                };
+                self.population.agents[agent_index]
+                    .memory
+                    .i_have_worked_this_place(kind, (where_it_grew.x, where_it_grew.y, 0));
             }
             if picked_out {
                 for watcher in self.population.agents.iter_mut() {

@@ -138,7 +138,7 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
 #[test]
 fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     use crate::environment::seasons::{DAYS_PER_YEAR, TICKS_PER_DAY};
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_063_813;
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_064_189;
 
     let a_year = (DAYS_PER_YEAR * TICKS_PER_DAY) as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -1194,6 +1194,53 @@ pub const EVERY_FAMILY: &[&[&str]] = &[
     &["flax", "rettedflax", "cotton"],
 ];
 
+/// What sort of thing this is, for somebody who can no longer say what it was.
+///
+/// **The category tier.** A name is the first thing to go and the place is the
+/// last, and between them there is a long stretch where a man knows he saw
+/// fibre in that valley without being able to say it was flax. The
+/// specification calls it category memory and gives the worked example:
+/// "flax grows at this field edge" becomes "fibre plant grows in that valley"
+/// becomes "that valley has useful plants" becomes nothing.
+///
+/// Broader than `EVERY_FAMILY`, and a different question. A family is what
+/// will stand in for what in a making - a substitution, and the reason
+/// knapping stone teaches knapping flint. A sort is what a man would call the
+/// stuff with the name gone. Every family sits inside one sort, and a test
+/// holds them to it so the two tables cannot come apart.
+///
+/// Both vocabularies are in here, because both are written on maps: the
+/// world's resources file themselves by `ResourceType` and the making chain
+/// works in its own names.
+pub const WHAT_SORT_OF_THING: &[(&str, &[&str])] = &[
+    ("stone", &["stone", "flint", "sand"]),
+    ("fibre", &["flax", "rettedflax", "cotton", "wool"]),
+    ("timber", &["wood"]),
+    ("earth", &["clay"]),
+    ("metal", &["iron", "shinylump", "metalblade"]),
+    (
+        "something to eat",
+        &[
+            "food", "greens", "roots", "nuts", "legumes", "grain", "meat", "fish", "honey",
+            "milk", "strangeplant",
+        ],
+    ),
+    ("physic", &["herbs"]),
+    ("hides", &["hides", "leather"]),
+];
+
+/// What a man would call this, with the name gone.
+///
+/// `None` for anything no sort covers, which is a thing he can put no word to
+/// at all - the place survives him as somewhere that was worth something, and
+/// that is the tier below this one.
+pub fn what_sort_of_thing_is_it(what: &str) -> Option<&'static str> {
+    WHAT_SORT_OF_THING
+        .iter()
+        .find(|(_, members)| members.contains(&what))
+        .map(|(sort, _)| *sort)
+}
+
 /// What else is of a kind with this, not counting itself.
 ///
 /// Empty for anything that has no siblings, which is most things: a hide is a
