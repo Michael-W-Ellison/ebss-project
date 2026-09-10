@@ -9737,6 +9737,30 @@ impl Agent {
         DriveType::Preparedness
     }
 
+    /// **Do I know what this is for?**
+    ///
+    /// The question that decides whether a place goes into the map as *what it
+    /// is* or only as *somewhere worth a look*. A man who has no use for
+    /// cotton walks past a cotton field and remembers a field; a man who spins
+    /// remembers cotton. Neither of them saw anything the other did not.
+    ///
+    /// Two sources, and both already exist. `is_a_familiar_thing` is what
+    /// anybody is born knowing - the obvious steps and workings, a stone you
+    /// can knap and a stick you can sharpen. `knows_how_to` is what this
+    /// particular agent has since been taught or worked out. So knowing what a
+    /// thing is for grows with the craft, which is what makes map memory
+    /// something a people gets better at rather than a fixed sense.
+    pub fn do_i_know_what_this_is_for(&self, what: &str) -> bool {
+        if crate::environment::making::is_a_familiar_thing(what) {
+            return true;
+        }
+
+        crate::environment::making::EVERY_STEP
+            .iter()
+            .filter(|step| step.makes == what || step.needs.iter().any(|(needs, _)| *needs == what))
+            .any(|step| self.knows_how_to(step))
+    }
+
     /// **What may I use?** - the fourth of the six questions, and the one that
     /// had no answer anywhere in this model until now.
     ///

@@ -264,6 +264,17 @@ impl Simulation {
                 .hunting_action(agent, agent_position)
                 .or_else(|| self.digging_in(agent, agent_position)),
 
+            // **Not a walk to the timber he remembers.** That was built and
+            // measured and it costs: over two blocks of 32 worlds it took
+            // person-days from 215,333 to 211,833 and settlements out of their
+            // first winter from 22 of 64 to 20, and - the number that says
+            // what happened - **burrows finished from 22 to 5 and the camp's
+            // larder from 30,745 items to 12,340.** A tent wants eight wood
+            // and four hides; a burrow wants nothing at all. Twenty paces
+            // spent on tent timber is twenty paces not spent digging the hole
+            // the store goes under. In this model the thing worth doing is
+            // nearly always the thing under his feet, and a walk displaces it.
+            // See ISSUES_FOUND #194.
             Some((what, _)) => Some(Action::Gather { resource_type: what }),
         }
     }

@@ -13875,14 +13875,33 @@ out of the first winter and 106,989 / 25 / 10:
 - **Filing only what a man can name** changed nothing at all, because nearly
   everything in these worlds is nameable by a stone-age agent.
 
-So the record costs about one and a half per cent and buys nothing, because
-the only reader that used the name was refuted. It is substrate for #171-#173 -
-upgrade, innovation and discovery all want to know where a material is - and it
-should go in when one of those is built to read it, not before. The work is
-kept as a patch rather than committed.
+**And the one and a half per cent turned out to be a bug, not a price.**
+`what_forgetting_this_would_cost` dropped a place a band when nobody could name
+it - and `remember_location` files a pit, a roof, a danger and a drink *without*
+a name, because there is nothing to say about them beyond what they are. So the
+winter store began fading a band faster, which is precisely the fault
+`how_much_this_matters` was written to fix. Three tests caught it:
+`the_store_outlasts_the_winter_it_was_laid_down_for`,
+`a_bush_somebody_walked_past_is_forgotten_in_a_fortnight` and
+`forgetting_in_batches_is_forgetting_at_the_same_rate`.
 
-One thing did come out of it and is fixed here: `Memory::batch_decay_and_prune`
+Naming only governs retention for a `Resource`, which is the one kind of place
+where the question means anything: a bank of clay to a potter, a patch of mud to
+everybody else. With that, the layer is **free**. The one-year roofs run comes
+back byte-identical to the run before any of this - 22 finished burrows, 162
+pits, 30,745 items - and over two years the blocks are 108,160 / 23 emptied / 11
+out of the first winter and 106,989 / 25 / 10, against 108,344 / 22 / 12 and
+106,989 / 25 / 10. The second block is identical; the first differs by one
+world. Person-days 215,333 to 215,149, which is nine hundredths of a per cent
+and well inside the noise of this harness. Seed 0's year rolls the same number
+of times it always did.
+
+So the record is in. Nothing reads the name yet beyond its own retention - the
+reader that walked to it is refuted and stays out - and it is substrate for
+#171-#173, which all want to know where a material is.
+
+One more thing came out of it and is fixed: `Memory::batch_decay_and_prune`
 evicted from a full shelf **by confidence alone**, so a bush seen this morning
 outranked a winter store. The cap is a thousand and the store never comes near
-it today, so this changes nothing measurable - it was found by filling the
-store and it is fixed rather than left for whoever fills it next.
+it, so this changes nothing measurable - it was found by filling the store and
+is fixed rather than left for whoever fills it next.

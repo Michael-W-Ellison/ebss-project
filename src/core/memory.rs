@@ -236,7 +236,20 @@ impl SpatialMemoryType {
     }
 }
 
-/// A spatial memory entry
+/// A remembered place, and what was there.
+///
+/// **What a place is remembered *as* is a fact about the rememberer, not about
+/// the place.** A man who knows what clay is for remembers a clay bank; a man
+/// who does not remembers that there is something on that bend of the river.
+/// Both of them saw the same mud. That is what `what_it_is` is for, and it is
+/// the whole difference between a map memory that can serve a craft and one
+/// that can only serve an appetite.
+///
+/// It also degrades in the right order. Confidence falls, and the *name* goes
+/// before the *place* does: "flax grows at that field edge" becomes "there is
+/// something worth having in that valley" becomes nothing. One clock and two
+/// thresholds rather than two clocks, so a memory cannot be sure what was
+/// there and unsure where.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpatialMemory {
     pub memory_type: SpatialMemoryType,
@@ -244,6 +257,13 @@ pub struct SpatialMemory {
     pub last_seen: u32, // Tick when last observed
     pub confidence: f32, // 0.0 to 1.0, decays over time
     pub value: f32, // Estimated value/usefulness
+    /// What was there, where the rememberer knew what it was for.
+    ///
+    /// `None` is not ignorance of the place - it is a place known without a
+    /// name, which is what a resource an agent has no use for comes to. See
+    /// `what_i_could_name_it`.
+    #[serde(default)]
+    pub what_it_is: Option<String>,
 }
 
 impl SpatialMemory {
@@ -254,8 +274,81 @@ impl SpatialMemory {
             last_seen: tick,
             confidence: 1.0,
             value: 1.0,
+            what_it_is: None,
         }
     }
+
+    /// What forgetting this place would cost.
+    ///
+    /// **A place you have no use for is worth less than a place you have.**
+    /// This is the retention half of the specificity rule, and it is the half
+    /// that costs nothing: a man who cannot name what was there loses it a
+    /// band faster and goes over the side first when the shelf is full, and
+    /// nobody walks anywhere on the strength of it.
+    ///
+    /// The type still decides the band - a store is a store - and the name
+    /// decides whether he keeps the whole of it. Wanting it the other way
+    /// round was measured: sending a man to fetch the material he remembers
+    /// took person-days from 215,333 to 201,777 over two blocks of 32 worlds
+    /// and cost four fifths of a settlement's finished burrows, because the
+    /// thing worth doing is nearly always the thing under his feet and a walk
+    /// displaces it. Knowing where the clay is turns out to be worth having
+    /// and not worth crossing a valley for.
+    pub fn what_forgetting_this_would_cost(&self) -> MemoryImportance {
+        let matters = self.memory_type.how_much_this_matters();
+
+        // **Only where naming is the point.** A pit a man dug, a roof he
+        // worked on, a place that hurt him and the water he drinks are not
+        // remembered *as* anything - `remember_location` files them without a
+        // name because there is nothing to say beyond what they are. Demoting
+        // those for want of a name made the winter store fade a band faster,
+        // which is precisely the fault `how_much_this_matters` was written to
+        // fix: measured, a store forgotten a fortnight after it was buried and
+        // its owner starving thirty paces from it. Three tests caught it.
+        //
+        // A `Resource` is the one kind where the question means something: it
+        // is a bank of clay to a potter and a patch of mud to everybody else.
+        if !matches!(
+            self.memory_type,
+            SpatialMemoryType::Resource | SpatialMemoryType::Tool
+        ) || self.what_it_is.is_some()
+        {
+            return matters;
+        }
+
+        match matters {
+            MemoryImportance::Critical => MemoryImportance::Important,
+            MemoryImportance::Important => MemoryImportance::Normal,
+            MemoryImportance::Normal => MemoryImportance::Minor,
+            MemoryImportance::Minor | MemoryImportance::Trivial => MemoryImportance::Trivial,
+        }
+    }
+
+    /// What he would call this place now.
+    ///
+    /// The name is the first thing to go. Above `STILL_KNOWS_WHAT_IT_WAS` he
+    /// can still say it was flax; below it he knows only that the valley was
+    /// worth something, which is what a category memory is; below the 0.3
+    /// `recall_locations` wants, nothing at all.
+    ///
+    /// Asked rather than stored, so there is one clock and the two tiers
+    /// cannot disagree about how long ago this was.
+    pub fn what_i_could_name_it(&self) -> Option<&str> {
+        (self.confidence > Self::STILL_KNOWS_WHAT_IT_WAS)
+            .then(|| self.what_it_is.as_deref())
+            .flatten()
+    }
+
+    /// How sure a man has to be to still say what was there.
+    ///
+    /// Set so the name lasts about a fifth as long as the place - a berry
+    /// patch named for three days and remembered as somewhere-worth-a-look for
+    /// a fortnight, on the ordinary rate. The specification asks for ratios
+    /// between one in three and one in twelve depending how the place was
+    /// learned; one threshold cannot be all three, and this sits in the middle
+    /// of them. Making it depend on *how* the place was learned is the next
+    /// piece, not this one.
+    pub const STILL_KNOWS_WHAT_IT_WAS: f32 = 0.85;
 
     /// Decay confidence over time
     pub fn forget_a_little(&mut self, ticks: u32) {
@@ -276,7 +369,7 @@ impl SpatialMemory {
         // much time has passed.
         let spent = ticks as f32
             * Self::HOW_FAST_AN_ORDINARY_PLACE_IS_FORGOTTEN
-            * self.memory_type.how_much_this_matters().decay_multiplier();
+            * self.what_forgetting_this_would_cost().decay_multiplier();
         self.confidence = (self.confidence - spent).max(0.0);
     }
 
@@ -431,7 +524,7 @@ impl Memory {
 
         // Enforce max memory limit if set.
         //
-        // **What goes off a full shelf is decided by what a place is worth,
+// **What goes off a full shelf is decided by what a place is worth,
         // not only by how lately it was seen.** This sorted on confidence
         // alone, so a berry bush glanced at this morning outranked the pit a
         // man dug in the autumn and filled with his winter food -
@@ -439,18 +532,16 @@ impl Memory {
         // who was evicted. That is the table-with-half-its-readers fault this
         // project keeps finding, at the call site that most needed it.
         //
-        // It does not bind today and this changes nothing measurable: the
-        // store holds only food, water, pits and roofs, and never comes near a
-        // thousand. It was found by filling it - teaching the sight pass to
-        // notice stone and timber as well put every tree in view in
-        // competition for the same slots - and it is fixed here rather than
-        // left for whoever fills it next.
+        // It does not bind today and this changes nothing measurable: a
+        // thousand places is far more than anybody ever remembers, and a run
+        // with this fixed came back byte-identical to one without. It was
+        // found by filling the store and it is fixed rather than left for
+        // whoever fills it next. See ISSUES_FOUND #194.
         if let Some(max) = self.config.max_memories {
             if self.spatial_memories.len() > max {
                 self.spatial_memories.sort_by(|a, b| {
-                    let worth = |m: &SpatialMemory| {
-                        m.memory_type.how_much_this_matters().decay_multiplier()
-                    };
+                    let worth =
+                        |m: &SpatialMemory| m.what_forgetting_this_would_cost().decay_multiplier();
 
                     // Lower multiplier is a place that matters more, so it
                     // sorts first; confidence breaks the tie within a band.
@@ -546,6 +637,36 @@ impl Memory {
                 && m.position == position
         }) {
             remembered.value = how_much as f32;
+        }
+    }
+
+    /// Remember a place, what was there, and how much of it.
+    ///
+    /// The writer the specification asks for. `what_it_is` is what the
+    /// *rememberer* could name, so the caller has already asked whether this
+    /// agent knows what the stuff is for - see
+    /// `Agent::do_i_know_what_this_is_for`. Passing `None` files the place
+    /// under its category alone, which is what every memory in this model was
+    /// until now.
+    ///
+    /// A name once learned is not unlearned by seeing the thing again without
+    /// knowing it: the `or` below keeps a name a later sighting could not
+    /// supply, because forgetting what a thing is called is what confidence is
+    /// for and not something a glance should do.
+    pub fn remember_this_here(
+        &mut self,
+        memory_type: SpatialMemoryType,
+        position: (i32, i32, i32),
+        what_it_is: Option<String>,
+        how_much: u32,
+    ) {
+        self.remember_how_much_is_there(memory_type.clone(), position, how_much);
+
+        if let Some(remembered) = self.spatial_memories.iter_mut().find(|m| {
+            std::mem::discriminant(&m.memory_type) == std::mem::discriminant(&memory_type)
+                && m.position == position
+        }) {
+            remembered.what_it_is = what_it_is.or(remembered.what_it_is.take());
         }
     }
 
