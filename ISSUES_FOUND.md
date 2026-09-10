@@ -14206,3 +14206,105 @@ against 201,777. Knowing where the clay is is worth having and not worth
 crossing a valley for, so the record exists and nothing acts on it. Until
 something does, every improvement to what a map remembers is an improvement to
 a thing only the craft layer reads.
+
+### 197. Where the map already is the first step, and the one place it cannot pay
+
+A survey against the five layers, and one measurement that came out against the
+obvious answer twice.
+
+#### What of the layers is standing
+
+**Layer 1, drives**, and **Layer 4, actions**, are whole. **Layer 3,
+strategies**, is `wanting::strategy` - twenty-four ways declared, fourteen
+reachable, each costed by `Utility` in one currency, each with a `Horizon`. The
+hydration list is the specification's own six, one for one.
+
+**Layer 2, goals, does not exist.** There is no object between a drive and the
+ways of answering it, and so no threshold: "potable_water_quantity >= threshold"
+is nowhere written. What stands in for it is `how_hard_it_presses`, which is a
+pressure rather than a target. Nothing is obviously broken for want of it -
+`Utility::relief` reads that pressure and prices every way against it - but the
+layer the specification names is not there, and a threshold is what would let a
+man stop gathering because he has *enough* rather than because the drive has
+gone quiet.
+
+**Layer 5, capabilities**, is half there. A way that wants a tool asks for it;
+a way that wants a *material* has nowhere to ask, because - see #196 - nothing
+in the decision layer reads a `SpatialMemoryType::Resource` memory at all.
+
+#### Knowing where it is already is the first step, for the things that kill
+
+For water, food and the store the map is consulted before anything else, and
+correctly. `known_source_position` asks the nose, then the spatial memory, then
+the exploration record; there is no omniscience in it. `FetchFromKnownSource`
+is a way that exists only because a place is remembered. Foraging is bounded by
+`FORAGE_RADIUS`, which is one turn of gathering's reach and matches an
+unimpaired agent's sight, so what looks like scanning the world is the
+neighbourhood he is standing in.
+
+One narrow exception worth writing down: **that radius is a constant, so a
+blind agent forages exactly as far as a sighted one.** `Trait::Blind` sets
+`sight_range` to nought and the hunger path never asks. Not measured, because
+the blast radius is however many agents are blind or short-sighted, but it is
+the one place in the food chain where knowing is skipped.
+
+#### And the measurement: ranking a remembered place by worth costs
+
+`known_source_position` chose between remembered places **on distance alone**,
+and `SpatialMemory::value` - how much was standing there - had one reader in
+the whole model, which used it as a boolean. The note on
+`remember_how_much_is_there` says exactly what that means: "an agent remembered
+a spring and a puddle as the same place. Foraging and migration both read this
+store, and both of them chose between remembered places on distance alone."
+
+So: rank them by `what_this_patch_is_worth`, which is the model's one opinion
+about what a trip is worth and is what the gather executor already picks by -
+making the walk and the harvest one opinion instead of two.
+
+Against 218,588 person-days / 48 worlds emptied / 21 out of the first winter:
+
+- **By worth**: 108,345 / 28 / 12 and 102,135 / 27 / 7 - a total of
+  210,480 / 55 / 19. Person-days down 3.1% and 4.3%, **both blocks**; eight
+  more worlds emptied, both blocks.
+- **By worth, discounted by confidence** - the specification's own term, and
+  the obvious diagnosis, since `value` never falls while `confidence` does, so
+  a man banks on a count that may be a month stale: 110,012 / 27 / 12 and
+  101,682 / 29 / 7, a total of 211,694 / 56 / 19. It recovered **a seventh** of
+  what was lost and left the rest.
+
+Reverted. What is left behind is the finding.
+
+#### Why, and it is the third time this model has said the same thing
+
+**Distance is not only a cost here. It is the error-correcting term.** A near
+place is cheap to check, and `forget_location` mends the memory the moment he
+arrives and finds nothing. A far place is a long walk to discover you were
+wrong, and the walk is charged in turns, which are the scarcest thing anybody
+in this world has. Sorting by nearness keeps a man inside a tight loop that
+corrects itself; sorting by remembered worth sends him on errands priced from
+stale information, and the better the remembered place looks the further he
+will go on it.
+
+This is now measured three separate times, in three different mechanisms:
+
+1. **Fetching a material you remember**: 215,333 person-days to 201,777, and
+   four fifths of a settlement's finished burrows. See
+   `what_forgetting_this_would_cost`.
+2. **Putting a place you were told about on your map** (#196): 6.3% of all
+   person-days and two thirds of the first winters.
+3. **Walking to the remembered place that looks richest** (here): 3.2-3.7% of
+   all person-days and eight more worlds emptied.
+
+Three mechanisms, one law: **in this model, acting on a remembered distant
+place loses to acting on what is under your feet.** That is not an argument
+against map memory - the map is what makes water, the larder and the innovation
+path work, and all three are measured. It is a statement about where map
+knowledge can pay, and it says the payoff is in *recognising* and *retaining*,
+not in *travelling*.
+
+Which points at what would have to change first for any of the three to pay:
+the walk is priced at `TURNS_A_PACE_TAKES = 2.0` turns a pace and an agent
+re-decides every tick, so a long errand is both expensive and constantly liable
+to be abandoned half-way. **Until an agent can commit to a trip, a better
+answer further off is worse than a poor answer to hand.** See #214, which is
+the same finding from the other end.
