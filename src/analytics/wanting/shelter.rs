@@ -7,14 +7,106 @@
 //! Part of the decision layer - see [`super`]. Nothing here does anything: it
 //! answers what would be worth doing, and hands that answer back up the ladder.
 
+
+/// Whose roof a body is looking for.
+///
+/// Four kinds, and between them they are exactly what `is_shelter_tile`
+/// already accepted - a completed building or a wood - so naming them takes
+/// no cover away from anybody. See `world::belonging`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum WhoseRoof {
+    /// His own: he put it up.
+    HisOwn,
+    /// A parent's, a child's, a sibling's or a partner's.
+    AKinsmans,
+    /// The settlement's, or nobody's - which come to the same thing to walk
+    /// into.
+    TheSettlements,
+    /// No roof at all: a wood, which is what cover was before anybody built
+    /// anything.
+    Natural,
+}
+
 use super::super::Simulation;
 use crate::environment::Action;
 
 impl Simulation {
-    /// Whether the agent is cold enough, and bare enough, to want another layer
+    /// Whether the agent is bare enough, and pressed enough, to want another
+    /// layer.
+    ///
+    /// **The Shelter drive decides this, not the thermometer.** It used to be
+    /// "am I cold at this instant, and am I bare", which made the drive a
+    /// router rather than a cause: `DriveType::Shelter` sent the tick here and
+    /// this line sent it straight back unless the body was already below its
+    /// ideal. Nobody made a coat in autumn, because in autumn nobody is
+    /// shivering yet - and the coat that is wanted in December has to be cut,
+    /// carried and sewn in October.
+    ///
+    /// Being cold now still counts, and counts on its own: a body under its
+    /// ideal wants a layer whatever a drive says about it. What is new is the
+    /// second way in - a Shelter drive over its own threshold, which is what
+    /// the drive layer means by "this one is exposed and it matters", and
+    /// which rises on the weather and the season rather than on the current
+    /// reading of one body.
+    ///
+    /// Bareness is the same test as before and is the harder half: somebody
+    /// already carrying `ENOUGH_INSULATION` wants nothing more however cold it
+    /// is or however hard the drive presses, which is what stops a settlement
+    /// spending the winter sewing.
     pub(in crate::analytics) fn wants_more_clothing(agent: &crate::agents::Agent) -> bool {
-        agent.body_temperature.current < agent.body_temperature.ideal - Self::CHILLY_MARGIN
-            && agent.body.total_cold_insulation() < Self::ENOUGH_INSULATION
+        if agent.body.total_cold_insulation() >= Self::ENOUGH_INSULATION {
+            return false;
+        }
+
+        let cold_now = agent.body_temperature.current
+            < agent.body_temperature.ideal - Self::CHILLY_MARGIN;
+
+        let the_drive_is_pressing = agent
+            .drives
+            .get(crate::core::DriveType::Shelter)
+            .map(|drive| drive.value >= crate::core::DriveType::Shelter.default_threshold())
+            .unwrap_or(false);
+
+        cold_now || the_drive_is_pressing
+    }
+
+    /// Whether this one of mine is bare enough that I should clothe it.
+    ///
+    /// A child cannot clothe itself - it cannot gather flax, has no skill to
+    /// sew, and until now nobody made it anything. The model already knew
+    /// this: `update_agent_exposure` has a paragraph explaining that a child
+    /// left to the weather runs two or three degrees colder than the adults
+    /// round it and dies of that, and it works around it by counting a carer
+    /// standing nearby *as shelter*. That is a plaster over the hole rather
+    /// than the thing itself, and it only holds while somebody is stood next
+    /// to them.
+    ///
+    /// So clothing hangs off Protection as well as Shelter, which is what a
+    /// parent is for.
+    pub(in crate::analytics) fn one_of_mine_who_is_bare(
+        &self,
+        agent: &crate::agents::Agent,
+    ) -> Option<uuid::Uuid> {
+        use crate::agents::LifeStage;
+
+        self.population
+            .agents
+            .iter()
+            .filter(|child| child.state.is_alive)
+            .filter(|child| child.parent_ids.contains(&agent.id))
+            .filter(|child| {
+                matches!(child.state.life_stage, LifeStage::Infant | LifeStage::Child)
+            })
+            .filter(|child| child.body.total_cold_insulation() < Self::ENOUGH_INSULATION)
+            // Near enough to hand it over. A gift is a thing you put in
+            // somebody's hands, not a thing you post.
+            .filter(|child| {
+                let (x, y, _) = child.state.position;
+                let (mx, my, _) = agent.state.position;
+                (x - mx).abs().max((y - my).abs()) <= Self::WITHIN_SIGHT
+            })
+            .map(|child| child.id)
+            .next()
     }
 
     /// What an agent of this much practice turns a given material into.
@@ -172,8 +264,98 @@ impl Simulation {
                 .hunting_action(agent, agent_position)
                 .or_else(|| self.digging_in(agent, agent_position)),
 
+            // **Not a walk to the timber he remembers.** That was built and
+            // measured and it costs: over two blocks of 32 worlds it took
+            // person-days from 215,333 to 211,833 and settlements out of their
+            // first winter from 22 of 64 to 20, and - the number that says
+            // what happened - **burrows finished from 22 to 5 and the camp's
+            // larder from 30,745 items to 12,340.** A tent wants eight wood
+            // and four hides; a burrow wants nothing at all. Twenty paces
+            // spent on tent timber is twenty paces not spent digging the hole
+            // the store goes under. In this model the thing worth doing is
+            // nearly always the thing under his feet, and a walk displaces it.
+            // See ISSUES_FOUND #194.
             Some((what, _)) => Some(Action::Gather { resource_type: what }),
         }
+    }
+
+    /// How far a man will walk to lend a hand to a job already going.
+    ///
+    /// Bounded, and bounded because the walk was measured. Sending somebody
+    /// back to a roof unconditionally cost 98,079 person-days against 99,396
+    /// over 32 seeded worlds - see `digging_in` - so a job the far side of the
+    /// map is not a job, it is a morning gone. This is about a camp, and a
+    /// camp is what you can see the smoke of.
+    pub(in crate::analytics) const HOW_FAR_TO_LEND_A_HAND: i32 = 20;
+
+    /// **The job this camp has going.**
+    ///
+    /// Nobody in this model has ever joined a job somebody else started. The
+    /// only lookup for a half-built roof was "is there one within two paces of
+    /// where I am standing", so a man dug his own burrow beside another man's
+    /// half-dug burrow and neither was ever finished; `workers` has sat on
+    /// `BuildingState::UnderConstruction` since buildings were written with
+    /// nothing to write it, and `SpatialMemoryType::Shelter` has sat in the
+    /// memory with no writer either. Those are the same absence seen from
+    /// three sides: there was no such thing as *our* job.
+    ///
+    /// Three rules, and each is doing something:
+    ///
+    /// 1. **From memory, not from the world.** He goes to a roof he knows
+    ///    about - one he started, one he has worked on. Asking the world would
+    ///    be the omniscience `nearest_full_pit` was taken out for.
+    /// 2. **One he may work on**, by `world::belonging`: his own, his kin's,
+    ///    or the camp's. In practice everything the decision layer can raise
+    ///    is the camp's, because `is_residential` names only the grand houses
+    ///    it cannot build - so this is nearly always yes, and it is here so
+    ///    that it stops being yes the day somebody builds a house.
+    /// 3. **The one furthest along.** This is the whole of the coordination
+    ///    and it is worth being plain about why: a camp that always takes the
+    ///    nearest job finishes nothing, and a camp that always takes the one
+    ///    nearest done finishes one roof, then the next. Nobody agrees to
+    ///    anything and nobody is told what to do - the half-built roof itself
+    ///    is what they coordinate through.
+    pub(in crate::analytics) fn the_job_this_camp_has_going(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        use crate::core::memory::SpatialMemoryType;
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+
+        agent
+            .memory
+            .recall_locations(SpatialMemoryType::Shelter)
+            .into_iter()
+            .filter_map(|remembered| {
+                let there = Position::new(remembered.position.0, remembered.position.1);
+
+                if (there.x - here.x).abs() > Self::HOW_FAR_TO_LEND_A_HAND
+                    || (there.y - here.y).abs() > Self::HOW_FAR_TO_LEND_A_HAND
+                {
+                    return None;
+                }
+
+                let roof = self
+                    .world
+                    .buildings
+                    .iter()
+                    .find(|building| building.position == there)?;
+
+                if roof.is_completed() || !agent.may_i_use(&roof.belongs()).is_mine_to_use() {
+                    return None;
+                }
+
+                // Furthest along first, nearest second. The ordering is the
+                // point; the distance only breaks a tie between two jobs at
+                // the same stage.
+                let how_far_along = (roof.construction_progress() * 1000.0) as i32;
+                Some((there, how_far_along, here.distance_to(&there)))
+            })
+            .max_by_key(|(_, how_far_along, paces)| (*how_far_along, -(*paces as i32)))
+            .map(|(there, _, _)| there)
     }
 
     /// Digging yourself in, for want of anything to build with.
@@ -189,6 +371,115 @@ impl Simulation {
     ) -> Option<Action> {
         use crate::world::Position;
 
+        let here = Position::new(agent_position.0, agent_position.1);
+
+        // A roof of one's own that is half up is a reason to go back to it.
+        //
+        // This used to be a flat "there is a building within two paces, so
+        // stop", which was right while nothing could ever finish one and is
+        // exactly wrong now that something can: a man dug a burrow, the site
+        // was then within two paces of him for ever, and he never went back.
+        // Every burrow in every measured world was left half dug for that
+        // reason. An unfinished roof is the job; a finished one is the reason
+        // there is no job.
+        //
+        // Ahead of both gates below, and deliberately. Neither applies to
+        // carrying on: the hole is already open, so the ground has already
+        // answered, and a man who dug half a burrow and then wore his axe out
+        // still has hands. Behind them, a settlement would abandon exactly the
+        // roofs it had spent the most on.
+        let near = self.world.buildings.iter().find(|building| {
+            (building.position.x - here.x).abs() <= Self::HOW_CLOSE_TWO_ROOFS_GET
+                && (building.position.y - here.y).abs() <= Self::HOW_CLOSE_TWO_ROOFS_GET
+        });
+
+        match near {
+            Some(roof) if !roof.is_completed() => {
+                let there = (roof.position.x, roof.position.y, agent_position.2);
+
+                if there == agent_position {
+                    return Some(Action::Build {
+                        structure_type: Self::what_they_call_this_roof(roof.building_type)
+                            .to_string(),
+                        position: agent_position,
+                    });
+                }
+
+                // Walking back to it is a different matter from finishing it
+                // while standing on it, and it waits on supper.
+                //
+                // The same rung `would_a_better_tool_pay` asks about, for the
+                // same reason: a roof pays over a winter, and a winter is no
+                // use to somebody with nothing in for tonight. Measured
+                // without this, over 32 seeded worlds, person-days came out
+                // 98,079 against 99,396 - the walk was costing more than the
+                // roof was worth, because `Build` reaches the top of the drive
+                // ladder about thirty-six times in eight world-years and the
+                // sites were mostly still half dug either way.
+                if agent
+                    .state
+                    .what_the_larder_says
+                    .as_ref()
+                    .is_some_and(|larder| {
+                        larder.rung == crate::agents::provision::HowLongTheFoodLasts::NotTheDay
+                    })
+                {
+                    return None;
+                }
+
+                return Some(Action::Move { target: there });
+            }
+            // A roof already standing here is the reason there is no job.
+            Some(_) => return None,
+            None => {}
+        }
+
+        // **And a job the camp already has going, further off than two paces.**
+        //
+        // This is what was missing: the lookup above sees only the ground a
+        // man is standing on, so two men three paces apart dug two burrows and
+        // finished neither. Measured over eight seeded world-years before
+        // anything could finish a roof at all, forty-five burrows were dug and
+        // forty-five were still going up when the last of the diggers died -
+        // and finishing them one at a time was only half the answer, because
+        // one man alone still starts a second before he has finished the
+        // first.
+        //
+        // Behind the same supper gate as the walk above, and for the same
+        // measured reason: a roof pays over a winter and a winter is no use to
+        // somebody with nothing in for tonight.
+        if let Some(going_up) = self.the_job_this_camp_has_going(agent, agent_position) {
+            let there = (going_up.x, going_up.y, agent_position.2);
+
+            if there == agent_position {
+                let what = self
+                    .world
+                    .buildings
+                    .iter()
+                    .find(|roof| roof.position == going_up)
+                    .map(|roof| Self::what_they_call_this_roof(roof.building_type))
+                    .unwrap_or("burrow");
+
+                return Some(Action::Build {
+                    structure_type: what.to_string(),
+                    position: agent_position,
+                });
+            }
+
+            if agent
+                .state
+                .what_the_larder_says
+                .as_ref()
+                .is_some_and(|larder| {
+                    larder.rung == crate::agents::provision::HowLongTheFoodLasts::NotTheDay
+                })
+            {
+                return None;
+            }
+
+            return Some(Action::Move { target: there });
+        }
+
         // Something to dig with. The matrix enforces it before the action
         // runs, so choosing this without one spends the turn on a refusal -
         // the pattern that cost a settlement half its winter store three
@@ -200,31 +491,39 @@ impl Simulation {
             return None;
         }
 
-        let here = Position::new(agent_position.0, agent_position.1);
-
         if !self.is_ground_a_pit_will_go_in(here) {
             return None;
         }
 
-        // Not on top of somebody else's roof, and not on top of a hole that
-        // is already there.
-        let already = self
-            .world
-            .buildings
-            .iter()
-            .any(|building| {
-                (building.position.x - here.x).abs() <= Self::HOW_CLOSE_TWO_ROOFS_GET
-                    && (building.position.y - here.y).abs() <= Self::HOW_CLOSE_TWO_ROOFS_GET
-            });
-
-        if already {
-            return None;
-        }
 
         Some(Action::Build {
             structure_type: "burrow".to_string(),
             position: agent_position,
         })
+    }
+
+    /// What the `Build` verb calls a roof of this kind.
+    ///
+    /// The executor takes a string and maps it back to a `BuildingType`, so
+    /// carrying on with a roof that is already up needs the spelling that maps
+    /// to what is standing there. Anything the decision layer never raises is
+    /// not worth a name here and comes back as a tent, which is what the
+    /// executor's own fall-through does with a word it does not know.
+    pub(in crate::analytics) fn what_they_call_this_roof(
+        what: crate::world::BuildingType,
+    ) -> &'static str {
+        use crate::world::BuildingType;
+
+        match what {
+            BuildingType::Burrow => "burrow",
+            BuildingType::SmallHouse => "smallhouse",
+            BuildingType::MediumHouse => "mediumhouse",
+            BuildingType::LargeHouse => "largehouse",
+            BuildingType::Workshop => "workshop",
+            BuildingType::Storehouse => "storehouse",
+            BuildingType::Farm => "farm",
+            _ => "tent",
+        }
     }
 
     /// How near one shelter goes to another.
@@ -250,6 +549,35 @@ impl Simulation {
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
         use crate::agents::LifeStage;
+
+        // Somebody of your own, lying ill within reach, and something in the
+        // pack for it: that is what looking after your own comes to before
+        // it comes to standing between them and a wolf.
+        if let Some(sick) = self.one_of_mine_who_is_ill(agent, agent_position) {
+            return Some(Action::Treat { who: Some(sick) });
+        }
+
+        // And one of your own going bare in the cold.
+        //
+        // Clothing hangs off two drives now, which is what was asked for and
+        // what the model always implied: Shelter is a coat for yourself,
+        // Protection is a coat for your child. A garment in hand goes to the
+        // child that has none; with none in hand, making one is the errand,
+        // and `clothing_action` already knows how to cut flax and sew it.
+        //
+        // Both of those are behind the ill and in front of the wolf, on the
+        // same reasoning as the line above: a thing that is happening to a
+        // child now beats a thing that is wearing it down, and a wolf beats
+        // both.
+        if let Some(bare) = self.one_of_mine_who_is_bare(agent) {
+            if Self::garment_to_put_on(agent).is_some() {
+                return Some(Action::GiveTo { to: bare });
+            }
+
+            if let Some(garment) = Self::garment_to_make(agent) {
+                return Some(Action::MakeClothing { garment });
+            }
+        }
 
         // Only the small ones. An adolescent can look after itself.
         let mine: Vec<(i32, i32, i32)> = self
@@ -383,6 +711,105 @@ impl Simulation {
         in_building || in_woodland
     }
 
+    /// Whether this tile is cover of a particular kind: whose roof it is.
+    ///
+    /// The same walk as `is_shelter_tile`, asked with a claim in mind. Four
+    /// answers between them cover exactly what `is_shelter_tile` covered - a
+    /// completed building or a wood - so splitting them takes nothing away
+    /// from anybody; what it buys is that `UseOwnedShelter`,
+    /// `UseHouseholdShelter` and `ShareCommunalShelter` stop being three names
+    /// for one thing. All three were declared `NotYet("shelter has no owner,
+    /// so somebody else's is not a different thing from one's own")`, and that
+    /// is the sentence this makes untrue.
+    pub(in crate::analytics) fn is_this_roof_mine_to_use(
+        &self,
+        agent: &crate::agents::Agent,
+        position: &crate::world::Position,
+        which: WhoseRoof,
+    ) -> bool {
+        use crate::world::belonging::{Access, Belongs};
+        use crate::world::TerrainType;
+
+        let roof = self
+            .world
+            .get_building_at(position)
+            .filter(|building| building.is_completed());
+
+        match which {
+            WhoseRoof::Natural => self
+                .world
+                .grid
+                .get_tile(position)
+                .is_some_and(|tile| matches!(tile.terrain.terrain_type, TerrainType::Forest)),
+
+            WhoseRoof::HisOwn => roof
+                .is_some_and(|building| building.belongs() == Belongs::To(agent.id)),
+
+            WhoseRoof::AKinsmans => roof.is_some_and(|building| {
+                matches!(agent.may_i_use(&building.belongs()), Access::ByKinship(_))
+            }),
+
+            // Nobody's and everybody's are one case here: an unclaimed roof
+            // and the settlement's own are the same thing to walk into.
+            WhoseRoof::TheSettlements => roof.is_some_and(|building| {
+                matches!(building.belongs(), Belongs::ToUsAll | Belongs::ToNobody)
+            }),
+        }
+    }
+
+    /// Closest cover of a given kind the agent can walk to.
+    ///
+    /// `nearest_shelter_from` with the claim asked on the way past, so the
+    /// four ways of getting under a roof search the same map and come back
+    /// with different tiles.
+    pub(in crate::analytics) fn nearest_roof_of_this_kind(
+        &self,
+        agent: &crate::agents::Agent,
+        position: (i32, i32, i32),
+        which: WhoseRoof,
+    ) -> Option<crate::world::Position> {
+        use crate::world::Position;
+        use std::collections::{BTreeSet, VecDeque};
+
+        const MAX_VISITED: usize = 4096;
+
+        let start = (position.0, position.1);
+        let mut queue = VecDeque::new();
+        let mut seen = BTreeSet::new();
+
+        queue.push_back(start);
+        seen.insert(start);
+
+        let mut visited = 0usize;
+
+        while let Some(current) = queue.pop_front() {
+            visited += 1;
+            if visited > MAX_VISITED {
+                break;
+            }
+
+            let candidate = Position::new(current.0, current.1);
+
+            if self.is_this_roof_mine_to_use(agent, &candidate, which) {
+                return Some(candidate);
+            }
+
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let next = (current.0 + dx, current.1 + dy);
+
+                if !seen.insert(next) {
+                    continue;
+                }
+
+                if self.is_passable_tile(next.0, next.1) {
+                    queue.push_back(next);
+                }
+            }
+        }
+
+        None
+    }
+
     /// Closest cover the agent can actually walk to, by walking distance.
     ///
     /// Reachability rather than raw proximity: a hut across a lake is no use,
@@ -445,4 +872,52 @@ impl Simulation {
             .map(|building| building.is_completed())
             .unwrap_or(false)
     }
+
+    /// One of this agent's own, ill, close enough to hand something to.
+    ///
+    /// Kin rather than anybody, because `Protection` is the drive for one's
+    /// own and a settlement where everybody doses everybody is a settlement
+    /// with no herbs left by Tuesday. Nearest first.
+    fn one_of_mine_who_is_ill(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        // Nothing to give is nothing to offer.
+        agent.what_i_have_for_it_for_somebody_else()?;
+
+        let mut nearest: Option<(i32, uuid::Uuid)> = None;
+        for other in self.population.agents.iter() {
+            if !other.state.is_alive || other.id == agent.id {
+                continue;
+            }
+            if !other.wants_something_for_it() {
+                continue;
+            }
+            let theirs = other.parent_ids.contains(&agent.id)
+                || agent.parent_ids.contains(&other.id)
+                || other.parent_ids.iter().any(|p| agent.parent_ids.contains(p));
+            if !theirs {
+                continue;
+            }
+
+            let apart = (agent_position.0 - other.state.position.0)
+                .abs()
+                .max((agent_position.1 - other.state.position.1).abs());
+            if apart > Self::HOW_FAR_YOU_WILL_GO_TO_DOSE_YOUR_OWN {
+                continue;
+            }
+            if nearest.map(|(so_far, _)| apart < so_far).unwrap_or(true) {
+                nearest = Some((apart, other.id));
+            }
+        }
+
+        nearest.map(|(_, who)| who)
+    }
+
+    /// How far somebody will carry a remedy to one of their own.
+    ///
+    /// Across the camp, and no further. Anything past that is a journey and
+    /// wants an errand rather than a drive.
+    const HOW_FAR_YOU_WILL_GO_TO_DOSE_YOUR_OWN: i32 = 12;
 }

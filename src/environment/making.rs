@@ -144,7 +144,11 @@ pub const KNAPPED_TIP_FROM_FLINT: Making = Making {
     needs: &[("flint", 1)],
     hands: SkillType::Crafting,
     effort: 4.0,
-    obvious: true,
+    // **Not obvious.** Anybody can knap ordinary stone; that flint takes half
+    // as much and holds a finer edge is the thing a people works out, and it
+    // is the plainest case of one use of a material teaching its siblings.
+    // See `EVERY_FAMILY`.
+    obvious: false,
     over_a_fire: false,
     wants_in_hand: None,
 };
@@ -990,6 +994,73 @@ pub fn what_comes_of_swapping(
     })
 }
 
+/// The one name every shaping act goes by, when the question is about order.
+///
+/// A man who knaps a core on Monday, scrapes a hide on Tuesday and carves a
+/// bowl on Wednesday has spent three days making things, and to the question
+/// "what order of acts answers this need" those three days are the same beat.
+///
+/// **It is only that question.** The dozen making verbs are not an accident
+/// to be tidied away: they exist so that applying a *different* act to a
+/// known material can produce a different result, which is how a people find
+/// out something they did not know. Everything that asks what a particular
+/// act achieves keeps the particular verb - `Element::Did`, the lessons store
+/// keyed on "verb:target" as tried, `what_working_i_would_try_out` picking an
+/// experiment. This name is for the composition layer and for nothing else;
+/// `Element::Kind` is where it lands, alongside the `Did` that stays
+/// particular.
+///
+/// **Measured.** Eight worlds, sixty-six bodies, three quarters through the
+/// first year. Against Utility the store held `gather > craft` at 0.242,
+/// `gather > cut` at 0.185, `gather > carve` at 0.305, `gather > smash` at
+/// 0.392 and `gather > mold` at 0.214 - five spellings of "get the stuff,
+/// then make the thing", every one of them under the four-tenths a run needs
+/// before anybody will follow it, and so not one body in sixty-six held a
+/// composition for making. Folded, they are one run and well over it.
+///
+/// Only the shaping verbs. Drying, salting, boiling and fermenting are
+/// preservation and answer Preparedness, where `dry > cover` is already the
+/// deepest run in the model and wants no help; building a shelter is not
+/// making a tool. What is folded here is the family that turns material into
+/// an object.
+pub fn what_making_is_called(verb: &str) -> &str {
+    if THE_SHAPING_VERBS.contains(&verb) {
+        WHAT_THE_WHOLE_FAMILY_IS_CALLED
+    } else {
+        verb
+    }
+}
+
+/// The name the family goes under, which is the one an agent already had for
+/// it before any of the rest were written.
+pub const WHAT_THE_WHOLE_FAMILY_IS_CALLED: &str = "craft";
+
+/// Whether doing this twice running is two stages of one thing rather than
+/// one thing done twice.
+///
+/// Making is the only act in this world whose product is what the next act of
+/// the same name is done to. A spear is a knapped tip, then a length of
+/// lashing, then the three parts put together - three makings in a row, all
+/// of them `craft` once the family is folded - so `craft > craft` is a
+/// recipe with stages in it and the chain builder must be allowed to walk it.
+///
+/// **Everything else is one thing done twice, and letting it through is
+/// ruinous.** Measured with the rule applied to every verb, eight worlds:
+/// `gather > gather > gather` took over. Thirst went to a hundred per cent of
+/// bodies holding that as its longest run and Industry to ninety-two, and
+/// Hunger's real composition - `gather > eat`, which is how anybody eats -
+/// fell from fifty-eight per cent of bodies to three. A man picking berries
+/// for an hour and a half is not following a plan.
+pub fn does_it_come_in_stages(verb: &str) -> bool {
+    verb == WHAT_THE_WHOLE_FAMILY_IS_CALLED
+}
+
+/// Every verb in the model that turns material into an object.
+pub const THE_SHAPING_VERBS: &[&str] = &[
+    "craft", "cut", "carve", "scrape", "smash", "crush", "mold", "weave",
+    "sew", "makeclothing",
+];
+
 /// How a try at a substitution is written down, so that nobody spends a life
 /// putting the same wrong thing in the same right place.
 pub fn what_that_swap_is_called(
@@ -1095,6 +1166,96 @@ pub fn how_to_make(what: &str) -> Option<&'static Making> {
 /// Every way of making a named thing.
 pub fn every_way_to_make(what: &str) -> impl Iterator<Item = &'static Making> + '_ {
     EVERY_STEP.iter().filter(move |step| step.makes == what)
+}
+
+/// Things of a kind, so that knowing one is a start on the others.
+///
+/// **The innovation path.** A man who knaps ordinary stone into a tip is not
+/// told that flint knaps finer; he works it out, and what lets him work it out
+/// is that flint is *the same sort of thing* as what he already knaps. One use
+/// of a material teaches its siblings.
+///
+/// Kept deliberately short and literal. These are not categories in the sense
+/// `MaterialCategory` means - that table has `Natural` holding wood and iron
+/// and water together, which is no help to anybody trying to guess what else
+/// would take an edge. A family here is what a person would actually mistake
+/// for the thing, or reach for when the thing ran out: a stone that flakes,
+/// something long and stringy you can twist.
+///
+/// The metals are **not** a family. Iron makes a lump and the lump makes a
+/// blade; that is a chain, and each link has to be found out on its own terms
+/// over a fire. Calling them siblings would hand a settlement bronze for
+/// having once picked up a bright stone.
+pub const EVERY_FAMILY: &[&[&str]] = &[
+    // Stone that flakes to an edge. Ordinary stone is what anybody starts
+    // with; flint takes half as much and holds better.
+    &["stone", "flint"],
+    // Something long you can twist into a cord.
+    &["flax", "rettedflax", "cotton"],
+];
+
+/// What sort of thing this is, for somebody who can no longer say what it was.
+///
+/// **The category tier.** A name is the first thing to go and the place is the
+/// last, and between them there is a long stretch where a man knows he saw
+/// fibre in that valley without being able to say it was flax. The
+/// specification calls it category memory and gives the worked example:
+/// "flax grows at this field edge" becomes "fibre plant grows in that valley"
+/// becomes "that valley has useful plants" becomes nothing.
+///
+/// Broader than `EVERY_FAMILY`, and a different question. A family is what
+/// will stand in for what in a making - a substitution, and the reason
+/// knapping stone teaches knapping flint. A sort is what a man would call the
+/// stuff with the name gone. Every family sits inside one sort, and a test
+/// holds them to it so the two tables cannot come apart.
+///
+/// Both vocabularies are in here, because both are written on maps: the
+/// world's resources file themselves by `ResourceType` and the making chain
+/// works in its own names.
+pub const WHAT_SORT_OF_THING: &[(&str, &[&str])] = &[
+    ("stone", &["stone", "flint", "sand"]),
+    ("fibre", &["flax", "rettedflax", "cotton", "wool"]),
+    ("timber", &["wood"]),
+    ("earth", &["clay"]),
+    ("metal", &["iron", "shinylump", "metalblade"]),
+    (
+        "something to eat",
+        &[
+            "food", "greens", "roots", "nuts", "legumes", "grain", "meat", "fish", "honey",
+            "milk", "strangeplant",
+        ],
+    ),
+    ("physic", &["herbs"]),
+    ("hides", &["hides", "leather"]),
+];
+
+/// What a man would call this, with the name gone.
+///
+/// `None` for anything no sort covers, which is a thing he can put no word to
+/// at all - the place survives him as somewhere that was worth something, and
+/// that is the tier below this one.
+pub fn what_sort_of_thing_is_it(what: &str) -> Option<&'static str> {
+    WHAT_SORT_OF_THING
+        .iter()
+        .find(|(_, members)| members.contains(&what))
+        .map(|(sort, _)| *sort)
+}
+
+/// What else is of a kind with this, not counting itself.
+///
+/// Empty for anything that has no siblings, which is most things: a hide is a
+/// hide and there is nothing else like it in this world.
+pub fn what_else_is_like_it(what: &str) -> impl Iterator<Item = &'static str> + '_ {
+    EVERY_FAMILY
+        .iter()
+        .filter(move |family| family.contains(&what))
+        .flat_map(|family| family.iter().copied())
+        .filter(move |kin| *kin != what)
+}
+
+/// Whether these two are of a kind.
+pub fn are_they_of_a_kind(one: &str, other: &str) -> bool {
+    one != other && what_else_is_like_it(one).any(|kin| kin == other)
 }
 
 /// Whether a named thing is something a person makes rather than finds.
@@ -1430,6 +1591,34 @@ pub const AXE_FOR_STONE: Tool = Tool {
     how_long_it_lasts: 40.0,
 };
 
+/// And a hole in the ground is dug with a stick, before anybody owns an axe.
+///
+/// The first tool for digging is a stick. This one was already in the model,
+/// as `STICK_FOR_DIGGING` and `STICK_FOR_FARMING` - a root is got out of the
+/// ground with it and a field is broken with it - and the one thing it was
+/// never allowed to do was dig a hole. Mining had a shovel, a handaxe and a
+/// metal axe and no bottom rung, so a people whose founders' handaxes had worn
+/// out could not dig at all.
+///
+/// What that cost: **`Excavate` refused 15,758 times out of 15,836 - 99.5%,
+/// the largest single refusal in the model** - and the winter store is capped
+/// by the holes that get dug, so the whole settlement starved on it. A pit
+/// holds 300 items, a mouth wants 864 for a winter, and the settlement dug six
+/// and a half holes where it wanted twenty-four.
+///
+/// Modest against the shovel and the axe, as it should be: it is a stick. Its
+/// importance is that it costs one length of wood and can therefore be had on
+/// the first afternoon, which is what a bottom rung is for.
+/// Thirty, the same as the stick lasts at rooting and at breaking a field.
+/// One stick, one working life: three numbers for one object would be three
+/// answers to one question, which is the fault this project keeps finding.
+pub const STICK_FOR_DIGGING_HOLES: Tool = Tool {
+    called: "diggingstick",
+    helps: SkillType::Mining,
+    how_much_better: 1.2,
+    how_long_it_lasts: 30.0,
+};
+
 /// A spear is the whole of stone-age hunting.
 pub const SPEAR_FOR_HUNTING: Tool = Tool {
     called: "spear",
@@ -1531,6 +1720,7 @@ pub const METAL_SPEAR_FOR_FISHING: Tool = Tool {
 pub const EVERY_TOOL: &[Tool] = &[
     AXE_FOR_WOOD,
     AXE_FOR_STONE,
+    STICK_FOR_DIGGING_HOLES,
     AXE_FOR_BUTCHERING,
     STICK_FOR_DIGGING,
     STICK_FOR_FARMING,
@@ -1565,6 +1755,40 @@ pub const METAL_SPEAR_FOR_KEEPING_IT_OFF: Tool = Tool {
 };
 
 /// The tools that are any use for a kind of work.
+/// Whether anybody here has a use for a thing.
+///
+/// A stone-age people carried **4,362 units of iron** across eight seeded
+/// world-years - 9.4% of everything anybody carried - and there is not one
+/// step in the whole chain that a man who has never smelted anything can take
+/// with a lump of it. At eight units of weight it is the heaviest thing in the
+/// world and a pack holds seventeen, so **one lump is very nearly half of what
+/// a person can carry**, spent on a stone nobody can do anything with.
+///
+/// `does_it_keep` said iron keeps, which is true and was the wrong question.
+/// This is the right one: is there a step this agent knows that takes it? A
+/// thing with no use is not a store, it is ballast.
+///
+/// Anything not made *of* anything - food, water, a thing gathered and eaten -
+/// comes back true, because the question does not apply to it and a gate that
+/// refused everything it had no recipe for would stop a settlement eating.
+pub fn is_this_any_use_to(
+    what: &str,
+    knows: &impl Fn(&Making) -> bool,
+) -> bool {
+    let wanted_by_something = EVERY_STEP
+        .iter()
+        .any(|step| step.needs.iter().any(|(needed, _)| *needed == what));
+
+    if !wanted_by_something {
+        return true;
+    }
+
+    EVERY_STEP
+        .iter()
+        .filter(|step| step.needs.iter().any(|(needed, _)| *needed == what))
+        .any(knows)
+}
+
 pub fn what_helps_with(trade: SkillType) -> impl Iterator<Item = &'static Tool> {
     EVERY_TOOL.iter().filter(move |tool| tool.helps == trade)
 }

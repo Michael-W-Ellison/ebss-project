@@ -832,7 +832,19 @@ pub struct Ailment {
     /// And when it will have run its course.
     pub until: u32,
     /// How badly, from nought to one.
+    ///
+    /// This is the live figure and a remedy moves it - see
+    /// `Agent::take_a_remedy`. What it started at is `at_its_worst`.
     pub severity: f32,
+
+    /// What it was at its worst, before anybody treated it.
+    ///
+    /// Kept so that easing can be capped against the illness itself rather
+    /// than against whatever it has already been eased to, which is the
+    /// difference between a remedy that helps and a remedy that, taken often
+    /// enough, cures. Nothing in this model cures anything.
+    #[serde(default)]
+    pub at_its_worst: f32,
 }
 
 impl Ailment {
@@ -848,6 +860,43 @@ impl Ailment {
     /// not simply a slower way of dying.
     pub const THE_SHORTEST_IT_LASTS: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
     pub const THE_LONGEST_IT_LASTS: u32 = 10 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// How bad it was before anybody did anything about it.
+    ///
+    /// A saved game from before remedies existed has nought here, and nought
+    /// means "as bad as it is now" rather than "no illness at all".
+    pub fn at_its_worst(&self) -> f32 {
+        if self.at_its_worst > 0.0 {
+            self.at_its_worst
+        } else {
+            self.severity
+        }
+    }
+
+    /// What sort of trouble this is, so a remedy can be right or wrong for it.
+    ///
+    /// **Every illness in this model is a bad gut** - raw flesh, food on the
+    /// turn, foul ground - which is not a shortcut so much as a fact about
+    /// what laid people up before anybody boiled water. The match is written
+    /// out rather than defaulted so that the day something else makes
+    /// somebody ill, this is a place that has to be looked at.
+    pub fn what_sort_it_is(&self) -> crate::environment::remedies::WhatARemedyEases {
+        use crate::environment::remedies::WhatARemedyEases as Eases;
+
+        match self.from.as_str() {
+            // What people were actually ill with before anybody boiled
+            // water: it went in at one end.
+            Agent::OFF_RAW_FLESH | Agent::OFF_FOOD_ON_THE_TURN | Agent::OFF_FOUL_GROUND => {
+                Eases::TheGut
+            }
+            // A soaking in the cold that turned into something.
+            Agent::OFF_A_SOAKING => Eases::TheChest,
+            // And the pre-antibiotic killer: a wound that did not close.
+            Agent::OFF_A_WOUND_THAT_TURNED => Eases::TheSkin,
+            // Anything new: the gut, because most of it is.
+            _ => Eases::TheGut,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -918,6 +967,14 @@ pub struct AgentState {
     /// that costs, it is the days after it.
     #[serde(default)]
     pub salt_in_me: f32,
+
+    /// A wound that has not closed, nought to one.
+    ///
+    /// Opened by `take_damage` and closing on its own clock. While it is
+    /// open it can turn - see `Agent::OFF_A_WOUND_THAT_TURNED` - which is
+    /// what actually killed people who survived the animal.
+    #[serde(default)]
+    pub an_open_wound: f32,
 }
 
 impl AgentState {
@@ -952,6 +1009,7 @@ impl AgentState {
             ailing: None,
             what_last_took_health: None,
             salt_in_me: 0.0,
+            an_open_wound: 0.0,
         }
     }
 
@@ -1033,6 +1091,13 @@ impl AgentState {
 
     /// Take damage
     pub fn take_damage(&mut self, amount: f32) {
+        // A blow leaves something open, and how open depends on how hard it
+        // was. This is the one place a wound is opened, because
+        // `take_damage` is the one place a blow lands - hunger and cold go
+        // through `lose_health` and leave nothing to fester.
+        let opened = (amount / Self::WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND).clamp(0.0, 1.0);
+        self.an_open_wound = self.an_open_wound.max(opened);
+
         self.lose_health(amount, "a blow");
     }
 
@@ -1043,6 +1108,20 @@ impl AgentState {
     /// gave **"unknown cause" for 70% of every death in this model** - by the
     /// time anybody asks, the hunger has been eaten away and the cold has
     /// worn off, and the honest answer to every question is no.
+    /// How hard a blow has to be before it leaves anything worth calling a
+    /// wound.
+    ///
+    /// A blow of this size leaves one that is as open as they come. A scratch
+    /// leaves a scratch.
+    pub const WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND: f32 = 25.0;
+
+    /// How much of an open wound closes in a tick.
+    ///
+    /// A fortnight to close the worst of them, on twelve ticks to the day,
+    /// which is about right for something nobody stitched.
+    pub const HOW_FAST_A_WOUND_CLOSES: f32 =
+        1.0 / (14.0 * crate::environment::seasons::TICKS_PER_DAY as f32);
+
     pub fn lose_health(&mut self, amount: f32, to: &str) {
         if amount <= 0.0 {
             return;
@@ -1301,6 +1380,10 @@ pub struct Agent {
     /// What has answered which need, and where it answered it.
     #[serde(default)]
     pub patterns: super::patterns::Patterns,
+    /// What this one knows of the country: an impression of the areas it has
+    /// been in, and the areas where a need was once answered.
+    #[serde(default)]
+    pub whereabouts: super::whereabouts::Whereabouts,
     pub storage_preferences: super::storage_management::StoragePreferences, // Storage management preferences
     pub parent_ids: Vec<Uuid>,
 
@@ -1315,6 +1398,38 @@ pub struct Agent {
     /// hunting.
     #[serde(default)]
     pub lessons: super::practices::Lessons,
+
+    /// What this one has just been doing, most recent last.
+    ///
+    /// The whole reason a pattern can be a composition rather than a single
+    /// act: without a run there is nothing to compose. Deliberately short -
+    /// see `A_RUN_WORTH_KEEPING` - because the useful compositions in a life
+    /// like this are two or three steps long and a longer memory only adds
+    /// coincidences to be reinforced.
+    #[serde(default)]
+    pub lately: std::collections::VecDeque<String>,
+    /// The way of answering the need that this turn's action was chosen under.
+    ///
+    /// Set where the strategy is picked and read where the episode is written
+    /// down, which are two different layers a turn apart - see
+    /// `Element::By` and `analytics::wanting::strategy`. `None` for a drive
+    /// whose arm has no strategies yet, and for every action that comes from
+    /// somewhere other than a drive's own answer.
+    #[serde(default)]
+    pub by_what_way: Option<String>,
+
+    /// How often this one does the things that have a how-often.
+    ///
+    /// Keyed by `Undertaking` because a rhythm belongs to a kind of work
+    /// rather than to a single action: going round the line is one rhythm
+    /// however many snares are on it. Only `Trapping` has one today, which is
+    /// the only undertaking in the model whose yield depends on how long you
+    /// leave it - see [`crate::agents::rhythm`].
+    #[serde(default)]
+    pub rhythms: std::collections::BTreeMap<
+        super::practices::Undertaking,
+        super::rhythm::Rhythm,
+    >,
     /// Questions this one has put to the world and is waiting on the answer
     /// to - see [`super::wondering::Wondering`].
     ///
@@ -1427,10 +1542,14 @@ impl Agent {
             food_i_ate: 0,
             food_that_rotted_on_me: 0,
             patterns: super::patterns::Patterns::default(),
+            whereabouts: super::whereabouts::Whereabouts::default(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
             practices: super::practices::Practices::new(),
             lessons: super::practices::Lessons::new(),
+            rhythms: std::collections::BTreeMap::new(),
+            lately: std::collections::VecDeque::new(),
+            by_what_way: None,
             hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
@@ -1778,6 +1897,24 @@ impl Agent {
             .map(|(name, _)| name.clone())
     }
 
+    /// Whether another handful would go in the pack, counting what this one
+    /// would set down to make room for it.
+    ///
+    /// The read-only twin of `set_down_what_is_worth_less_than_food`, and it
+    /// exists so that the decision and the executor answer one question. The
+    /// store branch used to offer `PickUp` whenever somebody stood on a pit,
+    /// and the executor refused it for want of room: **127,477 refusals of
+    /// "No room in the pack for what is in the store", 71% of every refusal
+    /// in the model**, a man standing on his own larder asking for it every
+    /// turn and being told no.
+    ///
+    /// One handful is all it has to decide, so it does not need to know how
+    /// much would come off - only whether anything would.
+    pub fn could_i_take_another_handful(&self, each: f32) -> bool {
+        self.inventory.weight_capacity_remaining() >= each
+            || self.what_i_would_set_down().is_some()
+    }
+
     /// How much of this one goes on the grass, once it has been decided that
     /// some of it should.
     ///
@@ -1801,6 +1938,30 @@ impl Agent {
         }
 
         let wanted = (self.how_much_too_much_i_am_carrying() / each).ceil() as u32;
+        wanted.clamp(1, item.quantity)
+    }
+
+    /// How much of this one goes on the grass to make room for something
+    /// better, when the load is inside the limit and simply full.
+    ///
+    /// The same question as `how_much_of_this_i_would_set_down`, asked
+    /// against a want rather than against a shortfall. A pack that is exactly
+    /// full is not over its limit, so the carrying invariant has nothing to
+    /// say about it - and a man whose pack is exactly full of stone cannot
+    /// pick up a berry for the rest of his life. Somebody standing on food
+    /// with a pack full of rock puts the rock down, and it stays where he was
+    /// standing for him or anybody else to come back to.
+    pub fn how_much_of_this_makes_room(&self, what: &str, room_wanted: f32) -> u32 {
+        let Some(item) = self.inventory.get_item(what) else {
+            return 0;
+        };
+
+        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        if each <= 0.0 {
+            return item.quantity;
+        }
+
+        let wanted = (room_wanted / each).ceil() as u32;
         wanted.clamp(1, item.quantity)
     }
 
@@ -1895,6 +2056,26 @@ impl Agent {
         }
     }
 
+    /// How dry a body has to be before the sea stops looking like poison and
+    /// starts looking like water.
+    ///
+    /// The bottom band of `Physiology::capability`: a man down to a quarter of
+    /// his water, working at a quarter of himself, who will be dead inside the
+    /// day. That is the state the docstring below has always described.
+    ///
+    /// **It was `is_dehydrated()`, which is `hydration <= 0.75`** - a quarter
+    /// *down*, capability still whole, a state every working body passes
+    /// through between one drink and the next. So the rule that everybody
+    /// knows better than to drink the sea was suspended for everybody, daily,
+    /// and what it cost was not one mouthful but a tickful: an agent in danger
+    /// takes its turn again once a simulated minute (see
+    /// `everybody_takes_a_turn`), so a frightened man a quarter dry drank the
+    /// sea five times inside one tick and was dead at the end of it, at full
+    /// health, with a full load of salt. Measured over twelve worlds: **58
+    /// bodies lost a whole quarter of their water in a single tick**, every
+    /// one of them in danger, every one of them at `salt_in_me` 1.0.
+    const SO_DRY_THE_SEA_LOOKS_LIKE_WATER: f32 = 0.25;
+
     /// Whether this one knows better than to drink the sea.
     ///
     /// Everybody does. This is not a discovery - a mouthful of sea water
@@ -1902,7 +2083,7 @@ impl Agent {
     /// that ever lived beside one knew. What it is not is a rule that holds
     /// when somebody is three days dry.
     pub fn would_i_drink_the_sea(&self) -> bool {
-        self.state.is_dehydrated()
+        self.state.physiology.hydration <= Self::SO_DRY_THE_SEA_LOOKS_LIKE_WATER
     }
 
     /// A tick of having drunk the sea: the thirst comes back worse, and the
@@ -1914,9 +2095,26 @@ impl Agent {
 
         let salt = self.state.salt_in_me;
 
-        if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
-            thirst.increase(salt * Self::WHAT_SALT_ADDS_TO_A_THIRST);
-        }
+        // **Out of the body, not off the drive.**
+        //
+        // This raised the Thirst drive directly, and the drive is *assigned*
+        // from the body a few hundred lines up - `drive.value =
+        // body_wants_water` - so every unit of thirst the salt added was wiped
+        // the same tick it was added. Measured: a man given a drink of the sea
+        // and then followed for six days came out at exactly the thirst he
+        // went in with, 0.3 against 0.3. The whole of ISSUES_FOUND.md #155 -
+        // salt water "drinkable, tempting, and worse than nothing" - did
+        // nothing whatever.
+        //
+        // Which is also the right model rather than a way round the
+        // assignment. Sea water does not make you feel thirstier; it makes you
+        // *drier*, because the kidney spends more water getting the salt out
+        // than the drink brought in. Taking it off the hydration is the fact,
+        // and the thirst then follows on its own like every other thirst in
+        // the model.
+        self.state.physiology.hydration =
+            (self.state.physiology.hydration - salt * Self::WHAT_THE_SALT_COSTS_IN_WATER)
+                .clamp(0.0, 1.0);
 
         self.state.salt_in_me = (salt - Self::HOW_FAST_SALT_GOES).max(0.0);
     }
@@ -1927,13 +2125,36 @@ impl Agent {
     /// And the most anybody can be carrying at once.
     const AS_SALT_AS_ANYBODY_GETS: f32 = 1.0;
 
-    /// How much a full load of salt adds to the thirst every tick.
+    /// What one mouthful of the sea costs a body in water, all told.
     ///
-    /// Set against `Thirst`'s own accumulation so that a drink of the sea
-    /// costs rather more than it gave: the drink takes half a unit off, and
-    /// getting rid of the salt puts most of a unit back on over the days it
-    /// takes.
-    const WHAT_SALT_ADDS_TO_A_THIRST: f32 = 0.012;
+    /// The drink itself is worth `physiology::A_DRINK_IS_WORTH`, a third of a
+    /// skin, and it goes in like any other drink. Getting the salt back out
+    /// costs this - rather more than the drink brought in - which is the whole
+    /// of "tempting, and worse than nothing".
+    const WHAT_A_MOUTHFUL_OF_THE_SEA_COSTS: f32 = physiology::A_DRINK_IS_WORTH * 1.05;
+
+    /// How much water a full load of salt costs the body every tick.
+    ///
+    /// Derived, rather than guessed at, so that the sentence above is the one
+    /// the arithmetic actually performs. A load of `s` goes at
+    /// `HOW_FAST_SALT_GOES` a tick and so is carried for `s /
+    /// HOW_FAST_SALT_GOES` ticks; the sum of what is carried over them is
+    /// `s^2 / (2 * HOW_FAST_SALT_GOES) + s / 2`. The rate is the cost divided
+    /// by that sum.
+    ///
+    /// **It was 0.0007, which is a hundredth of what the docstring beside it
+    /// claimed.** The sentence "over those ticks the salt in it costs about
+    /// 0.35 of a skin" was right about the intent and wrong about the number:
+    /// at 0.0007 a drink of the sea cost 0.0036 of a skin in salt, which is
+    /// nothing at all. The whole cost was instead being taken up front in the
+    /// executor, off the top of the drink, so the sea gave a body nothing and
+    /// charged it a sixth on the spot - a fast poison rather than a slow one.
+    /// Two places answering what a mouthful of the sea does, disagreeing with
+    /// each other and with both of their own docstrings.
+    const WHAT_THE_SALT_COSTS_IN_WATER: f32 = Self::WHAT_A_MOUTHFUL_OF_THE_SEA_COSTS
+        / (Self::WHAT_ONE_DRINK_OF_THE_SEA_LEAVES * Self::WHAT_ONE_DRINK_OF_THE_SEA_LEAVES
+            / (2.0 * Self::HOW_FAST_SALT_GOES)
+            + Self::WHAT_ONE_DRINK_OF_THE_SEA_LEAVES / 2.0);
 
     /// And how fast the body gets rid of it.
     const HOW_FAST_SALT_GOES: f32 = 0.012;
@@ -1971,6 +2192,7 @@ impl Agent {
             since: now,
             until: now + how_long,
             severity,
+            at_its_worst: severity,
         });
 
         // And it is a thing that happened for a reason. This is the whole of
@@ -1995,6 +2217,61 @@ impl Agent {
         self.state.ailing.as_ref()
     }
 
+    /// How often an open wound turns, in a tick, at its worst.
+    ///
+    /// About one in three hundred, which over the fortnight a bad wound takes
+    /// to close comes to rather better than an even chance of getting away
+    /// with it. That is the shape of the thing: most people were all right,
+    /// and the ones who were not died of it.
+    const HOW_OFTEN_A_WOUND_TURNS: f64 = 0.0035;
+
+    /// And how often a soaking in the cold turns into a chill.
+    ///
+    /// Read against how much the weather is actually taking out of somebody,
+    /// so a mild damp day is nothing and a January night in the open is not.
+    const HOW_OFTEN_A_SOAKING_TELLS: f64 = 0.02;
+
+    /// A wound closes, or it turns.
+    fn tick_the_wound(&mut self, now: u32) {
+        use rand::Rng;
+
+        if self.state.an_open_wound <= 0.0 {
+            return;
+        }
+
+        // Only an open wound can turn, and only somebody not already ill can
+        // come down with it - nothing in this model stacks.
+        if self.state.ailing.is_none() {
+            let odds = Self::HOW_OFTEN_A_WOUND_TURNS * self.state.an_open_wound as f64;
+            if crate::core::dice::roll().gen_bool(odds.clamp(0.0, 1.0)) {
+                let how_bad = 0.4 + 0.5 * self.state.an_open_wound;
+                self.taken_ill_with(Self::OFF_A_WOUND_THAT_TURNED, how_bad, now);
+            }
+        }
+
+        self.state.an_open_wound =
+            (self.state.an_open_wound - AgentState::HOW_FAST_A_WOUND_CLOSES).max(0.0);
+    }
+
+    /// Cold and wet, for long enough, comes to something.
+    ///
+    /// Called with what the weather is costing this tick, which is already
+    /// the answer to "how cold, how wet, how sheltered" - see
+    /// `update_exposure`. Nothing here needs to ask those three again.
+    pub fn a_soaking_may_tell(&mut self, what_the_weather_costs: f32, now: u32) {
+        use rand::Rng;
+
+        if what_the_weather_costs <= 0.0 || self.state.ailing.is_some() {
+            return;
+        }
+
+        let odds = Self::HOW_OFTEN_A_SOAKING_TELLS * what_the_weather_costs.min(1.0) as f64;
+        if crate::core::dice::roll().gen_bool(odds.clamp(0.0, 1.0)) {
+            let how_bad = (0.2 + what_the_weather_costs).clamp(0.2, 0.8);
+            self.taken_ill_with(Self::OFF_A_SOAKING, how_bad, now);
+        }
+    }
+
     /// A tick of being ill: it costs, and then it is over.
     fn tick_ailment(&mut self, now: u32) {
         let Some(ailing) = self.state.ailing.as_ref() else {
@@ -2013,6 +2290,144 @@ impl Agent {
             (self.state.health - severity * Self::WHAT_A_TICK_OF_ILLNESS_COSTS).max(0.0);
         self.state.energy =
             (self.state.energy - severity * Self::WHAT_ILLNESS_TAKES_OUT_OF_YOU).max(0.0);
+    }
+
+    /// Take something for it.
+    ///
+    /// **This is the whole of the treatment in this model, and it is
+    /// deliberately not very much.** A remedy takes something off how badly
+    /// somebody is laid up; it never shortens the illness by a single tick,
+    /// and no amount of it can take off more than
+    /// `THE_MOST_A_HERBAL_CAN_DO`. That cap is the line between easing and
+    /// curing, and every caveat in the specification is on the easing side of
+    /// it: aloe is "not a replacement for burn or wound care", echinacea's
+    /// "clinical benefits remain uncertain", garlic is not "an antibiotic
+    /// substitute". A settlement can have the whole hedgerow and still bury
+    /// people.
+    ///
+    /// The wrong remedy is still worth something - somebody has been looked
+    /// after - but only a quarter, which is what makes knowing one herb from
+    /// another worth having.
+    ///
+    /// Returns how much came off, or `None` if there was nothing to treat or
+    /// the thing was not a remedy at all.
+    pub fn take_a_remedy(&mut self, item_id: &str, now: u32) -> Option<f32> {
+        use crate::environment::remedies;
+
+        let remedy = remedies::what_this_is_good_for(item_id)?;
+        let ailing = self.state.ailing.as_ref()?;
+
+        if ailing.is_over(now) {
+            return None;
+        }
+
+        let worst = ailing.at_its_worst();
+        let sort = ailing.what_sort_it_is();
+
+        // A practised hand gets more out of the same handful: knowing when to
+        // pick it, how much to use, and what to do with it. The untaught get
+        // rather less and never nothing.
+        let hand = self
+            .skills
+            .get_skill_if_exists(super::SkillType::Herbalism)
+            .map(|skill| skill.level)
+            .unwrap_or(0)
+            .clamp(0, 10) as f32
+            / 10.0;
+        let by_hand = Self::WHAT_AN_UNTAUGHT_HAND_GETS
+            + (1.0 - Self::WHAT_AN_UNTAUGHT_HAND_GETS) * hand;
+
+        let for_the_right_thing = if remedy.eases == sort {
+            1.0
+        } else {
+            remedies::WHAT_THE_WRONG_REMEDY_IS_STILL_WORTH
+        };
+
+        // Against the illness at its worst, never against what it has already
+        // been eased to: this is what stops a second dose taking a second
+        // third off, and a sixth dose curing.
+        let already_off = (worst - ailing.severity).max(0.0);
+        let room = (worst * remedies::THE_MOST_A_HERBAL_CAN_DO - already_off).max(0.0);
+        let eased = (worst * remedy.takes_off * by_hand * for_the_right_thing).min(room);
+
+        if eased <= 0.0 {
+            return Some(0.0);
+        }
+
+        if let Some(ailing) = self.state.ailing.as_mut() {
+            ailing.severity = (ailing.severity - eased).max(0.0);
+        }
+
+        Some(eased)
+    }
+
+    /// What somebody who has never been taught gets out of a remedy.
+    ///
+    /// Half. The plants do what the plants do; what a herbalist adds is
+    /// knowing which one, when it was picked and how much of it - real, and
+    /// not the difference between life and death.
+    const WHAT_AN_UNTAUGHT_HAND_GETS: f32 = 0.5;
+
+    /// Whether this one would be glad of something for it.
+    pub fn wants_something_for_it(&self) -> bool {
+        self.state.ailing.is_some()
+    }
+
+    /// The first thing in the pack that is any use as a remedy, best first.
+    ///
+    /// Best for what actually ails them, so a herbalist reaches past the aloe
+    /// for the mint. Somebody with no Herbalism at all reaches for whatever
+    /// is nearest, which is what `WHAT_AN_UNTAUGHT_HAND_GETS` is about at the
+    /// other end.
+    pub fn what_i_have_for_it(&self) -> Option<String> {
+        use crate::environment::remedies;
+
+        let sort = self.state.ailing.as_ref()?.what_sort_it_is();
+        let taught = self
+            .skills
+            .get_skill_if_exists(super::SkillType::Herbalism)
+            .map(|skill| skill.level > 0)
+            .unwrap_or(false);
+
+        let mut best: Option<(f32, String)> = None;
+        for (id, item) in self.inventory.get_all_items().iter() {
+            if item.quantity == 0 {
+                continue;
+            }
+            let Some(remedy) = remedies::what_this_is_good_for(id) else {
+                continue;
+            };
+
+            // Somebody who has been taught knows which is which. Somebody who
+            // has not takes the first thing that is called medicine.
+            let worth = if taught && remedy.eases != sort {
+                remedy.takes_off * remedies::WHAT_THE_WRONG_REMEDY_IS_STILL_WORTH
+            } else {
+                remedy.takes_off
+            };
+
+            if best.as_ref().map(|(so_far, _)| worth > *so_far).unwrap_or(true) {
+                best = Some((worth, id.clone()));
+            }
+        }
+
+        best.map(|(_, id)| id)
+    }
+
+    /// Whether there is anything in the pack worth carrying to somebody
+    /// else who is ill.
+    ///
+    /// Anything at all that is a remedy: what is right for them depends on
+    /// what ails *them*, which this cannot see. It is the cheap check that
+    /// stops a healthy agent walking across the camp with an empty hand.
+    pub fn what_i_have_for_it_for_somebody_else(&self) -> Option<String> {
+        use crate::environment::remedies;
+
+        self.inventory
+            .get_all_items()
+            .iter()
+            .find(|(id, item)| item.quantity > 0 && remedies::is_a_remedy(id))
+            .map(|(id, _)| id.clone())
     }
 
     /// Whether this one has learned, the hard way, to leave a thing alone.
@@ -2080,6 +2495,23 @@ impl Agent {
 
     /// And off living on fouled ground.
     pub const OFF_FOUL_GROUND: &'static str = "foul ground";
+
+    /// A chill: cold and wet, for long enough, with no roof.
+    ///
+    /// The winter had nothing to do with illness in this model until the
+    /// thermometer started reading below freezing - see ISSUES_FOUND.md #161.
+    /// A person soaked through in a January wind gets ill, and that is most
+    /// of what a shelter and a coat are *for* beyond the exposure damage
+    /// itself.
+    pub const OFF_A_SOAKING: &'static str = "a soaking";
+
+    /// A wound that did not close.
+    ///
+    /// The thing that killed people who survived the bear. Nothing in this
+    /// model has ever cared what happened to a wound after the blow landed:
+    /// health came back at a flat rate and that was the end of it. A wound
+    /// that turns is why a man with aloe is better off than a man without.
+    pub const OFF_A_WOUND_THAT_TURNED: &'static str = "a wound that turned";
 
     /// Food went off in this agent's own hands.
     ///
@@ -2537,6 +2969,40 @@ impl Agent {
             })
     }
 
+    /// Every tool for a trade this one would rather have than what it has,
+    /// best first.
+    ///
+    /// `what_i_would_rather_have` answers with the single best and is right
+    /// for weighing whether an upgrade pays. It is wrong for *making* one,
+    /// because the best tool a man knows of and the best tool he can actually
+    /// begin are different questions, and taking the first answer for the
+    /// second is how a settlement comes to spend its life failing to start a
+    /// shovel with the makings of a handaxe in its pack. See
+    /// `make_what_this_wants`.
+    pub fn what_i_would_settle_for(&self, trade: super::SkillType) -> Vec<String> {
+        let good_enough = self
+            .what_i_have_to_work_with(trade)
+            .map(|tool| tool.how_much_better)
+            .unwrap_or(1.0);
+
+        let mut worth_having: Vec<&'static crate::environment::making::Tool> =
+            crate::environment::making::what_helps_with(trade)
+                .filter(|tool| self.knows_how_to_make(tool.called))
+                .filter(|tool| tool.how_much_better > good_enough)
+                .collect();
+
+        worth_having.sort_by(|a, b| {
+            b.how_much_better
+                .partial_cmp(&a.how_much_better)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        worth_having
+            .into_iter()
+            .map(|tool| tool.called.to_string())
+            .collect()
+    }
+
     /// Something this agent has found out how to do and could do right now.
     ///
     /// A man who has just worked out what a fire does to a bright stone will
@@ -2932,6 +3398,35 @@ impl Agent {
                 )
             })
             .map(|step| step.makes.to_string())
+    }
+
+    /// And the thing that making is a step *towards*.
+    ///
+    /// `what_i_would_make` returns the step that can be taken now - a knapped
+    /// tip, a length of lashing - and throws away what it was a step towards,
+    /// which is the only thing that makes the next two turns follow from this
+    /// one. A spear is a tip, then a lashing, then the three parts put
+    /// together; an agent that remembers only the tip decides again from
+    /// scratch the moment it is in the pack. See `Errand::to_make`.
+    pub fn what_i_am_working_towards(&self, a_fire_is_to_hand: bool) -> Option<&'static str> {
+        let holding = |what: &str| self.how_many_i_have(what);
+        let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
+        let in_hand = |what: &str| self.how_many_i_have(what) > 0;
+
+        Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
+            .iter()
+            .filter_map(|trade| self.what_i_would_rather_have(*trade))
+            .find(|want| {
+                crate::environment::making::what_to_do_first_that_can_be_done(
+                    want.called,
+                    &holding,
+                    &knows,
+                    &in_hand,
+                    a_fire_is_to_hand,
+                )
+                .is_some()
+            })
+            .map(|want| want.called)
     }
 
     /// How many usable ones of a named thing are in the pack.
@@ -3657,6 +4152,19 @@ impl Agent {
         self.apply_building_proximity_effects();
         self.memory.tick();
 
+        // And the trails fade. Charged by the day inside `fade`, so calling
+        // it every turn costs a subtraction and takes nothing until a day
+        // has actually gone by. A path nobody walks grows over, which is what
+        // keeps an agent holding the corner of the world that has paid it
+        // rather than all of the world it has ever seen.
+        self.patterns.fade(current_tick);
+
+        // And the country fades with it, on its own arithmetic: a month's
+        // grace and then five points a month off any area nobody has been
+        // back to. See `agents::whereabouts`.
+        self.whereabouts
+            .forget_what_has_not_been_seen(Self::what_day_it_is(current_tick));
+
         // Check for stale storage knowledge and trigger curiosity
         self.update_storage_curiosity(current_tick);
 
@@ -3665,11 +4173,28 @@ impl Agent {
 
         // Update emotions based on drive states (every tick)
         self.update_emotions_from_drives();
+        self.feel_what_the_habits_are_costing();
         // Drives rise differently depending on whether the agent has anything
         // more pressing on. See `DriveType::is_long_term`.
         let secure = self.immediate_needs_met();
         let situation = self.what_the_situation_asks();
         self.drives.tick_in(&situation, secure);
+
+        // And worry presses on whatever it is worried for. A man who expects
+        // his standing to suffer for what he has been doing attends to his
+        // standing - which is worry making somebody act rather than merely
+        // decline, and is the half of it that a subtraction in the pattern
+        // layer cannot do. Added after the ordinary rise so that it is a
+        // push on top of the need and not a replacement for it.
+        for drive in self.drives.drives.iter_mut() {
+            let worried = self
+                .patterns
+                .how_much_i_fear_for(drive.drive_type)
+                .clamp(0.0, Self::THE_MOST_WORRY_CAN_ADD);
+            if worried > 0.0 {
+                drive.value = (drive.value + worried).min(1.0);
+            }
+        }
 
         // Hunger and thirst are not accumulated; they are read off the body.
         //
@@ -3990,6 +4515,7 @@ impl Agent {
         // And whatever this one has come down with, which costs a little
         // every tick and then is over
         self.tick_ailment(current_tick);
+        self.tick_the_wound(current_tick);
 
         // And the salt, if this one has been drinking out of the sea
         self.tick_salt();
@@ -4101,7 +4627,7 @@ impl Agent {
         }
 
         // Remove completely spoiled food (freshness <= 0)
-        let spoiled_items: Vec<String> = self.inventory.items.iter()
+        let spoiled_items: Vec<String> = self.inventory.get_all_items().iter()
             .filter(|(_, item)| {
                 item.food_data.as_ref()
                     .map(|f| f.freshness <= 0.0)
@@ -4165,6 +4691,7 @@ impl Agent {
         has_shelter: bool,
         has_water_access: bool,
         time_of_day: f32,
+        now: u32,
     ) -> f32 {
         let damage = self.exposure_status.update(
             &self.body_temperature,
@@ -4178,6 +4705,9 @@ impl Agent {
         // Apply exposure damage to health
         if damage > 0.0 {
             self.state.lose_health(damage * 10.0, "the weather");
+            // And a soaking in the cold is a thing people came down with,
+            // rather than only a thing that wore them down.
+            self.a_soaking_may_tell(damage, now);
         }
 
         damage
@@ -5431,6 +5961,7 @@ impl Agent {
             Action::TakeCutting => "takecutting".to_string(),
             Action::PlantCutting => "plantcutting".to_string(),
             Action::SpreadMuck => "spreadmuck".to_string(),
+            Action::Treat { .. } => "treat".to_string(),
             Action::Socialize { .. } => "socialize".to_string(),
             Action::AskAbout { what, .. } => format!("ask:{what}"),
             Action::ShareInformation { .. } => "shareinformation".to_string(),
@@ -5455,6 +5986,36 @@ impl Agent {
     /// the action having an opinion about which of them matter. Which of them
     /// matter is the thing the agent works out - see
     /// [`super::practices::Lessons::what_this_changes`].
+    /// How often this one goes round at a kind of work, found out rather than
+    /// written down. See [`crate::agents::rhythm`].
+    pub fn how_often_i(&self, what: super::practices::Undertaking) -> super::rhythm::Rhythm {
+        self.rhythms
+            .get(&what)
+            .cloned()
+            .unwrap_or_else(super::rhythm::Rhythm::unfound)
+    }
+
+    /// Whether it is time he did it again.
+    pub fn is_it_time_i(&self, what: super::practices::Undertaking, now: u32) -> bool {
+        self.rhythms
+            .get(&what)
+            .map(|rhythm| rhythm.is_it_due(now))
+            .unwrap_or(true)
+    }
+
+    /// He did it, and this is what it brought back. The rhythm is judged here.
+    pub fn that_is_done(
+        &mut self,
+        what: super::practices::Undertaking,
+        now: u32,
+        brought_back: f32,
+    ) {
+        self.rhythms
+            .entry(what)
+            .or_insert_with(super::rhythm::Rhythm::unfound)
+            .how_it_went(now, brought_back);
+    }
+
     pub fn learn_from_this_here(
         &mut self,
         action: &Action,
@@ -5480,8 +6041,27 @@ impl Agent {
             // Freezing is not an attempt at anything and teaches nothing: an
             // agent that lived through it did not do so by freezing well
             Action::Freeze => return,
+            // Doctoring is its own lesson. A man who has dosed four people
+            // and watched them all get better anyway must not learn that he
+            // is a hunter, and folding it into `Foraging` would teach him
+            // about picking herbs rather than about giving them.
+            Action::Treat { .. } => Undertaking::Healing,
             Action::Fish => Undertaking::Fishing,
-            Action::SetSnare | Action::CheckSnares => Undertaking::Trapping,
+
+            // Going round the line is trapping. **Setting string is not, and
+            // counting it as trapping is why nobody could ever find out that
+            // their trapline was not working.** A snare goes in the ground
+            // whenever an agent decides to put one there, so `SetSnare` never
+            // fails; the round is the half that can come back empty and the
+            // only half that produces any food. Measured over twelve worlds:
+            // an agent in winter believed trapping worked at **0.93**, out of
+            // 18.6 attempts at a 76% success rate - of which **11.8 were
+            // snares set** and 6.8 were rounds walked. He set twelve snares,
+            // came back empty from four rounds in six, and concluded he was a
+            // trapper. The fine record keeps "setsnare" either way, above.
+            Action::SetSnare => return,
+
+            Action::CheckSnares => Undertaking::Trapping,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
             | Action::SpreadMuck
@@ -5545,12 +6125,50 @@ impl Agent {
     ) {
         use super::patterns::Patterns;
 
-        let what = Self::what_was_tried(action);
+        let elements = self.what_this_episode_was_made_of(action, where_it_was, now);
+        let turns = self.how_long_that_took();
         let mut answered_anything = false;
+
+        // And the run that led here, which is what makes this a pattern
+        // rather than an episode. The specification says an agent "links its
+        // **previous actions** taken to the drive satisfaction" - plural -
+        // and until now the only thing linked was the one act that happened
+        // to produce the drive change. So `Did("eat")` took all the credit
+        // for hunger coming off and the gathering that filled the pack took
+        // none, and the composition that actually feeds a man - go, gather,
+        // eat - could not be represented at all, let alone learned.
+        let runs = self.what_led_up_to_this(action);
 
         for (need, change) in &action_result.drive_changes {
             if *change <= -Patterns::ENOUGH_TO_NOTICE {
-                self.patterns.it_worked(*need, &what, where_it_was, now);
+                // Efficiency, not the bare fact of it: how much demand came
+                // off per turn spent getting it off. Somebody who can answer
+                // a need quickly has the rest of the day for the other ones,
+                // and that is what makes one way of doing it better than
+                // another rather than merely possible.
+                let efficiency = -*change / turns as f32;
+                self.patterns.it_worked(*need, &elements, efficiency, now);
+
+                // The runs go down beside the atoms and on the same terms, so
+                // the composition and its halves compete: where the pair is
+                // what matters it is there every time and outruns either half,
+                // and where only the last act matters the pairs vary and the
+                // atom wins. Arithmetic decides, which is how the rest of this
+                // module already works.
+                if !runs.is_empty() {
+                    self.patterns.it_worked(*need, &runs, efficiency, now);
+                }
+
+                // And the area goes down as a place that answers this, which
+                // is the half of it that keeps for years. The trail above is
+                // a tile and a season; this is a valley and a life. See
+                // `agents::whereabouts`.
+                self.whereabouts.it_answered_here(
+                    super::whereabouts::Area::holding(where_it_was),
+                    *need,
+                    &Self::what_was_tried(action),
+                    Self::what_day_it_is(now),
+                );
                 if *need == aimed_at {
                     answered_anything = true;
                 }
@@ -5558,8 +6176,299 @@ impl Agent {
         }
 
         if !answered_anything {
-            self.patterns.it_did_not(aimed_at, &what);
+            self.patterns.it_did_not(aimed_at, &elements);
         }
+    }
+
+    /// The elements of what just happened: everything that was true of it
+    /// which some later episode might also be true of.
+    ///
+    /// This is the whole of the generalising. Two hunts that fed somebody
+    /// share `Did("hunt")` and `On("Deer")` and differ in `At` and `Toward`,
+    /// so the doing outgrows the direction without anybody deciding that it
+    /// should.
+    pub fn what_this_episode_was_made_of(
+        &self,
+        action: &Action,
+        where_it_was: (i32, i32, i32),
+        now: u32,
+    ) -> Vec<super::patterns::Element> {
+        use super::patterns::{Bearing, Element};
+        use crate::environment::seasons::{Season, DAYS_PER_YEAR, TICKS_PER_DAY};
+
+        let tried = Self::what_was_tried(action);
+        let mut elements = Vec::with_capacity(5);
+
+        // `what_was_tried` writes "gather:Berries" - the verb and the thing it
+        // was done to, glued. Split, they are two elements that vary
+        // independently, which is what lets an agent learn that gathering
+        // pays without concluding that berries are the only thing worth
+        // gathering.
+        //
+        // The verb goes in twice where it belongs to a family: once as the
+        // particular act, which is what says that scraping a hide and
+        // smashing a core do different things, and once as the family, which
+        // is what lets a composition be about making rather than about
+        // knapping. See `Element::Did` and `Element::Kind`.
+        let (verb, subject) = match tried.split_once(':') {
+            Some((verb, subject)) => (verb, Some(subject)),
+            None => (tried.as_str(), None),
+        };
+        elements.push(Element::Did(verb.to_string()));
+        if let Some(subject) = subject {
+            elements.push(Element::On(subject.to_string()));
+        }
+        let family = crate::environment::making::what_making_is_called(verb);
+        if family != verb {
+            elements.push(Element::Kind(family.to_string()));
+        }
+
+        // And the way this was arrived at, where a drive's arm named one.
+        if let Some(way) = &self.by_what_way {
+            elements.push(Element::By(way.clone()));
+        }
+
+        elements.push(Element::At(where_it_was));
+
+        if let Some(errand) = &self.errand {
+            if let Some(bearing) = Bearing::from_home(errand.set_out_from, where_it_was) {
+                elements.push(Element::Toward(bearing));
+            }
+        }
+
+        let day_of_year = (now / TICKS_PER_DAY) % DAYS_PER_YEAR;
+        elements.push(Element::When(Season::from_day_of_year(day_of_year)));
+
+        elements
+    }
+
+    /// How much of a run is worth keeping.
+    ///
+    /// Three, which holds a pair and the step before it. Longer runs are
+    /// mostly coincidence: a man who ate at noon did also sleep the previous
+    /// night, and nothing is learned by writing that down every time.
+    pub const A_RUN_WORTH_KEEPING: usize = 3;
+
+    /// The runs that end in what was just done.
+    ///
+    /// One `Element::Then` for each step back through what he has lately been
+    /// doing, so that "gather then eat" and "move then eat" are both offered
+    /// to the arithmetic and the one that is there every time wins.
+    pub fn what_led_up_to_this(&self, action: &Action) -> Vec<super::patterns::Element> {
+        use super::patterns::Element;
+
+        let tried = Self::what_was_tried(action);
+        let now = Self::just_the_verb(&tried);
+
+        self.lately
+            .iter()
+            .rev()
+            .take(Self::A_RUN_WORTH_KEEPING)
+            // A man doing the same thing twice teaches nothing about order,
+            // and *the same thing* is the whole of what was done rather than
+            // the name the pattern layer files it under.
+            //
+            // **This is where the tool ladder lives.** A spear is a knapped
+            // tip, then a length of lashing, then the three parts put
+            // together - three separate makings in a row, and under the
+            // family name they are all `craft`. Comparing the folded verbs
+            // threw every one of them away as repetition, so the one
+            // composition this world is actually built out of could not be
+            // learned. Comparing what was tried keeps `craft:knappedtip >
+            // craft:spear` and still drops `gather:berries >
+            // gather:berries`, which is a man picking berries for an hour.
+            .filter(|before| before.as_str() != tried)
+            .map(|before| Element::Then(Self::just_the_verb(before), now.clone()))
+            .collect()
+    }
+
+    /// The verb out of a `what_was_tried` string, which writes "gather:Berries",
+    /// under the name the *composition* layer knows it by.
+    ///
+    /// This folds the making verbs into one - see
+    /// `making::what_making_is_called` - and it is used only where the
+    /// question is about order: the runs, the reader that follows them, and
+    /// the matching that decides whether an action satisfies a step a run
+    /// named. Nothing that asks what a particular act achieves goes through
+    /// here. `Element::Did` keeps the verb it was given, the lessons store is
+    /// keyed on "verb:target" as tried, and `what_working_i_would_try_out`
+    /// picks its experiments by the particular working - all of which is what
+    /// makes trying a new act on a known material a thing an agent can learn
+    /// from.
+    ///
+    /// So a run that says `craft` says "and then make something", and which
+    /// making is a question for the machinery that knows about materials and
+    /// recipes, not for the machinery that knows about order.
+    pub fn just_the_verb(tried: &str) -> String {
+        let verb = tried
+            .split_once(':')
+            .map(|(verb, _)| verb)
+            .unwrap_or(tried);
+        crate::environment::making::what_making_is_called(verb).to_string()
+    }
+
+    /// Note what was just done, so the next success has a run to credit.
+    pub fn that_is_what_i_just_did(&mut self, action: &Action) {
+        self.lately.push_back(Self::what_was_tried(action));
+        while self.lately.len() > Self::A_RUN_WORTH_KEEPING {
+            self.lately.pop_front();
+        }
+    }
+
+    /// What has answered this need after what he has just been doing.
+    ///
+    /// The reader for the compositions. Empty until an agent has walked the
+    /// same run often enough for it to be a habit - see
+    /// `Patterns::what_follows`.
+    pub fn what_usually_comes_next(&self, need: DriveType) -> Option<&str> {
+        let last = self.lately.back()?;
+        self.patterns
+            .what_follows(need, &Self::just_the_verb(last))
+    }
+
+    /// Lay down the run this agent has worked out for a need, as a plan.
+    ///
+    /// **This is what makes the plan branch worth reaching.** The planner it
+    /// already had builds steps out of goals and hard-coded coordinates -
+    /// `create_plan_for_goal` is handed (50, 50, 0) as "the resource" on a
+    /// fifty-square map - and writes them in a vocabulary with no `Eat` in it,
+    /// which is the last step of the only composition that feeds anybody. A
+    /// chain out of `Patterns` is the opposite in every way: the steps are
+    /// verbs the model acts in, the order was found out rather than written
+    /// down, and it is a plan *for a need* rather than for a goal nobody set.
+    ///
+    /// Returns whether one was laid down. Nothing happens where the agent has
+    /// not yet worked out a chain, which is most agents for most of a first
+    /// season.
+    pub fn plan_the_run_that_answers(&mut self, need: DriveType, now: u32) -> bool {
+        use crate::core::planning::{ActionPlan, PlanActionType, PlanStep};
+
+        // A run already in hand for this need is not replaced part-way
+        // through - that would be re-deciding every turn, which is what a
+        // plan exists not to do.
+        if self.is_the_plan_for(need) {
+            return false;
+        }
+
+        let Some(last) = self.lately.back().cloned() else {
+            return false;
+        };
+        let chain = self
+            .patterns
+            .the_chain_that_answers(need, &Self::just_the_verb(&last));
+
+        // One step is not a plan. `what_usually_comes_next` already answers
+        // that case, and routing it through the plan machinery as well would
+        // be two answers to one question.
+        if chain.len() < 2 {
+            return false;
+        }
+
+        let answering = format!("{need:?}");
+        let steps: Vec<PlanStep> = chain
+            .iter()
+            .map(|verb| PlanStep {
+                action: PlanActionType::AsLearned {
+                    verb: verb.clone(),
+                    answering: answering.clone(),
+                },
+                estimated_ticks: 1,
+                required_tool: None,
+                required_resources: Vec::new(),
+                target_location: None,
+                confidence: 1.0,
+            })
+            .collect();
+
+        self.current_plan = Some(ActionPlan::new(
+            format!("what has answered {answering}: {}", chain.join(", ")),
+            steps,
+            now,
+            "worked out".to_string(),
+        ));
+        self.plan_step_ticks = 0;
+        true
+    }
+
+    /// The verb the plan wants next, if the plan is a learned run.
+    pub fn what_the_plan_wants_next(&self) -> Option<&str> {
+        use crate::core::planning::PlanActionType;
+
+        match &self.current_plan.as_ref()?.current_step()?.action {
+            PlanActionType::AsLearned { verb, .. } => Some(verb.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Whether the plan in hand is a run this agent worked out for this need.
+    pub fn is_the_plan_for(&self, need: DriveType) -> bool {
+        use crate::core::planning::PlanActionType;
+
+        matches!(
+            self.current_plan.as_ref().and_then(|plan| plan.current_step()),
+            Some(step) if matches!(
+                &step.action,
+                PlanActionType::AsLearned { answering, .. } if *answering == format!("{need:?}")
+            )
+        )
+    }
+
+    /// Read the felt total of what this one expects its habits to cost it.
+    ///
+    /// Worry is not accumulated here; it is accumulated against the elements
+    /// of the things that earned it, and this is the sum of that. Doing it the
+    /// other way round would give an agent two records of the same fear which
+    /// would drift apart, and the one in the pattern layer is the one that can
+    /// actually be acted on.
+    fn feel_what_the_habits_are_costing(&mut self) {
+        self.emotions.worry = self.patterns.everything_i_dread().clamp(0.0, 1.0);
+    }
+
+    /// Something has cost this one future satisfaction of a drive.
+    ///
+    /// Whatever it has been doing lately takes the blame, against the drive
+    /// that took the loss - see `Patterns::it_cost_me`. What sorts out which
+    /// of those things actually caused it is repetition and nothing else.
+    pub fn this_cost_me(&mut self, cost_to: DriveType, how_much: f32, now: u32) {
+        self.patterns.it_cost_me(cost_to, how_much, now);
+        self.feel_what_the_habits_are_costing();
+    }
+
+    /// How much worry is pressing on a particular drive.
+    ///
+    /// This is worry feeding the drive layer: a man who expects his standing
+    /// to suffer attends to his standing. It is what turns "I am wary of this"
+    /// into a reason to go and do something about it, which is the whole
+    /// point - worry has to make somebody *act*, not merely refuse.
+    pub fn what_worry_adds_to(&self, drive: DriveType) -> f32 {
+        self.patterns.how_much_i_fear_for(drive).clamp(0.0, Self::THE_MOST_WORRY_CAN_ADD)
+    }
+
+    /// How far a worry can push a drive on its own.
+    ///
+    /// Well short of the thing actually going wrong. Being worried about your
+    /// standing is not the same as being friendless, and an agent that treated
+    /// them alike would spend its life mending fences nobody had broken.
+    pub const THE_MOST_WORRY_CAN_ADD: f32 = 0.25;
+
+    /// Which day of the world's life a tick falls on.
+    ///
+    /// Everything about remembering the country is counted in days, because
+    /// what a day is does not change and what a turn is might.
+    pub fn what_day_it_is(tick: u32) -> u32 {
+        tick / crate::environment::seasons::TICKS_PER_DAY
+    }
+
+    /// How many turns went into what was just finished.
+    ///
+    /// The walk as well as the work: an errand that took nine turns to reach a
+    /// bush and one to strip it cost ten, and pricing it at one is what makes
+    /// a far-off meal look as cheap as a near one.
+    fn how_long_that_took(&self) -> u32 {
+        self.errand
+            .as_ref()
+            .map(|errand| errand.turns_on_it.max(1))
+            .unwrap_or(1)
     }
 
     /// Ground this agent would walk back to for a need, if any.
@@ -5572,13 +6481,38 @@ impl Agent {
         from: (i32, i32, i32),
         now: u32,
     ) -> Option<(i32, i32, i32)> {
-        let there = self.patterns.where_it_worked(need, now)?;
-
-        if (there.0 - from.0).abs() + (there.1 - from.1).abs() <= 1 {
-            None
-        } else {
-            Some(there)
-        }
+        // Nobody walks anywhere on the strength of a memory, for now.
+        //
+        // Not because the memory is wrong. The trails above are better than
+        // what they replaced, and this is the one thing done with them that
+        // makes a settlement worse off. Measured over two blocks of sixty-four
+        // worlds, each a year long, counting people alive at the end:
+        //
+        // |                                      | block 1 | block 2 |
+        // |--------------------------------------|---------|---------|
+        // | before the pattern layer             |   199   |   219   |
+        // | trails, walking to them              |   164   |   170   |
+        // | trails, walking only within 25 paces |   183   |   174   |
+        // | trails, not walking to them          | **208** | **235** |
+        //
+        // Person-days across the year moved by about one per cent in every
+        // one of them, which is the shape of the thing: a settlement does as
+        // well through the year and ends it smaller, because somebody who
+        // sets off across the map for a bush he remembers is not in the camp
+        // when the camp needs him. Six of sixty-four worlds emptied under the
+        // twenty-five-pace gate against two before, so shortening the walk is
+        // not the answer either.
+        //
+        // What is at fault is that an errand is priced at the work and not at
+        // the walk - ISSUES_FOUND #189, and the fix for it is task #193.
+        // *Then* this is worth turning back on, and the trails will be
+        // waiting, better worn than they were. Learning where the food is has
+        // never been the problem; going there has.
+        //
+        // `where_it_worked` and `places_worth_the_walk` are left standing and
+        // tested. They are the substrate this comes back on.
+        let _ = (need, from, now);
+        None
     }
 
     /// Process feedback from action execution
@@ -7193,6 +8127,29 @@ impl Agent {
             return false;
         }
 
+        // And it has to be a plan worth executing.
+        //
+        // **Measured, and this is the whole of what #238 turned out to be.**
+        // Fixing the step counter made the branch reachable - agents that
+        // would run a plan went from 1.3% to 88.8% - and what it made
+        // reachable was the goal planner, whose steps are built against
+        // hard-coded coordinates: `create_plan_for_goal` is handed (50, 50, 0)
+        // as "the resource" on a fifty-square map, and its vocabulary has no
+        // `Eat` in it. Over 32 seeded worlds that cost **108,235 person-days
+        // to 102,708**, with worlds emptied 25 of 32 to 28. The branch was
+        // dead and the deadness was load-bearing.
+        //
+        // So the branch is reachable and what it carries is a run the agent
+        // worked out - see `plan_the_run_that_answers`. The goal planner
+        // still lays its plans down and they are still not executed, which is
+        // where they were before, and now for a reason that is written down.
+        if !matches!(
+            self.current_plan.as_ref().and_then(|plan| plan.current_step()),
+            Some(step) if matches!(step.action, crate::core::planning::PlanActionType::AsLearned { .. })
+        ) {
+            return false;
+        }
+
         // Check for plan step timeout (stuck too long on one step)
         if let Some(plan) = &self.current_plan {
             if let Some(step) = plan.current_step() {
@@ -7326,6 +8283,13 @@ impl Agent {
             PlanActionType::MoveTo { location } => {
                 Some(Action::Move { target: *location })
             }
+
+            // A learned step is a verb, not an action: what "gather" means
+            // this turn depends on what is standing in front of the agent,
+            // and that is a question only the decision layer can answer. It
+            // resolves it against the candidates the drive produced - see
+            // `Simulation::the_step_of_the_plan_that_can_be_taken`.
+            PlanActionType::AsLearned { .. } => None,
             PlanActionType::EquipItem { item: _ } => {
                 // Equipment is handled internally, return None to skip
                 // The step will be marked complete when equipment is applied
@@ -8145,6 +9109,9 @@ impl Agent {
                     PlanActionType::MoveTo { location } => {
                         format!("Moving to {:?}", location)
                     }
+                    PlanActionType::AsLearned { verb, answering } => {
+                        format!("{verb}, which has answered {answering}")
+                    }
                     PlanActionType::GatherResource { resource, amount } => {
                         format!("Gathering {} {}", amount, resource)
                     }
@@ -8399,6 +9366,10 @@ impl Agent {
             return;
         }
 
+        // Asked once rather than once per place: the sweep runs every turn for
+        // every living agent, and a lookup per place per need is real time.
+        let what_the_trails_say = self.patterns.what_every_place_is_worth();
+
         let mut worth: Vec<(crate::world::Position, f32)> = self
             .exploration_knowledge
             .known_resources
@@ -8442,7 +9413,50 @@ impl Agent {
                     // being told it is bare
                     .unwrap_or(0.5);
 
-                let keeping = wanted * 4.0 + freshness + how_rich
+                // And what the trails say about it, which is the only one of
+                // these terms that is about whether the place has actually
+                // ever paid. The rest are about whether it looks like it
+                // should: what is wanted, how fresh the news is, how much was
+                // standing there. A bank an agent has drunk at four times is
+                // worth more to it than a richer one it has heard of and never
+                // been to, and until this term nothing here could say so - the
+                // map and the pattern layer answered the same question and
+                // only one of them had been anywhere.
+                let has_paid = what_the_trails_say
+                    .get(&(where_it_is.x, where_it_is.y, 0))
+                    .copied()
+                    .unwrap_or(0.0);
+
+                // And how well this one knows the country the place is in,
+                // which is the term that decides whether a head fills up with
+                // the parish or with everywhere anybody ever walked. An area
+                // lived in for three weeks is remembered; one crossed once on
+                // the way somewhere is an impression that will be gone by the
+                // summer, and so are the places in it.
+                let area = super::whereabouts::Area::holding((
+                    where_it_is.x,
+                    where_it_is.y,
+                    0,
+                ));
+                let country = self.whereabouts.how_well_i_know(&area);
+
+                // Important places are deliberately *not* a term here.
+                //
+                // They were, at five points, and it was a mistake worth
+                // writing down: it made "somewhere that once worked" outrank
+                // "somewhere I want something from today", so a head filled
+                // with old valleys and pushed out the fresh, near, well
+                // stocked places a hungry man actually needs. Being important
+                // is about *retention*, not precedence - and retention is
+                // already handled, and handled better, by
+                // `Whereabouts::important`, which keeps the area and the need
+                // for five years at no cost to anything else. Two mechanisms
+                // for one idea, and only one of them was any good.
+                let keeping = wanted * 4.0
+                    + freshness
+                    + how_rich
+                    + has_paid * 2.0
+                    + country * 3.0
                     - if heard_not_seen { 0.5 } else { 0.0 };
                 (*where_it_is, keeping)
             })
@@ -8721,6 +9735,98 @@ impl Agent {
         }
 
         DriveType::Preparedness
+    }
+
+    /// **Do I know what this is for?**
+    ///
+    /// The question that decides whether a place goes into the map as *what it
+    /// is* or only as *somewhere worth a look*. A man who has no use for
+    /// cotton walks past a cotton field and remembers a field; a man who spins
+    /// remembers cotton. Neither of them saw anything the other did not.
+    ///
+    /// Two sources, and both already exist. `is_a_familiar_thing` is what
+    /// anybody is born knowing - the obvious steps and workings, a stone you
+    /// can knap and a stick you can sharpen. `knows_how_to` is what this
+    /// particular agent has since been taught or worked out. So knowing what a
+    /// thing is for grows with the craft, which is what makes map memory
+    /// something a people gets better at rather than a fixed sense.
+    pub fn do_i_know_what_this_is_for(&self, what: &str) -> bool {
+        if crate::environment::making::is_a_familiar_thing(what) {
+            return true;
+        }
+
+        if crate::environment::making::EVERY_STEP
+            .iter()
+            .filter(|step| step.makes == what || step.needs.iter().any(|(needs, _)| *needs == what))
+            .any(|step| self.knows_how_to(step))
+        {
+            return true;
+        }
+
+        // **And a thing of a kind with something he knows the use of.**
+        //
+        // "That is a stone like the ones I knap." He cannot yet knap *this*
+        // one - flint is a technique he has to work out - but he knows it for
+        // a stone and not for a lump of nothing, and so a bank of it is a
+        // place he can put a name to.
+        //
+        // Recognising a thing and knowing how to work it are two questions,
+        // and this is the line between them. Without it the innovation path
+        // eats its own tail: he could not name the flint until he knew flint
+        // knapping, and he could not work out flint knapping without first
+        // noticing there was flint about. See `making::what_else_is_like_it`.
+        crate::environment::making::what_else_is_like_it(what)
+            .any(|kin| crate::environment::making::is_a_familiar_thing(kin))
+    }
+
+    /// **What may I use?** - the fourth of the six questions, and the one that
+    /// had no answer anywhere in this model until now.
+    ///
+    /// The claim is a fact about the thing and lives on the thing
+    /// (`world::belonging::Belongs`). What that claim *permits* is not a fact
+    /// about the thing at all: the same hut is a man's own, his brother's, or
+    /// a stranger's, depending entirely on who is asking. So the asker answers
+    /// it, and he answers it out of the `RelationshipMap` he has carried since
+    /// the relationship graph was built - parents, children, siblings and a
+    /// partner. **There is no household object in this model and there does
+    /// not need to be one**: a household is who you are kin to, and that has
+    /// been written down all along without anything ever asking it a question.
+    ///
+    /// Nothing here refuses. `Access` says what the claim is; whether to stop
+    /// is the decision layer's to make, one way at a time, and today it stops
+    /// at nothing - see `world::belonging` for why a rule that left a man
+    /// outside in the weather would cost more than it bought.
+    pub fn may_i_use(&self, belongs: &crate::world::belonging::Belongs) -> crate::world::belonging::Access {
+        use crate::world::belonging::{Access, Belongs};
+
+        match belongs {
+            Belongs::ToNobody => Access::Freely,
+            Belongs::ToUsAll => Access::InCommon,
+            Belongs::To(whose) if *whose == self.id => Access::Freely,
+            Belongs::To(whose) if self.is_this_my_kin(*whose) => Access::ByKinship(*whose),
+            Belongs::To(whose) => Access::NotMine(*whose),
+        }
+    }
+
+    /// Whether this is somebody whose things are as good as one's own.
+    ///
+    /// Parent, child, sibling, partner. A friend is not kin - the model has a
+    /// `Friend` bond and it is the wrong one for this: friendship is who you
+    /// would help, kinship is whose store you would open without asking.
+    pub fn is_this_my_kin(&self, who: uuid::Uuid) -> bool {
+        use super::RelationshipType;
+
+        self.relationships
+            .get_relationship(&who)
+            .is_some_and(|bond| {
+                matches!(
+                    bond.relationship_type,
+                    RelationshipType::Parent
+                        | RelationshipType::Child
+                        | RelationshipType::Sibling
+                        | RelationshipType::Partner
+                )
+            })
     }
 
     /// What taking a thing would actually be worth to this agent.
@@ -9066,6 +10172,15 @@ impl Agent {
 pub struct Errand {
     /// Where it is going
     pub going_to: (i32, i32, i32),
+    /// And the ground it set out from.
+    ///
+    /// There is no settlement object in this model - see ISSUES_FOUND #11 -
+    /// so there is no camp to take a bearing from. Where somebody stood when
+    /// they set out is the honest origin anyway: the thing being learned is
+    /// "going that way answered it", and that way is relative to where the
+    /// going started.
+    #[serde(default)]
+    pub set_out_from: (i32, i32, i32),
     /// Or what it is making, if the errand is a job rather than a journey.
     ///
     /// A tool is not one turn's work. Measured, the tool arithmetic diverted

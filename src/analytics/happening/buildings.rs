@@ -265,7 +265,18 @@ impl Simulation {
         }
 
         // Create new building (under construction)
-        let building = Building::new_under_construction(building_type, build_pos);
+        // Whose roof it is. A dwelling is the man's who put it up; a
+        // storehouse, a workshop or a shrine is the settlement's, because
+        // nobody builds one of those to live in. See `world::belonging` -
+        // and note that until this line the owner field was written by
+        // nothing at all, so `owns_house` in the goal world-state has always
+        // been false for everybody in every world.
+        let mut building = Building::new_under_construction(building_type, build_pos);
+        building.now_belongs_to(if building_type.is_residential() {
+            crate::world::Belongs::To(self.population.agents[agent_index].id)
+        } else {
+            crate::world::Belongs::ToUsAll
+        });
 
         // Add building to world
         self.world.add_building(building);

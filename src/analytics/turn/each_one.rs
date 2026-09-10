@@ -45,9 +45,70 @@ impl Simulation {
             .collect();
 
         for agent_id in agent_ids {
+            self.one_persons_turn(agent_id, &agent_positions);
+
+            // And then, for anybody with something on them, the rest of the
+            // half hour a minute at a time.
+            //
+            // "Every 30 ticks/minutes agents should have the option of making
+            // a decision. This does not apply if an agent encounters a
+            // dangerous situation, as they must then make decisions minute by
+            // minute to enhance their survival odds."
+            //
+            // A turn is half an hour of committed action, which is the right
+            // grain for walking to a hedgerow and the wrong one for a wolf:
+            // half an hour is a long time to have already decided what you are
+            // doing. So somebody frightened enough to run or angry enough to
+            // stand goes round again, once a simulated minute, until the
+            // danger is off them or the half hour is gone.
+            //
+            // Only that person, and only while it lasts. The rest of the
+            // world stands still - and that is the whole difficulty with this
+            // mechanism, which was twice estimated as cheap and is not. A
+            // `Move` is one tile, whatever the turn is worth in minutes. Give
+            // a frightened man twenty-nine extra turns and he covers
+            // twenty-nine tiles while the wolf covers one, so the fast clock
+            // is not a finer grain on the same world: it is an escape hatch
+            // out of every predator balance the model has. Hence
+            // `predators_try_their_luck_at` just below - the thing that is
+            // after him gets its minutes too, and running away costs him what
+            // it should.
+            let mut minutes_left = crate::environment::seasons::MINUTES_PER_TURN;
+            while minutes_left > 1 {
+                let Some(agent_index) =
+                    self.population.agents.iter().position(|a| a.id == agent_id)
+                else {
+                    break;
+                };
+
+                let agent = &self.population.agents[agent_index];
+                if !agent.state.is_alive || !agent.emotions.in_danger() {
+                    break;
+                }
+
+                minutes_left -= 1;
+                self.minutes_spent_in_danger += 1;
+
+                self.one_persons_turn(agent_id, &agent_positions);
+                self.predators_try_their_luck_at(agent_index);
+            }
+        }
+    }
+
+    /// One person's turn: what is pressing, what they do about it, and what
+    /// came of it.
+    ///
+    /// Taken once a turn by everybody, and then once a minute by anybody in
+    /// danger - see `everybody_takes_a_turn`.
+    fn one_persons_turn(
+        &mut self,
+        agent_id: uuid::Uuid,
+        agent_positions: &[(uuid::Uuid, (i32, i32, i32))],
+    ) {
+        {
             let Some(agent_index) = self.population.agents.iter().position(|a| a.id == agent_id)
             else {
-                continue;
+                return;
             };
 
             // What is pressing hardest, and where this one is standing.
@@ -60,7 +121,7 @@ impl Simulation {
                     agent.state.position,
                 )
             };
-            let Some(drive_type) = drive_type else { continue };
+            let Some(drive_type) = drive_type else { return };
 
             debug!(
                 "Agent {} - Most urgent drive: {:?} (value: {:.2})",
@@ -126,7 +187,7 @@ impl Simulation {
         let agent_id = self.population.agents[agent_index].id;
 
         // Generate goals periodically based on drives and emotions
-        if self.current_tick % 50 == 0 {
+        if self.current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
             let agent = &mut self.population.agents[agent_index];
 
             // Collect current drive types and emotion values
@@ -211,7 +272,7 @@ impl Simulation {
 
             // Check if agent owns a house by checking actual building ownership
             let owns_house = self.world.buildings.iter().any(|b| {
-                b.owner == Some(agent_id) &&
+                b.owner() == Some(agent_id) &&
                 b.is_completed() &&
                 b.building_type.is_residential()
             });
@@ -523,6 +584,13 @@ impl Simulation {
         // the tool instead.
         let action = self.make_what_this_wants(action, agent_index);
 
+        // And a making somebody simply decided on: hold on to it, the
+        // way the two diversions above already do. This is the last
+        // path into `Errand::to_make` and it was the one missing, so
+        // the only makings anybody ever finished were the ones they
+        // were pushed into. See `hold_on_to_the_making`.
+        let action = self.hold_on_to_the_making(action, agent_index);
+
         // And a job this one *could* do now, but would do faster with
         // a tool worth stopping for. The turn was going to be work; it
         // goes on the tool because the tool buys back more work than
@@ -534,8 +602,12 @@ impl Simulation {
             .actions_taken
             .entry(Self::what_to_book(&action, running_away))
             .or_insert(0) += 1;
+
+
         action
     }
+
+
 
     /// What came of it: the body's bill, the tally, the lesson, and the plan.
     fn what_came_of_it(
@@ -616,6 +688,11 @@ impl Simulation {
         let now = self.current_tick;
         agent.link_what_worked(&action, &action_result, drive_type, where_it_was, now);
 
+        // And this act joins the run, *after* the linking, so that a run is
+        // always what led up to the thing being credited rather than
+        // including it. See `Agent::what_led_up_to_this`.
+        agent.that_is_what_i_just_did(&action);
+
         // Apply trait-based happiness rewards for successful actions
         if action_result.success {
             agent.apply_trait_action_rewards(&action);
@@ -640,15 +717,78 @@ impl Simulation {
                     agent.abandon_plan();
                 }
             }
-        } else {
-            // Not a plan action - tick the plan step counter anyway
-            // This allows plans to timeout if agent keeps getting interrupted
-            agent.tick_plan_step();
+        }
+
+        // **And a turn that was not spent on the plan does not count against
+        // it.** This used to tick the step counter anyway, on the reasoning
+        // that a plan should time out if the agent keeps being interrupted -
+        // and it locks the branch shut, because the counter is the only thing
+        // `should_execute_plan` measures staleness by. A plan the ladder never
+        // reaches ages out of its step's allowance, and once it has, it is
+        // "stuck" and can never be reached again. Measured over twelve worlds:
+        // **98.5% of bodies hold a plan and 1.3% would run one**, with only
+        // 9.5% hungry or thirsty enough for the survival gate to be what
+        // stopped them. The timeout ate the other eighty-eight points.
+        //
+        // A plan that has not been worked is not stuck on a step. It is
+        // waiting, and how long it has been waiting is what `created_at`
+        // already records.
+        //
+        // See ISSUES_FOUND.md #187.
+
+        // A learned run advances when its step is actually taken.
+        //
+        // `is_plan_action` is the old planner's flag and is set where the
+        // ladder falls through to it; a learned run comes back through the
+        // drive's own answer, so what marks it as a plan step is that the
+        // verb matches what the plan wanted. Advancing on the verb rather
+        // than on a flag also means a step the agent would have taken anyway
+        // still counts, which is right: the plan is a claim about order, not
+        // about who chose it.
+        {
+            let taken = crate::agents::Agent::what_was_tried(&action);
+            let verb = crate::agents::Agent::just_the_verb(&taken);
+            let agent = &mut self.population.agents[agent_index];
+            if let Some(wanted) = agent.what_the_plan_wants_next() {
+                if wanted == verb {
+                    if action_result.success {
+                        agent.advance_plan_step(true, agent.plan_step_ticks + 1);
+                    } else {
+                        agent.tick_plan_step();
+                    }
+                } else {
+                    // A turn spent on something else is a turn the plan is
+                    // waiting through, and enough of them mean it is not the
+                    // plan any more.
+                    agent.tick_plan_step();
+                }
+                if !agent.should_execute_plan() && agent.has_active_plan() {
+                    agent.abandon_plan();
+                }
+            }
+        }
+
+        let agent = &mut self.population.agents[agent_index];
+
+        // The run this one has worked out for what is pressing, laid down as
+        // a plan it can hold across turns.
+        //
+        // This is what the plan branch is for now. It is offered first
+        // because a chain out of `Patterns` is a plan *for a need*, made of
+        // verbs the model acts in and in an order the agent found out; the
+        // goal planner below is the old one, whose steps are written against
+        // hard-coded coordinates. See `Agent::plan_the_run_that_answers`.
+        // It may displace a goal plan, which is not being executed anyway -
+        // see the gate in `should_execute_plan`.
+        if let Some(pressing) = agent.drives.get_most_urgent().map(|drive| drive.drive_type) {
+            agent.plan_the_run_that_answers(pressing, now);
         }
 
         // Try to create a plan for goals if agent doesn't have one
         // Only do this periodically to avoid constant replanning
-        if !agent.has_active_plan() && self.current_tick % 50 == 0 {
+        if !agent.has_active_plan()
+            && self.current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0
+        {
             // Use a default resource/return location (should be enhanced with real world data)
             let resource_loc = (50, 50, 0);
             let return_loc = (0, 0, 0);
@@ -704,7 +844,7 @@ impl Simulation {
         }
 
         // Cleanup completed goals periodically
-        if self.current_tick % 100 == 0 {
+        if self.current_tick % crate::environment::seasons::ONCE_A_WEEK == 0 {
             let agent = &mut self.population.agents[agent_index];
             agent.goals.cleanup_completed();
         }
@@ -719,7 +859,7 @@ impl Simulation {
 
         // Check if agent should interact with storehouse (every 20 ticks, or when Preparedness is high)
         // This happens independently of drive-based actions to enable cooperative resource sharing
-        if self.current_tick % 20 == 0 || {
+        if self.current_tick % crate::environment::seasons::ONCE_EVERY_OTHER_DAY == 0 || {
             let agent = &self.population.agents[agent_index];
             agent.drives.get(DriveType::Preparedness)
                 .map(|d| d.value > 0.6)

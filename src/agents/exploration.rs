@@ -530,6 +530,49 @@ impl ExplorationKnowledge {
             .collect()
     }
 
+    /// Everywhere this one remembers something of a kind being, whether it
+    /// saw the place itself or was told about it.
+    ///
+    /// `known_resources` has been a map of every resource an agent has ever
+    /// laid eyes on since exploration was written, and until now **nothing
+    /// asked it where anything was.** It fed gossip - what one person passes
+    /// on to another - and the check on whether somebody's claim was true,
+    /// and that was the whole of its use. Meanwhile the only memory the
+    /// decision layer consulted was `SpatialMemoryType::Food` and `Water`,
+    /// which is written from `Percept::ResourceDetected`, which is raised
+    /// only from **smell**. So an agent could remember a thing it had sniffed
+    /// and could not remember a thing it had seen, and had no memory
+    /// whatever of where the wood or the stone or the clay was.
+    ///
+    /// Hearsay counts here where it does not count in `seen_for_myself`. The
+    /// distinction there is about what you are entitled to *repeat*, which is
+    /// a question of honesty; this is about where you are willing to *walk*,
+    /// and a place somebody mentioned is worth trying. Being wrong costs a
+    /// walk, and the walk teaches: `exploring` drops anything from this map
+    /// that turns out not to be there once the agent is standing in view of
+    /// it.
+    pub fn where_i_remember(&self, wanted: ResourceType) -> Vec<Position> {
+        self.known_resources
+            .iter()
+            .filter(|(_, what)| **what == wanted)
+            .map(|(where_it_is, _)| *where_it_is)
+            .collect()
+    }
+
+    /// The nearest of those, skipping ground this one believes it has
+    /// stripped.
+    pub fn nearest_i_remember(
+        &self,
+        wanted: ResourceType,
+        from: Position,
+        now: u32,
+    ) -> Option<Position> {
+        self.where_i_remember(wanted)
+            .into_iter()
+            .filter(|where_it_is| !self.is_it_picked_out(*where_it_is, now))
+            .min_by_key(|where_it_is| from.distance_to(where_it_is))
+    }
+
     /// What this agent has been told is here, and by whom, out of everything
     /// it can see from where it is standing.
     ///

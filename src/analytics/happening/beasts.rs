@@ -246,6 +246,23 @@ impl Simulation {
     /// it. Agents hunt for skins, the herds go down, the predators go hungry,
     /// and hungry predators come looking.
     pub(in crate::analytics) fn process_predator_attacks(&mut self) {
+        self.predators_try_their_luck(None);
+    }
+
+    /// The same, against one person only.
+    ///
+    /// For the minute clock: somebody in danger takes their turn a minute at a
+    /// time, and the thing that is after them has to get its minutes too, or
+    /// fleeing would be free. A man who moves out of reach in the first two
+    /// minutes is not struck at in the other twenty-eight; one who is cornered
+    /// is struck at every minute he stays there. That is the chase resolving
+    /// inside the turn rather than a single roll standing for half an hour of
+    /// it. See `Simulation::everybody_takes_a_turn`.
+    pub(in crate::analytics) fn predators_try_their_luck_at(&mut self, who: usize) {
+        self.predators_try_their_luck(Some(who));
+    }
+
+    fn predators_try_their_luck(&mut self, only: Option<usize>) {
         use rand::Rng;
 
         let mut rng = crate::core::dice::roll();
@@ -258,6 +275,7 @@ impl Simulation {
             .iter()
             .enumerate()
             .filter(|(_, agent)| agent.state.is_alive)
+            .filter(|(index, _)| only.is_none_or(|who| *index == who))
             .map(|(index, agent)| (index, (agent.state.position.0, agent.state.position.1)))
             .collect();
 

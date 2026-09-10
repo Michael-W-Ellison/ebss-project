@@ -146,6 +146,20 @@ pub struct Simulation {
     /// kept. Without it there is no way to tell a settlement that is not
     /// gathering enough from one that is gathering plenty and losing it.
     pub food_items_into_packs: u64,
+
+    /// What actually went down, by name, and what it was worth.
+    ///
+    /// A body burns `UNITS_BURNED_IN_AN_ORDINARY_DAY` - fourteen hundred and
+    /// forty - and one item is `UNITS_IN_ORDINARY_ITEM` five units of volume
+    /// times whatever that food's own energy is. So a handful of fat nuts at
+    /// eighty is four hundred, and a handful of spring leaf at six is thirty:
+    /// **thirteen handfuls of leaf to one of nuts.** Whether a settlement
+    /// eats enough is therefore not a question about how much it gathers, it
+    /// is a question about what. Nothing counted it until now.
+    pub what_went_down: std::collections::BTreeMap<String, u64>,
+
+    /// And what all of it came to, in the units a day is measured in.
+    pub energy_that_went_down: f64,
     /// Where the threat tree came out, by the name of the branch.
     ///
     /// The same argument as `actions_failed_because`, one level earlier. An
@@ -155,13 +169,19 @@ pub struct Simulation {
     /// about which of those it was, because every way of declining looks like
     /// `None` from outside. This counts the declining as well as the deciding.
     pub what_a_threat_came_to: std::collections::BTreeMap<String, u64>,
+    /// How many extra minutes have been spent on the fast clock.
+    ///
+    /// A minute of somebody's life that they got to decide about because
+    /// something was on them. Counted because the whole mechanism is invisible
+    /// otherwise: it fires only for people in danger, and a run where it never
+    /// fires looks exactly like a run without it. See
+    /// `Simulation::everybody_takes_a_turn`.
+    pub minutes_spent_in_danger: u64,
 }
 
 /// Configuration for simulation behavior and limits
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
-    /// Random seed for deterministic simulations (None = random)
-    pub random_seed: Option<i64>,
     /// Maximum number of ticks before simulation auto-stops (None = unlimited)
     pub max_ticks: Option<u32>,
     /// Enable logging output
@@ -174,16 +194,7 @@ pub struct SimulationConfig {
 
 impl Default for SimulationConfig {
     fn default() -> Self {
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        // Generate a random seed from system time
-        let seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .ok()
-            .map(|d| d.as_secs() as i64);
-
         Self {
-            random_seed: seed,
             max_ticks: None,
             enable_logging: true,
             enable_metrics: true,
@@ -193,11 +204,16 @@ impl Default for SimulationConfig {
 }
 
 impl SimulationConfig {
-    /// Set a specific random seed for deterministic simulations
-    pub fn with_seed(mut self, seed: i64) -> Self {
-        self.random_seed = Some(seed);
-        self
-    }
+    /// Fixing a run is `core::dice::seed`, and this is where the note about
+    /// it lives.
+    ///
+    /// There used to be a `random_seed` on this config, set from
+    /// `SystemTime::now()` and **read by nothing at all** - a store with a
+    /// writer and no reader, and the writer was the wall clock, in a model
+    /// whose whole cost of repeatability had already been paid next door in
+    /// `core::dice`. Anybody reaching for "the seed" would have found it,
+    /// set it, and got a world it had no effect on. See
+    /// `crate::core::dice::seed`, which is the one that works.
 
     /// Set maximum number of ticks
     pub fn with_max_ticks(mut self, max_ticks: u32) -> Self {
@@ -320,11 +336,14 @@ impl Simulation {
             actions_failed: std::collections::BTreeMap::new(),
             actions_failed_because: std::collections::BTreeMap::new(),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
+            minutes_spent_in_danger: 0,
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
             what_went_back_on_the_bush: 0,
             food_items_into_packs: 0,
+            what_went_down: std::collections::BTreeMap::new(),
+            energy_that_went_down: 0.0,
         }
     }
 
@@ -391,6 +410,12 @@ impl Simulation {
             Action::TakeCutting => Some(ActionType::Farming),
             Action::PlantCutting => Some(ActionType::Farming),
             Action::SpreadMuck => Some(ActionType::Farming),
+            // Herbalism is what a remedy is read against, and Herbalism is
+            // what gathering teaches.
+            // Watching somebody dose a sick man is watching a problem being
+            // worked at, which is the nearest thing the observation tiers
+            // have to doctoring.
+            Action::Treat { .. } => Some(ActionType::ProblemSolving),
             Action::Fish => Some(ActionType::Mining), // Taking something off the world
             Action::SetSnare | Action::CheckSnares => Some(ActionType::Mining),
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
@@ -479,6 +504,15 @@ impl Simulation {
             ResourceType::Stone => "stone",
             ResourceType::Iron => "iron",
             ResourceType::Food => "food",
+
+            // Water belongs here as much as anything does, and it was the one
+            // name the two lists did not share. Merging them without it took
+            // `Action::Gather { "water" }` away from everybody: across twelve
+            // worlds the person-samples fell from 5,327 to 286 and every
+            // person still alive and ill had Thirst pressing hardest on them.
+            // A settlement that cannot ask for water is dead in a fortnight.
+            ResourceType::Water => "water",
+
             ResourceType::Clay => "clay",
             ResourceType::Salt => "salt",
             ResourceType::Sand => "sand",
@@ -488,6 +522,8 @@ impl Simulation {
             ResourceType::Grain => "grain",
             ResourceType::Greens => "greens",
             ResourceType::Roots => "roots",
+            ResourceType::Nuts => "nuts",
+            ResourceType::Legumes => "legumes",
             ResourceType::Herbs => "herbs",
             ResourceType::Fish => "fish",
             ResourceType::Meat => "meat",
@@ -845,8 +881,71 @@ impl Simulation {
 
         // A pack with no room in it. Five thousand refused turns a world were
         // somebody asking for another armful with their arms already full.
-        if agent.inventory.weight_capacity_remaining() < Self::AS_MUCH_AS_ONE_TRIP_WEIGHS {
+        //
+        // Unless it is food, in which case the pack is not the reason to stay
+        // where you are. A full pack is full of something, and food is worth
+        // more than what it is full of: the stone goes on the grass and the
+        // crop goes in - see `set_down_what_is_worth_less_than_food`. Where
+        // there is nothing anybody would set down, what will not go in the
+        // pack goes in the mouth - see the tail of `gathering`. Either way
+        // the trip is worth making, and this gate used to stop the decision
+        // before the executor could do either, so a starving man with a full
+        // pack did not walk to the bush at all.
+        let food_is_the_point = wanted == ResourceType::Food;
+
+        if !food_is_the_point
+            && agent.inventory.weight_capacity_remaining() < Self::what_one_of_these_weighs(wanted)
+        {
             return false;
+        }
+
+        // A material this one already has a working stock of, or has no use
+        // for at all.
+        //
+        // Both questions are asked here because every way of deciding to
+        // gather anything comes through this gate, and both had no answer
+        // anywhere. Measured over eight seeded world-years, sampling every
+        // living pack once a day: **a pack holds 17.4 units and carries 15.7,
+        // and 89.2% of them had under five units of room.** What was in them
+        // was not food - wood was 25.7% of all the weight anybody carried and
+        // iron 9.4%, against about a third for everything edible put
+        // together. A people who cannot smelt were each carrying half a
+        // pack's worth of iron ore about with them for life.
+        //
+        // And nothing capped it. `WHAT_A_WORKING_STOCK_IS` is twelve, counted
+        // in items, and it governs only the top-up branch; twelve wood at two
+        // units each is **twenty-four units of weight, more than the whole
+        // pack holds**. Two numbers about the same pack that had never been
+        // compared, which is this project's recurring defect in the plainest
+        // form it has yet taken.
+        //
+        // The consequence was not hoarding for its own sake. It was that
+        // every one of 4,983 sampled moments where somebody needed stone or
+        // wood for a tool - every single one, without exception - found the
+        // pack too full to take it, so `Excavate` was refused 9,952 times out
+        // of 10,014 and nobody could dig the store that would have held the
+        // food.
+        //
+        // Somebody who is actually making a thing is exempt. He is not
+        // hoarding, he is short two stone for a knife, and `Errand::to_make`
+        // is where the model already says so.
+        let on_a_making = agent
+            .errand
+            .as_ref()
+            .is_some_and(|errand| errand.to_make.is_some());
+
+        if !food_is_the_point && !on_a_making {
+            let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
+
+            if !crate::environment::making::is_this_any_use_to(named, &knows) {
+                return false;
+            }
+
+            if agent.how_many_i_have(named) as f32 * Self::what_one_of_these_weighs(wanted)
+                >= Self::what_a_working_stock_weighs(agent)
+            {
+                return false;
+            }
         }
 
         let here = Position::new(agent_position.0, agent_position.1);
@@ -875,9 +974,36 @@ impl Simulation {
         })
     }
 
-    /// What one trip out brings back, as near as makes no difference. Below
-    /// this much room in the pack there is no point setting off.
-    const AS_MUCH_AS_ONE_TRIP_WEIGHS: f32 = 1.0;
+    /// What one of a thing weighs once it is in a pack.
+    ///
+    /// One table, because it was two and they disagreed. The executor charged
+    /// **five for a stone, eight for iron, two for wood** and the decision
+    /// asked only whether there was `AS_MUCH_AS_ONE_TRIP_WEIGHS` - a flat
+    /// **one** - of room. So a pack with a unit and a half of space left
+    /// passed the gate for stone and was refused by `take_what_fits` the
+    /// instant the turn was spent, and passed it again the next turn, and the
+    /// next, for the rest of that agent's life.
+    ///
+    /// Measured over eight seeded world-years: `Gather: Inventory full -
+    /// cannot carry more` was **241,191 refusals, 79.7% of every refusal in
+    /// the model**, against 23,293 person-days - **better than ten of the
+    /// forty-eight turns in everybody's day, spent asking for something the
+    /// executor was always going to refuse.** This is the same fault as #243
+    /// with different numbers on it: one question answered in two places that
+    /// do not agree.
+    pub(in crate::analytics) fn what_one_of_these_weighs(
+        what: crate::world::ResourceType,
+    ) -> f32 {
+        use crate::world::ResourceType;
+
+        match what {
+            ResourceType::Wood => 2.0,  // Wood is light but bulky
+            ResourceType::Stone => 5.0, // Stone is heavy
+            ResourceType::Iron => 8.0,  // Iron is very heavy
+            ResourceType::Food => crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,
+            _ => 1.0,
+        }
+    }
 
     /// Something worth taking while this one is standing here anyway.
     ///
@@ -941,7 +1067,35 @@ impl Simulation {
     /// Enough wood for several fires rather than one, and enough salt to see a
     /// winter's meat put by. Above this an agent has better things to do than
     /// stand at a woodpile.
+    ///
+    /// Counted in items, which is why it wants the weight-denominated
+    /// companion below rather than a bigger number: twelve is right for salt
+    /// at one unit each and absurd for stone at five.
     const WHAT_A_WORKING_STOCK_IS: u32 = 12;
+
+    /// The same question in the units the pack is actually kept in.
+    ///
+    /// A working stock is not a count, it is a share of what a person can
+    /// carry - because the thing a stock competes with is supper, and supper
+    /// is weighed. A third of the pack, so that two thirds are left for a
+    /// day's food and the tools of a trade. On the pack this model gives a
+    /// grown body that is about six units: three lengths of wood, or one
+    /// stone and a little, which is what somebody walking about their own
+    /// country would actually have on them.
+    ///
+    /// Read off the agent's own pack rather than named, so that a child, an
+    /// injured man and somebody with a handcart each get the answer their own
+    /// back gives - and so that this cannot drift away from the pack the way
+    /// the count above did.
+    pub(in crate::analytics) fn what_a_working_stock_weighs(
+        agent: &crate::agents::Agent,
+    ) -> f32 {
+        agent.inventory.max_weight * Self::WHAT_SHARE_OF_A_PACK_MATERIALS_GET
+    }
+
+    /// How much of a pack a person will give up to what they are carrying for
+    /// later, rather than to what they will eat tonight.
+    const WHAT_SHARE_OF_A_PACK_MATERIALS_GET: f32 = 1.0 / 3.0;
 
     /// What a request to gather names, in the world's own terms.
     ///
@@ -953,40 +1107,49 @@ impl Simulation {
     fn what_a_gather_asks_for(named: &str) -> Option<crate::world::ResourceType> {
         use crate::world::ResourceType;
 
-        match named {
-            "wood" => Some(ResourceType::Wood),
-            "stone" => Some(ResourceType::Stone),
-            "iron" => Some(ResourceType::Iron),
-            "food" => Some(ResourceType::Food),
-            // Wild grain stands in the world and there was no way to ask for
-            // it by name: a request for grain fell through to "unknown
-            // resource type" and failed. It came back only as an edible
-            // substitute for a request for food, which is how a people that
-            // had never handled grain came to have none of it to sow.
-            "grain" => Some(ResourceType::Grain),
-            // What there is to eat before anything has ripened
-            "greens" => Some(ResourceType::Greens),
-            "roots" => Some(ResourceType::Roots),
-            "water" => Some(ResourceType::Water),
-            // Clothing materials. Flax and cotton grow in patches an agent can
-            // walk to; hides and wool come off animals, so they are here for
-            // when an agent has somewhere to get them rather than because the
-            // ground offers any.
-            "flax" => Some(ResourceType::Flax),
-            "cotton" => Some(ResourceType::Cotton),
-            // Clay has been spawning on every riverbank and every marsh in
-            // every world since the project began and no agent could ever pick
-            // any of it up: it was missing from this list.
-            "clay" => Some(ResourceType::Clay),
-            "salt" => Some(ResourceType::Salt),
-            "hides" => Some(ResourceType::Hides),
-            "wool" => Some(ResourceType::Wool),
-            "generic" => Some(ResourceType::Wood), // Default to wood for generic
-            _ => None,
+        // "generic" is not a thing in the world. It is what the drive ladder
+        // says when Industry wins and it cannot name what it wants, and it
+        // comes out as a trip for timber.
+        if named == "generic" {
+            return Some(ResourceType::Wood);
         }
+
+        // Everything else is the inverse of `gathered_as`, walked rather than
+        // written out again.
+        //
+        // This was a second hand-written list, and `gathered_as` claims in its
+        // own docstring to be "the same vocabulary `Gather` answers to, kept
+        // here so that the decision and the executor cannot drift apart". They
+        // drifted apart three times. Its own comments record two of them:
+        // grain, which "fell through to unknown resource type and failed" so
+        // that a people who had never handled grain had none to sow; and clay,
+        // which "has been spawning on every riverbank and every marsh in every
+        // world since the project began and no agent could ever pick any of it
+        // up: it was missing from this list."
+        //
+        // The third was **herbs**, and it cost the whole of the treatment
+        // machinery. `Action::Gather { resource_type: "herbs" }` is what an
+        // ill agent with an empty pack is sent to do, Rest wins the tick for
+        // 194 of 426 ill person-samples, and every one of those turns came
+        // back "Unknown resource type: herbs". Measured across twelve worlds
+        // and 5,327 person-samples: **not one person ever held a remedy**,
+        // with seven thousand bearing herb patches on the maps and the nearest
+        // one a median twelve paces away. See ISSUES_FOUND.md #163 and #166.
+        //
+        // A list cannot fail this way if there is only one of it.
+        ResourceType::all()
+            .into_iter()
+            .find(|what| Self::gathered_as(*what) == Some(named))
     }
 
     /// Whether an agent can stand on this tile
+    /// Shout if somebody has just been put where there is no map.
+    ///
+    /// Temporary: `Move: No passable route` is half of every refusal left in
+    /// the model and every one of them is an agent standing off the grid.
+    /// Four places move an agent and all four look guarded, so this asks them
+    /// one at a time which is lying.
+
     fn is_passable_tile(&self, x: i32, y: i32) -> bool {
         use crate::world::{Position, TerrainType};
 
@@ -1126,11 +1289,14 @@ impl Simulation {
             actions_failed: std::collections::BTreeMap::new(),
             actions_failed_because: std::collections::BTreeMap::new(),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
+            minutes_spent_in_danger: 0,
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
             what_went_back_on_the_bush: 0,
             food_items_into_packs: 0,
+            what_went_down: std::collections::BTreeMap::new(),
+            energy_that_went_down: 0.0,
         };
 
         info!("Simulation loaded from tick {}", sim.current_tick);
@@ -1264,7 +1430,10 @@ impl Simulation {
 #[cfg(test)]
 mod tests;
 
-
-
-
-
+/// What a full sitting down to eat answers of a hunger.
+///
+/// The figure every eating path used to subtract flat, whatever had actually
+/// gone down. It is still what a *full* meal answers; what a partial one
+/// answers is now that much of it - see
+/// `agents::physiology::what_this_meal_answers`.
+pub const WHAT_A_FULL_SITTING_ANSWERS: f32 = 0.3;

@@ -27,22 +27,38 @@ impl Simulation {
             None => return ActionResult::failure("Nowhere to dig".to_string()),
         };
 
+        // What is standing here, asked before whether the ground can be
+        // broken - because the commonest green manure of all is a pod row in
+        // a field somebody broke last year, and `can_be_tilled` says no to
+        // ground that is already a field. Asking in the other order made
+        // ploughing a crop in possible only on ground that had never been
+        // farmed, which is the one place a farmer would not be doing it.
+        let standing = self
+            .world
+            .resources
+            .iter()
+            .position(|resource| resource.position == tile_position);
+
+        if let Some(standing) = standing {
+            let crop = self.world.resources[standing].resource_type;
+            let on_it = self.world.resources[standing].amount;
+
+            // A pod row is worth more under the plough than in a basket when
+            // the ground is poor, and turning it under is the whole point -
+            // see `ploughing_a_crop_in`. Anything else standing here is
+            // somebody's dinner and stays where it is.
+            if crop.feeds_the_ground() && on_it > 0 {
+                return self.ploughing_a_crop_in(agent_index, standing, tick_now);
+            }
+
+            return ActionResult::failure("Something already grows here".to_string());
+        }
+
         if !crate::world::Terrain::new(ground).can_be_tilled() {
             return ActionResult::failure(format!(
                 "Cannot break {:?} into a field",
                 ground
             ));
-        }
-
-        // Somewhere to put the crop, and something to sow it with.
-        // A field is only worth breaking where there is room for one.
-        if self
-            .world
-            .resources
-            .iter()
-            .any(|resource| resource.position == tile_position)
-        {
-            return ActionResult::failure("Something already grows here".to_string());
         }
 
         if let Some(tile) = self.world.grid.get_tile_mut(&tile_position) {
@@ -54,7 +70,19 @@ impl Simulation {
         // sowing. Nobody hands out grain seed: an agent that has only
         // ever stripped berry bushes sows berries, works the field all
         // season, and finds out what a berry bush thinks of a plough.
-        let sown = Self::what_this_one_would_sow(&self.population.agents[agent_index]);
+        // What this ground is worth, which is something a man standing on it
+        // can see and which decides whether he puts a hungry crop in it.
+        let how_good_the_ground_is = self
+            .world
+            .grid
+            .get_tile(&tile_position)
+            .map(|tile| tile.soil.fertility())
+            .unwrap_or(0.5);
+
+        let sown = Self::what_this_one_would_sow(
+            &self.population.agents[agent_index],
+            how_good_the_ground_is,
+        );
 
         // The seed itself goes in the ground. Sowing was free before
         // this, which made a field a thing you got for a day's digging
@@ -93,6 +121,68 @@ impl Simulation {
             .with_drive_change(DriveType::Sustenance, -0.4)
             .with_energy_cost(12.0)
             .with_message("Broke ground and sowed a field".to_string())
+    }
+
+    /// Green manure: turning a standing crop under instead of eating it.
+    ///
+    /// Reached through `Action::TillSoil` when what is standing on the tile
+    /// is a pod crop - see `ResourceType::feeds_the_ground`. Breaking ground
+    /// that already carries something used to be refused flatly, which is
+    /// right for a berry bush and wrong for a stand of vetch: ploughing the
+    /// vetch in is not an obstacle to farming the tile, it is the oldest way
+    /// there is of farming it.
+    ///
+    /// The trade is plain and it is a real one. What goes into the ground is
+    /// the crop somebody could have carried home and eaten, and a hungry
+    /// settlement will not do it. What comes back is the whole plant rather
+    /// than the roots and stalk the growing pass already left, which is the
+    /// part of the year's growth that would otherwise have walked away in a
+    /// basket.
+    pub(in crate::analytics) fn ploughing_a_crop_in(
+        &mut self,
+        agent_index: usize,
+        standing: usize,
+        tick_now: u32,
+    ) -> ActionResult {
+        use crate::world::{Soil, TerrainType};
+
+        let where_it_stands = self.world.resources[standing].position;
+        let turned_under = self.world.resources[standing].amount;
+        let crop = self.world.resources[standing].resource_type;
+
+        self.world.resources.remove(standing);
+
+        if let Some(tile) = self.world.grid.get_tile_mut(&where_it_stands) {
+            // The harvestable part, which is exactly what the residue path
+            // does *not* leave behind: `regenerate_in_ground` gives the
+            // ground the roots and the stalk of everything that grows, and
+            // the rest is what somebody carries off. Turning the crop under
+            // is choosing not to carry it off.
+            tile.soil.feed(turned_under as f32 * Soil::NUTRIENT_PER_UNIT_GROWN);
+            tile.soil
+                .add_leaf_litter(turned_under as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
+
+            // And the ground is broken now, which is the other half of what
+            // a day behind a plough buys.
+            if crate::world::Terrain::new(tile.terrain.terrain_type).can_be_tilled() {
+                tile.terrain = crate::world::Terrain::new(TerrainType::Farmland);
+            }
+            tile.soil.somebody_worked_this_field();
+        }
+
+        let agent = &mut self.population.agents[agent_index];
+        agent
+            .skills
+            .practise(crate::agents::SkillType::Farming, 15, tick_now);
+
+        debug!(
+            "Agent {} turned {turned_under} of {crop:?} under at {where_it_stands:?}",
+            agent.id
+        );
+
+        ActionResult::success()
+            .with_energy_cost(10.0)
+            .with_message(format!("Turned {turned_under} of {crop:?} under"))
     }
 
     /// `Action::TakeCutting`.

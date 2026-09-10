@@ -11,16 +11,27 @@ fn test_simulation_config_default() {
 
     // Should have reasonable defaults
     assert!(config.max_ticks.is_none(), "Default should have no tick limit");
-    assert!(config.random_seed.is_some(), "Should have a random seed");
     assert_eq!(config.enable_logging, true);
     assert_eq!(config.enable_metrics, true);
 }
 
+/// Fixing a run is `core::dice::seed`, and this config has nothing to do with
+/// it. What was here asserted that `SimulationConfig::default()` carried a
+/// `random_seed` - which it did, taken from the wall clock, and which nothing
+/// in the model ever read.
 #[test]
-fn test_simulation_config_with_seed() {
-    let config = SimulationConfig::default().with_seed(12345);
+fn the_seed_that_fixes_a_run_is_the_one_in_dice() {
+    let run = || {
+        crate::core::dice::seed(77);
+        (0..8)
+            .map(|_| {
+                use rand::Rng;
+                crate::core::dice::roll().gen_range(0..1_000_000)
+            })
+            .collect::<Vec<_>>()
+    };
 
-    assert_eq!(config.random_seed, Some(12345));
+    assert_eq!(run(), run(), "and it is the only one that fixes anything");
 }
 
 #[test]
@@ -47,12 +58,10 @@ fn test_simulation_config_disable_metrics() {
 #[test]
 fn test_simulation_config_builder_pattern() {
     let config = SimulationConfig::default()
-        .with_seed(42)
         .with_max_ticks(5000)
         .with_logging(true)
         .with_metrics(true);
 
-    assert_eq!(config.random_seed, Some(42));
     assert_eq!(config.max_ticks, Some(5000));
     assert_eq!(config.enable_logging, true);
     assert_eq!(config.enable_metrics, true);
@@ -76,15 +85,6 @@ fn test_simulation_config_validate_zero_max_ticks() {
 }
 
 #[test]
-fn test_simulation_config_validate_negative_seed_ok() {
-    // Negative seeds should be valid (they're just numbers)
-    let config = SimulationConfig::default()
-        .with_seed(-100);
-
-    assert!(config.validate().is_ok());
-}
-
-#[test]
 fn test_simulation_config_metrics_interval() {
     let config = SimulationConfig::default()
         .with_metrics_interval(10);
@@ -103,22 +103,18 @@ fn test_simulation_config_validate_metrics_interval() {
 
 #[test]
 fn test_simulation_config_clone() {
-    let config1 = SimulationConfig::default()
-        .with_seed(999)
-        .with_max_ticks(2000);
+    let config1 = SimulationConfig::default().with_max_ticks(2000);
 
     let config2 = config1.clone();
 
-    assert_eq!(config1.random_seed, config2.random_seed);
     assert_eq!(config1.max_ticks, config2.max_ticks);
 }
 
 #[test]
 fn test_simulation_config_debug() {
-    let config = SimulationConfig::default().with_seed(123);
+    let config = SimulationConfig::default().with_max_ticks(123);
 
     let debug_str = format!("{:?}", config);
 
-    // Should contain the seed
     assert!(debug_str.contains("123"));
 }

@@ -789,7 +789,14 @@ pub struct Building {
     pub building_type: BuildingType,
     pub position: Position,
     pub state: BuildingState,
-    pub owner: Option<uuid::Uuid>, // Optional owner (for houses)
+    /// Whose roof it is - see `world::belonging`.
+    ///
+    /// This was `owner: Option<Uuid>`, and it was read in exactly one place
+    /// (`owns_house` in the goal world-state) and **written in none**, so
+    /// every agent in every world has always been told it owns no house.
+    /// `owner()` still answers the old question for the inspectors.
+    #[serde(default)]
+    pub belongs: crate::world::belonging::Belongs,
     pub occupants: Vec<uuid::Uuid>, // Agents currently living here
     pub condition: f32, // Building condition 0.0-1.0, decays over time without maintenance
     pub production_timer: u32, // Ticks until next production cycle
@@ -802,7 +809,7 @@ impl Building {
             building_type,
             position,
             state: BuildingState::Completed, // Start completed for initial buildings
-            owner: None,
+            belongs: crate::world::belonging::Belongs::ToNobody,
             occupants: Vec::new(),
             condition: 1.0, // New buildings start in perfect condition
             production_timer: building_type.production_interval(),
@@ -819,12 +826,56 @@ impl Building {
                 resources_delivered: Vec::new(),
                 workers: Vec::new(),
             },
-            owner: None,
+            belongs: crate::world::belonging::Belongs::ToNobody,
             occupants: Vec::new(),
             condition: 1.0,
             production_timer: 0, // Timer starts when building is completed
             pending_production: Vec::new(),
         }
+    }
+
+    /// Somebody has put a turn of work into this.
+    ///
+    /// `workers` has been on `BuildingState::UnderConstruction` since
+    /// buildings were written and **nothing has ever written it** - it was
+    /// initialised empty and read only by the inspectors, so the answer to
+    /// "how many hands are on this job" was always none. It is a set in
+    /// spirit, so a man who works on the same roof for a week counts once.
+    pub fn a_hand_on_it(&mut self, who: uuid::Uuid) {
+        if let BuildingState::UnderConstruction { workers, .. } = &mut self.state {
+            if !workers.contains(&who) {
+                workers.push(who);
+            }
+        }
+    }
+
+    /// How many people have put work into this one.
+    ///
+    /// Nought for a roof that is finished: the question is about a job, and a
+    /// finished job is not one.
+    pub fn how_many_hands(&self) -> usize {
+        match &self.state {
+            BuildingState::UnderConstruction { workers, .. } => workers.len(),
+            BuildingState::Completed => 0,
+        }
+    }
+
+    /// Whose roof it is.
+    pub fn belongs(&self) -> crate::world::belonging::Belongs {
+        self.belongs
+    }
+
+    /// Whose it is, where it is anybody's in particular.
+    ///
+    /// The old `owner` field, answered rather than stored, so the inspectors
+    /// go on asking the question they always asked.
+    pub fn owner(&self) -> Option<uuid::Uuid> {
+        self.belongs.whose()
+    }
+
+    /// Say whose it is. Called when somebody finishes putting one up.
+    pub fn now_belongs_to(&mut self, belongs: crate::world::belonging::Belongs) {
+        self.belongs = belongs;
     }
 
     /// Deliver resources to construction site

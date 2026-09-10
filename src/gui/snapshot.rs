@@ -329,7 +329,7 @@ pub fn building_to_detailed(building: &Building) -> SelectedBuildingData {
         position: building.position,
         completed,
         progress,
-        owner_id: building.owner,
+        owner_id: building.owner(),
         occupant_ids: building.occupants.clone(),
         resources_needed,
         worker_ids,

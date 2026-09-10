@@ -17,9 +17,11 @@ pub mod pregnancy;
 pub mod childcare;
 pub mod fatigue;
 pub mod practices;
+pub mod whereabouts;
 pub mod wondering;
 pub mod patterns;
 pub mod physiology;
+pub mod rhythm;
 pub mod provision;
 
 pub use agent::{Agent, AgentConfig, AgentState, Ailment, Errand, Inventory, InventoryItem, LifeStage};

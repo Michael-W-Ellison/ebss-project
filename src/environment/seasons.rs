@@ -61,16 +61,72 @@ pub const MINUTES_IN_A_WHOLE_LIFE: u32 = MINUTES_PER_YEAR * YEARS_BEFORE_OLD_AGE
 /// is stated in minutes because that is what a body runs on; this is how
 /// often anybody in it stops to think.
 ///
-/// Twelve, so a turn is two hours. Every clock that matters is derived from
-/// the minute figures rather than from this, so making it finer makes the
-/// decision loop denser without making any of the physiology wrong - see
-/// `agents::physiology::MINUTES_PER_TURN`. At one, a turn is a minute and a
-/// seventy-year life is thirty-six million of them, which is the calendar as
-/// specified and is not a thing anybody can run.
-pub const TICKS_PER_DAY: u32 = 12;
+/// Forty-eight, so a turn is half an hour.
+///
+/// It was twelve - a two-hour turn - and twelve decisions in a waking day is
+/// not enough to live one. Every clock that matters is derived from the minute
+/// figures rather than from this, so making it finer makes the decision loop
+/// denser without making any of the physiology wrong; what it does *not*
+/// automatically do is carry the world's cadences with it, and that is what
+/// `ONCE_A_DAY` and its neighbours below are for.
+///
+/// One a minute is the calendar as specified and is still out of reach, and
+/// the reason is the world rather than the people: an empty world costs about
+/// 1.6 milliseconds a tick, so at a minute turn the ground and the weather
+/// alone come to fourteen minutes of running per simulated year per world,
+/// before a single agent thinks about anything. Deciding less often cannot
+/// rescue that; charging `World::tick` by elapsed time might. Measured in
+/// ISSUES_FOUND #170.
+pub const TICKS_PER_DAY: u32 = 48;
 
 /// How many turns a year lasts.
 pub const TICKS_PER_YEAR: u32 = TICKS_PER_DAY * DAYS_PER_YEAR;
+
+/// How often the world's slower business is attended to.
+///
+/// These were written as bare tick counts - 10, 20, 50 and 100 - chosen for
+/// overhead at a time when a turn was two hours, so they meant "about a day",
+/// "about two days", "about four days" and "about a week". As tick counts they
+/// would have gone on meaning ten, twenty, fifty and a hundred *turns* the
+/// moment a turn got shorter, which at half an hour is twenty minutes, forty
+/// minutes, an hour and two hours: relationships decaying every couple of
+/// hours, technology discovered before breakfast. That is the whole of
+/// ISSUES_FOUND #205, and this is the fix - a cadence stated in days means the
+/// same thing at any turn length, and there is one place to read it off.
+///
+/// At the twelve-turn day these come to 12, 24, 48 and 84 against the 10, 20,
+/// 50 and 100 they replace, so nothing much moves by the renaming itself.
+pub const ONCE_A_DAY: u32 = TICKS_PER_DAY;
+pub const ONCE_EVERY_OTHER_DAY: u32 = TICKS_PER_DAY * 2;
+pub const ONCE_EVERY_FEW_DAYS: u32 = TICKS_PER_DAY * 4;
+pub const ONCE_A_WEEK: u32 = TICKS_PER_DAY * DAYS_IN_A_SHORT_WEEK;
+
+/// What time of day it is, as a day number and a clock reading.
+///
+/// Four places worked this out for themselves as `tick / 1440` and
+/// `(tick % 1440) / 60`, which reads a turn as a minute. A turn has never been
+/// a minute in this model: it was two hours, and the clock in the window was
+/// therefore showing hour three on the third day of a world that was a
+/// fortnight old. Derived here so that it is right, and right at any turn
+/// length.
+pub fn what_the_clock_says(tick: u32) -> (u32, u32, u32) {
+    let minutes_into_the_day = (tick % TICKS_PER_DAY) * MINUTES_PER_TURN;
+    (
+        tick / TICKS_PER_DAY,
+        minutes_into_the_day / MINUTES_PER_HOUR,
+        minutes_into_the_day % MINUTES_PER_HOUR,
+    )
+}
+
+/// How many minutes one turn of thinking covers.
+///
+/// The one spelling. `agents::physiology::MINUTES_PER_TURN` derives from the
+/// same place; this is here because the clock in the window needs it too and
+/// should not be reaching into the physiology to get it.
+pub const MINUTES_PER_TURN: u32 = MINUTES_PER_DAY / TICKS_PER_DAY;
+
+/// Minutes in an hour, so nobody writes 60 twice.
+pub const MINUTES_PER_HOUR: u32 = 60;
 
 /// Where in a season a day falls: the first fortnight, the long middle, or
 /// the last fortnight.
@@ -207,12 +263,36 @@ impl Season {
     }
 
     /// Get temperature modifier for this season
-    pub fn temperature_modifier(&self) -> f32 {
+    /// The four of them, in the order the year runs.
+    pub const ALL: [Season; 4] = [
+        Season::Spring,
+        Season::Summer,
+        Season::Fall,
+        Season::Winter,
+    ];
+
+    /// How far through the swing from a place's winter to its summer this
+    /// season stands, nought to one.
+    ///
+    /// **A fraction of a journey between two bands, not a multiplier on a
+    /// temperature.** What was here returned 0.6 for winter and 1.2 for
+    /// summer and was multiplied into a Celsius reading, which is an
+    /// arithmetic mistake rather than a bad number: Celsius has an arbitrary
+    /// zero, so multiplying it makes a cold place colder at noon and warms
+    /// the tundra up overnight. See `BiomeType::temperature_at`, which is
+    /// the one place a temperature is now worked out.
+    ///
+    /// Spring sits below the halfway mark and autumn above it because the
+    /// ground and the sea lag the sun: an April day is colder than the
+    /// October day that has the same sun in it, and every gardener knows
+    /// it. The old figures said the same thing - spring 0.8 against autumn
+    /// 0.9 - and that much of them is kept.
+    pub fn how_far_into_the_year_it_is(&self) -> f32 {
         match self {
-            Season::Spring => 0.8,
-            Season::Summer => 1.2,
-            Season::Fall => 0.9,
-            Season::Winter => 0.6,
+            Season::Winter => 0.0,
+            Season::Spring => 0.45,
+            Season::Summer => 1.0,
+            Season::Fall => 0.60,
         }
     }
 
@@ -400,11 +480,34 @@ impl SeasonalCalendar {
         }
     }
 
-    /// Get effective temperature for environment
-    pub fn apply_modifiers(&self, base_temperature: Temperature) -> Temperature {
-        let season_mod = self.current_season().temperature_modifier();
-        let time_mod = self.time_of_day_temperature_modifier();
-        base_temperature * season_mod * time_mod
+    /// What a place whose year swings this wide reads now.
+    ///
+    /// `settled_at` is what it averages over the year and `swings_by` is how
+    /// far it goes either side of that between a winter night and a summer
+    /// afternoon - so the caller says how continental its climate is instead
+    /// of a multiplier deciding for it. A place with no season and no day in
+    /// it passes nought and gets its own number back.
+    ///
+    /// Additive, like everything else about temperature now. This used to
+    /// multiply the reading by a season factor and then a time-of-day
+    /// factor; see `Season::how_far_into_the_year_it_is`.
+    pub fn what_a_place_like_that_reads(
+        &self,
+        settled_at: Temperature,
+        swings_by: f32,
+    ) -> Temperature {
+        let by_season = self.current_season().how_far_into_the_year_it_is() - 0.5;
+        let by_hour = crate::environment::biome::how_far_through_the_days_warmth(self.time_of_day)
+            - 0.5;
+
+        // The year carries two thirds of the swing and the day a third,
+        // which is the shape of a temperate year: January to July is a
+        // longer way than night to noon, but not by very much.
+        const WHAT_SHARE_OF_THE_SWING_THE_YEAR_HAS: f32 = 0.67;
+
+        settled_at
+            + swings_by * WHAT_SHARE_OF_THE_SWING_THE_YEAR_HAS * by_season * 2.0
+            + swings_by * (1.0 - WHAT_SHARE_OF_THE_SWING_THE_YEAR_HAS) * by_hour * 2.0
     }
 
     /// Get season progress (0.0 to 1.0)
@@ -504,9 +607,19 @@ mod tests {
 
     #[test]
     fn test_temperature_modifiers() {
-        assert!(Season::Summer.temperature_modifier() > Season::Winter.temperature_modifier());
-        assert_eq!(Season::Summer.temperature_modifier(), 1.2);
-        assert_eq!(Season::Winter.temperature_modifier(), 0.6);
+        assert!(
+            Season::Summer.how_far_into_the_year_it_is()
+                > Season::Winter.how_far_into_the_year_it_is()
+        );
+        assert_eq!(Season::Summer.how_far_into_the_year_it_is(), 1.0);
+        assert_eq!(Season::Winter.how_far_into_the_year_it_is(), 0.0);
+
+        // Spring is colder than the autumn that matches it for sun, because
+        // the ground lags.
+        assert!(
+            Season::Spring.how_far_into_the_year_it_is()
+                < Season::Fall.how_far_into_the_year_it_is()
+        );
     }
 
     #[test]
@@ -595,11 +708,11 @@ mod tests {
         calendar.day_of_year = Season::Summer.first_day();
         calendar.time_of_day = 12.0; // Noon
 
-        let base_temp = 20.0;
-        let modified = calendar.apply_modifiers(base_temp);
+        let settled_at = 20.0;
+        let modified = calendar.what_a_place_like_that_reads(settled_at, 20.0);
 
         // Should be warmer in summer at noon
-        assert!(modified > base_temp);
+        assert!(modified > settled_at);
     }
 
     #[test]

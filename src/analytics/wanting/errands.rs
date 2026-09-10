@@ -188,7 +188,31 @@ impl Simulation {
                 // The goal tile itself may hold a building or resource the
                 // agent is heading for, so only intermediate tiles must be
                 // walkable.
-                if next != goal && !self.is_passable_tile(next.0, next.1) {
+                //
+                // Only tiles, though. This exemption had no floor under it,
+                // and a goal off the edge of the map is not a barn door: it
+                // is nowhere. A decision that named a target one pace past
+                // the edge got the agent walked onto it, and the next turn
+                // named one further out, and so on - the trace reads
+                // "walking toward (50, 10) to (50, 10)", then (51, 10), then
+                // (52, 10). `is_passable_tile` refuses every tile outside the
+                // grid, so once out there the agent had **no passable
+                // neighbour in any direction** and never took another step:
+                // it could not walk to food or to water and it starved where
+                // it stood. Measured over eight seeded world-years, `Move: No
+                // passable route toward destination` was 63,922 refusals -
+                // half of every refusal left in the model - and every one of
+                // them reported "standing off the map, with 0 ways out".
+                //
+                // One agent a world, from the day it wandered out to the day
+                // it died: 10,537 agent-ticks in the first world measured,
+                // which is two hundred and twenty days of a life spent
+                // standing still.
+                let on_the_map = next.0 >= 0
+                    && next.1 >= 0
+                    && next.0 < self.world.grid.width as i32
+                    && next.1 < self.world.grid.height as i32;
+                if !on_the_map || (next != goal && !self.is_passable_tile(next.0, next.1)) {
                     continue;
                 }
 
@@ -450,8 +474,10 @@ impl Simulation {
             if let Some(for_drive) = presses_hardest {
                 let pressed_this_hard =
                     self.population.agents[agent_index].how_hard_it_presses(for_drive);
+                let set_out_from = self.population.agents[agent_index].state.position;
                 self.population.agents[agent_index].errand = Some(crate::agents::Errand {
                     going_to: target,
+                    set_out_from,
                     to_make: None,
                     for_drive,
                     pressed_this_hard,
@@ -1001,6 +1027,7 @@ impl Simulation {
             let here = self.population.agents[agent_index].state.position;
             self.population.agents[agent_index].errand = Some(crate::agents::Errand {
                 going_to: here,
+                set_out_from: here,
                 to_make: Some(better.called.to_string()),
                 for_drive,
                 pressed_this_hard,
@@ -1111,22 +1138,38 @@ impl Simulation {
 
         // What would answer it. A free hand is somebody else's problem - see
         // `free_a_hand_for` - and bare hands are never missing.
-        let wanted: &str = match missing {
-            Wants::ThisInHand(what) => what,
-            Wants::AToolFor(trade) => match agent.what_i_would_rather_have(trade) {
-                Some(tool) => tool.called,
-                None => return action,
-            },
-            Wants::AVessel | Wants::AFreeHand | Wants::BareHands => return action,
-        };
-
         // Only a step that can actually be carried out, and failing that the
         // raw thing the chain is short of. Naming a step that cannot be taken
         // is worse than the refusal it replaces: the refusal goes into the
         // record and the man learns from it that making knives does not work.
         // See `how_i_would_come_by`.
-        let wanted = wanted.to_string();
-        let Some(instead) = self.how_i_would_come_by(&wanted, agent) else {
+        //
+        // Every tool the trade has, best first, and the first one there is a
+        // step towards. It used to be `what_i_would_rather_have` alone, which
+        // is `max_by(how_much_better)` - one candidate, the best there is, and
+        // no second thought if its chain happens to be out of reach.
+        //
+        // A settlement's founders start with a handaxe. It wears out.
+        // Digging, building, leatherworking and crafting all then want a tool
+        // nobody has, and the best Mining tool anybody knows of is a *shovel*
+        // - so the whole settlement spent the rest of its life failing to
+        // begin a shovel while a handaxe, which it knew how to make and had
+        // the makings for, sat one step away. Measured over eight seeded
+        // world-years, **every one of the 9,952 refusals reached "no step
+        // towards shovel" and not one said "towards handaxe"**; `Excavate` was
+        // refused 15,758 times out of 15,836 - 99.5%, the largest single
+        // refusal in the model - and the winter store is capped by the holes
+        // that never got dug.
+        let candidates: Vec<String> = match missing {
+            Wants::ThisInHand(what) => vec![what.to_string()],
+            Wants::AToolFor(trade) => agent.what_i_would_settle_for(trade),
+            Wants::AVessel | Wants::AFreeHand | Wants::BareHands => return action,
+        };
+
+        let Some((wanted, instead)) = candidates.into_iter().find_map(|what| {
+            self.how_i_would_come_by(&what, agent)
+                .map(|step| (what, step))
+        }) else {
             return action;
         };
 
@@ -1144,6 +1187,63 @@ impl Simulation {
         instead
     }
 
+    /// Hold on to a making that was chosen off the drive's own arm, so it is
+    /// carried through rather than re-decided the moment the first step is
+    /// done.
+    ///
+    /// **The third step of the crafting composition, and it is a hole rather
+    /// than a knob.** `Errand::to_make` exists for exactly this and says so in
+    /// its own docstring - "a diversion buys the next step in a chain, a
+    /// length of cordage, a knapped edge, and the turn after that the whole
+    /// decision was made again from scratch". Both *diversion* paths take the
+    /// making on: `make_what_this_wants`, where the turn was going to be a
+    /// refusal, and `would_a_better_tool_pay`, where it was going to be work.
+    /// The path where somebody simply decides to make something did not, so
+    /// the one making anybody chooses on purpose was the one nobody finished.
+    ///
+    /// What that cost is a composition, not a tool. A spear is three makings
+    /// in a row - tip, lashing, the three parts put together - and all three
+    /// are `craft` to the layer that learns, so a man who finished one would
+    /// hold `craft > craft` and the run `gather > craft > craft`. **Measured
+    /// over eight worlds and sixty-nine bodies: `craft > craft` did not occur
+    /// once.** Two makings never happened on consecutive turns, because
+    /// Utility presses on 2.1% of turns and the second step waited on it
+    /// coming round again.
+    pub(in crate::analytics) fn hold_on_to_the_making(
+        &mut self,
+        action: Action,
+        agent_index: usize,
+    ) -> Action {
+        if !matches!(action, Action::Craft { .. }) {
+            return action;
+        }
+
+        let agent = &self.population.agents[agent_index];
+        if agent.errand.is_some() {
+            return action;
+        }
+
+        let here = agent.state.position;
+        let a_fire_is_to_hand = self
+            .nearest_fire_from(here, Self::FIRE_REACH, true)
+            .is_some();
+
+        let Some(want) = self.population.agents[agent_index]
+            .what_i_am_working_towards(a_fire_is_to_hand)
+        else {
+            return action;
+        };
+
+        // Already got one. The step is being taken for some other reason and
+        // there is nothing to hold on to.
+        if self.population.agents[agent_index].how_many_i_have(want) > 0 {
+            return action;
+        }
+
+        self.take_the_making_on(want, agent_index);
+        action
+    }
+
     /// Take a making on as an errand, so that a chain several turns long is
     /// walked rather than restarted.
     fn take_the_making_on(&mut self, wanted: &str, agent_index: usize) {
@@ -1157,6 +1257,7 @@ impl Simulation {
 
         self.population.agents[agent_index].errand = Some(crate::agents::Errand {
             going_to: here,
+            set_out_from: here,
             to_make: Some(wanted.to_string()),
             for_drive,
             pressed_this_hard,

@@ -36,7 +36,7 @@ fn a_field_outyields_the_hedgerow_without_outrunning_it() {
         for _ in 0..300 {
             // Held steady, so this measures the rate rather than depletion
             soil.nutrients = fertility;
-            patch.regenerate_in_ground(20.0, 0.6, 1.0, cultivated, &mut soil);
+            patch.regenerate_in_ground(20.0, 0.6, 1.0, cultivated, &mut soil, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
         }
 
         patch.amount

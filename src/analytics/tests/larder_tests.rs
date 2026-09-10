@@ -298,6 +298,38 @@ fn what_is_buried_outlasts_what_is_carried() {
     );
 }
 
+/// Tell everybody about every pit there is.
+///
+/// A pit is a place an agent has to have *learned* about now - by seeing it,
+/// or by having dug or filled it - rather than a fact about the world that
+/// every mind has free of charge. See `nearest_pit_i_remember`. These
+/// fixtures push a pit straight into the world and then ask a decision about
+/// it, so they have to hand over the knowledge that a settlement would have
+/// come by in the ordinary way.
+fn and_everybody_knows_about_it(simulation: &mut Simulation) {
+    let pits: Vec<((i32, i32, i32), u32)> = simulation
+        .world
+        .pits
+        .iter()
+        .map(|pit| {
+            (
+                (pit.where_it_is.x, pit.where_it_is.y, 0),
+                pit.how_much_is_in_it().max(1),
+            )
+        })
+        .collect();
+
+    for agent in simulation.population.agents.iter_mut() {
+        for (where_it_is, holding) in &pits {
+            agent.memory.remember_how_much_is_there(
+                crate::core::memory::SpatialMemoryType::Storage,
+                *where_it_is,
+                *holding,
+            );
+        }
+    }
+}
+
 /// An open pit is a hole with food in it, which is much the same as leaving
 /// it on the grass.
 #[test]
@@ -308,6 +340,7 @@ fn an_open_pit_keeps_nothing() {
         holds: vec![supper(20, 0)],
         covered: false,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     for _ in 0..3000 {
@@ -342,6 +375,7 @@ fn what_is_buried_comes_back_out() {
         holds: vec![supper(40, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     let result = simulation.execute_action(
@@ -371,6 +405,7 @@ fn nobody_raids_the_store_with_a_full_pack() {
         holds: vec![supper(40, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
     let _ = simulation.population.agents[0]
         .inventory
@@ -395,7 +430,9 @@ fn a_store_across_the_camp_is_walked_to() {
         holds: vec![supper(40, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
+    and_everybody_knows_about_it(&mut simulation);
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation
@@ -763,6 +800,7 @@ fn a_full_load_with_the_store_across_the_camp_gets_walked_over() {
         holds: Vec::new(),
         covered: false,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     let _ = simulation.population.agents[0]
@@ -843,7 +881,9 @@ fn one_meal_in_the_pack_does_not_shut_the_store() {
         holds: vec![supper(40, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
+    and_everybody_knows_about_it(&mut simulation);
     let _ = simulation.population.agents[0].inventory.add_item(supper(
         Simulation::WHAT_A_PERSON_KEEPS_ON_THEM,
         0,
@@ -869,6 +909,7 @@ fn a_pack_with_two_days_in_it_leaves_the_store_shut() {
         holds: vec![supper(40, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
     let _ = simulation.population.agents[0].inventory.add_item(supper(
         Simulation::enough_not_to_open_the_store(),
@@ -902,6 +943,7 @@ fn going_out_for_food_comes_before_digging_up_the_store() {
         holds: vec![supper(40, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     // Something to eat in his hand and a winter's food under his boots
@@ -945,6 +987,7 @@ fn a_haunch_nobody_has_cut_up_is_not_what_the_store_offers() {
         holds: vec![haunch],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     };
 
     assert!(
@@ -966,6 +1009,7 @@ fn what_has_gone_over_is_not_what_the_store_offers() {
         holds: vec![gone_off],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     };
 
     assert!(
@@ -988,6 +1032,7 @@ fn nobody_is_sent_to_dig_up_what_they_cannot_eat() {
         holds: vec![haunch],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     let here = simulation.population.agents[0].state.position;
@@ -1022,7 +1067,9 @@ fn a_pack_full_of_carcass_is_a_pack_with_no_meals_in_it() {
         holds: vec![supper(40, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
+    and_everybody_knows_about_it(&mut simulation);
     let here = simulation.population.agents[0].state.position;
 
     assert!(
@@ -1066,6 +1113,7 @@ fn an_empty_store_wants_filling() {
         holds: Vec::new(),
         covered: false,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     assert!(
@@ -1084,6 +1132,7 @@ fn a_store_with_a_winter_in_it_does_not_want_filling() {
         holds: vec![supper(mouths * Simulation::what_one_mouth_wants_put_by(), 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     assert!(
@@ -1106,6 +1155,7 @@ fn it_is_the_whole_larder_that_is_counted_not_one_hole() {
             holds: vec![supper(enough - 1 + n as u32, 0)],
             covered: true,
             dug: 0,
+            belongs: crate::world::Belongs::ToNobody,
         });
     }
 
@@ -1127,6 +1177,7 @@ fn a_larder_across_the_valley_is_not_this_camps_larder() {
         holds: vec![supper(300, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     assert!(
@@ -1146,6 +1197,7 @@ fn more_mouths_want_more_put_by() {
         holds: vec![supper(Simulation::what_one_mouth_wants_put_by() * 3, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     assert!(
@@ -1192,6 +1244,7 @@ fn nobody_buries_into_a_store_that_is_already_a_winter_deep() {
             holds: vec![supper(this_one, 0)],
             covered: true,
             dug: 0,
+            belongs: crate::world::Belongs::ToNobody,
         });
         buried += this_one;
         where_it_is = Position::new(where_it_is.x + 1, where_it_is.y);
@@ -1316,6 +1369,7 @@ fn the_store_is_not_opened_while_the_hedges_are_bearing() {
         holds: vec![supper(40, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
 
     assert!(
@@ -1344,7 +1398,9 @@ fn a_starving_man_opens_the_store_whatever_the_month() {
         holds: vec![supper(40, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     });
+    and_everybody_knows_about_it(&mut simulation);
 
     assert!(simulation.are_the_hedgerows_bearing(), "still spring");
 
@@ -1380,8 +1436,8 @@ fn a_pit_says_how_long_a_thing_will_keep_in_it() {
     let mut leaf = InventoryItem::new_with_weight("greens".to_string(), 10, 0.5);
     leaf.food_data = database.create_food_data(&ItemType::Greens, 0);
 
-    let bare = Pit { where_it_is: Position::new(0, 0), holds: Vec::new(), covered: true, dug: 0 };
-    let mut lined = Pit { where_it_is: Position::new(1, 0), holds: Vec::new(), covered: true, dug: 0 };
+    let bare = Pit { where_it_is: Position::new(0, 0), holds: Vec::new(), covered: true, dug: 0, belongs: crate::world::Belongs::ToNobody };
+    let mut lined = Pit { where_it_is: Position::new(1, 0), holds: Vec::new(), covered: true, dug: 0, belongs: crate::world::Belongs::ToNobody };
     lined.put_in(InventoryItem::new_with_weight("bowl".to_string(), 1, 1.0));
 
     let in_bare = bare.how_long_this_would_keep(&leaf, 0).expect("leaf has a clock");
@@ -1417,7 +1473,7 @@ fn nothing_goes_in_the_ground_that_will_not_still_be_food_when_it_is_wanted() {
     use crate::world::{ItemType, Pit, Position};
 
     let database = FoodDatabase::new();
-    let bare = Pit { where_it_is: Position::new(0, 0), holds: Vec::new(), covered: true, dug: 0 };
+    let bare = Pit { where_it_is: Position::new(0, 0), holds: Vec::new(), covered: true, dug: 0, belongs: crate::world::Belongs::ToNobody };
     let bare_stretch =
         crate::agents::provision::how_long_the_land_gives_nothing() as f32;
 

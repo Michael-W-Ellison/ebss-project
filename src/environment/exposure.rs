@@ -31,8 +31,30 @@ pub enum ExposureType {
 
 impl ExposureType {
 
-    /// Get damage multiplier per tick
-    pub fn damage_multiplier(&self) -> f32 {
+    /// What one of these does to a body in a day of it.
+    ///
+    /// Per *day*, not per tick, which is a correction rather than a rescaling:
+    /// these were written as per-tick literals in November 2025, nine months
+    /// before this model had a calendar at all, so "per tick" named no length
+    /// of time and could not. When the turn went from two hours to half an
+    /// hour they quietly became four times what they had been - and it shows.
+    /// Measured over eight worlds a side, the share of deaths booked to the
+    /// weather went from **3.2% at the two-hour turn to 28% at the half-hour
+    /// one**, on the same map and the same people.
+    ///
+    /// The figures below are the old literals times twelve, which is the turn
+    /// they were last balanced at. Nothing about the numbers is new; what is
+    /// new is that they now name a day, so the next change to the turn length
+    /// leaves the weather alone. See ISSUES #171 for the eight clocks this
+    /// file was missed out of.
+    pub fn damage_in_a_day(&self) -> f32 {
+        self.damage_multiplier() * ExposureStatus::THE_TURN_THESE_WERE_WRITTEN_FOR
+    }
+
+    /// The literals as they were written, per turn of an unnamed length.
+    ///
+    /// Kept private to the day figure above so there is one way to ask.
+    fn damage_multiplier(&self) -> f32 {
         match self {
             ExposureType::Hypothermia => 0.02,
             ExposureType::Hyperthermia => 0.015,
@@ -65,11 +87,40 @@ impl ExposureStatus {
     /// is already total, so counting higher means nothing
     pub const MAX_EXPOSURE_DAMAGE: f32 = 10.0;
 
-    /// Exposure damage shed per tick while sheltered and out of danger
-    const SHELTERED_RECOVERY: f32 = 0.05;
+    /// Exposure damage shed in a day under cover, out of danger
+    const SHELTERED_RECOVERY: f32 = 0.05 * Self::THE_TURN_THESE_WERE_WRITTEN_FOR;
 
-    /// Exposure damage shed per tick in the open once conditions are safe
-    const OPEN_AIR_RECOVERY: f32 = 0.02;
+    /// Exposure damage shed in a day in the open once conditions are safe
+    const OPEN_AIR_RECOVERY: f32 = 0.02 * Self::THE_TURN_THESE_WERE_WRITTEN_FOR;
+
+    /// How much of a day the literals in this file were written against.
+    ///
+    /// Twelve turns to the day - the two-hour turn - which is the clock this
+    /// model's balance was last measured at before the half-hour turn. The
+    /// literals themselves predate any calendar, so this is not what they were
+    /// *designed* for; it is the last length of time at which the weather was
+    /// observed to behave, and it is stated here so that a rate in this file
+    /// means something rather than meaning "per call".
+    pub(crate) const THE_TURN_THESE_WERE_WRITTEN_FOR: f32 = 12.0;
+
+    /// Wetness taken on in a day of standing out in it, per unit of rain.
+    const SOAKED_IN_A_DAY: f32 = 1.0 * Self::THE_TURN_THESE_WERE_WRITTEN_FOR;
+
+    /// Wetness dried off in a day under cover.
+    const DRIED_IN_A_DAY: f32 = 0.01 * Self::THE_TURN_THESE_WERE_WRITTEN_FOR;
+
+    /// Sun taken on in a day of it, and shed in a night.
+    const BURNT_IN_A_DAY: f32 = 0.01 * Self::THE_TURN_THESE_WERE_WRITTEN_FOR;
+    const FADES_IN_A_DAY: f32 = 0.005 * Self::THE_TURN_THESE_WERE_WRITTEN_FOR;
+
+    /// What a day's worth of one of these rates comes to in one turn.
+    ///
+    /// The one place the calendar enters this file. Everything above is per
+    /// day, so shortening the turn makes each step smaller rather than making
+    /// the weather worse.
+    fn in_one_turn(in_a_day: f32) -> f32 {
+        in_a_day / crate::environment::seasons::TICKS_PER_DAY as f32
+    }
 
     pub fn new() -> Self {
         Self {
@@ -95,23 +146,28 @@ impl ExposureStatus {
 
         // Update wetness
         if !has_shelter {
-            self.wetness += weather.wetness_per_tick();
+            self.wetness += Self::in_one_turn(
+                weather.how_wet_it_gets_you_in_a_day() * Self::SOAKED_IN_A_DAY,
+            );
             self.wetness = self.wetness.min(1.0);
         } else {
             // Dry off slowly in shelter
-            self.wetness = (self.wetness - 0.01).max(0.0);
+            self.wetness =
+                (self.wetness - Self::in_one_turn(Self::DRIED_IN_A_DAY)).max(0.0);
         }
 
         // Check for hypothermia
         if body_temp.is_too_cold() {
             self.active_exposures.push(ExposureType::Hypothermia);
             let severity = body_temp.severity();
-            damage_this_tick += severity * ExposureType::Hypothermia.damage_multiplier();
+            damage_this_tick +=
+                severity * Self::in_one_turn(ExposureType::Hypothermia.damage_in_a_day());
 
             // Frostbite risk when wet and cold
             if self.wetness > 0.3 && environmental_temp < 0.0 {
                 self.active_exposures.push(ExposureType::Frostbite);
-                damage_this_tick += self.wetness * ExposureType::Frostbite.damage_multiplier();
+                damage_this_tick += self.wetness
+                    * Self::in_one_turn(ExposureType::Frostbite.damage_in_a_day());
             }
         }
 
@@ -119,38 +175,44 @@ impl ExposureStatus {
         if body_temp.is_too_hot() {
             self.active_exposures.push(ExposureType::Hyperthermia);
             let severity = body_temp.severity();
-            damage_this_tick += severity * ExposureType::Hyperthermia.damage_multiplier();
+            damage_this_tick +=
+                severity * Self::in_one_turn(ExposureType::Hyperthermia.damage_in_a_day());
 
             // Dehydration risk in extreme heat without water
             if environmental_temp > 35.0 && !has_water_access {
                 self.active_exposures.push(ExposureType::Dehydration);
-                damage_this_tick += ExposureType::Dehydration.damage_multiplier();
+                damage_this_tick +=
+                    Self::in_one_turn(ExposureType::Dehydration.damage_in_a_day());
             }
         }
 
         // Sun exposure during daytime (6 AM to 6 PM)
         if !has_shelter && time_of_day >= 6.0 && time_of_day <= 18.0 {
-            self.sun_exposure += 0.01;
+            self.sun_exposure += Self::in_one_turn(Self::BURNT_IN_A_DAY);
 
             // Sunburn after prolonged exposure
             if self.sun_exposure > 0.5 && environmental_temp > 25.0 {
                 self.active_exposures.push(ExposureType::Sunburn);
-                damage_this_tick += ExposureType::Sunburn.damage_multiplier();
+                damage_this_tick +=
+                    Self::in_one_turn(ExposureType::Sunburn.damage_in_a_day());
             }
         } else {
             // Sun exposure fades at night
-            self.sun_exposure = (self.sun_exposure - 0.005).max(0.0);
+            self.sun_exposure =
+                (self.sun_exposure - Self::in_one_turn(Self::FADES_IN_A_DAY)).max(0.0);
         }
 
         // Wind burn in high wind conditions
         if !has_shelter && weather.effective_wind_speed() > 10.0 {
             self.active_exposures.push(ExposureType::Windburn);
-            damage_this_tick += ExposureType::Windburn.damage_multiplier();
+            damage_this_tick +=
+                Self::in_one_turn(ExposureType::Windburn.damage_in_a_day());
         }
 
         // Add weather-specific exposure damage
         if !has_shelter {
-            damage_this_tick += weather.weather_type.exposure_damage_per_tick();
+            damage_this_tick +=
+                Self::in_one_turn(weather.weather_type.exposure_damage_in_a_day());
         }
 
         self.exposure_damage += damage_this_tick;
@@ -162,11 +224,11 @@ impl ExposureStatus {
         // cover, so an agent that could not reach shelter kept accumulating
         // damage until it read as critically exposed for the rest of its life.
         if self.active_exposures.is_empty() {
-            let recovery = if has_shelter {
+            let recovery = Self::in_one_turn(if has_shelter {
                 Self::SHELTERED_RECOVERY
             } else {
                 Self::OPEN_AIR_RECOVERY
-            };
+            });
 
             self.exposure_damage = (self.exposure_damage - recovery).max(0.0);
         }
@@ -331,6 +393,63 @@ mod tests {
         assert!(damage > 0.0);
     }
 
+    /// A day of it costs a day's worth, whatever a turn is.
+    ///
+    /// The guard on the whole of this file. Every rate here was a bare
+    /// literal applied once a turn, so shortening the turn made the weather
+    /// four times as deadly without anybody changing a number - see
+    /// `ExposureStatus::THE_TURN_THESE_WERE_WRITTEN_FOR`. Ticking a body
+    /// through a whole simulated day and adding up what it took has to come
+    /// to the per-day figure, and that stays true if `TICKS_PER_DAY` changes
+    /// again.
+    #[test]
+    fn a_day_of_a_blizzard_costs_a_day_of_a_blizzard() {
+        use crate::environment::seasons::TICKS_PER_DAY;
+
+        let mut status = ExposureStatus::new();
+        let body_temp = BodyTemperature::new();
+        let mut weather = Weather::clear();
+        weather.weather_type = WeatherType::Blizzard;
+
+        // A body at its ideal temperature, so the only thing being counted is
+        // the weather itself rather than the cold on top of it. Midnight, so
+        // no sun. In the open, or the weather does not reach him.
+        let mut took = 0.0;
+        for _ in 0..TICKS_PER_DAY {
+            took += status.update(&body_temp, 5.0, &weather, false, true, 0.0);
+        }
+
+        let a_day_of_it = WeatherType::Blizzard.exposure_damage_in_a_day();
+        assert!(
+            (took - a_day_of_it).abs() < a_day_of_it * 0.01,
+            "a day in a blizzard came to {took:.4} against the {a_day_of_it:.4} \
+             it is written down as"
+        );
+    }
+
+    /// And the wind that comes with it is on the same clock.
+    #[test]
+    fn a_day_of_wind_costs_a_day_of_wind() {
+        use crate::environment::seasons::TICKS_PER_DAY;
+
+        let mut status = ExposureStatus::new();
+        let body_temp = BodyTemperature::new();
+        let mut weather = Weather::clear();
+        weather.base_wind_speed = 20.0;
+
+        let mut took = 0.0;
+        for _ in 0..TICKS_PER_DAY {
+            took += status.update(&body_temp, 5.0, &weather, false, true, 0.0);
+        }
+
+        let a_day_of_it = ExposureType::Windburn.damage_in_a_day();
+        assert!(
+            (took - a_day_of_it).abs() < a_day_of_it * 0.01,
+            "a day in the wind came to {took:.4} against the {a_day_of_it:.4} \
+             it is written down as"
+        );
+    }
+
     #[test]
     fn test_hyperthermia_detection() {
         let mut status = ExposureStatus::new();
@@ -372,12 +491,17 @@ mod tests {
 
     #[test]
     fn test_sunburn_accumulation() {
+        use crate::environment::seasons::TICKS_PER_DAY;
+
         let mut status = ExposureStatus::new();
         let body_temp = BodyTemperature::new();
         let weather = Weather::clear();
 
-        // Simulate several hours of sun exposure
-        for _ in 0..100 {
+        // Five days of standing out at noon. This used to say "100 ticks",
+        // which was eight days at the two-hour turn and two at the half-hour
+        // one - the run length changed meaning when the turn did, which is
+        // the whole of ISSUES #171. Said in days it stays five days.
+        for _ in 0..(5 * TICKS_PER_DAY) {
             status.update(&body_temp, 30.0, &weather, false, true, 12.0); // Noon
         }
 

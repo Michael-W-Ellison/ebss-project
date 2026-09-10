@@ -177,6 +177,41 @@ impl Simulation {
         None
     }
 
+    /// Whether there is water within reach that this one would actually drink.
+    ///
+    /// The same question `water_action` asks itself, given a name so that the
+    /// strategy layer asks it too rather than growing a second opinion about
+    /// what counts as a drink. Not the sea unless he is far enough gone to
+    /// stop knowing better, and not a spring that has already given what it
+    /// has this hour.
+    pub(in crate::analytics) fn drinkable_water_within_reach(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> bool {
+        use crate::world::ResourceType;
+
+        let would_drink_the_sea = agent.would_i_drink_the_sea();
+
+        self.nearest_resource_within(agent_position, Self::FORAGE_RADIUS, |resource| {
+            if resource.resource_type != ResourceType::Water {
+                return false;
+            }
+            if resource.what_can_be_taken() == 0 {
+                return false;
+            }
+            if would_drink_the_sea {
+                return true;
+            }
+            !self
+                .world
+                .grid
+                .get_tile(&resource.position)
+                .is_some_and(|tile| tile.terrain.is_the_water_salt())
+        })
+        .is_some()
+    }
+
     /// How a hungry agent gets a meal, if it can.
     ///
     /// `desperate` marks an agent starving badly enough that finding food is
@@ -337,8 +372,12 @@ impl Simulation {
                 return None;
             }
 
+            // And the larder is measured against that walk too. This branch
+            // is where the dying were: a place they remembered, further off
+            // than the hole in the ground behind them with ten days of food
+            // in it.
             if distance > 1 {
-                return Some(Action::Move { target });
+                return Some(self.the_larder_or_this_walk(agent, agent_position, target));
             }
 
             return Some(Action::Gather { resource_type: "food".to_string() });
@@ -396,10 +435,174 @@ impl Simulation {
                 });
             }
 
+            // The whole map, before a random walk. Nothing about being hungry
+            // is answered by wandering, and there is no reason a person stops
+            // looking at the edge of a circle drawn round themselves - but
+            // the larder is on that map too, and it is nearer than most of
+            // it.
+            if let Some(there) = self.the_best_food_anywhere(agent, agent_position) {
+                return Some(self.the_larder_or_this_walk(
+                    agent,
+                    agent_position,
+                    (there.x, there.y, agent_position.2),
+                ));
+            }
+
+            // And only then, with nothing standing anywhere that would pay
+            // for the walk, strike out and hope.
             return Some(Self::search_leg(agent, agent_position, self.current_tick));
         }
 
-        None
+        // Merely hungry, with nothing in reach and nothing known: set out for
+        // the best thing standing, wherever it is. This fell through to
+        // whatever else the tick had going, which is right when there is
+        // something nearer to do about the hunger and wrong when the answer
+        // is simply that the food is further off than the circle. A walk
+        // begun today is a meal tomorrow; standing still is neither.
+        if let Some(there) = self.the_best_food_anywhere(agent, agent_position) {
+            return Some(self.the_larder_or_this_walk(
+                agent,
+                agent_position,
+                (there.x, there.y, agent_position.2),
+            ));
+        }
+
+        self.something_out_of_the_store(agent, agent_position)
+    }
+
+    /// The larder against a walk, decided on which is the shorter.
+    ///
+    /// The store used to sit behind the whole of `food_action` in the hunger
+    /// arm - `.or_else(something_out_of_the_store)` - and that ordering was
+    /// measured and is right: a pit in front of everything is drawn on five
+    /// times as often, halves the rot, and costs a fifth of all the food
+    /// anybody eats and six of the people in a settlement, because a meal out
+    /// of a hole costs two turns where a berry costs one. See ISSUES #43.
+    ///
+    /// What broke it was taking the limit off the range of the search. When
+    /// `food_action` ended at the edge of a circle it returned `None` on a
+    /// bare countryside and the store got its turn; once it could see the
+    /// whole map it always had *somewhere* to send a man, so the branch
+    /// behind it stopped existing. Measured at the last look anybody got
+    /// before they died, over thirty-two worlds: the settlement's pits held
+    /// **805.7 items among 6.68 mouths** - ten days of food for everybody -
+    /// the larder was wholly empty in under one per cent of those samples,
+    /// and the dying were carrying **one item** and were eleven days into a
+    /// three-week reserve. They starved walking somewhere.
+    ///
+    /// So it is neither in front nor behind: it is compared. This is the tail
+    /// of the branch, after everything underfoot and everything known, where
+    /// what is left is a long walk either way - and a walk to a hole with ten
+    /// days of food in it beats a walk twice as far to a bush. The store's own
+    /// gates are untouched: somebody with two days' food about them does not
+    /// open it, and neither does anybody at all while the hedgerows are
+    /// bearing unless they are starving.
+    fn the_larder_or_this_walk(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        there: (i32, i32, i32),
+    ) -> Action {
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let walk = here.distance_to(&Position::new(there.0, there.1));
+
+        // The same pit the store branch is talking about, which is one this
+        // agent remembers rather than whichever exists - see
+        // `nearest_pit_i_remember`. Two places asking the same question have
+        // to ask it the same way, or the comparison is between a pit he can
+        // find and a pit he cannot.
+        if let Some(store) = self.something_out_of_the_store(agent, agent_position) {
+            if self
+                .nearest_pit_i_remember(agent, agent_position)
+                .is_some_and(|(_, paces)| paces <= walk)
+            {
+                return store;
+            }
+        }
+
+        Action::Move { target: there }
+    }
+
+    /// The best food standing anywhere in the world.
+    ///
+    /// **There is no limit on the range.** Every other way an agent has of
+    /// finding food is bounded: `FORAGE_RADIUS` is how far one turn of
+    /// gathering reaches, scent carries as far as the wind, and a memory
+    /// reaches only as far as the agent has been. When all three came up
+    /// empty the fallback was `search_leg` - a random walk - so somebody
+    /// starving in picked-out country wandered at random while food stood a
+    /// short walk off. Measured over thirty-two worlds: **52% of the
+    /// person-days spent wasting had no food node at all within foraging
+    /// reach**, and the nearest food anywhere was a median of twenty-three
+    /// paces - one turn past the edge of what they could see.
+    ///
+    /// What keeps this from sending everybody across the country for a
+    /// handful of leaf is not a radius but a price. It is the same
+    /// worth-per-turn reckoning the `Gather` and `Eat` executors already make
+    /// - what a trip brings back, less what the walk costs, over the turns
+    /// the walk takes - and a patch that cannot pay for its own journey
+    /// scores at or below nothing and is never chosen, however near or far it
+    /// is. **Distance limits itself, and it limits itself by what the walk is
+    /// worth rather than by a number somebody picked.**
+    ///
+    /// This is a *destination*, not something to reach for: the answer is
+    /// usually a walk of several turns, so the caller emits `Move`. The
+    /// executors keep their reach - one turn of gathering still covers what
+    /// one turn of gathering covers, or a man would eat from a patch on the
+    /// far side of the map without leaving his fire.
+    pub(in crate::analytics) fn the_best_food_anywhere(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let now = self.current_tick;
+        let remembers = &agent.exploration_knowledge;
+
+        let mut best: Option<(Position, f32)> = None;
+
+        for resource in self.world.resources.iter() {
+            if resource.amount == 0 {
+                continue;
+            }
+            let Some(kind) = Self::edible_item_for(resource.resource_type) else {
+                continue;
+            };
+            // Ground this one has stripped and has no reason to think has
+            // grown back is not worth the walk, at any distance.
+            if remembers.is_it_picked_out(resource.position, now) {
+                continue;
+            }
+
+            // Somewhere that frightened this one is further off than it
+            // looks, which is the same weighting the `Eat` branch makes.
+            let paces = here.distance_to(&resource.position);
+            let felt = paces
+                + (remembers.how_bad_is_it_there(resource.position, now)
+                    * Self::WHAT_A_BAD_PLACE_ADDS_TO_A_WALK) as u32;
+
+            let energy = self
+                .food_database
+                .get(&kind)
+                .map(|template| template.base_nutrition.energy)
+                .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD);
+            let costs = crate::agents::provision::what_foraging_costs(
+                felt,
+                physiology::how_much_work_this_food_is(energy),
+            );
+            let worth = Self::what_this_patch_is_worth(energy, resource.amount, felt, costs);
+
+            if worth > 0.0 && best.as_ref().is_none_or(|(_, best_so_far)| worth > *best_so_far)
+            {
+                best = Some((resource.position, worth));
+            }
+        }
+
+        best.map(|(where_it_is, _)| where_it_is)
     }
 
     /// A place the agent knows to look: what it can smell right now, falling
@@ -429,14 +632,73 @@ impl Simulation {
             .map(|scent| scent.source_position)
             .min_by_key(walking_distance);
 
-        smelled.or_else(|| {
-            agent
-                .memory
-                .recall_locations(memory_type)
-                .into_iter()
-                .map(|memory| memory.position)
-                .min_by_key(walking_distance)
-        })
+        smelled
+            .or_else(|| {
+                agent
+                    .memory
+                    .recall_locations(memory_type.clone())
+                    .into_iter()
+                    .map(|memory| memory.position)
+                    .min_by_key(walking_distance)
+            })
+            // And last, what this one has *seen*.
+            //
+            // The two above are both the nose. `SpatialMemoryType::Food` and
+            // `Water` are written from `Percept::ResourceDetected`, which is
+            // raised only from a scent - so until now an agent could remember
+            // a thing it had smelled and could not remember a thing it had
+            // walked past and looked at. `known_resources` has held every
+            // resource anybody ever saw, and nothing asked it.
+            .or_else(|| {
+                let wanted = match &memory_type {
+                    crate::core::memory::SpatialMemoryType::Water => {
+                        crate::world::ResourceType::Water
+                    }
+                    _ => crate::world::ResourceType::Food,
+                };
+
+                let here = crate::world::Position::new(agent_position.0, agent_position.1);
+                let looking_for_food = wanted == crate::world::ResourceType::Food;
+
+                // And whether the thing remembered can be bearing today.
+                //
+                // `known_resources` holds every patch anybody ever walked
+                // past, for ever, and nothing asked the calendar of it - so
+                // from the first frost a hungry man was still being sent to
+                // the bramble he found in September. It is the same defect as
+                // a memory of a spring that has dried up: a decision offering
+                // food the world will not give. Measured over twelve worlds,
+                // `Gather` is refused 14.6 times a thousand person-ticks in
+                // winter and **0.0 in every other season** - every one of
+                // those a turn spent walking to an empty hedgerow in the one
+                // season when there is nothing to spare. See ISSUES #183.
+                let today = self.world.climate.calendar.day_of_year;
+
+                agent
+                    .exploration_knowledge
+                    .known_resources
+                    .iter()
+                    .filter(|(_, what)| {
+                        // Anything edible answers hunger, not only the one
+                        // resource called Food - which is the same question
+                        // `is_it_food` answers everywhere else.
+                        if looking_for_food {
+                            what.is_it_food() && what.is_it_bearing(today)
+                        } else {
+                            **what == wanted
+                        }
+                    })
+                    .map(|(where_it_is, _)| *where_it_is)
+                    .filter(|where_it_is| {
+                        !agent
+                            .exploration_knowledge
+                            .is_it_picked_out(*where_it_is, self.current_tick)
+                    })
+                    .map(|where_it_is| {
+                        (where_it_is.x, where_it_is.y, agent_position.2)
+                    })
+                    .min_by_key(walking_distance)
+            })
     }
 
     /// One leg of a search for something the agent cannot find nearby.
@@ -761,7 +1023,7 @@ impl Simulation {
     ///
     /// Foraging accepts everything that smells of food, so an agent does not
     /// starve standing in a grain field because only berries counted as edible.
-    pub(in crate::analytics) fn edible_resources() -> [(crate::world::ResourceType, crate::world::ItemType); 6] {
+    pub(in crate::analytics) fn edible_resources() -> [(crate::world::ResourceType, crate::world::ItemType); 8] {
         use crate::world::{ItemType, ResourceType};
 
         [
@@ -771,6 +1033,10 @@ impl Simulation {
             // is the whole of what there is
             (ResourceType::Greens, ItemType::Greens),
             (ResourceType::Roots, ItemType::Roots),
+            // The mast, and the best thing in the wood while it is down
+            (ResourceType::Nuts, ItemType::Nuts),
+            // And the pod crop, which is food and rent at once
+            (ResourceType::Legumes, ItemType::Legumes),
             (ResourceType::Fish, ItemType::Fish),
             (ResourceType::Meat, ItemType::Meat),
         ]

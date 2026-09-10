@@ -10,26 +10,32 @@ use uuid::Uuid;
 
 /// Maps terrain type to the most likely climate zone for that terrain
 pub fn terrain_to_climate_zone(terrain: TerrainType) -> ClimateZone {
-    match terrain {
-        TerrainType::Desert => ClimateZone::Desert,
-        // Most terrain types are temperate
-        TerrainType::Plains
-        | TerrainType::Forest
-        | TerrainType::Hills
-        | TerrainType::Meadow
-        | TerrainType::Wetland
-        | TerrainType::Riverbank
-        | TerrainType::Beach
-        | TerrainType::Farmland
-        | TerrainType::Water
-        | TerrainType::Sea
-        | TerrainType::SaltMarsh => ClimateZone::Temperate,
-        // A salt flat is a shallow sea that dried up, and it dried up for a
-        // reason
-        TerrainType::SaltFlat => ClimateZone::Desert,
-        // Mountains can be cold (arctic adjacent)
-        TerrainType::Mountain => ClimateZone::Arctic,
-    }
+    terrain_to_climate_zone_in(
+        crate::environment::BiomeType::THE_ORDINARY_SORT_OF_COUNTRY,
+        terrain,
+    )
+}
+
+/// And the same asked of a country of a given kind.
+///
+/// **Derived from the biome, not a second table beside it.** What was here
+/// was its own match on terrain, and it and `terrain_to_biome` were two
+/// answers to "where is this": a mountain was `Alpine` to the thermometer
+/// and `Arctic` to the fauna, a sea was `Coast` and `Temperate`, a marsh was
+/// `Wetland` and `Temperate`. They happened to agree on every terrain, which
+/// is luck rather than construction, and `a_zone_is_what_its_biome_says`
+/// proves this derivation reproduces the old table exactly.
+///
+/// The region is not threaded through the flora and the fauna yet - they
+/// call the wrapper above and get a temperate country, which is what every
+/// world measured in this project has been. Doing it properly means carrying
+/// the country into `survey_the_grounds` and the spawn pools, and it is
+/// named in ISSUES_FOUND.md rather than half-done here.
+pub fn terrain_to_climate_zone_in(
+    region: crate::environment::BiomeType,
+    terrain: TerrainType,
+) -> ClimateZone {
+    region.on_this_ground(terrain).climate_zone()
 }
 
 /// How much longer an animal waits between litters than its species data says.

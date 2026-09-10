@@ -371,13 +371,26 @@ impl SmallLife {
     /// waiting on the grazers besides.
     pub const HOW_FAST_THE_HUNTERS_FOLLOW: f32 = 0.0004;
 
-    /// What a snare on ground carrying all it can takes, in a tick.
+    /// What a snare on ground carrying all it can takes, in a day.
     ///
-    /// Twelve ticks to the day, so this is about a fifth of a chance a day
-    /// and something in the snare inside four or five days. A real line is
-    /// several snares and catches oftener than that; an agent that wants
-    /// oftener sets more of them, which is what a trapline is.
-    pub const WHAT_A_SNARE_TAKES_ON_FULL_GROUND: f32 = 0.02;
+    /// About a fifth of a chance a day, so something in the snare inside four
+    /// or five days. A real line is several snares and catches oftener than
+    /// that; an agent that wants oftener sets more of them, which is what a
+    /// trapline is.
+    pub const WHAT_A_SNARE_TAKES_ON_FULL_GROUND_IN_A_DAY: f32 = 0.2;
+
+    /// And the same, in a tick, which is what the pass asks for.
+    ///
+    /// **Derived rather than written down, because the number that was
+    /// written down was on a different calendar.** The docstring above this
+    /// used to read "twelve ticks to the day" and the constant was 0.02 - and
+    /// `TICKS_PER_DAY` is **48**, so a snare took four fifths of a chance a
+    /// day rather than a fifth, and the sentence beside it was wrong by four
+    /// times. The same defect as #143 and #288: a rate calibrated on a
+    /// calendar the world no longer keeps.
+    pub const WHAT_A_SNARE_TAKES_ON_FULL_GROUND: f32 =
+        Self::WHAT_A_SNARE_TAKES_ON_FULL_GROUND_IN_A_DAY
+            / crate::environment::seasons::TICKS_PER_DAY as f32;
 
     /// What a whole hunting ground gives a trapline in a tick, at full stock,
     /// however many snares are on it.
@@ -391,19 +404,32 @@ impl SmallLife {
     /// scale", and it is a scale rather than a switch.
     pub const WHAT_A_GROUND_GIVES_A_LINE: f32 = 0.15;
 
-    /// What takes the catch out of a snare in a settled country, in a tick.
+    /// What takes the catch out of a snare in a settled country, in a day.
     ///
     /// Most of a week before something finds it in a country with plenty in
     /// it, which is what makes a trapline worth keeping at all.
     ///
-    /// **Measured down from a third of this.** At 0.03 a tick - a couple of
-    /// days - a settlement of twelve caught 213 over a year and carried home
-    /// **28**. Losing seven catches in eight in a full wood is not a pinch,
-    /// it is a trapline that does not work, and it made the whole activity
-    /// pointless in exactly the case it should pay best. The pinch belongs at
-    /// the other end of the scale, where `WHAT_A_HUNGRY_COUNTRY_TAKES` is,
-    /// and the cap does that.
-    pub const WHAT_A_QUIET_COUNTRY_TAKES: f32 = 0.01;
+    /// **Measured down from a third of this.** At three times this rate a
+    /// settlement of twelve caught 213 over a year and carried home **28**.
+    /// Losing seven catches in eight in a full wood is not a pinch, it is a
+    /// trapline that does not work, and it made the whole activity pointless
+    /// in exactly the case it should pay best. The pinch belongs at the other
+    /// end of the scale, where `WHAT_A_HUNGRY_COUNTRY_TAKES` is, and the cap
+    /// does that.
+    pub const WHAT_A_QUIET_COUNTRY_TAKES_IN_A_DAY: f32 = 0.12;
+
+    /// And the same, in a tick.
+    ///
+    /// **The other half of the calendar defect above.** This was 0.01 a tick
+    /// on a twelve-tick day - "most of a week" - and at 48 ticks to the day
+    /// it came to four times that, so a catch was gone in a day and a half
+    /// rather than most of a week. Measured over twelve worlds before this
+    /// was mended: a settlement's snares caught **816 head in a winter and
+    /// carried home 21**, losing 96.7% of them to the fox. Trapping is the
+    /// one food source that does not stop when the hedgerows do, and it was
+    /// delivering two rabbits a settlement a winter.
+    pub const WHAT_A_QUIET_COUNTRY_TAKES: f32 = Self::WHAT_A_QUIET_COUNTRY_TAKES_IN_A_DAY
+        / crate::environment::seasons::TICKS_PER_DAY as f32;
 
     /// And the most it can ever be, when the game is gone and the foxes are
     /// not.

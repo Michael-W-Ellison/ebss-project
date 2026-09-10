@@ -396,18 +396,18 @@ impl Population {
         self.let_grudges_tell_on_the_bond();
 
         // Decay distant relationships (every 100 ticks to reduce overhead)
-        if current_tick % 100 == 0 {
+        if current_tick % crate::environment::seasons::ONCE_A_WEEK == 0 {
             self.decay_relationships();
         }
 
         // Process social interactions (every 10 ticks to reduce overhead)
-        if current_tick % 10 == 0 {
+        if current_tick % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.process_social_interactions();
         }
 
         // Process trait-based proximity effects (every 10 ticks)
         // Handles: Romantic partner happiness, Mediator calming, Intolerant stranger penalty
-        if current_tick % 10 == 0 {
+        if current_tick % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.process_trait_proximity_effects();
         }
 
@@ -420,7 +420,7 @@ impl Population {
         self.update_who_can_see_whom();
 
         // Process observational learning (every 20 ticks to reduce overhead)
-        if current_tick % 20 == 0 {
+        if current_tick % crate::environment::seasons::ONCE_EVERY_OTHER_DAY == 0 {
             self.process_observational_learning();
         }
 
@@ -442,7 +442,7 @@ impl Population {
         self.share_technologies();
 
         // Attempt technology discovery (every 50 ticks to reduce overhead)
-        if current_tick % 50 == 0 {
+        if current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
             self.discover_technologies();
         }
 
@@ -1975,7 +1975,13 @@ impl Population {
             // exploration record, so without this an agent would have a patch
             // catalogued and still starve walking past it.
             let sight = vision_range as i32;
-            let in_view: Vec<(crate::world::Position, SpatialMemoryType, u32)> = world
+            let in_view: Vec<(
+                crate::world::Position,
+                SpatialMemoryType,
+                Option<String>,
+                u32,
+                crate::core::memory::HowSteady,
+            )> = world
                 .resources
                 .iter()
                 .filter(|resource| resource.amount > 0)
@@ -1990,9 +1996,76 @@ impl Population {
                     } else if resource.resource_type == crate::world::ResourceType::Water {
                         SpatialMemoryType::Water
                     } else {
-                        return None;
+                        // **Everything else was thrown away here.**
+                        //
+                        // `SpatialMemoryType::Resource` has been in the memory
+                        // since memories were written and this `return None`
+                        // is why nothing has ever written it: a man could
+                        // remember where the berries were and where the water
+                        // was, and could not remember where the clay bank, the
+                        // flint, the reeds or the good timber were. Every
+                        // making in the model wants a material and not one of
+                        // them had a map to fetch it from - so gathering was
+                        // whatever happened to be under his feet.
+                        SpatialMemoryType::Resource
                     };
-                    Some((resource.position, memory_type, resource.what_can_be_taken()))
+
+                    // And what it was, if he is the sort of man who knows.
+                    //
+                    // This is the whole of the specificity rule: a name is a
+                    // fact about the rememberer. A man who has no use for
+                    // cotton remembers a field; a man who spins remembers
+                    // cotton. See `Agent::do_i_know_what_this_is_for`.
+                    let called = format!("{:?}", resource.resource_type).to_lowercase();
+                    let what_it_is = agent
+                        .do_i_know_what_this_is_for(&called)
+                        .then_some(called);
+
+                    // **Only what he has a use for gets a place on the map.**
+                    //
+                    // Food and water are filed whatever he knows, because
+                    // everybody eats and drinks and that is what this pass has
+                    // always done. Everything else has to earn its tile: a man
+                    // who cannot say what the stuff is gets nothing, which is
+                    // the specification's own "an agent that will not utilize a
+                    // resource... will quickly forget its location", taken to
+                    // its limit - he never learned it in the first place.
+                    //
+                    // Filing every nameless rock as well was measured and it
+                    // costs: over two blocks of 32 worlds, person-days 215,333
+                    // to 212,225, worlds emptied 47 to 53 and settlements out
+                    // of their first winter 22 to 18, for a record nothing
+                    // could ask a question of. A place worth knowing is a
+                    // place you know the use of.
+                    let worth_a_place = matches!(
+                        memory_type,
+                        SpatialMemoryType::Food | SpatialMemoryType::Water
+                    ) || what_it_is.is_some();
+
+                    worth_a_place.then_some((
+                        resource.position,
+                        memory_type,
+                        what_it_is,
+                        resource.what_can_be_taken(),
+                        // **Whether the stuff will still be there.**
+                        //
+                        // The world has known which is which since the
+                        // hedgerows were given a bearing year, and nothing
+                        // asked. A thing that never bears - stone, clay, a
+                        // river, a standing tree - is where it was. A thing
+                        // with a window in the year is a fact about that
+                        // window, and a man who remembers a bramble patch for
+                        // three years will walk to it in March. See
+                        // `HowSteady`.
+                        if matches!(
+                            resource.resource_type.bearing_window(),
+                            crate::world::Bearing::NeverStops
+                        ) {
+                            crate::core::memory::HowSteady::Steady
+                        } else {
+                            crate::core::memory::HowSteady::Turns
+                        },
+                    ))
                 })
                 .collect();
 
@@ -2000,10 +2073,116 @@ impl Population {
             // exactly as much as any other remembered place, so a man who left
             // camp for want of water walked to whichever waterhole was
             // furthest off rather than to the one he remembered as a spring.
-            for (pos, memory_type, how_much) in in_view {
-                agent
-                    .memory
-                    .remember_how_much_is_there(memory_type, (pos.x, pos.y, 0), how_much);
+            for (pos, memory_type, what_it_is, how_much, how_steady) in in_view {
+                // **Seeing a thing he knows the use of is the middle footing.**
+                //
+                // Not the weakest - that is watching somebody else work, and
+                // is what he has for a place he has no use for himself. Not
+                // the firmest either: he has taken nothing out of here. It is
+                // "I know what this stuff is for, though I have not worked
+                // it", and the specification gives it a year. See `HowIKnow`.
+                //
+                // Water and food are filed whatever he can name, because
+                // everybody eats and drinks. A thing he could not name is a
+                // place he simply noticed - the fortnight every remembered
+                // place in this model had before the footings existed - and
+                // *not* the weakest footing: that one is for watching
+                // somebody else work, and using it here would have halved the
+                // life of every berry patch anybody walked past.
+                let footing = if what_it_is.is_some() {
+                    crate::core::memory::HowIKnow::UsedThisKind
+                } else {
+                    crate::core::memory::HowIKnow::JustNoticedIt
+                };
+
+                agent.memory.remember_what_kind_of_place_this_is(
+                    memory_type,
+                    (pos.x, pos.y, 0),
+                    what_it_is,
+                    how_much,
+                    footing,
+                    how_steady,
+                );
+            }
+
+            // And the larder, which is not a resource and so was in none of
+            // the above.
+            //
+            // `SpatialMemoryType::Storage` had a reader and **no writer at
+            // all**: nobody in this model had ever remembered a pit. The
+            // decision found one by asking the world - `nearest_full_pit` -
+            // which is omniscience, and the omniscience covered for the
+            // missing memory so completely that nothing noticed the memory was
+            // dead. A hole in the ground somebody dug and filled is exactly
+            // the kind of place a person remembers, and it is the one place a
+            // settlement's food reliably is.
+            //
+            // Seen full, it is remembered with what was in it; seen empty, it
+            // is forgotten, on the same terms as a picked-over berry patch.
+            let pits_in_view: Vec<((i32, i32, i32), u32)> = world
+                .pits
+                .iter()
+                .filter(|pit| {
+                    let dx = pit.where_it_is.x - agent_pos.x;
+                    let dy = pit.where_it_is.y - agent_pos.y;
+                    dx * dx + dy * dy <= sight * sight
+                })
+                .map(|pit| {
+                    (
+                        (pit.where_it_is.x, pit.where_it_is.y, 0),
+                        if pit.has_food() { pit.how_much_is_in_it() } else { 0 },
+                    )
+                })
+                .collect();
+
+            for (where_it_is, holding) in pits_in_view {
+                if holding > 0 {
+                    agent.memory.remember_how_much_is_there(
+                        SpatialMemoryType::Storage,
+                        where_it_is,
+                        holding,
+                    );
+                } else {
+                    agent
+                        .memory
+                        .forget_location(SpatialMemoryType::Storage, where_it_is);
+                }
+            }
+
+            // And a roof going up, which is how a job becomes *ours*.
+            //
+            // `SpatialMemoryType::Shelter` had a reader and **no writer at
+            // all** - the same shape of fault as the pit above, and with the
+            // same consequence: a man could only ever go back to a roof he
+            // could see from where he stood, so two men three paces apart dug
+            // two burrows and finished neither. Seeing somebody else's
+            // half-built roof is how he comes to know there is a job on.
+            //
+            // Only what is still going up. A finished roof is not a job, and
+            // remembering it as one would have a camp walking to a roof to
+            // work on it for ever. It is forgotten on the turn it is finished,
+            // on the same terms as a pit seen empty.
+            let roofs_in_view: Vec<((i32, i32, i32), bool)> = world
+                .buildings
+                .iter()
+                .filter(|roof| {
+                    let dx = roof.position.x - agent_pos.x;
+                    let dy = roof.position.y - agent_pos.y;
+                    dx * dx + dy * dy <= sight * sight
+                })
+                .map(|roof| ((roof.position.x, roof.position.y, 0), roof.is_completed()))
+                .collect();
+
+            for (where_it_is, finished) in roofs_in_view {
+                if finished {
+                    agent
+                        .memory
+                        .forget_location(SpatialMemoryType::Shelter, where_it_is);
+                } else {
+                    agent
+                        .memory
+                        .remember_location(SpatialMemoryType::Shelter, where_it_is);
+                }
             }
 
             // Learn skills from discovered buildings, on the tick of finding

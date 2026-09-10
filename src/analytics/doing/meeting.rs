@@ -709,6 +709,7 @@ impl Simulation {
         // And whoever else was standing there saw it. A thief in a
         // camp of forty is a thief to forty people.
         let here = self.population.agents[agent_index].state.position;
+        let mut who_saw_it = 0;
 
         for onlooker in 0..self.population.agents.len() {
             if onlooker == agent_index || onlooker == them {
@@ -722,6 +723,7 @@ impl Simulation {
             let apart = (stood.0 - here.0).abs().max((stood.1 - here.1).abs());
 
             if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
+                who_saw_it += 1;
                 self.population.agents[onlooker]
                     .they_took_something_of_mine(
                         me,
@@ -730,7 +732,33 @@ impl Simulation {
                         tick_now,
                         how_strong_the_thief_is,
                     );
+
+                // And the watcher learns something about taking, without
+                // having had to try it. This is the second of the three
+                // places worry comes from - the agent's own history, what it
+                // saw happen to somebody else, and what it took from whoever
+                // raised it - and it is what stops every generation having to
+                // be caught once before it knows there is anything to be
+                // caught at.
+                self.population.agents[onlooker].patterns.taught_to_dread(
+                    DriveType::Utility,
+                    crate::agents::patterns::Element::Did("takefrom".to_string()),
+                    DriveType::Social,
+                    crate::agents::patterns::Patterns::WHAT_WATCHING_IT_HAPPEN_TEACHES,
+                );
             }
+        }
+
+        // And what it cost the thief, which is the whole of why anybody would
+        // hesitate. Standing is not lost by taking; it is lost by being seen
+        // to take. A man who steals in an empty camp learns that stealing is
+        // free, his worry fades on the ordinary clock, and the next time he is
+        // hungry he steals sooner - which is the behaviour wanted, not a
+        // defect in it. See `Patterns::it_cost_me`.
+        if who_saw_it > 0 {
+            let cost = (who_saw_it as f32 * Self::WHAT_ONE_PAIR_OF_EYES_COSTS)
+                .min(crate::agents::patterns::Patterns::WHAT_ONE_CONSEQUENCE_IS_WORTH);
+            self.population.agents[agent_index].this_cost_me(DriveType::Social, cost, tick_now);
         }
 
         debug!("Agent {me} helped himself to {took} {} of {robbed}'s", theirs.0);

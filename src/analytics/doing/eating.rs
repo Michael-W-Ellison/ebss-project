@@ -20,6 +20,72 @@ use log::debug;
 use rand::Rng;
 
 impl Simulation {
+    /// A sitting down to eat off what is in the hand, and how many of it that
+    /// comes to.
+    ///
+    /// **Eating never consults the pack.** A mouth is not a rucksack: a man
+    /// with his arms full can still put a handful of berries in it. This is
+    /// the one place the arithmetic lives, because two verbs end with food in
+    /// somebody's hand - `Eat` off a patch, and `Gather` that found no room -
+    /// and they had better agree about what a meal is.
+    ///
+    /// How many items a sitting comes to depends on what they are: four fish
+    /// or sixteen handfuls of leaf come to the same supper, which is the whole
+    /// of what caloric density means here. It stops at a third of a day's
+    /// energy or at a full stomach, whichever comes first, and never at
+    /// nought - somebody who has walked to a bush gets a mouthful even with a
+    /// stomach that says otherwise.
+    pub(in crate::analytics) fn a_sitting_from_the_hand(
+        &mut self,
+        agent_index: usize,
+        what: crate::world::ItemType,
+        in_the_hand: u32,
+    ) -> (u32, f32, crate::world::nutrition::NutritionalContent) {
+        let nutrition = self
+            .food_database
+            .get(&what)
+            .map(|template| template.base_nutrition)
+            .unwrap_or_else(|| NutritionalContent::new(20.0, 5.0, 35.0, 0.8));
+
+        let now = self.current_tick;
+        let agent = &mut self.population.agents[agent_index];
+
+        agent.nutrition.consume(&nutrition);
+        agent.state.eat(now, nutrition.energy);
+
+        let worth = physiology::what_a_unit_of_this_is_worth(nutrition.energy);
+        let mut eaten = 0u32;
+        let mut energy_in = 0.0f32;
+        while eaten < in_the_hand && energy_in < physiology::WHAT_A_SITTING_AIMS_AT {
+            let went_down = agent
+                .state
+                .physiology
+                .eat(physiology::UNITS_IN_ONE_ITEM, worth);
+            if went_down <= 0.0 {
+                break;
+            }
+            energy_in += went_down * worth;
+            eaten += 1;
+        }
+        if eaten == 0 {
+            eaten = 1;
+        }
+
+        let name = format!("{what:?}");
+        *self.what_went_down.entry(name).or_default() += eaten as u64;
+        self.energy_that_went_down += energy_in as f64;
+        let agent = &mut self.population.agents[agent_index];
+
+        // Foraged fruit and berries carry water too
+        if nutrition.water_content > 0.3 {
+            if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
+                thirst.decrease(nutrition.water_content * 0.1);
+            }
+        }
+
+        (eaten.min(in_the_hand.max(1)), energy_in, nutrition)
+    }
+
     /// `Action::Eat`.
     pub(in crate::analytics) fn eating(&mut self, food_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng) -> ActionResult {
         // A full stomach will not take more, however much the reserve
@@ -64,6 +130,7 @@ impl Simulation {
         if let Some(item_id) = carried_food {
             let mut energy_in = 0.0f32;
             let mut mouthfuls = 0u32;
+            let mut went_down_here = 0u64;
             let mut made_sick: Option<f32> = None;
             while energy_in < physiology::WHAT_A_SITTING_AIMS_AT
                 && agent.state.physiology.room_in_the_stomach()
@@ -83,6 +150,7 @@ impl Simulation {
                         }
                         energy_in += went_down * worth;
                         mouthfuls += 1;
+                        went_down_here += 1;
                     }
                     EatResult::MadeSick(damage) => {
                         made_sick = Some(damage);
@@ -92,6 +160,10 @@ impl Simulation {
                     EatResult::Spoiled | EatResult::NoFood => break,
                 }
             }
+
+            *self.what_went_down.entry(item_id.clone()).or_default() += went_down_here;
+            self.energy_that_went_down += energy_in as f64;
+            let agent = &mut self.population.agents[agent_index];
 
             if let Some(damage) = made_sick {
                 if mouthfuls == 0 {
@@ -109,7 +181,11 @@ impl Simulation {
                 );
 
                 return ActionResult::success()
-                    .with_drive_change(DriveType::Hunger, -0.3)
+                    .with_drive_change(
+                        DriveType::Hunger,
+                        -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
+                            * physiology::what_this_meal_answers(energy_in),
+                    )
                     .with_energy_cost(1.0) // Eating from inventory is cheap
                     .with_message(format!(
                         "Ate {mouthfuls} of carried {item_id} ({energy_in:.0} energy)"
@@ -257,6 +333,13 @@ impl Simulation {
                 if eaten_here == 0 {
                     eaten_here = 1;
                 }
+
+                *self
+                    .what_went_down
+                    .entry(format!("{foraged_item:?}"))
+                    .or_default() += eaten_here as u64;
+                self.energy_that_went_down += energy_in as f64;
+                let agent = &mut self.population.agents[agent_index];
 
                 // Foraged fruit and berries carry water too
                 if nutrition.water_content > 0.3 {
@@ -797,4 +880,161 @@ impl Simulation {
 
         result
     }
+
+    /// `Action::Treat`.
+    ///
+    /// Somebody takes something for what ails them, or gives it to somebody
+    /// who is ill. **It eases and it does not cure** - see
+    /// `crate::environment::remedies` - and the whole of what it buys is some
+    /// of the week back.
+    ///
+    /// Before this there was no treatment of any kind in the model. `Herbs`
+    /// spawned, were gathered, became `ItemType::Herbs`, taught Herbalism and
+    /// then sat in the pack for ever: ISSUES_FOUND.md #202.
+    pub(in crate::analytics) fn treating(
+        &mut self,
+        agent_index: usize,
+        who: Option<uuid::Uuid>,
+        tick_now: u32,
+    ) -> ActionResult {
+        // Who is being treated. Nobody is treated at a distance: a remedy has
+        // to be handed over, which is why this checks the reach.
+        let patient = match who {
+            None => agent_index,
+            Some(id) => {
+                let here = self.population.agents[agent_index].state.position;
+                let found = self
+                    .population
+                    .agents
+                    .iter()
+                    .position(|other| other.id == id && other.state.is_alive);
+                let Some(found) = found else {
+                    return ActionResult::failure("Nobody of that name here".to_string());
+                };
+                let there = self.population.agents[found].state.position;
+                let apart = (here.0 - there.0).abs().max((here.1 - there.1).abs());
+                if apart > Self::HOW_CLOSE_YOU_HAVE_TO_BE_TO_DOSE_SOMEBODY {
+                    return ActionResult::failure("Too far off to hand it over".to_string());
+                }
+                found
+            }
+        };
+
+        if !self.population.agents[patient].wants_something_for_it() {
+            return ActionResult::failure("There is nothing the matter".to_string());
+        }
+
+        // The remedy comes out of the pack of whoever is doing the treating,
+        // and it is chosen for what is actually wrong with the patient.
+        let sort = self.population.agents[patient]
+            .what_ails_me()
+            .map(|ailing| ailing.what_sort_it_is());
+        let Some(sort) = sort else {
+            return ActionResult::failure("There is nothing the matter".to_string());
+        };
+
+        let Some(remedy) = self.what_in_this_pack_would_answer(agent_index, sort) else {
+            return ActionResult::failure("Nothing in the pack for it".to_string());
+        };
+
+        // It is used up. A handful of mint is a handful of mint.
+        if self.population.agents[agent_index]
+            .inventory
+            .remove_item(&remedy, 1)
+            .is_none()
+        {
+            return ActionResult::failure("Nothing in the pack for it".to_string());
+        }
+
+        let eased = self.population.agents[patient]
+            .take_a_remedy(&remedy, tick_now)
+            .unwrap_or(0.0);
+
+        self.population.agents[agent_index].skills.practise(
+            crate::agents::SkillType::Herbalism,
+            Self::WHAT_DOSING_SOMEBODY_TEACHES,
+            tick_now,
+        );
+
+        // Being looked after is worth something in itself, whether or not the
+        // herb was. This is the placebo and the company, and it is the reason
+        // the wrong remedy is not worth nothing.
+        if patient != agent_index {
+            let name = self.population.agents[agent_index].id;
+            self.population.agents[patient].emotions.add_happiness(
+                crate::agents::EmotionSource::Agent(name),
+                Self::WHAT_BEING_LOOKED_AFTER_IS_WORTH,
+            );
+        }
+
+        debug!(
+            "Agent {} treated {} with {remedy}, easing {eased:.3}",
+            self.population.agents[agent_index].id,
+            if patient == agent_index { "himself".to_string() } else { "somebody".to_string() },
+        );
+
+        if eased <= 0.0 {
+            // It was a remedy, it was used up, and it did nothing that could
+            // be measured. That is a real outcome and it is recorded as a
+            // failure so the agent can learn it - see `Undertaking::Healing`.
+            return ActionResult::failure(format!("{remedy} did nothing"))
+                .with_energy_cost(Self::WHAT_DOSING_SOMEBODY_COSTS);
+        }
+
+        ActionResult::success()
+            .with_energy_cost(Self::WHAT_DOSING_SOMEBODY_COSTS)
+            .with_message(format!("Eased it with {remedy}"))
+    }
+
+    /// The best thing in a pack for a trouble of this sort.
+    ///
+    /// A taught hand knows which is which; an untaught one takes whatever is
+    /// called medicine - see `Agent::what_i_have_for_it`, which this is the
+    /// simulation's side of.
+    fn what_in_this_pack_would_answer(
+        &self,
+        agent_index: usize,
+        sort: crate::environment::remedies::WhatARemedyEases,
+    ) -> Option<String> {
+        use crate::environment::remedies;
+
+        let agent = &self.population.agents[agent_index];
+        let taught = agent
+            .skills
+            .get_skill_if_exists(crate::agents::SkillType::Herbalism)
+            .map(|skill| skill.level > 0)
+            .unwrap_or(false);
+
+        let mut best: Option<(f32, String)> = None;
+        for (id, item) in agent.inventory.get_all_items().iter() {
+            if item.quantity == 0 {
+                continue;
+            }
+            let Some(remedy) = remedies::what_this_is_good_for(id) else {
+                continue;
+            };
+            let worth = if taught && remedy.eases != sort {
+                remedy.takes_off * remedies::WHAT_THE_WRONG_REMEDY_IS_STILL_WORTH
+            } else {
+                remedy.takes_off
+            };
+            if best.as_ref().map(|(so_far, _)| worth > *so_far).unwrap_or(true) {
+                best = Some((worth, id.clone()));
+            }
+        }
+
+        best.map(|(_, id)| id)
+    }
+
+    /// How close you have to be to hand somebody a remedy.
+    const HOW_CLOSE_YOU_HAVE_TO_BE_TO_DOSE_SOMEBODY: i32 = 2;
+
+    /// What dosing somebody teaches about herbs.
+    const WHAT_DOSING_SOMEBODY_TEACHES: u32 = 8;
+
+    /// And what it costs: the picking is done, this is the sitting with them.
+    const WHAT_DOSING_SOMEBODY_COSTS: f32 = 1.0;
+
+    /// What being looked after is worth to somebody who is ill.
+    const WHAT_BEING_LOOKED_AFTER_IS_WORTH: f32 = 0.15;
 }

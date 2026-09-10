@@ -193,10 +193,22 @@ impl Piece {
     /// which is the whole reason anybody bothers cutting a thing into strips
     /// rather than just quartering it.
     pub fn how_long_it_takes_to_dry(&self) -> u32 {
+        /// Six days for a joint, two for a strip.
+        ///
+        /// These were 72 and 24 as bare tick counts, which said six days and
+        /// two days at a two-hour turn and would have said a day and a half
+        /// and half a day at a half-hour one. The spoilage tables beside them
+        /// were already stated in days and converted - see `days` - and this
+        /// was not. Drying is a thing that takes so many days in the sun; it
+        /// is not a thing that takes so many decisions.
+        const fn days(how_many: u32) -> u32 {
+            how_many * crate::environment::seasons::TICKS_PER_DAY
+        }
+
         match self {
             Self::Whole => u32::MAX,
-            Self::Portion => 72,
-            Self::Strip | Self::Small => 24,
+            Self::Portion => days(6),
+            Self::Strip | Self::Small => days(2),
         }
     }
 }
@@ -674,6 +686,38 @@ impl FoodDatabase {
             default_preparation: PreparationState::Raw,
         });
 
+        // The mast: acorn, hazel, chestnut, walnut.
+        //
+        // **The top of the scale, and it is the reason the scale had a top.**
+        // `physiology.rs` describes this database as running "from six
+        // (spring greens) to eighty (fat and nuts)" - and until now nothing
+        // in the world yielded one, so the eighty was a figure in a comment.
+        // A nut is a third fat by weight and that is where the energy is.
+        //
+        // What it does that nothing else does is **keep**. Everything else a
+        // settlement puts by has to be dried, salted, smoked or buried, and
+        // the throughput of that is what caps the winter store - #241. A nut
+        // in its shell wants nothing done to it: gathered in October, still
+        // food in March. Two hundred and forty days is eight months, which is
+        // an acorn kept dry and is longer than anything else in this table.
+        self.entries.insert(ItemType::Nuts, FoodTemplate {
+            base_nutrition: NutritionalContent::new(80.0, 20.0, 25.0, 0.05),
+            base_spoilage_ticks: Self::days(240),
+            default_preparation: PreparationState::Raw,
+        });
+
+        // Legumes - the plant protein, and it dries.
+        //
+        // A pod is worth having twice over: it is the only protein in this
+        // table that did not have to be hunted or caught, and dried peas
+        // keep four months, which is most of a winter. Set below a nut on
+        // energy and well above grain on protein, which is what a bean is.
+        self.entries.insert(ItemType::Legumes, FoodTemplate {
+            base_nutrition: NutritionalContent::new(45.0, 35.0, 20.0, 0.08),
+            base_spoilage_ticks: Self::days(120),
+            default_preparation: PreparationState::Raw,
+        });
+
         // === GRAINS (High energy, low protein) ===
 
         // Grain - high energy, low protein, moderate micronutrients
@@ -1131,12 +1175,14 @@ mod one_answer_to_what_is_food {
             );
         }
 
-        // And the twelve the database carries, named, so that dropping one
+        // And the thirteen the database carries, named, so that dropping one
         // from either side fails here rather than quietly starving somebody.
         for kind in [
             ItemType::Food, ItemType::Meat, ItemType::Fish, ItemType::Greens,
-            ItemType::Roots, ItemType::Grain, ItemType::Flour, ItemType::Bread,
-            ItemType::Milk, ItemType::Cheese, ItemType::Honey, ItemType::Ale,
+            ItemType::Roots, ItemType::Nuts, ItemType::Legumes, ItemType::Grain,
+            ItemType::Flour,
+            ItemType::Bread, ItemType::Milk, ItemType::Cheese, ItemType::Honey,
+            ItemType::Ale,
         ] {
             assert!(kind.is_it_food(), "{kind:?} should be food");
             assert!(db.is_food(&kind), "{kind:?} should have a template");
@@ -1151,7 +1197,7 @@ mod one_answer_to_what_is_food {
     /// cooking prefix and the cutting suffix alike.
     #[test]
     fn a_cooked_joint_is_still_food_and_a_stone_is_still_not() {
-        for id in ["food", "grain", "greens", "roots", "fish", "meat",
+        for id in ["food", "grain", "greens", "roots", "nuts", "fish", "meat",
                    "bread", "cooked_meat", "meatportions", "fishportions"] {
             assert!(is_this_food(id), "{id} should be food");
         }

@@ -1,6 +1,6 @@
 # Known Issues
 
-**Last verified:** September 2026, against commit `6e2eb70` and the work since.
+**Last verified:** September 2026, against commit `136d727` and the work since.
 
 Each entry below was reproduced before being written down, and each carries
 the evidence. Entries are ordered by how much they block someone picking the
@@ -5406,6 +5406,157 @@ with the type system rather than by hand.
 
 ## Housekeeping
 
+### 170. A one-minute turn is out of reach, and the reason is the world rather than the people
+
+Measured, on 240x240 with twelve people, in release:
+
+| | microseconds a tick |
+|---|---|
+| the world with nobody in it | 1,641 |
+| the same world with twelve people | 7,237 |
+| so the people | 5,596 (77%) |
+
+At the twelve-turn day that is 0.087 seconds a simulated day and about half a
+minute a simulated year for one world, which is what makes a sixty-four-world
+paired block a forty-minute job and the measurement discipline in this
+repository possible at all.
+
+At one turn a minute it is **10.4 seconds a simulated day and an hour a
+simulated year for one world**. A sixty-four-world block either side of a
+change becomes several days of running. And deciding less often cannot rescue
+it: the world alone, with nobody in it at all, is 2.4 seconds a simulated day
+at that clock, which is fourteen minutes a year a world before a single agent
+thinks about anything.
+
+So a minute turn needs the *world* processes charged by elapsed time, not just
+the decisions - `World::tick` doing sixty minutes' worth of work once an hour
+rather than one minute's worth sixty times. Some of that exists already
+(#252, #253); most of it does not.
+
+**A half-hour turn is reachable and was measured.** Setting `TICKS_PER_DAY` to
+48 compiles and runs; the suite goes from 293 seconds to 1,540, and from 7
+failures to 16. The eleven new ones are all the #206 family - tests that
+encode the turn length rather than the behaviour:
+`a_turn_is_two_hours_of_living` (which says so in its name),
+`an_ordinary_day_burns_about_what_an_ordinary_day_holds`, the four drying
+tests, `a_walk_is_finished_rather_than_re_decided_at_every_step`, and three
+long-run ecology tests that now need four times the ticks to cover the same
+years. All fixable. The standing cost is that every measurement in this
+repository takes four times as long, which is a decision about the project
+rather than about the code.
+
+Not audited yet, and it would have to be before such a change: the hard-coded
+moduli. `current_tick % 50`, `% 100`, `% 20`, `% 10` appear in
+`analytics/turn/` and are not derived from `TICKS_PER_DAY`, so they silently
+mean "every four days" at twelve turns and "every fifty minutes" at
+forty-eight. That is #205, and this is the change that would make it bite.
+
+### 171. The half-hour turn, and the five clocks that had to be found first
+
+The turn was two hours - twelve decisions in a waking day, which is not enough
+to live one. It is half an hour now: `TICKS_PER_DAY` is 48.
+
+Changing the constant is one line. What took the work was that the cadence of
+the world was written down in **eight** places and derived from the calendar in
+none of them, so shortening the turn would have quietly moved every one of
+them. Found and fixed in this pass, each one a rate or a trigger that meant
+"about once a day" and would have come to mean "every twenty minutes":
+
+| where | was | now |
+|---|---|---|
+| `World::tick` weather, rot, regeneration triggers | `% 10` | `ONCE_A_DAY` |
+| `rot_what_is_lying_about` | `TICKS_PER_PASS = 10.0` | `ONCE_A_DAY` |
+| `HOW_OFTEN_THE_WEATHER_GETS_AT_IT` | `10` | `ONCE_A_DAY` |
+| grazing cadence *and* what a pass stands for | two separate `10`s | one constant |
+| `ResourceNode` regeneration rates | fitted "per pass, every ten ticks" | scaled by the pass length |
+| plant zone sweep | `60` in `World::tick`, `60` twice more in flora fixtures | `HOW_OFTEN_A_ZONE_COMES_ROUND` |
+| `PreparationState::how_long_it_takes_to_dry` | `72` and `24` ticks | six days and two days |
+| `HOW_LONG_A_THING_LIES_THERE` | `432`, called "a season and a half" | a season and a half |
+
+That last one was already wrong before any of this: 432 ticks *was* a season
+and a half when a season was twenty-four days, and a season became ninety in
+#209 without it following. It had meant thirty-six days for a while, and food,
+which gets a quarter of it, nine. The same shape as
+`patterns::STILL_WORTH_THE_WALK` reading 288 against a comment saying "a
+season". A number that agrees with its own doc comment only on a calendar
+nobody uses any more is the commonest bug in this repository.
+
+Relatedly, four places worked out the clock in the window as `tick / 1440` and
+`(tick % 1440) / 60`, reading a turn as a minute. A turn has never been a
+minute here: the window was showing hour three on the third day of a world a
+fortnight old. There is one `what_the_clock_says` now.
+
+#### What it cost, and what is still open
+
+The suite goes from 293 seconds to about 1,200 - a little over four times, as
+expected, since agents are 77% of a tick and there are four times as many
+turns. Failures went 7 -> 18 at the flip and are 11 after the cadence work: the
+six that were already failing, and five new ones.
+
+Those five are one family and `a_year_is_shorter_than_a_run` names it exactly:
+**a test that runs for N ticks now covers a quarter of the simulated time it
+used to.** A year is 17,280 ticks and the longest run in the suite is 8,000, so
+nothing in here sees a second spring any more. That test is doing its job by
+failing. The five:
+
+- `a_year_is_shorter_than_a_run` - the meta-test, correct to fail
+- `a_settlement_lives_through_a_winter` and `most_of_what_lived_here_still_lives_here`
+  - long runs that no longer reach the season they are about
+- `food_left_lying_goes_into_the_ground` and
+  `what_is_left_out_goes_off_faster_than_what_is_carried` - windows calibrated
+  to the old spoilage rates
+
+The fix for all five is the same and is a sweep of its own: **test run lengths
+are written in ticks and a tick changed meaning.** They want stating in days or
+seasons, like the constants above, and the long ones want four times the ticks
+to cover the ground they did - which is more suite time again. That is #206 one
+level up, and it is the honest remaining cost of the half-hour turn.
+
+### 169. The one store nothing reads, and why capping it cost thirteen times the running time
+
+`ExplorationKnowledge::explored_tiles` is a `BTreeSet<Position>` with no
+ceiling and nothing ever taken out of it: every tile anybody has stood within
+sight of, for as long as they live, on a map of a hundred square kilometres.
+It is written from two places - `world/mod.rs:2589` and
+`analytics/doing/moving.rs:372` - which insert every tile in a radius round
+the agent on every move.
+
+It is also, at the time of writing, **the only store on an agent that nothing
+reads**. Its one accessor, `ExplorationKnowledge::is_explored`, has no callers
+anywhere in `src`. The `true`/`false` return of `explore_tile` feeds a
+`newly_explored_count`, and that is the whole of what the set is for.
+
+The obvious fix - cap it, drop the ground furthest from where the agent is
+standing - is wrong, and expensively so. Measured on two worlds of sixty days
+in release:
+
+| | seconds |
+|---|---|
+| before any of the pattern work | 7.95 |
+| with the cap on insert | 103 |
+| with the cap moved to a daily clock | 12.4 |
+| with the cap removed again | 8.09 |
+
+**Thirteen times the running time.** Not because the pruning is slow in
+itself: an agent sees a good deal of ground at once, so dropping the furthest
+of it only for the same eye to put it straight back leaves the set sitting on
+its ceiling and being rebuilt on nearly every tile observed. Moving the prune
+to once a day removed the thrash and still cost half as much again, because
+capping a set whose only question is "have I seen this before" makes ground
+*falsely new*, and every falsely new tile is an allocation and a count.
+
+So the entry stands rather than the fix. A store that nothing reads should
+either get a reader or stop being written; it should not be pruned, because
+pruning is what breaks the one thing it does. Both other candidates in the
+same struct are already bounded - `where_it_went_badly` and `where_it_ran_out`
+at 32 apiece - and `known_resources` is capped at 96 by
+`Agent::forget_what_does_not_matter`, so this is the only one left.
+
+The measurement is kept here because it is the useful part: it is a worked
+example of a ceiling enforced on the wrong event, and the same shape will
+appear anywhere else somebody caps a set that is written far more often than
+it is read.
+
 ### 93. Fourteen per cent of the public surface had no caller
 
 A sweep for `pub fn` definitions whose identifier appears nowhere else in
@@ -7352,6 +7503,125 @@ moving house is reachable at all is worth its own measurement.
 and **milk**, both of which the world generates and neither of which anybody
 can eat. Not touched here - changing what food is, is a change to the food
 supply and wants measuring on its own.
+
+---
+
+### 172. Every rate in the exposure file was per call, and the file predates the calendar
+
+The half-hour turn (#171) swept eight clocks in the world processes and missed
+`environment/exposure.rs` entirely, because that file is not a world process
+and nobody had reason to open it. Every rate in it was a bare literal applied
+once per call to `update_agent_exposure`, which runs once a tick:
+
+```rust
+ExposureType::Hypothermia => 0.02,      // per what?
+const SHELTERED_RECOVERY: f32 = 0.05;   // per what?
+self.sun_exposure += 0.01;              // per what?
+damage_this_tick += weather.weather_type.exposure_damage_per_tick();
+```
+
+**Per what, is the question, and the answer was nothing at all.** The file was
+written in November 2025. `TICKS_PER_DAY` was introduced in August 2026, nine
+months later. These rates never named a length of time because at the time they
+were written there was none to name - so when the turn went from two hours to
+half an hour, every one of them quietly became four times what it had been in a
+day, and the damage feeds `lose_health(damage * 10.0)`.
+
+#### What it was worth
+
+Measured across the clock change, eight worlds a side, the model's own
+cause-of-death tally:
+
+| cause | two-hour turn | half-hour turn |
+|---|---|---|
+| hunger + starvation | 36.9% | 47.3% |
+| dehydration + thirst | 54.7% | 17.3% |
+| **the weather** | **3.2%** | **19.4%** |
+
+Standing out in a blizzard, hypothermic and in the wind, came to 0.11 a tick -
+1.1 health - which at forty-eight ticks to the day is **fifty-three health a
+day, so two days of it kills a grown man**. At twelve ticks to the day the same
+literals were thirteen a day, and a week of it.
+
+#### The fix
+
+Every rate in the file now names a day, and one function divides by
+`TICKS_PER_DAY`. The figures are the old literals times twelve, which is the
+turn the model's balance was last measured at - `THE_TURN_THESE_WERE_WRITTEN_FOR`
+says so and says why that is a calibration rather than a design. Two guard
+tests tick a body through a whole simulated day of blizzard and of wind and
+assert the total comes to the per-day figure, so this cannot drift again when
+the turn next changes.
+
+`Weather::wetness_per_tick` turned out to have four callers in `world/mod.rs`
+that multiplied it by a hundred - exactly undoing its `* 0.01` - to read
+precipitation intensity through a wetness function. They ask
+`precipitation_intensity()` directly now.
+
+`test_sunburn_accumulation` looped "100 ticks", which was eight days at the old
+turn and two at the new one; it says five days now. That is #171's family again.
+
+#### What it bought
+
+Sixty-four seeded worlds, two years, twelve founders, paired before and after:
+
+| seeds | before | after |
+|---|---:|---:|
+| 0-31 | 94,914 person-days | 97,521 (+2.7%) |
+| 32-63 | 88,238 | 91,382 (+3.6%) |
+| **total** | **183,152** | **188,903 (+3.1%)** |
+
+Deaths booked to the weather fall from **25.4% to 15.7%** of all deaths - down
+by more than a third - and the people who used to freeze now live long enough
+to starve, so starvation rises to take up the slack. Settlements out of their
+first winter: **1 of 64 to 3 of 64**.
+
+**It is a correction, not a cure.** The first winter still empties sixty-one
+settlements in sixty-four, and the next entry is about why.
+
+### 173. Every settlement dies in its first winter, and it is not the pack
+
+"Get the agents to the point where they can survive sustainably" starts from a
+measurement, and the measurement is stark. Thirty-two seeded worlds, twelve
+founders, two years: **every settlement is emptied, and the days they empty on
+are 309 to 356** - a forty-seven-day window at the end of the first winter,
+with the population holding near ten through month nine and reaching zero by
+month twelve. It is a cliff, not a decline.
+
+Two hypotheses were tested and both are refuted. They are recorded because the
+next person will have them too.
+
+**The pack is full of rocks.** It is, and it does not matter. Sampled through
+the year, packs run at 97-110% of capacity all year round, and on the day
+winter opens a person carries, of a 17.2-unit pack: wood 4.3, iron 2.8, stone
+2.4, handaxe 1.9 - and **0.3 items of food**. 594,825 gathered items go back
+on the bush against 25,880 kept, for want of room. That reads like the whole
+story and is not: #119 already swept carrying capacity over three blocks of
+thirty-two worlds and found it **flat from six to twelve and a fifth worse at
+a hundred and twenty**. Capacity is a licence for other work, and the other
+work is what kills them.
+
+**The sufficiency thresholds are unreachable.** `ENOUGH_MATERIALS = 30.0`
+counts items in a pack that holds about thirteen items of material by weight,
+so Industry can never come down; `ENOUGH_FOOD = 20.0` is a day and a half
+against the project's own derived figure of ~860
+(`provision::what_one_mouth_this_age_wants_put_by`). Both are real defects of
+the kind this document is full of - one question answered twice, in a currency
+that does not match what holds it. **Neither is the cause.** Swept over eight
+worlds at `ENOUGH_MATERIALS` of 30, 8 and 4: 8 of 8 emptied in every arm, on
+days 311-358 in every arm, with the same causes. (Preparedness turns out not
+to read its threshold at all - `situation.rs` overwrites its value each pass
+with the derived larder reckoning - so only Sustenance and Industry ever see
+the number.)
+
+**Where it points.** #168 measured the constraint and it still stands: a
+settlement's annual surplus is **under one per cent of what it consumes**, so
+there is nothing to bank however good the larder is. #119 and #120 between them
+have ruled out the pack, the kit, the counters, the verb, and the walk to a
+remembered source, and both point at the same place: *a settlement lives or
+dies on whether the ground its people are standing on bears anything.* That is
+where the next attempt should start, and it should start by measuring what is
+within reach of somebody at the moment they starve.
 
 ---
 
@@ -10410,3 +10680,3529 @@ reaches the point of telling, or what is told never lands in
 The test is left failing and seeded rather than tuned back to green, because a
 green test that is reading the suite's dice is worse than a red one that is
 reading the model.
+
+### 161. Celsius is not a ratio scale, so three biomes were coldest at noon
+
+The first of the four sections of the sustenance-and-climate specification,
+and the one with a live inversion in it.
+
+`Biome::update_climate` worked a temperature out like this:
+
+```rust
+let mut current_temp = base_temp + (temp_range * 0.3 * (season_factor - 1.0));
+current_temp *= time_factor;   // 1.5 at noon, 0.7 at night
+```
+
+**Multiplying a Celsius reading.** Celsius has an arbitrary zero, so it is an
+interval scale and not a ratio scale: there is no sense in which twice as many
+degrees is twice as warm, and multiplying by 1.5 for noon makes a cold place
+colder. Measured, before:
+
+| biome | winter 2am | winter noon | summer noon | seasonal swing |
+|---|---|---|---|---|
+| Tundra | -11.7 | **-25.1** | -15.6 | 9.5 |
+| Taiga | -4.7 | **-10.0** | -0.6 | 9.4 |
+| Alpine | -6.0 | **-12.9** | -4.8 | 8.1 |
+| TemperateForest | 6.7 | **14.2** | 21.0 | 6.8 |
+| Grassland | 10.1 | **21.8** | 28.5 | 6.8 |
+| Tropical | 18.0 | 38.6 | 42.6 | 4.0 |
+
+The tundra, the taiga and the alpine were **coldest at midday and warmest at
+two in the morning**, every day of the year.
+
+The same multiplication was in two more places. `SeasonalCalendar::
+apply_modifiers` did `base * season_mod * time_mod`, and `ClimateManager::
+tick` did it on a global `-5.0` or `15.0` for the whole world - which in a
+cold world works summer out at minus six and winter at minus three, winter
+being the warmer. Neither was read by anything: the live path is
+`get_biome` -> `Biome::update_climate`, and the weather layer on the end of it
+was already additive, `base_temp + modifier`, which is the correct shape and
+was the odd one out.
+
+**The second thing it did was flatten the year.** The season entered as
+`range * 0.3 * (factor - 1.0)` with the factor spanning 0.6 to 1.2 - between
+minus an eighth and plus a sixteenth of the range - so a year moved the
+thermometer four to ten degrees wherever it was. The specification asks for
+twenty to thirty. Outside the three arctic biomes **nothing on any map ever
+went below zero**: a temperate deciduous forest read +14.2 at winter noon and
++6.7 before dawn. Water never froze, a fish run was never held up by ice, and
+exposure had nothing to bite on, which is why "make winter bite" kept coming
+back.
+
+**What replaces it.** `BiomeType::what_the_year_does_here` gives each biome a
+winter band and a summer band - the shape the specification itself uses,
+"Winter -5C to 5C, Summer 20C to 30C" - because one (min, max) pair cannot
+answer both "how cold does it get" and "how hot does it get" and leaves
+everything between them to be invented. The year moves the two ends of the
+day's band between the two pairs, and the hour moves the reading between those
+ends, on a cosine with its trough before dawn. Both are degrees. Nothing in
+this model multiplies a temperature any more, and `temperature_range` and
+`average_temperature` are derived from the bands rather than written down
+beside them.
+
+Measured, after:
+
+| biome | winter 2am | winter noon | summer noon | seasonal swing |
+|---|---|---|---|---|
+| Tundra | -35.6 | -21.1 | 6.3 | 27.4 |
+| Taiga | -26.3 | -14.3 | 16.3 | 30.6 |
+| Alpine | -17.1 | -7.4 | 14.4 | 21.9 |
+| TemperateForest | -3.5 | 1.3 | 26.3 | 25.0 |
+| Grassland | -16.3 | -4.3 | 29.4 | 33.7 |
+| Tropical | 20.7 | 23.1 | 29.4 | 6.3 |
+
+Every biome is warmer at noon than before dawn, in every season. The steppe
+has the hardest year on the map and the rainforest has next to none, which is
+the shape the specification describes.
+
+**What it cost, and this is the part worth reading.** Winter now bites, and
+the model's people cannot take it. Thirty-two worlds of twelve founders, same
+seeds, run to a year and four days:
+
+| | before | after |
+|---|---|---|
+| reached winter with somebody | 31/32 | 31/32 |
+| came out the other side | 7/31 | 6/31 |
+| people into winter | 174 | 233 |
+| people out of it | 9 | 7 |
+| alive a year on | 7/32 | 6/32 |
+
+The change is small because **the winter was already catastrophic**: nine
+people out of a hundred and seventy-four before, seven out of two hundred and
+thirty-three after - ninety-five per cent mortality against ninety-seven.
+More people reach winter now because summer is genuinely warm for the first
+time (a temperate forest summer reads 21.5 to 26.3, against 9.8 to 21.0), and
+more of them then die in it.
+
+The ecology does not notice. A year on a hundred square kilometres with
+nobody in the world comes out at 1,666 head, 133,246 resource nodes and
+208,894 plants either way, at 17.61 ms a tick against 17.69 - so what winter
+now costs is paid entirely by the people, and the animals and the plants are
+where they were. (An earlier reading of 23 ms against 12.75 was two
+simulations sharing a machine, and is withdrawn.)
+
+So this closes an arithmetic defect and opens an honest one: **a settlement in
+this model cannot survive a real winter, and could not before either.** It was
+hidden by a winter that never went below +6.7. `population_feeds_itself_over_
+a_long_run` is left failing rather than tuned: it asks that at least three of
+six seeded settlements still have somebody after four thousand ticks, and it
+got three before and two after - but measured across thirty-two worlds the
+rate is 22 per cent and then 19, so a six-world block asking for half was
+passing on its draw, which is what its own comment warns about. The threshold
+is not the thing to change; the winter is. That is a piece of work of its own
+and it is #141 and #207's real remainder.
+
+`a_settlement_works_things_out_that_nobody_wrote_down` also moved back into
+the failing set. It is unseeded, it was failing before the fish change,
+passing after it, and failing now: the #132 family again.
+
+### 162. Where a place is, answered twice, and neither answer could say "tropical"
+
+The second half of the climate specification, and it turns out to be the same
+defect this project keeps finding.
+
+**Two functions, both keyed on terrain alone.** `terrain_to_biome` said what
+kind of place a tile was for the thermometer; `terrain_to_climate_zone` said
+what kind of place it was for the plants and the beasts. A mountain was
+`Alpine` to one and `Arctic` to the other, a sea was `Coast` and `Temperate`,
+a marsh was `Wetland` and `Temperate`. They agreed on every terrain, but by
+luck rather than by construction: nothing made them agree and nothing would
+have noticed if they stopped.
+
+**And keying on terrain alone means every map is one map.** A wood was a
+temperate deciduous wood wherever it stood, because `Forest` is `Forest`. Walk
+all fourteen terrains through both functions and what comes out is:
+
+- **six of the ten biomes** - Grassland, TemperateForest, Alpine, Coast,
+  Desert, Wetland. Tundra, Taiga, Tropical and Savanna were unreachable on
+  any map ever generated.
+- **three of the four climate zones**. Nothing was ever Tropical.
+- and therefore the banana tree, the coffee bush, the mahogany, the mangrove,
+  the monkey and the parrot **had nowhere at all to be put**, in any world,
+  ever.
+
+**A hundred square kilometres is ten kilometres by ten, and that is one
+climate.** A map does not run from tundra to rainforest, so the missing
+biomes are not a terrain that was left out - they are a *country* that could
+never be chosen. `ClimateManager` now carries a region, and the ground picks
+within it: `BiomeType::on_this_ground` is the one place terrain becomes a
+biome, and `climate_zone()` is derived from that biome rather than from a
+second table. `a_zone_is_what_its_biome_says` holds the old table as data and
+proves the derivation reproduces it exactly, so the join changed nothing it
+was not meant to.
+
+| country | its wood | its open ground | zone |
+|---|---|---|---|
+| Tundra | Taiga | Tundra | Arctic |
+| Taiga | Taiga | Taiga | Arctic |
+| TemperateForest | TemperateForest | Grassland | Temperate |
+| TemperateConifer | TemperateConifer | Grassland | Temperate |
+| Grassland | TemperateForest | Grassland | Temperate |
+| Mediterranean | Mediterranean | Mediterranean | Temperate |
+| Savanna | TropicalDryForest | Savanna | Tropical |
+| Tropical | Tropical | Savanna | Tropical |
+| TropicalDryForest | TropicalDryForest | Savanna | Tropical |
+| Desert | Mediterranean | Desert | Desert |
+
+Over the ten countries: **fourteen biomes and four climate zones**, and no
+species in either registry without somewhere to live.
+
+**The specification's fourteen categories out of one table.** Four of the
+fourteen - alpine, wetland, freshwater and marine - are not countries at all;
+they are what the ground does to whatever country it is in, and the
+specification says so: "Wetlands in tundra, tropics, or deserts should inherit
+those broader biome patterns", "Freshwater ... air temperature depends on
+surrounding biome". So they read the country's bands and bend them: standing
+water pulls a year in towards its own average (a marsh a quarter, a lake a
+third, the sea two thirds), and height subtracts a lapse rate. That is also
+how the three marine readings fall out without being written down three
+times: salt water freezes near minus two and never runs above thirty, so a
+polar coast reads -2 to about 9 while the tundra behind it is at forty below.
+
+**A mistake worth recording.** The first cut mapped open ground to the
+country itself, so a plain in a deciduous country came out a deciduous
+forest and `test_terrain_to_biome` caught it. A country's kind names its
+climate, not what is standing on any particular field: open ground in a
+temperate country is grassland, in a polar country tundra, in the tropics
+savanna.
+
+**And the water is not the air over it.** Both a spring's flow and a fish run
+were gated on `get_temperature < 0.0` - the **air** - so a reach stopped the
+first frosty night. Water carries far more heat and gives it up far more
+slowly: `BiomeType::water_temperature_at` lags the day almost entirely and
+clamps to the specification's own nought-to-twenty-five for fresh water,
+because water below freezing is ice and ice is the state the callers actually
+want. A temperate river no longer ices over because one night was cold; a
+boreal one does.
+
+Measured, sixty-four worlds of twelve founders on the same seeds:
+
+| | before | after |
+|---|---|---|
+| reached winter with somebody | 63/64 | 61/64 |
+| came out the other side | 9/63 | 10/61 |
+| people into winter, and out | 515 -> 11 | 494 -> 10 |
+| alive a year on | 9/64 | 8/64 |
+
+Flat. Thirty-two worlds first read 6 against 3 and that was noise, which is
+what sixty-four are for.
+
+**Still open.** The region is not threaded into the flora and the fauna:
+`survey_the_grounds` and the spawn pools call `terrain_to_climate_zone`, which
+takes the ordinary temperate country. Every world this project has measured
+has been that country, so nothing is wrong today - but set a world to Taiga
+and its thermometer would know while its plants did not. Carrying the country
+into those two places is the rest of this job.
+
+### 163. A herbal that eases and does not cure, and three more ways to be ill
+
+The third of the four sections of the sustenance specification. Before this,
+`ResourceType::Herbs` spawned, was gathered, became `ItemType::Herbs`, taught
+Herbalism - and then **nothing**. There was no treatment of any kind in this
+model, which is the standing half of #202: illness is the only thing that
+kills anybody and nothing touches it. The chamomile, mint, sage, aloe,
+lavender and ginseng in the flora table were scenery.
+
+**The specification is unusually careful about its ten medicinal plants, and
+that care is the model.** Aloe is "topical gel for minor skin irritation;
+**not a replacement for burn or wound care**". Echinacea is "widely used in
+herbal products, **clinical benefits remain uncertain**". Garlic has
+"historical medicinal use; **avoid treating it as an antibiotic substitute**".
+Turmeric's "bioavailability and clinical effects vary". Only ginger gets a
+plain claim, and it is for nausea.
+
+So a remedy **eases and does not cure**: it takes something off how badly
+somebody is laid up, it never shortens the illness by a tick, and
+`THE_MOST_A_HERBAL_CAN_DO` is a third however much of it anybody swallows.
+The cap is measured against the illness at its worst rather than against what
+it has already been eased to, which is what stops a sixth dose curing. The
+wrong remedy is still worth a quarter - somebody has been looked after - which
+makes knowing one herb from another worth having without making it the
+difference between living and dying. A settlement can have the whole
+hedgerow and still bury people, which is what happened.
+
+The table is keyed on what a plant actually drops, so a medicine nobody can
+pick cannot get into it by accident:
+`every_remedy_is_something_you_could_actually_pick` proves it. Ginger,
+calendula, lemon balm, echinacea, garlic and turmeric are not in it because
+no plant in this world yields them yet; they belong with the rest of the crop
+list.
+
+**Three more ways to be ill.** Every ailment in this model was a bad gut -
+raw flesh, food on the turn, foul ground - which is not a shortcut so much as
+a fact about what laid people up before anybody boiled water. But it left the
+topical and chest remedies with nothing to be right about. Two more causes,
+both with machinery that already existed:
+
+- **A wound that turned.** `AgentState::take_damage` is the one place a blow
+  lands, so it is the one place a wound opens; hunger and cold go through
+  `lose_health` and leave nothing to fester. An open wound closes over a
+  fortnight and can turn while it is open. This is the pre-antibiotic killer
+  and it is what makes a topical the right answer to something.
+- **A soaking.** Read off what the weather is already costing, so a mild damp
+  day is nothing and a January night in the open is not. The winter had no
+  connection to illness at all until the thermometer started reading below
+  freezing - #161.
+
+Measured over twelve worlds of twelve founders, a year each, sampled as it
+went because the dead leave the roll:
+
+| came down with | times |
+|---|---|
+| raw flesh | 233 |
+| foul ground | 50 |
+| a wound that turned | 13 |
+| a soaking | 1 |
+| food on the turn | 1 |
+
+**And it does not yet fire in play.** `remedies given: 0` across all twelve
+worlds. The machinery is wired end to end and unit-tested - `Action::Treat`,
+the drive arms, the executor, the easing - and no agent in a live settlement
+ever took a remedy, because no agent was carrying one. Sending an ill agent
+to gather herbs when its pack is empty moved the survivors from **0 to 6** of
+144 and still produced no dose, which means the herbs are not being found
+either. This is the same class as #191 - a path that exists, compiles, is
+tested in a fixture, and has never once run in a settlement - and it is named
+here rather than claimed as working.
+
+What is left to look at: whether `ResourceType::Herbs` is anywhere near where
+people actually are, and whether `Rest` can win a tick against hunger often
+enough for an ill agent to do anything at all about it. The disease model
+proper - three states, rest arithmetic, resistance - is #210 and is not this.
+
+---
+
+### 164. The best food in a temperate wood existed only in a comment, and seven lists swallowed it whole
+
+`physiology.rs` describes the nutrition database as running "from six (spring
+greens) to eighty (fat and nuts)". Nothing in the world yielded a nut. There
+was no `ResourceType` for one, no `ItemType`, no template in the food
+database, and no plant that dropped one — an oak was standing timber. The top
+of this model's own energy scale was named in a comment and nowhere else, and
+the wood in October, which is the one place and time a temperate forager has
+a great deal of dense food on the ground at once, was empty ground.
+
+**The mast is also the first thing in this model that makes one year worth
+more than another.** The seasons turn, the weather blows, and every autumn was
+otherwise identical: a settlement that got through last winter knew exactly
+what this one held. A wood does not work like that. It drops next to nothing
+for two or three years and then, all the trees of a district agreeing somehow,
+floods the ground — and the pigs, the deer and the people live or do not live
+on that. `how_heavy_the_mast_is(year)` gives two years in five a quarter crop,
+one in five two and a half times the crop, and the rest an ordinary one, worked
+out from the year rather than rolled so that every wood in a country agrees.
+A district where half the woods bore would be no gamble at all, and a gamble
+is the point: it is what a store is *for*.
+
+#### The multiplicative hash never once flooded
+
+The first version used the obvious thing — Knuth's constant and the top bits of
+the product, `(year as u64).wrapping_mul(2_654_435_761) >> 16`. Over the first
+twenty years that produces
+
+```
+0.000  0.503  0.006  0.510  0.013  0.517  0.020  0.524  0.027  0.531 ...
+```
+
+because a single multiply leaves the high bits of a small input linear in it.
+Lean, ordinary, lean, ordinary, forever; no wood ever flooded and the whole
+point of the thing was gone. A splitmix64 finaliser — three shift-xor-multiply
+rounds — breaks it up, and over two hundred years lands 76 lean, 90 ordinary
+and 34 mast against the 80/80/40 asked for.
+
+#### And then it fell through seven hand-written lists
+
+This is the defect this project keeps finding, at its widest yet. A new food
+was added and **seven separate matches, none of which knows about the others,
+each had to be told about it by hand**:
+
+| the list | what it decides | what its silence did |
+|---|---|---|
+| `ResourceType::how_fast_it_comes_back` | regrowth rate | `_ => 0.0`, so not renewable |
+| `ResourceType::is_it_food` | can a person eat it | invisible to the forager |
+| `ResourceType::is_it_grown` | does the soil decide the crop | ignored the ground |
+| `ItemType::is_it_food` | is this in a pack food | not eaten once carried |
+| `Simulation::resource_name` / the reverse | asking for it by name | unaskable |
+| `getting.rs`'s basket list | a basket or an armful a trip | one nut a trip |
+| `food.rs::edible_resources` | what the drive layer forages | never gathered |
+
+The first one is the worst, and it is silent. A resource with no regrowth rate
+is not renewable, and `remove_depleted_resources` **deletes a non-renewable
+node the moment it is empty**. Out of its bearing window a nut stand is empty
+by design, so all twenty-five stands on every map were deleted on the first
+tick of the world and no autumn ever came. Measured: 25 nut nodes at tick 0,
+0 at mid-autumn, 0 in anybody's pack, across twelve worlds.
+
+`how_fast_it_comes_back` has swallowed a food this way three times now, and the
+comment above it has promised a guard called `every_food_grows_back` since the
+second time. **That guard had never been written.** It is written now, and so
+is `every_food_that_comes_out_of_the_ground_is_grown`; both walk `all()` rather
+than naming anything, which is the only shape that catches the next one.
+
+#### What it is worth
+
+After the seven lists were fixed, across twelve worlds at mid-autumn:
+
+| | before | after |
+|---|---|---|
+| nut stands on the map | 0 | 300 (25 a world) |
+| nuts standing in the wood | 0 | 9,691 |
+| nuts in somebody's pack | 0 | 569 |
+| worlds where anybody has any | 0/12 | 7/12 |
+
+And against the first winter, paired on seeds 1000–1063:
+
+| | before | after |
+|---|---|---|
+| reached winter with somebody | 62/64 | 62/64 |
+| came out the other side | 11/62 | 16/62 |
+| people out of winter | 13 | 18 |
+| alive a year and four days on | 11/64 | 16/64 |
+
+Half again as many settlements survive their first winter. Sixty-four draws
+with counts of 11 and 16 is not a large enough sample to call that precisely,
+and it is offered as a direction rather than a coefficient. Note also that
+**year 0 is an ordinary mast year** — `how_heavy_the_mast_is(0)` is 1.00 — so
+this is the mast at its average and none of the swing. Nothing in the harness
+reaches a lean year (year 2) or a flood (year 4); what a settlement does when
+the wood fails is not yet measured.
+
+#### Two tests moved, and both were resting on something else
+
+Adding twenty-five stands of food to a map changes where people go, so two
+live-settlement tests moved. Neither was tuned green.
+
+**`being_ill_costs_and_then_passes`** panicked indexing an empty population.
+Following it down: the person's health was falling a quarter of a point a
+tick with `what_last_took_health` reading `"thirst"` from the first tick to
+the last, and they died of dehydration on tick 90. The test's claim — that
+being ill takes something off — **was being carried entirely by thirst, and
+would have passed with the illness doing nothing at all**. It only showed
+because the death moved a few ticks earlier, past the end of the loop. The
+person is fed and watered each tick now, so what comes off is the ailment.
+
+**`news_reaches_everybody_within_earshot`** fell to 2 of 4. It was a block of
+four worlds allowing one to miss, which is not a rate. Measured wider it is
+19 of 24 and 10 of 12 — the claim holds in about four settlements in five —
+so it is twelve worlds and two thirds of them now, set from the measurement
+rather than to the failure.
+
+And one went the other way: **`lies_are_told_and_found_out_in_a_settlement`,
+left failing as the evidence for #160, now passes**, with nothing whatever
+changed in the trust machinery. More food on the map means more people alive
+at four thousand ticks and more chances to be told something. #160's finding
+stands — taking somebody's word is vanishingly rare — but part of what made it
+look like *never* was that nobody lived long enough.
+
+#### What is not here
+
+A mast does not regrow within its own autumn; what is on the ground is what
+fell. The bearing window gates growth to six weeks and the mast multiplier
+caps how full a stand gets, so a picked-over wood does refill inside those
+weeks, which a real one does not. Squirrels and pigs do not compete for it.
+And the mast year is worked out from the calendar year alone, so it is the
+same everywhere and does not run in the streaks a real wood does — a flood
+year exhausts the trees and is followed by lean ones.
+
+---
+
+### 165. Every crop was a withdrawal, so a field was an account nothing paid into
+
+`regenerate_in_ground` ends by taking `NUTRIENT_PER_UNIT_GROWN` out of the
+soil for every unit that came up. The only deposits anywhere in the model are
+muck, litter and what people drop — and muck-spreading is a practice an agent
+has to discover for itself (#41). Everything a settlement grows is a
+withdrawal, and there is no crop that goes the other way.
+
+Measured, eight worlds, sampled every thirty days through the first year — the
+ground under a settlement's own fields:
+
+| day | mean nutrient under a field |
+|---|---|
+| 60 | 0.601 |
+| 90 | 0.610 |
+| 120 | 0.503 |
+| 150 | 0.353 |
+| 180 | 0.265 |
+
+A field halves what it holds over one summer of cropping. The recovery after
+day 180 in that trace is not the ground healing; it is winter, and new fields
+being broken on ground nobody has worked yet pulling the mean back up.
+
+**A legume is the one plant that does not draw on the bank.** It fixes its own
+nitrogen out of the air through the bacteria in its roots, so what it builds
+itself out of never came from the soil, and what is left when it is done is
+more than was there before. That single fact is what makes a rotation worth
+knowing rather than a piece of folklore, and it is the first mechanism in this
+model where what you do this year pays in a different year.
+
+#### What was built
+
+`ResourceType::Legumes` — beans, peas, lentils, vetch — bearing from early
+summer to deep autumn, sowable, gathered, and stored. `ItemType::Legumes` at
+45 energy and 35 protein, the only plant protein in the food database, keeping
+120 days dried.
+
+`ResourceType::feeds_the_ground()` is the one owner of which crops fix
+nitrogen, asked in the three places that need it: the growing pass, the
+ploughing-in, and the sowing choice. `Soil::feed` is the counterpart to
+`Soil::draw` and until now nothing had needed one — every plant was a
+withdrawal and every deposit arrived as litter, which is the slower and
+lossier road (`decay` keeps only `KEPT_FROM_ROT` of it).
+
+`WHAT_A_LEGUME_FIXES_PER_UNIT_GROWN` is set to exactly
+`NUTRIENT_PER_UNIT_GROWN`, so a year of beans and a year of wheat are equal
+and opposite on the ledger. That is the whole of a two-course rotation written
+as one number, and it is checked by a test rather than left as a coincidence.
+
+**Green manure**: `Action::TillSoil` on a tile carrying a standing pod crop
+now turns it under instead of refusing with "Something already grows here".
+What goes in is the crop somebody could have eaten; what comes back is the
+part of the year's growth that would otherwise have walked away in a basket.
+The occupied-tile check had to move *above* `can_be_tilled`, because the
+commonest green manure of all is a pod row in a field somebody broke last
+year and `can_be_tilled` says no to ground that is already a field — asked in
+the other order, ploughing a crop in was possible only on ground that had
+never been farmed, which is the one place a farmer would not be doing it.
+
+#### What it is worth, and what it is not
+
+Paired on seeds 1000–1023, one year, sampled every thirty days:
+
+| | before | after |
+|---|---|---|
+| mean nutrient under a field | 0.469 | 0.497 |
+| fields seen in total | 7,457 | 8,689 |
+| pod fields, summed over samples | 0 | 56 |
+| legumes carried, summed over samples | 0 | 684 |
+
+The ground under a settlement's fields is about six per cent better fed. That
+is a real move and a small one, and the reason is in the third row: **56 pod
+fields against roughly thirty fields a sample.** People gather legumes freely —
+684 units carried — and sow them rarely, because sowing one requires both
+carrying seed and standing on ground the agent reads as tired.
+
+**And the ploughing-in has effectively never happened in play.** Of 600 wild
+pod stands spawned across 24 worlds, **599 were still standing at the end of
+the year.** The path is written, tested and reachable, and a settlement took
+it once. The cause is geometry rather than judgement: 25 wild stands scattered
+over a hundred square kilometres are almost never inside a farmer's walking
+radius, and the ones that are have to be on ground poor enough to be worth
+giving up a meal for. This is the same class as #163 and #191 — a path that
+exists, compiles, is tested in a fixture, and does not run in a settlement —
+and it is named here rather than claimed as working.
+
+#### What is not a rotation
+
+The sowing choice reads the ground: below half fertility a pod row outranks a
+hungry crop, unless the agent's own record of what has worked says otherwise.
+That is a **reading, not a plan.** Nothing connects a bean sown this year to
+the wheat that will do better next year on the same tile — the lessons are
+keyed on the crop and not on the ground, so that chain cannot be learned by an
+agent in this model. What an agent can do is notice that poor ground repays
+beans, which is what a farmer noticing his own field looks like from the
+outside and is close to how most of this was actually found out. Calling it a
+discovered rotation would be a claim the code does not support.
+
+#### Two tests moved, and one of them was hiding something
+
+**`a_deer_at_your_feet_beats_a_berry_patch_a_walk_away`** was unseeded, so the
+founder's personality was whatever the global dice were holding when
+`World::new` finished drawing — and a personality decides how a man weighs a
+walk against a meal. Adding a crop to the world moved the draw and the claim
+stopped holding. It is a seed block now.
+
+**`a_cold_agent_ends_up_dressed`** is worse and more interesting. Its own
+comment said one seed would not survive anything upstream changing, and then
+used one anyway, seeding *after* the fixture so the making was fixed and the
+world was not. Asked of a block of 24 worlds the real rate is **10 of 24**: a
+cold man with flax in his pack and flax growing three paces away ends up
+dressed in about four worlds in ten, and in the other six he spends fifty days
+doing something else while freezing. The test had claimed this always
+happened. One lucky seed had been hiding a coin-flip. The threshold is now a
+third — set under the measurement rather than at it — and what it guards is
+that the chain is reachable at all, which is the most this test was ever able
+to say.
+
+---
+
+### 166. "herbs" was missing from a list, and that one word was the whole of #163
+
+`Simulation::gathered_as` says, in its own docstring, that it is "the same
+vocabulary `Gather` answers to, kept here so that the decision and the
+executor cannot drift apart". It was one of **two** hand-written lists saying
+that, and they drifted apart three times. Two of them are recorded in the
+comments of the other list:
+
+> grain "fell through to unknown resource type and failed… which is how a
+> people that had never handled grain came to have none of it to sow"
+
+> clay "has been spawning on every riverbank and every marsh in every world
+> since the project began and no agent could ever pick any of it up: it was
+> missing from this list"
+
+The third was **`"herbs"`**, and it was the entire cause of #163.
+
+`Action::Gather { resource_type: "herbs" }` is what item 3's Rest arm sends an
+ill agent with an empty pack to do. Measured over twelve worlds and 5,327
+person-samples: Rest presses hardest on somebody ill in **194 of 426** ill
+samples, so the errand was chosen constantly; there were **7,003** bearing
+herb patches across those maps and the nearest was a **median of twelve paces
+away**; and **not one person ever held a remedy.** Every one of those turns
+came back "Unknown resource type: herbs" and the whole treatment machinery -
+`Action::Treat`, the drive arm, the executor, the easing, all of it
+unit-tested - never ran once in a settlement.
+
+There is one list now: `what_a_gather_asks_for` walks `ResourceType::all()`
+and inverts `gathered_as`, with `"generic"` handled separately because it is
+not a thing in the world but what the Industry arm says when it cannot name
+what it wants. A list cannot fail this way if there is only one of it. Three
+guard tests hold it there, including one that names every literal the drive
+ladder hands to `Gather` - the round trip alone cannot catch a name the ladder
+invents that no resource answers to, which is exactly what `"herbs"` was.
+
+**Merging the two lists took thirst away from everybody**, because `"water"`
+was the one name the old list had and `gathered_as` did not. Twelve worlds
+fell from 5,327 person-samples to 286 and every survivor still ill had Thirst
+pressing hardest on them. A settlement that cannot ask for water is dead in a
+fortnight. It is in `gathered_as` now.
+
+#### What it is worth
+
+With the fix, over twelve worlds: **2,015** person-samples holding a remedy
+where there were none, **148** of the ill holding one, **200** with somebody
+within two paces who is. Sixty-four worlds, settlements out of their first
+winter: **25/62 against 27/64** at the previous commit — within noise. The
+machinery runs and costs nothing measurable.
+
+#### And what the model would not take
+
+The obvious next step was the other half of item 6: the six plants the
+specification names that this project has no plant for — ginger, calendula,
+lemon balm, garlic, echinacea, turmeric. They were written: six
+`PlantSpecies`, six `ARemedy` entries, and the two the specification is most
+careful about (echinacea, "clinical benefits remain uncertain"; turmeric,
+"bioavailability and clinical effects vary") filed under
+`NothingAnybodyCanShow`, taking that category to four of seventeen.
+
+**They are not in the tree.** Sixty-four worlds, seeds 1000–1063, settlements
+coming out of their first winter and people alive a year on:
+
+| | out of winter | alive a year on |
+|---|---|---|
+| before any of this | 27/64 | 26/64 |
+| the gather-vocabulary fix alone | 25/62 | 24/64 |
+| the six plants alone | 29/63 | 27/64 |
+| **both together** | **16/62** | **14/64** |
+| both, errand bounded to six paces | 12/62 | 11/64 |
+| both, errand bounded to one pace | 12/62 | 9/64 |
+| both, with self-dosing capped | 16/62 | 14/64 |
+| both, errand removed entirely | 14/62 | 12/64 |
+| both, Rest standing aside for hunger | 9/64 | 8/64 |
+
+Either change alone is fine. Together they cost about 40% of every settlement
+in the model, and **none of the five things tried recovered it.** Bounding the
+walk did not (the walk is not the mechanism — one pace is as bad as
+twenty-five). Capping how often a person doses themselves did not. Removing
+the errand did not. Making Rest stand aside for hunger and thirst made it
+worse.
+
+So the six plants are not shipped. The rule for this item was "added where
+they would behave differently, skipped where they would be a name", and a
+change that costs four settlements in ten is neither: it is a change whose
+mechanism is not understood, and the honest thing is to say so rather than
+ship it or quietly tune around it.
+
+#### What this is really about
+
+It is not about the herbal. Rest presses on somebody ill at a **median of
+115**, where an ordinary drive sits near one. Once that happens Rest wins the
+tick over and over for the whole week an illness lasts, and whatever the Rest
+arm offers is what that person does instead of eating. What it offers at the
+bottom is `Sleep`. **An ill person in this model sleeps through their own
+hunger**, and until the vocabulary was fixed a broken string had been masking
+that, because a failed action left the tick free for something else.
+
+That is #210 (the disease model: three states, rest arithmetic, resistance)
+and #202, and it wants doing properly rather than patched. What to try for the
+herbal afterwards is to let somebody ill **stoop** for mint they are already
+walking past — `something_worth_stooping_for` is exactly that shape and costs
+nothing — rather than setting out for it.
+
+#### Three tests moved
+
+`sight_discovers_the_world_and_blindness_does_not` panicked on an index: two
+founders alone in a world do not reliably last two hundred ticks and the dead
+are swept out of the population, so it had been one unlucky world away from a
+panic since it was written. It reads both agents as it goes now.
+
+`news_reaches_everybody_within_earshot` fell to 7 of 12 — the block set at
+twelve in #165 was still too thin, because ill agents fetching herbs spend
+turns away from the camp. Twenty-four holds. A block wide enough to be a rate
+has to stay one when the settlement's habits change.
+
+`lies_are_told_and_found_out_in_a_settlement` fails again. It is the evidence
+for #160, it failed for most of this project, it went green by accident when
+the mast put more food on the map (#164), and it has gone back. Nothing about
+trust changed in either direction.
+
+#### What was skipped from the crop list, and why
+
+The rest of the specification's crops are names in this model, and adding them
+would have been padding: aromatics (garlic, onion) and most fruit and
+vegetables are already `ResourceType::Food`, `Greens` and `Roots` under other
+words; sesame and sunflower would behave exactly as `Flax` does.
+
+Two would genuinely behave differently and are not small:
+
+- **The grains split.** One `ResourceType::Grain` grows the same everywhere.
+  Rye and barley stand cold that wheat will not, and with fourteen biomes and
+  real temperatures (#161, #162) that would make *where you are* decide *what
+  you can sow*. It is a deep change to a deeply wired variant.
+- **Orchards.** A tree that takes years to come into bearing and then bears
+  for decades is a multi-year investment, and nothing in this model has one.
+  `ResourceType::Food` covers the fruit; it does not cover the waiting.
+
+---
+
+### 167. Nobody is ever born, because the surplus gate wants fifty-three times what anybody has
+
+Nine of the eighteen standing test failures were live-settlement claims —
+that a settlement ends up with enemies in it, that somebody notices a pattern
+nobody wrote down, that a lie gets found out, that children live past infancy.
+They looked like nine separate problems. They are mostly one, and it is
+measurable.
+
+**Every settlement is empty by six thousand ticks, and no child is ever born
+in any of them.** Eight worlds of twelve founders, sampled every five hundred
+ticks:
+
+| tick | alive | born here | worlds still standing |
+|---|---|---|---|
+| 0 | 12.0 | 0.0 | 8 |
+| 1,000 | 7.9 | 0.0 | 8 |
+| 2,000 | 7.8 | 0.0 | 8 |
+| 3,000 | 6.9 | 0.0 | 8 |
+| 3,500 | 5.2 | 0.0 | 7 |
+| 4,000 | 1.5 | 0.0 | 6 |
+| 4,500 | 0.4 | 0.0 | 2 |
+| 6,000 | 0.0 | 0.0 | 0 |
+
+The crash is the first winter — it opens on day 270, tick 3,240. But the
+second column is the sharper fact: **not "few children", none at all, ever, in
+any world.** A settlement of twelve adults that never reproduces cannot do
+anything but dwindle, and every claim in the suite that needs a second
+generation, or needs anybody alive after four thousand ticks, is asking for
+something the model cannot currently produce.
+
+#### Which link is binding
+
+Walked over 4,713 person-samples across eight worlds and four thousand ticks:
+
+| the chain | person-samples |
+|---|---|
+| alive | 4,713 |
+| of age to have a child | 4,713 |
+| ...and immediate needs met | 3,691 |
+| ...and has not been going short | 3,687 |
+| **...and enough put by for a child** | **0** |
+| would attempt reproduction | 0 |
+
+Three and a half thousand agents cleared every other gate. Not one ever
+cleared the last. It is not rare — it never happens.
+
+And it is not close. Weighing what the gate asks against what those same
+agents actually hold:
+
+- **mean units the gate wants: 129,600**
+- **mean units actually put by: 2,436**
+
+A factor of fifty-three. The gate asks for seventy-five days of food for two
+people — `how_long_the_land_gives_nothing()` is 75 days, and
+`for_the_two_of_them` is a grown body's day plus a fifth for the infant. What
+a settlement actually holds is about **a day and a half of food for one
+person.**
+
+The units are the same on both sides, which was worth checking: the comment on
+`UNITS_IN_ONE_STORED_ITEM` says eleven and a half stored items make a day, and
+`what_i_burn_in_a_day` is 1,440 energy units, which is consistent. This is a
+real shortfall and not a scale mix-up.
+
+#### What this is and is not
+
+The gate is not obviously wrong. `expects_to_be_able_to_feed_a_child` was
+written deliberately (#48: "breed only on a surplus, not on a full belly"),
+and the reasoning in its docstring is sound — a full belly says nothing about
+whether the next meal exists. Loosening it to make tests pass would undo a
+decision that was made on measurement.
+
+The binding constraint is upstream: **the store never fills**, which is #240
+("a full settlement now reaches winter with nothing put by"), #241
+(preservation throughput is what caps the winter store) and #213. A gate that
+asks for a winter's food is unreachable in a model where nobody banks two days
+of it.
+
+So this is not a test problem and it is not a gate problem. It is the
+project's central open question, now with a number attached to it: **a
+settlement would need fifty times the store it manages before its first child
+could be conceived.**
+
+#### What was done about the eighteen
+
+Nine of the eighteen were fixed, and each was a real defect rather than a
+threshold:
+
+- **Four** were one arithmetic error — reserve and burning both scaled by body
+  size, so size cancelled out of every ratio and a child and a grown man had
+  identical days to live. Kleiber's law (mass to the three quarters) in one
+  function fixed all four. See #227.
+- **Three** were fixtures asking one question while starving or dehydrating
+  their subject, including one that set `last_drank_tick` — a counter
+  `age_tick_with_modifier` says in its own comment is "derived rather than
+  counted", so the fixture was writing to a readout while the body dried out
+  underneath.
+- **One** was salt water doing nothing whatever, because the drive it raised
+  is assigned from the body a few hundred lines later. See #155 and the
+  commit.
+- **Two** encoded the old calendar: a test asserting `TICKS_PER_YEAR <= 2000`,
+  which is the figure #42 deliberately replaced, and a life-stage test reading
+  tick counts from a calendar where a year was eleven hundred ticks. See #206.
+
+The nine that remain are the ones above plus three that have not yet been
+traced: `an_agent_lights_a_fire_and_cooks_on_it`,
+`test_production_chain_buildings_cluster`, and
+`a_dedicated_farmer_brings_back_more_than_a_casual_one`, which reads 0 against
+0 for a reason that is **not** the bearing season — that was tried and it
+changed nothing.
+
+---
+
+### 168. Settlements do bank food. They bank about one per cent more than they eat
+
+"Make settlements bank food" turns out to be the wrong instruction, and #240's
+title — "a full settlement now reaches winter with nothing put by" — is no
+longer true. They reach winter with a full larder and starve beside it anyway,
+for a reason that is neither the larder's fault nor the decision layer's.
+
+**The pits fill.** Traced over a year, eight worlds, the food in the ground:
+
+| day | season | alive | in the pits |
+|---|---|---|---|
+| 15 | Spring | 9.9 | 29 |
+| 90 | Summer | 7.9 | 92 |
+| 180 | Fall | 7.8 | 124 |
+| 240 | Fall | 7.1 | 222 |
+| 270 | Winter | 6.9 | 201 |
+| 300 | Winter | 4.5 | 191 |
+| 330 | Winter | 1.6 | 181 |
+| 345 | Winter | 0.9 | **179** |
+
+The settlement dies with **89% of its store still in the ground**. And it is
+real food, not scrap: sixteen pits across eight worlds at the opening of
+winter, every one with something eatable in it, holding 1,600 items between
+them — 578 nuts, 502 roots, 391 legumes, and the rest fish, grain and meat.
+
+#### Three things that are not the cause
+
+Each was measured against a 64-world baseline of **25/62 settlements out of
+their first winter, 24/64 alive a year on**. None of the three is in the tree.
+
+- **The store sitting behind foraging in the hunger chain.** Moving
+  `something_out_of_the_store` ahead of `food_action`: 26/62 and 25/64. One
+  settlement, which is noise. This also confirms #43's finding from the other
+  direction.
+- **The store's reach.** `WORTH_WALKING_TO_THE_STORE` is 14 paces while
+  `FORAGE_RADIUS` is 25, so a settlement forages its way out of range of its
+  own larder — measured, only **29% of hungry person-ticks in winter had an
+  eatable pit inside fourteen paces**. Deriving the drawing reach from the
+  foraging reach instead: 25/62 and 24/64. **No change at all.**
+- **The store's target.** `what_one_mouth_this_age_wants_put_by` is correctly
+  derived — what a body eats in a day, times the age share, times how long the
+  land gives nothing — and comes to about 860 items for an adult. (The line in
+  `_debug_store` that says "the store target is 7 apiece" is a hard-coded
+  string in the harness, left over from an older figure. It is not a reading.)
+
+#### What the cause is
+
+The store holds about **200 items when winter opens**. A body eats **12.7
+items a day**, measured, and there are about seven people. That is **2.2 days
+of food for the settlement against a ninety-day winter.**
+
+And the reason it is only 200 is the rate it grows at. The pits go from 29
+items on day 15 to 222 on day 240 — **193 items banked over 225 days of
+growing season**, for a settlement of eight eating about a hundred items a day
+between them. The settlement runs a surplus of **under one per cent of what it
+consumes**.
+
+To bank a lean season — 75 days at ~89 items a day is about 6,700 items — in a
+225-day growing season, it would need to put by about **thirty items a day**.
+It manages **under one**.
+
+So the constraint is not the larder, the reach, the ordering or the target. It
+is upstream of all of them: **what a settlement gathers in a day is within one
+per cent of what it eats in a day.** A store cannot be filled out of a surplus
+that does not exist, and nothing downstream of the surplus can be tuned to
+make one.
+
+That also settles #167 without touching the breeding gate. A gate asking for
+seventy-five days of food for two is unreachable not because the gate is
+strict but because the settlement's whole annual surplus is two days' food.
+
+#### What would actually move it
+
+Not measured, and named here so the next attempt starts from the number rather
+than from the larder:
+
+- **What a body eats.** 12.7 items a day is the figure everything else is
+  weighed against. If a "handful" is worth less than it should be, or the
+  daily burn is too high, every ratio in this entry moves at once. This is
+  worth checking before anything is built, because it is one number and it
+  sets the scale of the whole problem.
+- **What a trip brings back.** `what_a_trip_brings_back` decides how much one
+  forage yields. A settlement gathering hand-to-mouth is one where a day's
+  work feeds a person for a day and no more.
+- **How many turns go on food at all.** If a person spends half their turns
+  on errands that are not food, the surplus is halved before any of the above.
+
+`food_items_into_packs` records 3,233 items a world a year, which is about 1.1
+per person per day — but that counter is specifically "edible items that
+landed in somebody's pack off a forage" and does not include hunting, fishing
+or eating straight off a node, so it is not the whole intake and is not
+evidence on its own.
+
+### 169. The pack refused seven in ten of everything, and mending it triples what comes home and saves nobody
+
+`Gather: Inventory full - cannot carry more` was **139,126 refusals out of
+199,981 — seven in ten of everything anybody in this model was ever refused.**
+`PickUp: No room for it` was another 2,641 of 3,170. It was not that these
+packs were overloaded. The carrying invariant,
+`what_nobody_can_carry_any_more`, only fires on a pack that is *over* its
+limit and trims it back to exactly the limit, so packs equilibrate at a
+hundred per cent full and stay there — measured across a run, 97–110% of
+capacity all year, **fifty-five per cent raw material by weight and about one
+per cent food.** Being full is not being overloaded, and nothing in the model
+had anything to say about a pack that was merely full.
+
+Two things were wrong with that, and they are different:
+
+- **A mouth is not a pack.** Somebody hungry, standing on a berry patch, was
+  told he could not carry it. He was not trying to carry it. Measured at the
+  last look anybody got before they died, 61.5% of the dying had no room for
+  another armful, and they died eleven days into a three-week reserve. Food
+  picked by somebody who cannot carry it is eaten where it stands now, and
+  only what is left over goes back on the bush.
+- **Food is worth more than the fourth stone.** What a person carries is a
+  decision, not a law. A food gather that will not fit now sets down what
+  `what_i_would_set_down` already ranks lowest — never food, never a tool this
+  one works with, never the thing they carry their load in — and only as much
+  of it as the room wants. It stays where they were standing, for them or
+  anybody else. This is *not* the refuted blanket reserve: shedding to "the
+  limit less a day's food" whether or not there is anything to pick up cost
+  **five per cent of person-days over 160 worlds**, because a man drops his
+  firewood in the middle of the moor. This fires only with a crop in the hand
+  that will not fit, so what goes down goes down beside what it was swapped
+  for.
+
+The decision layer's twin of that gate went with it:
+`could_this_gather_come_to_anything` no longer refuses a food trip for want of
+room, because a full pack is no longer a reason to stay where you are.
+
+#### It works, and it is not enough
+
+`food_items_into_packs` — edible items landing in a pack off a forage — over
+eight seeded world-years:
+
+| | food into packs, a world-year |
+|---|---|
+| before (recorded in #168) | 3,233 |
+| after | **10,399** |
+
+**Three and a quarter times as much food comes home.** And the settlements die
+on the same day. Measured over 32 seeded worlds, two years, twelve founders,
+person-days:
+
+| arm | person-days | out of the first winter |
+|---|---|---|
+| eat where it stands only | 94,575 | 0/32 |
+| + the pack sheds for food | 96,460 | 0/32 |
+| + the larder against the walk | 97,272 | 1/32 |
+
+Block-to-block noise on this measurement is about ten per cent. All three are
+flat.
+
+That is the finding, and it is worth more than the fix: **#168 was right and
+its remedy was in the wrong place.** The surplus is not limited by what a
+settlement can pick up or carry. Tripling the intake changed nothing, so the
+constraint is downstream of the pack — in what a body burns, or in how long
+the land gives nothing — and those are the two numbers #168 already named.
+
+#### And the larder, which was a real regression
+
+Taking the limit off the range of the food search (#189's neighbourhood) had a
+consequence nobody looked for: `food_action` could no longer return `None`.
+It always had *somewhere* to send a man, so `something_out_of_the_store`,
+which sits behind it in the hunger chain, stopped being reachable at all.
+
+Measured at the last look before death, over thirty-two worlds: the
+settlement's pits held **805.7 items among 6.68 mouths** — ten days of food
+for everybody — the larder was wholly empty in under one per cent of those
+samples, and the dying were carrying **one item**, eleven days into a
+three-week reserve. They starved walking somewhere.
+
+The store is neither in front of foraging nor behind it now: it is compared,
+on which is the shorter walk. A bush underfoot still beats a hole in the
+ground — that ordering was measured in #43 and is not being changed — and a
+pit five paces off beats a patch across the valley. The store's own gates are
+untouched.
+
+### 170. The gate weighed a stone at one and the pack weighed it at five, and that was ten turns of every day
+
+Straight after #169, with `Gather: Inventory full` supposedly mended, the
+refusal was still there and *larger*: measured over eight seeded world-years,
+**241,191 refusals, 79.7% of every refusal in the model**, against 23,293
+person-days. **Better than ten of the forty-eight turns in everybody's day.**
+
+They were not food gathers - #169 saw to that. They were stone, iron, wood and
+clay, and the reason is a straight disagreement between two places that answer
+the same question:
+
+| | what a stone weighs |
+|---|---|
+| `gathering`, the executor | **5.0** (iron 8.0, wood 2.0) |
+| `could_this_gather_come_to_anything`, the decision | `AS_MUCH_AS_ONE_TRIP_WEIGHS` = **1.0**, for everything |
+
+So a pack with a unit and a half of room passed the gate for a stone,
+`take_what_fits` refused it the instant the turn was spent, and the same agent
+asked again the next turn, and the next, for the rest of its life. The same
+fault as #243 with bigger numbers on it.
+
+The weights are one table now - `Simulation::what_one_of_these_weighs` - and
+the gate asks for room for one of the thing actually wanted.
+
+#### What it bought, and what it did not
+
+Over the same eight seeded world-years:
+
+| | before | after |
+|---|---|---|
+| refusals, all causes | 302,459 | **126,395** |
+| `Gather: Inventory full` | 241,191 | **0** |
+| food into packs | 83,192 | **124,160** |
+| turns spent eating | 133,707 | 164,994 |
+| person-days | 23,293 | 23,351 |
+
+**Every refusal in the model down by fifty-eight per cent, half again as much
+food carried home, a quarter more meals eaten - and the person-days do not
+move.** Over 32 seeded worlds, two years, twelve founders: 97,272 person-days
+and 1/32 through the first winter before, 93,055 and 2/32 after. Both inside
+the ten per cent noise.
+
+That is now three separate bottlenecks removed - the pack refusing food, the
+larder being unreachable, the gate and the executor disagreeing - each of
+which was real and large, and none of which moved the population. Whatever
+kills these settlements is not in the getting of food.
+
+#### The next thing in the way
+
+The refusal that took its place, in the same run:
+
+```
+Move: No passable route toward destination     63,922    50.6%
+```
+
+Up from 15,523, because the freed turns went into walking. **One Move in five
+is refused**, which is 2.7 turns a person-day spent failing to set off - and
+it lands hardest on the food branch, which since the range came off sends
+people clear across the map. `Attack: Target too far away (distance: 42,
+weapon range: 1)` is in the same list, which is the same fault wearing a
+different coat: a decision that names a destination the mover cannot reach.
+ISSUES #235 - "nobody owns pathfinding: an unused A* and two coordinate
+nudges" - is the entry for it, and it is now the largest single refusal in the
+model.
+
+### 171. It was never pathfinding: they walked off the map and stood there until they died
+
+`Move: No passable route toward destination` was 63,922 refusals over eight
+seeded world-years - half of every refusal left in the model after #170 - and
+"no passable route" is a bad name for it. By the time that message is written
+the agent has already tried the direct step, **a breadth-first search of four
+thousand tiles**, and all four of its neighbours. There is nothing wrong with
+the search: an indirect path is looked for, and found, whenever one exists.
+
+So the message was taught to say what it had found. Every single one of the
+63,922 came back the same:
+
+```
+Move: No passable route toward destination
+  (standing on off the map, which is not walkable, with 0 ways out)
+```
+
+`is_passable_tile` refuses every tile outside the grid, so an agent past the
+edge has **no neighbour it can step to, in any direction, ever again**. It
+cannot walk to food or to water. It stands where it is until it starves.
+Traced by hand: **one agent a world**, and in the first world measured it went
+out on day 79 and was still standing there on day 299 - **10,537 agent-ticks,
+two hundred and twenty days of a life spent motionless**, returning one
+refusal every turn of it.
+
+#### How they got out there
+
+Not by walking, which is bounds-checked at every step. The trace reads:
+
+```
+OFFMAP by walking toward (50, 10, 0) to (50, 10, 0)
+OFFMAP by walking toward (51, 10, 0) to (51, 10, 0)
+OFFMAP by walking toward (52, 10, 0) to (52, 10, 0)
+```
+
+`next_step_toward` exempts **the goal tile** from the passability check, and
+that exemption is right: a goal is often a barn door or a berry bush rather
+than open ground, and an agent that will not step onto its own destination
+cannot arrive. What it had no floor under it was the map. A decision naming a
+target one pace past the edge got the agent walked onto it; the next turn
+named one further out; and so on, out into nowhere, on a fifty-by-fifty grid.
+The exemption now applies only to tiles that exist.
+
+Two more places put a body where a body cannot stand, found on the way and
+fixed with it, though neither was the source here:
+
+- **A newborn** was placed at `mother_pos ± 1` in each axis with no bounds
+  check. A mother on the first column put one child in three at x = -1. A baby
+  is born where its mother is now.
+- **`Explore`** stepped `current + direction` while asking nothing at all: no
+  bounds, no water, no building. It is the one way of walking that checked
+  nothing. Somebody who cannot go that way looks from where they stand.
+
+#### What it bought
+
+| | before | after |
+|---|---|---|
+| `Move: No passable route` | 63,922 | **0** |
+| refusals, all causes | 126,395 | **72,550** |
+| person-days (32 seeded worlds, 2 years) | 93,055 | 95,994 |
+
+Person-days are still inside the ten per cent noise. Thirty thousand wasted
+turns a world-year and one person in twelve frozen for most of their life are
+gone regardless, and `Move` is off the refusal list altogether.
+
+### 172. They eat five and a half times what they burn, and a quarter of them starve
+
+The previous two entries closed by naming "what a body burns" as the next
+number to check, on the reasoning that tripling the food into packs had not
+moved the population. That reasoning was wrong, and the number says so.
+
+`what_went_down` and `energy_that_went_down` now count what actually reaches a
+stomach and what it is worth. Over eight seeded world-years, 23,351
+person-days:
+
+**Energy eaten: 7,863 a person-day, against the 1,440 a body burns in an
+ordinary day. Five hundred and forty-six per cent of maintenance.**
+
+Nor is it thin food. The caloric ladder in the database is real - nuts 80 an
+energy unit, grain 60, legumes 45, roots and meat 30, fish 25, berries 20,
+spring greens 6 - which puts a handful (five units) of nuts at 400 and a
+handful of leaf at 30, thirteen to one. What they actually eat:
+
+| | share of handfuls |
+|---|---|
+| Legumes | 22.9% |
+| Roots | 22.4% |
+| Food (berries) | 15.7% |
+| Greens | 15.3% |
+| Nuts | 7.9% |
+| Fish | 5.2% |
+
+That is a good mixed diet weighted to the dense end, not a settlement living
+on leaf. The most a body can burn is `what_the_work_costs` at its ceiling of
+1.5, so 2,160 a day; they eat three and a half times *that*.
+
+**And starvation and hunger are still 53% of all deaths.** A settlement that
+eats five and a half times its maintenance and dies of hunger is not short of
+food, and is not burning too fast. The energy is arriving in aggregate and not
+arriving where it is needed - which makes this a question about *distribution*
+between people, not about supply, appetite or the calorie table. The mean is
+not the man.
+
+That is the next measurement and it is a different one: not how much a
+settlement eats, but the spread of what each body gets, and what the reserve
+of the ones who die looked like on the days before they died.
+
+### 173. A mouthful buys off a starving man's hunger, because the drive is discharged flat
+
+"Why is a depleting reserve not making agents eat more to compensate?" It
+makes them eat **oftener**, and that half works. It does not make them eat
+**more**, and the reason is one number repeated in eight places.
+
+`how_fast_hunger_rises` reads the reserve and multiplies the rate by **1.0 at
+a full reserve up to 4.0 under a tenth of one**, and moves the "full enough to
+stop wanting" line down as the reserve empties. That is a real feedback and it
+fires. But hunger is an **accumulator** - `drive.value += base_rate ×
+how_fast_hunger_rises`, clamped - and nothing re-reads it off the body. It
+comes *down* only when an action subtracts from it, and every eating path
+subtracted a flat constant:
+
+```
+eating.rs:184   -0.3      eating.rs:405   -0.3      eating.rs:838   -0.05
+getting.rs:619  -0.3      getting.rs:842  -0.4      getting.rs:1332 -0.15
+getting.rs:1491 -0.15     keeping.rs:365  -0.1
+```
+
+Three tenths for a full sitting of four hundred and eighty energy, and three
+tenths for one berry worth a hundred. So a man eleven days into a three-week
+reserve who finds a single handful stops being hungry enough to act on it,
+another drive wins the turn, and he walks away with his reserve still falling.
+
+#### The fold in the middle of the table
+
+Sampling every living body once a day over eight seeded world-years, by how
+much of its reserve it has left:
+
+| reserve | samples | hunger | belly (energy) | food in pack | empty pack | in the pits |
+|---|---|---|---|---|---|---|
+| under 10% | 79 | **0.71** | **152** | 0.1 | 90% | 334 |
+| 10-25% | 126 | 0.84 | 71 | 0.2 | 90% | 484 |
+| 25-50% | 300 | **0.96** | **20** | 0.1 | 96% | 604 |
+| 50-75% | 387 | 0.93 | 41 | 0.6 | 94% | 819 |
+| over 75% | 23,043 | 0.12 | 979 | 5.9 | 49% | 1,176 |
+
+Read the first and third rows together. **The bodies nearest death are the
+less hungry**, because something has gone down - a hundred and fifty energy
+against the fourteen hundred and forty a day they burn. The drive is answered
+by a mouthful and not by a meal.
+
+A meal now answers what a meal is worth: `what_this_meal_answers` scales the
+discharge by the energy that actually went down, so a full sitting is worth
+exactly the three tenths it always was and a handful is worth a fifth of that.
+
+#### What it bought, and the two bigger things the table says
+
+Days spent under a quarter of a reserve fell about a sixth (892 depleted
+body-day samples to 742). Person-days: 95,994 to 93,439 over 32 seeded worlds,
+which is inside the noise and slightly down.
+
+Because the drive was never the binding constraint, and the same table says
+what is:
+
+- **The hungry have nothing to eat.** 90-97% of every depleted sample carries
+  no food at all, against 49% of the well-fed. Mean food in pack 0.1 items
+  against 5.9.
+- **The settlement's larder is full the whole time.** 334 to 1,176 items in
+  the ground, at every level of individual starvation, including for the
+  bodies under a tenth of their reserve.
+- **And the distribution is bimodal, not a spread.** 23,043 of 23,935 samples
+  - 96.3% - sit above three quarters of a reserve. Only 3.7% are below. Almost
+  everybody is nearly full almost always, and a few fall off a cliff and do
+  not come back.
+
+That is the shape of it: this is not a settlement going hungry, it is a
+settlement in which a few individuals lose access to the food and nobody -
+including them, with a full pit thirty paces off - closes the gap. The next
+work is that gap, not the appetite.
+
+#### And one design gap left standing, named here
+
+`WHAT_A_SITTING_AIMS_AT` is a flat third of a day, 480 energy, for every body
+in every condition. A man at a tenth of his reserve sits down to exactly what
+a full man sits down to. The docstring on `how_fast_hunger_rises` records that
+raising hunger *through* a full stomach was tried and rejected - "a body
+cannot answer a hunger it has no room for" - and that was right about
+frequency and never examined the portion. The room is there: the stomach
+holds six hundred units of volume, and a 480-energy sitting of legumes is
+under eleven of them, **under two per cent of the stomach**. A spent body
+could eat fifty such sittings before it ran out of room. Not changed here
+because the measurement above says appetite is not what is killing them.
+
+### 174. A larder nobody knew about, and a neighbour who would not hand over supper
+
+Entry #173 ended on the shape of the problem rather than the cause: the
+settlement's pits held between 334 and 1,176 items at every level of
+individual starvation, and 90-97% of the bodies nearest death were carrying
+nothing at all. A full store thirty paces off and a man dying beside it. Two
+of the three ways a person could close that gap were not working, and this is
+those two.
+
+#### The store an agent walked to had never been seen
+
+`something_out_of_the_store` asked the world: `world.nearest_full_pit`. So did
+`the_larder_or_this_walk`. That is omniscience - a man set off for a hole in
+the ground that nobody in his settlement had ever laid eyes on - and the cost
+of it was not the walking. It was that it hid a store with a reader and no
+writer, which is this project's recurring defect in its purest form:
+
+`SpatialMemoryType::Storage` had `recall_locations` called on it and nothing
+anywhere ever called `remember_location` with it. Not the sight pass, not the
+man who dug the pit, not the man who filled it. The memory existed, was
+plumbed through to a reader, and was empty for the whole life of the project -
+and no measurement could see that, because every reader that mattered was
+asking the world instead.
+
+Three writers now, which are the three ways a person comes to know where a
+store is:
+
+- **Seeing it.** The sight pass in `population.rs` already walked the
+  resources in view; it walks `world.pits` as well now, and records how much
+  is in one it can see - or forgets the place, if it has been emptied since.
+- **Digging it.** `Excavate` records the hole the digger just made.
+- **Filling it.** `putting_food_by` records the pit the food went into.
+
+And `nearest_pit_i_remember` replaces `nearest_full_pit` in both readers: the
+memory says a pit was worth walking to, the pit says what is actually in it
+when you get there, and if the walk was wasted the sight pass corrects the
+memory on arrival. Which is how a person works.
+
+#### Barter would not trade the one thing worth trading
+
+`what_i_would_hand_over` ran off `what_i_can_spare()` - a surplus. A man with
+two days of food and a starving neighbour has no surplus, so nothing was
+offered, so nothing changed hands. Measured across the arms, hunger and
+starvation together took **49.4%** of everybody who died, in settlements whose
+pits were never empty.
+
+`a_meal_for_somebody_with_none` fires on the taker having nothing rather than
+the giver having plenty: a day of food stays in the giver's pack and the rest
+is his neighbour's if his neighbour has no meals at all and is hungry. And
+`somebody_beside_me_with_nothing_to_eat` puts it in the override chain
+directly behind feeding one's own child, so it does not wait on anybody
+feeling sociable.
+
+#### What it came to
+
+Pits fuller: 1,151 to 1,324 items at the end of a run. Person-days 93,439 to
+93,297, which is flat inside a block-to-block noise of about ten per cent, and
+the empty-pack share among the depleted did not move (95-98%). One of the
+eleven standing suite failures - `a_settlement_lives_through_a_winter` - now
+passes, which is the first time that test has gone green.
+
+So the access gap is narrower and it is not closed. What the numbers say is
+that neither knowing where the store is nor being handed a meal by the man
+beside you is the binding constraint on its own; both were broken, both are
+mended, and the settlement still loses the same people. The remaining rung is
+the one that is still missing: a store at the camp, between the pack and the
+pit, that a man is standing next to when he needs it.
+
+### 175. A pack holds 17.4 units, and a working stock was twelve of anything
+
+Entry #174 ended saying the remaining rung was "a store at the camp, between
+the pack and the pit, that a man is standing next to when he needs it". Going
+after that rung found two things in the way of it and one much larger thing in
+the way of everything.
+
+#### Nothing in this model could ever finish a roof
+
+`Action::Build` pushes a `Building::new_under_construction` and takes the
+materials off the builder on the spot. The only caller of
+`add_construction_progress` anywhere in the model is `ConstructionWork` in the
+parallel `world::actions` system, which the decision layer does not issue, and
+`has_all_resources` asks about materials *delivered to the site*, which nothing
+delivers. So construction had a starter and no finisher.
+
+Measured over eight seeded world-years: **45 burrows dug, 45 still going up
+when the last of the diggers died.** The only eight finished roofs in any world
+were the ones the world was seeded with. `seeking_shelter` asks `is_completed`,
+so **185,100 turns of `SeekShelter` - 12.2% of every turn anybody ever took -
+could only ever be answered by a forest tile**, and the weather took between
+fifteen and twenty per cent of everybody who died.
+
+A `Build` on a site already going up now puts a morning's work into it, and a
+roof that gets finished has a covered pit dug under it - the middle rung, and a
+`Pit` rather than a new container because a burrow *is* a hole in the ground
+and everything a store has to do is already written once, for pits.
+
+And `digging_in` had to stop reading "there is a building within two paces" as
+"so stop". That was right while nothing could finish one and exactly wrong the
+moment something could: a man dug a burrow, the site was then within two paces
+of him for ever, and he never went back.
+
+#### The thing in the way of everything
+
+Sampling every living pack once a day over eight seeded world-years:
+
+**A pack holds 17.4 units and carries 15.7. 89.2% of them had under five units
+of room.**
+
+| in the pack | share of all the weight anybody carried |
+|---|---|
+| wood | 25.7% |
+| legumes | 23.3% |
+| handaxe | 9.9% |
+| **iron** | **9.4%** |
+| roots, stone, nuts | 13.1% |
+
+They were not short of tools - 18,303 handaxe-days and 20,227 stone-knife-days.
+They were short of *room*, and what filled it was not food. A people who cannot
+smelt were each carrying half a pack of iron ore about with them for life:
+`ResourceType::Iron` weighs eight units, so **one lump is 46% of everything a
+person can carry**, spent on a stone nobody can do anything with.
+
+Nothing capped it. `WHAT_A_WORKING_STOCK_IS` is twelve, counted in items, and
+it governs only the top-up branch - and **twelve wood at two units each is
+twenty-four units of weight, more than the whole pack holds.** Two numbers
+about the same pack that had never been compared, which is this project's
+recurring defect in the plainest form it has yet taken.
+
+The consequence was not hoarding for its own sake. Instrumenting the tool chain
+found that of **4,983 sampled moments where somebody needed stone or wood for a
+tool, every single one - without exception - found the pack too full to take
+it.** `Excavate` was refused 9,952 times out of 10,014, which is why nobody
+could dig the store that would have held the food.
+
+Two questions now, both asked at `could_this_gather_come_to_anything`, which is
+the one gate every way of deciding to gather anything comes through:
+
+- **Is there any use for this?** `is_this_any_use_to` asks whether the agent
+  knows a step that takes it. Iron leaves the pack entirely. A thing nothing is
+  made of - supper - is not refused, because the question does not apply.
+- **Is this already a working stock?** Denominated in weight now, as a third of
+  the agent's own pack, because the thing a stock competes with is supper and
+  supper is weighed. Read off the pack rather than named, so it cannot drift
+  away from it the way the count did. Somebody actually making a thing is
+  exempt: he is not hoarding, he is short two stone for a knife, and
+  `Errand::to_make` is where the model already says so.
+
+#### What it came to
+
+Over the same 32 seeded worlds: **person-days 93,297 to 98,769, +5.9%.** Iron
+is gone from the pack. Pits end a run holding 300-417 items against 169. The
+first burrows anybody has ever finished appear.
+
+Two things this did *not* buy, said plainly:
+
+- **The packs are still tight** - 90.3% under five units of room - because the
+  cap frees materials and food immediately takes the space. That is the right
+  answer to "where does the food go" only once the tent rung is actually
+  reachable, and it is not yet.
+- **The roof work does not pay yet.** `Build` reaches the top of the drive
+  ladder about **thirty-six times in eight world-years**, so being able to
+  finish a roof has almost nothing to work on: 2 burrows finished of 11 dug.
+  Walking back to a half-dug site was costing more than the roof was worth
+  until the walk was made to wait on the larder rung, the same test
+  `would_a_better_tool_pay` uses. **The Construction drive almost never winning
+  a turn is the next thing in the way of the ladder**, and it is a drive-order
+  question rather than a store question.
+
+`a_settlement_lives_through_a_winter` went green under #174 and is red again
+here, which is where it had sat for a long time before: the standing suite
+failures are 11, as they were.
+
+### 176. Anywhere a person had not looked in the last four hours was gone
+
+Every settlement empties between day 315 and day 350. That is a thirty-five day
+window across thirty-two seeded worlds, which is not attrition - it is a cliff,
+and a cliff has a mechanism.
+
+#### What a body a few days from death actually does
+
+Sampling every turn taken by a body under a quarter of its reserve, over eight
+seeded world-years - 204,003 turns:
+
+| | share of those turns |
+|---|---|
+| the hunger drive is active | 97.7% |
+| `food_action` has an answer ready | **83.5%** |
+| ...and it is allowed through (`is_starving`) | 30.6% |
+| **spent on `Move`** | **49.3%** |
+| **spent on `SeekShelter`** | **34.7%** |
+| **spent on `Eat`** | **0.2%** |
+
+A dying settlement eats **once in five hundred turns** while the food branch
+has a good answer four times in five. And of those turns, only 0.6% could
+remember where the settlement's store was - while its pits held two thousand
+items, 65% of which were sound, edible food.
+
+#### One rule, two spellings, and neither of them right
+
+`SpatialMemory::decay` took `current_tick`, read `last_seen`, and subtracted
+the whole elapsed span. That is an **absolute** reading: correct called once,
+quadratic called repeatedly. It had two callers with opposite contracts.
+
+- `Memory::tick` called it **every tick**, so each call subtracted the entire
+  elapsed span again from an already-decayed confidence. A memory was gone in
+  under a minute.
+- `batch_decay_and_prune` - the live path, since `batch_decay` defaults to true
+  - had **its own copy** of the arithmetic and then multiplied by
+  `prune_interval` on top of the elapsed time. With the default hundred that is
+  a tenth of confidence per tick elapsed: a fresh memory fell below the 0.3
+  `recall_locations` wants in **seven ticks** and was pruned outright in nine.
+
+**Anywhere a person had not looked in the last four hours was gone.** A man
+buried his winter food in October and could not find it in November.
+
+`forget_a_little(ticks)` replaces it: denominated in time since the last call,
+so it means one thing, and both callers now say how much time has passed.
+
+#### And a store is not a bush
+
+A spatial memory had no importance at all, so the pit a man dug and filled was
+forgotten at exactly the rate of a bush he glanced at.
+`MemoryImportance::decay_multiplier` has described five bands of this since
+memories were written and **only the episodic entries ever read it** - a table
+with a reader for half its callers. `SpatialMemoryType::how_much_this_matters`
+supplies the other half: a store is Critical, water and danger Important, a
+bush Normal. A bush is now forgotten in a fortnight and a store outlasts the
+seventy-five days the land gives nothing, which is the span it was laid down
+for.
+
+And a memory that persists has to be correctable, or it is a lie the agent
+keeps walking back to. `forget_nearby_food_memories` was written for food and
+only ever called for food; it is now `forget_what_is_not_there`, and the failed
+`Gather` calls it for water too.
+
+#### What it came to, including what it did not
+
+Over 32 seeded worlds, person-days **98,769 to 98,328** - flat, inside noise.
+What moved was *which* constraint binds:
+
+| | before | after |
+|---|---|---|
+| starvation | 28.2% | **21.1%** |
+| the weather | 18.5% | 17.2% |
+| dehydration | 12.8% | **18.2%** |
+
+A quarter fewer die of starvation. They die of thirst instead, at springs that
+dried up months ago - the memory now outlives the water. The water call site
+above measured **no change at all** over 32 worlds, so whatever corrects a
+stale water memory, it is not the failed `Gather`; that is an open thread, not
+a fix, and it is recorded here as one.
+
+#### The branch that was not the answer, so nobody spends the afternoon again
+
+`needs_shelter()` is `is_critical() || !active_exposures.is_empty()` - cold at
+all - and it sits above every drive there is, Hunger included. From the first
+frost it answers the turn for everybody, for ever. That looks exactly like the
+cause of the table at the top, and it is not. Narrowing it to `is_critical`
+moved `SeekShelter` from 34.7% of a thin body's turns to 16.5%, **did not move
+`Eat` at all** - 0.2% either way - sent `Move` up to 61.6%, took the weather
+from 18.5% of deaths to 23.6%, and cost person-days 98,769 to 94,879. Reverted,
+and the measurement left in the comment.
+
+The override is not what stands between a starving man and his supper. Being
+unable to reach the store was, and now that he can remember where it is, what
+stands there is the walk itself: 82.2% of a thin body's turns go on `Move`, and
+nothing in the model prices a journey against what is at the end of it. That is
+entry #193, still open, and it is now the top of the list.
+
+### 177. The settlement knew it wanted seven thousand and never dug the holes
+
+Entry #176 mended what a person can remember and left the cliff standing:
+everybody still dead between day 315 and day 350. This is the cliff, and it is
+arithmetic rather than judgement.
+
+#### The larder is capped by the number of holes, and the holes are not enough
+
+A grown body gets through about fifteen items a day and the land gives nothing
+for seventy-five days running, so `what_one_mouth_wants_put_by` comes to about
+**864 items a mouth** - roughly 7,000 for the eight who reach autumn. A pit
+holds 300. **A settlement therefore needs about twenty-four holes and digs six
+and a half.**
+
+Measured at month nine over eight seeded world-years:
+
+| | |
+|---|---|
+| pits a settlement | **6.5** |
+| of them full to the brim | **78.8%** |
+| larder that caps at | **1,950 items** |
+| what the store's own gate asks for | **~7,000 items** |
+
+And the larder observed at its autumn peak was 2,014. The store is not short
+because anybody decided it should be; it is short because there is nowhere left
+to put anything.
+
+#### One question with an answer, and the branch that needed it never asked
+
+`does_the_store_still_want_filling` computes exactly the right number and is
+read every time anybody decides whether to gather for the store. The *digging*
+decision, three lines below it in the same function, asked something else
+entirely: "is there any pit anywhere within reach with any room in it". So a
+settlement with one pit a third full never dug a second, however far short of
+the winter it was - and once every pit was brim full,
+`is_this_lot_for_the_store` (which also wants `nearest_pit_with_room`) stopped
+anybody gathering for the store at all.
+
+The answer existed. The branch that needed it never asked. That is this
+project's recurring defect in its cheapest form yet: not two spellings that
+disagree, but one spelling with a reader missing.
+
+Digging now waits on whether the ground round here holds - and has room to hold
+- what the winter wants, and refuses only where a hole would go on top of one
+that is still going spare, two paces being the same spacing roofs keep.
+
+#### What it came to
+
+| | before | after |
+|---|---|---|
+| pits a settlement | 6.5 | **10.9** |
+| the larder at month nine | 2,014 | **3,122** |
+| person-days, 32 seeded worlds | 98,769 | **99,862** |
+| out of the first winter | 0/32 | **1/32** |
+| starvation | 28.2% of deaths | 19.3% |
+| the weather | 18.5% | 16.2% |
+| dehydration | 12.8% | 21.9% |
+
+The winter store is up 55% and person-days are the best this line of work has
+produced. **It is still not enough**: 86.2% of the pits are full to the brim at
+month nine, so the larder is still capped by digging - eleven holes where
+twenty-four are wanted - and everybody is still dead by month twelve.
+
+What caps the digging is named and not fixed here: `Excavate` is refused 9,952
+times out of 10,014 for want of a tool for Mining, which is entry #243 and now
+the thing standing between this settlement and its winter.
+
+The suite goes from **11 standing failures to 9**, the fewest this project has
+recorded: `a_settlement_lives_through_a_winter` passes, and so does
+`a_settlement_works_things_out_that_nobody_wrote_down` - a settlement that can
+keep its people alive long enough has time to find things out.
+
+### 178. The first tool for digging should be a stick
+
+Entry #177 raised the larder from 1,950 to 3,122 and left it capped by digging:
+eleven holes where twenty-four are wanted, with `Excavate` refused **15,758
+times out of 15,836 - 99.5%, the largest single refusal in the model**. This is
+that refusal.
+
+#### An agent fixates on the best tool it knows and never falls back
+
+A settlement's founders arrive carrying a handaxe. It wears out. Digging,
+building, leatherworking and crafting then all want a Mining tool nobody has,
+and `make_what_this_wants` asked `what_i_would_rather_have`, which is
+`max_by(how_much_better)` - **one candidate, the best there is, and no second
+thought if its chain happens to be out of reach.**
+
+The best Mining tool anybody knows of is a *shovel*. So a settlement spent the
+rest of its life failing to begin a shovel while a handaxe, which it knew how
+to make, sat one step away. Measured: **every one of the 9,952 refusals reached
+"no step towards shovel" and not one said "towards handaxe".**
+
+`what_i_would_settle_for` returns every tool for a trade worth having, best
+first, and the making takes the first one there is actually a step towards.
+
+#### And the ladder had no bottom rung
+
+Mining had a shovel, a handaxe and a metal axe. **A hole in the ground is dug
+with a stick before anybody owns an axe**, and the stick was already in the
+model - `STICK_FOR_DIGGING` gets a root out of the ground and
+`STICK_FOR_FARMING` breaks a field - but the one thing it was never allowed to
+do was dig a hole. `STICK_FOR_DIGGING_HOLES` costs one length of wood, which is
+the point: the first rung has to be one a people can afford on their first
+afternoon.
+
+#### What it came to, and what it did not
+
+| | #177 | + fallback | + the stick |
+|---|---|---|---|
+| the larder at the end of a year | 382 | 5,594 | **7,243** |
+| pits, 8 worlds | 54 | 99 | 93 |
+| burrows finished | 0 | 5 | 4 |
+| person-days, 32 seeded worlds | 99,862 | 96,751 | 97,203 |
+| out of the first winter | 1/32 | **5/32** | 1/32 |
+| starvation | 19.3% of deaths | 14.2% | **14.3%** |
+
+**The larder is now at the number the winter actually wants** - a mouth wants
+864 items and eight mouths want about 7,000 - having been 382 three changes
+ago, which is nineteen times over.
+
+The stick was first given `how_long_it_lasts: 20.0` while the same stick
+already lasted 30.0 at rooting and at breaking a field - three numbers for one
+object, which is the fault this whole file is about, and it cost a settlement
+turns spent remaking a stick it had just worn out: 96,797 person-days and 0/32
+out of the winter against 97,203 and 1/32 once it was one number.
+
+And person-days did not follow. They are flat inside the ten per cent this
+harness moves by between blocks, and everybody is still dead by month twelve.
+What *has* moved, across this whole session, is what kills them: **starvation
+went from 28.2% of deaths to 14.3%** as the store was mended, and dehydration
+from 12.8% to 23.3% as it was not.
+That is the finding: **the store is no longer the binding constraint.** A
+settlement now banks what it needs and dies anyway, with hunger and starvation
+still 43.6% of deaths and 7,243 items in the ground.
+
+What remains is access, and it is measured in #176: 82.2% of the turns taken by
+a body under a quarter of its reserve go on `Move`, and nothing in this model
+prices a journey against what is at the end of it. That is entry #193, and it
+is now the whole of the problem rather than part of it.
+
+`Excavate` is still refused 99.2% - the stick wants a stone knife in hand to
+make, and stone knives wear out too - so the tool ladder has a bottom rung now
+and still no reliable way onto it. That is the other open thread.
+
+The suite stands at 10 against the historical 11, having touched 9 under #177:
+`a_settlement_lives_through_a_winter` and
+`a_settlement_works_things_out_that_nobody_wrote_down` are both whole-settlement
+tests on a knife edge, and they trade places between arms. No failure new to
+this session survives in either direction.
+
+### 179. They could reach the food all along; something else was taking the turn
+
+Asked to fix the movement so a starving settlement could reach its larder. The
+first hypothesis was that walks never complete - `a_long_walk` is computed as
+`how_far_it_was(here) * 3`, which is the **remaining** distance recomputed
+every turn while `turns_on_it` climbs, so a twenty-pace walk starts with a
+budget of sixty turns and has twelve left when it is one pace away. Patience
+decreasing as you approach is a real oddity and it is **not** what is
+happening. The errand tallies say so directly:
+
+| of 53,279 errands set out | |
+|---|---|
+| **got there** | **92.1%** |
+| gave up on it | 7.3% |
+| set aside for something that would not wait | 98.1% |
+
+**The walks arrive.** The movement was never broken.
+
+#### What the memory fix uncovered
+
+With `SpatialMemoryType::Storage` no longer forgotten in an afternoon - see
+#176 - the same 103,498 turns taken by a body under a quarter of its reserve
+now read:
+
+| | |
+|---|---|
+| remembers a store | **75.6%** (was 0.6%) |
+| the store branch has an answer ready | **72.1%** |
+| ...and what it actually did: `SeekShelter` | **44.7%** |
+| `Move` | 41.4% |
+| **`Eat`** | **0.4%** |
+
+The remembered distances track the real pits almost exactly - 4.1/25.3/15.4
+against 4.1/25.3/15.4 - so the memory is not merely present, it is right.
+
+**The store had an answer in seven turns out of ten and the shelter override
+took four and a half of them.** `needs_shelter()` is `is_critical() ||
+!active_exposures.is_empty()` - cold at all - and it sits above every drive
+there is.
+
+#### Why the earlier attempt at this failed, and why it does not now
+
+#176 records narrowing that override to `is_critical` and reverting it: it
+halved `SeekShelter`, did not move `Eat` at all, and cost person-days 98,769 to
+94,879. That result is kept and it does not carry, **because its premise is
+gone**. At the time 0.6% of those bodies could remember where a store was, so
+taking the turn off shelter only freed it to wander to a bare hedgerow. There
+is somewhere worth going now.
+
+So the override is not weakened. A narrow exception is put in front of it, on
+the drive hierarchy's own stated terms - rank the primary drives by how fast
+each would kill: **a body under a quarter of its reserve, with a store it can
+find, goes and gets it.** A man merely cold and fed still goes to the roof, and
+`is_the_body_eating_itself` names the quarter that every measurement in #173
+through #178 is already drawn at, so the decision and the instrument that
+judges it read one line.
+
+#### What it came to
+
+| | before | after |
+|---|---|---|
+| `SeekShelter`, thin bodies | 44.7% | **33.0%** |
+| `PickUp`, thin bodies | 0.5% | **1.9%** |
+| turns spent under a quarter reserve | 103,498 | 93,327 |
+| starvation | 14.3% of deaths | **11.8%** |
+| person-days, 32 seeded worlds | 97,203 | 96,961 |
+
+Person-days flat inside noise again, and 1/32 out of the first winter either
+way. Across this whole session **starvation has gone from 28.2% of deaths to
+11.8%** - it is now the fifth cause, behind hunger, thirst, the weather and a
+blow - while dehydration has gone from 12.8% to 24.1%.
+
+The suite stands at 10 against the historical 11, with
+`a_settlement_lives_through_a_winter` green again and no failure new to this
+session in either direction.
+
+Two threads are named and open. **Dehydration has doubled** and is now the
+second biggest killer: the memory that lets a man find a store also lets him
+walk further from water, and the one correction for a stale water memory
+measured no effect at all (#176). And **`Eat` is 0.4% while `PickUp` is 1.9%**:
+they take food out of the store and the turn after that they are still not
+eating it, which is a smaller and sharper question than any of the above and is
+where the next look should start.
+
+### 180. They opened the store, took eight out, and it stopped existing
+
+`PickUp` was 1.9% of a starving body's turns and `Eat` was 0.4%. They reached
+the larder and did not eat. This is what was between the two.
+
+#### A return value nobody read
+
+`Inventory::add_item` returns `false` when the pack is too heavy or has no free
+slot. The pit branch of `picking_up` took eight items **out of the pit first**
+and then handed them to `add_item` without looking at what came back. The food
+had already left the ground and never arrived anywhere.
+
+Directly, with a man half a unit of room short:
+
+```
+room in the pack: 0.50
+result: success=true  msg="Took 8 food out of the pit"
+pit:  60 -> 52
+pack:  0 -> 0
+```
+
+**The store is drained, nobody is fed, and the model reports success.** The
+branch immediately below it - for a thing lying on the ground - has always
+asked first and left the thing where it was. A store is not different.
+
+The struct's own docstring has said since ISSUES #65 that "almost every caller
+ignores it, so the food simply stops existing", and `what_would_not_go_in`
+exists to count it. It counted this and nobody read that either.
+
+It now measures the room first - shedding what is worth less than food, the
+same as at a bush - takes only what will fit, and refuses honestly when nothing
+will.
+
+#### Then the refusal it turned into
+
+Fixing the sink made the decision's optimism audible: **168,915 refusals of
+"No room in the pack for what is in the store", 76.5% of every refusal in the
+model.** A decision that promises what the executor will not do is this
+project's standing fault, and it is worse where the decision sits above every
+drive there is. Two gates close it:
+
+- **The pack before the store.** Somebody carrying supper eats it rather than
+  opening the larder for more - the ladder this whole line of work is about.
+- **`could_i_take_another_handful`,** the read-only twin of the executor's own
+  shedding, so the store branch and the store executor answer one question.
+
+And one arithmetic slip of my own, worth recording because it looked like the
+model's fault for two runs: `set_down_what_is_worth_less_than_food` answers
+with the room it **made**, which is nought for a pack that needed to shed
+nothing. Using that as the room there *is* refused every man who already had
+space. Refusals only fell from 168,915 to 105,280 until that was asked properly.
+
+#### What it came to
+
+| | before | after |
+|---|---|---|
+| refusals, all causes, 8 world-years | 61,525 | **56,349** |
+| ...of which "no room for what is in the store" | — | 4,259 |
+| what the pits held at the end of a year | 288 | **13,077** |
+| `Eat`, all turns | 11.9% | **14.0%** |
+| person-days, 32 seeded worlds | 96,961 | **99,429** |
+| out of the first winter | 1/32 | **5/32** |
+| **worlds emptied** | **32/32** | **27/32** |
+| **alive at the end of two years** | **0** | **5** |
+| starvation | 11.8% of deaths | **5.0%** |
+
+**Five settlements out of thirty-two still had somebody alive after two
+years.** Every arm measured in this whole line of work before this one ended
+with `alive at the end` a row of zeros. Starvation, which took 28.2% of
+everybody who died when this session started, now takes 5.0% and is the
+seventh cause of death.
+
+They are not thriving - the survivors are single people, the month-24 mean is
+back to nought, and hunger is still 32.7% of deaths with dehydration second at
+23.4%. But a settlement can now get through a winter, which it could not before.
+
+The same ignored return value is at a dozen other `add_item` callers - the
+fishing catches, the gather paths, `TakeFrom` - and each is the same silent
+destruction wherever the pack happens to be full. They are not touched here and
+they should be.
+
+### 181. Nobody died of thirst. Ninety-three men drank the sea
+
+Entry #176 left dehydration as the second biggest killer at 23.4% of deaths,
+doubled from 12.8%, with a note that the one correction written for a stale
+water memory measured byte-identical over thirty-two worlds and that whatever
+was killing them was therefore not that. This is what it was, and it is not a
+thirst problem at all.
+
+#### The first two guesses were wrong, and the instrument said so
+
+**Guess one: a spring at its springline.** `ResourceNode::what_can_be_taken`
+holds back a pass's worth of flow, and the decision layer's `drinkable` closure
+refuses any source with nothing takeable — while the executor, three hundred
+lines away in `Simulation::gathering`, cheerfully serves
+`a_mouthful_from_the_flow` at exactly that source. A decision refusing what the
+executor would allow is this project's signature defect, so it looked certain.
+
+Measured over sixteen world-years, sampling every living body once a day and
+asking both questions of every water node within `FORAGE_RADIUS`:
+
+| state | samples | carrying water | decision says yes | executor would serve | **the gap** | nearest water |
+|---|---|---|---|---|---|---|
+| content | 45,865 | 0% | 100% | 100% | **0.0%** | 8.9 paces |
+| thirsty | 1,372 | 0% | 100% | 100% | **0.0%** | 7.9 |
+| dehydrated | 11 | 0% | 100% | 100% | **0.0%** | 7.4 |
+
+The gap is zero everywhere. Water is eight paces away from everybody, always,
+and the decision always accepts it. The asymmetry is real and it has never once
+bound.
+
+**Guess two: the thirst clock and the body's clock disagree.** They do not —
+`is_dehydrated()` reads `physiology::is_parched()`, and there is only one
+hydration field with six writers in the whole project.
+
+What the same table did say, and what nobody had asked, is the third column:
+**eleven dehydrated samples in 47,248.** A quarter of deaths cannot come out of
+a state that occurs two hundredths of one per cent of the time unless death is
+sudden. So the next instrument sampled hydration every tick and kept the last
+twenty-four ticks of anybody who went.
+
+#### A man at full health, one quarter down, dead in half an hour
+
+```
+   tick  hydration  thirst-drive        salt
+  12978      0.760         0.980        0.00
+  12979      0.757         0.985        0.00
+  12980      0.753         0.990        0.00   <- in danger
+  12981      0.000         0.000        1.00
+```
+
+A body cannot lose three quarters of its water in half an hour. The most a turn
+of drying can take is `MINUTES_PER_TURN / MINUTES_TO_DIE_OF_THIRST` at the
+hardest work a body does, which is 0.0104. **Fifty-eight bodies over twelve
+worlds lost more than a turn of drying can explain**, and every single one of
+them was carrying `salt_in_me` at 1.0 — the cap — having had none at all the
+tick before. `WHAT_ONE_DRINK_OF_THE_SEA_LEAVES` is 0.35, so going from nothing
+to the cap in one tick takes at least three drinks, and the water lost takes
+five.
+
+Five mouthfuls of the sea in half an hour. The man at the top of that table was
+at 99.3 health.
+
+#### Four places answer what a mouthful of the sea does, and all four disagree
+
+1. **Who takes one.** `would_i_drink_the_sea()` was `is_dehydrated()`, which is
+   `is_parched()`, which is `hydration <= FIRST_BAND` — and `FIRST_BAND` is
+   **0.75**. A quarter *down*, capability still 1.00, a state every working body
+   passes through between one drink and the next. Its own docstring says the
+   rule breaks "when somebody is three days dry". So the sentence "everybody
+   knows better than to drink the sea" was suspended for everybody, daily. It is
+   now the bottom band of `Physiology::capability`, 0.25 — a quarter of a man,
+   dead inside the day, which is what the docstring always described.
+
+2. **How many mouthfuls one turn buys.** `everybody_takes_a_turn` gives an agent
+   in danger its turn again once a simulated minute until the half hour is out —
+   the danger cadence of #287 — and every one of those is a full
+   `one_persons_turn` with a full turn's body costs. The comment above that loop
+   already worries about exactly this for `Move` ("a `Move` is one tile, whatever
+   the turn is worth in minutes") and closes it only for predators. Every one of
+   the fifty-eight was in danger. **This is the amplifier and it is not fixed
+   here**; it is recorded as #182 below, because it is a change to a deliberate
+   mechanism and wants its own arm. With the gate mended it has nothing lethal
+   left to multiply.
+
+3. **What the drink is worth.** The executor took `A_DRINK_IS_WORTH * 0.5` — a
+   sixth of a body — straight *off* the hydration and put nothing in. Both
+   docstrings on the salt describe the opposite: a drink that "gives a third and
+   takes rather more than a third back over the two and a half days it takes to
+   be rid of". Sea water does put water into a body; what it does not do is
+   leave it there. It now goes down like any other drink and the salt does all
+   the taking, so there is one reckoning of the cost instead of two.
+
+4. **What the salt costs.** `WHAT_THE_SALT_COSTS_IN_WATER` was `0.0007`, and the
+   docstring beside it states the arithmetic it was supposed to satisfy: 0.35 of
+   a skin over the twenty-nine ticks a load takes to clear. At 0.0007 the actual
+   cost of a mouthful is **0.0036** — a hundredth of the stated figure, which is
+   to say nothing at all. The constant is now derived from that sentence rather
+   than guessed: a load of `s` is carried for `s / HOW_FAST_SALT_GOES` ticks and
+   the sum of what is carried over them is `s^2 / (2 * HOW_FAST_SALT_GOES) +
+   s / 2`, so the rate is the cost divided by that sum and the docstring is what
+   the code performs.
+
+So the sea was not tempting and worse than nothing. It was a fast poison, priced
+in the wrong place, at a hundred times the wrong rate, offered to everybody who
+was slightly thirsty, and served up to thirty times in a tick to anybody who was
+frightened.
+
+#### Measured, 32 seeded worlds, two years, twelve founders
+
+| | before | after |
+|---|---|---|
+| person-days | 99,429 | **104,341** (+4.9%) |
+| out of the first winter | 5/32 | **9/32** |
+| worlds emptied | 27/32 | **25/32** |
+| alive at the end | 5 | **8** |
+| **dehydration** | **93 (23.4%)** | **0** |
+| thirst | 14 (3.5%) | 19 (4.9%) |
+| hunger | 130 (32.7%) | 121 (31.5%) |
+| starvation | 20 (5.0%) | 100 (26.0%) |
+| the weather | 73 (18.4%) | 79 (20.6%) |
+| total deaths | 397 | 384 |
+
+And on the instrument that found it, over twelve worlds: **falls larger than a
+turn of drying can explain, 58 to 0**, with no body-tick anywhere below 0.60 of
+a skin where before there were ninety-three below 0.60 and seventy-eight of
+those below 0.10. Two worlds now run past the first year, to days 551 and 701.
+
+Dehydration is not reduced. It is gone: there is no longer any mechanism in the
+model by which a body reaches nought water, because the only one there ever was
+was the sea.
+
+What replaces it is starvation, five times over — 20 deaths to 100 — and that is
+the honest reading of this result rather than a disappointment. The ninety-three
+who used to be dead of salt by month nine now live to month twelve and run out
+of food, which is where entries #177 and #193 already say the binding constraint
+is. Total deaths fell, person-days rose, and four more settlements got through a
+winter.
+
+#### And a lesson written to a book nobody reads
+
+`drank_salt_water` records `DRINKING_THE_SEA` against the doing of it, with the
+comment "so that somebody who has done it twice knows better". Nothing reads it
+outside its own test. That is a store with a writer and no reader, which is the
+other half of this project's signature defect, and it is left alone here
+deliberately: making it load-bearing changes the gate a second time and would
+confound the arm above. Recorded, not fixed.
+
+### 182. Half an hour of danger buys thirty turns, at full price each
+
+Found while measuring #181 and separated from it because it is a change to a
+mechanism that was built on purpose.
+
+`everybody_takes_a_turn` gives anybody in danger their turn again once a
+simulated minute until the half hour is out. The intent is right and the
+specification asks for it: "this does not apply if an agent encounters a
+dangerous situation, as they must then make decisions minute by minute to
+enhance their survival odds." The comment above the loop already identifies the
+hazard — "a `Move` is one tile, whatever the turn is worth in minutes" — and
+closes it for exactly one thing, by giving the predator its minutes too.
+
+Everything else is still priced by the turn. A frightened man does not walk
+twenty-nine tiles any more, but he can still gather twenty-nine times, make
+twenty-nine attempts at a tool, and eat twenty-nine meals, each costing and
+yielding what half an hour of it would. #181 is what that looks like when the
+thing being repeated is lethal: five mouthfuls of the sea inside one tick.
+
+The fix is not to remove the fast clock but to denominate what a turn taken on
+it costs and yields — a minute's worth rather than half an hour's — which is the
+same correction #288 made to the exposure rates and #143 made to the food clock.
+It is a sweep across every executor, so it wants its own arm and its own
+measurement, and with #181's gate mended there is nothing lethal left for it to
+multiply in the meantime.
+
+### 183. Winter catches more than spring, and the fox gets all of it
+
+"Certain food sources, such as trapping, should still work in the winter but
+at a greatly reduced rate." The first thing the instrument said was that the
+premise was half wrong in an interesting way: **winter is the best trapping
+season in the model, and it delivers nothing.**
+
+#### What a settlement gets, and from where
+
+Twelve worlds, one year, everything counted per thousand person-ticks lived in
+that season so the seasons compare:
+
+| | Spring | Summer | Fall | Winter |
+|---|---|---|---|---|
+| `Gather` | 326.4 | 529.4 | 515.5 | 246.2 |
+| `CheckSnares` | 0.42 | 0.08 | 0.03 | **0.08** |
+| `SetSnare` | 2.72 | 0.12 | 0.04 | **0.00** |
+| `Hunt` | 0.08 | 0.00 | 0.03 | 0.07 |
+| `Fish` | 1.37 | 0.00 | 0.02 | 0.05 |
+| `PickUp` | 5.3 | 7.1 | 5.2 | 195.5 |
+
+And what the snares actually did:
+
+| season | caught | robbed | carried home | robbed |
+|---|---|---|---|---|
+| Spring | 660 | 400 | 252 | 60.6% |
+| Summer | 484 | 433 | 44 | 89.5% |
+| Fall | 488 | 482 | 12 | 98.8% |
+| **Winter** | **816** | **789** | **21** | **96.7%** |
+
+Winter takes **816 head, more than any other season** - the line is longest by
+then and the small life is still there, thinned to 0.45 by
+`what_a_hectare_of_this_is_worth` and no further. The reduced winter rate the
+task asks for was already in the world. What the settlement carried home out of
+those 816 was **twenty-one**, across twelve world-winters: under two rabbits a
+settlement a winter.
+
+#### Two guesses were wrong before the right one
+
+**`SetSnare` at exactly 0.00 in winter** looks like a seasonal gate and is not
+one. `SetSnare` hangs off Preparedness, and Preparedness is chained behind
+Hunger, so the obvious reading is that a starving settlement never gets to want
+a snare - which is the failure `drives.rs` already carries a note about for
+storing. Probed directly, gate by gate, once a day per living body:
+
+| season | hunger | put-by | gave up | nothing pressing | **line full** | ground bare | would set |
+|---|---|---|---|---|---|---|---|
+| Spring | 0.27 | 3.32 | 0.0% | 0.0% | 44.6% | 0.0% | 55.4% |
+| Winter | 3.44 | 1.64 | 0.0% | 2.5% | **92.8%** | 0.0% | 4.8% |
+
+Preparedness stands at 1.64 in winter against a threshold of 0.25. Nobody has
+given up on trapping and no ground is bare. **Everybody already has twelve
+snares out**, which is `A_LINE_OF_SNARES`, and that is the whole of why nobody
+sets a thirteenth. Setting was never the problem.
+
+#### The trapping rates are on a twelve-tick day and this world keeps forty-eight
+
+`WHAT_A_SNARE_TAKES_ON_FULL_GROUND` was `0.02` a tick, and the docstring above
+it read: *"Twelve ticks to the day, so this is about a fifth of a chance a day
+and something in the snare inside four or five days."* `TICKS_PER_DAY` is
+**48**. The snare took four fifths of a chance a day.
+
+`WHAT_A_QUIET_COUNTRY_TAKES` was `0.01` a tick, and its docstring read *"Most of
+a week before something finds it in a country with plenty in it, which is what
+makes a trapline worth keeping at all."* At 48 ticks a day that is a catch
+half gone in a day and a half, not most of a week.
+
+Both are now written per day - the number the sentence states - and divided by
+`TICKS_PER_DAY`, so the docstring is the arithmetic. It is the same defect as
+#143 (the food clock) and #288 (the exposure rates): a rate calibrated on a
+calendar the world has since stopped keeping, with its own prose left standing
+as the record of what it was supposed to be.
+
+Note which way each error cut. Catching four times too often did not help,
+because a long line is capped by `WHAT_A_GROUND_GIVES_A_LINE` rather than by
+the snare - twelve people at twelve snares each share one ground - so the extra
+rate was thrown away. Robbing four times too fast was pure loss.
+
+#### Two more, found on the way
+
+**A man was still being sent to a bramble he found in September.**
+`ExplorationKnowledge::known_resources` holds every patch anybody ever walked
+past, for ever, and `known_source_position` never asked the calendar of it.
+`ResourceType::is_it_bearing` has existed the whole time and had no caller
+here. The tell is in the table above: `Gather` is refused **14.6 times a
+thousand person-ticks in winter and 0.00 in every other season** - every one of
+those a turn spent walking to an empty hedgerow in the one season with no turns
+to spare. Same shape as a memory of a spring that has dried up.
+
+**And the catch stopped existing if the pack was full.**
+`going_round_the_line` cleared `caught_at` and then called
+`agent.inventory.add_item(catch)` **ignoring the bool** - the identical defect
+to the store in #180, at one of the call sites that entry named and did not
+fix. What will not fit now stays in the snare, where it is still there when he
+comes back with room, and the tally is decremented rather than counting a catch
+nobody ate.
+
+#### Measured, 32 seeded worlds, two years
+
+| | before | after |
+|---|---|---|
+| person-days | 104,341 | **105,497** |
+| out of the first winter | 9/32 | **10/32** |
+| population at month nine | 7.4 | **7.8** |
+| worlds running past the first year | 2 | **4** |
+| deaths | 384 | 381 |
+
+And on the trapline itself, over twelve world-winters:
+
+| | before | after |
+|---|---|---|
+| snares holding at any moment | 0.87% | **3.14%** |
+| `CheckSnares`, per thousand person-ticks | 0.08 | **1.05** |
+| carried home | 21 | **31** |
+| robbed | 96.7% | 94.5% |
+
+Person-days is inside the block noise of about ten per cent on its own; what
+carries it is that four separate measures move the same way, and that the
+trapline numbers - which are what the task was about - move by three and
+thirteen times.
+
+#### What is still wrong, stated rather than buried
+
+**94.5% is still robbed, and the reason is not the rate any more.** A catch now
+survives about a day. The line is walked about once every four days:
+`CheckSnares` at 1.05 a thousand person-ticks over a winter of 228,721 comes to
+twenty-three rounds a world across ninety days. A trapline is a thing you walk
+every morning, and nothing in this model expresses that - going round the line
+is only ever reached when hunger has already been refused by the ground in
+front of the agent and by the store, which in winter is most of the way to
+being dead.
+
+That is the next thing for trapping, and it is a decision-layer change rather
+than a rate: **walking the line wants to be a round, on its own clock, the way
+a man who has set string actually behaves** - not the last option in the hunger
+chain. It is filed here rather than done because the comment on
+`walking_to_a_catch` records that putting it in front of ordinary food cost a
+third of every settlement when it was tried globally, and the narrow version -
+in front of food only when the ground is out of season - wants its own arm and
+its own measurement.
+
+`WHAT_A_GROUND_GIVES_A_LINE` and `HOW_FAST_THE_GRAZERS_COME_BACK` are on the
+same twelve-tick day as the two rates mended here: the first glosses itself as
+"two and a quarter a day" and comes to nine, and the second says a rabbit
+population "trebles in a season" and would give it six hundredfold if the
+logistic did not stop it. They are left alone because they set the whole
+ecology's carrying capacity rather than the trapline's, and moving them is an
+arm of its own.
+
+### 184. He set twelve snares, walked the line six times, and concluded he was a trapper
+
+"Agents need to try new things if an action is not working. If setting traps
+and walking the line every four days is not working, agents should change what
+they are doing until the proper pattern is discovered."
+
+Three separate things had to be true for an agent to be unable to discover
+that, and all three were.
+
+#### One: the book credited the half that cannot fail
+
+`Action::SetSnare | Action::CheckSnares => Undertaking::Trapping`. A snare goes
+into the ground whenever an agent decides to put one there, so `SetSnare` never
+fails. The round is the half that comes back empty and the only half that
+produces food. Measured over twelve worlds, once a day per living body:
+
+| season | belief | tries | wins | win rate | of which sets | of which rounds |
+|---|---|---|---|---|---|---|
+| Spring | 0.88 | 10.4 | 9.5 | 91% | 8.2 | 2.1 |
+| Summer | 0.96 | 16.6 | 13.6 | 82% | 11.7 | 4.8 |
+| Fall | 0.95 | 17.5 | 13.9 | 80% | 11.8 | 5.8 |
+| **Winter** | **0.93** | **18.6** | **14.2** | **76%** | **11.8** | **6.8** |
+
+A man in February believes trapping works at 0.93. He has twelve snares in the
+ground, he has walked the line six times, he came back empty from four of those
+six, and he thinks he is a trapper - because eleven point eight of his eighteen
+"attempts at trapping" were the act of tying string to a stick.
+
+`SetSnare` now teaches nothing coarse, the same way `Action::Freeze` already
+did. The fine record keeps `setsnare` either way, because whether he can set a
+snare is a real question with a real answer; it is just not the question
+"does trapping feed me".
+
+Afterwards, on the same twelve worlds: **belief 0.93 to 0.59**, tries 18.6 to
+3.8, and tries now equal rounds exactly. The picture is honest. Note what it
+says: a round that pays three times in five is *worth doing*. He was never
+wrong to trap. He was wrong about how often to go.
+
+#### Two: the fine book could never speak
+
+`Lessons::A_FAIR_GO` is 12 - twelve goes before a particular thing may be
+judged - and `how_likely_to_try_this` returns `NEVER_QUITE_CERTAIN` until then.
+Rounds are walked **6.8 times in a whole winter lifetime**. So `checksnares`
+sat at 0.91 to 0.94 in every season of every world: not because it was going
+well, but because it had never been done often enough to be judged at all.
+
+A thing done too rarely to be judged is never judged, so nothing changes, so it
+goes on being done too rarely. It is left at 12 here rather than lowered,
+because lowering it moves every particular lesson in the model at once and
+wants its own arm - but it is the reason the fine book was silent and it is
+recorded as such.
+
+#### Three: and nothing in the model varied *how* a thing was done
+
+This is the real gap and it was total. Every drive answers with an ordered list
+- for hunger: the catch at your feet, then the ground in front of you, then the
+store, then the walk out to a snare, then the river, then the deer - and it
+took the first rung that would answer, for ever, however badly that rung was
+going.
+
+`Lessons` can slacken a particular thing until the drive stands aside
+altogether. That makes a man do **less**, not **differently**: a starving man
+who has learned that gathering is not working stops taking a turn at all rather
+than spending it on the river. And the coarse `Undertaking` book cannot tell
+two rungs of the same list apart, so it could not have chosen between them.
+
+`Simulation::how_far_down_the_list_to_look` is the missing piece. A need that
+has gone unanswered for `LONG_ENOUGH_TO_TRY_SOMETHING_ELSE` - two days of
+asking and not being fed - starts spending a share of its turns on the *next*
+rung instead of the first. The share rises with how long it has been denied,
+caps at `WHAT_SHARE_OF_TURNS_GO_ON_TRYING_SOMETHING_ELSE` (0.3), and is bent by
+`Trait::Curious`, which is what curiosity is for.
+
+What it reads is `DriveState::denied_ticks`, which has counted exactly this
+since drives were given pressure and which nothing had ever read except to make
+the drive shout louder. Shouting louder does not help a man whose hedgerow is
+bare. Walking past it to the river does.
+
+Three properties, all deliberate:
+
+- **One rung, not the bottom of the list.** A starving man who skipped every
+  rung he knew would end up hunting a deer with his hands.
+- **A share of turns, not a switch.** What he knows stays what he mostly does.
+  An agent that reconsiders from first principles every turn is not adaptive,
+  it is incoherent.
+- **It keeps happening while the need keeps going unmet**, which is what makes
+  it a search rather than a tantrum. When the other thing starts feeding him
+  the denial falls and the habit reasserts itself - so the pattern that is
+  discovered is the one that pays, and nothing had to write down which one it
+  would be.
+
+#### And the first cut of it walked a hungry man past his own supper
+
+The rule as first written passed over whatever the first rung offered,
+including `Eat`. A frightened man with food in his pack went for a walk. The
+suite caught it -
+`fear_of_running_short_comes_out_as_answering_the_need` - and it is a real
+defect in the rule rather than a stale expectation: a search is for finding out
+whether the walk you keep taking is worth taking, and the supper in your own
+pack is not a hypothesis. `is_it_already_in_his_hand` now exempts eating what
+you carry and taking a rabbit out of the snare you are standing on, both of
+which cost no walk and cannot come back empty.
+
+It is worth recording what that correction cost, because it was most of the
+gain. Uncorrected - with men experimenting past their own food - the 32 worlds
+read 107,672 person-days, 24 emptied and nine alive at the end. Corrected they
+read 106,631, 27 emptied and five. Some of what looked like adaptation paying
+was agents skipping meals, and the honest number is the smaller one.
+
+#### Measured, 32 seeded worlds, two years
+
+| | before | after |
+|---|---|---|
+| person-days | 105,497 | **106,631** |
+| population at month nine | 7.8 | **8.3** |
+| out of the first winter | 10/32 | 7/32 |
+| worlds emptied | 27/32 | 27/32 |
+| alive at the end | 6 | 5 |
+| deaths | 381 | 384 |
+
+**This is about neutral and it is reported as such.** Person-days are up 1.1%,
+which is well inside the ten per cent this measurement moves block to block;
+month nine - the last month before the winter cliff, and the one with the most
+bodies in it - is up half a person; and "out of the first winter" is down three
+worlds out of thirty-two, which is inside binomial noise at this sample but is
+down. No claim is made that trying something else saves settlements. What is
+claimed is that they now do it at all.
+
+The turns do move, which is the mechanism working: over twelve worlds `Gather`
+falls from 530.0 to 516.8 a thousand person-ticks in summer and from 532.9 to
+508.7 in autumn, while `PickUp` rises 6.29 to 8.06 and 7.10 to 7.91. Nobody
+wrote that down. It is agents whose gathering had stopped paying spending some
+of their turns on the store instead.
+
+Across the three entries of this session - #181, #183 and this one - person-days
+go **99,429 to 106,631 (+7.2%)**, starvation replaces death by salt water
+entirely, and month-nine population goes 7.3 to 8.3.
+
+#### What this does not do
+
+It searches one step down a list somebody else wrote. It cannot invent a rung.
+The trapline's real answer - go round every morning rather than every four days
+- is not on the hunger list at all, because *how often* to do a thing is not
+one of the things a drive can offer; the list is over actions, not over
+cadences. Making a cadence something an agent can vary and settle is the next
+piece, and it is what #183's closing note asks for.
+
+### 185. How often, which nothing in the model could hold
+
+Entry #184 closed by naming what it could not do: it searches one step down a
+list somebody else wrote, and the trapline's real answer - go round every
+morning rather than every four days - is not on that list at all, "because
+*how often* to do a thing is not one of the things a drive can offer; the list
+is over actions, not over cadences." This is the cadence.
+
+#### What the type is, and what it climbs
+
+`agents::rhythm::Rhythm` is one number - ticks between doings - and the
+evidence for it. `Agent::rhythms` keys them by `Undertaking`, because a rhythm
+belongs to a kind of work rather than to a single action: going round the line
+is one rhythm however many snares are on it.
+
+What it climbs is **what one doing brings back**. Not what it brings in a day
+- that measure is maximised by going round constantly and would drive every
+rhythm to its floor - but what the *turn* buys, which is the question the
+decision layer has to answer against every other use of the turn.
+
+That measure has a knee in it, and the knee is the answer. Leaving a line
+longer brings back more per round, but only until what was caught first is
+gone again; past that the extra wait buys nothing and costs the same turn. So
+an agent climbing it settles near the span the country takes to rob a snare -
+a number that lives in `SmallLife::WHAT_A_QUIET_COUNTRY_TAKES` and would move
+if that did. That property is the point: **the cadence tracks the world rather
+than a constant in the file**, and `the_cadence_follows_the_world_and_not_a_constant`
+is the test that holds it there - a country five times slower to take the
+catch is walked less often, and nobody wrote either number down.
+
+`WORTH_THE_WAIT` is why it sits at the knee rather than wandering the plateau:
+the curve saturates, so a longer rhythm has to be a tenth better to be kept.
+That is also the right prejudice - food in hand today beats the same food on
+Thursday.
+
+#### And the round itself, which did not exist
+
+`a_catch_at_my_feet` and `walking_to_a_catch` both ask whether a snare is
+*holding something*. The agent only ever went to a snare it already knew had a
+rabbit in it, and only once hunger had been refused by everything above them.
+A man does not know his snare has caught anything until he walks out and
+looks. `going_round_is_due` is the walk out: it fires when the rhythm says so,
+whether or not anything is known to be in the line, and it sits behind eating
+what is carried, behind the ground in front of him, and ahead of the store -
+and in the Preparedness arm ahead of setting more string, which is the order a
+trapper does them in.
+
+Rounds went from **3.8 a lifetime to 10.5**, and the cadence settled at
+**2.29 days** from a first guess of three.
+
+#### Measured, 32 seeded worlds, two years
+
+| | before | after |
+|---|---|---|
+| person-days | 106,631 | 105,933 |
+| worlds emptied | 27/32 | **24/32** |
+| alive at the end | 5 | **7** |
+| out of the first winter | 7/32 | **8/32** |
+| population at month six | 10.8 | **10.9** |
+| population at month nine | 8.3 | 8.0 |
+
+Person-days down 0.7% and three of the other four measures up, all of it well
+inside the ten per cent this measurement moves block to block. **It is about
+neutral and is shipped for the capability rather than for the number.** What
+the settlement does with the capability, on this ecology's arithmetic, is
+discover that trapping is a poor use of a turn: a round at the settled cadence
+brings back about half an item where a turn of gathering brings back several.
+Belief in trapping falls and most agents stop. That is the search working and
+reaching a true answer about a thin trapline, not the search failing.
+
+#### The arm that was measured and refused
+
+The obvious next move is to shelter a searching rhythm from `Lessons`: while
+the cadence is still moving, an empty round says he went at the wrong time,
+not that trapping does not feed him, so the coarse book should not hear about
+it. It is a good argument and it is wrong, because **the coarse book is also
+the brake**.
+
+Sheltered, over the same 32 worlds: rounds went 10.5 a lifetime to **43.6** at
+a 15% success rate, the cadence drifted *out* to three and a half days instead
+of in, and person-days fell **105,933 to 101,733** with worlds emptied 24 to
+29. Taking the brake off a search that is not converging does not buy
+convergence; it buys a settlement that spends its winter walking an empty
+line. `Rhythm::still_finding_it` is kept and readable, because it is what the
+search knows about itself, and deliberately unread - with the numbers in its
+docstring so nobody spends the afternoon again.
+
+#### What is still missing
+
+One undertaking has a rhythm. Fishing a reach, drawing on the store and going
+round the fields all have a how-often and none of them has been given one,
+because each wants its own yield signal and its own arm. And the rhythm is
+per-agent: twelve people who each keep their own line rediscover the same
+cadence twelve times over, where a settlement that talked to itself would
+learn it once. Neither is hard now that there is a type to hang it on, which
+was the whole difficulty.
+
+### 186. The pattern layer had no readers, and a pattern was one act long
+
+"Patterns should be compositions of smaller actions. Agents should explore the
+various smaller action compositions to discover the overall patterns which
+satisfy drive demand."
+
+Two things were wrong and the second is the larger.
+
+#### A pattern was one act, against the specification's own words
+
+The specification says an agent "links its **previous actions** taken to the
+drive satisfaction to form a pattern" - plural, and the worked example in it is
+a composition: "travel to + specific location = water". `link_what_worked` is
+called once per action with that action's own result, and built its elements
+out of that single act. So when hunger came off, `Did("eat")` took all of the
+credit and the gathering that filled the pack took none. The composition that
+actually feeds a man - go, gather, eat - could not be *represented*, let alone
+learned.
+
+`Element::Then(first, next)` is the composition, and `Agent::lately` is the
+short run it is read off. When a need is answered, every run ending in what was
+just done goes into the record beside the atoms and on the same terms - so the
+pair and its halves compete, and the module's existing arithmetic sorts them
+without anybody deciding which mattered: where the pair is what matters it is
+there every time and outruns either half; where only the last act matters the
+pairs vary and the atom wins.
+
+Measured over twelve worlds, summing trail worth across the bodies that lived
+out the year:
+
+| for | run | worth | | for | act | worth |
+|---|---|---|---|---|---|---|
+| Hunger | **gather > eat** | **81.4** | | Hunger | eat | 71.5 |
+| Thirst | move > gather | 80.7 | | Thirst | gather | 356.6 |
+| Hunger | move > pickup | 9.0 | | Hunger | pickup | 4.6 |
+| Hunger | pickup > eat | 9.2 | | | | |
+
+Both halves of the mechanism show in that table. **For hunger the composition
+beats the bare act** - 81.4 against 71.5 - which is correct: eating answers
+hunger *because gathering came first*, and an agent that has learned "eat" and
+not "gather then eat" has learned the half that does not feed him. **For thirst
+the atom wins by a mile** - 356.6 against 80.7 - which is also correct, because
+drinking answers thirst whether or not a walk came first, and following the
+walk would be a superstition. Nobody wrote either verdict down.
+
+`move > pickup` and `pickup > eat` are the store: go to the hole, take food out,
+eat it. Three steps, learned as two overlapping pairs, never written anywhere.
+
+#### And the whole layer had no readers at all
+
+`what_answers`, `something_like_it`, `where_it_worked`, `which_way_it_lies`,
+`places_worth_the_walk`, `how_alike` and `strength` have **no callers anywhere
+outside the module and its own tests**. Nine hundred lines that record
+beautifully and change nothing an agent does. It is this project's signature
+defect at the largest scale it appears.
+
+Half of that is deliberate and well argued: `somewhere_that_answered` carries a
+measurement showing that walking to a remembered place makes a settlement
+*worse*, because an errand is priced at the work and not at the walk (#189,
+task #193), and it is switched off until that is mended. That reasoning is
+sound and is left alone.
+
+But it only covers the readers that send somebody somewhere. "Which run of acts
+answers this need" involves no walk at all, and `Patterns::what_follows` is
+that reader: an agent that has just gathered and is still hungry asks what has
+followed gathering, gets back "eat", and does that instead of working down the
+fixed list from the top again.
+
+It is guarded twice, and both guards earn their place. A run must be worn past
+`WORN_ENOUGH_TO_FOLLOW` - about four ordinary successes - so one lucky
+afternoon is not a habit. And it must beat what its own second half scores
+alone, which is what stops thirst's `move > gather` displacing the plain
+`gather` that is doing the work.
+
+It can only ever choose among candidates the drive's own list has already
+produced. It does not invent an action, which is what keeps a learned habit
+from proposing something the world will refuse - and it is why the list is now
+gathered in full on the turns where a run is worn enough to choose, instead of
+being cut off at the first answer.
+
+#### Measured, 32 seeded worlds, two years
+
+| | before | after |
+|---|---|---|
+| person-days | 105,933 | **108,235** |
+| alive at the end | 7 | **11** |
+| out of the first winter | 8/32 | **9/32** |
+| population at month three | 11.0 | **11.1** |
+| population at month six | 10.9 | **11.0** |
+| population at month nine | 8.0 | **8.1** |
+| population at month fifteen | 0.3 | **0.4** |
+| deaths | 384 | **380** |
+| worlds emptied | 24/32 | 25/32 |
+
+Up 2.2% on person-days and up on seven of the eight other measures. The best
+single result of this run of work, and the first change in it whose gain is
+larger than the block noise on more than one measure at once.
+
+Across this session - #181, #183, #184, #185 and this - person-days go
+**99,429 to 108,235 (+8.9%)**, deaths by salt water go from 93 to none, and the
+month-nine population goes 7.3 to 8.1.
+
+#### What this does not do
+
+A run is two acts. Three-step compositions are learned only as overlapping
+pairs - `move > pickup` and `pickup > eat` - which is enough to walk the chain
+one step at a time but is not the same as holding "go, take, eat" as one thing
+that could be planned against. The plan machinery that would hold it is
+`ActionPlan`, and ISSUES #238 records that its branch of the decision ladder is
+unreachable.
+
+And an agent explores compositions only in the sense that #184 gave it: it
+varies which rung it takes when a need has gone unanswered, and whatever run
+results gets recorded. It does not deliberately try an *unfamiliar order* to
+find out what happens. That would be exploration over compositions proper, and
+it wants the plan branch first.
+
+### 187. The plan branch was dead, and the deadness was load-bearing
+
+"Make the plan branch reachable so three-step compositions can be planned
+against." ISSUES #238 has recorded the branch as unreachable without saying
+why. This is why, and what happened on turning it on.
+
+#### The counter that locked it shut
+
+`should_execute_plan` has three gates: there must be a plan, hunger and thirst
+must not be pressing, and the current step must not have taken more than three
+times its allowance. Measured over twelve worlds, once a day per living body:
+
+| | |
+|---|---|
+| has a goal at all | 98.6% |
+| has an active plan | 98.5% |
+| hungry or thirsty | 9.5% |
+| **would run the plan** | **1.3%** |
+
+Ninety-eight and a half per cent hold a plan and only nine and a half per cent
+are pressed by a survival drive, so about eighty-nine per cent should be
+eligible. One point three are. **The step timeout eats the other
+eighty-eight**, and the reason is a counter answering two questions:
+`plan_step_ticks` was ticked *every turn whether or not the plan ran* - the
+comment beside it says "this allows plans to timeout if agent keeps getting
+interrupted".
+
+That is a lock. The step counter is the only thing staleness is measured by, so
+a plan the ladder never reaches ages out of its allowance, and once it has it
+is "stuck" and can never be reached. It times out because it is not run, and is
+not run because it timed out. A plan nobody has worked is not stuck on a step;
+it is waiting, and how long it has been waiting is what `created_at` already
+records. The tick now happens only on turns actually spent on the plan.
+
+**1.3% to 88.8%.** The branch is reachable.
+
+#### And what came through it cost five per cent
+
+What the branch made reachable was the goal planner, and its steps are built
+against hard-coded coordinates - `create_plan_for_goal` is handed `(50, 50, 0)`
+as "the resource" on a fifty-square map, and `(0, 0, 0)` as "home". Its
+vocabulary is a second enum of ten kinds with no `Eat` among them, which is the
+last step of the only composition in this model that feeds anybody. Over 32
+seeded worlds:
+
+| | branch dead | branch open to the goal planner |
+|---|---|---|
+| person-days | 108,235 | **102,708** |
+| worlds emptied | 25/32 | 28/32 |
+| alive at the end | 11 | 5 |
+| population at month six | 11.0 | 10.4 |
+
+**Minus 5.1%.** The branch was dead and the deadness was holding the model up.
+That is worth saying plainly: an unreachable branch is not always a bug waiting
+to be fixed, and "make it reachable" is only half an instruction - the other
+half is what it should carry.
+
+#### What it carries now
+
+A run out of `Patterns`. `the_chain_that_answers` joins the overlapping pairs
+of #186 back into a chain - `move > pickup` and `pickup > eat` become "go to
+the store, take something out, eat it" - and `plan_the_run_that_answers` lays
+that down as an `ActionPlan` whose steps are `PlanActionType::AsLearned`,
+carrying a verb from the vocabulary the model actually acts in. The decision
+layer resolves each verb against the candidates the drive produced, so a plan
+can never propose something the world will refuse.
+
+It is the opposite of the goal planner in every way that mattered above: the
+steps are real verbs, the order was found out rather than written down, and it
+is a plan *for a need* rather than for a goal nobody set. `should_execute_plan`
+now requires the plan to be one of these, which leaves the goal planner's plans
+exactly where they were - laid down and not executed - and for a reason that is
+now written down and measured rather than accidental.
+
+Over the same 32 worlds, against the branch dead: person-days 108,235 to
+**107,181** (-1.0%, inside the noise), worlds emptied 25/32 to **23/32**, alive
+at the end 11 to **12**, out of the first winter 9/32 to **10/32**, deaths 380
+to **375**.
+
+#### And the honest part: it is reachable and nearly idle
+
+**Chains of two or more steps occur in about 0.0% of body-days.** The branch is
+open, the machinery works, and almost nothing comes through it.
+
+The reason is in #186's own table. `gather > eat` is worn deep and beats the
+bare `eat`, so the *first* link is there - but the second link has to clear the
+same two guards, and `eat > pickup` scores 1.72 against `pickup` alone at 4.61.
+It fails the beat-the-atom test, correctly, because pickup answers hunger
+whether or not eating came first. **The compositions this world throws up are
+two acts long**, and two-act runs are already handled by the reactive reader
+from #186 without needing a plan at all.
+
+So what is shipped is: a real defect fixed (the self-locking counter), the
+branch reachable, a measurement showing why it must not carry the old planner,
+and the composition machinery waiting behind it for chains that the record does
+not yet contain at planning strength. Three-step compositions can now be
+planned against. There are not yet three-step compositions worth planning.
+
+What would produce them is a world with longer causal chains in it - the tool
+ladder (#195) has four- and five-step makings in it already, and `Undertaking::
+Crafting` is where a run of three would first appear. That is where to look
+next, and it is an arm of its own rather than a change to this machinery.
+
+### 188. Crafting could not compose, and it was four things at once
+
+#187 ended by saying that `Undertaking::Crafting` was where a run of three
+would first appear, and that this was where to look next. It was. What was
+there was worse than a missing feature: the composition layer built over #186
+and #187 was returning **no chain of two or more steps, on any drive, in any
+world.** Twelve worlds, a hundred and two bodies, sampled three quarters
+through the year - not one.
+
+It was not one defect. It was four, each of which alone was enough to produce
+that zero, so each had to be found and fixed before the next became visible.
+
+#### One: the guard that belongs on the reader, not on the chain
+
+`Patterns::what_follows` served two callers with opposite questions. The
+reactive reader asks *what should I do instead of the obvious thing*, and the
+beat-the-atom test is right for it: a run that does not beat its own second
+half is no reason to depart from the plain answer. The chain builder asks *what
+came next*, which is a question about order.
+
+The middle of nearly every run is `gather`, and `gather` on its own carries the
+biggest trail any drive holds - thirst put it at 30,498 against the
+four-tenths a worn run needs to clear. Nothing could beat that, so the chain
+died at its first step every time.
+
+Split into a guarded reader and an unguarded `what_has_followed` for chaining.
+Chains appeared immediately on four drives.
+
+#### Two: the fattest step is not the step that goes anywhere
+
+The chain walk took the best successor at each step. On Utility,
+`gather > pickup` carries more than half again what `gather > craft` does, and
+picking a thing up leads nowhere while making something is the start of a
+sequence. The greedy walk stepped onto the fatter pair and stopped.
+
+Replaced with a bounded search over every worn successor, keeping the run that
+goes furthest and breaking ties on worth. Hunger's three-step compositions went
+from 47% of bodies to 65%, Preparedness 38% to 57%, and Social found
+`gather > shareinformation > socialize` where it had held nothing.
+
+#### Three: one act, ten names
+
+Then crafting specifically. The making verbs are `craft`, `cut`, `carve`,
+`scrape`, `smash`, `crush`, `mold`, `weave`, `sew` and `makeclothing` - ten
+spellings of *turn material into an object*. The verb matrix has good reason to
+keep them apart; the layer that learns what answers a need has none.
+
+Against Utility the store held `gather > craft` at 0.242, `gather > cut` at
+0.185, `gather > carve` at 0.305, `gather > smash` at 0.392 and
+`gather > mold` at 0.214 - five spellings of one habit, every one of them under
+the bar, so a man who knapped a core on Monday, scraped a hide on Tuesday and
+carved a bowl on Wednesday had made three things and learned nothing.
+
+`making::what_making_is_called` folds them, in the pattern layer only. `On`
+keeps the particular material, so the difference between knapping and carving
+is still written down where it belongs. Preservation is deliberately not folded
+in: drying and salting answer Preparedness, and `dry > cover` is already the
+deepest run in the model. `gather > craft` went from 31 bodies to 52.
+
+**This is the project's recurring defect in a new dress:** one question
+answered in ten places that could not agree because nothing had ever asked them
+to.
+
+#### Four: the threshold was in units of hunger
+
+And it still would not clear the bar. A trail is fed with `efficiency` - demand
+off the drive per turn spent - so what one success is worth is denominated in
+the drive it answered. A meal takes nine-tenths off Hunger; a making takes
+two-tenths off Utility. `WORN_ENOUGH_TO_FOLLOW = 0.4` therefore means "about
+four successes" on the drive it was calibrated against and "about eighteen" on
+the making drives, and eighteen is more makings than a stone-age life has
+occasion for. Fifty-two bodies in seventy held `gather > craft` - nearly
+everybody - and not one was over the bar.
+
+A rate calibrated on a scale the rest of the model does not keep. #143, #288,
+the trapping rates, and now this.
+
+The bar is now the **lower** of the fixed number and a share of the deepest run
+that body holds for that same need, plus a count - three successes - which is
+the unit-free half of the same question and what keeps the share honest. Taking
+the share on its own was measured and refused: it raises the bar on the deep
+drives, and Hunger went from 56% of bodies holding a three-step composition to
+12%. Lower-of-the-two makes it strictly a loosening.
+
+#### Measured: 8 worlds, one year, bodies sampled three quarters through
+
+| drive | held no run, before | held no run, after |
+|---|---|---|
+| Utility | 100% | **4%** |
+| Curiosity | 87% | **0%** |
+| Sustenance | 100% | **6%** |
+| Safety | 100% | **0%** |
+| Industry | 100% | **8%** |
+| Social | 100% | **0%** |
+
+And the compositions of three verbs, which did not exist at all before:
+`gather > dry > cover` held by 45 bodies, `sleep > gather > eat` by 36,
+`gather > shareinformation > socialize` by 32. Crafting holds `gather > craft`
+across 59 bodies in 71, where it held nothing.
+
+#### And the honest part: it costs nothing and buys nothing, yet
+
+Over the 32 seeded worlds, two years: person-days 107,181 to **107,362**
+(+0.2%, deep inside the block noise), month-nine population 8.1 to 8.1, worlds
+emptied 23/32 to 26/32. The suite goes from 11 standing failures to **10**, with
+no new ones - `a_settlement_lives_through_a_winter` now passes.
+
+So: the composition layer went from returning nothing to returning
+compositions on six drives, and the settlements are exactly as likely to die.
+That is the truthful result and it should not be dressed up. What an agent
+knows is now richer than what its survival depends on, because the things it
+has learned to compose - making a tool, sharing news - are not yet the things
+that carry it through a winter. The making that would be worth composing is the
+tool ladder (#195), whose four- and five-step recipes exist in the world and
+which nobody in a settlement has yet lived long enough to climb.
+
+The third step of the crafting composition is the one that is still missing:
+`craft > pickup` sits just under the bar, and under the looser share-only rule
+it did appear - `gather > craft > pickup`, held by one body in seventy-seven -
+but not at a bar that leaves Hunger's compositions intact. That is the next
+thing to look at, and it is a question about what making is worth, not about
+the composition machinery.
+
+### 189. The third crafting step: two holes and a refuted guess
+
+#188 left crafting holding a two-verb composition - `gather > craft`, across 59
+bodies in 71 - and no third step. The obvious third step turned out to be the
+wrong one, and finding the right one turned up two more holes.
+
+#### The refuted guess: taking the tool in hand
+
+`Action::Equip` has exactly one caller in this model - `get_the_tool_out_for`,
+which fires as a prefix to a job that already wants a tool - so a man who
+knapped a blade put it in his pack and forgot it. Making that a step of its own
+after a craft seemed obviously right, and it was measured and refused.
+
+It fires: equipping went from essentially never to 229 turns in eight worlds.
+It produces nothing: **no `craft > equip` run formed on any body.** The reason
+is the same gate that blocked everything else, and `each_one.rs` had already
+written it down about this exact action - "reaching for a tool is not what
+somebody does with a spare moment, it is what they do just before using it".
+The Utility arm is only entered when Utility is the pressing drive, and Utility
+presses on **2.1% of turns**, so the turn after a making is essentially never
+another Utility turn. Reverted.
+
+That measurement is the finding: **a composition whose steps are all answered
+by one drive can only form if that drive presses on consecutive turns.** Hunger
+does (4.6% of turns, and gathering is 41% of everything). Utility does not.
+
+#### Hole one: the run between two makings was filtered out
+
+The real third step is not a different verb at all. **A spear is three makings
+in a row**: a knapped tip, a length of lashing, then the three parts put
+together. Under the family name from #188 all three are `craft`.
+
+And `what_led_up_to_this` dropped them: "a thing that follows itself is a man
+doing the same thing twice and teaches nothing about order". That is true of
+`gather:berries > gather:berries` and false of `craft:knappedtip >
+craft:spear`. The filter compared the folded verbs, so folding made the one
+composition the tool ladder is built out of invisible.
+
+It now compares what was actually tried. `craft:knappedtip > craft:spear`
+survives; `gather:berries > gather:berries` still does not.
+
+#### Hole two: the making nobody was pushed into was the one nobody finished
+
+`Errand::to_make` exists for precisely this and says so in its own docstring -
+"a diversion buys the next step in a chain, a length of cordage, a knapped
+edge, and the turn after that the whole decision was made again from scratch,
+so the settlement collected half-finished tools it never picked up again".
+
+Both *diversion* paths take the making on as an errand:
+`make_what_this_wants`, where the turn was going to be a refusal, and
+`would_a_better_tool_pay`, where it was going to be work. **The path where
+somebody simply decides to make something did not.** So the only makings anyone
+ever finished were the ones they were pushed into, and a man who wanted a spear
+knapped a tip and then decided again from scratch.
+
+`hold_on_to_the_making` closes it. It also needed
+`Agent::what_i_am_working_towards`: `what_i_would_make` returns the step that
+can be taken now and throws away what it is a step *towards*, and the errand
+has to be set on the want or it ends the moment the first stage is in the pack.
+
+**Measured**: `Utility: craft > craft` went from not occurring at all - eight
+worlds, sixty-nine bodies, not once - to 0.187 across 9 bodies.
+
+#### Hole three, half of one: the cycle guard
+
+A chain builder that refuses to walk a verb twice cannot walk a recipe with
+stages. Allowed - and then measured with the latitude given to *every* verb,
+which was ruinous: `gather > gather > gather` took over, Thirst went to 100% of
+bodies holding it as their longest run and Industry to 92%, and Hunger's real
+composition `gather > eat` fell from 58% of bodies to 3%. A man picking berries
+for an hour and a half is not following a plan.
+
+Narrowed to `making::does_it_come_in_stages`, which is true of making and
+nothing else, because making is the only act in this world whose product is
+what the next act of the same name is done to.
+
+#### Measured, and it is honestly a wash
+
+Two blocks of 32 seeded worlds, two years, against #188:
+
+| | seeds 0-31 | seeds 32-63 |
+|---|---|---|
+| person-days | 107,362 → **105,429** (-1.8%) | 103,852 → **106,661** (+2.7%) |
+| population at month nine | 8.1 → 8.2 | 7.9 → **8.5** |
+| worlds emptied | 26 → 28 | 25 → 28 |
+
+Person-days move opposite ways on the two blocks, which is what noise looks
+like. Population at every month is up on the paired block. Worlds emptied is up
+by two or three on both, and that is the one consistent sign: more people alive
+for longer in the settlements that hold, and a few more settlements that empty.
+That is what committing to a making does - a commitment made at the wrong time
+kills a marginal camp - and it is the cost of the thing being asked for. The
+suite is unchanged at 10 standing failures with no new ones.
+
+#### What is there now, and what is not
+
+Two makings in a row now happen, are recorded, and can be walked as a chain.
+`craft > craft` is held by 9 bodies in 61. It is not yet *worn* enough to be
+followed: Utility's deepest run is `gather > pickup` at 0.745 and the bar is a
+third of that, and `craft > craft` sits at 0.139. So the three-step making
+composition exists in the record and is not yet a habit.
+
+What would make it one is more tool-making, and what caps that is the ordering
+in the Utility arm: `what_i_would_work_on` - the undirected carving and
+scraping that is where bowls and leather come from - stands in front of
+`Action::Craft` and almost always answers, so crafting a tool happens on 0.07%
+of turns. Demoting the pottering was measured before and cost a settlement two
+thirds of its vessels (see the comment at `wanting/mod.rs`), so the answer is
+not to swap them. It is to give the tool a reason to be wanted that the
+pottering cannot satisfy, which is #196 and #199 rather than anything here.
+
+### 190. The fold in #188 threw away the innovation record
+
+The many making verbs are not an untidiness. They are there so that applying a
+*different* act to a known material can produce a different result - scraping a
+hide gives leather, smashing a core gives flakes - which is how a people find
+out something they did not know. #188 folded all of them into `craft` inside
+the pattern layer, and in doing so folded `Element::Did`, which is the record
+of what a particular act achieves. After that, nothing in the trails could tell
+scraping from smashing, so no agent could ever notice that the new act it tried
+had done something the old one did not.
+
+The composition argument in #188 was right about its own question. A run is
+about *order*, and to "what order of acts answers this need" knapping and
+carving are the same beat. But that is one question about a doing, and the
+layer had been recording only one thing per doing.
+
+An episode now writes both:
+
+- `Element::Did("scrape")` - the particular act, kept exactly as tried.
+- `Element::Kind("craft")` - the family, and only where there is one. Making
+  is the only act in this world with siblings.
+
+They compete on the same terms as everything else in the bundle, which is what
+`it_worked` already does: where the family is what matters the family is there
+every time, and where the particular act is what matters the family is diluted
+by its siblings and the atom wins. Runs stay on the family, so a composition is
+still about making rather than about knapping. The beat-the-atom guard now
+reads whichever atom the name in the run belongs to.
+
+`just_the_verb` is documented as what it actually is: the composition layer's
+vocabulary and nothing else. So a run that says `craft` says "and then make
+something", and *which* making is a question for the machinery that knows about
+materials and recipes.
+
+#### What was and was not damaged
+
+The discovery machinery itself never went through the fold, which is worth
+recording so the scope of the mistake is clear rather than overstated.
+`what_working_i_would_try_out` picks an experiment by the particular working;
+`Lessons` is keyed on "verb:target" exactly as tried; `found_out` holds
+products. Those are what actually turn a new act on a known material into new
+knowledge, and they were untouched. What the fold destroyed was the *pattern
+layer's* record - the part that would let an agent weigh scraping against
+carving by what each has paid - and `what_answers` now returns the particular
+act again rather than a family name that is not an action anybody can take.
+
+#### Measured: it costs nothing
+
+Two blocks of 32 seeded worlds, two years, against #189: person-days
+**105,429** and **106,661**, worlds emptied 28 and 28, month-nine population
+8.2 and 8.5 - identical on every figure, both blocks. The split changes what is
+written down, and the only read that changed is the beat-the-atom guard, which
+takes whichever of `Did` and `Kind` is larger and so sees exactly what it saw
+before. The record is given back for nothing.
+
+Three new tests, fifteen in the file. The suite reported eleven failures on
+this run against ten on the last, and the difference is
+`a_settlement_lives_through_a_winter`, which **passes when run on its own**: it
+seeds the global `dice` and asserts that one settlement in thirty-two comes
+through, so under the parallel runner it races another test's seeding. It has
+been in and out of the standing set all session for that reason. Worth fixing
+as its own thing - the shared global seed is the defect, not the winter.
+
+### 191. There was no seed race, and there was a clock in the config
+
+I said last time that `a_settlement_lives_through_a_winter` races another
+test's seeding of the global `dice` stream. **That was wrong.** `THE_STREAM` is
+a `thread_local!`, and the test runner gives every test a thread of its own, so
+no test can reach another's stream. The diagnosis was a guess offered as a
+finding and it should not have been.
+
+What is true is that the test does flip: over three runs of the identical
+binary it failed once and passed twice. So there is something, and this is what
+looking for it found.
+
+#### What was ruled out, and how
+
+- **The dice stream.** Thread-local, and the test seeds it at the top of every
+  one of its thirty-two worlds.
+- **Unordered tables.** There is not one `HashMap` or `HashSet` left in the
+  model; `nothing_decides_anything_by_walking_an_unordered_table` already
+  guards it.
+- **Randomness outside the stream.** No `thread_rng`, `rand::random` or
+  `Uuid::new_v4` anywhere in the model, guarded at source level by
+  `every_roll_comes_from_the_one_stream`.
+- **Statics, `unsafe`, spawned threads, environment variables, pointer
+  ordering.** None in the model. The only process-global is
+  `how_long_the_land_gives_nothing`, whose `OnceLock` holds a pure function of
+  the calendar.
+- **The wall clock in the tick.** `Instant::now` appears only in
+  `analytics::performance`, which nothing reads.
+- **The model itself.** Thirty-two worlds run as a plain binary came out
+  **byte-identical across three concurrent processes**; one world came out
+  identical over fifteen processes at a hundred and twenty ticks and eight
+  processes at a whole year.
+
+So the model is repeatable, and the flake was not reproduced.
+
+#### What was found: a seed taken from the clock
+
+`SimulationConfig::default()` set `random_seed` from
+`SystemTime::now().as_secs()`. It is **read by nothing at all** - a store with
+a writer and no reader, where the writer is the wall clock, in a model whose
+whole cost of repeatability had already been paid next door in `core::dice`.
+It was not the cause of anything, because nothing consulted it. It was a trap:
+anybody reaching for "the seed" would have found it, set it with `with_seed`,
+and got a world it had no effect on.
+
+Removed, along with `with_seed`, and the four config tests that asserted the
+field exists now assert the thing that is actually true - that
+`core::dice::seed` is what fixes a run.
+
+#### And the instrument, which is the part that will settle it
+
+The reason this took a day is that the only thing that reported the fault was a
+half-hour test whose whole message was "not one settlement of 32 came out the
+far side of the winter". That says nothing about which world, or whether the
+world was even a different one.
+
+Two things now:
+
+- `a_fixed_world_rolls_a_recorded_number_of_times` and its whole-year
+  companion assert `dice::draws_taken()` against a **recorded constant**
+  - 8,786 for seed 4242 at a hundred and twenty ticks, 876,050 for seed 0 over
+  a year. The existing repeatability test runs both of its worlds in one
+  process and so cannot see drift *between* runs; these can. The short one
+  costs a third of a second, so a drift that used to take half an hour to
+  surface now surfaces in the time it takes to run one test. When the model is
+  changed on purpose the number changes with it and the new one goes in the
+  constant, which is the point: it is a fact about the model and should have to
+  be restated when the model is.
+- The winter test now reports, on failure, what every one of its thirty-two
+  worlds did and how many times each rolled. If the roll counts match a good
+  run, the worlds were the same and the fault is not repeatability at all; if
+  they part company, the seed at which they part is named.
+
+**This is not a fix.** The flake is real, it was not reproduced in eleven
+attempts, and what is shipped is the thing that will name it the next time it
+happens rather than another half-hour of "none of thirty-two".
+
+### 192. Layer 3: the ways of answering a drive were the order somebody typed
+
+A five-layer specification arrived - drives, goals, strategies, actions,
+capabilities - and the first thing worth recording is how much of it this model
+already has. Four of the five layers exist; three of them under other names,
+one on a different axis. `SATISFACTION.md` holds the whole mapping. In short:
+
+- **Drives** are `DriveType`, sixteen of them, near enough one-to-one.
+- **Goals** are `core::goals` and are the wrong shape - emotions and property,
+  not "obtain potable water" - and #187 already measured the branch carrying
+  them as nearly dead.
+- **Actions** are the `Action` enum and the verb matrix, which is already
+  preconditions-as-data through `Wants`.
+- **Capabilities** are `making::Tool`, which is already a capability table with
+  coefficients - shovel/Mining **1.9**, handaxe/Mining **1.5**, diggingstick/
+  Mining **1.2**, which is `digging_tool 1.0 / 0.7 / 0.3` in another
+  normalisation - but keyed on the **trade** rather than the capability. The
+  two coincide for digging, mining and fishing and come apart for cutting
+  (smeared across three trades), for weapons, and for containers, which are not
+  in the table at all and run through `Wants::AVessel` instead.
+
+**Strategies were the absent layer**, and their absence is what seventeen
+hand-written `.or_else()` chains in `analytics::wanting` are. The ranking was
+always there; it was source order, and the source keeps apologising for it -
+*"the order of a hand-written list decided what a whole people ever made"*,
+*"nobody ever fermented anything, because somebody always had flax"*. Two
+places work around it with the same trick, `self.id.as_u128() % could.len()`, a
+per-agent rotation standing in for a ranking nobody could learn.
+
+And the rungs were not one strategy each. The hydration arm's first test is
+`carrying_water || water_in_reach`, so **drinking out of your own skin and
+drinking from the river in front of you were one rung producing one action**.
+They are not the same bet: a skin runs out and has to be refilled, a river does
+not and cannot be carried away from. `Did("gather")` cannot tell them apart, so
+nothing could ever learn the difference.
+
+#### What is here now
+
+`Element::By` - the way an episode was answered, written down beside `Did`,
+`On`, `At`, `When` and `Then`, and ranked by the same arithmetic that already
+ranks verbs, places and runs. No second learning mechanism.
+
+`analytics::wanting::strategy` - `Strategy`, its written order per drive, and
+one place where a way's **preconditions and its action are the same question**:
+a way that cannot name what to do now has not met its preconditions.
+
+Thirst is the first drive through it, split into the three ways the
+specification's own worked example names - `drink-carried`, `drink-here`,
+`walk-to-water`. `water_action` stays as the tail: nowhere known to drink, and
+striking out blind. Those are not ways anybody chooses between, they are what
+is left. And the question *is there a drink within reach* now has one
+implementation that both the old arm and the new layer ask, rather than two
+that could drift apart.
+
+#### Measured: it changes nothing, on purpose
+
+Two blocks of 32 seeded worlds, two years: person-days **105,429** and
+**106,661**, worlds emptied 28 and 28, month-nine population 8.2 and 8.5 -
+identical to #190 on every figure, both blocks. Suite unchanged at 10 standing
+failures, no new ones. Six new tests.
+
+That is the point of the step. With nothing learned every way is worth zero,
+the sort is stable, and the written order returns exactly what it returned
+before - so the machinery lands without a behaviour change to argue about.
+
+#### And the wire that is not in yet
+
+**`Element::By` is not written at the end of a turn.** The decision layer is
+`&self` on the Simulation and `&Agent` all the way down - four levels between
+`the_way_to_answer` and the place an episode is recorded - so the way chosen
+has no route out to the learning layer.
+
+Exploration is deliberately left out until it does. The obvious next thing is
+the rule the hunger arm already uses, a share of turns on the next way down, so
+the first way that ever worked does not become the only way ever tried again.
+Putting it in now would spend real turns choosing between ways nobody can learn
+about, which is not a search, it is noise.
+
+So the honest state: the ways exist, are told apart, have preconditions, and are
+rankable. Nothing ranks them yet. The wire is the next piece of work and it is a
+plumbing decision - thread the chosen way out through four signatures, or give
+the two ways that share a verb two different actions, which is the satisfier-
+and-enabler distinction arriving through the front door.
+
+### 193. Explicit strategies, a price on each, and a horizon that is not a price
+
+#192 put one drive through a strategy layer with three ways in it and no
+ranking. This is the rest: every way declared for the three drives the
+specification names, a cost on each, and a rule about when a way is worth
+taking at all that is deliberately *not* a cost.
+
+#### Twenty-four ways, and seven of them cannot fire
+
+Thirst, Hunger and Shelter now declare their ways in full - including the ones
+this world has no machinery for. `Reach::NotYet` carries the reason, and there
+are seven:
+
+| way | what is missing |
+|---|---|
+| follow somebody to water | knowing where a man is going is not askable |
+| catch rain | rain falls; nothing catches it |
+| dig a well | the water table is not modelled |
+| move camp to water | moving house never fires - #237 |
+| steal food | theft sits at the tail of a chain almost nobody reaches - #226 |
+| ask for a share | there is no settlement object to ask - #11 |
+| mend a shelter | a shelter has no condition to mend |
+
+Declaring them costs a match arm and buys a countable gap. A way that is named
+and unreachable is one somebody can go and fill; a way that was never named is
+a gap nobody knows is there. Three of the seven already have issue numbers
+against them, which is the point.
+
+#### The formula, in one currency
+
+```text
+utility = relief - time - effort - danger - wear - uncertainty
+```
+
+Written as the specification writes it, and **every term converted into drive
+demand before it is subtracted**. Subtracting turns from demand and energy from
+both is arithmetic on three different things. The currency is drive demand
+because that is what the pattern layer is already denominated in - #190 is a
+long note about what happens when one part of this model quietly starts keeping
+a second set of books.
+
+Each term comes from whatever already knows it rather than a table of guesses:
+danger from `Patterns::what_i_dread`, confidence from `Lessons`, turns from the
+distance actually being walked - which is #193's complaint, that an errand
+costs the walk as well as the work and nothing was charging for the walk.
+
+**Uncertainty discounts the relief rather than being subtracted beside it.** A
+half-believed mouthful is worth half a mouthful. Priced flat, a large enough
+relief would swamp any doubt at all, and the thing doubt should do is make a
+big prize look smaller, not lose to it.
+
+#### The horizon is a gate, not a term
+
+Immediate, short-term, long-term. **A man dying of thirst does not dig a well,
+however good a well is** - and that is not the well being worth less, because
+over a season it is worth far more than a mouthful. So urgency chooses the
+horizon first and utility decides within it. A cost that is subtracted can
+always be outweighed by a big enough number; this must not be, so it is not
+one.
+
+#### Measured: it fires, and it mostly agrees
+
+Two blocks of 32 seeded worlds, two years, against #192:
+
+| | seeds 0-31 | seeds 32-63 |
+|---|---|---|
+| person-days | 105,429 → **105,429** | 106,661 → **106,431** (-0.2%) |
+| worlds emptied | 28 → 28 | 28 → 28 |
+| month-nine population | 8.2 → 8.2 | 8.5 → 8.5 |
+
+One block identical, the other moved a fifth of a per cent. So the scoring does
+fire - a block that changed proves it - and **it almost always picks what the
+hand-written order picked**. That is worth saying plainly rather than dressing
+up: for thirst, reaching into your own pack is one turn with no walk and no
+doubt, which scores highest and was also written first. The ranking has not
+bought anything yet. What it has bought is that the ordering is now a
+consequence of costs somebody can argue with, rather than of where a line sits
+in a file.
+
+Suite unchanged at 10 standing failures, no new ones. Twelve tests.
+
+#### Hunger is declared and deliberately not wired
+
+Its arm carries the plan reader, the composition reader and the search that
+#188 to #190 measured into it. Putting a fresh ranker in front of all that
+would throw them away to buy an ordering that, on the evidence above, is worth
+about a fifth of a per cent. Moving hunger over means moving those over with
+it, and that is its own piece of work and its own measurement.
+
+The other thing still missing is the same one #192 ended on: `Element::By` is
+not written at the end of a turn, so nothing learns which way paid. The costs
+are computed; the confidence term reads `Lessons`, which *is* learned, so the
+formula is not entirely blind - but the way itself has no trail yet.
+
+---
+
+### 194. Map memory has no specificity, and two of its seven kinds of place have never been written
+
+A specification for map memory - generic against specific, retention by how
+the place was learned, graded decay from a named thing to a vague area - was
+surveyed against what the model has, and most of it is genuinely absent. What
+is there and well-formed is the confidence decay with importance bands per
+kind of place, `value` for how much is there, and refresh on re-sighting.
+
+The largest absence is underneath the specification rather than in it. The
+sight pass filed food and water and had `return None` for everything else, so
+`SpatialMemoryType::Resource` and `SpatialMemoryType::Tool` have sat in the
+memory since memories were written with **nothing to write them and nothing to
+read them**. Nobody in this model has ever remembered where clay, flint, stone,
+reeds or good timber were. Every making wants a material, and `Action::Gather`
+takes what is under the agent's feet - so "he is short of wood, let him gather
+wood" has always meant "let him scratch at the ground where he stands".
+
+**Building it was measured five times and it does not pay yet.** A memory
+gained a name written only by an agent who knows what the stuff is for
+(`is_a_familiar_thing` plus `knows_how_to`), the name faded before the place
+did, and the sight pass filed what it saw. Against 108,344 / 22 emptied / 12
+out of the first winter and 106,989 / 25 / 10:
+
+- **Fetching what you remember, from the roof path**: 107,116 / 26 / 9 and
+  104,717 / 23 / 11, and over 8 worlds in a year **finished burrows 22 to 5 and
+  the larder 30,745 items to 12,340**. A tent wants eight wood and four hides;
+  a burrow wants nothing at all, and twenty paces spent on tent timber is
+  twenty paces not spent digging the hole the store goes under.
+- **Fetching as a strict fallback on the making path**: worse still, 100,245
+  and 101,532. `make_what_this_wants` wraps every action, so a fetch-before-do
+  rule reaches the roof again by another door. **In this model the thing worth
+  doing is nearly always the thing under your feet, and a walk displaces it.**
+- **The record alone, no fetching**: roofs and larder recover exactly - 22
+  finished, 162 pits, 30,479 items - and the two-year measure settles at
+  105,980 / 25 / 9 and 106,245 / 28 / 9. A consistent small cost: person-days
+  215,333 to 212,225, worlds emptied 47 to 53, first winters survived 22 to 18.
+- **Filing only what a man can name** changed nothing at all, because nearly
+  everything in these worlds is nameable by a stone-age agent.
+
+**And the one and a half per cent turned out to be a bug, not a price.**
+`what_forgetting_this_would_cost` dropped a place a band when nobody could name
+it - and `remember_location` files a pit, a roof, a danger and a drink *without*
+a name, because there is nothing to say about them beyond what they are. So the
+winter store began fading a band faster, which is precisely the fault
+`how_much_this_matters` was written to fix. Three tests caught it:
+`the_store_outlasts_the_winter_it_was_laid_down_for`,
+`a_bush_somebody_walked_past_is_forgotten_in_a_fortnight` and
+`forgetting_in_batches_is_forgetting_at_the_same_rate`.
+
+Naming only governs retention for a `Resource`, which is the one kind of place
+where the question means anything: a bank of clay to a potter, a patch of mud to
+everybody else. With that, the layer is **free**. The one-year roofs run comes
+back byte-identical to the run before any of this - 22 finished burrows, 162
+pits, 30,745 items - and over two years the blocks are 108,160 / 23 emptied / 11
+out of the first winter and 106,989 / 25 / 10, against 108,344 / 22 / 12 and
+106,989 / 25 / 10. The second block is identical; the first differs by one
+world. Person-days 215,333 to 215,149, which is nine hundredths of a per cent
+and well inside the noise of this harness. Seed 0's year rolls the same number
+of times it always did.
+
+So the record is in. Nothing reads the name yet beyond its own retention - the
+reader that walked to it is refuted and stays out - and it is substrate for
+#171-#173, which all want to know where a material is.
+
+One more thing came out of it and is fixed: `Memory::batch_decay_and_prune`
+evicted from a full shelf **by confidence alone**, so a bush seen this morning
+outranked a winter store. The cap is a thousand and the store never comes near
+it, so this changes nothing measurable - it was found by filling the store and
+is fixed rather than left for whoever fills it next.
+
+---
+
+### 195. Every sibling material in the model is handed to every founder at birth
+
+The innovation path - "one use of a material teaches its siblings" - had
+nothing to teach. The families are real: `stone` and `flint` both knap to a
+tip, `flax` and `cotton` both twist to a lashing. But `KNAPPED_TIP_FROM_FLINT`
+and `LASHING_FROM_COTTON` were both `obvious: true`, so every founder arrived
+knowing all of them and there was no thought left for anybody to have. The
+craft did not grow; it was inherited entire.
+
+`EVERY_FAMILY` names the likenesses now, and
+`somebody_puts_two_and_two_together` is the second way of finding something
+out. The first, `somebody_notices_something`, is an accident: the right things
+in your pack and a fire in front of you. This one is reasoning - a man who
+knows the job, looking at a thing of a kind with what he uses for it - and it
+does not want the stuff in his hand. **It wants the name on his map.** A
+`SpatialMemory` has carried `what_it_is` since #194 and nothing asked; this is
+the first thing in the model to read it, and it is the whole of the prompt: a
+settlement that never walks past a flint bank never has the thought, and one
+that walks past it daily has it within a season.
+
+Two things had to be settled to make it work.
+
+**Recognising a thing and knowing how to work it are different questions.**
+`do_i_know_what_this_is_for` now also answers yes for a thing of a kind with
+something known - "that is a stone like the ones I knap". Without that the path
+eats its own tail: he cannot name the flint until he knows flint knapping, and
+cannot work out flint knapping without noticing there is flint about.
+
+**And the metals are deliberately not a family.** Iron makes a lump and the
+lump makes a blade: a chain, each link found out on its own terms over a fire.
+Calling them siblings would hand a settlement bronze for having once picked up
+a bright stone.
+
+**Taking flint away is free; taking cotton away is not.** Against 108,160 / 23
+emptied / 11 out of the first winter and 106,989 / 25 / 10:
+
+- **Both made discoveries**: 110,572 / 27 / 9 and 103,655 / 27 / 6. Person-days
+  are noise and disagree in direction, but settlements out of their first
+  winter fall from 21 of 64 to **15** and both blocks agree.
+- **Flint alone**: 112,507 / 21 / 11 and 106,701 / 25 / 9. Person-days 215,149
+  to 219,208, but the blocks disagree - A up 4.0%, B down 0.3% - so that is
+  noise and not a gain. Worlds emptied 48 to 46, first winters 21 to 20.
+  Nothing moves outside the block noise in either direction: **the layer is
+  free.**
+
+Lashing is what fifteen of the steps in this chain want. Taking a fibre away
+from a founding people costs more than the thought is worth, and the difference
+between the two runs is the price of that one line. Flint is the case the
+specification is really about - anybody can knap ordinary stone; that flint
+takes half as much and holds a finer edge is a thing a people works out - and
+it is the one that is in.
+
+An earlier reading of the flint-alone run had it at 217,670 and up on both
+blocks. That run was taken before the stream fix below and does not describe
+this code; the figures above are the re-measurement.
+
+**The pass rolled a die every tick whether or not it had anything to decide.**
+The dice stream is shared world-wide, so a pass that rolls unconditionally
+re-shuffles every seeded outcome downstream of it - the ecology included. It
+knocked over `the_land_will_only_carry_so_many`, which is ten sheep on a
+quarter of a square kilometre and thin enough already: 1 roaming against 5
+penned. No sheep had died differently, the draws had simply moved. The
+candidates are built first now and the dice are not touched unless there is
+one. Deciding nothing costs nothing.
+
+### And the map arm never fires in a live world
+
+The prompt has two halves - the stuff in his pack, or the name on his map -
+and only the first of them does any work today. Over 8 worlds of 12 founders
+run 180 days, 5 of 8 worlds worked flint knapping out, first on days 32, 39,
+119, 122 and 147; 7 of the 96 people who ever lived had the thought. **None of
+them had flint on their map**, and every one of the seven was holding flint
+when he had it.
+
+The reason is that flint is not a thing that lies in the ground. There is no
+`ResourceType::Flint`; flint is *made*, by `SMASH_A_CORE` - a stone core broken
+down into flakes - so no sight pass can ever write it and no map can ever
+carry it. What does get a name, counted as agent-ticks holding one over 6
+worlds of 120 days: fish 7.8M, wood 4.7M, stone 3.3M, flax 1.5M, cotton 1.2M,
+iron 104k.
+
+Cotton is the one that matters in that list. It lies in the ground, it is in a
+family, and it is on a million agent-ticks' worth of maps - so the map arm
+*would* be load-bearing the moment `LASHING_FROM_COTTON` became a discovery.
+That is exactly the run measured above at 15 first winters out of 64 against
+21. So the two halves of this stand in each other's way: **the sibling that is
+cheap to make a discovery is made rather than found, and the one that is found
+rather than made is too dear to make a discovery.**
+
+The reader is real, it is what `knowing_where_the_flint_is_is_what_teaches_him_flint`
+asserts end to end, and it will fire for any ground-lying sibling added after
+this. It is not doing anything in a live world today, and saying otherwise
+would be claiming a measurement that was not taken. Putting flint in the
+ground - a chalk-and-hills deposit, the way flint actually occurs - is what
+would make it live at flint's price instead of cotton's, and that is a change
+to the world's contents rather than to this layer, wanting its own
+measurement.
+
+### What a man knows is a product, not a recipe
+
+`knows_how_to` is `step.obvious || found_out.contains(step.makes)`, so what
+gets written down when somebody works flint out is "he knows knappedtip".
+There are two ways to make a knapped tip and one of them is obvious, so today
+this is exactly right. It stops being right the moment a third way of making
+one is added: whoever works out any one non-obvious route would be handed
+every other route to the same thing for free. The record wants to be per
+recipe before that happens.
+
+### 196. Map memory had one clock, and nobody ever told anybody where anything was
+
+Two absences, and the second is the larger.
+
+**Every remembered place faded at the same rate.** `SpatialMemory::forget_a_little`
+bent the rate by what *kind* of place it was - a store outlasts a bush - and by
+nothing else, so the clay bank a potter had dug out every week for a year was
+forgotten at exactly the rate of one he had glimpsed over somebody's shoulder.
+The note on `STILL_KNOWS_WHAT_IT_WAS` said as much in as many words: "making it
+depend on *how* the place was learned is the next piece, not this one."
+
+**And a place somebody told you about never reached your map.**
+`InformationType::ResourceLocation` has been in the gossip layer since it was
+written. Agents believe it, `detect_lies_in_knowledge` verifies it, and
+`found_out_i_was_lied_to` prices a lie about it by whether it sent somebody
+somewhere they needed to go. None of that ever put a place on a map. A man
+could be told where the clay was, believe it, be lied to about it, resent the
+liar - and still not know where the clay was. Worse, the only thing anybody
+ever said was the literal string `"generic"` at their own feet, which is not
+news and not a place: the speaker and the listener were standing on it.
+
+#### The three footings
+
+`HowIKnow` is how a man came by a place, and it is what decides how long he
+keeps it. One sentence each, and the specification's own numbers:
+
+| Footing | The thought behind it | How long |
+|---|---|---|
+| `SawItUsed` | so-and-so will find this useful, even if I do not | a week |
+| `UsedThisKind` | I find this useful, though I have not worked it | a year |
+| `WorkedThisPlace(n)` | I find this useful and I have had it out of the ground | three years, and another for every trip |
+
+Read off the decay rather than asserted about the table - see
+`the_three_footings_are_a_week_a_year_and_three_years`. The trip count stops
+telling after four: a settlement lasts about a year in this model, so a memory
+already good for six years is good for ever and counting past it is arithmetic
+nothing can distinguish.
+
+All three have writers, which is the part that was worth checking. The sight
+pass files what he can name on the middle footing and what he cannot on the
+weakest. Harvesting promotes a place he already remembered - the one footing
+earned with the hands. And watching somebody else work a patch files it on the
+weakest, which is the specification's first level exactly: the man who will
+never spin can still tell a spinner where the flax was, for about a week, and
+a week is long enough to walk there.
+
+#### The brake, which is what keeps the rest honest
+
+A clay bank is where it was. A bramble is a fact about last autumn, and a man
+walking half a day in March on a patch he stripped in October has been misled
+by his own good memory. `HowSteady` says which, and the world has known since
+the hedgerows were given a bearing year: anything with a window in
+`ResourceType::bearing_window` turns, anything that never bears never stops.
+
+A turning place is never held *longer* than the ordinary fortnight however well
+he knows it. It is never held shorter either - two systems shortening one
+memory is how a winter store came to be forgotten a fortnight after it was
+buried, and that fault is not being repeated. And none of the footings reach
+`Storage`, `Water`, `Danger` or `Shelter`: a pit a man dug is not a source,
+there is no trip back to count and no season to turn, and those bands were set
+by measuring a settlement starving thirty paces from its own larder.
+
+#### The footings fire, and they cost nothing
+
+Six worlds of twelve founders over a hundred and twenty days: **17,413
+remembered places** among the living, 11,932 on the weakest footings, 4,270 on
+the middle and 1,211 worked by hand over 41,815 trips. All three are populated,
+which is what says the writers are real rather than merely present.
+
+Against 219,208 person-days / 46 worlds emptied / 20 out of the first winter
+over 64 seeded worlds: **111,817 / 23 / 11 and 106,771 / 25 / 10, a total of
+218,588 / 48 / 21.** Person-days disagree in direction between the blocks (A
+down 0.6%, B up 0.1%) and move 0.3% in total; two more worlds empty and one
+more settlement gets out of its first winter. Nothing moves outside the noise
+in either direction: **free**.
+
+**And one fault of my own, caught by a test rather than by reading.** The
+default footing was at first the weakest of the specification's three, which
+silently halved the life of every memory nobody had thought to label - a bush a
+man walked past went in a week rather than a fortnight. That is exactly the
+two-systems-shortening-one-memory fault this layer is careful about everywhere
+else, and it reached every `remember_location` caller in the model.
+`a_bush_somebody_walked_past_is_forgotten_in_a_fortnight` caught it. The default
+is now `JustNoticedIt`, which holds for the fortnight every remembered place in
+this model held before any of this, so a writer that says nothing changes
+nothing. An earlier reading taken before that fix had the layer at
+220,163 / 48 / 21; that build is not this one.
+
+#### The category tier
+
+The name goes first, the *sort of thing* outlasts it, the place outlasts that:
+"flax at that field edge" becomes "fibre in that valley" becomes "somewhere
+over there was worth a look" becomes nothing. `WHAT_SORT_OF_THING` is the
+vocabulary and it is deliberately broader than `EVERY_FAMILY`: a family is what
+will stand in for what in a making, a sort is what a man calls the stuff with
+the name gone. Every family sits inside one sort and a test holds them to it,
+so the two tables cannot come apart.
+
+**Nothing reads it.** The reader it was built for is the next section, and the
+next section is the part that had to come out.
+
+#### Telling somebody where things are: built, measured, and taken out again
+
+`InformationType::ResourceLocation` has been in the gossip layer since it was
+written. Agents believe it, `detect_lies_in_knowledge` verifies it, and
+`found_out_i_was_lied_to` prices a lie about it by whether it sent somebody
+somewhere they needed to go. And **the only thing anybody ever said was the
+literal string `"generic"` at their own feet**, which is not news and not a
+place: the speaker and the listener were standing on it. A man could be told
+where the clay was, believe it, be lied to about it, resent the liar - and
+still not know where the clay was.
+
+What was built: a man tells you the best place he can still put a word to (the
+name while he has it, the sort once it has gone, and nothing below that);
+half of what he says is first-hand and half passed on, so other news is not
+swamped; and a place he is told about goes on his map on the weakest footing
+if he believed it. It worked. Over six worlds of a hundred and twenty days the
+living were carrying **4,274 claims about where things are, 3,956 of them
+believed and none of them the old stub**.
+
+**It cost 6.3% of all person-days and two thirds of the first winters.**
+Against 220,163 / 48 / 21 for the footings alone as they then stood: 104,190 / 28 / 4 and
+102,123 / 31 / 4, a total of 206,313 / 59 / 8. Both blocks agreed on all three
+figures, and the weather rose past starvation to the second cause of death,
+which is what a settlement walking off after rumours looks like from outside.
+
+**Two diagnoses, both refuted by measurement, and they are the useful part of
+this entry.**
+
+The first was confidence. A told place arrived at 1.0, exactly as sure as
+standing in front of the thing, so for the first days of its week a rumour
+outranked everything a man had seen with his own eyes - and the specification
+asks for the opposite in as many words ("heard about berry patch: medium
+confidence, fast decay"). Landing it instead at the confidence the hearer had
+in the teller changed **nothing**: 206,371 / 58 / 9 against 206,313 / 59 / 8.
+
+The second was the map itself. Taking the write out entirely - so a told place
+stays in `KnowledgeBase` and never reaches a map - came back **byte-identical**
+to the run before it: 103,589 / 4 and 102,782 / 5, the same numbers to the
+person-day. Which settles it: the map write never did anything at all. Nothing
+in the decision layer walks on a `SpatialMemoryType::Resource` memory, so
+filing one changes no decision.
+
+So the cost is in what the *claims themselves* now do, and the likeliest seat
+of it is `verify_resource_claim`. It returns `Some(false)` for a place the
+hearer has been to and holds no resource for, and `detect_lies_in_knowledge`
+turns any `false` into a lie **regardless of the roll and regardless of
+`ground_truth`** - so an honest man naming a patch that has since been picked
+over is branded a liar and the grudge machinery fires. Changing what circulates
+from one meaningless string to real, checkable, perishable claims turned that
+from a formality into a settlement-wide falling-out. That is a fault in the
+lie-detection arithmetic rather than in telling people things, and it wants
+fixing before this is tried again.
+
+The whole of it is reverted. What is left behind is the category tier, which
+is correct, tested, and waiting for a consumer that is not this one.
+
+#### What of the specification is still not built
+
+Named here rather than left to be rediscovered:
+
+- **Salience as a product** - usefulness x scarcity x urgency x past success x
+  proximity. Half of it is already in `what_this_patch_is_worth`, which weighs
+  energy, how much is standing, distance and the cost of the trip. Scarcity,
+  present drive pressure and whether the last trip paid are not in it. This one
+  has live readers in foraging and migration and is the biggest thing left.
+- **The exploit-detail tier** - best in the dry season, upper layer poor, the
+  path floods in spring. The tier below a name, and nothing in the world
+  currently varies that way within a single deposit.
+- **Which** season a turning place turns in. `HowSteady` records that it turns,
+  not its window, so a man cannot yet decide to go in October rather than March.
+- **Source split.** `HowIKnow::SawItUsed` covers both watching somebody work and
+  being told, which are the same firmness from different people. The
+  specification asks for self / observed / told as separate facts.
+- **The predictive landscape model** - "clay is often found on cut banks near
+  streams". Level D of the A-B-C-D progression; A, B and C are all in.
+- **Strengthening events are still flat.** `refresh` adds a fifth of confidence
+  whether he glanced at the place or spent the morning digging it.
+- **Telling somebody where things are**, which is the section above: it wants
+  the lie-detection arithmetic fixed first.
+
+And one that is not in the specification but is in the way of it: **nothing in
+the decision layer walks on a `SpatialMemoryType::Resource` memory.** Proved by
+accident here - taking the hearsay map write out came back byte-identical - and
+it is the same finding as the note on `what_forgetting_this_would_cost`, where
+sending a man to fetch a material he remembered cost 215,333 person-days
+against 201,777. Knowing where the clay is is worth having and not worth
+crossing a valley for, so the record exists and nothing acts on it. Until
+something does, every improvement to what a map remembers is an improvement to
+a thing only the craft layer reads.

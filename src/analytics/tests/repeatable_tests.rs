@@ -99,6 +99,57 @@ fn the_same_seed_is_the_same_world() {
     );
 }
 
+/// And how many times a fixed world rolls is a *recorded* number, not merely
+/// one that agrees with itself.
+///
+/// `the_same_seed_is_the_same_world` runs both worlds in one process on one
+/// thread, so it cannot see anything that varies *between* runs - and that is
+/// exactly the kind of drift that has been hardest to pin down here. A
+/// settlement test that asserts "at least one of thirty-two survives" fails
+/// intermittently, takes half an hour to do it, and says nothing at all about
+/// why; this says it in a second, and says which fault it is. A count that has
+/// moved means something took a branch on an input the seed does not fix.
+///
+/// If the model is deliberately changed, this number changes with it, and the
+/// new one goes here. That is the point: it is a fact about the model, so it
+/// should have to be restated when the model is restated.
+#[test]
+fn a_fixed_world_rolls_a_recorded_number_of_times() {
+    const WHAT_SEED_4242_ROLLS_IN_120_TICKS: u64 = 8_824;
+
+    let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
+
+    assert_eq!(
+        rolled, WHAT_SEED_4242_ROLLS_IN_120_TICKS,
+        "seed 4242 rolled {rolled} times where it has always rolled {WHAT_SEED_4242_ROLLS_IN_120_TICKS}. \
+         Either the model was changed on purpose - in which case put {rolled} in \
+         the constant - or something is deciding a branch on an input the seed \
+         does not fix, which is what this is here to catch."
+    );
+}
+
+/// And the same, out to the length a settlement test actually runs.
+///
+/// Kept separate from the short one because it costs about a minute. The
+/// short one catches anything that goes wrong early; a whole year is where
+/// the seasons turn, the herds move and a settlement dies, and a drift that
+/// only shows up out there would otherwise be found by a half-hour test that
+/// says "not one settlement of thirty-two came out".
+#[test]
+fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
+    use crate::environment::seasons::{DAYS_PER_YEAR, TICKS_PER_DAY};
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_064_189;
+
+    let a_year = (DAYS_PER_YEAR * TICKS_PER_DAY) as usize;
+    let (_, rolled) = a_world_from(0, a_year);
+
+    assert_eq!(
+        rolled, WHAT_SEED_0_ROLLS_IN_A_YEAR,
+        "seed 0 rolled {rolled} times over a year where it has always rolled \
+         {WHAT_SEED_0_ROLLS_IN_A_YEAR}"
+    );
+}
+
 /// And a different seed is a different world, or seeding would prove nothing.
 #[test]
 fn a_different_seed_is_a_different_world() {

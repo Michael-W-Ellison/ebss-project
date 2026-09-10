@@ -17,6 +17,95 @@ use log::debug;
 use rand::Rng;
 
 impl Simulation {
+    /// Set down what is worth less than food, to make room for food.
+    ///
+    /// The carrying invariant - `what_nobody_can_carry_any_more` - only fires
+    /// on a pack that is *over* its limit, and trims it back to exactly the
+    /// limit. So a pack equilibrates at a hundred per cent full and stays
+    /// there: measured across a run, packs sat at 97-110% of capacity all
+    /// year, **fifty-five per cent raw material by weight and about one per
+    /// cent food**, and refused every armful anybody was standing over.
+    ///
+    /// Being full is not being overloaded, and what to carry is a decision
+    /// rather than a law. This is the decision: food is worth more than the
+    /// fourth stone, so the stone goes down. What goes down is what
+    /// `what_i_would_set_down` ranks - the heaviest thing that is not food,
+    /// not a tool this one works with, and not the thing it carries its load
+    /// in - and only as much of it as the room wants. It stays where the
+    /// agent is standing, to be picked up by them or by anybody else.
+    ///
+    /// Returns how much room was actually made, which is nothing at all for
+    /// somebody whose pack is all food and tools.
+    ///
+    /// Note what this is *not*: shedding down to a standing reserve, whether
+    /// there is anything to pick up or not. That was tried - a blanket
+    /// "limit less a day's food" - and cost **five per cent of a settlement's
+    /// person-days over 160 worlds**, because a man drops his firewood in the
+    /// middle of the moor and goes back for more. This fires only with a crop
+    /// in the hand that will not fit, so what goes down goes down beside what
+    /// it was swapped for.
+    pub(in crate::analytics) fn set_down_what_is_worth_less_than_food(
+        &mut self,
+        agent_index: usize,
+        room_wanted: f32,
+    ) -> f32 {
+        use crate::world::Position;
+
+        let here = {
+            let at = self.population.agents[agent_index].state.position;
+            Position::new(at.0, at.1)
+        };
+        let now = self.current_tick;
+        let started_with = self.population.agents[agent_index]
+            .inventory
+            .weight_capacity_remaining();
+
+        loop {
+            let room = self.population.agents[agent_index]
+                .inventory
+                .weight_capacity_remaining();
+            let still_wanted = room_wanted - (room - started_with).max(0.0);
+            if still_wanted <= 0.0 {
+                break;
+            }
+
+            let Some(what) = self.population.agents[agent_index].what_i_would_set_down() else {
+                break;
+            };
+
+            let how_many =
+                self.population.agents[agent_index].how_much_of_this_makes_room(&what, still_wanted);
+            if how_many == 0 {
+                break;
+            }
+
+            let Some(mut down) = self.population.agents[agent_index]
+                .inventory
+                .get_item(&what)
+                .cloned()
+            else {
+                break;
+            };
+            down.quantity = how_many;
+
+            self.population.agents[agent_index]
+                .inventory
+                .remove_item(&what, how_many);
+            self.world.somebody_left_this(down, here, now);
+
+            debug!(
+                "Agent {} set down {how_many} {what} to make room for food",
+                self.population.agents[agent_index].id
+            );
+        }
+
+        (self.population.agents[agent_index]
+            .inventory
+            .weight_capacity_remaining()
+            - started_with)
+            .max(0.0)
+    }
+
     /// What a trip to a food plant brings back.
     ///
     /// A forager strips a bush; they do not pick a single fruit and walk
@@ -207,6 +296,8 @@ impl Simulation {
                 ResourceType::Food
                 | ResourceType::Greens
                 | ResourceType::Roots
+                | ResourceType::Nuts
+                | ResourceType::Legumes
                 | ResourceType::Grain
                 | ResourceType::Herbs => {
                     Self::what_a_trip_brings_back(resource_type_enum, today, rng)
@@ -276,6 +367,28 @@ impl Simulation {
                 self.population.agents[agent_index]
                     .exploration_knowledge
                     .found_some_at(where_it_grew);
+
+                // **And he has now had it out of the ground here.**
+                //
+                // The firmest of the three footings a map memory can stand
+                // on, and the only one earned with the hands: watching is not
+                // using, and using a kind of stuff is not working a bank. The
+                // specification gives this three years and another for every
+                // trip back, against a year for knowing what the stuff is for
+                // and a week for having watched somebody else. See
+                // `core::memory::HowIKnow`.
+                //
+                // A man who walks onto a patch and strips it without ever
+                // having filed it has nothing to promote, which is the
+                // ordinary case and why this says nothing about failure.
+                let kind = if Self::edible_item_for(resource_type_enum).is_some() {
+                    crate::core::memory::SpatialMemoryType::Food
+                } else {
+                    crate::core::memory::SpatialMemoryType::Resource
+                };
+                self.population.agents[agent_index]
+                    .memory
+                    .i_have_worked_this_place(kind, (where_it_grew.x, where_it_grew.y, 0));
             }
             if picked_out {
                 for watcher in self.population.agents.iter_mut() {
@@ -362,17 +475,20 @@ impl Simulation {
                     agent.state.last_drank_tick = self.current_tick;
                     agent.state.ticks_without_water = 0;
 
-                    if salt {
-                        // Salt water takes more water out of a body
-                        // than it puts in, and the body finds that out
-                        // twenty minutes later like any other drink.
-                        agent.state.physiology.hydration =
-                            (agent.state.physiology.hydration
-                                - physiology::A_DRINK_IS_WORTH * 0.5)
-                                .max(0.0);
-                    } else {
-                        agent.state.physiology.drink(physiology::A_DRINK_IS_WORTH);
-                    }
+                    // Salt water goes down like any other drink, and the body
+                    // finds out what it was over the days it takes to get the
+                    // salt back out - see `Agent::tick_salt` and
+                    // `WHAT_A_MOUTHFUL_OF_THE_SEA_COSTS`. That is the one
+                    // place the cost of the sea is reckoned.
+                    //
+                    // **This took a sixth of a body off on the spot and gave
+                    // nothing back**, which is a second answer to the question
+                    // `tick_salt` already answers, and a harsher one than
+                    // either docstring described: a man who drank the sea was
+                    // not slowly poisoned, he was immediately a sixth drier
+                    // for it. Sea water does put water into a body. What it
+                    // does not do is leave it there.
+                    agent.state.physiology.drink(physiology::A_DRINK_IS_WORTH);
 
                     if salt {
                         // "Even if it seems to temporarily satiate
@@ -410,18 +526,14 @@ impl Simulation {
                 // added, and clay would have done the same.
                 let item_id = Self::gathered_as(resource_type_enum).unwrap_or("generic");
 
+                // One table for what a thing weighs, shared with the decision
+                // that asks whether there is room for it - see
+                // `what_one_of_these_weighs`. There were two, and the gate's
+                // said one for everything.
                 let mut item = InventoryItem::new_with_weight(
                     item_id.to_string(),
                     harvested,
-                    match resource_type_enum {
-                        ResourceType::Wood => 2.0,     // Wood is light but bulky
-                        ResourceType::Stone => 5.0,    // Stone is heavy
-                        ResourceType::Iron => 8.0,     // Iron is very heavy
-                        ResourceType::Food => {
-                            crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS
-                        }
-                        _ => 1.0,
-                    }
+                    Self::what_one_of_these_weighs(resource_type_enum),
                 );
 
                 // Gathered food carries nutrition and spoils over time
@@ -435,7 +547,36 @@ impl Simulation {
                 // As much as will go, rather than all or nothing: an armful
                 // offered as one lump to a pack with room for half of it used
                 // to be refused entire. See #118.
-                let took = self.take_what_fits(agent_index, &item);
+                let mut took = self.take_what_fits(agent_index, &item);
+
+                // And a pack that is merely full puts the stone down.
+                //
+                // The carrying invariant only fires on a pack that is *over*
+                // its limit, and trims it to exactly the limit - so packs sit
+                // at a hundred per cent, year round, **fifty-five per cent
+                // raw material by weight and about one per cent food**, and
+                // refuse every armful anybody stands over. That is the whole
+                // of `Gather: Inventory full`: 139,126 refusals of 199,981.
+                //
+                // Being full is not the same as being overloaded, and it is a
+                // decision rather than a law: what is worth carrying is what
+                // you are going to need, and a man on a berry patch in autumn
+                // needs the berries more than he needs the fourth stone.
+                // So food, and only food, is worth setting something down
+                // for, and what goes down is what `what_i_would_set_down`
+                // already ranks lowest - never food, never a tool he works
+                // with, never the thing he carries his load in. It stays
+                // where he was standing, for him or anybody else.
+                if it_is_food && took < harvested {
+                    let each = item.weight_per_unit * item.how_much_lighter_it_is();
+                    let short = (harvested - took) as f32 * each;
+                    if self.set_down_what_is_worth_less_than_food(agent_index, short) > 0.0 {
+                        let mut the_rest = item.clone();
+                        the_rest.quantity = harvested - took;
+                        took += self.take_what_fits(agent_index, &the_rest);
+                    }
+                }
+                let took = took;
                 let went_in_the_pack = took > 0;
                 if it_is_food {
                     self.food_items_into_packs += took as u64;
@@ -475,6 +616,45 @@ impl Simulation {
                     // a hundred and fifty in packs, and the rest went
                     // nowhere at all. ISSUES #165 states this principle
                     // and never reached this branch.
+                    // Except that a mouth is not a pack.
+                    //
+                    // This was the single largest refusal in the model -
+                    // **139,126 of 199,981, seven in ten of everything anybody
+                    // was refused** - and a good share of it was somebody
+                    // hungry, standing on a bush, being told they could not
+                    // carry it. They were not trying to carry it. Measured at
+                    // the last look before death: 61.5% of the dying had no
+                    // room for another armful, and they died eleven days into
+                    // a three-week reserve.
+                    //
+                    // So food picked by somebody who cannot carry it is eaten
+                    // where it stands, and only what is left over goes back on
+                    // the bush. Nothing else changes: a full pack still cannot
+                    // carry wood, and a man who is not hungry still cannot
+                    // pick up what he has no room for.
+                    if it_is_food {
+                        if let Some(kind) = Self::edible_item_for(resource_type_enum) {
+                            let (eaten, went_in, nutrition) =
+                                self.a_sitting_from_the_hand(agent_index, kind, harvested);
+
+                            self.world.resources[resource_index]
+                                .put_it_back(harvested.saturating_sub(eaten));
+
+                            return ActionResult::success()
+                                .with_drive_change(
+                                    DriveType::Hunger,
+                                    -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
+                                        * physiology::what_this_meal_answers(went_in),
+                                )
+                                .with_energy_cost(10.0)
+                                .with_message(format!(
+                                    "Ate {eaten} {resource_type} where it stood, \
+                                     having no room to carry any ({:.1} energy)",
+                                    nutrition.energy
+                                ));
+                        }
+                    }
+
                     self.world.resources[resource_index].put_it_back(harvested);
                     ActionResult::failure("Inventory full - cannot carry more".to_string())
                 }
@@ -521,8 +701,17 @@ impl Simulation {
                 }
             }
 
-            if resource_type_enum == ResourceType::Food {
-                self.forget_nearby_food_memories(agent_index);
+            // A place that has just been looked at and had nothing in it is
+            // not where the food is, nor where the water is. Water was left
+            // out of this, which was harmless while a memory lasted four hours
+            // and is not harmless now that one lasts a fortnight.
+            match resource_type_enum {
+                ResourceType::Food => self.forget_nearby_food_memories(agent_index),
+                ResourceType::Water => self.forget_what_is_not_there(
+                    agent_index,
+                    crate::core::memory::SpatialMemoryType::Water,
+                ),
+                _ => {}
             }
 
             ActionResult::failure(format!("No {} sources nearby", resource_type))
@@ -1021,16 +1210,34 @@ impl Simulation {
             return ActionResult::failure("Nothing to dig here".to_string());
         }
 
+        // Whose hole it is: the man with the shovel. Nothing refuses anybody
+        // a pit on the strength of this - see `world::belonging` - but it is
+        // what lets a man tell his own store from the one across the camp,
+        // and it is the first claim anybody in this model has ever made on
+        // anything.
+        let whose = self.population.agents[agent_index].id;
+
         self.world.pits.push(Pit {
             where_it_is: here,
             holds: Vec::new(),
             covered: false,
             dug: tick_now,
+            belongs: crate::world::Belongs::To(whose),
         });
 
         // What comes out of a hole. The matrix says excavating changes
         // the ground and what is held, and this is the second half.
         let agent = &mut self.population.agents[agent_index];
+
+        // And a man knows where he dug. Seeing a pit is one way to learn of
+        // one - see the sight pass in `Population` - but it is not the way you
+        // learn about your own: you were there with the shovel. Without this a
+        // digger who walked away and came back would have to catch sight of
+        // his own larder again to remember it.
+        agent.memory.remember_location(
+            crate::core::memory::SpatialMemoryType::Storage,
+            (here.x, here.y, 0),
+        );
         agent.inventory.add_item(crate::agents::InventoryItem::new_with_weight(
             "stone".to_string(),
             Self::WHAT_COMES_OUT_OF_A_HOLE,
@@ -1319,6 +1526,13 @@ impl Simulation {
             agent
                 .skills
                 .practise(crate::agents::SkillType::Hunting, 3, tick_now);
+            // An empty round is evidence about the rhythm too, and the
+            // important half of it: a line walked too often comes back empty.
+            agent.that_is_done(
+                crate::agents::practices::Undertaking::Trapping,
+                tick_now,
+                0.0,
+            );
             return ActionResult::failure("Empty".to_string())
                 .with_energy_cost(Self::WHAT_A_ROUND_COSTS);
         }
@@ -1327,19 +1541,93 @@ impl Simulation {
             .food_database
             .create_food_data(&crate::world::inventory::ItemType::Meat, self.current_tick);
 
+        // Room for it before the snares are emptied, and only as much as
+        // there is room for. **`add_item` returns whether the thing went in
+        // and this threw the answer away**, so a man with a full pack took
+        // the catch out of the snare and it stopped existing - the same
+        // defect as the store in #180, at the call site that entry named and
+        // did not fix. What will not fit stays in the snare, where it is at
+        // least still there when he comes back with room.
+        let each = 1.2f32;
+        let _ = self.set_down_what_is_worth_less_than_food(agent_index, each * took as f32);
+        let agent = &mut self.population.agents[agent_index];
+        let room = agent.inventory.weight_capacity_remaining();
+        let carrying = took.min((room / each).floor().max(0.0) as u32);
+
+        if carrying == 0 {
+            // Put them back: the snare held it and the snare can go on
+            // holding it.
+            let mut left = took;
+            for snare in self.world.snares.iter_mut() {
+                if left == 0 {
+                    break;
+                }
+                if snare.set_by == agent_id && snare.caught_at.is_none() {
+                    let reach = (snare.at.0 - at.0).abs().max((snare.at.1 - at.1).abs());
+                    if reach <= Self::CLOSE_ENOUGH_TO_A_SNARE {
+                        snare.caught_at = Some(tick_now);
+                        left -= 1;
+                    }
+                }
+            }
+            self.world.animals.small_life.snare_tally.taken -= (took - left) as u64;
+            return ActionResult::failure("No room in the pack for the catch".to_string())
+                .with_energy_cost(Self::WHAT_A_ROUND_COSTS);
+        }
+
         let agent = &mut self.population.agents[agent_index];
         let mut catch =
-            crate::agents::InventoryItem::new_with_weight("meat".to_string(), took, 1.2);
+            crate::agents::InventoryItem::new_with_weight("meat".to_string(), carrying, each);
         catch.food_data = food_data;
-        agent.inventory.add_item(catch);
+        let went_in = agent.inventory.add_item(catch);
+
+        // And if it still will not go in, it goes back in the snare.
+        //
+        // The room above is measured in *weight*, and weight is not the only
+        // thing `add_item` refuses on: a pack already holding its full number
+        // of kinds of thing turns away a new kind however light it is. So the
+        // line above asserted an invariant it did not have, and the assertion
+        // was right to fire - a man with a full pack of kinds took the catch
+        // out of the snare and it stopped existing, which is exactly the
+        // defect the comment forty lines up says it was fixing, one step
+        // further in and still there. Same answer as no room at all: what
+        // will not fit stays where it was caught.
+        if !went_in {
+            let mut left = took;
+            for snare in self.world.snares.iter_mut() {
+                if left == 0 {
+                    break;
+                }
+                if snare.set_by == agent_id && snare.caught_at.is_none() {
+                    let reach = (snare.at.0 - at.0).abs().max((snare.at.1 - at.1).abs());
+                    if reach <= Self::CLOSE_ENOUGH_TO_A_SNARE {
+                        snare.caught_at = Some(tick_now);
+                        left -= 1;
+                    }
+                }
+            }
+            self.world.animals.small_life.snare_tally.taken -= (took - left) as u64;
+            return ActionResult::failure("No room in the pack for the catch".to_string())
+                .with_energy_cost(Self::WHAT_A_ROUND_COSTS);
+        }
+
+        let agent = &mut self.population.agents[agent_index];
         agent
             .skills
             .practise(crate::agents::SkillType::Hunting, 12, tick_now);
+
+        // And what the round brought back, which is what the rhythm is
+        // climbing. See `crate::agents::rhythm`.
+        agent.that_is_done(
+            crate::agents::practices::Undertaking::Trapping,
+            tick_now,
+            carrying as f32,
+        );
 
         ActionResult::success()
             .with_drive_change(DriveType::Hunger, -0.15)
             .with_drive_change(DriveType::Sustenance, -0.1)
             .with_energy_cost(Self::WHAT_A_ROUND_COSTS)
-            .with_message(format!("Took {took} out of the snares"))
+            .with_message(format!("Took {carrying} out of the snares"))
     }
 }

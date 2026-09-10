@@ -34,3 +34,6 @@ cobertura.xml
 # Benchmark results
 /benches/results/
 target/
+
+# Measurement working files: run outputs and harness binaries.
+scratchpad/

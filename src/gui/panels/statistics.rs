@@ -57,10 +57,9 @@ fn render_quick_stats(ui: &mut Ui, snapshot: &crate::gui::state::SimulationSnaps
 
         // Tick/Time
         ui.vertical(|ui| {
-            let days = world.tick / 1440;
+            let (days, hours, minutes) =
+                crate::environment::seasons::what_the_clock_says(world.tick);
             ui.label(RichText::new(format!("Day {}", days + 1)).size(16.0));
-            let hours = (world.tick % 1440) / 60;
-            let minutes = world.tick % 60;
             ui.label(RichText::new(format!("{:02}:{:02}", hours, minutes)).small());
         });
 

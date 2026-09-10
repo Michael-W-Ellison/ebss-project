@@ -126,6 +126,150 @@ impl Simulation {
         }
     }
 
+    /// How often a man who has the thought at all follows it through.
+    ///
+    /// Ten times the rate of stumbling on something over a fire
+    /// (`HOW_OFTEN_ANYBODY_WORKS_IT_OUT`), and deliberately: this is not an
+    /// accident, it is a man who already knows the job looking at a thing of a
+    /// kind with what he uses for it. The hard part - knowing the technique,
+    /// knowing the material, having the two in mind at once - has already
+    /// happened by the time this rolls.
+    pub(in crate::analytics) const HOW_OFTEN_A_LIKENESS_IS_FOLLOWED_UP: f64 = 0.1;
+
+    /// **One use of a material teaches its siblings.**
+    ///
+    /// The innovation path. A man who knaps ordinary stone into a tip, and who
+    /// can point to a bank of flint, works out that flint will do it too - and
+    /// better. He does not need the flint in his hand. He needs to know the
+    /// job, and to know there is a thing of that kind to be had.
+    ///
+    /// That is what makes it different from `somebody_notices_something`,
+    /// which is the accident of standing over a fire with the right things in
+    /// your pack. This one is reasoning: two things a man already knows, put
+    /// beside each other. The specification calls it the innovation path and
+    /// it is what makes a craft grow rather than merely be inherited.
+    ///
+    /// **And it is what reads the name on the map.** A `SpatialMemory` carries
+    /// `what_it_is` - what was there, where the rememberer knew what it was
+    /// for - and until now nothing asked. Knowing where the flint is is the
+    /// whole of the prompt: a settlement that has never walked past a flint
+    /// bank never has the thought, and one that walks past it every day has it
+    /// within a season. See `core::memory` and ISSUES_FOUND #194.
+    ///
+    /// A thing in the pack counts too. Picking a stone up and turning it over
+    /// is at least as good a prompt as remembering where it lies, and refusing
+    /// it would make the rule about maps rather than about likeness.
+    pub(in crate::analytics) fn somebody_puts_two_and_two_together(&mut self) {
+        use crate::environment::making::Making;
+        use rand::Rng;
+
+        // The candidates first, and **not a die touched until there is one.**
+        //
+        // The stream is shared with the whole world, so a pass that rolls
+        // whether or not it has anything to decide re-shuffles every seeded
+        // outcome downstream of it - the ecology included. It knocked over
+        // `the_land_will_only_carry_so_many`, which is ten sheep on a quarter
+        // of a square kilometre and thin enough already, and no sheep had
+        // died differently: the draws had simply moved. Deciding nothing
+        // should cost nothing.
+        let mut could_have_the_thought: Vec<(usize, &'static Making, f64)> = Vec::new();
+
+        for (index, agent) in self.population.agents.iter().enumerate() {
+            if !agent.state.is_alive {
+                continue;
+            }
+
+            let curiosity = agent
+                .drives
+                .get(crate::core::DriveType::Curiosity)
+                .map(|drive| drive.value)
+                .unwrap_or(0.0);
+            if curiosity < Self::CURIOUS_ENOUGH_TO_NOTICE {
+                continue;
+            }
+
+            for step in crate::environment::making::everything_to_find_out() {
+                if agent.knows_how_to(step) {
+                    continue;
+                }
+
+                // Is this the same job, done with a thing of a kind?
+                let a_likeness = crate::environment::making::every_way_to_make(step.makes)
+                    .filter(|known| agent.knows_how_to(known))
+                    .any(|known| {
+                        step.needs.iter().any(|(wants, _)| {
+                            known.needs.iter().any(|(has, _)| {
+                                crate::environment::making::are_they_of_a_kind(wants, has)
+                            })
+                        })
+                    });
+
+                if !a_likeness {
+                    continue;
+                }
+
+                // And can he point to the stuff? In his pack, or on his map.
+                //
+                // **The map half of this never fires today, and it is worth
+                // knowing why.** Flint is not a thing that lies in the
+                // ground - there is no `ResourceType::Flint`, it is made by
+                // smashing a stone core - so no sight pass can write it and
+                // no map can carry it. Measured over 8 worlds of 180 days,
+                // 5 of them worked flint knapping out and not one of the 96
+                // people who ever lived had flint on his map: every man who
+                // had the thought was holding the stuff.
+                //
+                // The one sibling that *does* lie in the ground is cotton,
+                // and it is on maps in quantity - so this arm would be
+                // load-bearing the moment `LASHING_FROM_COTTON` became a
+                // discovery, which is the run that cost 6 of 64 settlements
+                // their first winter. The cheap sibling is made rather than
+                // found and the found one is too dear. See ISSUES_FOUND #195.
+                let to_be_had = step.needs.iter().any(|(wants, _)| {
+                    agent.how_many_i_have(wants) > 0
+                        || agent
+                            .memory
+                            .spatial_memories
+                            .iter()
+                            .any(|place| place.what_i_could_name_it() == Some(*wants))
+                });
+
+                if !to_be_had {
+                    continue;
+                }
+
+                let odds = Self::HOW_OFTEN_A_LIKENESS_IS_FOLLOWED_UP
+                    * curiosity as f64
+                    * agent.skills.hand_for(step.hands) as f64;
+
+                could_have_the_thought.push((index, step, odds));
+                break;
+            }
+        }
+
+        if could_have_the_thought.is_empty() {
+            return;
+        }
+
+        let mut rng = crate::core::dice::roll();
+        let mut worked_out: Vec<(usize, &'static str)> = Vec::new();
+
+        for (index, step, odds) in could_have_the_thought {
+            if rng.gen_bool(odds.clamp(0.0, 1.0)) {
+                worked_out.push((index, step.makes));
+            }
+        }
+
+        for (index, what) in worked_out {
+            if self.population.agents[index].found_out_how_to(what) {
+                debug!(
+                    "Agent {} worked out that something else would make {what}",
+                    self.population.agents[index].id
+                );
+            }
+        }
+    }
+
     /// How far a man will walk to get off fouled ground.
     ///
     /// Not far. The point is to step off the midden, not to leave the country.

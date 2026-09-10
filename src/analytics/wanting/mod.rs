@@ -27,6 +27,7 @@
 //! The move was behaviour-neutral, and proved so: three seeds run six hundred
 //! ticks give byte-identical worlds either side of it.
 
+pub mod strategy;
 pub mod camp;
 pub mod errands;
 pub mod food;
@@ -415,6 +416,14 @@ impl Simulation {
             return (Action::GiveTo { to }, false);
         }
 
+        // And anybody at all standing here with nothing to eat, when there is
+        // more than a day's food in this pack. Not only one's own: a band
+        // feeds the man beside it. See
+        // `somebody_beside_me_with_nothing_to_eat`.
+        if let Some(to) = self.somebody_beside_me_with_nothing_to_eat(agent, agent_position) {
+            return (Action::GiveTo { to }, false);
+        }
+
         // And somebody too young to be this far from anybody grown, heading
         // back. `LifeStage` has described the three bands of this in prose
         // since the lifecycle was written and nothing ever read them: with a
@@ -425,9 +434,74 @@ impl Simulation {
             return (action, false);
         }
 
-        // And freezing, where there is a roof within reach. Exposure is
-        // already doing damage by the time this fires, so it is not a matter
-        // of how much the agent wants to be warm.
+        // Before that: a body eating into its own reserve, with a store it can
+        // find.
+        //
+        // The shelter override below outranks every drive there is, Hunger
+        // included, and it fires on `needs_shelter` - being cold at all - so
+        // from the first frost it answers the turn for everybody, for ever.
+        // Measured over the 103,498 turns taken by a body under a quarter of
+        // its reserve: **the store branch has an answer ready in 72.1% of
+        // them, and what those bodies actually do is SeekShelter 44.7% and
+        // Eat 0.4%.**
+        //
+        // Narrowing the override itself was tried before the memory fix of
+        // #176 and made things worse - see the note below it, which is kept.
+        // That result does not carry, because its premise is gone: at the time
+        // **0.6% of those bodies could remember where a store was**, so taking
+        // the turn off shelter only freed it to wander to a bare hedgerow.
+        // With `SpatialMemoryType::Storage` no longer forgotten in an
+        // afternoon, 75.6% of them now know where a store is and the distances
+        // they remember match the real pits almost exactly.
+        //
+        // So this is not a weakening of the shelter rule; it is a narrow
+        // exception to it, on the drive hierarchy's own terms - "rank the
+        // primary drives by how fast each would kill". A man merely cold and
+        // fed still goes to the roof. A man a few days from starving, who
+        // knows where the food is, goes and gets it.
+        // The pack first, then the store. Somebody with supper about them does
+        // not open the larder for more of it - he eats what he has, which is
+        // the ladder this whole line of work is about and is `food_action`'s
+        // job a few lines down.
+        //
+        // Without this the override sent a man standing on a pit to `PickUp`
+        // every turn whether or not he had anything to eat and whether or not
+        // his pack could take another handful, and the executor refused him:
+        // **168,915 refusals of "No room in the pack for what is in the
+        // store", 76.5% of every refusal in the model.** A decision that
+        // promises what the executor will not do is the fault this project
+        // keeps finding, and it is worse when the decision sits above every
+        // drive there is.
+        if Self::is_the_body_eating_itself(agent) && !agent.has_edible_food() {
+            if let Some(from_the_store) = self.something_out_of_the_store(agent, agent_position) {
+                return (from_the_store, false);
+            }
+        }
+
+        // And freezing, where there is a roof within reach.
+        //
+        // *Freezing*, not cold. This asked `needs_shelter`, which is
+        // `is_critical() || !active_exposures.is_empty()` - that is, being cold
+        // at all - and it sits above every drive there is, Hunger included. In
+        // winter every agent is cold every turn, so from the first frost this
+        // line answered the turn for everybody, for ever, and **the Hunger
+        // drive was never reached again**.
+        //
+        // Measured over eight seeded world-years, over the 204,003 turns taken
+        // by a body under a quarter of its reserve: the hunger drive was
+        // active in 97.7% of them and `food_action` had an answer ready in
+        // **83.5%**. What those bodies actually did was Move 49.3% and
+        // SeekShelter 34.7%. **They ate in 0.2%.** Every settlement emptied
+        // between day 315 and day 350 with food still in the ground.
+        //
+        // Narrowing it to `is_critical` was tried and is **not** kept. Over 32
+        // seeded worlds it moved SeekShelter from 34.7% of a thin body's turns
+        // to 16.5% and did not move Eat at all - it stayed at 0.2% - while the
+        // weather went from 18.5% of deaths to 23.6% and person-days fell
+        // 98,769 to 94,879. The override is not what stands between a starving
+        // man and his supper; being unable to reach the store is. Left as it
+        // was, with the measurement recorded so nobody spends the afternoon on
+        // it again.
         if agent.needs_shelter() && self.nearest_shelter_from(agent_position).is_some() {
             return (Action::SeekShelter, false);
         }
@@ -558,6 +632,98 @@ impl Simulation {
         }
     }
 
+
+    /// Whether an answer is one there is nothing to find out about.
+    ///
+    /// Eating what you are carrying and taking a rabbit out of the snare you
+    /// are standing on both cost no walk and cannot come back empty. There is
+    /// no experiment to run on them, and passing over one to go and try
+    /// something else is not curiosity, it is starving with your dinner in
+    /// your hand.
+    fn is_it_already_in_his_hand(doing: &Action) -> bool {
+        matches!(doing, Action::Eat { .. } | Action::CheckSnares)
+    }
+
+    /// How long a need goes unanswered before an agent stops taking its own
+    /// first answer and tries the next thing down the list.
+    ///
+    /// Two days of the world's calendar of asking and not being fed.
+    pub(in crate::analytics) const LONG_ENOUGH_TO_TRY_SOMETHING_ELSE: f32 =
+        2.0 * crate::environment::seasons::TICKS_PER_DAY as f32;
+
+    /// And the most of his turns a man will ever spend on the other thing.
+    ///
+    /// He does not abandon what he knows: he keeps doing it most of the time
+    /// and spends the rest finding out whether something else would have been
+    /// better. Set low on purpose - the habit is usually right, and an agent
+    /// that spends half its winter experimenting starves in a different way.
+    pub(in crate::analytics) const WHAT_SHARE_OF_TURNS_GO_ON_TRYING_SOMETHING_ELSE: f32 = 0.3;
+
+    /// How far past its habit a drive looks this turn.
+    ///
+    /// **This is the whole of "try something else when what you are doing is
+    /// not working", and until now there was nothing of it anywhere.** Every
+    /// drive answers with an ordered list and always took the first rung that
+    /// would answer, for ever, however badly that rung was going. `Lessons`
+    /// could slacken a *particular* thing until the drive stood aside
+    /// altogether - which makes a man do less, not differently - and the
+    /// coarse `Undertaking` book could not see the difference between two
+    /// rungs of the same list at all.
+    ///
+    /// What decides it is how long the need has been asking without being
+    /// met. `DriveState::denied_ticks` has counted exactly that since drives
+    /// were given pressure, and nothing had ever read it except to make the
+    /// drive shout louder. Shouting louder does not help a man whose hedgerow
+    /// is bare; walking past it to the river does.
+    ///
+    /// Whether that action is the verb a learned run or a plan step names.
+    ///
+    /// Through `just_the_verb`, so that both sides speak the vocabulary the
+    /// pattern layer uses: a run that says `craft` is answered by a turn spent
+    /// carving or knapping or scraping, which is the point of giving the
+    /// shaping verbs one name - see `making::what_making_is_called`.
+    fn is_that_the_verb(doing: &Action, verb: &str) -> bool {
+        crate::agents::Agent::just_the_verb(&crate::agents::Agent::what_was_tried(doing)) == verb
+    }
+
+    /// It is a share of turns rather than a switch, so what he knows stays
+    /// what he mostly does, and the trying is a thing he keeps doing until it
+    /// pays - which is what makes it a search and not a tantrum.
+    pub(in crate::analytics) fn how_far_down_the_list_to_look(
+        agent: &crate::agents::Agent,
+        drive_type: DriveType,
+    ) -> usize {
+        use rand::Rng;
+
+        let Some(drive) = agent.drives.get(drive_type) else {
+            return 0;
+        };
+
+        let denied = drive.denied_ticks() as f32;
+        if denied < Self::LONG_ENOUGH_TO_TRY_SOMETHING_ELSE {
+            return 0;
+        }
+
+        // How restless this has made him, up to the cap. A man three days
+        // hungry tries the other thing oftener than one who missed lunch.
+        let restless = ((denied / Self::LONG_ENOUGH_TO_TRY_SOMETHING_ELSE - 1.0) * 0.5)
+            .clamp(0.0, Self::WHAT_SHARE_OF_TURNS_GO_ON_TRYING_SOMETHING_ELSE);
+
+        // And a curious man tries the other thing sooner, which is what
+        // curiosity is for and the one place a personality bears on a search.
+        let leaning = if agent.traits.has(crate::core::traits::Trait::Curious) {
+            1.5
+        } else {
+            1.0
+        };
+
+        if crate::core::dice::roll().gen::<f32>() < restless * leaning {
+            1
+        } else {
+            0
+        }
+    }
+
     /// How many turns this piece of work would take, as near as the agent can
     /// tell before starting it.
     ///
@@ -660,50 +826,69 @@ impl Simulation {
             // Water first of the two, always, because it runs out first - but
             // that is now decided by the clocks in `how_hard_it_presses`
             // rather than written down here
-            DriveType::Thirst => {
-                self.water_action(agent, agent_position, agent.state.is_dehydrated())
-            }
+            // The first drive to go through the strategy layer. Which way a
+            // thirsty man answers it - the skin, the water in front of him, or
+            // a walk to water he knows - is now a thing he can be right or
+            // wrong about and learn from, rather than the order these were
+            // typed in. See `analytics::wanting::strategy` and
+            // `SATISFACTION.md`.
+            //
+            // `water_action` is still the tail: nowhere known to drink, and
+            // striking out blind when it has come to that. Those are not
+            // strategies anybody chooses between, they are what is left.
+            DriveType::Thirst => self
+                .the_way_to_answer(DriveType::Thirst, agent, agent_position)
+                .map(|way| way.doing)
+                .or_else(|| {
+                    self.water_action(agent, agent_position, agent.state.is_dehydrated())
+                }),
 
             // Eat what is carried, go and get what is not, and failing both
             // stand in a river or go after an animal
-            DriveType::Hunger => {
-                let starving = agent.state.is_starving() || agent.nutrition.is_starving();
-
-                // A catch in a snare the agent is standing on comes first
-                // of everything, because it costs nothing: no walk, no
-                // weighing, take it. The *walk* to one further off is a
-                // different question and sits below the ground in front of
-                // him - see `walking_to_a_catch`, which was measured the
-                // wrong way round first and cost a third of every settlement.
-                self.a_catch_at_my_feet(agent, agent_position)
-                    .or_else(|| self.food_action(agent, agent_position, starving))
-                    // A store within reach beats a walk out to a berry bush,
-                    // which is the whole of what digging one buys.
-                    //
-                    // It stays *behind* the ordinary food branch, which was
-                    // measured both ways. In front, the store is drawn on
-                    // five times as often and the rot in the pits halves -
-                    // and it costs a fifth of all the food anybody eats and
-                    // six of the people in a settlement, because a meal out
-                    // of a hole costs two turns where a berry costs one, and
-                    // because everything taken out was put back in by
-                    // somebody a day earlier. Efficiency did not move.
-                    // See ISSUES_FOUND #43.
-                    .or_else(|| self.something_out_of_the_store(agent, agent_position))
-                    // Then the walk out to a catch. Setting *more* string is
-                    // not here at all: a snare set now feeds you in four
-                    // days, which is no answer to being hungry today, and
-                    // `Action::SetSnare` answers Preparedness for exactly
-                    // that reason. Offering it from the hunger arm as well
-                    // had hungry men spending their turns on string - six
-                    // worlds went from 23,733 person-days to 20,337.
-                    .or_else(|| self.walking_to_a_catch(agent, agent_position))
-                    .or_else(|| self.fishing_action(agent, agent_position))
-                    .or_else(|| self.hunting_action(agent, agent_position))
-            }
+            //
+            // **Hunger's ways are declared in `strategy` and this arm is not
+            // wired to them yet, on purpose.** What is below is not only a
+            // ladder: it carries the plan reader, the composition reader and
+            // the search that #188 to #190 measured into it, and putting a
+            // fresh ranker in front of all that would throw those away to buy
+            // an ordering. Moving hunger over means moving them over with it,
+            // which is its own piece of work and its own measurement.
+            // Every way a hungry man has, costed against the others, with
+            // the plan and the run deciding over the top of the costs.
+            //
+            // This was the longest arm in the model and the last to move: it
+            // carried the in-hand pre-empt, the plan reader and the composition
+            // reader, and none of those were about hunger. They were about
+            // choosing among things you could do, which is what
+            // `analytics::wanting::strategy` is, so they went with it and
+            // thirst and shelter got them too - neither could hold a plan or
+            // follow a run before.
+            //
+            // What is lost is the early exit. The old arm asked each rung only
+            // until enough had answered, so a man doing what he always does
+            // paid for one lookup; a ranking has to price everything it ranks,
+            // so now he pays for all of them. That is the cost of the ordering
+            // being a consequence of anything.
+            DriveType::Hunger => self
+                .the_way_to_answer(DriveType::Hunger, agent, agent_position)
+                .map(|way| way.doing),
 
             DriveType::Rest => {
-                if agent.fatigue.is_sleeping {
+                // Something for it first, and then lie down. A remedy costs a
+                // turn and eases the week; it is the one thing a person can
+                // do about being ill besides waiting, and until now there was
+                // nothing at all - see ISSUES_FOUND.md #202.
+                if agent.wants_something_for_it() && agent.what_i_have_for_it().is_some() {
+                    Some(Action::Treat { who: None })
+                } else if agent.wants_something_for_it() && !agent.fatigue.is_sleeping {
+                    // Ill and nothing in the pack. **Measured: without this,
+                    // the whole of the treatment machinery never fired once
+                    // in twelve worlds** - nobody carries herbs unless
+                    // something sends them for herbs, so a settlement with a
+                    // hedgerow full of mint never touched it. Going for it is
+                    // what somebody ill and on their feet does.
+                    Some(Action::Gather { resource_type: "herbs".to_string() })
+                } else if agent.fatigue.is_sleeping {
                     None
                 } else if let Some(clean) = self.somewhere_that_does_not_stink(agent_position) {
                     // "Waste should smell unpleasant and repulse the agents."
@@ -810,6 +995,14 @@ impl Simulation {
             // a turn only when the weather is actually doing something.
             DriveType::Shelter => self
                 .clothing_action(agent, agent_position, true)
+                // Then the ways of getting under a roof, costed against each
+                // other - see `analytics::wanting::strategy`. Clothing stays in
+                // front of it: putting a coat on is not one of the ways of
+                // finding shelter, it is the other answer to being cold.
+                .or_else(|| {
+                    self.the_way_to_answer(DriveType::Shelter, agent, agent_position)
+                        .map(|way| way.doing)
+                })
                 .or_else(|| {
                     let worth_going_in = agent.needs_shelter()
                         || agent.body_temperature.is_too_cold()
@@ -959,6 +1152,11 @@ impl Simulation {
                 // quarter. Trapping is what you do when there is nothing
                 // better to do with the turn, and that is the honest place
                 // for it - a supplement, which is what a trapline was.
+                // And walking the line you have comes before making it
+                // longer, which is the order a trapper does them in and the
+                // order the yield asks for: a twelfth snare is worth nothing
+                // if the eleven are never visited.
+                .or_else(|| self.going_round_is_due(agent, agent_position))
                 .or_else(|| self.lengthening_the_line(agent, agent_position)),
 
             // Nothing in the world is fine enough to want yet - see

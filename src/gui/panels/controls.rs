@@ -59,10 +59,9 @@ pub fn render_controls(ui: &mut Ui, state: &GuiState, command_tx: &Sender<Simula
         if let Some(snapshot) = &state.latest_snapshot {
             ui.label(format!("Tick: {}", snapshot.tick));
 
-            // Calculate in-game time (1440 ticks = 1 day)
-            let days = snapshot.tick / 1440;
-            let hours = (snapshot.tick % 1440) / 60;
-            ui.label(format!("Day {}, {:02}:00", days + 1, hours));
+            let (days, hours, minutes) =
+                crate::environment::seasons::what_the_clock_says(snapshot.tick);
+            ui.label(format!("Day {}, {:02}:{:02}", days + 1, hours, minutes));
         }
 
         ui.separator();

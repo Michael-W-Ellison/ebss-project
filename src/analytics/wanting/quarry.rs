@@ -490,6 +490,68 @@ impl Simulation {
         None
     }
 
+    /// The round: go and walk the line because it is time to, whether or not
+    /// anything is known to be in it.
+    ///
+    /// **This is the piece that made a trapline a trapline.**
+    /// `a_catch_at_my_feet` and `walking_to_a_catch` both ask whether a snare
+    /// is *holding something* - which is to say the agent only ever went to a
+    /// snare it already knew had a rabbit in it, and only once hunger had been
+    /// refused by everything above them. A man does not know his snare has
+    /// caught anything until he walks out and looks, and the walking out is
+    /// the whole of the work.
+    ///
+    /// How often he goes is not written here. It is
+    /// [`crate::agents::rhythm::Rhythm`], which he moves about by what the
+    /// rounds bring back and which settles near the span the country takes to
+    /// rob a snare - a number that lives in the ecology, not in this module.
+    pub(in crate::analytics) fn going_round_is_due(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
+
+        if !agent.is_it_time_i(Undertaking::Trapping, self.current_tick) {
+            return None;
+        }
+
+        // Somebody who has worked out that trapping does not feed him keeps no
+        // rhythm for it. This is the one gate the rhythm defers to, and it is
+        // `Lessons` doing its own job: whether to do a thing at all is a
+        // different question from how often.
+        if !agent.lessons.worth_trying(Undertaking::Trapping) {
+            return None;
+        }
+
+        let here = (agent_position.0, agent_position.1);
+        let mine = self
+            .world
+            .snares
+            .iter()
+            .filter(|snare| snare.set_by == agent.id)
+            .min_by_key(|snare| {
+                (snare.at.0 - here.0).abs().max((snare.at.1 - here.1).abs())
+            })?;
+
+        let paces = (mine.at.0 - here.0).abs().max((mine.at.1 - here.1).abs());
+
+        // Only what is within a walk. A line is kept near where you live, and
+        // one snare the far side of the map is not a reason to cross it - the
+        // same bound `walking_to_a_catch` keeps.
+        if paces > Self::AS_FAR_AS_A_LINE_IS_WORTH_WALKING {
+            return None;
+        }
+
+        if paces <= Self::CLOSE_ENOUGH_TO_A_SNARE {
+            Some(Action::CheckSnares)
+        } else {
+            Some(Action::Move {
+                target: (mine.at.0, mine.at.1, agent_position.2),
+            })
+        }
+    }
+
     /// Nothing waiting: set another where you are standing, if there is
     /// anything pressing and there is room in the line.
     pub(in crate::analytics) fn lengthening_the_line(

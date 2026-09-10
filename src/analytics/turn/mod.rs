@@ -69,6 +69,11 @@ impl Simulation {
         // what the fire does to it
         self.somebody_notices_something();
 
+        // And the other way of finding something out: not an accident over a
+        // fire, but a man who knows a job looking at a thing of a kind with
+        // what he uses for it. See `somebody_puts_two_and_two_together`.
+        self.somebody_puts_two_and_two_together();
+
         // And the ground they fouled last season comes up in berries
         self.what_was_dropped_comes_up();
 
@@ -148,13 +153,13 @@ impl Simulation {
 
         // Process building production collection (every 50 ticks)
         // Agents near production buildings automatically collect resources
-        if self.current_tick % 50 == 0 {
+        if self.current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
             self.process_building_production_collection();
         }
 
         // Process building maintenance (every 100 ticks)
         // Generate maintenance tasks for buildings in poor condition
-        if self.current_tick % 100 == 0 {
+        if self.current_tick % crate::environment::seasons::ONCE_A_WEEK == 0 {
             self.process_building_maintenance();
         }
 
@@ -207,7 +212,7 @@ impl Simulation {
         self.apply_religious_effects();
 
         // Log statistics every 10 ticks
-        if self.current_tick % 10 == 0 {
+        if self.current_tick % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.log_statistics();
         }
 

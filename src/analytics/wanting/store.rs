@@ -190,6 +190,63 @@ impl Simulation {
         put_by < mouths * Self::what_one_mouth_wants_put_by()
     }
 
+    /// How much more this settlement's pits could take, within reach.
+    ///
+    /// The other half of "is there enough store": what is in the ground says
+    /// how far along the settlement is, and this says how much further the
+    /// holes it has already dug will carry it.
+    pub(in crate::analytics) fn how_much_room_is_left_near(
+        &self,
+        here: crate::world::Position,
+    ) -> u32 {
+        self.world
+            .pits
+            .iter()
+            .filter(|pit| here.distance_to(&pit.where_it_is) <= Self::WORTH_WALKING_TO_THE_STORE)
+            .map(|pit| {
+                crate::world::Pit::WHAT_A_PIT_TAKES.saturating_sub(pit.how_much_is_in_it())
+            })
+            .sum()
+    }
+
+    /// Whether there is a hole underfoot that is not worth adding to.
+    ///
+    /// Two paces, the same spacing roofs keep. A settlement that digs a second
+    /// pit beside a half-empty first one has spent a morning for nothing, and
+    /// without this the branch above would dig one every turn for ever.
+    pub(in crate::analytics) fn is_there_a_hole_going_spare(
+        &self,
+        here: crate::world::Position,
+    ) -> bool {
+        self.world.pits.iter().any(|pit| {
+            here.distance_to(&pit.where_it_is) <= Self::HOW_CLOSE_TWO_HOLES_GET && pit.has_room()
+        })
+    }
+
+    /// How near one hole goes to another.
+    pub(in crate::analytics) const HOW_CLOSE_TWO_HOLES_GET: u32 = 2;
+
+    /// Whether this body is living on itself rather than on its food.
+    ///
+    /// A quarter of the reserve. `is_starving` is three days into it, which is
+    /// far too late to be the line at which a man goes to the larder rather
+    /// than to the roof: measured, only 30.6% of the turns taken by a body
+    /// under a quarter of its reserve were `is_starving`, so a rule written on
+    /// that line leaves the other seven turns in ten to whatever else is
+    /// pressing.
+    ///
+    /// A quarter is the same line every measurement in ISSUES #173 through
+    /// #178 is drawn at, which is the point of naming it here: one line, read
+    /// by the decision and by the instrument that judges it.
+    pub(in crate::analytics) fn is_the_body_eating_itself(agent: &crate::agents::Agent) -> bool {
+        agent.state.physiology.reserve
+            / crate::agents::physiology::RESERVE_OF_A_GROWN_BODY
+            < Self::WHAT_IS_LEFT_WHEN_A_BODY_IS_LIVING_ON_ITSELF
+    }
+
+    /// The share of a reserve below which a body is spending itself.
+    pub(in crate::analytics) const WHAT_IS_LEFT_WHEN_A_BODY_IS_LIVING_ON_ITSELF: f32 = 0.25;
+
     /// How many living people this store has to see through the winter.
     pub(in crate::analytics) fn how_many_mouths_about(&self, here: crate::world::Position) -> u32 {
         self.population
@@ -440,6 +497,51 @@ impl Simulation {
                 return Some(Action::Cover { what });
             }
 
+            // A hole with room in it is not the same as enough hole for a
+            // winter, and only the first of those was ever asked.
+            //
+            // Digging sat behind "is there any pit anywhere within reach with
+            // any room in it", so a settlement with one pit a third full never
+            // dug a second, however far short of the winter it was. What that
+            // came to, measured at month nine over eight seeded world-years:
+            // **6.5 pits a settlement, 78.8% of them full to the brim**, and a
+            // larder capped at 1,950 items. `does_the_store_still_want_filling`
+            // - three lines up, and read every time anybody decides to gather
+            // for the store - correctly asks for a mouth's winter eating times
+            // the mouths, which at eight mouths is about **7,200**. The
+            // settlement knew what it needed and the digging decision never
+            // asked. Every world empties between day 315 and day 350 with its
+            // pits full.
+            //
+            // So: walk to a pit with room only while the ground round here
+            // holds enough to be worth walking to. Past that the answer is
+            // another hole.
+            let enough_hole_for_the_winter = self
+                .world
+                .how_much_is_in_the_ground_near(here, Self::WORTH_WALKING_TO_THE_STORE)
+                + self.how_much_room_is_left_near(here)
+                >= self.how_many_mouths_about(here).max(1) * Self::what_one_mouth_wants_put_by();
+
+            if enough_hole_for_the_winter {
+                if let Some((pit, _)) = self
+                    .world
+                    .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
+                {
+                    return Some(Action::Move {
+                        target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+                    });
+                }
+            }
+
+            // Dig - but only where a hole will go, and not on top of one that
+            // is still half empty. The first cut asked for one wherever
+            // somebody happened to be standing, and the executor refused most
+            // of them: measured at 100 attempts a world for 1.7 pits, which is
+            // ninety-eight turns spent trying to dig a hole in a lake.
+            if self.is_ground_a_pit_will_go_in(here) && !self.is_there_a_hole_going_spare(here) {
+                return Some(Action::Excavate);
+            }
+
             if let Some((pit, _)) = self
                 .world
                 .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
@@ -447,15 +549,6 @@ impl Simulation {
                 return Some(Action::Move {
                     target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
                 });
-            }
-
-            // Nowhere to put it. Dig - but only where a hole will go. The
-            // first cut asked for one wherever somebody happened to be
-            // standing, and the executor refused most of them: measured at
-            // 100 attempts a world for 1.7 pits, which is ninety-eight turns
-            // spent trying to dig a hole in a lake.
-            if self.is_ground_a_pit_will_go_in(here) {
-                return Some(Action::Excavate);
             }
         }
 
@@ -574,20 +667,107 @@ impl Simulation {
             return None;
         }
 
+        // Any pit anywhere, not one within fourteen paces.
+        //
+        // A larder is food, and there is no more reason to stop looking for
+        // it at the edge of a circle than for a hedgerow. Measured over
+        // thirty-two worlds, at the last look anybody got before they died
+        // the settlement's pits held **eight hundred items among under seven
+        // mouths** - ten days of food for everybody - and the nearest pit
+        // with something in it was a median of eighteen paces off, so **six
+        // starving person-days in ten had a full larder that this line could
+        // not see.** The `?` returned before any other gate was reached.
+        //
+        // Widening it is worth nothing on its own - swept at fourteen,
+        // twenty-five and forty over thirty-two seeded worlds, person-days
+        // came out 97,521 / 97,537 / 97,529, which is a spread of one part in
+        // six thousand. It is here because a man who knows where the store is
+        // should not forget it at fifteen paces, not because it feeds
+        // anybody. What stops him is measured next door.
+        // A pit this one has actually seen, rather than whichever pit exists.
+        //
+        // This asked the world - `nearest_full_pit` - which is omniscience:
+        // an agent walked to a larder it had never laid eyes on. It reads the
+        // agent's own memory now. `SpatialMemoryType::Storage` had a reader
+        // and no writer until the sight pass was taught to notice a pit, and
+        // the omniscience here is precisely what hid that.
         let here = Position::new(agent_position.0, agent_position.1);
-        let (pit, paces) = self
-            .world
-            .nearest_full_pit(here, Self::WORTH_WALKING_TO_THE_STORE)?;
+        let (where_it_is, paces) = self.nearest_pit_i_remember(agent, agent_position)?;
 
-        let what = pit.something_to_eat()?.to_string();
-
+        // What is actually in it is a thing you find out by opening it. The
+        // memory says a pit was worth walking to; the pit says what is in it
+        // now, and if the walk was wasted the sight pass corrects the memory
+        // on arrival.
+        let standing_on_it = self.world.pit_at(where_it_is);
         if paces == 0 {
+            let what = standing_on_it?.something_to_eat()?.to_string();
+
+            // And a pack that will not take it. The executor asks this and
+            // used to be the only one asking - see
+            // `could_i_take_another_handful`. Offering a man his own larder
+            // and then refusing him is worse than not offering, because this
+            // branch sits above every drive there is and he spends the turn on
+            // it either way.
+            if !agent.could_i_take_another_handful(
+                crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,
+            ) {
+                return None;
+            }
+
             return Some(Action::PickUp { what });
         }
 
         Some(Action::Move {
-            target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+            target: (where_it_is.x, where_it_is.y, agent_position.2),
         })
+    }
+
+    /// The nearest pit this one remembers having food in it.
+    ///
+    /// Memory, not the world. A settlement's pits are the one place its food
+    /// reliably is - measured, between 334 and 1,176 items in the ground at
+    /// every level of individual starvation - and until the sight pass was
+    /// taught to notice one, nobody had ever remembered where a pit was. The
+    /// decision covered for it by asking the world directly, which is how a
+    /// dead store keeps a reader for a year without anybody noticing.
+    pub(in crate::analytics) fn nearest_pit_i_remember(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<(crate::world::Position, u32)> {
+        use crate::core::memory::SpatialMemoryType;
+        use crate::world::Position;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+
+        // Whose hole it is, before how far off it is.
+        //
+        // **This is the first place in the model where access decides
+        // anything.** A pit belongs to whoever dug it, or to the settlement
+        // where it was dug under the common roof - see `world::belonging` -
+        // and a man walks to his own, his kin's, or the settlement's before he
+        // walks to one somebody else sank. Nothing is refused: a stranger's
+        // pit is still the answer when it is the only one he remembers,
+        // because a rule that let a man starve beside a full larder over whose
+        // hole it was would cost more than it bought. It is an order, not a
+        // gate.
+        agent
+            .memory
+            .recall_locations(SpatialMemoryType::Storage)
+            .into_iter()
+            .filter(|remembered| remembered.value > 0.0)
+            .map(|remembered| {
+                let there = Position::new(remembered.position.0, remembered.position.1);
+                let paces = here.distance_to(&there);
+                let somebody_elses = self
+                    .world
+                    .pit_at(there)
+                    .map(|pit| !agent.may_i_use(&pit.belongs).is_mine_to_use())
+                    .unwrap_or(false);
+                (there, paces, somebody_elses)
+            })
+            .min_by_key(|(_, paces, somebody_elses)| (*somebody_elses, *paces))
+            .map(|(there, paces, _)| (there, paces))
     }
 
     /// How much food in the pack is enough that a person leaves the store

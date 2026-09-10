@@ -71,10 +71,12 @@ pub mod territory;
 pub mod resource_spawning;
 pub mod nutrition;
 pub mod soil;
+pub mod belonging;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
 pub use soil::Soil;
+pub use belonging::{Access, Belongs};
 pub use resources::{Bearing, Resource, ResourceType, ResourceNode};
 pub use buildings::{Building, BuildingType, BuildingState};
 pub use inventory::{Inventory, Item, ItemType};
@@ -264,6 +266,11 @@ pub struct Pit {
     pub covered: bool,
     /// The tick it was dug, which is what the ground counts from
     pub dug: u32,
+    /// Whose hole it is. The man with the shovel, ordinarily - see
+    /// `world::belonging`. `ToNobody` for a pit nobody remembers digging,
+    /// which is what a world starts with.
+    #[serde(default)]
+    pub belongs: crate::world::belonging::Belongs,
 }
 
 impl Pit {
@@ -739,7 +746,16 @@ impl World {
     /// A season and a half for anything: long enough that somebody walking the
     /// same country again finds it, short enough that a world does not silt up
     /// with everything anybody ever put down.
-    pub const HOW_LONG_A_THING_LIES_THERE: u32 = 432;
+    ///
+    /// This read 432, which *was* a season and a half - back when a season was
+    /// twenty-four days. A season became ninety days and this did not follow,
+    /// so it had quietly meant thirty-six days for a while, and food, which
+    /// gets a quarter of it, nine. Derived from the season now, so the comment
+    /// and the number cannot part company again. The same shape as
+    /// `patterns::STILL_WORTH_THE_WALK`, which read 288 against a comment
+    /// saying "a season".
+    pub const HOW_LONG_A_THING_LIES_THERE: u32 =
+        crate::environment::seasons::DAYS_PER_SEASON * 3 / 2 * crate::environment::seasons::TICKS_PER_DAY;
 
     /// What the weather does to what is lying about.
     ///
@@ -834,11 +850,16 @@ impl World {
     /// Superseded by `nutrition::Piece::how_long_it_takes_to_dry`, which asks
     /// the question this constant could not: how big is the piece.
     #[allow(dead_code)]
-    const HOW_LONG_DRYING_TAKES: u32 = 24;
+    const HOW_LONG_DRYING_TAKES: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
 
     /// How often the weathering pass runs, which is what the extra ageing is
     /// reckoned against.
-    const HOW_OFTEN_THE_WEATHER_GETS_AT_IT: u32 = 10;
+    ///
+    /// The fourth spelling of one cadence, and the plainest: it sat next to a
+    /// `% 10` in the same file that it had to agree with, and said so in its
+    /// own doc comment. Derived now, so the ageing and the running of it
+    /// cannot drift apart.
+    const HOW_OFTEN_THE_WEATHER_GETS_AT_IT: u32 = crate::environment::seasons::ONCE_A_DAY;
 
     /// What share of what a plant is carrying comes off it each pass, once
     /// the season it bears in has passed.
@@ -1476,6 +1497,11 @@ impl World {
         for (what, how_many) in [
             (ResourceType::Greens, config.food_nodes * 3),
             (ResourceType::Roots, config.food_nodes * 2),
+            // Wild vetch and pea. Thin on the ground compared to the leaf -
+            // a wild legume is not a crop until somebody sows it - but there
+            // has to be some of it somewhere for anybody to find out what it
+            // is, which is the same reason there is wild grain.
+            (ResourceType::Legumes, config.food_nodes),
         ] {
             let (thin, heavy) = resource_spawning::TerrainResourceMapper::amount_range(what);
 
@@ -1493,6 +1519,36 @@ impl World {
                         pos,
                         rng.gen_range(thin..=heavy),
                         today,
+                    ));
+            }
+        }
+
+        // The mast, under the trees that drop it.
+        //
+        // Fewer stands than there are berry bushes and far heavier ones: a
+        // wood in October is one place where a great deal of food is on the
+        // ground at once, for a few weeks, and how much depends on whether
+        // this is a mast year - see `ResourceType::how_heavy_the_mast_is`.
+        {
+            let (thin, heavy) =
+                resource_spawning::TerrainResourceMapper::amount_range(ResourceType::Nuts);
+            let this_year = self.climate.calendar.year;
+
+            for _ in 0..config.food_nodes {
+                let terrain = if rng.gen::<f32>() < 0.75 {
+                    TerrainType::Forest
+                } else {
+                    TerrainType::Hills
+                };
+                let pos = self.find_random_terrain_position(terrain, taken);
+                self.resources
+                    .push(resource_spawning::what_this_ground_carries_in(
+                        &self.grid,
+                        ResourceType::Nuts,
+                        pos,
+                        rng.gen_range(thin..=heavy),
+                        today,
+                        this_year,
                     ));
             }
         }
@@ -1580,7 +1636,7 @@ impl World {
     /// founders could drink one dry in the first morning of the world - which
     /// is the whole failure this is meant to prevent, arriving ten ticks early.
     fn prime_the_springs(&mut self) {
-        let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+        let precipitation = self.climate.weather.weather_type.precipitation_intensity();
 
         for resource in &mut self.resources {
             if resource.resource_type != ResourceType::Water {
@@ -1593,8 +1649,10 @@ impl World {
                 .map(|tile| tile.terrain.terrain_type)
                 .unwrap_or(TerrainType::Plains);
 
-            let temperature = self.climate.get_temperature(resource.position, terrain_type);
-            let inflow = resource.water_inflow(terrain_type, precipitation, temperature < 0.0);
+            // What stops a spring is the ground freezing, not the air being
+            // cold for an hour - see `ClimateManager::water_temperature`.
+            let frozen = self.climate.is_the_water_frozen(resource.position, terrain_type);
+            let inflow = resource.water_inflow(terrain_type, precipitation, frozen);
 
             resource.flow = inflow;
         }
@@ -2217,7 +2275,7 @@ impl World {
         self.heat_sources.tick_all();
 
         // And the weather gets at whatever is lying about
-        if self.tick % 10 == 0 {
+        if self.tick % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.what_is_lying_about_weathers();
         }
 
@@ -2228,9 +2286,18 @@ impl World {
         // ground and put back onto it. Grazing runs on the vegetation's own
         // ten-tick cadence - see `AnimalManager::tick_in_world` - so a
         // grazing pass stands for ten ticks of feeding.
-        let grazing_ticks = if self.tick % 10 == 0 { 10.0 } else { 0.0 };
+        // The cadence and the amount are one number. A pass stands for
+        // exactly as long as it is since the last pass, and reading that off
+        // two separate literals is how a herd ends up eating a tenth or ten
+        // times what it should the moment the turn length changes.
+        let how_often_the_ground_is_grazed = crate::environment::seasons::ONCE_A_DAY;
+        let grazing_ticks = if self.tick % how_often_the_ground_is_grazed == 0 {
+            how_often_the_ground_is_grazed as f32
+        } else {
+            0.0
+        };
         let weather = crate::environment::GrazingWeather {
-            precipitation: self.climate.weather.wetness_per_tick() * 100.0,
+            precipitation: self.climate.weather.weather_type.precipitation_intensity(),
             now: self.tick,
             season: self.climate.current_season(),
         };
@@ -2272,10 +2339,13 @@ impl World {
         // of it - see `PlantManager::catch_up_one` - because a grazed plant
         // would otherwise lose condition a hundred and forty-four times for
         // every time it gained any.
-        const HOW_OFTEN_A_ZONE_COMES_ROUND: u32 = 60;
+        // The one spelling, and it lives with the plants because the plants
+        // are what it is about - see `PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND`.
+        use crate::environment::flora::PlantManager;
+        const HOW_OFTEN_A_ZONE_COMES_ROUND: u32 = PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND;
 
         if self.tick % HOW_OFTEN_A_ZONE_COMES_ROUND == 0 {
-            let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+            let precipitation = self.climate.weather.weather_type.precipitation_intensity();
             let season = self.climate.current_season();
             let zone = (self.tick / HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
                 % crate::environment::PlantManager::HOW_MANY_ZONES;
@@ -2285,7 +2355,7 @@ impl World {
         }
 
         // Regenerate resources based on climate conditions (every 10 ticks to reduce overhead)
-        if self.tick % 10 == 0 {
+        if self.tick % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.rot_what_is_lying_about();
             self.regenerate_resources();
         }
@@ -2316,10 +2386,14 @@ impl World {
         use crate::world::soil::Soil;
 
         // Rain reaches everywhere; the ground decides what it does with it
-        let precipitation = self.climate.weather.wetness_per_tick() * 100.0;
+        let precipitation = self.climate.weather.weather_type.precipitation_intensity();
 
-        // One pass every ten ticks, so each pass stands for ten ticks of rot
-        const TICKS_PER_PASS: f32 = 10.0;
+        // A pass stands for however long it has been since the last one, which
+        // is one number and not two. This read ten while the trigger in
+        // `World::tick` read ten separately, in another function - two
+        // spellings of one cadence, and shortening the turn would have moved
+        // one and not the other.
+        const TICKS_PER_PASS: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
 
         // Every tile in the world, because every tile in the world has litter
         // on it - `Soil::for_terrain` gives a forest floor 1.5 and a desert
@@ -2343,8 +2417,9 @@ impl World {
     fn regenerate_resources(&mut self) {
         let current_season = self.climate.current_season();
         let today = self.climate.calendar.day_of_year;
+        let this_year = self.climate.calendar.year;
         let season_modifier = current_season.plant_growth_modifier();
-        let precipitation = self.climate.weather.wetness_per_tick() * 100.0; // Scale to 0-1 range
+        let precipitation = self.climate.weather.weather_type.precipitation_intensity(); // Scale to 0-1 range
 
         for resource in &mut self.resources {
             // Get temperature at resource position
@@ -2353,12 +2428,18 @@ impl World {
                 .unwrap_or(TerrainType::Plains);
 
             let temperature = self.climate.get_temperature(resource.position, terrain_type);
+            // And how warm the water is, which is a different question and
+            // the one that decides ice. See `ClimateManager::water_temperature`.
+            let frozen_water = self.climate.is_the_water_frozen(resource.position, terrain_type);
 
             // Water is fed by the ground it sits on and the weather over it,
             // not by growing back the way a berry patch does
             if resource.resource_type == ResourceType::Water {
-                let inflow =
-                    resource.water_inflow(terrain_type, precipitation, temperature < 0.0);
+                let inflow = resource.water_inflow(
+                    terrain_type,
+                    precipitation,
+                    frozen_water,
+                );
 
                 // The rate is also the floor. What is standing in a spring is
                 // this pass's flow arriving, not a barrel somebody filled, so
@@ -2374,8 +2455,7 @@ impl World {
             // what last year's fishing left behind, so a reach that was taken
             // down to nothing fills again - see `fish_run`.
             if resource.resource_type.grows_in_water() {
-                let run =
-                    resource.fish_run(terrain_type, current_season, temperature < 0.0);
+                let run = resource.fish_run(terrain_type, current_season, frozen_water);
                 resource.take_inflow(run);
                 continue;
             }
@@ -2416,13 +2496,28 @@ impl World {
                 continue;
             }
 
+            // A pass stands for exactly the ground it covers: however long it
+            // has been since the last one. The rates inside are per-pass
+            // numbers fitted when a pass was ten ticks, and they are read
+            // against that - see `ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO`.
             let _regen_amount = resource.regenerate_in_ground(
                 temperature,
                 ground_water,
                 season_modifier,
                 cultivated,
                 soil,
+                crate::environment::seasons::ONCE_A_DAY as f32,
             );
+
+            // And how good a year it is, which only the mast asks. A wood
+            // that stood full last autumn stands nearly bare this one, and
+            // that is the first thing in this model that makes one year
+            // different from another - see `how_heavy_the_mast_is`.
+            if resource.resource_type.does_it_have_mast_years() {
+                let mast = ResourceType::how_heavy_the_mast_is(this_year);
+                let this_autumn = ((resource.max_amount as f32 * mast).round() as u32).max(1);
+                resource.amount = resource.amount.min(this_autumn);
+            }
 
             // Debug log significant regeneration
             // if regen_amount > 0 {

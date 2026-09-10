@@ -36,6 +36,37 @@ pub enum ResourceType {
     /// Better than greens and nothing like a harvest.
     Roots,
 
+    /// The mast: acorns, hazel, chestnut, walnut, whatever the wood drops.
+    ///
+    /// **The top of this model's own energy scale, and there was none of it
+    /// anywhere in the world.** `physiology.rs` prices the nutrition database
+    /// as running "from six (spring greens) to eighty (fat and nuts)" - and
+    /// nothing yielded a nut, no `ItemType` held one and no plant dropped
+    /// one. The best food a temperate forager had was named in a comment and
+    /// existed nowhere else.
+    ///
+    /// What makes it worth having is not the energy alone. A nut keeps.
+    /// Everything else a settlement puts by has to be dried, salted, smoked
+    /// or buried, and the throughput of that is what caps the winter store -
+    /// see ISSUES_FOUND.md #241. Mast wants nothing done to it: it is
+    /// gathered in the autumn and it is still food in March.
+    Nuts,
+
+    /// Beans, peas, lentils, vetch: the pod crops.
+    ///
+    /// **The only thing in this world that gives ground back.** Every other
+    /// crop draws on `Soil::nutrients` and nothing but muck, litter and what
+    /// people leave behind puts any of it back, so a field halves what it
+    /// holds over one summer of cropping - measured, 0.60 down to 0.27 across
+    /// a hundred and twenty days. A legume fixes its own nitrogen out of the
+    /// air, takes nothing from the bank, and leaves the ground better than it
+    /// found it. See `feeds_the_ground`.
+    ///
+    /// That is what makes a rotation a thing worth knowing rather than a
+    /// piece of folklore, and it is the first mechanism here where what you
+    /// do this year pays in a different year.
+    Legumes,
+
     // === Raw Materials (Agricultural) ===
     Grain,      // Wheat, barley, etc. - for flour, bread, beer
     Flax,       // For linen, rope
@@ -294,6 +325,19 @@ impl ResourceType {
             // A harvest, and everybody knows when it is
             ResourceType::Grain => Bearing::from((Summer, Late), (Fall, Deep)),
 
+            // The mast. Later than the grain and shorter than any of it: the
+            // wood drops in a few weeks and then the pigs and the squirrels
+            // and the deer have it. Whoever is there in those weeks eats all
+            // winter and whoever is not does not - which is what makes an
+            // autumn in a wood worth being in.
+            ResourceType::Nuts => Bearing::from((Fall, Early), (Fall, Late)),
+
+            // A pod is later than a leaf and earlier than a harvest, and it
+            // goes on bearing for as long as it is picked, which is what a
+            // bean row does. Sown in spring and picked from midsummer to the
+            // first frosts.
+            ResourceType::Legumes => Bearing::from((Summer, Early), (Fall, Deep)),
+
             // A colony has built something worth robbing by midsummer, and by
             // late autumn it is defended and dwindling
             ResourceType::Honey => Bearing::from((Summer, Deep), (Fall, Early)),
@@ -313,6 +357,95 @@ impl ResourceType {
         }
     }
 
+    /// How heavy the mast is this year, nought to rather more than one.
+    ///
+    /// **A mast year is a real and famous thing.** An oak wood does not drop
+    /// the same weight of acorns every autumn: it drops next to nothing for
+    /// two or three years and then, all the trees of a district agreeing
+    /// somehow, floods the ground. The pigs, the deer, the squirrels and the
+    /// people all live or do not live on that, and it is the sharpest
+    /// year-to-year swing in a temperate forager's food supply - sharper
+    /// than the weather.
+    ///
+    /// Nothing else in this world varies between years at all. The seasons
+    /// turn, the weather blows, and every autumn is otherwise the same
+    /// autumn; a settlement that got through last winter knows exactly what
+    /// this one holds. A mast year is the first thing in the model that makes
+    /// one year worth more than another, which is what a store is *for*.
+    ///
+    /// Worked out from the year alone and not rolled, so that every wood in a
+    /// country agrees - which is the part that matters, because a district
+    /// where half the woods bore would be no gamble at all. A cheap integer
+    /// hash rather than the dice: it must not depend on how many other things
+    /// have drawn a number this tick, which is ISSUES_FOUND.md #132's whole
+    /// family of trouble.
+    pub fn how_heavy_the_mast_is(year: u32) -> f32 {
+        // A splitmix64 finaliser, which is what it takes to get a
+        // well-spread number out of a small counter. The obvious thing -
+        // Knuth's multiplicative constant and the top bits of the product -
+        // does not work here: over the first twenty years it alternates
+        // 0.000, 0.503, 0.006, 0.510, 0.013, ... because a single multiply
+        // leaves the high bits of a small input linear in it, and the wood
+        // never floods once. The shift-xor-multiply rounds below break that
+        // up; over two hundred years this lands 76 lean, 90 ordinary and 34
+        // mast against the 80/80/40 asked for.
+        let mut spread = (year as u64).wrapping_add(0x9E37_79B9_7F4A_7C15);
+        spread = (spread ^ (spread >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        spread = (spread ^ (spread >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        spread ^= spread >> 31;
+        let roll = (spread % 1000) as f32 / 1000.0;
+
+        // Two years in five are lean, two are ordinary, one in five is a
+        // mast year and the wood is knee deep in it.
+        if roll < Self::HOW_OFTEN_A_WOOD_BEARS_NOTHING {
+            Self::WHAT_A_LEAN_YEAR_DROPS
+        } else if roll < 1.0 - Self::HOW_OFTEN_A_WOOD_FLOODS {
+            1.0
+        } else {
+            Self::WHAT_A_MAST_YEAR_DROPS
+        }
+    }
+
+    /// How often a wood drops next to nothing.
+    const HOW_OFTEN_A_WOOD_BEARS_NOTHING: f32 = 0.4;
+    /// And how often it floods.
+    const HOW_OFTEN_A_WOOD_FLOODS: f32 = 0.2;
+    /// What a lean year is worth against an ordinary one: a bad autumn, and
+    /// not an empty one - there is always something under a tree.
+    const WHAT_A_LEAN_YEAR_DROPS: f32 = 0.25;
+    /// And a mast year, which is why anybody remembers them.
+    const WHAT_A_MAST_YEAR_DROPS: f32 = 2.5;
+
+    /// Whether a thing's yield swings from one year to the next.
+    ///
+    /// Only the mast does. A hedge bears what it bears.
+    pub fn does_it_have_mast_years(&self) -> bool {
+        matches!(self, ResourceType::Nuts)
+    }
+
+    /// Whether growing this leaves the ground better than it found it.
+    ///
+    /// Every other growing thing in this model is a withdrawal.
+    /// `regenerate_in_ground` ends by taking `NUTRIENT_PER_UNIT_GROWN` out of
+    /// the soil for every unit that came up, and the only deposits anywhere
+    /// are muck, litter and what people drop - so a field is a bank account
+    /// that one crop draws on and nothing much pays into. Measured over a
+    /// summer of cropping, the ground under a settlement's fields fell from
+    /// 0.60 to 0.27.
+    ///
+    /// A pod crop is the exception, and it is not a fudge: a legume fixes
+    /// nitrogen out of the air through the bacteria in its roots, so what it
+    /// builds itself out of did not come from the bank, and what is left in
+    /// the ground when it is done is more than was there before. This is the
+    /// one thing that makes rotation worth knowing.
+    ///
+    /// It is a fact about the plant, so it lives on the plant - and it is one
+    /// answer rather than a list repeated at each of the three places that
+    /// asks: the growing pass, the ploughing-in, and the sowing choice.
+    pub fn feeds_the_ground(&self) -> bool {
+        matches!(self, ResourceType::Legumes)
+    }
+
     /// Whether there is anything on it to take, on this day of the year.
     pub fn is_it_bearing(&self, day_of_year: u32) -> bool {
         self.bearing_window().covers(day_of_year)
@@ -327,8 +460,10 @@ impl ResourceType {
     /// day of the year anything is bearing, for one. The exhaustive match in
     /// `every_resource_is_listed` below fails to compile if a variant is added
     /// and not put here, so this cannot quietly fall behind the enum.
-    pub fn all() -> [ResourceType; 43] {
+    pub fn all() -> [ResourceType; 45] {
         [
+        ResourceType::Nuts,
+        ResourceType::Legumes,
         ResourceType::Wood,
         ResourceType::Stone,
         ResourceType::Iron,
@@ -430,6 +565,25 @@ impl ResourceType {
             // And a root is a season's work, so slower than a berry.
             ResourceType::Roots => 0.02,
 
+            // The mast. Quick, because the whole of it is on the ground
+            // inside one six-week window and `regenerate_in_ground` only
+            // runs inside that window - a slow rate here would mean a wood
+            // that never filled before the leaves came off it. How much it
+            // fills to is `how_heavy_the_mast_is`, not this.
+            //
+            // Nuts fell through to `_ => 0.0` when they were added, which
+            // made every nut node non-renewable: it spawned empty out of
+            // season, `remove_depleted_resources` deleted all twenty-five of
+            // them on the first tick, and no autumn ever came. That is the
+            // third time this exact match has swallowed a new food - see the
+            // Greens and Roots note above - and the guard that note promised
+            // had never been written. It is `every_food_grows_back` now.
+            ResourceType::Nuts => 0.03,
+
+            // A pod row cropped over is picking again in a fortnight, which
+            // is most of why it is worth the ground.
+            ResourceType::Legumes => 0.035,
+
             ResourceType::StrangePlant => 0.025, // Whatever they are, they grow
             ResourceType::Grain => 0.015,     // Wild grain is thin stuff
             ResourceType::Herbs => 0.04,      // Herbs grow quickly
@@ -471,6 +625,8 @@ impl ResourceType {
                 | ResourceType::Grain
                 | ResourceType::Greens
                 | ResourceType::Roots
+                | ResourceType::Nuts
+                | ResourceType::Legumes
                 | ResourceType::Fish
                 | ResourceType::Meat
         )
@@ -485,6 +641,8 @@ impl ResourceType {
                 | ResourceType::Grain
                 | ResourceType::Greens
                 | ResourceType::Roots
+                | ResourceType::Nuts
+                | ResourceType::Legumes
                 | ResourceType::Herbs
                 | ResourceType::Flax
                 | ResourceType::Cotton
@@ -509,6 +667,8 @@ impl ResourceType {
             // Something nobody has tried
             ResourceType::StrangePlant => '?',
             ResourceType::Greens => 'v',
+            ResourceType::Nuts => '*',
+            ResourceType::Legumes => 'o',
             ResourceType::Roots => 'r',
             ResourceType::Salt => '*',
 
@@ -572,6 +732,8 @@ impl ResourceType {
         match self {
             ResourceType::StrangePlant => "\x1b[35m",  // Magenta: unknown
             ResourceType::Greens => "\x1b[92m",        // Bright green: new leaf
+            ResourceType::Nuts => "\x1b[38;5;130m",     // Husk brown
+            ResourceType::Legumes => "\x1b[38;5;107m",  // Pod green
             ResourceType::Roots => "\x1b[33m",         // Yellow/brown
             ResourceType::Salt => "\x1b[97m",          // Bright white
 
@@ -677,6 +839,8 @@ impl ResourceType {
             ResourceType::StrangePlant => "Unidentified",
             ResourceType::Wood | ResourceType::Stone | ResourceType::Iron | ResourceType::Food | ResourceType::Water => "Basic Resource",
             ResourceType::Grain | ResourceType::Flax | ResourceType::Herbs | ResourceType::Cotton => "Agricultural",
+            ResourceType::Nuts => "Agricultural",
+            ResourceType::Legumes => "Agricultural",
             ResourceType::Greens | ResourceType::Roots => "Agricultural",
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => "Animal Product",
             ResourceType::Fish | ResourceType::Honey => "Animal Product",
@@ -1144,6 +1308,7 @@ impl ResourceNode {
             season_modifier,
             cultivated,
             &mut nowhere,
+            Self::WHAT_THESE_RATES_WERE_FITTED_TO,
         )
     }
 
@@ -1161,6 +1326,7 @@ impl ResourceNode {
         season_modifier: f32,
         cultivated: bool,
         soil: &mut Soil,
+        ticks_this_pass_stands_for: f32,
     ) -> u32 {
         self.regenerate_in_ground(
             temperature,
@@ -1168,6 +1334,7 @@ impl ResourceNode {
             season_modifier,
             cultivated,
             soil,
+            ticks_this_pass_stands_for,
         )
     }
 
@@ -1178,6 +1345,19 @@ impl ResourceNode {
     /// hour's rainfall in here meant every plant in the world was in drought on
     /// any day it was not actively raining, which cut growth to a fifth
     /// wherever a marsh and a dune were treated alike.
+    /// The cadence these rates were fitted against: one pass every ten world
+    /// ticks, when a turn was two hours and `World::tick` said `% 10`.
+    ///
+    /// The rates in `how_fast_it_comes_back` and `water_inflow` are
+    /// hand-fitted numbers *per pass*, and how long a pass stood for lived as
+    /// a literal in another file. Three spellings of one cadence, in three
+    /// modules, and none of them derived from the calendar: shorten the turn
+    /// and wild food quietly comes back at a fraction of the rate it was
+    /// balanced at, with nothing to say so. This is what lets the pass be
+    /// scheduled on the calendar while the rates stay the ones that were
+    /// measured. See ISSUES_FOUND #205.
+    pub const WHAT_THESE_RATES_WERE_FITTED_TO: f32 = 10.0;
+
     pub fn regenerate_in_ground(
         &mut self,
         temperature: f32,
@@ -1185,6 +1365,7 @@ impl ResourceNode {
         season_modifier: f32,
         cultivated: bool,
         soil: &mut Soil,
+        ticks_this_pass_stands_for: f32,
     ) -> u32 {
         if self.amount >= self.how_heavy_a_crop_it_carries(soil.fertility(), cultivated) {
             return 0; // As heavy a crop as this ground will carry
@@ -1221,6 +1402,8 @@ impl ResourceNode {
             | ResourceType::Grain
             | ResourceType::Greens
             | ResourceType::Roots
+            | ResourceType::Nuts
+            | ResourceType::Legumes
             | ResourceType::Herbs
             | ResourceType::StrangePlant => {
                 // Plants prefer 15-25°C
@@ -1261,6 +1444,8 @@ impl ResourceNode {
             | ResourceType::Grain
             | ResourceType::Greens
             | ResourceType::Roots
+            | ResourceType::Nuts
+            | ResourceType::Legumes
             | ResourceType::Herbs
             | ResourceType::Flax => {
                 // Most crops need moderate precipitation
@@ -1317,7 +1502,10 @@ impl ResourceNode {
 
 
         // Calculate total regeneration
-        let regen_amount = base_rate
+        let how_long_a_pass_is_now =
+            ticks_this_pass_stands_for / Self::WHAT_THESE_RATES_WERE_FITTED_TO;
+        let regen_amount = how_long_a_pass_is_now
+            * base_rate
             * temp_modifier
             * precip_modifier
             * season_modifier
@@ -1344,7 +1532,16 @@ impl ResourceNode {
         // What grew in the water is a different matter: it takes nothing from
         // the bank and leaves nothing on it.
         if actual_regen > 0 && !self.resource_type.grows_in_water() {
-            soil.draw(actual_regen as f32 * Soil::NUTRIENT_PER_UNIT_GROWN);
+            // A pod crop is the one thing that goes the other way. It builds
+            // itself out of nitrogen it fixed from the air rather than out of
+            // the bank, so it takes nothing, and what its roots leave behind
+            // is a deposit - see `ResourceType::feeds_the_ground` and
+            // `Soil::WHAT_A_LEGUME_FIXES_PER_UNIT_GROWN`.
+            if self.resource_type.feeds_the_ground() {
+                soil.feed(actual_regen as f32 * Soil::WHAT_A_LEGUME_FIXES_PER_UNIT_GROWN);
+            } else {
+                soil.draw(actual_regen as f32 * Soil::NUTRIENT_PER_UNIT_GROWN);
+            }
             soil.add_leaf_litter(actual_regen as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
         }
 
@@ -1432,6 +1629,8 @@ mod all_resources_tests {
             ResourceType::Water => {}
             ResourceType::StrangePlant => {}
             ResourceType::Greens => {}
+            ResourceType::Nuts => {}
+            ResourceType::Legumes => {}
             ResourceType::Roots => {}
             ResourceType::Grain => {}
             ResourceType::Flax => {}
@@ -1480,5 +1679,60 @@ mod all_resources_tests {
         seen.sort_by_key(|what| format!("{what:?}"));
         seen.dedup();
         assert_eq!(seen.len(), all.len(), "a resource is listed twice in all()");
+    }
+
+    /// The guard `how_fast_it_comes_back` has promised since the Greens and
+    /// Roots hole and never had.
+    ///
+    /// Three foods have now fallen through that match to `_ => 0.0`. A food
+    /// with no regrowth rate is not renewable, and a resource that is not
+    /// renewable is **deleted the moment it is empty** - so a hedgerow that
+    /// is bare out of its season is deleted on the first tick of the world
+    /// and never comes back. Nuts spawned twenty-five stands to a map and had
+    /// none by tick one.
+    ///
+    /// Nothing in the world says "this is food" in one place, so the only way
+    /// to hold the two lists together is to walk `all()` and ask both.
+    #[test]
+    fn every_food_grows_back() {
+        for what in ResourceType::all() {
+            // A carcass is the one food that is genuinely used up. It is a
+            // kill somebody left, not a stand of anything, and deleting it
+            // once it is eaten is the right thing - see
+            // `remove_depleted_resources`.
+            if !what.is_it_food() || what == ResourceType::Meat {
+                continue;
+            }
+            assert!(
+                what.how_fast_it_comes_back() > 0.0,
+                "{what:?} is food and does not grow back, so the world deletes \
+                 every one of them the first time it is out of season"
+            );
+        }
+    }
+
+    /// And the other half of it: a thing that comes up out of the ground is
+    /// grown, so what a patch of it carries follows the soil under it.
+    ///
+    /// Meat and fish are food and are not grown - they walk and swim - so
+    /// this asks only of the ones the ground puts up.
+    #[test]
+    fn every_food_that_comes_out_of_the_ground_is_grown() {
+        for what in ResourceType::all() {
+            if !what.is_it_food() || matches!(what, ResourceType::Meat | ResourceType::Fish) {
+                continue;
+            }
+            assert!(
+                what.is_it_grown(),
+                "{what:?} is picked off the ground and does not read the soil, \
+                 so a stand on worked-out ground carries as much as one on a \
+                 river meadow"
+            );
+            assert!(
+                (0..crate::environment::seasons::DAYS_PER_YEAR).any(|day| what.is_it_bearing(day)),
+                "{what:?} is food and bears on no day of the year, so it is \
+                 food nobody can ever pick"
+            );
+        }
     }
 }

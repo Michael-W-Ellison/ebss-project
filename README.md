@@ -459,7 +459,7 @@ original specifications.
 
   Why nobody can starve: the thresholds were never rebased when the calendar
   was. `ticks_without_food > 1440` is commented "a day" and would be, at a tick
-  of a minute — but `TICKS_PER_DAY` is **12**, so it is 120 days, and the death
+  of a minute — but `TICKS_PER_DAY` is **48**, so it is 30 days, and the death
   threshold is over two years. **Not one of those branches has ever fired.**
   ISSUES #24 again, in the survival clock this time. Filed as #203 rather than
   fixed, because making starvation possible for the first time is a balance
@@ -1984,7 +1984,7 @@ original specifications.
 - ✅ Family: parents keep their children close and go to one that has strayed or
   that something is stalking; children learn skills by watching the adults
   around them, and most from their own parents
-- ✅ A calendar that turns: a tick is two hours, a day twelve ticks, a season
+- ✅ A calendar that turns: a tick is half an hour, a day forty-eight ticks, a season
   twenty-four days and a year 1,152 ticks. A world opens in spring, an
   eight-thousand-tick run covers seven years and all four seasons, and a life
   spans eight or nine of them. Every run before this ended on Year 0, Day 4,
@@ -2285,11 +2285,107 @@ and what it lets go of first is what answers no need it has — hearsay before
 what it saw itself, and older before newer where it wants them equally.
 
 ### Memory
-Agents remember:
-- Spatial locations (resources, structures, landmarks)
-- Storage contents with decay over time
-- Social relationships and observed behaviors
-- Discovered crafting recipes
+
+Memory here is pattern recognition, and the record it keeps is a set of worn
+paths rather than a filing cabinet.
+
+An episode is not stored as an episode. It is broken into its elements - what
+was done, what it was done to, the ground it was done on, which way that
+ground lies from where the walk began, the time of year - and every one of
+them is reinforced when a need is answered. The element that is there every
+time climbs on every success; the element that varies climbs on its own
+successes only and is overtaken. So a man who hunts out east and eats, and
+hunts out west and eats, ends up believing in *hunting* twice as strongly as
+in *east*, and nobody had to decide that the hunting was the part that
+mattered. The arithmetic decides, out of his own history.
+
+What is added is not the fact of success but its efficiency: how much demand
+came off per turn spent, counting the walk as well as the work. A drink ten
+paces away is worth more than the same drink a hundred paces away, because
+answering a need quickly leaves the rest of the day for the other ones.
+
+Strength goes down with time - two per cent a day - and a path that falls
+under the floor is forgotten. That is what lets an agent hold the corner of
+the world that has paid it rather than all of the world it has seen, and it
+is why map knowledge is not required to stay accurate, only useful.
+
+Because two situations are alike to the degree that they share elements, a
+trail that goes cold already knows what to suggest instead. A bank that has
+gone dry brings to mind the drinking that was done at it, and the other places
+that drinking was done at are the ones that come back - not the best place the
+agent knows, which may have nothing to do with the case.
+
+#### The country, which is two different things
+
+Alongside the trails, what an agent knows of the map is split in two -
+`agents::whereabouts`.
+
+**General knowledge** is the impression a place leaves by being lived in. Five
+points a day for looking at an area, no more than once a day however long
+somebody stands there; then a month's grace and five points a month off
+anything nobody goes back to. So twenty days of living somewhere is enough to
+know it thoroughly, twenty months of never returning is enough to lose it, and
+a field crossed once in the spring is a five per cent impression that is gone
+by the summer. An area is thirty-two tiles across, which is not arbitrary: an
+agent sees three tiles in each direction, so about twenty looks covers one, and
+five points a look reaching a hundred in twenty looks is the same number
+arrived at from the other end.
+
+**Important places** are the areas where a need was once answered, and they
+keep for five years. They are areas rather than tiles on purpose - a man
+remembers that there are berries in that valley, not which bush - which is
+both truer and cheaper, because a valley does not go stale when a bush is
+picked.
+
+Alongside both, agents still keep: places they have been told about, storage
+contents with decay, social relationships, and what they know how to make.
+
+What this does *not* yet do is change any decision, and that is worth stating
+plainly rather than leaving to be discovered. The only thing reading the
+general impression is the sweep that decides which ninety-six remembered
+places to keep, and it cannot tell them apart: an agent's remembered places
+are nearly all in country it knows equally well, so the term never reorders
+anything. Measured over two blocks of sixty-four worlds the result is
+byte-identical to the run without it. The consumer that *would* use it is
+heading for an area that once answered a need - and that is the same
+walking-to-remembered-ground that costs a fifth of the settlement, above. So
+this is substrate, like the trails, and it comes alive at the same moment
+they do.
+
+An earlier version did change things, for the wrong reason: it let "somewhere
+that once worked" outrank "somewhere I want something from today" in that
+sweep, which filled heads with old valleys and pushed out the fresh, near,
+well-stocked places a hungry man needs. It cost 39 people in one block of
+sixty-four and nothing in the other. Being important is about *retention*, not
+precedence, and retention was already handled - by keeping the area and the
+need for five years, at no cost to anything else.
+
+### Worry
+
+The same machinery run backwards. An element carries what it has *cost* as
+well as what it has paid, against the drive it cost it to, and the cost is
+subtracted from the payment when anybody weighs the thing up. Stealing answers
+hunger and endangers standing; both facts are written against the same
+elements.
+
+What costs a thief is being *seen*, not taking. With nobody watching, nothing
+is written down, the worry already there fades on its own clock, and the trail
+strengthens on every meal - so a man who is never caught gets bolder. That is
+the behaviour asked for and not a hole in it.
+
+How long a worry lasts comes off the drive it guards, which is the drive's own
+rank and not a second opinion about it: a month for the ones that kill you, a
+fortnight for the ones that decide whether your people are here in ten years,
+a day for the ones that decide what sort of place they live in. It is felt as
+an emotion, and it presses on the drive it fears for, so a man who expects his
+standing to suffer goes and attends to his standing rather than merely
+declining to do things.
+
+A newborn has no history, so if worry could only be earned the first thing
+every child would learn is that nothing costs anything. Two other sources:
+what it saw happen to somebody else, and a third of what the people who raised
+it were wary of. The worry passes; the trails do not. A child does not inherit
+its parents' map.
 
 ### The turning year
 
@@ -2330,13 +2426,100 @@ to. Measured over eight worlds of ten thousand ticks, a settlement works out
 about thirteen of these per living agent from nothing, and four agents in five
 end up knowing where the water is.
 
-What it does not do is change how a settlement fares. Eight worlds a side at
-ten thousand ticks put the population up by 16 at a standard error of 11; eight
-worlds a side at twelve thousand put it *down* by 14 at a standard error of 10.
-Two runs pointing opposite ways at the same size is noise, and the honest
-reading is that the mechanism costs nothing and buys nothing yet. It is kept
-because it is the substrate the rest of the discovery work stands on, and
-because what it records is worth having whether or not it has paid off.
+#### And what to do with a pattern, which is the harder half
+
+Two blocks of sixty-four worlds, each run a full year, counting people alive
+at the end:
+
+| | block 1 | block 2 | person-days |
+|---|---|---|---|
+| before the pattern layer | 199 | 219 | 209k / 213k |
+| trails, walking to what they point at | 164 | 170 | 208k / 210k |
+| trails, walking only within 25 paces | 183 | 174 | 209k / 211k |
+| **trails, not walking to them** | **208** | **235** | **212k / 214k** |
+
+Both blocks say the same thing and they say it twice. Learning where the food
+is helps. *Going there* costs about a fifth of the people alive at the end of
+a year, and shortening the walk does not rescue it - the twenty-five-pace
+version emptied six worlds of sixty-four against two.
+
+Person-days across the year move by about one per cent in every row, which is
+the shape of the thing. A settlement does as well through the year and ends it
+smaller, because somebody who sets off across the map for a bush he remembers
+is not in the camp when the camp needs him. The trails are not at fault and
+neither is remembering; what is at fault is that an errand is priced at the
+work and not at the walk. So the trails learn and nobody walks on them yet,
+and the mechanism that turns them into a journey comes back when an errand can
+weigh its own trip.
+
+That is also the honest reading of the whole memory rewrite: it is a better
+substrate than what it replaced and it is worth about a per cent of the tick,
+but the settlement-level gain in the last row is a gain from *removing* a
+journey, not from adding a memory. What memory buys will not be visible until
+the thing downstream of it can count the cost of acting on it.
+
+### Cold, and what a rate means
+
+Every rate in `environment/exposure.rs` was a bare number applied once a turn:
+hypothermia at 0.02, sunburn accruing at 0.01, damage shed at 0.05 under
+cover. Per what? The file was written nine months before this model had a
+calendar, so the honest answer was: per call, and nothing more. When the turn
+went from two hours to half an hour, every one of them became four times what
+it had been in a day without anybody touching a number, and the share of
+deaths booked to the weather went from **3.2% to 25%**.
+
+They name a day now, and one function divides by `TICKS_PER_DAY`. The figures
+are the old ones times twelve - the turn the balance was last measured at,
+which is a calibration and is labelled as one rather than passed off as a
+design. Two guard tests tick a body through a whole simulated day of blizzard
+and of wind and check the total comes to the day's figure, so the next change
+to the turn leaves the weather alone.
+
+Over sixty-four seeded worlds it is worth **+3.1% person-days**, and it cuts
+the weather from a quarter of all deaths to a sixth. It is a correction rather
+than a cure: sixty-one settlements in sixty-four still die in their first
+winter, of hunger, and that is a larger problem than the weather ever was.
+
+### The turn, and the minute
+
+A turn is half an hour. That is `TICKS_PER_DAY = 48`, and it is the grain at
+which somebody decides what to do: walk to the hedgerow, sit down and knap a
+blade, carry the meat home. Half an hour is the right length for all of that
+and the wrong length for a wolf. Half an hour is a very long time to have
+already decided what you are doing when something is coming at you.
+
+So anybody frightened enough to run, or angry enough to stand, goes round
+again once a simulated minute until the danger is off them or the half hour is
+gone. Nobody else moves while it happens - except the thing that is after
+them, which gets its minutes too.
+
+That last clause is the whole of the difficulty, and it was twice estimated as
+cheap before it was looked at. A `Move` is one tile, whatever the turn is
+worth in minutes. Hand a frightened man twenty-nine extra turns and he covers
+twenty-nine tiles while the wolf covers one: the fast clock would not be a
+finer grain on the same world, it would be an escape hatch out of every
+predator balance in it. Hence the predator on the same clock.
+
+Measured over eleven half-year runs of twelve people, the extra minutes come
+to a median of **1% of person-turns**, and the spread is the point rather than
+the median: three runs never used the mechanism at all, and the two that used
+it most - 15% and 20% of person-turns - are the two runs that ended with four
+and seven people alive out of twelve. The fast clock costs nothing in the
+settlements that were never in trouble and fires hardest in the ones that
+were, which is what it is for. Against the tick cost it is inside the noise of
+a paired before-and-after run.
+
+Somebody is "in danger" on the same appraisal that decides whether they fight
+or run, not on a separate flag: `EmotionState::in_danger` is `should_flee() ||
+should_attack()`. This matters for writing tests about it. Fear and anger are
+re-appraised from what is actually present every turn, so writing a fright
+into an agent's emotions and ticking produces fear 1.000 followed immediately
+by fear 0.000 - correctly, because a wolf that does not exist is not
+frightening. A test about danger has to put something in the world to be in
+danger of. And it has to put it on the right man: a sound adult sizes up one
+wolf and comes out *angry*, at 0.21 against a gate of 0.43, because he can
+face it. It is the man already hurt who reads the same wolf as more than he
+can cope with.
 
 ### Learning
 - **Trial & Error**: Random exploration with reinforcement

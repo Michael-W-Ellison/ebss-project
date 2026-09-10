@@ -29,7 +29,7 @@ pub const MINUTES_PER_DAY: u32 = 1440;
 ///
 /// Derived, so that making the decision loop finer makes the body's steps
 /// smaller rather than making the body wrong.
-pub const MINUTES_PER_TURN: u32 = MINUTES_PER_DAY / crate::environment::seasons::TICKS_PER_DAY;
+pub use crate::environment::seasons::MINUTES_PER_TURN;
 
 /// Three days without water and an adult is dead.
 pub const MINUTES_TO_DIE_OF_THIRST: u32 = 3 * MINUTES_PER_DAY;
@@ -242,6 +242,27 @@ pub fn share_of_a_meal_gone_by(age_in_minutes: u32) -> f32 {
 /// fishing. The fishery's numbers are the later and the more specific, so they
 /// are the ones taken. The stomach's six hundred is a volume, and it is a
 /// ceiling on gorging rather than a daily target.
+/// How much of a hunger a meal of this much energy actually answers.
+///
+/// One, for a full sitting; a fifth, for a fifth of one. **Every eating path
+/// in this model discharged the Hunger drive by a flat constant** - minus
+/// three tenths for a meal and minus three tenths for a single berry - and
+/// the drive is an accumulator, not something re-read off the body each turn.
+/// So a mouthful bought a starving man's hunger off entirely: the drive fell
+/// under the threshold, another drive won the turn, and he walked away from
+/// the food with his reserve still emptying.
+///
+/// Measured over eight seeded world-years, sampling every living body once a
+/// day, that shows up as a fold in the middle of the table. Bodies at a
+/// quarter to a half of their reserve carry a hunger of **0.96 on an empty
+/// stomach**; bodies under a *tenth* of their reserve carry **0.71, with a
+/// hundred and fifty energy in the belly**. The ones nearest death were the
+/// less hungry, because something had gone down. A hundred and fifty energy
+/// against the fourteen hundred and forty a body burns in a day.
+pub fn what_this_meal_answers(energy_in: f32) -> f32 {
+    (energy_in / WHAT_A_SITTING_AIMS_AT).clamp(0.0, 1.0)
+}
+
 pub fn what_a_unit_of_this_is_worth(energy: f32) -> f32 {
     energy.max(0.5)
 }
@@ -271,6 +292,38 @@ pub fn what_the_work_costs(energy_spent: f32) -> f32 {
 
     let share = (energy_spent / (AN_ORDINARY_TURN_COSTS * 2.0)).clamp(0.0, 1.0);
     AT_REST + (WORKING_HARD - AT_REST) * share
+}
+
+/// What a body of this size burns, against what a grown one burns.
+///
+/// **Not its share of a grown body, which is what this was, and that made
+/// every question about body size cancel itself out.** A body's reserve
+/// scaled by `share` and its burning scaled by `share` too, so
+/// `reserve / burn` - the number of days a body has if it never eats again -
+/// came out the same for a child and a grown man. Measured: **235 turns
+/// against 235**. `days_into_the_reserve` cancelled the same way, and so did
+/// what share of its own store three days costs a body.
+///
+/// The docstring on `Physiology::for_a_body_of` has claimed the opposite
+/// since it was written - "a child carries days where an adult carries weeks,
+/// so the same famine takes the young first without anybody having written
+/// that down" - and the arithmetic under it made that impossible. Four tests
+/// asserted it and four tests failed. See ISSUES_FOUND.md #227.
+///
+/// Kleiber's law is the reason and the number: metabolic rate goes as mass to
+/// the three quarters, not as mass. A small body burns proportionally *more*
+/// than its size for its own store, which is why children are the first to go
+/// in a famine and why a mouse eats its own weight in a week. Reserve still
+/// scales with size; burning scales more slowly; the two no longer cancel.
+///
+/// At a child's share of 0.45 that is 0.55 of a grown body's burning against
+/// 0.45 of its reserve - so the child has about 0.82 of the man's days, and
+/// three days without food costs it a fifth more of what it carries.
+pub fn what_a_body_this_size_burns(share: f32) -> f32 {
+    /// Mass to the three quarters. Kleiber, 1932, and it has held up.
+    const WHAT_SIZE_DOES_TO_BURNING: f32 = 0.75;
+
+    share.clamp(0.05, 1.0).powf(WHAT_SIZE_DOES_TO_BURNING)
 }
 
 /// A meal in the stomach, emptying into the gut on its own clock.
@@ -369,7 +422,8 @@ impl Physiology {
             stomach_capacity: STOMACH_CAPACITY * share,
             waste: 0.0,
             burned_today: 0.0,
-            what_i_burn_in_a_day: UNITS_BURNED_IN_AN_ORDINARY_DAY * share,
+            what_i_burn_in_a_day: UNITS_BURNED_IN_AN_ORDINARY_DAY
+                * what_a_body_this_size_burns(share),
             units_ever_eaten: 0.0,
             meals_ever_eaten: 0,
         }
@@ -395,7 +449,8 @@ impl Physiology {
         // Which is the whole of "a child and an adult come out identical" from
         // the project status report, in reverse: they were not identical, they
         // disagreed with themselves.
-        self.what_i_burn_in_a_day = UNITS_BURNED_IN_AN_ORDINARY_DAY * share;
+        self.what_i_burn_in_a_day =
+            UNITS_BURNED_IN_AN_ORDINARY_DAY * what_a_body_this_size_burns(share);
     }
 
     /// Whether there is room for another mouthful.
@@ -421,7 +476,7 @@ impl Physiology {
     /// given. It made a child need more meals a day than its father while
     /// carrying a quarter of the stomach to take them in.
     pub fn how_fast_this_body_burns(&self) -> f32 {
-        self.reserve_capacity / RESERVE_OF_A_GROWN_BODY
+        what_a_body_this_size_burns(self.reserve_capacity / RESERVE_OF_A_GROWN_BODY)
     }
 
     /// What is in the stomach now.

@@ -5,7 +5,7 @@
 //! to the drive satisfaction to form a pattern. (e.g., travel to + specific
 //! location = water)."
 
-use crate::agents::patterns::Patterns;
+use crate::agents::patterns::{Bearing, Element, Patterns};
 use crate::agents::{Agent, AgentConfig, Population};
 use crate::analytics::Simulation;
 use crate::core::DriveType;
@@ -40,14 +40,26 @@ fn answering_a_need_is_written_down_against_the_place() {
         100,
     );
 
-    assert_eq!(agent.patterns.how_often(DriveType::Thirst, "gather:water"), 1);
-    let (what, habit) = agent
+    // The verb and the thing it was done to are separate elements, so each
+    // can be believed to a different degree
+    assert_eq!(agent.patterns.how_often(DriveType::Thirst, "gather"), 1);
+    let (what, trail) = agent
         .patterns
         .what_answers(DriveType::Thirst)
         .expect("something answers thirst now");
-    assert_eq!(what, "gather:water");
-    assert_eq!(habit.where_it_worked, Some(bank));
-    assert_eq!(habit.last_worked, 100);
+    assert_eq!(what, "gather");
+    assert_eq!(trail.last_worked, 100);
+
+    // And the ground is written down beside them, as its own element
+    let ground = agent
+        .patterns
+        .trail(DriveType::Thirst, &Element::At(bank))
+        .expect("the bank was written down");
+    assert_eq!(ground.last_worked, 100);
+    assert!(ground.strength > 0.0);
+
+    // As is what it was done to
+    assert!(agent.patterns.strength(DriveType::Thirst, &Element::On("water".to_string())) > 0.0);
 }
 
 /// A drive that barely moved is not evidence of anything.
@@ -210,18 +222,40 @@ fn the_place_you_are_standing_is_not_a_destination() {
         None,
         "\"where do I go\" is not answered by \"here\""
     );
+
+    // Nor by anywhere else at the moment - nobody walks on the strength of a
+    // memory until an errand can price its own trip. See
+    // `Agent::somewhere_that_answered` for the measurement that settled it.
     assert_eq!(
         agent.somewhere_that_answered(DriveType::Thirst, (40, 40, 0), 6),
+        None,
+        "not from across the map either, for now"
+    );
+
+    // But the place is written down, and that is what comes back on
+    assert_eq!(
+        agent.patterns.where_it_worked(DriveType::Thirst, 6),
         Some(here),
-        "but from across the map it is"
+        "the bank is remembered even though nobody is walking to it"
     );
 }
 
 // --- what it changes --------------------------------------------------------
 
-/// A thirsty agent with nowhere in reach walks back to where it drank.
+/// A thirsty agent knows where it drank, and stays where it is.
+///
+/// This test used to assert the opposite, and the assertion was right about
+/// what the code did and wrong about whether it should. Measured over two
+/// blocks of sixty-four worlds, walking to remembered ground cost about a
+/// fifth of the people alive at the end of a year - the table is in
+/// `Agent::somewhere_that_answered`. What the settlement gains by remembering
+/// the bank it loses twice over by sending somebody to it, because an errand
+/// is priced at the work and not at the walk.
+///
+/// So the test is kept, pointed the other way, and it is the test that will
+/// have to be turned back round when ISSUES_FOUND #189 is fixed.
 #[test]
-fn a_thirsty_agent_walks_back_to_the_bank_it_drank_from() {
+fn a_thirsty_agent_knows_the_bank_it_drank_from_and_does_not_set_off_for_it() {
     let population = a_lone_agent();
     let mut world = World::new(WorldConfig::default());
 
@@ -257,10 +291,20 @@ fn a_thirsty_agent_walks_back_to_the_bank_it_drank_from() {
         simulation.what_this_drive_offers(DriveType::Thirst, agent, here)
     };
 
-    assert_eq!(
+    assert_ne!(
         action,
         Some(Action::Move { target: bank }),
-        "with no water anywhere in reach, the remembered bank is the answer"
+        "the bank is remembered, but setting off for it is what costs the \
+         settlement more than the memory is worth"
+    );
+
+    // And the memory itself is intact, which is the half of this that works
+    assert_eq!(
+        simulation.population.agents[0]
+            .patterns
+            .where_it_worked(DriveType::Thirst, 6),
+        Some(bank),
+        "he knows perfectly well where the water was"
     );
 }
 
@@ -382,11 +426,11 @@ fn a_pattern_belongs_to_the_man_who_noticed_it() {
     );
 
     assert_eq!(
-        population.agents[0].patterns.how_often(DriveType::Thirst, "gather:water"),
+        population.agents[0].patterns.how_often(DriveType::Thirst, "gather"),
         1
     );
     assert_eq!(
-        population.agents[1].patterns.how_often(DriveType::Thirst, "gather:water"),
+        population.agents[1].patterns.how_often(DriveType::Thirst, "gather"),
         0
     );
 }
@@ -402,5 +446,314 @@ fn nobody_arrives_knowing_what_answers_what() {
     assert_eq!(
         founder.somewhere_that_answered(DriveType::Thirst, (0, 0, 0), 0),
         None
+    );
+}
+
+/// The whole of the generalising: what two successes share outgrows what they
+/// differ in.
+///
+/// "I went hunting out east and got meat which satisfied my hunger drive" and
+/// "I went hunting out west and got meat which satisfied my hunger drive" share
+/// every element except the direction. So hunting should end up believed in
+/// twice as strongly as east does, without anybody having written down that
+/// the hunting is the part that matters.
+#[test]
+fn hunting_east_and_west_teaches_hunting_rather_than_east() {
+    let mut population = a_lone_agent();
+    let agent = &mut population.agents[0];
+
+    let east = (40, 0, 0);
+    let west = (-40, 0, 0);
+    let camp = (0, 0, 0);
+
+    // Both trips set out from the same camp, so both have a bearing
+    agent.errand = Some(crate::agents::Errand {
+        going_to: east,
+        set_out_from: camp,
+        to_make: None,
+        for_drive: DriveType::Hunger,
+        pressed_this_hard: 1.0,
+        turns_on_it: 1,
+        set_aside: 0,
+    });
+    agent.link_what_worked(&a_hunt(), &a_meal(), DriveType::Hunger, east, 10);
+
+    agent.errand = Some(crate::agents::Errand {
+        going_to: west,
+        set_out_from: camp,
+        to_make: None,
+        for_drive: DriveType::Hunger,
+        pressed_this_hard: 1.0,
+        turns_on_it: 1,
+        set_aside: 0,
+    });
+    agent.link_what_worked(&a_hunt(), &a_meal(), DriveType::Hunger, west, 20);
+
+    let hunting = agent
+        .patterns
+        .strength(DriveType::Hunger, &Element::Did("hunt".to_string()));
+    let out_east = agent
+        .patterns
+        .strength(DriveType::Hunger, &Element::Toward(Bearing::East));
+    let out_west = agent
+        .patterns
+        .strength(DriveType::Hunger, &Element::Toward(Bearing::West));
+
+    assert!(hunting > 0.0, "hunting answered hunger twice and is believed");
+    assert!(out_east > 0.0, "so did going east, once");
+    assert!(
+        hunting > out_east && hunting > out_west,
+        "the doing is shared by both trips and the direction is not, so the \
+         doing should be the better worn of the two: hunting {hunting}, \
+         east {out_east}, west {out_west}"
+    );
+    assert!(
+        (out_east - out_west).abs() < 1e-6,
+        "and neither direction has anything the other has not"
+    );
+}
+
+/// A path nobody walks grows over.
+#[test]
+fn a_trail_nobody_walks_grows_over() {
+    let mut population = a_lone_agent();
+    let agent = &mut population.agents[0];
+    let bank = (14, 9, 0);
+
+    for tick in 0..3 {
+        agent.link_what_worked(
+            &Action::Gather { resource_type: "water".to_string() },
+            &a_drink(),
+            DriveType::Thirst,
+            bank,
+            tick,
+        );
+    }
+
+    let when_fresh = agent
+        .patterns
+        .strength(DriveType::Thirst, &Element::At(bank));
+    assert!(when_fresh > 0.0);
+
+    // A season of not going back
+    let a_season = Patterns::STILL_WORTH_THE_WALK;
+    agent.patterns.fade(a_season);
+
+    let after_a_season = agent
+        .patterns
+        .strength(DriveType::Thirst, &Element::At(bank));
+    assert!(
+        after_a_season < when_fresh,
+        "the trail should have faded: {when_fresh} -> {after_a_season}"
+    );
+
+    // And a year of it takes the place off the map altogether, which is what
+    // lets an agent hold a corner of the world instead of all of it
+    agent.patterns.fade(a_season * 4);
+    assert_eq!(
+        agent
+            .patterns
+            .strength(DriveType::Thirst, &Element::At(bank)),
+        0.0,
+        "a place nobody has been to in a year is forgotten"
+    );
+}
+
+/// A need answered in one turn is worth more than the same need answered in ten.
+#[test]
+fn a_quick_answer_lays_a_stronger_trail_than_a_slow_one() {
+    let mut population = a_lone_agent();
+
+    let near = (1, 0, 0);
+    let far = (40, 0, 0);
+
+    let quick = {
+        let agent = &mut population.agents[0];
+        agent.errand = Some(crate::agents::Errand {
+            going_to: near,
+            set_out_from: (0, 0, 0),
+            to_make: None,
+            for_drive: DriveType::Thirst,
+            pressed_this_hard: 1.0,
+            turns_on_it: 1,
+            set_aside: 0,
+        });
+        agent.link_what_worked(
+            &Action::Gather { resource_type: "water".to_string() },
+            &a_drink(),
+            DriveType::Thirst,
+            near,
+            10,
+        );
+        agent.patterns.strength(DriveType::Thirst, &Element::At(near))
+    };
+
+    let slow = {
+        let mut second = a_lone_agent();
+        let agent = &mut second.agents[0];
+        agent.errand = Some(crate::agents::Errand {
+            going_to: far,
+            set_out_from: (0, 0, 0),
+            to_make: None,
+            for_drive: DriveType::Thirst,
+            pressed_this_hard: 1.0,
+            turns_on_it: 10,
+            set_aside: 0,
+        });
+        agent.link_what_worked(
+            &Action::Gather { resource_type: "water".to_string() },
+            &a_drink(),
+            DriveType::Thirst,
+            far,
+            10,
+        );
+        agent.patterns.strength(DriveType::Thirst, &Element::At(far))
+    };
+
+    assert!(
+        quick > slow,
+        "the same drink for a tenth of the walking should be worth more: \
+         one turn {quick}, ten turns {slow}"
+    );
+}
+
+/// Elements are map keys, and JSON has only string keys.
+#[test]
+fn every_element_survives_being_written_down_and_read_back() {
+    let all = [
+        Element::Did("gather".to_string()),
+        Element::On("Berries".to_string()),
+        Element::At((-14, 9, 3)),
+        Element::Toward(Bearing::SouthWest),
+        Element::When(crate::environment::seasons::Season::Winter),
+    ];
+
+    for element in all {
+        let written = element.to_string();
+        let read_back = Element::try_from(written.clone())
+            .unwrap_or_else(|why| panic!("{written} did not come back: {why}"));
+        assert_eq!(element, read_back, "{written}");
+    }
+
+    // And through the format the map keys actually go through
+    let mut patterns = Patterns::default();
+    patterns.it_worked(
+        DriveType::Hunger,
+        &[Element::At((3, 4, 0)), Element::Did("fish".to_string())],
+        0.5,
+        1,
+    );
+    let written = serde_json::to_string(&patterns).expect("patterns write");
+    let read_back: Patterns = serde_json::from_str(&written).expect("patterns read");
+    assert_eq!(
+        read_back.strength(DriveType::Hunger, &Element::At((3, 4, 0))),
+        patterns.strength(DriveType::Hunger, &Element::At((3, 4, 0))),
+    );
+}
+
+/// A bearing is taken from where the walk began, and a step is not a bearing.
+#[test]
+fn a_bearing_is_taken_from_where_the_walk_began() {
+    let camp = (0, 0, 0);
+
+    assert_eq!(Bearing::from_home(camp, (40, 1, 0)), Some(Bearing::East));
+    assert_eq!(Bearing::from_home(camp, (-40, 1, 0)), Some(Bearing::West));
+    assert_eq!(Bearing::from_home(camp, (1, 40, 0)), Some(Bearing::North));
+    assert_eq!(Bearing::from_home(camp, (30, 30, 0)), Some(Bearing::NorthEast));
+    assert_eq!(Bearing::from_home(camp, (-30, -30, 0)), Some(Bearing::SouthWest));
+
+    // Standing on the spot, or one pace off it, has no direction in it
+    assert_eq!(Bearing::from_home(camp, camp), None);
+    assert_eq!(Bearing::from_home(camp, (1, 1, 0)), None);
+}
+
+/// A hunt, and what a hunt that fed somebody looks like.
+fn a_hunt() -> Action {
+    Action::Hunt {
+        animal_id: uuid::Uuid::nil(),
+        weapon: None,
+    }
+}
+
+fn a_meal() -> ActionResult {
+    ActionResult::success().with_drive_change(DriveType::Hunger, -0.5)
+}
+
+/// A bank that has gone dry should bring another bank to mind, not the best
+/// thing the agent knows about anything.
+#[test]
+fn when_a_place_stops_working_the_next_one_is_one_like_it() {
+    use crate::agents::patterns::Patterns;
+
+    let mut patterns = Patterns::default();
+
+    let one_bank = Element::At((10, 0, 0));
+    let another_bank = Element::At((30, 0, 0));
+    let a_berry_patch = Element::At((0, 40, 0));
+    let drinking = Element::Did("gather".to_string());
+    let water = Element::On("water".to_string());
+    let picking = Element::Did("gather".to_string());
+    let berries = Element::On("Berries".to_string());
+
+    // Drinking is done at two banks, often enough for both to be habits
+    for tick in 0..4 {
+        patterns.it_worked(
+            DriveType::Thirst,
+            &[drinking.clone(), water.clone(), one_bank.clone()],
+            0.4,
+            tick,
+        );
+    }
+    for tick in 4..8 {
+        patterns.it_worked(
+            DriveType::Thirst,
+            &[drinking.clone(), water.clone(), another_bank.clone()],
+            0.3,
+            tick,
+        );
+    }
+    // And a berry patch has answered thirst too, better than either bank -
+    // fruit is wet - but it has nothing else in common with them
+    for tick in 8..12 {
+        patterns.it_worked(
+            DriveType::Thirst,
+            &[picking.clone(), berries.clone(), a_berry_patch.clone()],
+            0.9,
+            tick,
+        );
+    }
+
+    // With nothing having failed, the best-worn place wins
+    assert_eq!(
+        patterns.where_it_worked(DriveType::Thirst, 12),
+        Some((0, 40, 0)),
+        "the berry patch is the best thing he knows"
+    );
+
+    // Now the first bank goes dry
+    patterns.it_did_not(
+        DriveType::Thirst,
+        &[drinking.clone(), water.clone(), one_bank.clone()],
+    );
+
+    assert_eq!(
+        patterns.where_it_worked(DriveType::Thirst, 12),
+        Some((30, 0, 0)),
+        "a dry bank should send him to the other bank - the place that shares \
+         its afternoons - and not to the berry patch that shares nothing"
+    );
+
+    // Two banks are more alike than a bank and a berry patch. They are not
+    // wholly unalike - gathering is gathering, and that is the generalising
+    // working rather than failing - but the water is only true of the banks.
+    let two_banks = patterns.how_alike(DriveType::Thirst, &one_bank, &another_bank);
+    let bank_and_patch = patterns.how_alike(DriveType::Thirst, &one_bank, &a_berry_patch);
+    assert!(
+        two_banks > bank_and_patch,
+        "both banks share the gathering and the water; the patch shares only          the gathering: {two_banks} against {bank_and_patch}"
+    );
+    assert!(
+        bank_and_patch > 0,
+        "and gathering is gathering wherever it is done"
     );
 }

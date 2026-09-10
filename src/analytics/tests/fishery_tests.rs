@@ -53,7 +53,7 @@ fn a_fish_takes_nothing_out_of_the_bank() {
     reach.max_amount = 500;
 
     for _ in 0..200 {
-        reach.regenerate_in_ground(15.0, 0.8, 1.0, false, &mut soil);
+        reach.regenerate_in_ground(15.0, 0.8, 1.0, false, &mut soil, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
     }
 
     assert_eq!(
@@ -66,7 +66,7 @@ fn a_fish_takes_nothing_out_of_the_bank() {
     let mut crop = ResourceNode::new(ResourceType::Food, Position::new(1, 1), 10);
     crop.max_amount = 500;
     for _ in 0..200 {
-        crop.regenerate_in_ground(15.0, 0.8, 1.0, false, &mut soil);
+        crop.regenerate_in_ground(15.0, 0.8, 1.0, false, &mut soil, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
     }
 
     assert!(

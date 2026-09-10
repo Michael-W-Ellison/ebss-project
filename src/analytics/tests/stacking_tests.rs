@@ -151,6 +151,7 @@ fn a_pit_puts_this_load_beside_the_last_one() {
         holds: vec![a_lot_of("food", 40, 0)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     };
 
     pit.put_in(a_lot_of("food", 10, 5_000));
@@ -176,6 +177,7 @@ fn a_pit_joins_up_what_went_in_together() {
         holds: vec![a_lot_of("food", 40, 1_000)],
         covered: true,
         dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
     };
 
     pit.put_in(a_lot_of("food", 10, 1_001));

@@ -218,3 +218,143 @@ fn a_cast_that_catches_nothing_still_costs_the_morning() {
         );
     }
 }
+
+// --- the mast ---------------------------------------------------------------
+
+/// The top of this model's own energy scale was a food that did not exist.
+///
+/// `physiology.rs` describes the nutrition database as running "from six
+/// (spring greens) to eighty (fat and nuts)" - and nothing in the world
+/// yielded a nut, no `ItemType` held one and no plant dropped one. The best
+/// food a temperate forager has was named in a comment and nowhere else.
+#[test]
+fn a_nut_is_the_best_thing_in_the_wood_and_it_keeps() {
+    use crate::world::nutrition::FoodDatabase;
+    use crate::world::ItemType;
+
+    let food = FoodDatabase::new();
+    let nuts = food.create_food_data(&ItemType::Nuts, 0).expect("nuts are food");
+    let greens = food.create_food_data(&ItemType::Greens, 0).expect("greens are food");
+    let grain = food.create_food_data(&ItemType::Grain, 0).expect("grain is food");
+    let meat = food.create_food_data(&ItemType::Meat, 0).expect("meat is food");
+
+    assert!(
+        nuts.base_nutrition.energy > greens.base_nutrition.energy * 10.0,
+        "the top of the scale against the bottom of it: {} against {}",
+        nuts.base_nutrition.energy,
+        greens.base_nutrition.energy
+    );
+    assert!(
+        nuts.base_nutrition.energy >= grain.base_nutrition.energy,
+        "and better than a harvest"
+    );
+
+    // And the point of it: it keeps, with nothing done to it. Everything
+    // else a settlement puts by has to be dried, salted, smoked or buried,
+    // and the throughput of that is what caps the winter store - #241.
+    assert!(
+        nuts.base_spoilage_ticks > meat.base_spoilage_ticks * 10,
+        "a nut outlasts fresh meat many times over: {} against {}",
+        nuts.base_spoilage_ticks,
+        meat.base_spoilage_ticks
+    );
+    assert!(
+        nuts.base_spoilage_ticks
+            > (crate::environment::seasons::DAYS_PER_SEASON
+                * crate::environment::seasons::TICKS_PER_DAY) as u32,
+        "gathered in October and still food in March: {}",
+        nuts.base_spoilage_ticks
+    );
+}
+
+/// The mast is on the ground for a few weeks of autumn and at no other time.
+#[test]
+fn the_mast_is_an_autumn_and_nothing_else() {
+    use crate::environment::seasons::{Season, DAYS_PER_SEASON};
+    use crate::world::ResourceType;
+
+    let midsummer = Season::Summer.first_day() + DAYS_PER_SEASON / 2;
+    let autumn = Season::Fall.first_day() + DAYS_PER_SEASON / 2;
+    let midwinter = Season::Winter.first_day() + DAYS_PER_SEASON / 2;
+    let spring = Season::Spring.first_day() + DAYS_PER_SEASON / 2;
+
+    assert!(ResourceType::Nuts.is_it_bearing(autumn), "the mast is an autumn");
+    assert!(!ResourceType::Nuts.is_it_bearing(midsummer));
+    assert!(!ResourceType::Nuts.is_it_bearing(midwinter));
+    assert!(!ResourceType::Nuts.is_it_bearing(spring));
+
+    // Later than the grain, which is what a harvest and a mast are.
+    assert!(
+        ResourceType::Grain.is_it_bearing(Season::Summer.first_day() + DAYS_PER_SEASON - 5),
+        "grain comes in at the end of summer"
+    );
+}
+
+/// A wood does not drop the same weight of mast every year, and that is the
+/// first thing in this model that makes one year worth more than another.
+#[test]
+fn some_autumns_are_worth_being_in_a_wood_for() {
+    use crate::world::ResourceType;
+
+    let over_twenty_years: Vec<f32> =
+        (0..20).map(ResourceType::how_heavy_the_mast_is).collect();
+
+    let lean = over_twenty_years.iter().filter(|&&m| m < 0.5).count();
+    let flooded = over_twenty_years.iter().filter(|&&m| m > 1.5).count();
+    let ordinary = over_twenty_years.len() - lean - flooded;
+
+    assert!(lean >= 4, "a good few autumns are bad ones: {lean} of 20");
+    assert!(flooded >= 2, "and a few are mast years: {flooded} of 20");
+    assert!(ordinary >= 4, "and the rest are ordinary: {ordinary} of 20");
+
+    // Every wood in a country agrees, because a district where half the woods
+    // bore would be no gamble at all - so this is worked out from the year
+    // and not rolled.
+    assert_eq!(
+        ResourceType::how_heavy_the_mast_is(7),
+        ResourceType::how_heavy_the_mast_is(7),
+        "the same year is the same year"
+    );
+
+    // And nothing else in the world has a mast year.
+    assert!(ResourceType::Nuts.does_it_have_mast_years());
+    for other in [ResourceType::Food, ResourceType::Grain, ResourceType::Greens] {
+        assert!(!other.does_it_have_mast_years(), "{other:?} bears what it bears");
+    }
+}
+
+/// The mast reaches a pack under whatever name the tree that dropped it goes
+/// by, and it reaches the world under the trees that drop it.
+#[test]
+fn the_mast_is_gatherable_and_storable() {
+    use crate::agents::storage_integration::id_to_item_type;
+    use crate::world::resource_spawning::TerrainResourceMapper;
+    use crate::world::{ItemType, ResourceType, TerrainType};
+
+    for named in ["nuts", "acorns", "hazelnuts", "chestnuts", "walnuts"] {
+        assert_eq!(
+            id_to_item_type(named),
+            Some(ItemType::Nuts),
+            "{named} should reach the pack as nuts"
+        );
+    }
+
+    let where_it_falls = TerrainResourceMapper::preferred_terrains(ResourceType::Nuts);
+    assert!(
+        where_it_falls.contains(&TerrainType::Forest),
+        "the mast falls under the trees: {where_it_falls:?}"
+    );
+    assert!(
+        !where_it_falls.contains(&TerrainType::Plains),
+        "and not on open ground"
+    );
+
+    // And an oak drops it, which it did not before: an oak was standing
+    // timber and nothing else.
+    let flora = crate::environment::flora::FloraRegistry::new();
+    let oak = flora.get("oak_tree").expect("oaks exist");
+    assert!(
+        oak.drops.iter().any(|drop| drop.material_id == "acorns"),
+        "an oak drops acorns"
+    );
+}
