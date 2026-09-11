@@ -149,7 +149,7 @@ fn a_tool_in_the_pack_makes_the_work_go_better() {
     // Bare hands are bare hands, and bare hands are poor at felling trees:
     // "without tools, these actions are not very efficient". See ISSUES #88.
     assert_eq!(
-        agent.how_much_my_tools_help(SkillType::Woodcutting),
+        agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting),
         Agent::what_bare_hands_manage(SkillType::Woodcutting),
     );
 
@@ -157,11 +157,11 @@ fn a_tool_in_the_pack_makes_the_work_go_better() {
     agent.inventory.add_item(axe);
 
     assert!(
-        agent.how_much_my_tools_help(SkillType::Woodcutting) > 1.0,
+        agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting) > 1.0,
         "an axe should make felling timber go faster"
     );
     assert!(
-        agent.how_much_my_tools_help(SkillType::Woodcutting) <= AXE_FOR_WOOD.how_much_better,
+        agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting) <= AXE_FOR_WOOD.how_much_better,
         "but no faster than the tool is worth"
     );
 }
@@ -173,13 +173,13 @@ fn a_worn_tool_is_worth_less_than_a_new_one() {
     population.spawn_agent(AgentConfig::default());
     let agent = &mut population.agents[0];
 
-    let fresh = agent.how_much_my_tools_help(SkillType::Woodcutting);
+    let fresh = agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting);
 
     let axe = agent.inventory.get_item_mut("handaxe").unwrap();
     let max = axe.max_durability.unwrap();
     axe.current_durability = Some(max * 0.1);
 
-    let nearly_done = agent.how_much_my_tools_help(SkillType::Woodcutting);
+    let nearly_done = agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting);
     assert!(
         nearly_done < fresh,
         "a blunt axe should be worth less than a sharp one: {nearly_done} against {fresh}"
@@ -224,7 +224,7 @@ fn enough_work_wears_a_tool_out() {
         "a stone axe should not outlast the man who made it"
     );
     assert_eq!(
-        agent.how_much_my_tools_help(SkillType::Woodcutting),
+        agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting),
         Agent::what_bare_hands_manage(SkillType::Woodcutting),
         "and a worn-through axe is no axe"
     );
@@ -278,7 +278,7 @@ fn a_broken_tool_is_a_reason_to_make_a_new_one() {
         "a man with a broken axe and the makings of one should make one"
     );
     assert!(
-        simulation.population.agents[0].how_much_my_tools_help(SkillType::Woodcutting) > 1.0,
+        simulation.population.agents[0].how_fast_my_tools_make_this_go(SkillType::Woodcutting) > 1.0,
         "and be back in business"
     );
 }
@@ -349,7 +349,7 @@ fn a_spear_makes_a_hunter_of_somebody() {
     let agent = &mut population.agents[0];
 
     assert_eq!(
-        agent.how_much_my_tools_help(SkillType::Hunting),
+        agent.how_fast_my_tools_make_this_go(SkillType::Hunting),
         Agent::what_bare_hands_manage(SkillType::Hunting),
         "a founder arrives without a spear, and throwing stones is poor work"
     );
@@ -357,7 +357,7 @@ fn a_spear_makes_a_hunter_of_somebody() {
     let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);
     agent.inventory.add_item(spear);
 
-    let helped = agent.how_much_my_tools_help(SkillType::Hunting);
+    let helped = agent.how_fast_my_tools_make_this_go(SkillType::Hunting);
     assert!(helped > 1.0, "a spear should count for something in a hunt");
     assert!(helped <= SPEAR_FOR_HUNTING.how_much_better);
 }
@@ -373,7 +373,7 @@ fn a_practised_hand_makes_a_tool_that_works_better() {
         agent.inventory.remove_item("spear", 1);
         let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);
         agent.inventory.add_item(spear);
-        agent.how_much_my_tools_help(SkillType::Hunting)
+        agent.how_fast_my_tools_make_this_go(SkillType::Hunting)
     }
 
     let agent = &mut population.agents[0];
@@ -403,7 +403,7 @@ fn even_crude_work_beats_bare_hands() {
     agent.inventory.add_item(spear);
 
     assert!(
-        agent.how_much_my_tools_help(SkillType::Hunting) > 1.0,
+        agent.how_fast_my_tools_make_this_go(SkillType::Hunting) > 1.0,
         "the worst spear anybody ever made is still a spear"
     );
 }

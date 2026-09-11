@@ -10,7 +10,7 @@
 //! out of `Agent::equipment`, which nothing in this model has ever put a
 //! weapon into: the action's own field, `own_strength`, and by omission the
 //! fight itself. The live vocabulary is `environment::making`, reached through
-//! `how_much_my_tools_help`. See ISSUES_FOUND.md #100.
+//! `how_fast_my_tools_make_this_go`. See ISSUES_FOUND.md #100.
 
 use crate::agents::{AgentConfig, InventoryItem, LifeStage, Population, SkillType};
 use crate::analytics::Simulation;
@@ -158,10 +158,10 @@ fn bare_hands_still_fight() {
 #[test]
 fn a_fight_and_a_hunt_read_the_same_hand() {
     let (mut simulation, _) = a_man_and_a_wolf();
-    let bare = simulation.population.agents[0].how_much_my_tools_help(SkillType::Hunting);
+    let bare = simulation.population.agents[0].how_fast_my_tools_make_this_go(SkillType::Hunting);
 
     give_him_a_spear(&mut simulation);
-    let armed = simulation.population.agents[0].how_much_my_tools_help(SkillType::Hunting);
+    let armed = simulation.population.agents[0].how_fast_my_tools_make_this_go(SkillType::Hunting);
 
     assert!(
         armed > bare,

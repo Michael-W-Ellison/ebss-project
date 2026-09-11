@@ -320,7 +320,24 @@ impl Simulation {
             // axe was, until now, a thing an agent counted and nothing
             // else: a man carrying one felled timber at exactly the
             // rate of a man with his bare hands.
-            let tool = self.population.agents[agent_index].how_much_my_tools_help(trade);
+            //
+            // The *yield* channel, which is blind to how worn the tool is: a
+            // better edge wastes less of what it takes, and a blunt one takes
+            // just as much but takes longer about it. What being blunt costs
+            // is charged below, against what the trip costs to make.
+            let tool = self.population.agents[agent_index].how_much_my_tools_bring_back(trade);
+
+            // And how fast the same pair of hands gets through it, which is
+            // where a worn edge tells. "An agent can slowly gather reeds by
+            // hand but gathers them faster with a flint knife. The more
+            // durable (sharper) the knife, the faster the gathering." A turn
+            // is a fixed slice of a day in this model and has no clock inside
+            // it, so the only currency "faster" has here is what the trip
+            // takes out of a body - and until now a gathering trip cost a
+            // flat ten whether the agent stripped the bush with a fresh flake
+            // or with its fingernails.
+            let how_fast_it_goes = self.population.agents[agent_index]
+                .how_fast_my_tools_make_this_go(trade);
 
             // And how old the hands are. A six-year-old strips a bush at
             // three tenths of what his father does, which is the working half
@@ -601,7 +618,10 @@ impl Simulation {
 
                     ActionResult::success()
                         .with_drive_change(DriveType::Industry, -0.15)
-                        .with_energy_cost(10.0)
+                        .with_energy_cost(
+                            Self::WHAT_A_GATHERING_TRIP_COSTS
+                                * Self::what_the_tool_saves_on_a_trip(trade, how_fast_it_goes),
+                        )
                         .with_message(format!("Gathered {} {}", harvested, resource_type))
                 } else {
                     // What you cannot carry stays where it fell.
@@ -777,7 +797,7 @@ impl Simulation {
             // hunting. `weapon` is the older flag and still counts;
             // what is in the pack counts for more, and counts for
             // less as it wears.
-            let spear = agent.how_much_my_tools_help(crate::agents::skills::SkillType::Hunting);
+            let spear = agent.how_fast_my_tools_make_this_go(crate::agents::skills::SkillType::Hunting);
 
             // Something in the hand, for anything bigger than a hare.
             //
@@ -839,8 +859,12 @@ impl Simulation {
                         }
                     }
 
+                    // How much comes off the carcass, which is the waste
+                    // question and so reads the yield channel: a fine flake
+                    // leaves less on the bone than a crude one, and a worn
+                    // flake leaves no more than a fresh one.
                     let knife = self.population.agents[agent_index]
-                        .how_much_my_tools_help(
+                        .how_much_my_tools_bring_back(
                             crate::agents::skills::SkillType::Leatherworking,
                         );
                     let butchered = self.butcher(&items_gained, knife);
@@ -1255,7 +1279,7 @@ impl Simulation {
         // its fingers - which is most of a turn's work either way, and
         // a settlement that cannot dig cheaply cannot keep a larder.
         let shovel = self.population.agents[agent_index]
-            .how_much_my_tools_help(crate::agents::SkillType::Mining);
+            .how_fast_my_tools_make_this_go(crate::agents::SkillType::Mining);
         if shovel > 1.0 {
             self.population.agents[agent_index]
                 .wear_what_i_worked_with(crate::agents::SkillType::Mining);
@@ -1319,7 +1343,7 @@ impl Simulation {
         // is slow work: standing in the shallows waiting for
         // something to come within reach of a thrust.
         let spear = self.population.agents[agent_index]
-            .how_much_my_tools_help(crate::agents::SkillType::Fishing);
+            .how_fast_my_tools_make_this_go(crate::agents::SkillType::Fishing);
 
         let hand = (skill / 10.0).clamp(0.0, 0.5) + (spear - 1.0) * 0.3;
         let odds = (Self::A_THRUST_THAT_TELLS + 0.4 * thickness + hand).clamp(0.0, 0.9);

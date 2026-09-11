@@ -81,6 +81,7 @@ pub mod innovation_tests;
 pub mod map_memory_tests;
 pub mod goal_tests;
 pub mod stage_zero_tests;
+pub mod durability_tests;
 pub mod retention_tests;
 pub mod working_together_tests;
 pub mod keeping_tests;

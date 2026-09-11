@@ -872,7 +872,7 @@ impl Simulation {
     ///   in it. That is the horizon, and it is the honest one: a tool has to
     ///   pay for itself inside its own working life, and nothing has to be
     ///   assumed about how long the agent will go on wanting the trade.
-    /// - `how_much_my_tools_help` is what the work costs now, and
+    /// - `how_fast_my_tools_make_this_go` is what the work costs now, and
     ///   `how_much_better` what it would cost after.
     /// - `how_many_turns_to_make` is the price, counted along the same chain
     ///   the agent will actually walk.
@@ -933,7 +933,7 @@ impl Simulation {
             return action;
         };
 
-        let now = agent.how_much_my_tools_help(trade).max(0.01);
+        let now = agent.how_fast_my_tools_make_this_go(trade).max(0.01);
         let after = better.how_much_better.max(now);
         if after <= now {
             return action;

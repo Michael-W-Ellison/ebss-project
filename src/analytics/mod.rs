@@ -629,7 +629,7 @@ impl Simulation {
     /// nutrition in it and skins that can become a coat.
     ///
     /// `with_a_knife` is what the tool in the butcher's hand multiplies the
-    /// carcass by - see `Agent::how_much_my_tools_help`. Taking a deer apart
+    /// carcass by - see `Agent::how_much_my_tools_bring_back`. Taking a deer apart
     /// with a sharp flake and taking it apart with your hands are not the
     /// same job, and until now they were.
     /// Put as much of a stack into the pack as will go, and say how much went.

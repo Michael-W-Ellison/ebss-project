@@ -338,7 +338,7 @@ impl Simulation {
         let (mine, what_the_point_is_worth) = {
             let agent = &self.population.agents[agent_index];
             let spear =
-                agent.how_much_my_tools_help(crate::agents::skills::SkillType::Hunting);
+                agent.how_fast_my_tools_make_this_go(crate::agents::skills::SkillType::Hunting);
             // `weapon` is the older flag and still counts; what is in the pack
             // counts for more, and counts for less as it wears.
             let named: f32 = if weapon.is_some() { 0.2 } else { 0.0 };
@@ -416,7 +416,7 @@ impl Simulation {
             }
 
             let knife = self.population.agents[agent_index]
-                .how_much_my_tools_help(
+                .how_fast_my_tools_make_this_go(
                     crate::agents::skills::SkillType::Leatherworking,
                 );
             let butchered = self.butcher(&items_gained, knife);

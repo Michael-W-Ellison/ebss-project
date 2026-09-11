@@ -304,6 +304,25 @@ Three of the seven tags already have an axis. Four do not, and containers are a
 second mechanism answering the same question - which is this project's
 recurring defect, already in place.
 
+### What a tool is worth: two questions, not one
+
+A tool answers two questions and they have different inputs.
+
+| | Reads | Sets |
+|---|---|---|
+| `how_fast_my_tools_make_this_go` | technology, workmanship, **wear**, in hand or in pack | the energy a trip costs, the odds a cast or throw tells, the work a turn of making gets through |
+| `how_much_my_tools_bring_back` | technology, workmanship | what comes back off a bush, off a carcass, off a core |
+
+**Durability lives on the first and nowhere else.** A blunt flake takes longer
+over a carcass; it does not leave more on the bone. Speed has no single
+spelling here because a turn is a fixed slice of a day with no clock inside
+it - the three currencies above are all the same quantity, how much of the job
+one turn finishes.
+
+The wear curve is a straight line rather than a set of bands, so every stroke
+of use tells a little and none of them tells suddenly. See ISSUES_FOUND.md
+#200, including what it cost to anchor a gathering trip's cost wrongly.
+
 ### Stage 0: what the layer starts holding
 
 A capability table says what a people *can* use. It says nothing about what a

@@ -207,7 +207,7 @@ fn an_axe_in_the_hand_is_worth_more_than_the_same_axe_in_the_bag() {
     give(&mut simulation, "handaxe", 1);
 
     let in_the_bag =
-        simulation.population.agents[0].how_much_my_tools_help(SkillType::Woodcutting);
+        simulation.population.agents[0].how_fast_my_tools_make_this_go(SkillType::Woodcutting);
 
     simulation.execute_action(
         &Action::Equip {
@@ -217,7 +217,7 @@ fn an_axe_in_the_hand_is_worth_more_than_the_same_axe_in_the_bag() {
     );
 
     let in_the_hand =
-        simulation.population.agents[0].how_much_my_tools_help(SkillType::Woodcutting);
+        simulation.population.agents[0].how_fast_my_tools_make_this_go(SkillType::Woodcutting);
 
     assert!(
         in_the_hand > in_the_bag,

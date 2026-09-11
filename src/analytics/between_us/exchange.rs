@@ -317,6 +317,46 @@ impl Simulation {
     /// A real morning's work, and deliberately so: this is the most expensive
     /// single act in the model, because it is the one that buys a settlement a
     /// February.
+    /// What a trip to strip a bush or cut a load of wood takes out of a body,
+    /// **for somebody working with nothing but their hands**.
+    ///
+    /// A tool takes it down from there - see `what_the_tool_saves_on_a_trip`,
+    /// which is the only place a tool's condition is allowed to tell: a sharp
+    /// flake gets the same load for less of the day, a blunt one for more,
+    /// and neither changes how much comes back.
+    pub(in crate::analytics) const WHAT_A_GATHERING_TRIP_COSTS: f32 = 10.0;
+
+    /// The least of a trip that any tool can leave to be paid.
+    ///
+    /// Walking to the patch and back is most of a foraging trip and no edge
+    /// in the world shortens it, so a tool can take the work out of a trip
+    /// but never the trip.
+    pub(in crate::analytics) const WHAT_NO_TOOL_CAN_SAVE_YOU: f32 = 0.2;
+
+    /// What share of a bare-handed trip the same trip costs, with whatever
+    /// this agent is working with.
+    ///
+    /// **Anchored on bare hands, and that anchoring is the point.** Dividing
+    /// the flat cost straight through by `how_fast_my_tools_make_this_go`
+    /// looks right and is not: that function answers `what_bare_hands_manage`
+    /// when there is no tool, which is a quarter for woodcutting, so a man
+    /// with nothing in his hands was suddenly charged forty for a trip that
+    /// had always cost ten. Measured, that alone was **2.3% of person-days
+    /// and four more worlds emptied** - punishing the bottom of the ladder
+    /// rather than rewarding the top of it, which is not what a tool is for.
+    ///
+    /// So the ratio is against what this same pair of hands would manage with
+    /// nothing: one when there is no tool, and less as the tool gets better
+    /// and as more of its edge is left.
+    pub(in crate::analytics) fn what_the_tool_saves_on_a_trip(
+        trade: crate::agents::SkillType,
+        how_fast_it_goes: f32,
+    ) -> f32 {
+        let bare_hands = crate::agents::Agent::what_bare_hands_manage(trade).max(0.01);
+
+        (bare_hands / how_fast_it_goes.max(0.01)).clamp(Self::WHAT_NO_TOOL_CAN_SAVE_YOU, 1.0)
+    }
+
     pub(in crate::analytics) const WHAT_DIGGING_A_PIT_COSTS: f32 = 22.0;
 
     /// How near a fire you have to be to hang something in the smoke of it.

@@ -3500,7 +3500,7 @@ impl Agent {
     /// Putting a shaft in the way of something is hard on the shaft, so the
     /// caller is expected to wear it afterwards.
     pub fn what_a_blow_costs_me(&self, coming: f32) -> f32 {
-        let turned = self.how_much_my_tools_help(super::SkillType::MeleeCombat);
+        let turned = self.how_fast_my_tools_make_this_go(super::SkillType::MeleeCombat);
         coming / turned.max(1.0)
     }
 
@@ -3672,18 +3672,42 @@ impl Agent {
         }
     }
 
-    pub fn how_much_my_tools_help(&self, trade: super::SkillType) -> f32 {
-        let bare_hands = Self::what_bare_hands_manage(trade);
+    /// How much of a tool's advantage a worn edge still carries.
+    ///
+    /// A blunt axe is still an axe. A quarter of what the tool is worth is in
+    /// being the right shape at all - a haft, a weight, an edge of some sort -
+    /// and that much survives to the last stroke. The other three quarters is
+    /// the edge, and that wears away with it.
+    pub const WHAT_A_BLUNT_EDGE_STILL_CARRIES: f32 = 0.25;
 
-        let Some(tool) = self.what_i_have_to_work_with(trade) else {
-            return bare_hands;
-        };
+    /// What is left of a tool's edge, at this much life remaining.
+    ///
+    /// **Gradual, and deliberately not banded.** A step function would make a
+    /// tool at 75% and one at 100% identical and then drop a quarter of its
+    /// worth between 75% and 74%, which is neither how an edge behaves nor
+    /// something an agent could sensibly plan around. This is a straight line
+    /// from a fresh edge to a blunt one, so every stroke of use tells a
+    /// little and none of them tells suddenly.
+    pub fn how_much_edge_is_left(left: f32) -> f32 {
+        Self::WHAT_A_BLUNT_EDGE_STILL_CARRIES
+            + (1.0 - Self::WHAT_A_BLUNT_EDGE_STILL_CARRIES) * left.clamp(0.0, 1.0)
+    }
 
-        let Some(carried) = self.inventory.get_item(tool.called) else {
-            return bare_hands;
-        };
+    /// The tool this agent would bring to a trade, and the three things about
+    /// it that decide what it is worth.
+    ///
+    /// Returns the tool, how well it was made, how much life is left in it,
+    /// and whether it is already in the hand. The two questions worth asking
+    /// of a tool - how fast does this go, and how much comes back - read
+    /// different subsets of these, which is the whole point of separating
+    /// them here rather than collapsing them into one number.
+    fn what_i_am_working_with(
+        &self,
+        trade: super::SkillType,
+    ) -> Option<(&'static crate::environment::making::Tool, f32, f32, f32)> {
+        let tool = self.what_i_have_to_work_with(trade)?;
+        let carried = self.inventory.get_item(tool.called)?;
 
-        let left = carried.durability_percentage();
         let (worst, best) = Self::WHAT_GOOD_WORK_IS_WORTH;
         let how_well_made = carried
             .quality
@@ -3694,15 +3718,70 @@ impl Agent {
         // works - a person is not helpless because the thing is in the bag -
         // but a tool already in the hand is worth appreciably more, and that
         // difference is the whole reason anybody bothers to take one out.
-        let out = if self.is_in_my_hand(tool.called) {
+        let in_hand = if self.is_in_my_hand(tool.called) {
             1.0
         } else {
             Self::WHAT_A_TOOL_STILL_IN_THE_PACK_IS_WORTH
         };
 
-        // A blunt axe is still an axe, so half the gain survives to the end
-        // of its life and the other half wears away with it.
-        1.0 + (tool.how_much_better - 1.0) * (0.5 + 0.5 * left) * how_well_made * out
+        Some((
+            tool,
+            how_well_made,
+            carried.durability_percentage(),
+            in_hand,
+        ))
+    }
+
+    /// How fast the work goes with what this agent has to hand.
+    ///
+    /// **This is the only place durability is allowed to matter.** "Tools
+    /// increase task completion speed or enable task completion... the more
+    /// durable (sharper) the knife, the faster the gathering." A blunt knife
+    /// cuts reeds more slowly than a sharp one; it does not cut fewer reeds
+    /// out of the ones it cuts. What wears away is the rate.
+    ///
+    /// Which currency "faster" is spelled in depends on the job, because this
+    /// model has no clock inside a turn: it is the energy a trip costs, the
+    /// odds that a cast or a throw tells, and the work a turn of making gets
+    /// through. All three are the same quantity - how much of the job one
+    /// turn finishes - and all three read this.
+    ///
+    /// Whether the thing is in the hand or in the pack belongs here too, and
+    /// only here: stopping to dig an axe out of a bag costs time, not timber.
+    pub fn how_fast_my_tools_make_this_go(&self, trade: super::SkillType) -> f32 {
+        let bare_hands = Self::what_bare_hands_manage(trade);
+
+        let Some((tool, how_well_made, left, in_hand)) = self.what_i_am_working_with(trade) else {
+            return bare_hands;
+        };
+
+        1.0 + (tool.how_much_better - 1.0)
+            * how_well_made
+            * in_hand
+            * Self::how_much_edge_is_left(left)
+    }
+
+    /// How much of the job comes back usable, with what this agent has to
+    /// hand.
+    ///
+    /// **Deliberately blind to durability.** "Task output amount should depend
+    /// on quality and technology, as a better quality tool should produce less
+    /// waste. Durability should only apply to speed, not output amount." So
+    /// what decides this is which tool it is and how well it was made, and a
+    /// tool on its last job takes a carcass apart no more wastefully than a
+    /// fresh one - it just takes longer about it.
+    ///
+    /// A tool that is worn *out* still gets nothing, because a tool at no
+    /// durability is not carried into the job at all: see the filters on
+    /// `durability_percentage`.
+    pub fn how_much_my_tools_bring_back(&self, trade: super::SkillType) -> f32 {
+        let bare_hands = Self::what_bare_hands_manage(trade);
+
+        let Some((tool, how_well_made, _left, _in_hand)) = self.what_i_am_working_with(trade) else {
+            return bare_hands;
+        };
+
+        1.0 + (tool.how_much_better - 1.0) * how_well_made
     }
 
     /// What a tool you have not got out is worth against one you have.

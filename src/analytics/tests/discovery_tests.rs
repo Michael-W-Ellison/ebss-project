@@ -360,9 +360,9 @@ fn a_people_that_has_found_it_all_out_can_make_a_metal_knife() {
     let agent = &simulation.population.agents[0];
     assert_eq!(agent.inventory.count_item("metalknife"), 1);
     assert!(
-        agent.how_much_my_tools_help(SkillType::Leatherworking)
+        agent.how_much_my_tools_bring_back(SkillType::Leatherworking)
             > 1.0 + (making::KNIFE_FOR_BUTCHERING.how_much_better - 1.0),
-        "a metal knife should beat a stone one at butchering"
+        "a metal knife should take more off a carcass than a stone one"
     );
 }
 

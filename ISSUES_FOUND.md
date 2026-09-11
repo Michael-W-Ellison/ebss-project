@@ -14534,3 +14534,125 @@ knowing about, not because anything was fixed.
   that nothing computes. They belong with the stages after this one.
 - **The stages above zero are the user's to write**, which is the whole point
   of the `number` field. Nothing here assumes Stage 0 is the last word.
+
+---
+
+### 200. Durability was one number doing three jobs, and one of the three was wrong
+
+"The intention is for tools to increase task completion speed or enable task
+completion... The more durable (sharper) the knife, the faster the gathering...
+Task output amount should depend on quality and technology, as a better quality
+tool should produce less waste. **Durability should only apply to speed, not
+output amount.**"
+
+That is two channels. This world had one. `how_much_my_tools_help` multiplied
+technology, workmanship and wear together into a single number and handed it
+to every question anybody asked about a tool:
+
+| Call site | What the number set | Which channel it wanted |
+|---|---|---|
+| harvest | how much came back off the bush | yield |
+| butchery | how much came off the carcass | yield |
+| a working | how many came off the core | yield |
+| digging a pit | what the hole cost | speed |
+| hunting | the odds a throw told | speed |
+| fishing | the odds a cast told | speed |
+| the tool-planning decision | whether a better one would pay | speed |
+
+So a blunt flake made a man bring home fewer berries as well as taking longer
+over them, which is not what being blunt does.
+
+#### The split
+
+- **`how_fast_my_tools_make_this_go`** - technology, workmanship, **wear**,
+  and whether the thing is in the hand or in the pack. The only place
+  durability is allowed to matter.
+- **`how_much_my_tools_bring_back`** - technology and workmanship, and nothing
+  else. A tool on its last job takes a carcass apart no more wastefully than a
+  fresh one; it just takes longer about it.
+
+Whether the thing is in the hand moved to the speed channel and only there:
+stopping to dig an axe out of a bag costs time, not timber.
+
+**Speed has no single spelling in this model, because a turn is a fixed slice
+of a day with no clock inside it.** It is the energy a trip costs, the odds a
+cast or a throw tells, and the work a turn of making gets through. All three
+are the same quantity - how much of the job one turn finishes - and all three
+now read one function.
+
+#### Gradual, and stated as such
+
+`how_much_edge_is_left` is a straight line from a fresh edge to a blunt one:
+`WHAT_A_BLUNT_EDGE_STILL_CARRIES` (a quarter - being the right shape at all)
+plus three quarters scaled by what is left.
+`the_wear_curve_is_gradual_and_has_no_cliff_in_it` checks that every tenth of
+wear costs the same as every other tenth, so nobody can quietly band it later.
+
+The banded alternative was considered and rejected on its own terms: it would
+make a tool at 76% and one at 100% identical and then drop a quarter of its
+worth between 76% and 74%, which is neither how an edge behaves nor anything
+an agent could plan around.
+
+#### Gathering had no speed channel at all, and giving it one cost 2.3% before it paid
+
+A gathering trip cost a flat ten whether the agent stripped the bush with a
+fresh flake or with its fingernails, so there was nowhere for "the sharper the
+knife, the faster the gathering" to show. Dividing that flat cost through by
+the speed channel is the obvious move and it is **wrong**, in a way worth
+recording because it looks right:
+
+`how_fast_my_tools_make_this_go` answers `what_bare_hands_manage` when there is
+no tool - a quarter for woodcutting, a quarter for fishing, three tenths for
+mining. So dividing by it quadrupled the cost of a barehanded trip. A man with
+nothing in his hands, who had always paid ten, was suddenly charged forty.
+
+| | Baseline | Divided through | Anchored on bare hands |
+|---|---|---|---|
+| person-days | 217,753 | 212,846 | **212,906** |
+| worlds emptied | 49 of 64 | 53 of 64 | **46 of 64** |
+| out of the first winter | 21 | 17 | **22** |
+
+Person-days are the same to within a tenth of a per cent between the two
+versions. **Seven fewer worlds emptied and five more first winters** came from
+nothing but anchoring the ratio so that bare hands pay what bare hands have
+always paid, and the tool is what buys the speed. The lesson generalises past
+tools: *a change meant to reward the top of a ladder can punish the bottom of
+it instead, and the two look identical in the person-day total.*
+
+`what_the_tool_saves_on_a_trip` is the anchored form, and
+`bare_hands_pay_what_bare_hands_have_always_paid` is what stops it drifting
+back. `WHAT_NO_TOOL_CAN_SAVE_YOU` floors it: walking to the patch and back is
+most of a foraging trip and no edge in the world shortens it.
+
+#### What it came to
+
+Against 217,753 person-days / 49 worlds emptied / 21 out of the first winter:
+**212,906 / 46 / 22.** Person-days down 2.2%, **three fewer worlds emptied and
+one more settlement out of its first winter**, with both blocks agreeing on the
+direction of each. Inside the noise on person-days and slightly to the good on
+the two measures that say whether a people lives.
+
+Recorded draw counts moved twice and were re-recorded twice, which is what
+they are for: 8,824 → 8,566 for seed 4242, and 982,776 → 936,464 for seed 0
+over a year.
+
+#### What is still not built
+
+- **The enablement half is only half spelled.** "An agent cannot cut down a
+  tree barehanded" is a hard gate, and this model has one of those only for
+  hunting - `could_bring_it_down`, which refuses anything bigger than a hare
+  to empty hands. Everywhere else enablement is a fraction in
+  `what_bare_hands_manage`, so felling a tree barehanded is a quarter as good
+  rather than impossible. Making it impossible wants a felling action distinct
+  from gathering deadfall, which does not exist: picking up fallen wood is
+  genuinely something hands can do.
+- **Quality's top two rungs still do identical work.** `WHAT_GOOD_WORK_IS_WORTH`
+  clamps the quality modifier to (0.7, 1.5), and both Advanced (1.6) and Expert
+  (2.0) land on 1.5. Under the specification's naming that means Fine and
+  Masterwork cut at the same speed, against "Masterwork - maximum efficiency".
+  Untouched here because it is a quality question rather than a durability one.
+- **Catastrophic break risk and waste rate during manufacture** are named in
+  the specification and have no counterpart in the model.
+- **Quality sits on made items only.** "Poor leather: uneven thickness, tears
+  at stress points" wants it on raw materials too, and a hide off a carcass
+  carries none.
