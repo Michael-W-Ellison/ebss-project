@@ -14390,3 +14390,147 @@ that it did anything at all.
   blocks three separate reverted changes is an agent's inability to commit to a
   long trip; a goal with a threshold does not fix that on its own, because the
   threshold says when to stop and not how long to persist.
+
+---
+
+### 199. Stage 0 was never written down, and measuring the one disagreement found a defect worth more than the flag
+
+Every technology in this model arrives one of two ways: somebody finds it out,
+or a people simply has it. The second kind is Stage 0, and it had no name and
+no list. It was spelled once per recipe, in `Making::obvious` - thirty-two
+flags with the reasoning in doc comments beside them, no way to ask the model
+what a people starts with, and no way at all to ask what it *ought* to start
+with and be told where the two disagree.
+
+`environment::stage` is that list. Thirty-five development paths, each with
+what a people has in its hands on the first day, what that lets it do, and
+what it cannot do until the path advances. The shape - `Stage { number, .. }` -
+takes the stages after this one without changing.
+
+#### What writing it down found
+
+| | Paths |
+|---|---|
+| Carried whole | 19 |
+| Carried in part | 12 |
+| Not carried at all | 4 |
+
+The four not carried at all are **boatbuilding** (nothing crosses water: no
+swimming, no float, no crossing), **masonry** (nothing is ever stacked: no
+wall, no cairn, no hearth ring), **pottery beyond stoneware** (nothing in this
+model is valued for being looked at, so there is no ornament, bead or
+figurine) and **stoneware**, which is the interesting one - see below.
+
+The twelve half-carried paths are the useful list, because each names the half
+that is missing. Among them:
+
+- **Fire.** Hearths, firewood and cooking all work. Nobody carries an ember,
+  so a fire that goes out is lit from nothing every time.
+- **Fishing.** A rod is obvious and the run is on the calendar. There is no
+  shellfish and no wading, so a river is a thing you fish and not a thing you
+  pick over.
+- **Animal husbandry.** Hunting pressure genuinely shapes prey - animals grow
+  shy where they are hunted, which is Stage 0's first line. Nothing follows a
+  camp, scavenges waste, or is tolerated, which is the rest of it.
+- **Governance.** Households, kinship and feeding children from a parent's
+  stores are all here. There is no leader, and nothing anybody can tell
+  anybody to do.
+- **Water.** Rivers, springs and rain are all drinkable and salt water is
+  worse than nothing. The carrying half is one carved bowl that almost nobody
+  ever makes - #292, restated where somebody counting Stage 0 will trip over
+  it.
+- **Footwear.** Bark boots exist and nothing asks for them, because feet are
+  not a place the exposure model wounds.
+
+#### The one disagreement, and what it cost to try
+
+**Hand-shaping a clay vessel is Stage 0 and this model makes it a discovery.**
+The specification is unambiguous - "hand-shaped clay vessels, pit firing, low
+temperature firing, porous pottery" is where the stoneware path *starts* - and
+`MOLD_CLAY` had `obvious: false`. So it was set true, on the reasoning that
+what is still found out is the fire: "fuel supply and kiln design are required
+for stoneware", which leaves `FIRE_A_POT` a discovery and keeps #156's whole
+narrative at the step the specification puts it.
+
+Against 217,753 person-days / 49 worlds emptied / 21 out of the first winter:
+
+| | Baseline | Shaping made obvious |
+|---|---|---|
+| person-days | 217,753 | **207,080** |
+| worlds emptied | 49 of 64 | **55 of 64** |
+| out of the first winter | 21 | **13** |
+
+Both blocks agreed - block A 9 of 32 first winters, block B 4 of 32 - so it is
+**4.9% of person-days and eight of twenty-one first winters**, well outside
+the ~10% block noise on the measure that moved furthest. It is reverted.
+
+#### And this is the finding: nothing asks whether what a working makes is worth making
+
+The cost is not about clay. `what_i_would_work_on` picks something in the pack
+worth breaking down, and its filters are: a working this agent knows, enough
+of the input to hand, fewer than `A_FEW_SPARE` of the output already, and no
+lesson against it. **There is no filter on the output being worth having.**
+
+It has never mattered, because every obvious working in the table makes
+something a person eats (portions, strips), carries things in (basket, bag,
+bowl) or builds with (flint, leather). A shape in unfired clay is the first
+that makes nothing at all: it holds nothing, feeds nothing, and at Stage 0 it
+is not an ingredient of any step anybody knows, because the only thing that
+consumes a claypot is the firing nobody has discovered yet. So a people born
+knowing how to shape clay spends its winters shaping clay.
+
+The right filter is not "does this hold or feed something" but **"can I eat
+it, carry things in it, or use it in a step I know?"** - which would make a
+claypot worthless at Stage 0 and worth making the day somebody finds out what
+a fire does to one. That is the correct model and it is not a one-line change:
+the same rule would make flint worthless too, since `KNAPPED_TIP_FROM_FLINT`
+is a discovery and `KNAPPED_TIP` takes ordinary stone, so smashing cores would
+stop. Recorded as its own job rather than smuggled in here.
+
+#### What holds the table honest
+
+It is a declaration, in the same sense as `Strategy::reach`, and a declaration
+nothing checks is a wish list. Two rules:
+
+- **`the_stage_table_and_the_making_tables_cannot_drift`.** A path that says a
+  people is born knowing how to make a thing, and a making table that says the
+  thing wants discovering, are two answers to one question. The suite goes red
+  rather than letting both stand. It is also what makes the stoneware row
+  honest: the path says `Short` and claims no born knowledge, so the table and
+  the flag agree about the disagreement.
+- **A Stage 0 product that is also discovered must have a road that needs no
+  discovery.** This one caught what it was written to catch on its first run.
+  A knapped tip is born knowledge off ordinary stone and a discovery off flint:
+  one product, two roads, the second better. That is the innovation path and it
+  is correct. What would be wrong is a product handed over at Stage 0 that can
+  *only* be reached by finding something out.
+
+The table is not a second source of truth about recipes. It names products and
+the recipe tables own them; the coupling is the drift test and nothing else.
+
+#### One test moved, and it is not being claimed as a win
+
+With shaping made obvious, `a_settlement_works_things_out_that_nobody_wrote_down`
+- one of the ten standing failures - passed. It is a single-world test of
+whether anybody notices anything over a year and a season, the dice stream is
+shared world-wide, and the change re-shuffled it. On the reverted tree it fails
+again. Recorded because a failure that flickers on an unrelated change is worth
+knowing about, not because anything was fixed.
+
+#### What is still not built
+
+- **Nothing at runtime reads the table.** Its consumers are the two drift
+  tests and a reader. That is the same footing `Strategy::reach`'s `NotYet`
+  arms sit on and it is deliberate - but it means the table can only make gaps
+  countable, not close them.
+- **`born_knowing` is keyed on the product, not the recipe**, because
+  `Making::obvious` and `Agent::found_out` both are. That is #195's wart
+  inherited, not a new one.
+- **The cross-domain dependencies and the common prerequisites are not
+  modelled.** "Cordage enables sewing, nets, loom use and footwear assembly"
+  is true of the recipe graph by construction - a net needs four lengths of
+  lashing - but "salt access strongly accelerates food preservation" and
+  "tanning chemistry transforms footwear quality" are statements about rates
+  that nothing computes. They belong with the stages after this one.
+- **The stages above zero are the user's to write**, which is the whole point
+  of the `number` field. Nothing here assumes Stage 0 is the last word.

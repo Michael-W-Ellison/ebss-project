@@ -304,6 +304,39 @@ Three of the seven tags already have an axis. Four do not, and containers are a
 second mechanism answering the same question - which is this project's
 recurring defect, already in place.
 
+### Stage 0: what the layer starts holding
+
+A capability table says what a people *can* use. It says nothing about what a
+people *has* on the first day, and until now nothing did: that was spelled
+thirty-two times over, once per recipe, in `Making::obvious`.
+
+`environment::stage` names it. Thirty-five development paths, each with a
+Stage 0 - what is in a people's hands, what that lets it do, what it cannot do
+until the path advances - and, honestly, whether this world carries it:
+
+| | Paths |
+|---|---|
+| Carried whole | 19 |
+| Carried in part | 12 |
+| Not carried at all | 4 |
+
+The twelve half-carried paths are the layer's real gap list, each naming its
+missing half: no ember is ever carried, no shellfish is ever gathered, nothing
+follows a camp for its scraps, nobody can tell anybody what to do, and the
+carrying half of the water path is one carved bowl that almost nobody makes.
+
+One path the table and the model disagree about, and the disagreement was
+measured rather than argued: the specification starts a people able to
+hand-shape a clay vessel, and making that so cost **4.9% of person-days and
+eight of twenty-one first winters**. Not because of clay - because nothing in
+the model asks whether what a working makes is worth making, and an unfired
+shape is the first obvious product that is worth nothing.
+
+The stages above zero are the user's to write. What is here is the shape that
+takes them - `Stage { number, .. }` - and two rules that stop the table and the
+recipe tables drifting into two opinions about what a people knows. See
+ISSUES_FOUND.md #199.
+
 ---
 
 ## Satisfiers and enablers

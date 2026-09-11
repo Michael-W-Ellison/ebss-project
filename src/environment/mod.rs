@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 use crate::core::DriveType;
 
 pub mod making;
+pub mod stage;
 pub mod verbs;
 mod material;
 mod action;

@@ -606,6 +606,19 @@ pub const MOLD_CLAY: Working = Working {
     how_many: 1,
     hands: SkillType::Crafting,
     effort: 5.0,
+    // The specification puts this at Stage 0 - "hand-shaped clay vessels, pit
+    // firing, low temperature firing, porous pottery" - and it was made
+    // obvious to match. **It cost 4.9% of person-days and eight of
+    // twenty-one first winters, on both blocks of thirty-two seeded worlds,
+    // and it is back.**
+    //
+    // Why, and it is not about clay. `what_i_would_work_on` breaks down
+    // anything it knows the working for, has the makings of, and holds fewer
+    // than `A_FEW_SPARE` of the output of. It has no notion of whether the
+    // output is worth having. Every other obvious working makes something a
+    // person eats, carries things in, or builds with; a shape in unfired clay
+    // is the first that makes nothing at all, and a people that starts
+    // knowing how spends its winters making them. See ISSUES_FOUND.md #199.
     obvious: false,
     holds: None,
     feeds: None,

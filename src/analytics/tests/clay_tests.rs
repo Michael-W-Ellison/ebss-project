@@ -157,6 +157,14 @@ fn somebody_who_has_tried_everything_walks_past_it() {
 
 /// Clay holds a shape. Nobody is born knowing that, and finding it out costs
 /// nothing but an idle afternoon.
+///
+/// The Stage 0 specification says the opposite - "hand-shaped clay vessels"
+/// is where the stoneware path starts - and it was tried. **It cost 4.9% of
+/// person-days and eight of twenty-one first winters over sixty-four seeded
+/// worlds**, because `what_i_would_work_on` will spend a turn on any working
+/// it knows without asking whether the thing it makes is worth having, and a
+/// shape in unfired clay is worth nothing. See `environment::stage`,
+/// `MOLD_CLAY` and ISSUES_FOUND.md #199.
 #[test]
 fn clay_holds_a_shape_and_it_is_a_discovery() {
     let working = making::how_to_work("mold", "clay").expect("clay molds");
