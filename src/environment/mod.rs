@@ -19,6 +19,7 @@ use crate::core::DriveType;
 pub mod making;
 pub mod stage;
 pub mod verbs;
+pub mod tags;
 mod material;
 mod action;
 mod crafting;

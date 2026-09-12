@@ -467,3 +467,167 @@ fn a_doubt_outweighs_every_cost_put_together() {
          can come back, and be measured again"
     );
 }
+
+// --------------------------------------------------------------------------
+// What answers a need, and what merely lets it be answered
+// --------------------------------------------------------------------------
+//
+// "Hydration is satisfied by water. A gourd is a transport/storage enabler."
+//
+// Written down it is obvious, and it is exactly the confusion a goal system
+// falls into when it is built out of preconditions alone. A planner that
+// scores "has water container" as progress towards not being thirsty will send
+// a dying man to fetch a pot. This layer had the ways and the prices; what it
+// did not have was any statement of which of the things a way needs is the
+// *point* of it and which are the *means*.
+
+use crate::analytics::wanting::strategy::{what_answers, Enabler, Reach, Satisfier};
+
+/// Every need this layer carries ways for says what would answer it, and
+/// every need that says so has ways.
+///
+/// The pair has to move together. A need that acquired ways without a
+/// satisfier would be a need nobody could say was met; a satisfier with no
+/// ways would be a want nobody could act on.
+#[test]
+fn a_need_with_ways_of_being_answered_says_what_would_answer_it() {
+    for need in [
+        DriveType::Thirst,
+        DriveType::Hunger,
+        DriveType::Shelter,
+        DriveType::Safety,
+        DriveType::Social,
+    ] {
+        let ways = Strategy::all_for(need);
+        assert_eq!(
+            !ways.is_empty(),
+            what_answers(need).is_some(),
+            "{need:?} has {} ways and {:?} to answer it",
+            ways.len(),
+            what_answers(need)
+        );
+    }
+}
+
+/// **The distinction this exists to draw.** Nothing that enables is a thing
+/// that satisfies.
+///
+/// Thirst is answered by water and by nothing else. A container, a source, a
+/// path, leave to take, the time and getting back alive are six things that
+/// can each stop it being answered, and not one of them is a mouthful.
+#[test]
+fn nothing_that_enables_a_need_can_answer_it() {
+    assert_eq!(what_answers(DriveType::Thirst), Some(Satisfier::PotableWater));
+
+    let every_enabler_of_thirst: Vec<Enabler> = Strategy::all_for(DriveType::Thirst)
+        .iter()
+        .flat_map(|way| way.what_it_takes().iter().copied())
+        .collect();
+
+    assert!(
+        every_enabler_of_thirst.contains(&Enabler::AContainer),
+        "the specification's own example: a gourd is how water travels"
+    );
+
+    // The satisfier is not in the enabler vocabulary at all, and cannot be:
+    // they are different types. What this asserts is the thing that would go
+    // wrong if they were one type - that carrying the means would read as
+    // having the end.
+    for enabler in &every_enabler_of_thirst {
+        assert_ne!(
+            enabler.called(),
+            Satisfier::PotableWater.called(),
+            "{} is being counted as a way of being less thirsty",
+            enabler.called()
+        );
+    }
+}
+
+/// The one way that wants nothing of the world outside the pack still wants
+/// the container.
+///
+/// Which is the whole reason a settlement with nothing to carry water in is
+/// left with only the ways that need a river in front of them.
+#[test]
+fn drinking_what_you_carry_still_needs_something_to_carry_it_in() {
+    assert_eq!(
+        Strategy::ConsumeCarriedWater.what_it_takes(),
+        &[Enabler::AContainer]
+    );
+
+    // And the way that does not want one is the one done at the water.
+    assert!(!Strategy::DrinkFromLocalSource
+        .what_it_takes()
+        .contains(&Enabler::AContainer));
+}
+
+/// The six ways of answering thirst the specification lists are all named.
+#[test]
+fn every_way_of_answering_thirst_the_specification_lists_is_named() {
+    let ways = Strategy::all_for(DriveType::Thirst);
+
+    for wanted in [
+        Strategy::ConsumeCarriedWater,
+        Strategy::DrinkFromLocalSource,
+        Strategy::FetchFromKnownSource,
+        Strategy::DigOrRepairWell,
+        Strategy::TradeForWater,
+        Strategy::AskOrFollowAnotherToWater,
+    ] {
+        assert!(
+            ways.contains(&wanted),
+            "{} is not among the ways of answering thirst",
+            wanted.called()
+        );
+    }
+}
+
+/// A way that can be taken now is not waiting on anything.
+///
+/// The converse does not hold, and deliberately: a way can be out of reach for
+/// want of a *mechanism* rather than of a thing - there is no water table, so
+/// a well has nowhere to go - and reading that as an enabler shortfall would
+/// say a settlement could sink one if only somebody fetched a shovel.
+#[test]
+fn only_a_way_that_is_out_of_reach_waits_on_anything() {
+    let mut short_of_a_thing = 0;
+    let mut short_of_machinery = 0;
+
+    for way in Strategy::every_one() {
+        match (way.reach(), way.the_enabler_it_waits_on()) {
+            (Reach::Now, waiting) => assert_eq!(
+                waiting,
+                None,
+                "{} can be taken now and claims to be waiting on {waiting:?}",
+                way.called()
+            ),
+            (Reach::NotYet(_), Some(_)) => short_of_a_thing += 1,
+            (Reach::NotYet(_), None) => short_of_machinery += 1,
+        }
+    }
+
+    assert!(
+        short_of_a_thing > 0 && short_of_machinery > 0,
+        "the split is the point: {short_of_a_thing} ways want a thing and \
+         {short_of_machinery} want machinery, and only the first kind is \
+         fixed by giving somebody something"
+    );
+}
+
+/// Two of the ways this world cannot take want the same thing: a vessel.
+///
+/// Catching rain and trading water both wait on a container, which makes
+/// "give a settlement something to carry water in" worth two ways rather than
+/// one - the sort of sum the vocabulary exists to let anybody do.
+#[test]
+fn the_missing_vessel_costs_this_world_more_than_one_way() {
+    let waiting_on_a_vessel: Vec<&'static str> = Strategy::every_one()
+        .filter(|way| way.the_enabler_it_waits_on() == Some(Enabler::AContainer))
+        .map(|way| way.called())
+        .collect();
+
+    assert!(
+        waiting_on_a_vessel.len() >= 2,
+        "only {waiting_on_a_vessel:?} waits on a vessel"
+    );
+}

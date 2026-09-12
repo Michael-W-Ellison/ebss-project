@@ -445,3 +445,148 @@ fn nobody_is_offered_a_store_they_cannot_carry_away_from() {
          offering: this branch sits above every drive there is"
     );
 }
+
+// --------------------------------------------------------------------------
+// What a tent is actually made of
+// --------------------------------------------------------------------------
+//
+// **`SkinTent` has declared since it was written that it wants eight wood and
+// four hides, and two separate comments in `world::buildings` say so.** The
+// builder resolved a `ResourceType` to an item name with a `match` of three
+// arms - wood, stone, iron - and `continue`d on everything else, in the
+// checking pass *and* in the consuming pass. So the hides were neither
+// required nor taken, and every tent ever raised in this model was poles and
+// air.
+//
+// It is now asked for by class - poles, a flexible covering, cordage - which
+// is what the specification asks for and what stops the same thing happening
+// again: a class cannot quietly fail to resolve, because there is no arm to
+// fall off the end of.
+
+use crate::environment::tags::{self, Tag};
+
+fn somebody_on_open_ground() -> crate::analytics::Simulation {
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation =
+        crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    simulation.population.agents[0].state.position = (10, 10, 0);
+    simulation.world.buildings.clear();
+    simulation.population.agents[0]
+        .inventory
+        .get_all_items_mut()
+        .clear();
+    simulation.population.agents[0].inventory.recalculate_weight();
+    simulation
+}
+
+fn put_in_the_pack(simulation: &mut crate::analytics::Simulation, what: &str, how_many: u32) {
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight(what.to_string(), how_many, 0.5));
+}
+
+fn puts_up_a_tent(simulation: &mut crate::analytics::Simulation) -> crate::environment::ActionResult {
+    simulation.execute_action(
+        &Action::Build {
+            structure_type: "tent".to_string(),
+            position: (10, 10, 0),
+        },
+        0,
+    )
+}
+
+/// **The defect this test exists for.** Poles alone are not a tent.
+#[test]
+fn a_tent_cannot_be_made_of_poles_and_air() {
+    let mut simulation = somebody_on_open_ground();
+    put_in_the_pack(&mut simulation, "wood", 20);
+
+    let result = puts_up_a_tent(&mut simulation);
+
+    assert!(
+        !result.success,
+        "twenty pieces of wood and nothing to stretch over them went up as a \
+         tent: {:?}",
+        result.message
+    );
+    assert!(
+        result
+            .message
+            .as_deref()
+            .unwrap_or_default()
+            .contains(Tag::FlexibleCovering.called()),
+        "and the refusal should say which class is short, because that is the \
+         next job: {:?}",
+        result.message
+    );
+}
+
+/// With poles, a covering and cordage it goes up, and all three come out of
+/// the pack.
+#[test]
+fn a_tent_takes_what_it_says_it_takes() {
+    let mut simulation = somebody_on_open_ground();
+    put_in_the_pack(&mut simulation, "wood", 20);
+    put_in_the_pack(&mut simulation, "hides", 6);
+    put_in_the_pack(&mut simulation, "lashing", 4);
+
+    let result = puts_up_a_tent(&mut simulation);
+    assert!(result.success, "{:?}", result.message);
+
+    let left = |what: &str| simulation.population.agents[0].how_many_i_have(what);
+
+    assert!(left("wood") < 20, "the poles went into it");
+    assert!(
+        left("hides") < 6,
+        "and so did the covering, which is the half that was free before"
+    );
+    assert!(left("lashing") < 4, "and the cordage");
+}
+
+/// **What asking by class buys.** A people who scraped their hides into
+/// leather can roof with the leather.
+///
+/// Asked by name it was `ResourceType::Hides` and nothing else, so a
+/// settlement that had gone one step further up its own tanning chain had
+/// turned its roofing material into something the roof did not recognise.
+#[test]
+fn leather_will_roof_a_tent_as_well_as_a_raw_hide_will() {
+    assert!(tags::is_this_a("leather", Tag::FlexibleCovering));
+
+    let mut simulation = somebody_on_open_ground();
+    put_in_the_pack(&mut simulation, "wood", 20);
+    put_in_the_pack(&mut simulation, "leather", 6);
+    put_in_the_pack(&mut simulation, "lashing", 4);
+
+    let result = puts_up_a_tent(&mut simulation);
+
+    assert!(result.success, "{:?}", result.message);
+    assert!(simulation.population.agents[0].how_many_i_have("leather") < 6);
+}
+
+/// A burrow still costs a morning and nothing to fetch.
+///
+/// The whole point of it is that there is nothing to be short of, and a change
+/// that made tents dearer had better not have touched the one shelter a people
+/// with no timber and no skins can put up. It wants something to dig with -
+/// which is the verb matrix doing its job, not a material - and that is all.
+#[test]
+fn a_burrow_still_wants_nothing_that_has_to_be_gathered() {
+    let mut simulation = somebody_on_open_ground();
+    put_in_the_pack(&mut simulation, "diggingstick", 1);
+
+    let result = simulation.execute_action(
+        &Action::Build {
+            structure_type: "burrow".to_string(),
+            position: (10, 10, 0),
+        },
+        0,
+    );
+
+    assert!(
+        result.success,
+        "a man with a stick and nothing else can still dig himself in: {:?}",
+        result.message
+    );
+}

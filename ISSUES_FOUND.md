@@ -14964,3 +14964,181 @@ the honest thing to say is that this is **unmeasured in the direction that
 matters** - it will first tell when a settlement survives long enough to make
 something better than crude, and the measurement to watch for it is a longer
 run, not this one.
+
+### 204. Everything in this world was addressed by name, so a check written once silently stopped being true
+
+Four things the specification asks for, and they turn out to be one thing
+looked at from four sides: **the model could say what a thing was called and
+could not say what it was.**
+
+#### Tags: what a thing is
+
+`src/environment/tags.rs`. A thing carries every class that is true of it, and
+the classes that sound like drawbacks are as load-bearing as the ones that
+sound like virtues - a fired pot is a food container, a water container **and
+a fragile container**, and without the third nothing in the model can explain
+why anybody would ever prefer a leather bag.
+
+The specification's three worked examples map onto this world's vocabulary
+directly: its gourd is a fired pot, its flint spear is a spear, its cordage
+grass is flax and cotton. And the distinction it draws in passing - a fibre
+*source* is not cordage - is one the recipe chain already made in named steps
+and could not state.
+
+#### Capabilities: what a job wants, and how well a thing answers it
+
+Eight, graded, `0.0` for bare hands and `1.0` for the best answer this world
+has: digging, cutting, piercing, carrying, holding water, roofing, fishing,
+hunting.
+
+**Four of the eight are derived from the tool table rather than declared
+beside it.** `EVERY_TOOL` has said for a long time that a shovel multiplies
+mining by 1.9 and a digging stick by 1.2 - the same fact the specification
+writes as `digging_tool 1.0 / 0.7 / 0.3`, on the axis of the *trade* instead
+of of the *capability*. Writing a second table of digging coefficients would be
+two spellings of one question, which this codebase has paid for at least three
+times, most recently in #203. So the coefficient is a *view*: the fraction of
+the best available advantage a thing delivers, computed as
+`(how_much_better - 1) / (best - 1)`, which puts bare hands at nought by
+construction and renormalises the whole ladder the moment somebody makes a
+better shovel. A test asserts that nothing is described in both places.
+
+The remaining four have no trade behind them and are declared outright. One
+caveat is written into the source rather than hidden: **a capability is only as
+fine-grained as the trade behind it.** `Mining` here is both quarrying stone
+and digging a hole, so a metal axe outranks a shovel as a digging tool - right
+for a seam of flint and wrong for a storage pit. Splitting the trade is the
+fix; papering over it with a second number is not.
+
+#### Three places where a name had gone stale
+
+The point is not tidiness. A check written by name is a check written against
+the world as it stood, and it stops being true as the world moves on - silently,
+because nothing fails.
+
+1. **A pit could only be lined with a bowl or a basket.** `Pit::is_lined` was
+   `matches!(item_id, "bowl" | "basket")`, written when those were the only
+   vessels there were. A settlement that had got as far as *firing pots* -
+   several technologies past carving a bowl - had nothing to line a pit with
+   and stored its winter in bare earth. Lining is worth double what the hole is
+   worth on its own.
+
+2. **Every tent ever raised in this model was poles and air.**
+   `BuildingType::SkinTent` has declared since it was written that it wants
+   eight wood and four hides, and two separate comments say so. The builder
+   resolved a `ResourceType` to an item name with a `match` of three arms -
+   wood, stone, iron - and `continue`d on everything else, in the checking pass
+   *and* in the consuming pass. The hides were neither required nor taken.
+   Four of the nine distinct requirements in the building table match no arm.
+
+   It is now asked for as the specification writes it - poles, a flexible
+   covering, cordage - which also means a people who scraped their hides into
+   leather can roof with the leather, where by name they could not. **This
+   makes tents dearer**, and the measurement below is the thing to read.
+
+3. **`POUR` wanted a waterskin, and there is no waterskin.** Nothing in this
+   world's recipe chain makes one; the vessels it can make are a bowl, a fired
+   pot, stoneware and a leather bag. The want was unsatisfiable by
+   construction, so had the verb ever been performed it would have been refused
+   every single time. A test now asserts that no verb wants a thing this world
+   cannot make or dig up.
+
+#### Satisfiers against enablers
+
+"Hydration is satisfied by water. A gourd is a transport/storage enabler."
+
+Obvious written down, and exactly the confusion a goal system falls into when
+it is built out of preconditions alone: a planner that scores *has water
+container* as progress towards *not being thirsty* will send a dying man to
+fetch a pot. `Satisfier` and `Enabler` are separate types, so the two cannot be
+added up.
+
+The strategy layer already had the ways and their prices. What it did not have
+was any statement of which of the things a way needs is the point and which are
+the means - and `TradeForWater`, the one of the specification's six ways this
+world had not named, which arrives declared and out of reach.
+
+The useful product is a distinction I did not expect to have to draw. `Reach`
+has always carried a sentence of prose about what is missing, and translating
+those into the enabler vocabulary showed that **they are not all the same kind
+of missing**:
+
+| kind | example | fixed by |
+|---|---|---|
+| a thing | nothing is left out in the rain to catch it | giving somebody a thing |
+| a mechanism | there is no water table, so a well has nowhere to go | modelling something |
+| wiring | building is answered by Construction and not by Shelter | connecting two things that exist |
+
+`the_enabler_it_waits_on` returns `None` for the last two on purpose. Reading
+them as enabler shortfalls would say a settlement could sink a well if only
+somebody fetched a better shovel, which is false and would send people after
+shovels. Two ways wait on a vessel, which makes "give a settlement something to
+carry water in" worth two ways rather than one - the sort of sum the vocabulary
+exists to let anybody do.
+
+#### Actions as operators
+
+The verb matrix already held three of the six things the specification asks for
+under other names: `targets` and `wants` are the preconditions, `changes` are
+the effects. Inputs, costs and risks were nowhere, and skill was nowhere.
+
+The distinction worth being careful about is **wants against inputs**: a knife
+is *wanted* and comes back out of the job, a hide is an *input* and does not.
+Conflating them is how a model ends up eating its own tools - every verb that
+wanted one would consume one, and a settlement would burn a knife per hide.
+
+`Wants::ACapability` is the live wiring of the tag layer into the matrix, and
+it earns its place immediately in the errand layer: when somebody is short of
+what a verb wants, the candidates to go and make are now *everything that
+answers the want, best first*, rather than the one thing somebody typed into a
+match arm.
+
+`FILL` is the specification's worked operator written out in full, with
+`done_by: None` - **nothing in this simulation fills a container.** Drinking is
+done at the water or out of what somebody is already carrying, and how the
+carrying came about is a question the model has never asked. A verb declared
+and unperformed is a gap somebody can count; the same argument as
+`everything_still_to_build`, one level down, and `everything_still_to_price`
+counts the other half.
+
+#### Measured: exactly null, and the reason is a finding of its own
+
+| | Before | After |
+|---|---|---|
+| person-days | 213,850 | **213,850** |
+| worlds emptied | 42 of 64 | **42 of 64** |
+| out of the first winter | 26 of 64 | **26 of 64** |
+
+Not "within noise" - **identical**, down to the day each of the forty-two
+worlds emptied and the tally of what took every one of the 773 dead. The
+recorded draw counts are unchanged too. Standing suite failures held at ten.
+
+That is a stronger result than it looks, because it is not consistent with
+"the changes are small". A tent that now costs four hides and two cordage
+where it cost nothing would move the pack, and a moved pack diverges the world
+within a day. Identical output means the path is **never taken**.
+
+So it was counted rather than inferred. Over eight worlds and a year:
+
+```
+roofs somebody started, and how many were finished:
+  Burrow           started    13   finished     9
+```
+
+**Not one tent, in eight worlds, in a year.** The source calls a skin tent
+"what stands between a stone-age people and the weather", and between a fifth
+and a quarter of everybody who dies in these runs dies of the weather. The
+burrow - added as the way out for a people with neither timber nor skins - is
+the only roof anybody ever raises, and it is worse than a tent in every way
+except that it can be built.
+
+Which recasts what was fixed here. A tent made of poles and air was not
+costing this model anything, because no tent was ever made of anything. The
+defect was real and the fix is right; what the measurement says is that
+**shelter is blocked somewhere upstream of the materials**, and that is the
+thing worth going after next. The same is true of the pit lining: a settlement
+would have to fire a pot to feel it, and none does inside two years.
+
+A null that is *exactly* null, on a change that could not have been null if
+the code had run, is worth more than a null within noise. It says where the
+live edge of the model is.

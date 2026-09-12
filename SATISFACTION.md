@@ -239,6 +239,25 @@ no settlement to *ask*, so `ToUsAll` means "anybody here may use it" rather
 than naming a body that owns it. Multi-agent
 coordination sits on top of this and is much the larger piece.
 
+### Satisfiers and enablers - what answers a need, and what merely lets it be
+
+"Hydration is satisfied by water. A gourd is a transport/storage enabler."
+
+Obvious written down, and exactly the confusion a goal system falls into when
+it is built out of preconditions alone: a planner that scores *has water
+container* as progress towards *not being thirsty* will send a dying man to
+fetch a pot. `Satisfier` and `Enabler` are separate types, so the two cannot be
+added together.
+
+Translating `Reach`'s prose into the enabler vocabulary turned up a
+distinction worth keeping. **Not every way that is out of reach is out of
+reach for want of a thing.** Three kinds of missing turn up: a *thing* (nothing
+is left out in the rain to catch it), a *mechanism* (there is no water table,
+so a well has nowhere to go), and *wiring* (building is answered by the
+Construction drive and not by the Shelter one). Only the first is fixed by
+giving somebody something, and reading the other two as enabler shortfalls
+would send people after shovels for a well that has nowhere to go.
+
 ### Reach
 
 Ten of the twenty-five ways are declared and cannot fire: no rain catchment, no
@@ -264,8 +283,26 @@ data - `Wants::{BareHands, AFreeHand, AToolFor(trade), ThisInHand(name),
 AVessel}` - and effects and costs as data, through
 `ActionResult::with_drive_change` and `with_energy_cost`.
 
-Preconditions, inputs, effects and costs are there. Risks and skill
-requirements are scattered rather than declared.
+### Operators: the six things a verb declares
+
+**In the model: `environment::verbs::Verb`.** The matrix held three of the six
+under other names since it was built - `targets` and `wants` are the
+preconditions, `changes` are the effects - and it now carries the other three:
+`inputs`, `costs` and `risks`, plus the trade a verb is done with.
+
+The one distinction worth being careful about is **wants against inputs**. A
+knife is *wanted* and comes back out of the job; a hide is an *input* and does
+not. Conflating them is how a model ends up eating its own tools: every verb
+that wanted one would consume one, and a settlement would burn a knife per
+hide.
+
+`FILL` is the specification's own worked example written out in full, and it is
+declared with nothing performing it - because **nothing in this simulation
+fills a container**. Drinking is done at the water or out of what somebody is
+already carrying, and how the carrying came about is a question the model has
+never asked. `everything_still_to_price` counts the verbs that have been named
+and not yet thought about as operators, the same way `everything_still_to_build`
+counts the ones nothing performs.
 
 ---
 
@@ -303,6 +340,35 @@ They come apart for the rest:
 Three of the seven tags already have an axis. Four do not, and containers are a
 second mechanism answering the same question - which is this project's
 recurring defect, already in place.
+
+### What a thing is, as against what it is called
+
+**In the model: `environment::tags`.** Two vocabularies, and the difference
+between them is the whole point.
+
+**`Tag` is what a thing is** - descriptive, ungraded, plural. A fired pot is a
+food container, a water container *and a fragile container*, and the third
+tag is why you do not take it hunting. There is no such thing as being more of
+a pole than something else is.
+
+**`Capability` is what a job wants**, and it is graded, because "I need
+something to dig with" has better and worse answers. `0.0` is bare hands,
+`1.0` is the best thing in this world. Four of the eight are **derived from
+the tool table** rather than declared beside it: `EVERY_TOOL` already prices
+digging, cutting, fishing and hunting on the axis of the *trade*, and a second
+table on the axis of the *capability* would be two spellings of one question.
+The coefficient is the fraction of the best available advantage, so adding a
+better shovel renormalises the ladder rather than leaving a stale 1.0 behind.
+
+The reason this matters is not tidiness. **A check written by name is a check
+written against the world as it stood**, and it stops being true as the world
+moves on without anything failing. Three of those were sitting in the code: a
+pit could only be lined with a bowl or a basket, so a settlement that had got
+as far as firing pots stored its winter in bare earth; a tent's hides fell off
+the end of a three-armed `match`, so every tent ever raised was poles and air;
+and one verb wanted a waterskin, which nothing in this world makes.
+
+See ISSUES_FOUND.md #204.
 
 ### What a tool is worth: two questions, not one
 

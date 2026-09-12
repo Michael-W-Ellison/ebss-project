@@ -783,6 +783,9 @@ impl Simulation {
                 }
                 verbs::Wants::AFreeHand => "Both hands full".to_string(),
                 verbs::Wants::AVessel => "Nothing to hold water in".to_string(),
+                verbs::Wants::ACapability(capability) => {
+                    format!("Nothing in hand that answers {}", capability.called())
+                }
                 verbs::Wants::BareHands => "Nothing wanting".to_string(),
             })
     }
@@ -1163,6 +1166,18 @@ impl Simulation {
         let candidates: Vec<String> = match missing {
             Wants::ThisInHand(what) => vec![what.to_string()],
             Wants::AToolFor(trade) => agent.what_i_would_settle_for(trade),
+            // Everything that answers the want, best first. This is the whole
+            // reason for asking by capability rather than by name: a man who
+            // needs something to dig with has a *list* of things that would
+            // do, and the errand layer can go after whichever of them he can
+            // actually come by - rather than after the one thing somebody
+            // happened to type into a match arm.
+            Wants::ACapability(capability) => {
+                crate::environment::tags::everything_that_answers(capability)
+                    .into_iter()
+                    .map(|(called, _)| called.to_string())
+                    .collect()
+            }
             Wants::AVessel | Wants::AFreeHand | Wants::BareHands => return action,
         };
 

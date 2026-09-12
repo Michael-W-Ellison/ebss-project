@@ -33,6 +33,7 @@
 //! verbs would be worse than no matrix. See `EVERY_VERB` and the tests.
 
 use crate::agents::skills::SkillType;
+use super::tags::{Capability, Tag};
 
 /// What a verb acts on.
 ///
@@ -84,6 +85,15 @@ pub enum Wants {
     /// written. A verb that wants a vessel wants a full one: an empty bowl is
     /// a bowl and not a means.
     AVessel,
+    /// Anything at all that answers a want - see
+    /// [`crate::environment::tags::Capability`].
+    ///
+    /// The difference from `ThisInHand` is the whole of the tag layer.
+    /// `ThisInHand("waterskin")` is true of one named thing and silently
+    /// false of every other thing that would do just as well, which is fine
+    /// until the world has two of them. This asks the question the verb
+    /// actually means: is there *something here to carry water in*.
+    ACapability(Capability),
 }
 
 impl Wants {
@@ -114,8 +124,63 @@ impl Wants {
             Wants::AToolFor(trade) => helped_by(*trade),
             Wants::ThisInHand(what) => holding(what) > 0,
             Wants::AVessel => carrying_liquid > 0.0,
+            Wants::ACapability(capability) => {
+                super::tags::the_best_to_hand(*capability, holding).is_some()
+            }
         }
     }
+}
+
+/// What doing a thing takes out of the day and out of the body.
+///
+/// Two currencies because they are spent differently: a turn spent walking is
+/// a turn nobody gets back, and effort is a thing a body has more of in the
+/// morning. The model prices effort already - every `ActionResult` carries an
+/// energy cost - and has never priced time at all, which is why nothing in it
+/// can weigh a long errand against a short one. Declared here so that the
+/// question is at least askable; see the standing task on weighing the trip.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Costs {
+    /// Turns it takes, where a turn is the unit the tick runs in
+    pub time: f32,
+    /// What it takes out of somebody, on the scale `ActionResult` uses
+    pub effort: f32,
+}
+
+impl Costs {
+    /// One turn, and not much in it: looking at a thing, saying a thing.
+    pub const A_MOMENT: Costs = Costs { time: 1.0, effort: 1.0 };
+    /// One turn of ordinary work
+    pub const A_TURN_OF_WORK: Costs = Costs { time: 1.0, effort: 8.0 };
+    /// One turn of hard work
+    pub const A_TURN_OF_HARD_WORK: Costs = Costs { time: 1.0, effort: 18.0 };
+}
+
+/// What can go wrong in the doing of it.
+///
+/// Not what *does* go wrong - that is the executor's business and the dice's -
+/// but what the verb exposes somebody to at all. A verb with an empty list is
+/// a verb that cannot hurt anybody, and being able to see which those are is
+/// the point of declaring it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Risk {
+    /// A cut, a burn, a crushed finger
+    Injury,
+    /// Something that makes you ill later rather than now
+    Illness,
+    /// Bad water, bad food: the risk the specification names for filling a
+    /// container at a poor source
+    Contamination,
+    /// The thing being worked is ruined in the working
+    SpoilTheMakings,
+    /// The tool is a little nearer the end of itself
+    WearTheTool,
+    /// Whatever you are doing this to may do something back
+    TheThingFightsBack,
+    /// Somebody sees you do it
+    BeingSeen,
+    /// Not getting back
+    LosingTheWay,
 }
 
 /// What a verb alters when it is done.
@@ -193,6 +258,29 @@ pub struct Verb {
     /// action before it runs — see
     /// [`crate::environment::verbs::what_this_action_cannot_do_without`].
     pub always: bool,
+
+    // ---- the operator half ----------------------------------------------
+    //
+    // "Define each action with: preconditions, inputs, effects, costs, risks,
+    // skill requirements." Three of those six were already here under other
+    // names - `targets` and `wants` are the preconditions, `changes` are the
+    // effects - and three were not written down anywhere.
+    //
+    // The difference between `wants` and `inputs` is the one worth being
+    // careful about: a knife is *wanted* and comes back out of the job, the
+    // hide is an *input* and does not. Conflating them is how a model ends up
+    // eating its own tools.
+    /// What it uses up, by class. Empty for a verb that consumes nothing.
+    pub inputs: &'static [Tag],
+    /// What it costs the day and the body
+    pub costs: Costs,
+    /// What it exposes somebody to
+    pub risks: &'static [Risk],
+    /// The trade it is done with, where it is a matter of skill at all.
+    ///
+    /// `None` is not "anybody can do it badly" - it is "there is no being
+    /// good at this". Walking and looking are in that class; knapping is not.
+    pub needs_skill: Option<SkillType>,
 }
 
 impl Verb {
@@ -233,6 +321,12 @@ const fn verb(
         done_by,
         happens_when: None,
         always: true,
+        // The quiet defaults: takes a turn, uses nothing up, cannot hurt
+        // anybody, and is not a skill. Anything else is stated at the verb.
+        inputs: &[],
+        costs: Costs::A_MOMENT,
+        risks: &[],
+        needs_skill: None,
     }
 }
 
@@ -250,6 +344,23 @@ const fn happens_when(
         happens_when: Some(occasion),
         ..verb(called, family, targets, wants, changes, None)
     }
+}
+
+/// A verb with its operator half filled in.
+///
+/// Wraps one of the three constructors above rather than replacing them, so
+/// that a verb which has been thought about as an operator reads differently
+/// from one which has only ever been named. The quiet defaults - a turn, no
+/// inputs, no risk, no skill - are what an unwrapped verb still carries, and
+/// [`everything_still_to_price`] counts them.
+const fn an_operator(
+    base: Verb,
+    inputs: &'static [Tag],
+    costs: Costs,
+    risks: &'static [Risk],
+    needs_skill: Option<SkillType>,
+) -> Verb {
+    Verb { inputs, costs, risks, needs_skill, ..base }
 }
 
 /// The same, for a verb an action carries out only when the job in hand calls
@@ -390,13 +501,19 @@ pub const RELEASE: Verb = verb(
 // that is the whole point of the family: a man with no edge cannot cut.
 // ---------------------------------------------------------------------------
 
-pub const SMASH: Verb = verb(
+pub const SMASH: Verb = an_operator(
+    verb(
     "smash",
     Family::Disruption,
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Mining),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
     Some("smash"),
+    ),
+    &[Tag::Knappable],
+    Costs::A_TURN_OF_WORK,
+    &[Risk::Injury, Risk::SpoilTheMakings],
+    Some(SkillType::Crafting),
 );
 
 pub const CRUSH: Verb = verb(
@@ -408,22 +525,34 @@ pub const CRUSH: Verb = verb(
     Some("crush"),
 );
 
-pub const CUT: Verb = verb(
+pub const CUT: Verb = an_operator(
+    verb(
     "cut",
     Family::Disruption,
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Leatherworking),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
     Some("cut"),
+    ),
+    &[],
+    Costs::A_TURN_OF_WORK,
+    &[Risk::Injury, Risk::WearTheTool],
+    Some(SkillType::Leatherworking),
 );
 
-pub const SCRAPE: Verb = verb(
+pub const SCRAPE: Verb = an_operator(
+    verb(
     "scrape",
     Family::Disruption,
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Leatherworking),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
     Some("scrape"),
+    ),
+    &[Tag::Hide],
+    Costs::A_TURN_OF_WORK,
+    &[Risk::Injury, Risk::WearTheTool, Risk::SpoilTheMakings],
+    Some(SkillType::Leatherworking),
 );
 
 /// Anything pointed will do it, which is the whole of a tool ladder and not
@@ -570,11 +699,52 @@ pub const MIX: Verb = verb(
     None,
 );
 
+/// The specification's worked operator, written out in full.
+///
+/// > Action: Fill Container. Preconditions: agent at water source; has
+/// > water_container with free capacity; source accessible. Effects: container
+/// > water +X, time spent, maybe source amount reduced slightly. Costs: time,
+/// > effort. Risks: contamination if source quality poor.
+///
+/// Every line of that has somewhere to go now. Being at the source is
+/// `Targets::Water`; having something to put it in is
+/// `Wants::ACapability(WaterContainer)`, which is the half that could not be
+/// said before - `ThisInHand("waterskin")` was true of one thing and silently
+/// false of the four other vessels this world can make. What it changes, what
+/// it costs and what it risks are the three operator fields.
+///
+/// `done_by: None`, honestly: **nothing in this simulation fills a container.**
+/// Drinking is done at the water or out of what somebody is already carrying,
+/// and how the carrying came about is a question the model has never asked.
+/// That is a standing gap, and a verb that is declared and unperformed is a
+/// gap somebody can count rather than one nobody can see.
+pub const FILL: Verb = an_operator(
+    verb(
+        "fill",
+        Family::Fluid,
+        Targets::Water,
+        Wants::ACapability(Capability::WaterContainer),
+        &[Changes::WhatIsHeld, Changes::TheGround],
+        None,
+    ),
+    &[],
+    Costs::A_TURN_OF_WORK,
+    &[Risk::Contamination, Risk::Illness],
+    None,
+);
+
+/// Emptying one out, which wants the same thing in hand as filling one.
+///
+/// It wanted a waterskin by name. There is no waterskin in this world's
+/// recipe chain - the vessels it can actually make are a bowl, a fired pot,
+/// stoneware and a leather bag - so the want was unsatisfiable by
+/// construction, and had this verb ever been performed it would have been
+/// refused every time.
 pub const POUR: Verb = verb(
     "pour",
     Family::Fluid,
     Targets::TheGroundUnderfoot,
-    Wants::ThisInHand("waterskin"),
+    Wants::ACapability(Capability::WaterContainer),
     &[Changes::TheGround, Changes::WhatIsHeld],
     None,
 );
@@ -628,31 +798,49 @@ pub const FERMENT: Verb = verb(
 // 6. Assembly and construction
 // ---------------------------------------------------------------------------
 
-pub const LASH: Verb = sometimes(
+pub const LASH: Verb = an_operator(
+    sometimes(
     "lash",
     Family::Assembly,
     Targets::AThingHeld,
     Wants::ThisInHand("lashing"),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
     Some("craft"),
+    ),
+    &[Tag::Cordage],
+    Costs::A_TURN_OF_WORK,
+    &[Risk::SpoilTheMakings],
+    Some(SkillType::Crafting),
 );
 
-pub const WEAVE: Verb = verb(
+pub const WEAVE: Verb = an_operator(
+    verb(
     "weave",
     Family::Assembly,
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::WhatAThingIs],
     Some("weave"),
+    ),
+    &[Tag::Cordage],
+    Costs::A_TURN_OF_WORK,
+    &[Risk::SpoilTheMakings],
+    Some(SkillType::Crafting),
 );
 
-pub const CARVE: Verb = verb(
+pub const CARVE: Verb = an_operator(
+    verb(
     "carve",
     Family::Assembly,
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Crafting),
     &[Changes::WhatAThingIs],
     Some("carve"),
+    ),
+    &[Tag::Timber],
+    Costs::A_TURN_OF_WORK,
+    &[Risk::Injury, Risk::WearTheTool, Risk::SpoilTheMakings],
+    Some(SkillType::Crafting),
 );
 
 /// Pressing a soft thing into a shape it keeps.
@@ -718,26 +906,38 @@ pub const ATTACH: Verb = sometimes(
 /// in one hand and a spear in the other is not stitching anything - and it is
 /// the one this economy can actually carry. What a knife is worth to the work
 /// is still what it always was: how well the garment comes out.
-pub const SEW: Verb = verb(
+pub const SEW: Verb = an_operator(
+    verb(
     "sew",
     Family::Assembly,
     Targets::AThingHeld,
     Wants::AFreeHand,
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
     Some("makeclothing"),
+    ),
+    &[Tag::Hide, Tag::Cordage],
+    Costs::A_TURN_OF_WORK,
+    &[Risk::SpoilTheMakings],
+    Some(SkillType::Leatherworking),
 );
 
 // ---------------------------------------------------------------------------
 // 7. Subterranean
 // ---------------------------------------------------------------------------
 
-pub const DIG: Verb = verb(
+pub const DIG: Verb = an_operator(
+    verb(
     "dig",
     Family::Subterranean,
     Targets::TheGroundUnderfoot,
     Wants::BareHands,
     &[Changes::TheGround],
     Some("tillsoil"),
+    ),
+    &[],
+    Costs::A_TURN_OF_HARD_WORK,
+    &[Risk::Injury, Risk::WearTheTool],
+    Some(SkillType::Mining),
 );
 
 /// Digging yourself into the ground, because there is nothing to build with.
@@ -780,13 +980,19 @@ pub const COVER: Verb = verb(
 // 8. Survival and biology
 // ---------------------------------------------------------------------------
 
-pub const HARVEST: Verb = verb(
+pub const HARVEST: Verb = an_operator(
+    verb(
     "harvest",
     Family::Survival,
     Targets::AThingUnderfoot,
     Wants::BareHands,
     &[Changes::WhatIsHeld],
     Some("gather"),
+    ),
+    &[],
+    Costs::A_TURN_OF_WORK,
+    &[Risk::WearTheTool],
+    Some(SkillType::Herbalism),
 );
 
 /// What a hunt needs in hand depends on what is being hunted, and this table
@@ -805,31 +1011,49 @@ pub const HARVEST: Verb = verb(
 /// quarry can be seen: `Simulation::could_bring_it_down` is the one owner, and
 /// `worth_hunting` now asks it before anybody sets out. What this table can
 /// honestly say is that a hunt takes hands.
-pub const HUNT: Verb = verb(
+pub const HUNT: Verb = an_operator(
+    verb(
     "hunt",
     Family::Survival,
     Targets::AnAnimal,
     Wants::BareHands,
     &[Changes::ABody, Changes::WhatIsHeld],
     Some("hunt"),
+    ),
+    &[],
+    Costs::A_TURN_OF_HARD_WORK,
+    &[Risk::Injury, Risk::TheThingFightsBack, Risk::WearTheTool],
+    Some(SkillType::Hunting),
 );
 
-pub const BUTCHER: Verb = sometimes(
+pub const BUTCHER: Verb = an_operator(
+    sometimes(
     "butcher",
     Family::Survival,
     Targets::AnAnimal,
     Wants::AToolFor(SkillType::Leatherworking),
     &[Changes::WhatIsHeld, Changes::WhatAThingIs],
     Some("hunt"),
+    ),
+    &[],
+    Costs::A_TURN_OF_WORK,
+    &[Risk::Injury, Risk::WearTheTool],
+    Some(SkillType::Leatherworking),
 );
 
-pub const EAT: Verb = verb(
+pub const EAT: Verb = an_operator(
+    verb(
     "eat",
     Family::Survival,
     Targets::AThingHeld,
     Wants::BareHands,
     &[Changes::ABody, Changes::WhatIsHeld],
     Some("eat"),
+    ),
+    &[Tag::Perishable],
+    Costs::A_MOMENT,
+    &[Risk::Illness],
+    None,
 );
 
 pub const DRINK: Verb = verb(
@@ -841,26 +1065,38 @@ pub const DRINK: Verb = verb(
     Some("gather"),
 );
 
-pub const TASTE: Verb = verb(
+pub const TASTE: Verb = an_operator(
+    verb(
     "taste",
     Family::Survival,
     Targets::AThingUnderfoot,
     Wants::BareHands,
     &[Changes::ABody, Changes::WhatIsKnown],
     Some("taste"),
+    ),
+    &[],
+    Costs::A_MOMENT,
+    &[Risk::Illness],
+    None,
 );
 
 // ---------------------------------------------------------------------------
 // 9. Combat and defence
 // ---------------------------------------------------------------------------
 
-pub const ATTACK_WITH: Verb = verb(
+pub const ATTACK_WITH: Verb = an_operator(
+    verb(
     "attack with",
     Family::Combat,
     Targets::APerson,
     Wants::BareHands,
     &[Changes::ABody, Changes::ABond],
     Some("attack"),
+    ),
+    &[],
+    Costs::A_TURN_OF_HARD_WORK,
+    &[Risk::Injury, Risk::TheThingFightsBack, Risk::WearTheTool],
+    Some(SkillType::MeleeCombat),
 );
 
 /// Nobody decides to do this. It is what happens when something comes at you
@@ -953,13 +1189,19 @@ pub const GIVE_TO: Verb = verb(
     Some("giveto"),
 );
 
-pub const TAKE_FROM: Verb = verb(
+pub const TAKE_FROM: Verb = an_operator(
+    verb(
     "take from",
     Family::Exchange,
     Targets::APerson,
     Wants::AFreeHand,
     &[Changes::WhatIsHeld, Changes::ABond],
     Some("takefrom"),
+    ),
+    &[],
+    Costs::A_MOMENT,
+    &[Risk::BeingSeen],
+    None,
 );
 
 pub const TRADE: Verb = verb(
@@ -1095,7 +1337,7 @@ pub const EVERY_VERB: &[Verb] = &[
     // 4
     HEAT, DRY, SALT, FIRE, COOL, QUENCH, IGNITE, MELT, ROAST,
     // 5
-    MIX, POUR, SOAK, COAT, BOIL, LEACH, FERMENT,
+    MIX, FILL, POUR, SOAK, COAT, BOIL, LEACH, FERMENT,
     // 6
     LASH, WEAVE, CARVE, MOLD, FOLD, STACK, FRAME, ATTACH, SEW,
     // 7
@@ -1171,8 +1413,59 @@ pub fn what_this_action_cannot_do_without(named: &str) -> Vec<Wants> {
     wanted
 }
 
+/// Every verb whose operator half is still the quiet default.
+///
+/// A verb here has not been thought about as an operator: it is declared to
+/// take a moment, use nothing up, risk nothing and want no skill, and for most
+/// of them at least one of those four is simply untrue. Counting them is the
+/// point - the same argument as [`everything_still_to_build`], one level down.
+pub fn everything_still_to_price() -> impl Iterator<Item = &'static Verb> {
+    EVERY_VERB.iter().filter(|verb| {
+        verb.inputs.is_empty()
+            && verb.risks.is_empty()
+            && verb.needs_skill.is_none()
+            && verb.costs == Costs::A_MOMENT
+    })
+}
+
+/// Everything a verb exposes somebody to, across every verb an action does.
+pub fn what_this_action_risks(named: &str) -> Vec<Risk> {
+    let mut risks: Vec<Risk> = Vec::new();
+
+    for verb in EVERY_VERB.iter().filter(|verb| verb.done_by == Some(named)) {
+        for risk in verb.risks {
+            if !risks.contains(risk) {
+                risks.push(*risk);
+            }
+        }
+    }
+
+    risks.sort_unstable();
+    risks
+}
+
+/// What an action costs, adding up every verb it always performs.
+///
+/// Alternatives are not added: `Craft` is heating *or* lashing *or*
+/// attaching, and charging for all three would price a craft at the cost of
+/// three crafts. The `always` flag is what tells them apart, exactly as it
+/// does for `wants`.
+pub fn what_this_action_costs(named: &str) -> Costs {
+    EVERY_VERB
+        .iter()
+        .filter(|verb| verb.done_by == Some(named) && verb.always)
+        .fold(Costs { time: 0.0, effort: 0.0 }, |so_far, verb| Costs {
+            time: so_far.time + verb.costs.time,
+            effort: so_far.effort + verb.costs.effort,
+        })
+}
+
 /// How many hands a person has to work with.
 ///
 /// Two, and this is where that number lives rather than being assumed in
 /// several places at once.
 pub const A_PAIR_OF_HANDS: u32 = 2;
+
+#[cfg(test)]
+#[path = "tests/operator_tests.rs"]
+mod operator_tests;

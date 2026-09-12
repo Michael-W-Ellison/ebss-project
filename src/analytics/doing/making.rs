@@ -103,30 +103,65 @@ impl Simulation {
             _ => BuildingType::SkinTent,
         };
 
-        // Get resource requirements for this building
+        // What this roof takes, and what would answer it.
+        //
+        // Two ways of asking, and the first one is the one the specification
+        // asks for: **a class rather than a name.** A tent wants poles, a
+        // flexible covering and cordage, and a people who scraped their hides
+        // into leather should be able to roof with the leather - which, asked
+        // by name, they could not.
+        //
+        // It also closes a hole. `SkinTent` has declared since it was written
+        // that it wants eight wood and four hides, and two comments in
+        // `world::buildings` say so - but the loop below resolves a
+        // `ResourceType` to an item name with three arms and `continue`s on
+        // everything else, in the checking pass *and* in the consuming pass.
+        // So the hides were neither required nor taken: **every tent ever
+        // raised in this model was poles and air.** Four of the nine
+        // requirements in the building table are for things that match no arm.
+        let by_class = crate::environment::tags::what_this_roof_takes(building_type);
+
         let requirements = building_type.requirements();
+        let mut taking: Vec<(&'static str, u32)> = Vec::new();
 
         // Check if agent has required resources in inventory
         let agent = &self.population.agents[agent_index];
         let mut has_all_resources = true;
         let mut missing_resources = Vec::new();
 
-        for req in &requirements {
-            let item_id = match req.resource_type {
-                ResourceType::Wood => "wood",
-                ResourceType::Stone => "stone",
-                ResourceType::Iron => "iron",
-                _ => continue,
-            };
+        if let Some(wants) = by_class {
+            let holding = |what: &str| agent.how_many_i_have(what);
 
-            if let Some(item) = agent.inventory.get_item(item_id) {
-                if item.quantity < req.amount {
+            match crate::environment::tags::what_would_be_used(wants, &holding) {
+                Ok(using) => taking = using,
+                Err((short_of, how_many)) => {
                     has_all_resources = false;
-                    missing_resources.push(format!("{} {} (have {})", req.amount - item.quantity, item_id, item.quantity));
+                    missing_resources.push(format!("{how_many} {}", short_of.called()));
                 }
-            } else {
-                has_all_resources = false;
-                missing_resources.push(format!("{} {}", req.amount, item_id));
+            }
+        } else {
+            for req in &requirements {
+                let item_id = match req.resource_type {
+                    ResourceType::Wood => "wood",
+                    ResourceType::Stone => "stone",
+                    ResourceType::Iron => "iron",
+                    ResourceType::Hides => "hides",
+                    // Provisioning a work party, presumably; nine buildings
+                    // want it and nothing has ever checked or taken it. Left
+                    // as it was rather than turned into a hard requirement on
+                    // nine buildings in the same change that fixes the tent.
+                    _ => continue,
+                };
+
+                if let Some(item) = agent.inventory.get_item(item_id) {
+                    if item.quantity < req.amount {
+                        has_all_resources = false;
+                        missing_resources.push(format!("{} {} (have {})", req.amount - item.quantity, item_id, item.quantity));
+                    }
+                } else {
+                    has_all_resources = false;
+                    missing_resources.push(format!("{} {}", req.amount, item_id));
+                }
             }
         }
 
@@ -237,17 +272,30 @@ impl Simulation {
             return ActionResult::failure("No suitable building location found (all positions occupied)".to_string());
         }
 
-        // Remove resources from agent inventory
+        // Remove resources from agent inventory.
+        //
+        // Whatever the check above settled on is what comes out of the pack -
+        // one list, resolved once. Two loops resolving the same requirements
+        // independently is how the hides came to be checked in neither and
+        // taken in neither.
         let agent = &mut self.population.agents[agent_index];
-        for req in &requirements {
-            let item_id = match req.resource_type {
-                ResourceType::Wood => "wood",
-                ResourceType::Stone => "stone",
-                ResourceType::Iron => "iron",
-                _ => continue,
-            };
 
-            agent.inventory.remove_item(item_id, req.amount);
+        if by_class.is_some() {
+            for (what, how_many) in &taking {
+                agent.inventory.remove_item(what, *how_many);
+            }
+        } else {
+            for req in &requirements {
+                let item_id = match req.resource_type {
+                    ResourceType::Wood => "wood",
+                    ResourceType::Stone => "stone",
+                    ResourceType::Iron => "iron",
+                    ResourceType::Hides => "hides",
+                    _ => continue,
+                };
+
+                agent.inventory.remove_item(item_id, req.amount);
+            }
         }
 
         // Create new building (under construction)
