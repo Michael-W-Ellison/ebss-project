@@ -22,6 +22,25 @@ fn carrying(agent: &mut Agent, what: &str, how_many: u32) {
 }
 
 /// Take everything out of a pack, by the only door there is.
+/// A hand that will not spoil what it is making.
+///
+/// Making anything now turns on `Skill::perform_check`, so an unpractised
+/// agent spoils roughly a third of what it attempts - see
+/// `quality_tests::skill_decides_whether_the_making_comes_off`. These tests
+/// are about what a recipe wants and what comes out of it, not about luck,
+/// so they are given somebody who has done the job before.
+fn a_hand_that_does_not_spoil_things(agent: &mut Agent) {
+    for trade in [
+        SkillType::Crafting,
+        SkillType::Mining,
+        SkillType::Woodcutting,
+        SkillType::Leatherworking,
+        SkillType::Construction,
+    ] {
+        agent.skills.set_skill_level(trade, 9);
+    }
+}
+
 fn empty_the_pack(agent: &mut Agent) {
     let everything: Vec<(String, u32)> = agent
         .inventory
@@ -318,6 +337,7 @@ fn a_man_with_his_tools_about_him_asks_for_nothing() {
 #[test]
 fn making_a_thing_spends_the_makings_and_leaves_the_thing() {
     let mut simulation = one_agent_world();
+    a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
     let agent = &mut simulation.population.agents[0];
     empty_the_pack(agent);
     carrying(agent, "flax", 2);
@@ -342,6 +362,7 @@ fn making_a_thing_spends_the_makings_and_leaves_the_thing() {
 #[test]
 fn a_spear_can_be_made_out_of_what_was_made_before_it() {
     let mut simulation = one_agent_world();
+    a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
     let agent = &mut simulation.population.agents[0];
     empty_the_pack(agent);
     carrying(agent, "wood", 1);
@@ -371,6 +392,7 @@ fn a_spear_can_be_made_out_of_what_was_made_before_it() {
 #[test]
 fn a_man_short_of_a_part_is_told_which_part() {
     let mut simulation = one_agent_world();
+    a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
     let agent = &mut simulation.population.agents[0];
     empty_the_pack(agent);
     carrying(agent, "wood", 1);
@@ -391,6 +413,7 @@ fn a_man_short_of_a_part_is_told_which_part() {
 #[test]
 fn making_a_thing_teaches_the_hand_that_made_it() {
     let mut simulation = one_agent_world();
+    a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
     let agent = &mut simulation.population.agents[0];
     empty_the_pack(agent);
     carrying(agent, "stone", 2);

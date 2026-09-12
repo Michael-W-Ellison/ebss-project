@@ -3672,6 +3672,86 @@ impl Agent {
         }
     }
 
+    /// What workmanship is worth at the work, squeezed onto the band.
+    ///
+    /// This was a `clamp`, and a clamp is the wrong shape. The six rungs of
+    /// `Quality` run 0.5 to 2.0 and the band is 0.7 to 1.5, so clamping put
+    /// **both Advanced and Expert on 1.5** - the top two rungs of the ladder
+    /// doing identical work, against "higher quality items... are more
+    /// effective" and "agents with the same type of tool but differing
+    /// quality should finish the same task at different speeds". Two of the
+    /// six rungs were indistinguishable at the end that a settlement spends
+    /// its life climbing towards.
+    ///
+    /// A squeeze keeps the band and keeps the order: the whole quality range
+    /// is mapped onto it linearly, so every rung is worth more than the one
+    /// below and none of them escapes the band.
+    pub fn what_this_workmanship_is_worth(quality: super::skills::Quality) -> f32 {
+        use super::skills::Quality;
+
+        let (worst, best) = Self::WHAT_GOOD_WORK_IS_WORTH;
+        let (lowest, highest) = (
+            Quality::Pathetic.modifier(),
+            Quality::Expert.modifier(),
+        );
+
+        // Hinged on ordinary work rather than stretched from end to end.
+        //
+        // A straight line from the worst rung to the best moves *every* rung,
+        // and the one it moves that nobody asked to move is `Basic` - plain
+        // serviceable work, which is what most things in this world are - so
+        // a flat line quietly taxed the common case by three per cent to
+        // separate two rungs at the top. Hinging at `Basic` leaves ordinary
+        // work worth exactly what it was worth and spreads the rungs either
+        // side of it.
+        let ordinary = Quality::Basic.modifier();
+
+        if quality.modifier() >= ordinary {
+            let along = (quality.modifier() - ordinary) / (highest - ordinary);
+            1.0 + (best - 1.0) * along.clamp(0.0, 1.0)
+        } else {
+            let along = (quality.modifier() - lowest) / (ordinary - lowest);
+            worst + (1.0 - worst) * along.clamp(0.0, 1.0)
+        }
+    }
+
+    /// The best a pair of empty hands can turn out.
+    ///
+    /// Not nothing - fingers can twist a cord and shape a lump of clay, and
+    /// the result is serviceable. What they cannot do is fine work.
+    pub const WHAT_BARE_HANDS_CAN_TURN_OUT: super::skills::Quality =
+        super::skills::Quality::Basic;
+
+    /// The best thing these hands could turn out at this trade, given what
+    /// they have to work with.
+    ///
+    /// **"An agent with a master crafting level should not be capable of
+    /// making masterwork goods using the worst quality tools. Skill level
+    /// should determine crafting success chance, while tool quality should
+    /// cap output quality."** This is the cap. A man can get a little more
+    /// out of a tool than it deserves - `material_quality_limit` is one rung
+    /// up - and no more than that, so the ladder has to be climbed a tool at
+    /// a time rather than jumped by a good hand alone.
+    pub fn the_best_i_could_turn_out(&self, trade: super::SkillType) -> super::skills::Quality {
+        self.how_well_made_is_what_i_work_this_trade_with(trade)
+            .map(|quality| quality.material_quality_limit())
+            .unwrap_or(Self::WHAT_BARE_HANDS_CAN_TURN_OUT)
+    }
+
+    /// How well made the tool is that this agent would bring to a trade, if
+    /// it has one at all.
+    ///
+    /// Both of the questions the specification asks about tool quality want
+    /// this and nothing else about the tool: what it caps the work at, and
+    /// how badly the work can go wrong with it in the hand.
+    pub fn how_well_made_is_what_i_work_this_trade_with(
+        &self,
+        trade: super::SkillType,
+    ) -> Option<super::skills::Quality> {
+        let tool = self.what_i_have_to_work_with(trade)?;
+        self.inventory.get_item(tool.called)?.quality
+    }
+
     /// How much of a tool's advantage a worn edge still carries.
     ///
     /// A blunt axe is still an axe. A quarter of what the tool is worth is in
@@ -3708,10 +3788,9 @@ impl Agent {
         let tool = self.what_i_have_to_work_with(trade)?;
         let carried = self.inventory.get_item(tool.called)?;
 
-        let (worst, best) = Self::WHAT_GOOD_WORK_IS_WORTH;
         let how_well_made = carried
             .quality
-            .map(|quality| quality.modifier().clamp(worst, best))
+            .map(Self::what_this_workmanship_is_worth)
             .unwrap_or(1.0);
 
         // An axe in the pack is an axe you have to stop and dig out. It still
@@ -3885,10 +3964,33 @@ impl Agent {
                 .unwrap_or(tool.helps);
             let hand = self.skills.hand_for(trade);
 
-            let lasts = crate::environment::making::how_long_this_one_lasts(tool, hand);
+            // What the hand would turn out, and what it is working with will
+            // let it. Skill alone used to decide this, so a master with
+            // nothing but a crude flake turned out masterwork - see
+            // `the_best_i_could_turn_out`.
+            let as_good_as_the_hand = super::skills::Quality::from_hand(hand);
+            let as_good_as_the_tools_allow = self.the_best_i_could_turn_out(trade);
+            let quality = as_good_as_the_hand.min(as_good_as_the_tools_allow);
+
+            // And a better-made thing lasts longer - which this model already
+            // said, through the hand: `how_long_this_one_lasts` takes the
+            // hand that did the making and scales the life by it. Multiplying
+            // in the quality as well **double-counts the same fact**, and
+            // because a founder's work is Crude it does so downwards: every
+            // founder tool lost a quarter of its life. Measured, the whole
+            // batch cost nine more worlds emptied and half the first winters.
+            //
+            // So what is charged here is only the part the hand does not
+            // already account for: how far the tools being worked with held
+            // the work below what the hand would otherwise have turned out.
+            // One when nothing held it back, less when something did.
+            let held_back = quality.tool_durability_modifier()
+                / as_good_as_the_hand.tool_durability_modifier();
+            let lasts = crate::environment::making::how_long_this_one_lasts(tool, hand)
+                * held_back.min(1.0);
             made.current_durability = Some(lasts);
             made.max_durability = Some(lasts);
-            made.quality = Some(super::skills::Quality::from_hand(hand));
+            made.quality = Some(quality);
         }
 
         made

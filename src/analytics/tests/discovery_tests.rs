@@ -18,6 +18,23 @@ fn carrying(agent: &mut Agent, what: &str, how_many: u32) {
         .add_item(InventoryItem::new_with_weight(what.to_string(), how_many, 0.5));
 }
 
+/// A hand that will not spoil what it is making.
+///
+/// Making anything now turns on `Skill::perform_check`, so an unpractised
+/// agent spoils roughly a third of what it attempts. These tests are about
+/// what a recipe wants and what comes out of it, not about luck.
+fn a_hand_that_does_not_spoil_things(agent: &mut crate::agents::Agent) {
+    for trade in [
+        SkillType::Crafting,
+        SkillType::Mining,
+        SkillType::Woodcutting,
+        SkillType::Leatherworking,
+        SkillType::Construction,
+    ] {
+        agent.skills.set_skill_level(trade, 9);
+    }
+}
+
 fn one_agent_world() -> Simulation {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
@@ -256,6 +273,7 @@ fn the_blade_cannot_be_found_out_before_the_lump() {
 #[test]
 fn once_known_the_work_still_wants_its_conditions() {
     let mut simulation = one_agent_world();
+    a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
     simulation.population.agents[0].found_out_how_to("shinylump");
     carrying(&mut simulation.population.agents[0], "iron", 4);
 
@@ -288,6 +306,7 @@ fn once_known_the_work_still_wants_its_conditions() {
 #[test]
 fn a_blade_wants_a_hammer_in_the_hand() {
     let mut simulation = one_agent_world();
+    a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
     simulation.population.agents[0].found_out_how_to("metalblade");
     carrying(&mut simulation.population.agents[0], "shinylump", 2);
 
@@ -338,6 +357,7 @@ fn a_blade_wants_a_hammer_in_the_hand() {
 #[test]
 fn a_people_that_has_found_it_all_out_can_make_a_metal_knife() {
     let mut simulation = one_agent_world();
+    a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
     a_fire_where_he_stands(&mut simulation);
 
     {

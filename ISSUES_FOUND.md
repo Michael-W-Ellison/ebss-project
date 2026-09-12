@@ -14656,3 +14656,132 @@ over a year.
 - **Quality sits on made items only.** "Poor leather: uneven thickness, tears
   at stress points" wants it on raw materials too, and a hide off a carcass
   carries none.
+
+---
+
+### 201. Quality: nearly all of it was built, none of it was connected, and three of my own additions decided the whole measurement
+
+"Higher quality items last longer, are more effective, and decrease task
+completion [time]... Two agents with the same clothing items but of differing
+quality should have different weather resistances... **Skill level should
+determine crafting success chance, while tool quality should cap output
+quality.**"
+
+Almost all of this already existed in `skills.rs` and had no callers. The
+pattern is by now the most reliable single finding about this codebase: the
+machinery is written, the wiring is not.
+
+| Built | Callers before |
+|---|---|
+| `Skill::perform_check(tool_quality)` - success, injury and speed off skill and tool | one, the tailoring branch, passing `None` |
+| `Quality::material_quality_limit` - one rung above the tool, the cap the specification asks for | none outside its own unit test |
+| `Quality::tool_risk_roll_count` - a bad tool rolls the failure check again | reachable only through `perform_check` |
+| `Quality::determine_quality` - skill to quality | reachable only through `perform_check` |
+
+#### What was genuinely missing
+
+- **The cap.** `a_tool_fresh_from_these_hands` set quality from
+  `Quality::from_hand` alone, so a master with nothing but a crude flake
+  turned out masterwork. Output quality is now `min(hand, tool cap)` in both
+  making paths.
+- **A success roll on making anything that is not a garment.** Every other
+  making in the model succeeded on the first attempt whoever tried it, so a
+  first-day knapper turned out spears as reliably as a lifetime's flintsman.
+- **The tailoring branch's tool quality**, which was `None` - the one place
+  that already asked whether an attempt came off asked it as though every
+  tailor worked barehanded.
+- **Two of the six quality rungs were indistinguishable.** The band was
+  applied with a `clamp` and the quality range runs past the top of it, so
+  Advanced and Expert both landed on 1.5 - the top two rungs doing identical
+  work, at the end a settlement spends its life climbing towards.
+
+#### And three things I got wrong, each of which cost more than the wiring gained
+
+| | person-days | emptied | first winters |
+|---|---|---|---|
+| baseline | 212,906 | 46 of 64 | 22 |
+| the specification, wired, with all three faults | 210,960 | 55 | **11** |
+| two removed | 209,212 | 51 | 19 |
+| all three removed | **213,826** | **42** | **26** |
+
+**A second opinion about how long a tool lasts.** "Higher quality items last
+longer" was already true here, through the hand: `how_long_this_one_lasts`
+takes the hand that did the making and scales the life by it. Multiplying the
+quality in as well double-counts one fact - and because a founder's work is
+Crude, `tool_durability_modifier` is 0.75, so it double-counted *downwards*:
+**every founder tool lost a quarter of its life.** What is charged now is only
+the part the hand does not already account for - how far the tools being
+worked with held the work below what the hand would otherwise have turned out.
+
+**A band that moved the rung nobody asked to move.** Spreading the six rungs
+evenly from worst to best separates the top two, which was the point, and
+shifts every other rung while doing it - including `Basic`, plain serviceable
+work, which is what most things in this world are. A flat line quietly taxed
+the common case by three per cent to fix a problem at the top. The band is
+hinged on ordinary work instead, so `Basic` is worth exactly 1.0 as it always
+was and the rungs spread either side of it.
+
+**And the one that mattered most: a spoiled attempt taught despair.**
+`learn_from_this_here(&action, action_result.success, ..)` is fed by every
+action, and a spoiled making went through the same failure path as "no
+materials" and "no fire". So a beginner who spoiled a third of what he tried
+learned that **making does not work** - and a beginner who concludes that
+never practises into a master, which is the entire point of a skill deciding
+the odds. The mechanism defeated itself.
+
+`ActionResult::attempted` separates the two. Being refused means the world
+would not let the work begin, and is worth counting and worth learning from.
+Spoiling the makings means the work began and went wrong, which costs the turn
+and the materials and teaches only that the hand wants practice - which the
+skill has already been given.
+
+**That one change is the difference between 19 first winters and 26.** It was
+caught by `knife_chain_tests::a_settlement_crafts_without_being_refused`, a
+test written long before any of this, whose comment says exactly why: *"a
+refusal is worse than a wasted turn, because it teaches a man that making does
+not work."* The guard was right and had been right for months.
+
+#### Where it landed
+
+Against 212,906 person-days / 46 worlds emptied / 22 out of the first winter:
+**213,826 / 42 / 26.** Worlds emptied and first winters improve **on both
+blocks independently** - block A 24 against 27 and 10 against 8, block B 18
+against 19 and 16 against 14 - which is this project's bar for a trusted
+result. Person-days are up 0.4% overall with the blocks disagreeing on sign,
+so that measure is noise as usual; the two that say whether a people lives are
+not.
+
+So the specification's quality model, wired as asked, is a small net gain -
+and the three-stage measurement is the finding, not the total. **Each
+intermediate version looked like a regression caused by the specification, and
+all three times it was caused by me.**
+
+#### What the success roll costs, and why it stays
+
+A founder sits at −4 or −5 in the making trades, which is `SkillCategory::Low`
+and a 30% failure chance, so roughly a third of a founder's attempts now spoil
+the makings. That is a real tax and it is the specification's: "skill level
+should determine crafting success chance". It is also exactly the bargain the
+tailoring branch has struck since it was written, and the reasoning there
+holds here - it is what makes a dedicated hand quicker as well as better,
+without the model needing a notion of how long a job takes.
+
+Twenty-three `Action::Craft` calls across seven test files became subject to a
+roll. Nine of them asserted success and are given a practised hand, which is
+the right fixture for testing a chain rather than luck; the one test that is
+*about* an unpractised hand improving retries instead, because raising its
+skill would raise the very thing it measures.
+
+#### What is still not built
+
+- **Quality on raw materials.** "Poor leather: uneven thickness, tears at
+  stress points" wants it on what comes off a carcass, and a hide carries
+  none. `limit_to_material` is written and waiting for it.
+- **Catastrophic break risk** and **waste rate during manufacture**, both
+  named in the specification, have no counterpart.
+- **The quality names differ from the specification's.** This model runs
+  Pathetic/Crude/Basic/Moderate/Advanced/Expert against
+  Crude/Poor/Common/Good/Fine/Masterwork. Aligned by position the semantics
+  match - both have the neutral rung third - so it is a rename, not a
+  rebalance, and it was left alone rather than churning every call site
+  inside a measured change.

@@ -323,6 +323,29 @@ The wear curve is a straight line rather than a set of bands, so every stroke
 of use tells a little and none of them tells suddenly. See ISSUES_FOUND.md
 #200, including what it cost to anchor a gathering trip's cost wrongly.
 
+### What workmanship is worth, and what decides it
+
+Quality is the third input, beside technology and wear, and it is the one that
+reaches furthest: it tells on how fast the work goes, on how much comes back,
+on how long the thing lasts, and - on a garment - on how much weather it keeps
+off. Two agents in the same coat cut to the same pattern are not equally warm.
+
+What decides the quality of what comes out is **the hand and the tool
+together**: `min(Quality::from_hand, tool.material_quality_limit())`. Skill
+decides whether the attempt comes off at all; the tool caps how good the
+result can be. A master with nothing but a crude flake turns out good work and
+not fine work, and a beginner with a fine knife still turns out a beginner's
+work.
+
+A spoiled attempt is not a refusal - `ActionResult::attempted` holds the two
+apart - because a beginner who learns from spoiling a hide that *making does
+not work* never practises into a master, and the whole point of a skill
+deciding the odds is that practice pays.
+
+See ISSUES_FOUND.md #201, including three things added there that the
+specification did not ask for, each of which made the measurement look like a
+regression caused by the specification.
+
 ### Stage 0: what the layer starts holding
 
 A capability table says what a people *can* use. It says nothing about what a

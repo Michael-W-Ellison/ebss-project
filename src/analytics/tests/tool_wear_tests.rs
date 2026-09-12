@@ -19,6 +19,23 @@ fn carrying(agent: &mut Agent, what: &str, how_many: u32) {
         .add_item(InventoryItem::new_with_weight(what.to_string(), how_many, 0.5));
 }
 
+/// A hand that will not spoil what it is making.
+///
+/// Making anything now turns on `Skill::perform_check`, so an unpractised
+/// agent spoils roughly a third of what it attempts. These tests are about
+/// what a recipe wants and what comes out of it, not about luck.
+fn a_hand_that_does_not_spoil_things(agent: &mut crate::agents::Agent) {
+    for trade in [
+        SkillType::Crafting,
+        SkillType::Mining,
+        SkillType::Woodcutting,
+        SkillType::Leatherworking,
+        SkillType::Construction,
+    ] {
+        agent.skills.set_skill_level(trade, 9);
+    }
+}
+
 fn one_agent_world() -> Simulation {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
@@ -256,6 +273,7 @@ fn a_broken_tool_is_a_reason_to_make_a_new_one() {
     // a world and let the real crafting path work through the chain.
     let mut simulation = one_agent_world();
     simulation.population.agents[0] = population.agents.remove(0);
+    a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
 
     let mut made_an_axe = false;
     for _ in 0..12 {
@@ -426,10 +444,30 @@ fn making_the_same_thing_over_and_over_improves_it() {
             carrying(agent, "knappedtip", 1);
             carrying(agent, "lashing", 1);
         }
-        let result = simulation.execute_action(
+        // An unpractised hand spoils a good many attempts and the makings
+        // with them, so the spear is attempted until one comes off: what
+        // this test is about is how good the spear is, not how often the
+        // attempt fails. The hand is deliberately left where it started -
+        // raising it would be raising the very thing being measured.
+        let mut result = simulation.execute_action(
             &Action::Craft { item_type: "spear".to_string() },
             0,
         );
+        for _ in 0..40 {
+            if result.success {
+                break;
+            }
+            {
+                let agent = &mut simulation.population.agents[0];
+                carrying(agent, "wood", 1);
+                carrying(agent, "knappedtip", 1);
+                carrying(agent, "lashing", 1);
+            }
+            result = simulation.execute_action(
+                &Action::Craft { item_type: "spear".to_string() },
+                0,
+            );
+        }
         assert!(result.success, "{:?}", result.message);
         let made = simulation.population.agents[0]
             .inventory

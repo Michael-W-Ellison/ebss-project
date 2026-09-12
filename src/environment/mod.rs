@@ -148,6 +148,21 @@ pub struct ActionResult {
     pub drive_satisfaction: f32,
     /// Message describing what happened
     pub message: Option<String>,
+    /// Whether the attempt was actually made, whatever came of it.
+    ///
+    /// **A refusal and a spoiled attempt are not the same thing.** Being
+    /// refused means the world would not let the work begin - no materials,
+    /// no tool, no fire - and it is worth counting, because a man who is
+    /// refused has learned something true about his situation. Spoiling the
+    /// makings means the work began and went wrong, which costs the turn and
+    /// the materials and teaches only that the hand wants practice.
+    ///
+    /// Without the distinction, wiring a success roll into making taught
+    /// every beginner that **making does not work** - and a beginner who
+    /// concludes that never practises into a master, which is the whole point
+    /// of a skill deciding the odds. See `knife_chain_tests::
+    /// a_settlement_crafts_without_being_refused`, which caught it.
+    pub attempted: bool,
 }
 
 /// Actions that agents can perform in the environment
@@ -413,6 +428,7 @@ impl ActionResult {
             energy_cost: 0.0,
             drive_satisfaction: 0.0,
             message: None,
+            attempted: true,
         }
     }
 
@@ -425,8 +441,20 @@ impl ActionResult {
             experience: 0.0,
             energy_cost: 0.0,
             drive_satisfaction: 0.0,
+            // A plain failure is a refusal: the work never began.
+            attempted: false,
             message: Some(message),
         }
+    }
+
+    /// A failure where the work *did* begin and went wrong.
+    ///
+    /// The turn is spent and the makings with it, and nobody learns that the
+    /// undertaking is impossible - because it is not, it merely wants a
+    /// better hand.
+    pub fn spoiled_in_the_making(mut self) -> Self {
+        self.attempted = true;
+        self
     }
 
     pub fn with_drive_change(mut self, drive: DriveType, amount: f32) -> Self {

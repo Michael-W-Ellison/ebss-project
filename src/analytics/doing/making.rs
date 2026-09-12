@@ -410,8 +410,50 @@ impl Simulation {
             }
 
             let agent = &mut self.population.agents[agent_index];
+
+            // Whether it comes off at all.
+            //
+            // "Skill level should determine crafting success chance, while
+            // tool quality should cap output quality." The success half was
+            // built long ago - `Skill::perform_check` - and had exactly one
+            // caller, the tailoring branch. Every other making in the model
+            // succeeded on the first try whoever attempted it, so a first-day
+            // knapper turned out spears as reliably as a lifetime's flintsman
+            // and nothing but the finished article was ever at stake.
+            //
+            // What is in the hand tells here too, and not on the quality: a
+            // poor tool is a *dangerous* tool, and `tool_risk_roll_count`
+            // rolls the failure and injury checks again for one.
+            let with_what = agent.how_well_made_is_what_i_work_this_trade_with(step.hands);
+            let attempt = agent.skills.perform_check(step.hands, with_what);
+
+            // Cuts and burns, which are the other tax on a bad hand and a bad
+            // tool both.
+            if let Some(hurt) = attempt.injury {
+                let harm = match hurt {
+                    crate::agents::skills::InjuryType::Small => 2.0,
+                    crate::agents::skills::InjuryType::Large => 8.0,
+                };
+                agent.state.health = (agent.state.health - harm).max(1.0);
+            }
+
             for (what, how_many) in step.needs {
                 agent.inventory.remove_item(what, *how_many);
+            }
+
+            if !attempt.success {
+                // The makings are spoiled in the trying, and something is
+                // learned from having spoiled them - the same bargain the
+                // tailoring branch has always struck.
+                agent
+                    .skills
+                    .practise(step.hands, (step.effort / 8.0).round().max(1.0) as u32, tick_now);
+
+                return ActionResult::failure(format!(
+                    "Spoiled the makings of a {} in the trying",
+                    step.makes
+                ))
+                .spoiled_in_the_making();
             }
 
             // A thing that took more doing is the heavier thing to
@@ -866,10 +908,15 @@ impl Simulation {
         // attempts fail; a master's never do. That is what makes a
         // dedicated tailor quicker as well as better, without anything
         // in the model needing a notion of how long a job takes.
+        // What is in the hand tells here too. This passed `None`, so the one
+        // branch in the model that already asked whether an attempt came off
+        // asked it as though every tailor worked barehanded: a crude awl and
+        // a fine one spoiled hides at exactly the same rate.
+        let with_what = agent.how_well_made_is_what_i_work_this_trade_with(SkillType::Leatherworking);
         let attempt = agent
             .skills
             .get_skill_mut(SkillType::Leatherworking)
-            .perform_check(None);
+            .perform_check(with_what);
 
         // Cuts and needle-stabs, which are a beginner's other tax
         if let Some(hurt) = attempt.injury {
@@ -891,10 +938,15 @@ impl Simulation {
             return ActionResult::failure(format!(
                 "Spoiled the {} in the making",
                 recipe.name
-            ));
+            ))
+            .spoiled_in_the_making();
         }
 
-        let quality = Self::expected_garment_quality(agent);
+        // What the hand would turn out, capped by what it is working with.
+        // "Tool quality should cap output quality" - a master tailor with a
+        // crude flake for a knife turns out good work and not fine work.
+        let quality = Self::expected_garment_quality(agent)
+            .min(agent.the_best_i_could_turn_out(SkillType::Leatherworking));
 
         let made = match crate::agents::equipment::ClothingTemplate::from_id(
             recipe.id, quality,

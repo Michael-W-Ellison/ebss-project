@@ -627,7 +627,10 @@ impl Simulation {
         self.population.agents[agent_index].state.effort_this_turn +=
             action_result.energy_cost;
 
-        if !action_result.success {
+        // A refusal is counted; a spoiled attempt is not. The work began and
+        // went wrong, which costs the turn and the makings - see
+        // `ActionResult::attempted`.
+        if !action_result.success && !action_result.attempted {
             *self
                 .actions_failed
                 .entry(Self::name_of(&action))
@@ -679,7 +682,14 @@ impl Simulation {
         // And note how it went, so the agent does more of what pays
         // and less of what does not - and note what the afternoon was
         // like, so it can work out for itself which afternoons pay
-        agent.learn_from_this_here(&action, action_result.success, &what_it_was_like);
+        // Spoiling the makings teaches that this hand wants practice, which
+        // the skill has already been given. What it must not teach is that
+        // the undertaking does not work: a beginner who concludes that never
+        // practises into a master, which is the whole point of a skill
+        // deciding the odds.
+        if action_result.success || !action_result.attempted {
+            agent.learn_from_this_here(&action, action_result.success, &what_it_was_like);
+        }
 
         // Then join the doing to the need it answered and the ground
         // it was answered on, which is what lets a thirsty man walk
