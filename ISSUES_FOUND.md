@@ -15142,3 +15142,132 @@ would have to fire a pot to feel it, and none does inside two years.
 A null that is *exactly* null, on a change that could not have been null if
 the code had run, is worth more than a null within noise. It says where the
 live edge of the model is.
+
+### 205. Shelter is not blocked by shelter: a tool famine, a stone famine, and a pack with no room in it
+
+#204 ended on a count that did not fit its own explanation - thirteen burrows
+started and nine finished across eight worlds in a year, and **not one tent** -
+and concluded that shelter was blocked somewhere upstream of its materials.
+This is where. Every link below is counted over the same eight worlds and one
+year, twelve founders each.
+
+#### 1. Every refusal of a roof is a missing tool, and not one is a missing material
+
+```
+Build          11,817 attempted   11,722 refused  (99.2%)
+  11,722  Build: Nothing in hand that is any use for Mining
+```
+
+That is the **whole** of the refusal record for building. Not one refusal says
+"no wood in hand" - which is what a tent short of poles would say - because
+`Action::Build { structure_type: "tent" }` **is never issued at all**. The
+11,817 are burrows, refused at the verb matrix before the executor is reached,
+because `BURROW` wants something to dig with.
+
+So the materials fix in #204 was correct and was never going to show: the roof
+branch does not get as far as materials.
+
+#### 2. Tool ownership collapses inside the first month
+
+Of everybody alive, sampled monthly:
+
+| month | alive | something to dig with | a knife |
+|---|---|---|---|
+| 0 | 96 | 96 (100%) | 96 (100%) |
+| 1 | 93 | 8 (**9%**) | 7 (8%) |
+| 3 | 82 | 2 (2%) | 1 (1%) |
+| 7 | 57 | **0** | **0** |
+| 10 | 58 | 0 | 0 |
+
+The founders' handaxe and stone knife wear out - forty uses and thirty - and
+are never replaced. From month seven nobody in any world has anything to dig
+with, for the rest of the run.
+
+The nine burrows that do get finished are dug in the window where the founders'
+axes still have life in them. That is the whole of this model's shelter.
+
+#### 3. They *can* remake a tool. They have no stone to do it with
+
+Nothing bars the way: `HAND_AXE` and `STONE_KNIFE` both want **nothing in
+hand**, so the chain restarts bare-handed - two stone into a knapped tip, two
+flax into a lashing, and the two together into a fresh axe.
+
+They have the fibre all year and never the stone:
+
+| month | carrying stone (2 stone, a tip, or a flint) | carrying fibre |
+|---|---|---|
+| 1 | 13 | 37 |
+| 2 | 5 | 39 |
+| 3 | 1 | 28 |
+| 4 | **0** | 22 |
+| 7 | 0 | 5 |
+
+#### 4. Why there is no stone: a stone weighs five and a pack has one unit free
+
+| month | mean room left in a pack | mean pack capacity | people with room for one stone |
+|---|---|---|---|
+| 0 | 38.5 | 42.0 | 96 (100%) |
+| 1 | **0.7** | 13.9 | 2 (2%) |
+| 4 | 1.5 | 12.3 | 9 (11%) |
+| 9 | 0.8 | 11.7 | 2 (4%) |
+
+**A stone weighs 5.0 units. From the end of the first month a pack has between
+0.7 and 1.9 units of room in it.** Two to seventeen per cent of people can fit
+a single stone, and a knapped tip wants two. `PickUp: No room for it` is
+refused 6,298 times, and that is the shape of it.
+
+Note the second column as well, which is a separate question and a sharp one:
+**pack capacity itself falls from 42 to about 12 within the first month** and
+stays there. That is not the pack filling up - it is the pack getting smaller.
+`update_inventory_capacity_from_transport` computes it from
+`how_much_this_body_can_lift()`, age and whether a hand has a child in it, and
+something in that product drops threefold in thirty days. I have not chased
+which; it is the sharpest single lead here.
+
+#### 5. And the tent, separately, is gated on a thing that does not exist
+
+`raising_a_roof` reads `SkinTent.requirements()` - eight wood, four hides -
+and takes whichever it is shortest of. Wood it can gather: 90 of 96 people
+held eight at some point. Hides it cannot:
+
+```
+Hunt               50 attempted   41 refused
+people who ever held one hide:  0 of 96
+most hides anybody held at once: 0     (a tent wants 4)
+```
+
+**Not one person in ninety-six person-years ever holds a single hide.** So the
+hide arm - hunt, or failing that dig in - is the only arm the tent branch ever
+takes, and the burrow is not a fallback in this model. It is the only thing
+there is.
+
+#### What this actually is
+
+One root with four symptoms, and only the last of them looks like shelter:
+
+- nothing to dig with → **no burrows** after month one;
+- nothing to dig with → **`Excavate` refused 8,020 of 8,095 (99.1%)**, which
+  is the larder, which is the winter store. That is issue #243 from the other
+  end;
+- nothing in hand for Crafting or Leatherworking → **`Work` refused 5,621 of
+  10,092**;
+- and no hides, ever → **no tent**, which is what #204 went looking for.
+
+Shelter is blocked by a tool famine. The tool famine is a stone famine. The
+stone famine is a pack with a unit of room in it and a stone that weighs five.
+
+#### What would move it, in the order I would try
+
+1. **Find out why a pack shrinks from 42 to 12 in a month.** It is one
+   product of three terms and it is measurable in an afternoon. If it is
+   wrong, everything above unblocks at once and nothing needs rebalancing.
+2. **Let a working stock be counted against what it is for.** The gate that
+   decides whether a thing is worth picking up is weight against a third of
+   the pack; a stone is five units against a working stock of under six even
+   at full strength, so a knapped tip is at the edge of possible on a good day
+   and off it on every other.
+3. **Let somebody make a tool out of what is under their feet without
+   carrying it home.** Knapping happens where the stone is; the model makes
+   people carry the stone to the decision instead.
+
+None of these is a shelter change, which is the point.
