@@ -15390,3 +15390,109 @@ That is the counted half of standing issue #191.
 None of these is measured yet. Each changes behaviour, and 2,210 units of food
 a year is large enough that removing the loss could move the headline in either
 direction - a settlement that keeps its food also breeds sooner.
+
+### 207. One rule for what may leave the pack: the chain unblocks, and food becomes the constraint
+
+The first of the three fixes #206 named. `what_i_would_swap` now asks the
+question `what_i_would_set_down` was already answering, through one function
+(`Agent::is_this_part_of_the_kit`) rather than two copies of a filter. A man's
+tools and the thing everything else is carried in are not spare - not to make
+room for supper, and not on the chance that a basket is what a digging stick
+was missing.
+
+Nine lines of change. Food is deliberately **not** in the shared rule: the
+shedding path excludes it for a reason local to shedding (you shed to make room
+*for* food), and folding in a third change would have made the measurement
+unreadable.
+
+#### The chain unblocks, comprehensively
+
+Eight worlds, one year, twelve founders. Both columns are the same harness:
+
+| | before | after |
+|---|---|---|
+| mean pack at month 1 | 13.9 | **42.0** |
+| holding a carrier at month 1 | 6% | **100%** |
+| something to dig with, month 1 | 9% | **52%** |
+| something to dig with, month 6 | 4% | **92%** |
+| burrows started / finished | 13 / 9 | **206 / 189** |
+| `Build` refused | 11,722 of 11,817 (99.2%) | 1,093 of 2,688 (**40.7%**) |
+| `Excavate` refused | 8,020 of 8,095 (99.1%) | 899 of 1,232 (**73%**) |
+| `Craft` attempted | 1,182 | **5,435** |
+| `TrySwapping` succeeded | 0 of 11,391 | **2** of 6,663 |
+
+**Twenty-one times as many roofs finished.** The larder goes from one success
+in a hundred to one in four. And `TrySwapping` succeeded for the first time in
+this project's recorded history - twice - because agents now live with their
+materials long enough to hold a hide and a length of flax at once.
+
+Every one of those was a symptom named in #205. All of them moved, and moved
+together, which is what a correctly identified root cause looks like.
+
+#### And survival does not improve
+
+Two blocks of thirty-two seeded worlds, two years:
+
+| | before | after |
+|---|---|---|
+| person-days | 213,850 | **212,527** (−0.6%) |
+| worlds emptied | 42 of 64 | **44 of 64** |
+| out of the first winter | 26 of 64 | **24 of 64** |
+| deaths | 773 | **1,193** |
+
+Person-days is flat - six tenths of a per cent, against a block-to-block noise
+of about ten. The other two look slightly worse and **the blocks disagree in
+direction**: block A emptied one world fewer and held its first winters level,
+block B emptied three more and lost two. By this project's own rule a result is
+only trusted when both blocks agree, so the honest statement is *no measurable
+effect on survival*, not *slightly worse*.
+
+What did move, in both blocks and by a lot, is the shape of the year:
+
+| | before (A / B) | after (A / B) |
+|---|---|---|
+| population at month 3 | 10.9 / 10.8 | 9.8 / 10.2 |
+| population at month 6 | 10.5 / 10.7 | 9.2 / 9.6 |
+| **population at month 9** | 7.9 / 7.8 | **10.0 / 10.9** |
+| hunger's share of deaths | 35.5% / 39.1% | **46.9% / 52.2%** |
+| the weather's share | 22.6% / 19.0% | 13.6% / 14.9% |
+
+Fewer people at three and six months, half as many again at nine, and the
+collapse at the year mark unchanged. Deaths up by half while person-days holds:
+the settlement turns over faster.
+
+#### Why, and it was predicted in this repository years before I got here
+
+The docstring on `WHAT_TWO_HANDS_HOLD` records a sweep of exactly this:
+
+> A bigger pack is not a kindness. What it buys is turns: at 120 the share of
+> the settlement's turns spent on `Work` rises by twenty-seven per cent and the
+> share spent on `Eat` falls, because a person with materials in hand has
+> something to make and making competes with eating.
+
+That is what happened. Restoring the basket restored the forty-two-unit pack
+the founders were always meant to have, agents filled it with materials,
+`Craft` went up four and a half times and `Work` by a quarter - and hunger went
+from a third of deaths to a half while the weather's share fell by a third.
+
+**The block is gone and the binding constraint has moved.** Shelter, tools and
+the larder are no longer what stops a settlement; food is, and harder than
+before. That is a better model than the one that preceded it - it is doing
+what its own source says it does - and it is not yet a longer-lived one.
+
+#### What this change is and is not
+
+It is a correctness fix, and I would keep it on those grounds alone: an action
+that cannot succeed in any world this model can produce was destroying 150
+baskets, 156 tools and 2,210 units of food a year, and two places deciding
+whether a thing may leave the pack now hold one rule between them.
+
+It is not a survival improvement, and nothing here should be read as one.
+
+The draw counts are re-recorded (8,733 → 8,936 over 120 ticks; 847,722 →
+603,478 over a year - the year count falls by a third because the settlements
+are smaller for most of it). Standing suite failures unchanged at ten.
+
+The next thing to try is not the other two fixes from #206 - those are small
+and will not move food. It is the hunger constraint itself, now that it is
+the one holding.

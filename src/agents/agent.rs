@@ -1937,20 +1937,39 @@ impl Agent {
     /// weighs two a stick, so the ten units of firewood filling every pack in
     /// the world were five sticks and five is not more than six. A reserve
     /// counted in things cannot answer a question asked in weight.
-    pub fn what_i_would_set_down(&self) -> Option<String> {
-        use crate::environment::making;
+    /// Whether this is part of somebody's kit rather than something they
+    /// happen to be carrying.
+    ///
+    /// **One rule, one place.** A tool is what you work with and a basket is
+    /// what everything else is in; neither is spare, and neither is spare for
+    /// *any* reason - not to make room for supper, and not on the chance that
+    /// a basket is what a digging stick was missing.
+    ///
+    /// That second clause is why this is a function. The rule existed, in
+    /// `what_i_would_set_down`, and was written as two inline filters; the
+    /// swap machinery in `what_i_would_swap` never asked. So a man would not
+    /// put his basket down to make room for food and would cheerfully destroy
+    /// it in an experiment - and measured over eight worlds and a year that
+    /// experiment ate **150 baskets and 156 tools** and succeeded not once.
+    /// Two places deciding whether a thing may leave the pack, and only one of
+    /// them holding the rule. See ISSUES_FOUND #206, and #203 and #204 for the
+    /// same defect in two other coats.
+    pub fn is_this_part_of_the_kit(called: &str) -> bool {
+        crate::environment::making::EVERY_TOOL
+            .iter()
+            .any(|tool| tool.called == called)
+            || Self::WHAT_CARRIES
+                .iter()
+                .any(|(carrier, _)| *carrier == called)
+    }
 
+    pub fn what_i_would_set_down(&self) -> Option<String> {
         self.inventory
             .get_all_items()
             .iter()
             .filter(|(_, item)| item.quantity > 0)
             .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
-            .filter(|(name, _)| {
-                !making::EVERY_TOOL.iter().any(|tool| tool.called == name.as_str())
-            })
-            .filter(|(name, _)| {
-                !Self::WHAT_CARRIES.iter().any(|(called, _)| *called == name.as_str())
-            })
+            .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
             .max_by(|a, b| {
                 let load = |item: &InventoryItem| item.quantity as f32 * item.weight_per_unit;
                 load(a.1)
@@ -3363,6 +3382,19 @@ impl Agent {
                     // Not a thing the step already wants, and not the part
                     // that is missing
                     if step.needs.iter().any(|(what, _)| *what == put_in) {
+                        continue;
+                    }
+
+                    // And not the axe in his hand or the basket on his back.
+                    //
+                    // Spending the makings on a failed attempt is the honest
+                    // cost of trying things - `trying_a_swap` says so and is
+                    // right. Spending the *substitute* means every trial
+                    // destroys a thing chosen precisely because it was not
+                    // part of the recipe, and nothing said that a man's tools
+                    // and the thing he carries everything in were off that
+                    // list. See `is_this_part_of_the_kit`.
+                    if Self::is_this_part_of_the_kit(put_in) {
                         continue;
                     }
 
