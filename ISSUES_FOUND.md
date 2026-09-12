@@ -15496,3 +15496,46 @@ are smaller for most of it). Standing suite failures unchanged at ten.
 The next thing to try is not the other two fixes from #206 - those are small
 and will not move food. It is the hunger constraint itself, now that it is
 the one holding.
+
+#### Measured again, four blocks a side, and one thing above is wrong
+
+The two blocks in the table above were not enough to separate a small effect
+from noise, so the whole thing was re-run on two fresh seed blocks - and
+**before as well as after**, because a new block with no matching baseline
+answers nothing. Both binaries were built from the two commits, checksummed
+apart, and smoke-tested on one seed to prove they were not the same program
+twice.
+
+| block | seeds | person-days before | after | | worlds emptied | out of the first winter |
+|---|---|---|---|---|---|---|
+| A | 0–31 | 105,533 | 103,958 | −1.5% | 24 → 23 | 10 → 10 |
+| B | 32–63 | 108,317 | 108,569 | +0.2% | 18 → 21 | 16 → 14 |
+| C | 64–95 | 107,942 | 103,229 | −4.4% | 24 → 24 | 15 → 14 |
+| D | 96–127 | 102,875 | 99,678 | −3.1% | 27 → 28 | 8 → 10 |
+| **all** | | **424,667** | **415,434** | **−2.2%** | **93 → 96** of 128 | **49 → 48** of 128 |
+
+**The correction.** On two blocks I read worlds emptied and first winters as
+"slightly worse, but the blocks disagree". On four blocks that does not hold:
+**first winters is flat** - 49 against 48 out of 128, which is one settlement -
+and worlds emptied moves by three in a hundred and twenty-eight, 72.7% to
+75.0%, inside what a block of this size varies by anyway. The measure I said
+looked worse is the one that turns out to be level.
+
+What does survive four blocks is the measure I called flat: **person-days are
+down about two per cent, and three of the four blocks agree.** Per block:
+−1.5%, +0.2%, −4.4%, −3.1%; mean −2.2% with a spread of about four and a half
+points, which is roughly two standard errors. That is weak evidence of a real
+small loss rather than proof of one - but it is the only survival signal in the
+set that points anywhere consistently, and it points down.
+
+So the honest summary, on 128 worlds a side:
+
+- **the chain unblocks, enormously** - twenty-one times the roofs, the larder
+  from one success in a hundred to one in four, and every symptom in #205
+  moving together;
+- **survival is flat to two per cent worse**, and nothing here is an
+  improvement in how long a people lasts.
+
+Both halves of that were true after two blocks as well. What the extra hour
+bought was knowing which of the three survival numbers to believe, and it was
+not the two I would have guessed.
