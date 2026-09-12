@@ -759,6 +759,14 @@ impl Simulation {
                 // else says otherwise
                 let mut item = InventoryItem::new_with_weight(item_id, off_the_carcass, 2.0);
                 item.food_data = food_data;
+
+                // And how good it is, which the caller decided when it read
+                // the flake in the hand. A hide is the first thing in this
+                // model whose worth is set by somebody's work rather than by
+                // its own making, and it is the thing a coat is cut from -
+                // so this is where the specification's "same clothing items
+                // but of differing quality" actually starts.
+                item.quality = stack.quality;
                 item
             })
             .collect()

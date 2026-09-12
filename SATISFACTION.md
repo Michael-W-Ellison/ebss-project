@@ -350,6 +350,34 @@ See ISSUES_FOUND.md #201, including three things added there that the
 specification did not ask for, each of which made the measurement look like a
 regression caused by the specification.
 
+### Where workmanship attaches, and whether it survives being put down
+
+The cap has a third input beside the hand and the tool: **what the thing is
+made of**. A length of crude cordage does not become a fine spear because a
+good man lashed it, and a coat is only as good as the hide it is cut from. So
+the stone-age chain caps its output at one rung above the worst of its
+makings, and tailoring caps the garment at one rung above the hide - which is
+the specification's own example running end to end, since the hide now carries
+the worth of the flake that skinned it. Two agents in the same coat differ in
+warmth because of a butchering three actions back.
+
+That needed quality to be able to *travel*. It lived in two places - a tool in
+a pack, a garment on a back - and the produced-goods channel between them
+carried a name and a number and nothing else, so a hide taken with a fine
+flake and a hide hacked off with a broken one arrived indistinguishable.
+
+And it needed a stack to stop throwing it away. A pack holds one entry per
+kind of thing, so the second coat is merged into the first, and the merge
+dropped the newcomer's quality and durability outright: every improvement
+anybody ever made to anything they already had went nowhere. Both are now
+blended by how much of each there is - the rule the food clock has used for
+age since #61 - with integer division, so the blend can never round a stack
+*up* into a rung it has not earned.
+
+See ISSUES_FOUND.md #203, including the two places in the source where this
+fault had been correctly described in a comment and worked around rather than
+fixed.
+
 ### Stage 0: what the layer starts holding
 
 A capability table says what a people *can* use. It says nothing about what a

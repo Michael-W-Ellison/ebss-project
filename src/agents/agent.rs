@@ -184,6 +184,61 @@ impl InventoryItem {
             (Some(only), None) | (None, Some(only)) => Some(only),
             (None, None) => None,
         };
+
+        // How well made the stack is, and how much life is left in it.
+        //
+        // These were simply **dropped**: whatever the newcomer was worth,
+        // the stack went on saying what it had said before. A pack holds one
+        // entry per kind of thing, so every second coat, every second spear,
+        // every second flake an agent ever made was merged into the first
+        // one and its workmanship went nowhere. The tailoring branch worked
+        // around it by putting a coat on the moment it was finished rather
+        // than folding it away - over eight thousand ticks one settlement
+        // made two hundred and eighty garments and wore a hundred and sixty
+        // - and the knapping branch worked around it by throwing a
+        // worn-through tool out before adding a fresh one, because stacking
+        // handed the new tool the broken one's durability.
+        //
+        // Blended by how much of each there is, which is what `the_older_clock`
+        // directly above already does for age. No free improvement for the
+        // items already in the stack, and nothing lost by the one going in.
+        self.quality = match (self.quality, other.quality) {
+            (Some(ours), Some(theirs_quality)) => {
+                Some(ours.mixed_into(theirs_quality, mine, theirs))
+            }
+            // An unrecorded stack is ordinary work - which is how every
+            // reader of this field already treats one - not an absence that
+            // the other side gets to speak for.
+            (Some(only), None) => {
+                Some(only.mixed_into(super::skills::Quality::Common, mine, theirs))
+            }
+            (None, Some(only)) => {
+                Some(super::skills::Quality::Common.mixed_into(only, mine, theirs))
+            }
+            (None, None) => None,
+        };
+
+        self.current_durability =
+            Self::blended(self.current_durability, other.current_durability, mine, theirs);
+        self.max_durability =
+            Self::blended(self.max_durability, other.max_durability, mine, theirs);
+    }
+
+    /// One measure blended into another by how much of each there is.
+    ///
+    /// A measure only one side records stands for the whole stack: a thing
+    /// with no durability at all is food or firewood, and averaging a tool's
+    /// life against nothing would say the tool was half worn out.
+    fn blended(mine_worth: Option<f32>, theirs_worth: Option<f32>, mine: u32, theirs: u32) -> Option<f32> {
+        match (mine_worth, theirs_worth) {
+            (Some(ours), Some(theirs_worth)) => {
+                let mine = mine.max(1) as f32;
+                let theirs = theirs.max(1) as f32;
+                Some((ours * mine + theirs_worth * theirs) / (mine + theirs))
+            }
+            (Some(only), None) | (None, Some(only)) => Some(only),
+            (None, None) => None,
+        }
     }
 
     /// Whether this is something to eat.
@@ -3950,6 +4005,26 @@ impl Agent {
         how_many: u32,
         weight: f32,
     ) -> super::InventoryItem {
+        self.a_tool_fresh_from_these_hands_out_of(called, how_many, weight, None)
+    }
+
+    /// The same, out of makings whose own worth is known.
+    ///
+    /// The hand caps the work, the tool in the hand caps the work, and so
+    /// does what the work is *made of*: a length of crude cordage does not
+    /// become a fine spear because a good man lashed it. `limit_to_material`
+    /// has expressed exactly this since long before I got here and had no
+    /// caller at all - it was a rule written down and never applied.
+    ///
+    /// `None` for makings nobody decided the worth of, which is most of them:
+    /// a flint nodule out of a riverbed is a flint nodule.
+    pub fn a_tool_fresh_from_these_hands_out_of(
+        &self,
+        called: &str,
+        how_many: u32,
+        weight: f32,
+        out_of: Option<super::skills::Quality>,
+    ) -> super::InventoryItem {
         let mut made = super::InventoryItem::new_with_weight(called.to_string(), how_many, weight);
 
         if let Some(tool) = crate::environment::making::EVERY_TOOL
@@ -3970,7 +4045,12 @@ impl Agent {
             // `the_best_i_could_turn_out`.
             let as_good_as_the_hand = super::skills::Quality::from_hand(hand);
             let as_good_as_the_tools_allow = self.the_best_i_could_turn_out(trade);
-            let quality = as_good_as_the_hand.min(as_good_as_the_tools_allow);
+            let quality = match out_of {
+                Some(makings) => as_good_as_the_hand
+                    .min(as_good_as_the_tools_allow)
+                    .limit_to_material(makings),
+                None => as_good_as_the_hand.min(as_good_as_the_tools_allow),
+            };
 
             // And a better-made thing lasts longer - which this model already
             // said, through the hand: `how_long_this_one_lasts` takes the

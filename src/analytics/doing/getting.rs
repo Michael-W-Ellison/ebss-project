@@ -849,12 +849,26 @@ impl Simulation {
                 // If killed, get drops
                 let mut items_gained = Vec::new();
                 if !animal.is_alive() {
+                    // What comes off it is as good as the flake that took it
+                    // off - see the same stamp on the fighting branch.
+                    let as_good_a_knife = self.population.agents[agent_index]
+                        .how_well_made_is_what_i_work_this_trade_with(
+                            crate::agents::skills::SkillType::Leatherworking,
+                        );
+
                     for drop in &species.drops {
                         if rng.gen_bool(drop.drop_chance as f64) {
                             let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
-                            items_gained.push(crate::environment::ItemStack {
-                                material_id: drop.material_id.clone(),
-                                quantity,
+                            items_gained.push(match as_good_a_knife {
+                                Some(quality) => crate::environment::ItemStack::of_quality(
+                                    drop.material_id.clone(),
+                                    quantity,
+                                    quality,
+                                ),
+                                None => crate::environment::ItemStack::new(
+                                    drop.material_id.clone(),
+                                    quantity,
+                                ),
                             });
                         }
                     }
@@ -1035,10 +1049,10 @@ impl Simulation {
                 if let Some(timer) = animal.product_timers.get(&product.material_id) {
                     if *timer == 0 {
                         // Product is ready
-                        collected_products.push(crate::environment::ItemStack {
-                            material_id: product.material_id.clone(),
-                            quantity: product.quantity,
-                        });
+                        collected_products.push(crate::environment::ItemStack::new(
+                            product.material_id.clone(),
+                            product.quantity,
+                        ));
 
                         // Reset timer
                         animal.product_timers.insert(product.material_id.clone(), product.production_time);
@@ -1137,10 +1151,10 @@ impl Simulation {
                 // Generate items from drops
                 for drop in &drops {
                     let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
-                    items_gained.push(crate::environment::ItemStack {
-                        material_id: drop.material_id.clone(),
+                    items_gained.push(crate::environment::ItemStack::new(
+                        drop.material_id.clone(),
                         quantity,
-                    });
+                    ));
                 }
 
                 // Add to agent inventory.

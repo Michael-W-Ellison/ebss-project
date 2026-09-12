@@ -402,21 +402,43 @@ impl Simulation {
             }
 
             // What is killed in a fight is still worth butchering -
-            // a wolf driven off is a wolf, a wolf killed is a hide
+            // a wolf driven off is a wolf, a wolf killed is a hide.
+            //
+            // And what comes off it is as good as the flake that took it
+            // off: a hide skinned with a fine edge is a hide worth making a
+            // coat from, and one hacked off with a broken one is not.
+            let as_good_a_knife = self.population.agents[agent_index]
+                .how_well_made_is_what_i_work_this_trade_with(
+                    crate::agents::skills::SkillType::Leatherworking,
+                );
+
             let mut items_gained = Vec::new();
             for drop in &species.drops {
                 if rng.gen_bool(drop.drop_chance as f64) {
                     let quantity =
                         rng.gen_range(drop.min_quantity..=drop.max_quantity);
-                    items_gained.push(crate::environment::ItemStack {
-                        material_id: drop.material_id.clone(),
-                        quantity,
+                    items_gained.push(match as_good_a_knife {
+                        Some(quality) => crate::environment::ItemStack::of_quality(
+                            drop.material_id.clone(),
+                            quantity,
+                            quality,
+                        ),
+                        None => crate::environment::ItemStack::new(
+                            drop.material_id.clone(),
+                            quantity,
+                        ),
                     });
                 }
             }
 
+            // How much comes off the carcass is the waste question, and the
+            // waste question reads the yield channel. This branch read the
+            // *speed* channel instead - the one that counts a worn edge and
+            // a tool still in the pack - so a kill in a fight and the same
+            // kill in a hunt were butchered by two different rules. Two
+            // spellings of one question; see `could_bring_it_down`.
             let knife = self.population.agents[agent_index]
-                .how_fast_my_tools_make_this_go(
+                .how_much_my_tools_bring_back(
                     crate::agents::skills::SkillType::Leatherworking,
                 );
             let butchered = self.butcher(&items_gained, knife);

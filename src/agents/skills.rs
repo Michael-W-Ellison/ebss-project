@@ -278,9 +278,18 @@ impl Quality {
 
     /// Downgrade quality by N levels (for recycling)
     pub fn downgrade(&self, levels: u8) -> Quality {
-        let current_level = *self as i32;
-        let new_level = (current_level - levels as i32).max(0);
-        match new_level {
+        Self::on_the_ladder(*self as i32 - levels as i32)
+    }
+
+    /// The rung this number stands on, clamped to the ladder's ends.
+    ///
+    /// The ladder is walked by number in three places now - downgrading,
+    /// blending a stack, and reading a stored rung back - and each of them
+    /// had, or would have had, its own copy of this `match`. Adding a rung
+    /// to the enum and missing one of those copies is the kind of fault that
+    /// does not show up until a world has run for a year.
+    pub fn on_the_ladder(rung: i32) -> Quality {
+        match rung.clamp(0, Quality::Masterwork as i32) {
             0 => Quality::Crude,
             1 => Quality::Poor,
             2 => Quality::Common,
@@ -288,6 +297,29 @@ impl Quality {
             4 => Quality::Fine,
             _ => Quality::Masterwork,
         }
+    }
+
+    /// What a stack is worth when this much of it is mixed with that much of
+    /// something else.
+    ///
+    /// A stack carries one quality for the whole of it, so putting a better
+    /// thing into a stack of worse ones has to mean *something*. Two answers
+    /// are wrong and both were once in the code: taking the newcomer's
+    /// quality hands every worse item in the stack a free improvement, and
+    /// dropping it - which is what `absorb` actually did - loses the better
+    /// thing entirely. The honest answer is the one the food clock already
+    /// gives for age: blend by how much of each there is.
+    ///
+    /// Integer division, so the blend never rounds *up* into a rung the
+    /// stack has not earned. One fine coat folded in with three plain ones
+    /// reads as plain, not as good.
+    pub fn mixed_into(self, other: Quality, mine: u32, theirs: u32) -> Quality {
+        let mine = mine.max(1) as i32;
+        let theirs = theirs.max(1) as i32;
+
+        Self::on_the_ladder(
+            ((self as i32) * mine + (other as i32) * theirs) / (mine + theirs),
+        )
     }
 }
 

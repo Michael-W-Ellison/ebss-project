@@ -137,10 +137,7 @@ fn the_condition_of_a_herd_changes_gradually() {
 fn the_same_kill_yields_more_meat_in_the_autumn() {
     use crate::environment::ItemStack;
 
-    let dropped = vec![ItemStack {
-        material_id: "meat".to_string(),
-        quantity: 20,
-    }];
+    let dropped = vec![ItemStack::new("meat".to_string(), 20)];
 
     fn meat_on(day: u32, dropped: &[crate::environment::ItemStack]) -> u32 {
         let mut simulation = a_world();

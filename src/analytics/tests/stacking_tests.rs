@@ -236,3 +236,183 @@ fn what_is_given_is_the_thing_and_not_its_name() {
         "with the same clock it had before it changed hands"
     );
 }
+
+// --------------------------------------------------------------------------
+// What happens to workmanship when one lot is put in with another
+// --------------------------------------------------------------------------
+//
+// The clock above was fixed years of world-time ago; the two things beside it
+// on the same stack were not. `absorb` merged the quantity and the clock and
+// **dropped the quality and the durability outright**, so the stack went on
+// saying whatever it had said before the better thing went into it.
+//
+// A pack holds one entry per kind of thing, so that is not an edge case: it
+// is every second coat, every second spear, every second flake an agent ever
+// makes. The silence had been worked around twice rather than fixed. The
+// tailoring branch puts a coat on the moment it is finished rather than
+// folding it away, because a folded one lost its worth - over eight thousand
+// ticks one settlement made two hundred and eighty garments and wore a
+// hundred and sixty. The knapping branch throws a worn-through tool out
+// before adding a fresh one, because stacking handed the new tool the broken
+// one's life. Both workarounds are still there and both are still right; they
+// are simply no longer load-bearing.
+//
+// The rule is the one `the_older_clock` above already uses for age: blend by
+// how much of each there is.
+
+use crate::agents::skills::Quality;
+
+fn a_lot_worth(called: &str, how_many: u32, quality: Quality) -> InventoryItem {
+    let mut lot = InventoryItem::new_with_weight(called.to_string(), how_many, 2.0);
+    lot.quality = Some(quality);
+    lot
+}
+
+/// **The defect this test exists for.** A better second thing was worth
+/// nothing at all once it went into the pack.
+#[test]
+fn a_better_thing_put_in_with_a_worse_one_is_not_thrown_away() {
+    let mut worse = a_lot_worth("coat", 1, Quality::Crude);
+    worse.absorb(a_lot_worth("coat", 1, Quality::Masterwork));
+
+    assert_eq!(worse.quantity, 2);
+    assert!(
+        worse.quality.expect("the stack says what it is worth") > Quality::Crude,
+        "a masterwork coat folded in with a crude one has to leave the stack \
+         better than it found it, and this dropped it outright"
+    );
+}
+
+/// And the other way about: nobody gets a free upgrade either.
+#[test]
+fn a_worse_thing_put_in_with_a_better_one_drags_the_stack_down() {
+    let mut better = a_lot_worth("coat", 1, Quality::Masterwork);
+    better.absorb(a_lot_worth("coat", 1, Quality::Crude));
+
+    assert!(
+        better.quality.expect("the stack says what it is worth") < Quality::Masterwork,
+        "a crude coat in the same bundle has to cost the bundle something"
+    );
+}
+
+/// How much of each there is decides how far it moves. One fine thing among
+/// many plain ones is a fine thing among many plain ones; it does not make
+/// the bundle fine.
+#[test]
+fn the_quality_blend_goes_by_how_much_of_each_there_is() {
+    let mut many_plain = a_lot_worth("coat", 9, Quality::Common);
+    many_plain.absorb(a_lot_worth("coat", 1, Quality::Masterwork));
+
+    assert_eq!(
+        many_plain.quality,
+        Some(Quality::Common),
+        "one masterwork coat in ten plain ones does not make ten masterwork coats"
+    );
+
+    let mut one_plain = a_lot_worth("coat", 1, Quality::Common);
+    one_plain.absorb(a_lot_worth("coat", 9, Quality::Masterwork));
+
+    assert!(
+        one_plain.quality.expect("worth something") >= Quality::Fine,
+        "and nine masterwork coats are not dragged to plain by one plain one"
+    );
+}
+
+/// The blend never rounds up into a rung the stack has not earned.
+#[test]
+fn the_quality_blend_never_invents_workmanship() {
+    // Crude and Common, half and half, falls between Crude and Poor: it reads
+    // as the lower of the two rungs it lands between, not the higher.
+    let mut crude = a_lot_worth("cord", 1, Quality::Crude);
+    crude.absorb(a_lot_worth("cord", 1, Quality::Common));
+
+    assert_eq!(crude.quality, Some(Quality::Poor));
+    assert!(crude.quality.unwrap() < Quality::Common);
+}
+
+/// A lot nobody recorded the worth of is ordinary work, not an absence for
+/// the other side to speak for.
+#[test]
+fn an_unmarked_lot_counts_as_ordinary_rather_than_as_nothing() {
+    let mut unmarked = InventoryItem::new_with_weight("coat".to_string(), 1, 2.0);
+    unmarked.absorb(a_lot_worth("coat", 1, Quality::Masterwork));
+
+    assert_eq!(
+        unmarked.quality,
+        Some(Quality::Good),
+        "an unrecorded coat is an ordinary coat, so a masterwork one beside it \
+         makes a pair of good ones - it neither hands the unrecorded one \
+         masterwork nor lets it swallow the masterwork one"
+    );
+
+    // And with more of the ordinary work than of the good, the bundle stays
+    // ordinary: three plain coats and one masterwork average to plain.
+    let mut mostly_unmarked = InventoryItem::new_with_weight("coat".to_string(), 3, 2.0);
+    mostly_unmarked.absorb(a_lot_worth("coat", 1, Quality::Masterwork));
+
+    assert_eq!(mostly_unmarked.quality, Some(Quality::Common));
+}
+
+/// And a stack of things with no workmanship in them goes on saying so.
+#[test]
+fn berries_do_not_acquire_a_workmanship_by_being_stacked() {
+    let mut berries = a_lot_of("blackberry", 12, 0);
+    berries.absorb(a_lot_of("blackberry", 8, 0));
+
+    assert_eq!(berries.quantity, 20);
+    assert_eq!(berries.quality, None, "nobody made a blackberry");
+}
+
+/// **The defect this test exists for.** A fresh tool put in with a worn one
+/// took the worn one's life, which is why the knapping branch has to throw
+/// the worn one away first.
+#[test]
+fn a_fresh_tool_stacked_with_a_worn_one_lands_between_them() {
+    let mut worn = InventoryItem::new_with_weight("handaxe".to_string(), 1, 2.0);
+    worn.current_durability = Some(10.0);
+    worn.max_durability = Some(100.0);
+
+    let mut fresh = InventoryItem::new_with_weight("handaxe".to_string(), 1, 2.0);
+    fresh.current_durability = Some(100.0);
+    fresh.max_durability = Some(100.0);
+
+    worn.absorb(fresh);
+
+    let left = worn.current_durability.expect("the stack has a life");
+    assert!(
+        left > 10.0 && left < 100.0,
+        "two axes, one all but used up and one new, is a pair of axes half worn \
+         through - it was reading as the worn one alone (left {left})"
+    );
+    assert_eq!(worn.max_durability, Some(100.0));
+}
+
+/// A thing with no life at all is food or firewood, and averaging a tool
+/// against one would say the tool was half used up.
+#[test]
+fn a_thing_with_no_durability_does_not_dilute_one_that_has() {
+    let mut axe = InventoryItem::new_with_weight("handaxe".to_string(), 1, 2.0);
+    axe.current_durability = Some(80.0);
+    axe.max_durability = Some(100.0);
+
+    axe.absorb(InventoryItem::new_with_weight("handaxe".to_string(), 1, 2.0));
+
+    assert_eq!(axe.current_durability, Some(80.0));
+    assert_eq!(axe.max_durability, Some(100.0));
+}
+
+/// The pack gives the same answer the item does.
+///
+/// `absorb` is reached through `Inventory::add_item` in every live path, and
+/// that is the one that has to come out right.
+#[test]
+fn the_pack_keeps_the_blended_worth() {
+    let mut inventory = Inventory::new(20, 500.0);
+
+    assert!(inventory.add_item(a_lot_worth("coat", 1, Quality::Crude)));
+    assert!(inventory.add_item(a_lot_worth("coat", 1, Quality::Fine)));
+
+    let held = inventory.get_item("coat").expect("one entry, two coats");
+    assert_eq!(held.quantity, 2);
+    assert!(held.quality.expect("worth something") > Quality::Crude);
+}

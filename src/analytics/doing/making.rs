@@ -437,6 +437,18 @@ impl Simulation {
                 agent.state.health = (agent.state.health - harm).max(1.0);
             }
 
+            // How good the makings are, read before they are consumed. The
+            // worst of them decides: a spear is a shaft, a point and a
+            // lashing, and it is only ever as good as the poorest of the
+            // three.
+            let out_of = step
+                .needs
+                .iter()
+                .filter_map(|(what, _)| {
+                    agent.inventory.get_item(what).and_then(|carried| carried.quality)
+                })
+                .min();
+
             for (what, how_many) in step.needs {
                 agent.inventory.remove_item(what, *how_many);
             }
@@ -471,10 +483,11 @@ impl Simulation {
                 agent.inventory.remove_item(step.makes, had);
             }
 
-            let made = agent.a_tool_fresh_from_these_hands(
+            let made = agent.a_tool_fresh_from_these_hands_out_of(
                 step.makes,
                 step.how_many,
                 step.effort / 4.0,
+                out_of,
             );
             if !agent.inventory.add_item(made) {
                 debug!(
@@ -945,8 +958,27 @@ impl Simulation {
         // What the hand would turn out, capped by what it is working with.
         // "Tool quality should cap output quality" - a master tailor with a
         // crude flake for a knife turns out good work and not fine work.
-        let quality = Self::expected_garment_quality(agent)
-            .min(agent.the_best_i_could_turn_out(SkillType::Leatherworking));
+        //
+        // And capped again by the hide itself, which now carries the worth
+        // of the flake that skinned it. This is the specification's own
+        // example running end to end: "two agents with the same clothing
+        // items but of differing quality should have different weather
+        // resistances", and what makes them differ is a butchering three
+        // actions back.
+        let out_of = agent
+            .inventory
+            .get_item(recipe.material_item)
+            .and_then(|carried| carried.quality);
+
+        let quality = {
+            let as_far_as_hand_and_tool_go = Self::expected_garment_quality(agent)
+                .min(agent.the_best_i_could_turn_out(SkillType::Leatherworking));
+
+            match out_of {
+                Some(hide) => as_far_as_hand_and_tool_go.limit_to_material(hide),
+                None => as_far_as_hand_and_tool_go,
+            }
+        };
 
         let made = match crate::agents::equipment::ClothingTemplate::from_id(
             recipe.id, quality,

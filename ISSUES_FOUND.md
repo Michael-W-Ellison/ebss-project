@@ -14836,3 +14836,131 @@ instead of being taken on trust or measured for two hours.*
 a save written before this will not load. There are no committed saves and the
 save/load tests round-trip within a run, so nothing in the repository is
 affected - but a save file kept outside it is now stale.
+
+### 203. A stack threw away the workmanship put into it, and quality could not travel from one action to the next
+
+Two halves of one thing: quality was recorded in two places and could not
+survive being put down in either of them.
+
+#### The stacking fault
+
+A pack is a `BTreeMap` keyed by item id - **one entry per kind of thing** -
+so the second coat an agent makes does not sit beside the first, it is merged
+into it by `InventoryItem::absorb`. That function merged the quantity, merged
+the food clock properly (`the_older_clock`, quantity-weighted, fixed years of
+world-time ago in #61), and **dropped the newcomer's quality and durability
+outright**. Whatever the better thing was worth, the stack went on saying what
+it had said before.
+
+That is not an edge case. It is every second coat, every second spear, every
+second flake anybody ever makes.
+
+What makes it worth writing down is that **it had been worked around twice
+rather than fixed, and both workarounds are load-bearing comments in the
+source**:
+
+- `making_clothing` puts a coat on the instant it is finished rather than
+  folding it away, with the comment "an inventory stack carries one quality
+  for the whole stack, so a better second coat merged into the first and was
+  recorded as no better than it... one settlement made two hundred and eighty
+  garments and put on a hundred and sixty."
+- `crafting` throws a worn-through tool away before adding a fresh one,
+  because "stacking would hand the fresh tool the broken one's durability."
+
+Two independent authors hit the same fault, described it accurately in a
+comment, routed around it, and left it. Both routes are still there and both
+are still right on their own merits - a coat on a back beats a coat in a bag -
+but neither is holding anything up now.
+
+The rule is the one sitting immediately above it in the same function: blend
+by how much of each there is.
+
+| | Was | Is |
+|---|---|---|
+| food clock | quantity-weighted blend | unchanged |
+| quality | **discarded** | quantity-weighted blend, `Quality::mixed_into` |
+| durability | **discarded** | quantity-weighted blend |
+
+Two details worth stating because either could have gone the other way:
+
+- **Integer division, so the blend never rounds up.** One masterwork coat
+  among nine plain ones reads as plain. Rounding to nearest would have handed
+  nine plain coats a free rung, which is the same class of lie as the one
+  being fixed, pointing the other way.
+- **An unrecorded lot counts as ordinary, not as nothing.** `None` merged
+  against `Some` the way the food clock does it - "the one record we have
+  stands for the stack" - would let one fine coat make four fine coats.
+  Every reader of this field already treats an unmarked item as `Common`, so
+  the blend does too. `(None, None)` stays `None`: nobody made a blackberry.
+
+#### Where quality attaches
+
+`ItemStack { material_id, quantity }` is the produced-goods channel - what a
+working hands to whatever comes next - and it could not say how good the goods
+were. So a hide skinned with a fine flake and a hide hacked off with a broken
+one arrived indistinguishable and made the same coat. It now carries an
+`Option<Quality>`, and butchery is the first thing to set it: what comes off a
+carcass is as good as the flake that took it off.
+
+That gives `limit_to_material` its first callers. **It had been written down
+since the beginning of the project and called from nowhere but its own unit
+test** - the third cap the specification asks for, one rung above the
+material, sitting in `skills.rs` as a rule in the codebase that was not a rule
+in the model. Both making paths read it now:
+
+- the stone-age chain caps what it turns out at one rung above **the worst of
+  the makings**, read before they are consumed - a spear is a shaft, a point
+  and a lashing, and it is only as good as the poorest of the three;
+- tailoring caps the garment at one rung above **the hide**, which is now the
+  specification's own example running end to end: two agents in the same coat
+  differ in warmth because of a butchering three actions back.
+
+The cap is a cap and not a floor in both places, which has its own tests: the
+best leather in the world does not make a beginner's coat a good coat.
+
+#### A second defect found on the way
+
+`fighting.rs` butchered a kill with `how_fast_my_tools_make_this_go` and
+`getting.rs` butchered the same kill with `how_much_my_tools_bring_back`. How
+much comes off a carcass is a *waste* question, so the yield channel is the
+right one; the speed channel counts a worn edge and a tool still in the pack,
+neither of which has anything to do with how much meat there is. The same kill
+was butchered by two different rules depending on whether it was hunted or
+fought. Now both read the yield channel. This is the third time this codebase
+has lost something to two spellings of one question - see `could_bring_it_down`
+- and the first two both cost measurable behaviour.
+
+#### Measured: null, and why that was the expected answer
+
+| | Before | After |
+|---|---|---|
+| person-days | 213,826 | **213,850** (+0.01%) |
+| worlds emptied | 42 of 64 | **42 of 64** |
+| out of the first winter | 26 of 64 | **26 of 64** |
+
+Both blocks agree, and the two measures that say whether a people lives -
+worlds emptied and first winters - are identical. The recorded draw counts are
+also unchanged, so the world takes the same branches over seed 4242's 120
+ticks and seed 0's year; the twenty-four person-days say something moved
+somewhere across sixty-four worlds and two years, and nothing more than that.
+
+That is the answer this should have given, and it is worth writing down why,
+because a null result is easy to mistake for a change that did not land:
+
+- **A founder is crude-handed and crude-tooled.** Every new cap binds at one
+  rung above Crude, and the hand was already turning out Crude. The material
+  cap and the tool cap agree on every value a two-year settlement actually
+  reaches, so the cap that is now correct was not previously wrong *for these
+  settlements*. It bites when a people climbs, and in two years none of them
+  do.
+- **The stacking fault was worked around at both of its live sites.** Coats go
+  straight onto a back and worn tools are thrown out before a fresh one is
+  added, so the merge that was losing workmanship was rarely reached by
+  anything that had workmanship to lose.
+
+So the effect is latent by construction: it is correctness banked against the
+technology ladder rather than a change in what happens now. Which also means
+the honest thing to say is that this is **unmeasured in the direction that
+matters** - it will first tell when a settlement survives long enough to make
+something better than crude, and the measurement to watch for it is a longer
+run, not this one.

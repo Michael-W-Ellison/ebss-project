@@ -504,3 +504,139 @@ fn the_quality_ladder_is_the_one_the_specification_names() {
     assert_eq!(Quality::Common.value_multiplier(), 1.0);
     assert_eq!(Quality::Common.tool_durability_modifier(), 1.0);
 }
+
+// --------------------------------------------------------------------------
+// Where quality attaches: the makings, and not only the hand and the tool
+// --------------------------------------------------------------------------
+//
+// Quality lived in two places and travelled between none of them: a tool in
+// somebody's pack, and a garment on somebody's back. Everything in between -
+// what comes off a carcass, what one working hands to the next - moved as a
+// name and a number, so a hide skinned with a fine flake and a hide hacked
+// off with a broken one arrived indistinguishable and made the same coat.
+//
+// `limit_to_material` - the third cap, one rung above the *material* - had
+// been written down since the beginning and had no caller anywhere outside
+// its own unit test. It was a rule in the codebase and not in the model.
+
+/// A carcass comes off as well as the flake that skinned it.
+#[test]
+fn a_hide_is_as_good_as_the_flake_that_took_it() {
+    use crate::environment::ItemStack;
+
+    let taken_with = |quality: Quality| {
+        let mut world = crate::world::World::new(crate::world::WorldConfig::default());
+        world.animals.get_all_mut().clear();
+        let mut population = one_person();
+        knife_made(&mut population.agents[0], quality);
+        let simulation = crate::analytics::Simulation::new(world, population);
+
+        let agent = &simulation.population.agents[0];
+        let as_good_a_knife =
+            agent.how_well_made_is_what_i_work_this_trade_with(SkillType::Leatherworking);
+        assert_eq!(as_good_a_knife, Some(quality), "the flake in the hand");
+
+        let carcass = vec![ItemStack::of_quality(
+            "leather".to_string(),
+            4,
+            as_good_a_knife.expect("a flake"),
+        )];
+
+        simulation.butcher(&carcass, 1.0)[0]
+            .quality
+            .expect("the hide says what it is worth")
+    };
+
+    assert_eq!(taken_with(Quality::Crude), Quality::Crude);
+    assert!(
+        taken_with(Quality::Fine) > taken_with(Quality::Crude),
+        "the same animal, two flakes, two hides"
+    );
+}
+
+/// A lot nobody's work decided the worth of says so, rather than guessing.
+#[test]
+fn a_lot_nobody_made_carries_no_workmanship() {
+    use crate::environment::ItemStack;
+
+    let berries = ItemStack::new("blackberry".to_string(), 30);
+    assert_eq!(berries.quality, None, "nobody made a blackberry");
+}
+
+/// What a thing is made of caps it, the same as the hand and the tool do.
+///
+/// **The rule that was written down and never applied.** A length of crude
+/// cordage does not become a fine spear because a good man lashed it, and
+/// until now it did: the cap read the hand and the tool and nothing else.
+#[test]
+fn what_a_thing_is_made_of_caps_it_too() {
+    let mut population = one_person();
+    let agent = &mut population.agents[0];
+
+    // A good hand and a good tool, so that nothing else is doing the capping.
+    agent.skills.set_skill_level(SkillType::Crafting, 10);
+    knife_made(agent, Quality::Masterwork);
+
+    let out_of_nothing_in_particular = agent
+        .a_tool_fresh_from_these_hands("stoneknife", 1, 2.0)
+        .quality
+        .expect("a made thing has a worth");
+
+    let out_of_poor_stuff = agent
+        .a_tool_fresh_from_these_hands_out_of("stoneknife", 1, 2.0, Some(Quality::Crude))
+        .quality
+        .expect("a made thing has a worth");
+
+    assert!(
+        out_of_poor_stuff < out_of_nothing_in_particular,
+        "crude makings have to hold the work down: {out_of_poor_stuff:?} \
+         against {out_of_nothing_in_particular:?}"
+    );
+
+    // One rung above the material and no further, which is the same licence
+    // the tool cap gives: a good hand gets a little more out of poor stuff
+    // than it deserves, and no more than that.
+    assert_eq!(out_of_poor_stuff, Quality::Crude.material_quality_limit());
+}
+
+/// And good makings do not hold anything back.
+#[test]
+fn good_makings_leave_the_hand_and_the_tool_to_decide() {
+    let mut population = one_person();
+    let agent = &mut population.agents[0];
+
+    agent.skills.set_skill_level(SkillType::Crafting, 10);
+    knife_made(agent, Quality::Masterwork);
+
+    let unlimited = agent
+        .a_tool_fresh_from_these_hands("stoneknife", 1, 2.0)
+        .quality;
+    let out_of_good_stuff = agent
+        .a_tool_fresh_from_these_hands_out_of("stoneknife", 1, 2.0, Some(Quality::Masterwork))
+        .quality;
+
+    assert_eq!(out_of_good_stuff, unlimited);
+}
+
+/// The cap is a cap and not a floor here either: masterwork leather does not
+/// make a beginner's coat a masterwork coat.
+#[test]
+fn good_makings_do_not_lift_a_poor_hand() {
+    let mut population = one_person();
+    let agent = &mut population.agents[0];
+
+    agent.skills.set_skill_level(SkillType::Crafting, -8);
+    knife_made(agent, Quality::Crude);
+
+    let by_hand_alone = agent
+        .a_tool_fresh_from_these_hands("stoneknife", 1, 2.0)
+        .quality;
+    let out_of_the_best = agent
+        .a_tool_fresh_from_these_hands_out_of("stoneknife", 1, 2.0, Some(Quality::Masterwork))
+        .quality;
+
+    assert_eq!(
+        out_of_the_best, by_hand_alone,
+        "the best stuff in the world does not make a beginner a master"
+    );
+}

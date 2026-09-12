@@ -493,11 +493,34 @@ impl ActionResult {
 pub struct ItemStack {
     pub material_id: String,
     pub quantity: u32,
+    /// How well made this particular lot is, where anything decided that.
+    ///
+    /// Quality belonged to two places before this: a tool sitting in
+    /// somebody's pack, and a garment on somebody's back. Everything in
+    /// between - what comes off a carcass, what a working turns out, what
+    /// one action hands to the next - travelled as a name and a number and
+    /// could not say how good it was, so a hide taken off with a fine flake
+    /// and a hide hacked off with a broken one arrived indistinguishable and
+    /// made the same coat.
+    ///
+    /// `None` is *not* "bad". It is "nobody decided": a bushel of berries
+    /// has no workmanship in it and should not be made to claim one.
+    pub quality: Option<crate::agents::skills::Quality>,
 }
 
 impl ItemStack {
+    /// A lot of something, with nothing said about how good it is.
     pub fn new(material_id: String, quantity: u32) -> Self {
-        Self { material_id, quantity }
+        Self { material_id, quantity, quality: None }
+    }
+
+    /// A lot of something that somebody's work decided the worth of.
+    pub fn of_quality(
+        material_id: String,
+        quantity: u32,
+        quality: crate::agents::skills::Quality,
+    ) -> Self {
+        Self { material_id, quantity, quality: Some(quality) }
     }
 }
 
