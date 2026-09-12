@@ -60,7 +60,7 @@ fn give_a_tool(simulation: &mut Simulation, called: &str) {
             called.to_string(),
             1,
             40.0,
-            crate::agents::Quality::Basic,
+            crate::agents::Quality::Common,
         ));
 }
 

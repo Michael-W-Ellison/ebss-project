@@ -50,18 +50,18 @@ fn knife_made(agent: &mut Agent, quality: Quality) {
 /// Every rung of the ladder is worth more than the one below it.
 ///
 /// **The defect this test exists for.** The band was applied with a `clamp`,
-/// and the quality range runs past the top of the band, so Advanced and
-/// Expert both landed on 1.5 - the top two rungs doing identical work, at the
-/// end a settlement spends its life climbing towards.
+/// and the quality range runs past the top of the band, so Fine and
+/// Masterwork both landed on 1.5 - the top two rungs doing identical work, at
+/// the end a settlement spends its life climbing towards.
 #[test]
 fn no_two_rungs_of_the_quality_ladder_are_worth_the_same() {
     let ladder = [
-        Quality::Pathetic,
         Quality::Crude,
-        Quality::Basic,
-        Quality::Moderate,
-        Quality::Advanced,
-        Quality::Expert,
+        Quality::Poor,
+        Quality::Common,
+        Quality::Good,
+        Quality::Fine,
+        Quality::Masterwork,
     ];
 
     let worth: Vec<f32> = ladder
@@ -95,7 +95,7 @@ fn no_two_rungs_of_the_quality_ladder_are_worth_the_same() {
 #[test]
 fn separating_the_top_rungs_did_not_move_the_common_one() {
     assert_eq!(
-        Agent::what_this_workmanship_is_worth(Quality::Basic),
+        Agent::what_this_workmanship_is_worth(Quality::Common),
         1.0,
         "plain serviceable work multiplies the job by one, as it always did"
     );
@@ -107,13 +107,13 @@ fn the_same_tool_better_made_finishes_the_job_sooner() {
     let mut population = one_person();
     let agent = &mut population.agents[0];
 
-    axe_made(agent, Quality::Crude);
+    axe_made(agent, Quality::Poor);
     let rough = agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting);
 
-    axe_made(agent, Quality::Advanced);
+    axe_made(agent, Quality::Fine);
     let good = agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting);
 
-    axe_made(agent, Quality::Expert);
+    axe_made(agent, Quality::Masterwork);
     let fine = agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting);
 
     assert!(rough < good, "a better axe should work faster");
@@ -129,10 +129,10 @@ fn the_same_tool_better_made_wastes_less() {
     let mut population = one_person();
     let agent = &mut population.agents[0];
 
-    axe_made(agent, Quality::Crude);
+    axe_made(agent, Quality::Poor);
     let rough = agent.how_much_my_tools_bring_back(SkillType::Woodcutting);
 
-    axe_made(agent, Quality::Expert);
+    axe_made(agent, Quality::Masterwork);
     let fine = agent.how_much_my_tools_bring_back(SkillType::Woodcutting);
 
     assert!(fine > rough, "{fine} against {rough}");
@@ -141,7 +141,7 @@ fn the_same_tool_better_made_wastes_less() {
 /// A better-made tool lasts longer, which is the first thing quality is for.
 #[test]
 fn a_better_made_tool_lasts_longer() {
-    let ladder = [Quality::Pathetic, Quality::Crude, Quality::Basic, Quality::Expert];
+    let ladder = [Quality::Crude, Quality::Poor, Quality::Common, Quality::Masterwork];
 
     let lives: Vec<f32> = ladder
         .iter()
@@ -170,9 +170,9 @@ fn a_better_made_tool_lasts_longer() {
 fn the_same_coat_made_better_keeps_more_weather_off() {
     use crate::agents::equipment::ClothingTemplate;
 
-    let rough = ClothingTemplate::from_id("leather_tunic", Quality::Crude)
+    let rough = ClothingTemplate::from_id("leather_tunic", Quality::Poor)
         .expect("a tunic can be made");
-    let fine = ClothingTemplate::from_id("leather_tunic", Quality::Expert)
+    let fine = ClothingTemplate::from_id("leather_tunic", Quality::Masterwork)
         .expect("a tunic can be made");
 
     assert!(
@@ -198,8 +198,8 @@ fn two_bodies_in_the_same_coat_are_not_equally_warm() {
     let mut population = one_person();
     population.spawn_agent(AgentConfig::default());
 
-    let rough = ClothingTemplate::from_id("leather_tunic", Quality::Crude).unwrap();
-    let fine = ClothingTemplate::from_id("leather_tunic", Quality::Expert).unwrap();
+    let rough = ClothingTemplate::from_id("leather_tunic", Quality::Poor).unwrap();
+    let fine = ClothingTemplate::from_id("leather_tunic", Quality::Masterwork).unwrap();
 
     population.agents[0].body.equip(rough);
     population.agents[1].body.equip(fine);
@@ -232,11 +232,11 @@ fn a_master_with_the_worst_tools_cannot_turn_out_the_best_work() {
     agent.skills.set_skill_level(SkillType::Crafting, 10);
     let by_hand_alone = Quality::from_hand(agent.skills.hand_for(SkillType::Crafting));
     assert!(
-        by_hand_alone >= Quality::Advanced,
+        by_hand_alone >= Quality::Fine,
         "a master's hands are worth the best work there is"
     );
 
-    axe_made(agent, Quality::Pathetic);
+    axe_made(agent, Quality::Crude);
     let ceiling = agent.the_best_i_could_turn_out(SkillType::Woodcutting);
 
     assert!(
@@ -246,7 +246,7 @@ fn a_master_with_the_worst_tools_cannot_turn_out_the_best_work() {
     );
     assert_ne!(
         ceiling,
-        Quality::Expert,
+        Quality::Masterwork,
         "and the worst tools should never reach the best work"
     );
 }
@@ -257,10 +257,10 @@ fn a_better_tool_raises_what_can_be_turned_out() {
     let mut population = one_person();
     let agent = &mut population.agents[0];
 
-    axe_made(agent, Quality::Crude);
+    axe_made(agent, Quality::Poor);
     let with_a_rough_one = agent.the_best_i_could_turn_out(SkillType::Woodcutting);
 
-    axe_made(agent, Quality::Advanced);
+    axe_made(agent, Quality::Fine);
     let with_a_good_one = agent.the_best_i_could_turn_out(SkillType::Woodcutting);
 
     assert!(
@@ -282,7 +282,7 @@ fn bare_hands_can_turn_out_serviceable_work_and_no_better() {
         "fingers can twist a cord and shape a lump of clay"
     );
     assert!(
-        Agent::WHAT_BARE_HANDS_CAN_TURN_OUT < Quality::Expert,
+        Agent::WHAT_BARE_HANDS_CAN_TURN_OUT < Quality::Masterwork,
         "but they cannot do fine work"
     );
 }
@@ -301,7 +301,7 @@ fn a_fine_tool_does_not_make_a_beginner_a_master() {
     agent.skills.set_skill_level(SkillType::Woodcutting, -9);
     let by_hand_alone = Quality::from_hand(agent.skills.hand_for(SkillType::Woodcutting));
 
-    axe_made(agent, Quality::Expert);
+    axe_made(agent, Quality::Masterwork);
     let ceiling = agent.the_best_i_could_turn_out(SkillType::Woodcutting);
 
     assert!(
@@ -329,7 +329,7 @@ fn skill_decides_whether_the_making_comes_off() {
 
     let spoiled = |skill: &Skill| {
         (0..200)
-            .filter(|_| !skill.perform_check(Some(Quality::Basic)).success)
+            .filter(|_| !skill.perform_check(Some(Quality::Common)).success)
             .count()
     };
 
@@ -359,8 +359,8 @@ fn a_worse_tool_spoils_more_of_what_is_attempted() {
             .count()
     };
 
-    let with_a_wretched_one = spoiled(Quality::Pathetic);
-    let with_a_fair_one = spoiled(Quality::Basic);
+    let with_a_wretched_one = spoiled(Quality::Crude);
+    let with_a_fair_one = spoiled(Quality::Common);
 
     assert!(
         with_a_wretched_one > with_a_fair_one,
@@ -387,7 +387,7 @@ fn a_tool_nothing_held_back_lasts_what_the_hand_would_give_it() {
 
     // A founder's own hand, with a tool good enough not to hold the work
     // back - which is the ordinary case and must not have changed.
-    knife_made(agent, Quality::Expert);
+    knife_made(agent, Quality::Masterwork);
 
     let made = agent.a_tool_fresh_from_these_hands("handaxe", 1, 2.0);
     let hand = agent.skills.hand_for(SkillType::Crafting);
@@ -411,13 +411,13 @@ fn a_tool_the_tools_held_back_lasts_less() {
     // A hand good enough that the tools are what hold it back.
     agent.skills.set_skill_level(SkillType::Crafting, 10);
 
-    knife_made(agent, Quality::Expert);
+    knife_made(agent, Quality::Masterwork);
     let unhandicapped = agent
         .a_tool_fresh_from_these_hands("handaxe", 1, 2.0)
         .max_durability
         .unwrap();
 
-    knife_made(agent, Quality::Pathetic);
+    knife_made(agent, Quality::Crude);
     let handicapped = agent
         .a_tool_fresh_from_these_hands("handaxe", 1, 2.0)
         .max_durability
@@ -462,4 +462,45 @@ fn a_spoiled_attempt_is_not_a_refusal() {
 
     let came_off = ActionResult::success();
     assert!(came_off.success && came_off.attempted);
+}
+
+
+/// The ladder is the one the specification names, in the order it names it.
+///
+/// These six went by other names until now - Pathetic, Crude, Basic,
+/// Moderate, Advanced, Expert - which read as the same ladder one rung out of
+/// step, and `Crude` sat at a *different rung* in each. Anybody comparing the
+/// two lists had to hold the offset in their head, and a rename done in the
+/// wrong order would have collapsed two rungs into one silently.
+#[test]
+fn the_quality_ladder_is_the_one_the_specification_names() {
+    let ladder = [
+        (Quality::Crude, "Crude"),
+        (Quality::Poor, "Poor"),
+        (Quality::Common, "Common"),
+        (Quality::Good, "Good"),
+        (Quality::Fine, "Fine"),
+        (Quality::Masterwork, "Masterwork"),
+    ];
+
+    for (rung, called) in ladder {
+        assert_eq!(rung.name(), called, "{rung:?} answers to its own name");
+    }
+
+    for pair in ladder.windows(2) {
+        assert!(
+            pair[0].0 < pair[1].0,
+            "the ladder runs the way it reads: {:?} below {:?}",
+            pair[0].0,
+            pair[1].0
+        );
+    }
+
+    // Ordinary everyday work is the third rung and the neutral one - the
+    // specification's "Common: normal everyday quality... baseline durability
+    // and efficiency" - and everything in this model is priced against it.
+    assert_eq!(ladder[2].0, Quality::Common);
+    assert_eq!(Quality::Common.modifier(), 1.0);
+    assert_eq!(Quality::Common.value_multiplier(), 1.0);
+    assert_eq!(Quality::Common.tool_durability_modifier(), 1.0);
 }

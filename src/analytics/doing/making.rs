@@ -1036,7 +1036,7 @@ impl Simulation {
 
         let quality = carried
             .quality
-            .unwrap_or(crate::agents::skills::Quality::Basic);
+            .unwrap_or(crate::agents::skills::Quality::Common);
 
         let mut clothing = match ClothingTemplate::from_id(recipe.id, quality) {
             Some(clothing) => clothing,

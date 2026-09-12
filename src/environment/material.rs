@@ -172,7 +172,7 @@ impl Material {
             food_value: 0.0,
             is_flammable: false,
             light_level: 0,
-            quality: Quality::Basic,  // Default to Basic quality
+            quality: Quality::Common,  // Ordinary everyday quality
             melting_point: None,
             can_cold_work: false,
             workable_temp: None,

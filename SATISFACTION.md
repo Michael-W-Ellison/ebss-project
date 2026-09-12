@@ -330,6 +330,10 @@ reaches furthest: it tells on how fast the work goes, on how much comes back,
 on how long the thing lasts, and - on a garment - on how much weather it keeps
 off. Two agents in the same coat cut to the same pattern are not equally warm.
 
+The ladder is the specification's own: Crude, Poor, Common, Good, Fine,
+Masterwork, with `Common` the neutral rung that everything else is priced
+against.
+
 What decides the quality of what comes out is **the hand and the tool
 together**: `min(Quality::from_hand, tool.material_quality_limit())`. Skill
 decides whether the attempt comes off at all; the tool caps how good the

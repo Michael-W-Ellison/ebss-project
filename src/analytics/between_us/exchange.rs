@@ -228,7 +228,7 @@ impl Simulation {
             .filter(|item| item.quantity > 0)
             .filter_map(|item| {
                 let recipe = garment_recipe(&item.item_id)?;
-                let quality = item.quality.unwrap_or(crate::agents::skills::Quality::Crude);
+                let quality = item.quality.unwrap_or(crate::agents::skills::Quality::Poor);
                 let wear = match (item.current_durability, item.max_durability) {
                     (Some(current), Some(max)) if max > 0.0 => (current / max).clamp(0.0, 1.0),
                     _ => 1.0,

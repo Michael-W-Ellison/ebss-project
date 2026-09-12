@@ -14779,9 +14779,60 @@ skill would raise the very thing it measures.
   none. `limit_to_material` is written and waiting for it.
 - **Catastrophic break risk** and **waste rate during manufacture**, both
   named in the specification, have no counterpart.
-- **The quality names differ from the specification's.** This model runs
-  Pathetic/Crude/Basic/Moderate/Advanced/Expert against
-  Crude/Poor/Common/Good/Fine/Masterwork. Aligned by position the semantics
-  match - both have the neutral rung third - so it is a rename, not a
-  rebalance, and it was left alone rather than churning every call site
-  inside a measured change.
+- ~~**The quality names differ from the specification's.**~~ Done
+  separately, once the measured work was in and could not be confused with
+  it - see #202.
+
+
+---
+
+### 202. The quality ladder now goes by the names the specification gives it
+
+A rename, and worth recording only for the trap in it and the way it was
+proved free.
+
+| Rung | Was | Is |
+|---|---|---|
+| 0 | Pathetic | **Crude** |
+| 1 | Crude | **Poor** |
+| 2 | Basic | **Common** |
+| 3 | Moderate | **Good** |
+| 4 | Advanced | **Fine** |
+| 5 | Expert | **Masterwork** |
+
+#### The trap
+
+**`Crude` appears in both ladders at different rungs.** It is the bottom of
+the specification's and the second of this model's, so a rename done in the
+obvious order - walk the list top to bottom - maps `Pathetic → Crude` first
+and then `Crude → Poor` second, which sweeps the new bottom rung into the
+second one and **collapses two rungs into one**. The enum would still compile,
+every match would still be exhaustive, and the ladder would silently have five
+rungs where it had six.
+
+Doing `Crude → Poor` before `Pathetic → Crude` is all it takes, and the reason
+to write it down is that nothing in the language would have caught the other
+order.
+
+`the_quality_ladder_is_the_one_the_specification_names` pins the six names,
+their order, and that `Common` is the neutral rung where `modifier`,
+`value_multiplier` and `tool_durability_modifier` all read exactly one.
+
+#### Proved free rather than measured
+
+A pure rename should cost nothing, and this project has a cheaper proof of
+that than a two-hour world run: **the recorded draw counts.** If the world
+takes a single different branch, seed 4242 over 120 ticks and seed 0 over a
+year stop rolling the number of times they have always rolled. Both were
+unchanged, so the world is byte-identical and no measurement was needed.
+
+Worth remembering as a general rule for this codebase: *a change that claims
+to be behaviour-preserving can be held to it by the draw counts, in a minute,
+instead of being taken on trust or measured for two hours.*
+
+#### One thing it does break
+
+`Quality` derives `Serialize`/`Deserialize` and serialises by variant name, so
+a save written before this will not load. There are no committed saves and the
+save/load tests round-trip within a run, so nothing in the repository is
+affected - but a save file kept outside it is now stale.

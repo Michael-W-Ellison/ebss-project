@@ -3691,8 +3691,8 @@ impl Agent {
 
         let (worst, best) = Self::WHAT_GOOD_WORK_IS_WORTH;
         let (lowest, highest) = (
-            Quality::Pathetic.modifier(),
-            Quality::Expert.modifier(),
+            Quality::Crude.modifier(),
+            Quality::Masterwork.modifier(),
         );
 
         // Hinged on ordinary work rather than stretched from end to end.
@@ -3704,7 +3704,7 @@ impl Agent {
         // separate two rungs at the top. Hinging at `Basic` leaves ordinary
         // work worth exactly what it was worth and spreads the rungs either
         // side of it.
-        let ordinary = Quality::Basic.modifier();
+        let ordinary = Quality::Common.modifier();
 
         if quality.modifier() >= ordinary {
             let along = (quality.modifier() - ordinary) / (highest - ordinary);
@@ -3720,7 +3720,7 @@ impl Agent {
     /// Not nothing - fingers can twist a cord and shape a lump of clay, and
     /// the result is serviceable. What they cannot do is fine work.
     pub const WHAT_BARE_HANDS_CAN_TURN_OUT: super::skills::Quality =
-        super::skills::Quality::Basic;
+        super::skills::Quality::Common;
 
     /// The best thing these hands could turn out at this trade, given what
     /// they have to work with.

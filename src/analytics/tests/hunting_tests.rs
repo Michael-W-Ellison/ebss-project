@@ -116,7 +116,7 @@ fn a_kill_fills_the_pack_with_meat_and_skins() {
                 "spear".to_string(),
                 1,
                 25.0,
-                crate::agents::Quality::Basic,
+                crate::agents::Quality::Common,
             ));
     }
 
@@ -287,7 +287,7 @@ fn an_agent_hunts_for_the_skins_it_needs() {
             "spear".to_string(),
             1,
             25.0,
-            crate::agents::Quality::Basic,
+            crate::agents::Quality::Common,
         ));
 
     // Wants to be warmer than the weather will ever make it

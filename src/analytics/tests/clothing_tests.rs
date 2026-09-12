@@ -32,7 +32,7 @@ fn a_garment_is_worth_what_it_is_made_of() {
             recipe.id
         );
         assert!(
-            ClothingTemplate::from_id(recipe.id, Quality::Basic).is_some(),
+            ClothingTemplate::from_id(recipe.id, Quality::Common).is_some(),
             "{} cannot be built into something wearable",
             recipe.id
         );
@@ -71,7 +71,7 @@ fn practice_tells_in_what_comes_out() {
     let mut agent = crate::agents::Agent::new(AgentConfig::default());
 
     let first = Simulation::expected_garment_quality(&agent);
-    assert_eq!(first, Quality::Crude, "a first garment should be crude");
+    assert_eq!(first, Quality::Poor, "a first garment should be crude");
 
     agent.skills.set_skill_level(SkillType::Leatherworking, 5);
     let practised = Simulation::expected_garment_quality(&agent);
@@ -200,12 +200,12 @@ fn a_near_identical_coat_is_not_worth_changing_into() {
         agent.inventory.max_weight = 500.0;
         agent.body_temperature.current = 34.0;
 
-        let worn = ClothingTemplate::from_id("linen_cloak", Quality::Crude)
+        let worn = ClothingTemplate::from_id("linen_cloak", Quality::Poor)
             .expect("linen cloak should exist");
         agent.body.equip(worn);
 
         let mut spare = InventoryItem::new_with_weight("linen_cloak".to_string(), 1, 2.0);
-        spare.quality = Some(Quality::Crude);
+        spare.quality = Some(Quality::Poor);
         agent.inventory.add_item(spare);
     }
 
@@ -229,7 +229,7 @@ fn a_cloak_keeps_the_cold_out() {
     let mut bare = BodyTemperature::new();
     let mut clothed = BodyTemperature::new();
 
-    let cloak = ClothingTemplate::from_id("linen_cloak", Quality::Basic)
+    let cloak = ClothingTemplate::from_id("linen_cloak", Quality::Common)
         .expect("linen cloak should exist");
     let insulation = cloak.cold_insulation();
     assert!(insulation > 0.0);
@@ -361,7 +361,7 @@ fn nobody_strips_themselves_for_a_child_who_is_already_dressed() {
         .add_item(InventoryItem::new(coat.to_string(), 1));
 
     // Dress the child past the point where it wants anything.
-    let dressed = ClothingTemplate::from_id(coat, Quality::Basic)
+    let dressed = ClothingTemplate::from_id(coat, Quality::Common)
         .expect("the recipe builds something wearable");
     population.agents[1]
         .body
@@ -466,7 +466,7 @@ fn a_folded_coat_keeps_its_wear() {
         agent.inventory.max_weight = 500.0;
         agent.body_temperature.current = 34.0;
         agent.body.equip(
-            ClothingTemplate::from_id("linen_cloak", Quality::Basic)
+            ClothingTemplate::from_id("linen_cloak", Quality::Common)
                 .expect("linen cloak should exist"),
         );
     }

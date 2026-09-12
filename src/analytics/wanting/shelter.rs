@@ -111,7 +111,7 @@ impl Simulation {
 
     /// What an agent of this much practice turns a given material into.
     ///
-    /// The generic skill quality curve puts every untrained agent at Pathetic,
+    /// The generic skill quality curve puts every untrained agent at Crude,
     /// and skills start ten levels below untrained, so a first cloak was worth
     /// half of nothing and no agent ever cooked or sewed often enough to climb
     /// out. A first attempt here is crude but wearable, and practice tells.
@@ -125,11 +125,11 @@ impl Simulation {
             .unwrap_or(-10);
 
         match practice {
-            level if level < 0 => Quality::Crude,
-            0..=3 => Quality::Basic,
-            4..=6 => Quality::Moderate,
-            7..=8 => Quality::Advanced,
-            _ => Quality::Expert,
+            level if level < 0 => Quality::Poor,
+            0..=3 => Quality::Common,
+            4..=6 => Quality::Good,
+            7..=8 => Quality::Fine,
+            _ => Quality::Masterwork,
         }
     }
 
@@ -162,7 +162,7 @@ impl Simulation {
             .filter(|item| item.quantity > 0)
             .filter_map(|item| {
                 let recipe = garment_recipe(&item.item_id)?;
-                let quality = item.quality.unwrap_or(crate::agents::skills::Quality::Crude);
+                let quality = item.quality.unwrap_or(crate::agents::skills::Quality::Poor);
                 let wear = match (item.current_durability, item.max_durability) {
                     (Some(current), Some(max)) if max > 0.0 => (current / max).clamp(0.0, 1.0),
                     _ => 1.0,

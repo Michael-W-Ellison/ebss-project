@@ -120,7 +120,7 @@ fn a_founder_is_nobody_special_at_making_things() {
     let made = founder.a_tool_fresh_from_these_hands("spear", 1, 2.0);
     let quality = made.quality.expect("a made tool has a quality");
     assert!(
-        quality <= Quality::Basic,
+        quality <= Quality::Common,
         "a founder should turn out crude work, not {quality:?}"
     );
 }
@@ -417,7 +417,7 @@ fn even_crude_work_beats_bare_hands() {
     agent.skills.set_skill_level(SkillType::Crafting, -10);
 
     let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);
-    assert_eq!(spear.quality, Some(Quality::Pathetic));
+    assert_eq!(spear.quality, Some(Quality::Crude));
     agent.inventory.add_item(spear);
 
     assert!(

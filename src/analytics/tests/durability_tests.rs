@@ -144,10 +144,10 @@ fn workmanship_decides_how_much_comes_back() {
         axe.quality = Some(quality);
     };
 
-    made_badly(agent, Quality::Crude);
+    made_badly(agent, Quality::Poor);
     let from_a_crude_one = agent.how_much_my_tools_bring_back(SkillType::Woodcutting);
 
-    made_badly(agent, Quality::Moderate);
+    made_badly(agent, Quality::Good);
     let from_a_good_one = agent.how_much_my_tools_bring_back(SkillType::Woodcutting);
 
     assert!(
@@ -158,9 +158,9 @@ fn workmanship_decides_how_much_comes_back() {
 
     // And the same ordering on the other channel, because workmanship is the
     // one thing both questions agree to read.
-    made_badly(agent, Quality::Crude);
+    made_badly(agent, Quality::Poor);
     let slow = agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting);
-    made_badly(agent, Quality::Moderate);
+    made_badly(agent, Quality::Good);
     let quick = agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting);
 
     assert!(quick > slow, "and work faster: {quick} against {slow}");
@@ -272,8 +272,8 @@ fn a_tool_worn_through_is_no_tool_at_all() {
 /// how work goes - they read one band, and the band is stated once.
 #[test]
 fn the_two_channels_read_one_opinion_of_workmanship() {
-    let best_there_is = Quality::Expert.modifier();
-    let worst_there_is = Quality::Pathetic.modifier();
+    let best_there_is = Quality::Masterwork.modifier();
+    let worst_there_is = Quality::Crude.modifier();
 
     assert!(
         best_there_is > worst_there_is,

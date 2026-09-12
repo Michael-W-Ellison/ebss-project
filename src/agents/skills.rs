@@ -134,12 +134,12 @@ impl SkillCategory {
 /// Quality levels for produced items
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Quality {
-    Pathetic = 0,
-    Crude = 1,
-    Basic = 2,
-    Moderate = 3,
-    Advanced = 4,
-    Expert = 5,
+    Crude = 0,
+    Poor = 1,
+    Common = 2,
+    Good = 3,
+    Fine = 4,
+    Masterwork = 5,
 }
 
 impl Quality {
@@ -152,79 +152,79 @@ impl Quality {
     /// crude things. None of them are experts at making anything.
     pub fn from_hand(hand: f32) -> Self {
         match hand {
-            h if h < 0.8 => Quality::Pathetic,
-            h if h < 1.1 => Quality::Crude,
-            h if h < 1.4 => Quality::Basic,
-            h if h < 1.65 => Quality::Moderate,
-            h if h < 1.85 => Quality::Advanced,
-            _ => Quality::Expert,
+            h if h < 0.8 => Quality::Crude,
+            h if h < 1.1 => Quality::Poor,
+            h if h < 1.4 => Quality::Common,
+            h if h < 1.65 => Quality::Good,
+            h if h < 1.85 => Quality::Fine,
+            _ => Quality::Masterwork,
         }
     }
 
     pub fn name(&self) -> &'static str {
         match self {
-            Quality::Pathetic => "Pathetic",
             Quality::Crude => "Crude",
-            Quality::Basic => "Basic",
-            Quality::Moderate => "Moderate",
-            Quality::Advanced => "Advanced",
-            Quality::Expert => "Expert",
+            Quality::Poor => "Poor",
+            Quality::Common => "Common",
+            Quality::Good => "Good",
+            Quality::Fine => "Fine",
+            Quality::Masterwork => "Masterwork",
         }
     }
 
     /// Get quality modifier for item effectiveness
     pub fn modifier(&self) -> f32 {
         match self {
-            Quality::Pathetic => 0.5,
-            Quality::Crude => 0.7,
-            Quality::Basic => 1.0,
-            Quality::Moderate => 1.3,
-            Quality::Advanced => 1.6,
-            Quality::Expert => 2.0,
+            Quality::Crude => 0.5,
+            Quality::Poor => 0.7,
+            Quality::Common => 1.0,
+            Quality::Good => 1.3,
+            Quality::Fine => 1.6,
+            Quality::Masterwork => 2.0,
         }
     }
 
     /// Get value multiplier for trade/comparison purposes
     pub fn value_multiplier(&self) -> f32 {
         match self {
-            Quality::Pathetic => 0.3,
-            Quality::Crude => 0.6,
-            Quality::Basic => 1.0,
-            Quality::Moderate => 1.5,
-            Quality::Advanced => 2.5,
-            Quality::Expert => 4.0,
+            Quality::Crude => 0.3,
+            Quality::Poor => 0.6,
+            Quality::Common => 1.0,
+            Quality::Good => 1.5,
+            Quality::Fine => 2.5,
+            Quality::Masterwork => 4.0,
         }
     }
 
     /// Get tool durability modifier
     pub fn tool_durability_modifier(&self) -> f32 {
         match self {
-            Quality::Pathetic => 0.5,  // -50%
-            Quality::Crude => 0.75,     // -25%
-            Quality::Basic => 1.0,      // default
-            Quality::Moderate => 1.1,   // +10%
-            Quality::Advanced => 1.25,  // +25%
-            Quality::Expert => 1.5,     // +50%
+            Quality::Crude => 0.5,  // -50%
+            Quality::Poor => 0.75,     // -25%
+            Quality::Common => 1.0,      // default
+            Quality::Good => 1.1,   // +10%
+            Quality::Fine => 1.25,  // +25%
+            Quality::Masterwork => 1.5,     // +50%
         }
     }
 
     /// Get tool speed modifier
     pub fn tool_speed_modifier(&self) -> f32 {
         match self {
-            Quality::Pathetic => 1.0,
             Quality::Crude => 1.0,
-            Quality::Basic => 1.0,
-            Quality::Moderate => 1.1,   // +10%
-            Quality::Advanced => 1.25,  // +25%
-            Quality::Expert => 1.5,     // +50%
+            Quality::Poor => 1.0,
+            Quality::Common => 1.0,
+            Quality::Good => 1.1,   // +10%
+            Quality::Fine => 1.25,  // +25%
+            Quality::Masterwork => 1.5,     // +50%
         }
     }
 
     /// Get number of injury/failure rolls for tool quality
     pub fn tool_risk_roll_count(&self) -> u8 {
         match self {
-            Quality::Pathetic => 3,  // Roll 3 times (more danger)
-            Quality::Crude => 2,     // Roll 2 times
+            Quality::Crude => 3,  // Roll 3 times (more danger)
+            Quality::Poor => 2,     // Roll 2 times
             _ => 1,                   // Normal single roll
         }
     }
@@ -232,24 +232,24 @@ impl Quality {
     /// Get maximum output quality limit for materials
     pub fn material_quality_limit(&self) -> Quality {
         match self {
-            Quality::Pathetic => Quality::Crude,
-            Quality::Crude => Quality::Basic,
-            Quality::Basic => Quality::Moderate,
-            Quality::Moderate => Quality::Advanced,
-            Quality::Advanced => Quality::Expert,
-            Quality::Expert => Quality::Expert,
+            Quality::Crude => Quality::Poor,
+            Quality::Poor => Quality::Common,
+            Quality::Common => Quality::Good,
+            Quality::Good => Quality::Fine,
+            Quality::Fine => Quality::Masterwork,
+            Quality::Masterwork => Quality::Masterwork,
         }
     }
 
     /// Get drive satisfaction modifier for material/product quality
     pub fn drive_satisfaction_modifier(&self) -> f32 {
         match self {
-            Quality::Pathetic => 0.5,   // -50%
-            Quality::Crude => 0.75,      // -25%
-            Quality::Basic => 1.0,       // normal
-            Quality::Moderate => 1.0,    // normal
-            Quality::Advanced => 1.1,    // +10%
-            Quality::Expert => 1.25,     // +25%
+            Quality::Crude => 0.5,   // -50%
+            Quality::Poor => 0.75,      // -25%
+            Quality::Common => 1.0,       // normal
+            Quality::Good => 1.0,    // normal
+            Quality::Fine => 1.1,    // +10%
+            Quality::Masterwork => 1.25,     // +25%
         }
     }
 
@@ -267,12 +267,12 @@ impl Quality {
     /// Get minimum skill level required for 50% success rate at this quality
     pub fn min_skill_level_for_repair(&self) -> i32 {
         match self {
-            Quality::Pathetic => -9,   // 90% chance at -9
-            Quality::Crude => -7,      // 70% chance at -7
-            Quality::Basic => -5,      // 60% chance at -5
-            Quality::Moderate => -1,   // 50% chance at -1
-            Quality::Advanced => 3,    // 50% chance at 3
-            Quality::Expert => 7,      // 50% chance at 7
+            Quality::Crude => -9,   // 90% chance at -9
+            Quality::Poor => -7,      // 70% chance at -7
+            Quality::Common => -5,      // 60% chance at -5
+            Quality::Good => -1,   // 50% chance at -1
+            Quality::Fine => 3,    // 50% chance at 3
+            Quality::Masterwork => 7,      // 50% chance at 7
         }
     }
 
@@ -281,12 +281,12 @@ impl Quality {
         let current_level = *self as i32;
         let new_level = (current_level - levels as i32).max(0);
         match new_level {
-            0 => Quality::Pathetic,
-            1 => Quality::Crude,
-            2 => Quality::Basic,
-            3 => Quality::Moderate,
-            4 => Quality::Advanced,
-            _ => Quality::Expert,
+            0 => Quality::Crude,
+            1 => Quality::Poor,
+            2 => Quality::Common,
+            3 => Quality::Good,
+            4 => Quality::Fine,
+            _ => Quality::Masterwork,
         }
     }
 }
@@ -461,48 +461,48 @@ impl Skill {
         let roll = crate::core::dice::roll().gen::<f32>() * 100.0;
 
         match self.level {
-            -10 => Quality::Pathetic,
-            -9 => if roll < 90.0 { Quality::Pathetic } else { Quality::Crude },
-            -8 => if roll < 80.0 { Quality::Pathetic } else { Quality::Crude },
-            -7 => if roll < 70.0 { Quality::Pathetic } else { Quality::Crude },
-            -6 => if roll < 60.0 { Quality::Pathetic } else { Quality::Crude },
-            -5 => if roll < 40.0 { Quality::Pathetic } else { Quality::Crude },
+            -10 => Quality::Crude,
+            -9 => if roll < 90.0 { Quality::Crude } else { Quality::Poor },
+            -8 => if roll < 80.0 { Quality::Crude } else { Quality::Poor },
+            -7 => if roll < 70.0 { Quality::Crude } else { Quality::Poor },
+            -6 => if roll < 60.0 { Quality::Crude } else { Quality::Poor },
+            -5 => if roll < 40.0 { Quality::Crude } else { Quality::Poor },
             -4 => {
-                if roll < 20.0 { Quality::Pathetic }
-                else if roll < 90.0 { Quality::Crude }
-                else { Quality::Basic }
+                if roll < 20.0 { Quality::Crude }
+                else if roll < 90.0 { Quality::Poor }
+                else { Quality::Common }
             }
-            -3 => if roll < 80.0 { Quality::Crude } else { Quality::Basic },
-            -2 => if roll < 70.0 { Quality::Crude } else { Quality::Basic },
-            -1 => if roll < 60.0 { Quality::Crude } else { Quality::Basic },
+            -3 => if roll < 80.0 { Quality::Poor } else { Quality::Common },
+            -2 => if roll < 70.0 { Quality::Poor } else { Quality::Common },
+            -1 => if roll < 60.0 { Quality::Poor } else { Quality::Common },
             0 => {
-                if roll < 40.0 { Quality::Crude }
-                else if roll < 90.0 { Quality::Basic }
-                else { Quality::Moderate }
+                if roll < 40.0 { Quality::Poor }
+                else if roll < 90.0 { Quality::Common }
+                else { Quality::Good }
             }
             1 => {
-                if roll < 20.0 { Quality::Crude }
-                else if roll < 80.0 { Quality::Basic }
-                else { Quality::Moderate }
+                if roll < 20.0 { Quality::Poor }
+                else if roll < 80.0 { Quality::Common }
+                else { Quality::Good }
             }
-            2 => if roll < 70.0 { Quality::Basic } else { Quality::Moderate },
-            3 => if roll < 60.0 { Quality::Basic } else { Quality::Moderate },
-            4 => if roll < 50.0 { Quality::Basic } else { Quality::Moderate },
-            5 => if roll < 40.0 { Quality::Basic } else { Quality::Moderate },
+            2 => if roll < 70.0 { Quality::Common } else { Quality::Good },
+            3 => if roll < 60.0 { Quality::Common } else { Quality::Good },
+            4 => if roll < 50.0 { Quality::Common } else { Quality::Good },
+            5 => if roll < 40.0 { Quality::Common } else { Quality::Good },
             6 => {
-                if roll < 20.0 { Quality::Basic }
-                else if roll < 90.0 { Quality::Moderate }
-                else { Quality::Advanced }
+                if roll < 20.0 { Quality::Common }
+                else if roll < 90.0 { Quality::Good }
+                else { Quality::Fine }
             }
-            7 => if roll < 80.0 { Quality::Moderate } else { Quality::Advanced },
-            8 => if roll < 60.0 { Quality::Moderate } else { Quality::Advanced },
-            9 => if roll < 40.0 { Quality::Moderate } else { Quality::Advanced },
+            7 => if roll < 80.0 { Quality::Good } else { Quality::Fine },
+            8 => if roll < 60.0 { Quality::Good } else { Quality::Fine },
+            9 => if roll < 40.0 { Quality::Good } else { Quality::Fine },
             10 => {
-                if roll < 10.0 { Quality::Moderate }
-                else if roll < 90.0 { Quality::Advanced }
-                else { Quality::Expert }
+                if roll < 10.0 { Quality::Good }
+                else if roll < 90.0 { Quality::Fine }
+                else { Quality::Masterwork }
             }
-            _ => Quality::Pathetic,
+            _ => Quality::Crude,
         }
     }
 
@@ -818,9 +818,9 @@ mod tests {
 
     #[test]
     fn test_quality_modifier() {
-        assert_eq!(Quality::Pathetic.modifier(), 0.5);
-        assert_eq!(Quality::Basic.modifier(), 1.0);
-        assert_eq!(Quality::Expert.modifier(), 2.0);
+        assert_eq!(Quality::Crude.modifier(), 0.5);
+        assert_eq!(Quality::Common.modifier(), 1.0);
+        assert_eq!(Quality::Masterwork.modifier(), 2.0);
     }
 
     #[test]
@@ -838,45 +838,45 @@ mod tests {
     fn test_tool_quality_speed_bonus() {
         let skill = Skill::with_level(SkillType::Mining, 0);
 
-        // Basic tool: no bonus
-        let result_basic = skill.perform_check(Some(Quality::Basic));
+        // A Common tool: no bonus
+        let result_basic = skill.perform_check(Some(Quality::Common));
         assert_eq!(result_basic.speed_multiplier, 1.0);
 
-        // Expert tool: +50% bonus
-        let result_expert = skill.perform_check(Some(Quality::Expert));
+        // A Masterwork tool: +50% bonus
+        let result_expert = skill.perform_check(Some(Quality::Masterwork));
         assert_eq!(result_expert.speed_multiplier, 1.5);
     }
 
     #[test]
     fn test_quality_durability_modifiers() {
-        assert_eq!(Quality::Pathetic.tool_durability_modifier(), 0.5);
-        assert_eq!(Quality::Basic.tool_durability_modifier(), 1.0);
-        assert_eq!(Quality::Expert.tool_durability_modifier(), 1.5);
+        assert_eq!(Quality::Crude.tool_durability_modifier(), 0.5);
+        assert_eq!(Quality::Common.tool_durability_modifier(), 1.0);
+        assert_eq!(Quality::Masterwork.tool_durability_modifier(), 1.5);
     }
 
     #[test]
     fn test_quality_drive_satisfaction() {
-        assert_eq!(Quality::Pathetic.drive_satisfaction_modifier(), 0.5);
-        assert_eq!(Quality::Basic.drive_satisfaction_modifier(), 1.0);
-        assert_eq!(Quality::Expert.drive_satisfaction_modifier(), 1.25);
+        assert_eq!(Quality::Crude.drive_satisfaction_modifier(), 0.5);
+        assert_eq!(Quality::Common.drive_satisfaction_modifier(), 1.0);
+        assert_eq!(Quality::Masterwork.drive_satisfaction_modifier(), 1.25);
     }
 
     #[test]
     fn test_material_quality_limits() {
-        assert_eq!(Quality::Pathetic.material_quality_limit(), Quality::Crude);
-        assert_eq!(Quality::Crude.material_quality_limit(), Quality::Basic);
-        assert_eq!(Quality::Expert.material_quality_limit(), Quality::Expert);
+        assert_eq!(Quality::Crude.material_quality_limit(), Quality::Poor);
+        assert_eq!(Quality::Poor.material_quality_limit(), Quality::Common);
+        assert_eq!(Quality::Masterwork.material_quality_limit(), Quality::Masterwork);
     }
 
     #[test]
     fn test_quality_limiting() {
-        let output_quality = Quality::Advanced;
+        let output_quality = Quality::Fine;
 
-        // Pathetic material limits to Crude
-        assert_eq!(output_quality.limit_to_material(Quality::Pathetic), Quality::Crude);
+        // The worst material limits the work to one rung above it
+        assert_eq!(output_quality.limit_to_material(Quality::Crude), Quality::Poor);
 
         // Expert material doesn't limit
-        assert_eq!(output_quality.limit_to_material(Quality::Expert), Quality::Advanced);
+        assert_eq!(output_quality.limit_to_material(Quality::Masterwork), Quality::Fine);
     }
 
     #[test]
@@ -916,22 +916,22 @@ mod tests {
 
     #[test]
     fn test_quality_downgrade() {
-        assert_eq!(Quality::Expert.downgrade(0), Quality::Expert);
-        assert_eq!(Quality::Expert.downgrade(1), Quality::Advanced);
-        assert_eq!(Quality::Expert.downgrade(2), Quality::Moderate);
-        assert_eq!(Quality::Advanced.downgrade(1), Quality::Moderate);
-        assert_eq!(Quality::Crude.downgrade(1), Quality::Pathetic);
-        assert_eq!(Quality::Pathetic.downgrade(1), Quality::Pathetic); // Can't go lower
+        assert_eq!(Quality::Masterwork.downgrade(0), Quality::Masterwork);
+        assert_eq!(Quality::Masterwork.downgrade(1), Quality::Fine);
+        assert_eq!(Quality::Masterwork.downgrade(2), Quality::Good);
+        assert_eq!(Quality::Fine.downgrade(1), Quality::Good);
+        assert_eq!(Quality::Poor.downgrade(1), Quality::Crude);
+        assert_eq!(Quality::Crude.downgrade(1), Quality::Crude); // Can't go lower
     }
 
     #[test]
     fn test_min_skill_level_for_repair() {
-        assert_eq!(Quality::Pathetic.min_skill_level_for_repair(), -9);
-        assert_eq!(Quality::Crude.min_skill_level_for_repair(), -7);
-        assert_eq!(Quality::Basic.min_skill_level_for_repair(), -5);
-        assert_eq!(Quality::Moderate.min_skill_level_for_repair(), -1);
-        assert_eq!(Quality::Advanced.min_skill_level_for_repair(), 3);
-        assert_eq!(Quality::Expert.min_skill_level_for_repair(), 7);
+        assert_eq!(Quality::Crude.min_skill_level_for_repair(), -9);
+        assert_eq!(Quality::Poor.min_skill_level_for_repair(), -7);
+        assert_eq!(Quality::Common.min_skill_level_for_repair(), -5);
+        assert_eq!(Quality::Good.min_skill_level_for_repair(), -1);
+        assert_eq!(Quality::Fine.min_skill_level_for_repair(), 3);
+        assert_eq!(Quality::Masterwork.min_skill_level_for_repair(), 7);
     }
 
     #[test]
@@ -939,32 +939,32 @@ mod tests {
         let skill_low = Skill::with_level(SkillType::Crafting, -8);
         let skill_high = Skill::with_level(SkillType::Crafting, 5);
 
-        // Low skill (-8) can repair Pathetic (-9) but not Crude (-7 required)
-        assert!(skill_low.can_repair(Quality::Pathetic));
-        assert!(!skill_low.can_repair(Quality::Crude)); // Requires -7, have -8
-        assert!(!skill_low.can_repair(Quality::Basic));
-        assert!(!skill_low.can_repair(Quality::Moderate));
+        // Low skill (-8) can repair Crude (-9) but not Poor (-7 required)
+        assert!(skill_low.can_repair(Quality::Crude));
+        assert!(!skill_low.can_repair(Quality::Poor)); // Requires -7, have -8
+        assert!(!skill_low.can_repair(Quality::Common));
+        assert!(!skill_low.can_repair(Quality::Good));
 
         // High skill (5) can repair everything up to Advanced but not Expert
-        assert!(skill_high.can_repair(Quality::Pathetic));
         assert!(skill_high.can_repair(Quality::Crude));
-        assert!(skill_high.can_repair(Quality::Basic));
-        assert!(skill_high.can_repair(Quality::Moderate));
-        assert!(skill_high.can_repair(Quality::Advanced)); // Requires 3, have 5
-        assert!(!skill_high.can_repair(Quality::Expert)); // Requires 7, have 5
+        assert!(skill_high.can_repair(Quality::Poor));
+        assert!(skill_high.can_repair(Quality::Common));
+        assert!(skill_high.can_repair(Quality::Good));
+        assert!(skill_high.can_repair(Quality::Fine)); // Requires 3, have 5
+        assert!(!skill_high.can_repair(Quality::Masterwork)); // Requires 7, have 5
     }
 
     #[test]
     fn test_perform_repair() {
         let mut skill = Skill::with_level(SkillType::Crafting, 5);
 
-        // Can repair Moderate quality
-        let result = skill.perform_repair(Quality::Moderate);
+        // Can repair Good quality
+        let result = skill.perform_repair(Quality::Good);
         assert!(result.success);
         assert_eq!(result.experience_gained, 0.5);
 
-        // Cannot repair Expert quality (requires level 7)
-        let result_fail = skill.perform_repair(Quality::Expert);
+        // Cannot repair Masterwork quality (requires level 7)
+        let result_fail = skill.perform_repair(Quality::Masterwork);
         assert!(!result_fail.success);
         assert_eq!(result_fail.experience_gained, 0.0);
     }
@@ -975,7 +975,7 @@ mod tests {
         let initial_exp = skill.experience;
 
         // Perform repair (0.5 exp = 50 exp points)
-        skill.perform_repair(Quality::Basic);
+        skill.perform_repair(Quality::Common);
 
         assert_eq!(skill.experience, initial_exp + 50);
     }
