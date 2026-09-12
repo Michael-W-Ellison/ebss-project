@@ -15271,3 +15271,122 @@ stone famine is a pack with a unit of room in it and a stone that weighs five.
    people carry the stone to the decision instead.
 
 None of these is a shelter change, which is the point.
+
+### 206. The pack shrinks because an experiment that cannot succeed eats the basket, and 156 tools, and 2,210 units of food
+
+#205 left a number hanging: pack capacity falls from 42 to about 12 within a
+month and stays there, and I flagged it as the sharpest lead without chasing
+it. This is it, and it turns out to be the same root as the tool famine above.
+
+#### The arithmetic is not about bodies at all
+
+`WHAT_TWO_HANDS_HOLD` is 12. A basket is `TransportType::Backpack`, which adds
+30. **42 is a basket. 12 is two hands.** Nothing in between.
+
+The other terms of `update_inventory_capacity_from_transport` never move:
+
+| month | mean pack | holds a carrier | has a transport | mean lift | age factor | a child in hand |
+|---|---|---|---|---|---|---|
+| 0 | 42.0 | 96 (100%) | 96 (100%) | 1.00 | 1.00 | 0% |
+| 1 | 13.9 | 6 (**6%**) | 6 (6%) | 1.00 | 1.00 | 0% |
+| 4 | 12.3 | 1 (1%) | 1 (1%) | 1.00 | 1.00 | 0% |
+| 7 | 12.0 | **0** | 0 | 1.00 | 1.00 | 0% |
+
+`how_much_this_body_can_lift()` is **1.00 for the whole year**. The age factor
+holds at 1.00 until month nine. Nobody has a child in hand. So the guess in
+#205 - that a weakening body carries less - is wrong, and it is worth saying
+so plainly: the body never weakens in this respect at all. `has a transport`
+tracks `holds a carrier` exactly, so the transport machinery is working
+correctly too.
+
+The basket simply leaves the pack. Of ninety-six founders, ninety-five lose
+theirs: **29 in the first week, 60 in the first month, 6 in the first season.**
+
+#### Where it goes
+
+A backtrace on the first removal, which took one short run:
+
+```
+ebss::agents::agent::Inventory::remove_item
+ebss::analytics::doing::making::…::trying_a_swap
+```
+
+`Action::TrySwapping` - putting the wrong thing where a part goes, which is
+how a people is meant to get past what it already knows how to make.
+
+`trying_a_swap` says what it does, in a comment, and means it:
+
+> The materials go whether it works or not. That is the whole cost of trying
+> things: a man who puts a lump of iron where the flake goes has spent a stick
+> and a length of cord and has a lump of iron tied to a stick.
+
+That is a fair rule. The problem is what it is applied to. `what_i_would_swap`
+walks **every stack in the pack** looking for something to put in, with three
+filters: the stack is not empty, it is not already an input to the step, and
+the lesson has not already been learned. **Nothing excludes a tool, a vessel,
+food, or the thing everything else is being carried in.**
+
+And the model already knows better twenty lines away. `what_i_would_set_down` -
+the rule for what a person sheds when the pack is too full - reads:
+
+```rust
+.filter(|(name, _)| !making::EVERY_TOOL.iter().any(|tool| tool.called == name))
+.filter(|(name, _)| !Self::WHAT_CARRIES.iter().any(|(called, _)| *called == name))
+```
+
+**Two places decide whether a thing may leave the pack, and only one of them
+has the rule.** A man will not put his basket down to make room for food, and
+will cheerfully destroy it on the chance that a basket is what a digging stick
+was missing. That is this project's signature defect - two spellings of one
+question - for the third time in as many issues; compare the butchery channels
+in #203 and the name-versus-class checks in #204.
+
+#### What it costs, counted
+
+Over eight worlds and a year, `trying_a_swap` destroyed **4,629 items** and
+succeeded **zero times** (`TrySwapping`: 11,391 attempted, 11,391 refused):
+
+| | |
+|---|---|
+| baskets | **150** |
+| tools | **156** (53 handaxe, 35 diggingstick, 31 sharpenedstick, 24 spear, 13 stoneknife) |
+| vessels | 47 (25 claypot, 22 bowl) |
+| food | **2,210** (574 fish, 406 roots, 400 legumes, 372 food, 260 nuts, 107 grain, 70 meat, 21 greens) |
+| materials | 634 wood, 405 lashing, 274 stone, 272 cotton, 208 flax, 22 knappedtip |
+
+Ninety-six founders start with a basket, so a hundred and fifty is every
+founder's and then some. A hundred and fifty-six tools is most of the tool
+famine in #205 - the founders' axes are not only wearing out, they are being
+fed into a machine that cannot return anything. And two thousand two hundred
+units of food, in a model where hunger is the commonest single cause of death.
+
+#### And it cannot succeed. Not "does not" - cannot
+
+`EVERY_SWAP` has three entries, and in a stone-age settlement every one of them
+is unreachable **by construction**:
+
+| swap | wants | why it never fires |
+|---|---|---|
+| thong for cord | `hides` | #205: nobody in ninety-six person-years ever holds one |
+| blade for flake in an axe | `metalblade` | wants smelting, which no settlement reaches |
+| blade for flake in a spear | `metalblade` | the same |
+
+So the zero success rate is not bad luck and not a tuning problem. In every
+world this model can currently produce, `TrySwapping` is a pure destructor.
+That is the counted half of standing issue #191.
+
+#### What would fix it, cheapest first
+
+1. **One function for "may this leave the pack".** `what_i_would_swap` should
+   ask what `what_i_would_set_down` asks. Two filters, and it is the same rule
+   in both places rather than a second copy - the lesson of #203.
+2. **Do not offer a swap whose substitute the world cannot supply.** An
+   experiment nobody can run should not be proposed at all, let alone charged
+   for. `Strategy::reach` already has the vocabulary for saying so.
+3. **Reconsider what an experiment costs.** Spending the makings on a failed
+   attempt is right; spending the *substitute* as well means every trial
+   destroys a thing chosen precisely because it was not part of the recipe.
+
+None of these is measured yet. Each changes behaviour, and 2,210 units of food
+a year is large enough that removing the loss could move the headline in either
+direction - a settlement that keeps its food also breeds sooner.
