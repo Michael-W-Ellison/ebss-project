@@ -5378,15 +5378,33 @@ impl Agent {
     /// # Arguments
     /// * `deceased_id` - UUID of the deceased
     /// * `source` - Source of the death (what killed them)
-    pub fn respond_to_loved_one_death(&mut self, deceased_id: &Uuid, source: super::EmotionSource) {
+    /// Grieve somebody, and be afraid of whoever had a hand in it.
+    ///
+    /// `killed_by` is a person or nobody. It used to be the reckoning's name
+    /// for what took them - "hunger", "the weather" - and that was a fear of
+    /// something nothing can run from: `what_frightens_me_most` reads only
+    /// `Creature` sources and `who_frightens_me_most` only `Agent` ones, so an
+    /// `Event` source was written and never read. See the note in
+    /// `Population::process_deaths` for what it cost.
+    ///
+    /// A death nobody had a hand in leaves sadness and no fear, which is the
+    /// honest answer: there is nothing there to be afraid *of*. What it should
+    /// leave instead - a dread of the winter that took him - is worry rather
+    /// than fear, and is not wired up.
+    pub fn respond_to_loved_one_death(
+        &mut self,
+        deceased_id: &Uuid,
+        killed_by: Option<super::EmotionSource>,
+    ) {
         // Maximum sadness for death of loved one
         if let Some(relationship) = self.relationships.get_relationship(deceased_id) {
             if relationship.is_loved_one() {
                 let sadness_amount = relationship.bond_strength * 0.9;
                 self.emotions.add_sadness_with_traits(EmotionSource::Agent(*deceased_id), sadness_amount, &self.traits);
 
-                // Fear of the source that killed them
-                self.emotions.add_fear_with_traits(source, 0.4, &self.traits);
+                if let Some(killed_by) = killed_by {
+                    self.emotions.add_fear_with_traits(killed_by, 0.4, &self.traits);
+                }
             }
         }
     }

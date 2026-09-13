@@ -15726,15 +15726,24 @@ own reckoning inside the tick each body falls in.
 | a fall | 2.1% | **0%** |
 | *deaths in the block* | *143* | *140* |
 
-**Violence more than doubles its share of the dead.** And three causes go to
-nothing at all: the weather, thirst and falls are never the largest part of
-anybody who dies in this model, though between them the last-blow reading gave
-them a quarter of every death.
+**Violence more than doubles its share of the dead.** And three causes very
+nearly vanish: the weather, thirst and falls are hardly ever the largest part
+of anybody who dies, though between them the last-blow reading gave them a
+quarter of every death.
 
 Thirst is the starkest. It did 0.6% of all the health lost in the model and was
-credited with one death in ten; apportioned, it kills nobody. It is a drip of
-the purest kind - a small amount, very often, to a body that is usually being
-killed by something else.
+credited with one death in ten; apportioned, it kills nobody at all - not in
+this block, and not in either of the 32-world blocks below. It is a drip of the
+purest kind: a small amount, very often, to a body that is being killed by
+something else.
+
+**A correction to the three zeroes.** On the larger sample below - 64 worlds
+over two years, 1,187 deaths - the weather and falls are not quite zero: the
+weather takes 0.2% and 0.7% of the two blocks and a fall 0.7% and none. So the
+right statement is *hardly ever*, not *never*; eight worlds over one year was
+too small a sample to tell a small number from nothing. Thirst and a wound are
+genuinely zero across all of it. A mishap at the workbench turns up three
+times, which is the first evidence that routing it was worth doing.
 
 #### A correction to #208
 
@@ -15787,12 +15796,36 @@ It also means **the draw-count tests are not sufficient here.** Both held
 world, and across eight the two readings diverge. A count that holds on one
 seed proves less than it looks like it proves.
 
+#### Survival: unchanged
+
+The apportionment perturbs the world, so it needs a survival reading of its
+own. The standard two blocks, against the figures recorded for exactly these
+seeds at the end of #207:
+
+| block | seeds | person-days before | after | | worlds emptied | out of the first winter |
+|---|---|---|---|---|---|---|
+| A | 0-31 | 103,958 | 103,795 | -0.16% | 23 -> 27 | 10 -> 10 |
+| B | 32-63 | 108,569 | 107,630 | -0.87% | 21 -> 22 | 14 -> 14 |
+| **both** | | **212,527** | **211,425** | **-0.52%** | **44 -> 49** of 64 | **24 -> 24** of 64 |
+
+**Survival is flat.** Person-days move half a per cent against a block-to-block
+noise of about ten; first winters are identical, 24 and 24. Worlds emptied is
+up five in sixty-four, but the blocks disagree by four to one, and block A's
+four are all worlds that had a single survivor limping to the end and emptied
+around day 700 instead of day 720 - which is why person-days barely notice
+them. By the rule this project has been using since #207, that is inside what
+a block of this size varies by anyway.
+
+Which is what should have happened. Nothing about how a body works was
+changed; only what the record calls the result.
+
 #### What is still open
 
-- **Grief and gossip key on the cause string.** Either they should key on
-  something coarser that does not move when the diagnosis improves, or the
-  coupling should be made deliberate. Until then, any future change to how a
-  death is named is also a change to the world.
+- ~~**Grief and gossip key on the cause string.**~~ **Fixed in #210** - grief
+  now keys on the person who had a hand in it, or on nobody. Half of this
+  claim was also wrong as written: the cause string reaches gossip as a
+  *payload*, not as part of an item's identity, so gossip was never a coupling
+  point. See #210.
 - **`DeathCause`, the enum the timeline uses, cannot say most of these.** The
   weather, a fall, illness, a wound and a mishap all fall through to
   `DeathCause::Unknown`; only starvation, thirst, old age, exhaustion and a
@@ -15807,3 +15840,111 @@ seed proves less than it looks like it proves.
 - **Every reading of "what took them" in this file predates the fix**,
   including the ones in #205 and #207. They are not wrong about what happened,
   but they are wrong about what it was called.
+
+### 210. Grief was keyed on the settlement's own verdict, which nothing could act on and everything depended on
+
+#209 left this standing: correcting the diagnosis of a death changed the world.
+The same eight seeds read two ways held 143 deaths and 140. This is that, and
+it turns out to be a smaller and sharper fault than #209 described - and one
+half of what #209 said about it was wrong.
+
+#### What it was
+
+Every death handed the survivors a cause by name:
+
+```rust
+let cause_source = EmotionSource::Event(cause_description.clone());
+...
+agent.respond_to_loved_one_death(deceased_id, cause_source.clone());
+agent.process_drive_source_loss_with_cause(drive_type, *deceased_id, Some(cause_source.clone()));
+```
+
+So an agent came away from a friend's death **afraid of the word "hunger"**.
+
+That is not a thing anybody can do anything about, and the model knows it:
+
+```rust
+pub fn what_frightens_me_most(&self) -> Option<(&str, f32)> { Self::worst_creature(&self.fear_sources) }
+pub fn who_frightens_me_most(&self) -> Option<(Uuid, f32)> { Self::worst_agent(&self.fear_sources) }
+```
+
+Every reader of the fear and anger maps filters to `Creature` or to `Agent`.
+**An `Event` source is written and never read** - it can never reach the flight
+branch, the fight branch, a grudge or a retaliation.
+
+#### What it cost
+
+Write-only was not the same as harmless, because the maps are keyed by it:
+
+```rust
+pub fear_sources: BTreeMap<EmotionSource, f32>,
+```
+
+Two consequences, and both of them run on the cause *names*:
+
+1. **How many buckets.** Every distinct name is its own entry, and `tick`
+   decays **each entry** by the decay rate. Being afraid of four things drains
+   four times as fast as being afraid of one. So the number of different words
+   a settlement had for death set the rate at which its people stopped being
+   afraid.
+2. **What order they are summed in.** `BTreeMap` walks in key order, which for
+   `Event(String)` is alphabetical by the cause. `update_totals` adds the
+   entries up in that order, and floating-point addition is not associative.
+
+So the verdict of the reckoning reached behaviour twice, and for no gain at all.
+
+#### The correction to #209
+
+#209 said the cause string was also "part of a gossip item's identity". **That
+is wrong.** An `Information`'s identity is `id: crate::core::dice::name()`, a
+fresh draw, and the cause is carried in `InformationType::Death { agent, cause }`
+as a payload. Tracing every read of it: three distortion arms decorate it
+("painful {cause}"), and `meeting.rs` formats it into a debug line. Nothing
+decides anything on it. Gossip was never a coupling point - the emotions were
+the whole of it.
+
+#### The rule
+
+**What the survivors grieve at is a person, or nobody.** The death hands on
+`recent_attacker` - who, if anybody, had a hand in it - and that is asked of
+every death rather than only of the ones the reckoning calls a blow, which is
+the whole point: grief must not consult the verdict at all.
+
+- **Sadness** is at the person who died, which it already was.
+- **Fear** is of whoever had a hand in it, and there is none if nobody did.
+- **Anger** is at whoever had a hand in it, through the arm of
+  `process_drive_source_loss_with_cause` that has always been there and that
+  the only caller in the model could never reach:
+
+  ```rust
+  EmotionSource::Agent(_) | EmotionSource::Creature(_) => {
+      // Anger at whoever took away our satisfaction source
+  ```
+
+  That is the fourth dead branch this run of work has turned up, and it is dead
+  for the same reason as the others: one caller that only ever builds one shape.
+
+A death nobody had a hand in now leaves grief and nothing to be afraid of,
+which is the honest answer - there is no *thing* there. What it ought to leave
+is a dread of the winter that took him, and that is worry rather than fear.
+Worry exists in this model (#282, #283) and is not wired to bereavement; that
+is the right home for it and it is not done here.
+
+#### What this changes
+
+This is a behaviour change and not a bookkeeping one, because anger at a person
+is read - by `anger_at_people`, by the relationship machinery, by retaliation.
+Seed 0 over a year goes from 603,478 draws to **680,944**, up 12.8%, and the
+constant is re-recorded.
+
+#### What is still open
+
+- **A death by a predator leaves nothing.** `last_attacker` is an
+  `Option<Uuid>` and only ever another agent, so a man taken by a wolf in front
+  of his brother leaves his brother with no fear of wolves. Fixing it means
+  recording the killing creature at death, and it would make a real difference,
+  because `what_frightens_me_most` reads `Creature` sources and would see it.
+- **Bereavement should feed worry.** See above.
+- **The `Event` arm of `process_drive_source_loss_with_cause` now has no
+  production caller.** A test still exercises it and the shape is a legitimate
+  one for a general function, but nothing in the model builds it any more.
