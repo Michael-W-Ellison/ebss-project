@@ -15737,13 +15737,39 @@ this block, and not in either of the 32-world blocks below. It is a drip of the
 purest kind: a small amount, very often, to a body that is being killed by
 something else.
 
-**A correction to the three zeroes.** On the larger sample below - 64 worlds
-over two years, 1,187 deaths - the weather and falls are not quite zero: the
-weather takes 0.2% and 0.7% of the two blocks and a fall 0.7% and none. So the
+**A correction to the three zeroes.** On the larger sample below - 128 worlds
+over two years, 2,324 deaths - the weather and falls are not quite zero: the
+weather takes between 0.2% and 0.7% of a block and a fall up to 0.7%. So the
 right statement is *hardly ever*, not *never*; eight worlds over one year was
-too small a sample to tell a small number from nothing. Thirst and a wound are
-genuinely zero across all of it. A mishap at the workbench turns up three
-times, which is the first evidence that routing it was worth doing.
+too small a sample to tell a small number from nothing. A wound is genuinely
+zero across all of it, and a mishap at the workbench turns up in every block,
+which is the evidence that routing it was worth doing.
+
+**And a second correction, which is a fault in this change rather than in the
+sample.** Thirst is *not* zero - it is spelled two ways, and the apportionment
+tallies by name:
+
+```rust
+self.lose_health(self.health, "dehydration");   // the killing blow: all that is left
+self.lose_health(0.15 * (...), "thirst");       // the drip, every turn
+```
+
+Blocks C and D show **"dehydration" at 0.9% and 1.2%** of the dead, where "thirst"
+is nil. They are one cause under two names, and `process_deaths` already knows
+it - `"thirst" | "dehydration" => DeathCause::Dehydration`. **Hunger is the same
+shape**: "hunger" is the drip and "starvation" the blow that takes whatever is
+left, mapping to one `DeathCause::Starvation`.
+
+So the table above splits both survival causes in half and under-credits each.
+Read properly, hunger-and-starvation is 44.2% of the eight-world block rather
+than 42.1%, and thirst-and-dehydration is not zero anywhere C and D can see.
+The headline is unaffected - a blow at 52.9% still leads - but the arithmetic
+is wrong in a way I introduced by apportioning on a string.
+
+This is the two-spellings fault again, now inside my own fix. It is cheap to
+put right, and **#210 is what makes it safe to**: the cause name no longer
+reaches grief, so renaming the killing blows to match their drips changes
+nothing but the tally. Recorded as open.
 
 #### A correction to #208
 
@@ -15826,6 +15852,11 @@ changed; only what the record calls the result.
   claim was also wrong as written: the cause string reaches gossip as a
   *payload*, not as part of an item's identity, so gossip was never a coupling
   point. See #210.
+- **Two causes are spelled two ways each, and the tally apportions by name.**
+  "hunger"/"starvation" and "thirst"/"dehydration" are one cause apiece - the
+  drip and the blow that finishes it - and each is booked separately, so each
+  half is under-credited. The fix is to give the blow the drip's name; #210
+  made that safe by taking the cause string out of grief.
 - **`DeathCause`, the enum the timeline uses, cannot say most of these.** The
   weather, a fall, illness, a wound and a mishap all fall through to
   `DeathCause::Unknown`; only starvation, thirst, old age, exhaustion and a
@@ -15968,18 +15999,44 @@ What it is *not* is more killing. The cause mix hardly moves: a blow takes
 and 54.7% against 53.7% and 57.2%. People are not fighting each other to death
 in greater numbers; the settlements are simply going a little sooner.
 
-**This is not decided.** One block a side agreeing on one threshold measure,
-while the continuous measure disagrees with itself, is exactly the position
-#207 was in before four blocks reversed its reading. It wants blocks C and D on
-fresh seeds, run before as well as after, before anything is concluded - and if
-it holds, the question is whether a settlement that can hold a grudge is worth
-a settlement that survives, which is a design question and not a measurement
-one.
+**This is not decided** on two blocks, and it wants C and D on fresh seeds -
+run before as well as after, because a fresh block has no recorded baseline.
+
+#### Four blocks: it was block B, and survival is flat
+
+Blocks C and D were run from two binaries built at the two commits and
+checksummed apart (`c735c5b6` before, `e17c591d` after), so that no part of
+this is the same program measured twice.
+
+| block | seeds | person-days before | after | | worlds emptied | out of the first winter |
+|---|---|---|---|---|---|---|
+| A | 0-31 | 103,795 | 105,780 | +1.9% | 27 -> 27 | 10 -> 8 |
+| B | 32-63 | 107,630 | 102,649 | -4.6% | 22 -> 27 | 14 -> 7 |
+| C | 64-95 | 104,470 | 106,766 | +2.2% | 28 -> 25 | 11 -> 10 |
+| D | 96-127 | 99,520 | 100,638 | +1.1% | 27 -> 24 | 9 -> 12 |
+| **all** | | **415,415** | **415,833** | **+0.10%** | **104 -> 103** of 128 | **44 -> 37** of 128 |
+
+**Every measure the two-block reading raised an alarm about dissolves.**
+
+- **Person-days are flat and if anything up**: +0.10% over 128 worlds, with
+  three of the four blocks positive (+1.9%, +2.2%, +1.1%) and only B negative.
+- **Worlds emptied, which looked five worse on A and B, is one better on all
+  four** - 104 against 103 - because C and D both went the other way, 28 to 25
+  and 27 to 24.
+- **Out of the first winter is 44 against 37, and the blocks disagree**: -2,
+  -7, -1, **+3**. Block B's seven is the whole of it; no other block loses more
+  than one, and D gains three. It was never a signal.
+
+Deaths are down slightly, 2,361 to 2,324, which is the same story.
+
+So: **letting a settlement hold a grudge costs it nothing measurable.** Block B
+was an outlier and the two-block reading was wrong - which is the second time
+in this file that two blocks have said something four blocks took back (see
+#207), and the second time the measure that looked worst was the one that was
+level.
 
 #### What is still open
 
-- **Blocks C and D, before and after.** See above. Until they are run this
-  change is carrying an unresolved warning.
 - **A death by a predator leaves nothing.** `last_attacker` is an
   `Option<Uuid>` and only ever another agent, so a man taken by a wolf in front
   of his brother leaves his brother with no fear of wolves. Fixing it means
