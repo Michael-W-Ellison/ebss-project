@@ -15937,8 +15937,49 @@ is read - by `anger_at_people`, by the relationship machinery, by retaliation.
 Seed 0 over a year goes from 603,478 draws to **680,944**, up 12.8%, and the
 constant is re-recorded.
 
+#### Survival: one measure says this costs a settlement its first winter
+
+Against the figures for exactly these seeds at #209 (that is, with the
+apportionment in and the grief keying not yet changed):
+
+| block | seeds | person-days before | after | | worlds emptied | out of the first winter |
+|---|---|---|---|---|---|---|
+| A | 0-31 | 103,795 | 105,780 | **+1.9%** | 27 -> 27 | 10 -> 8 |
+| B | 32-63 | 107,630 | 102,649 | **-4.6%** | 22 -> 27 | 14 -> 7 |
+| **both** | | **211,425** | **208,429** | **-1.4%** | **49 -> 54** of 64 | **24 -> 15** of 64 |
+
+**Person-days cannot be read: the blocks disagree in direction**, +1.9% against
+-4.6%. By the rule this project has used since #207 that is not a result.
+
+**Out of the first winter is the one measure both blocks agree on, and it is
+down by more than a third** - 24 of 64 to 15, block A losing two and block B
+seven. That is a large enough move to take seriously, with one caveat that cuts
+against it: it is a *threshold* measure sitting directly on a cliff. A
+settlement is counted as out of the first winter if anybody is alive on day
+360, and the days these worlds actually empty on cluster hard just short of it
+- block B's list runs 212, 271, 314, 316, 316, 317, 320, 320, 323, 325, 325,
+326, 326, 328, 328, 330, 331, 333, 335, 335, 336, 338, 341, 345, 350, 358, 360.
+Two dozen worlds die within forty days of the line, so a small worsening
+anywhere tips a lot of them across it, and the same small worsening barely
+shows in person-days.
+
+What it is *not* is more killing. The cause mix hardly moves: a blow takes
+37.5% and 35.8% of the dead against 37.9% and 34.5% before, and hunger 56.0%
+and 54.7% against 53.7% and 57.2%. People are not fighting each other to death
+in greater numbers; the settlements are simply going a little sooner.
+
+**This is not decided.** One block a side agreeing on one threshold measure,
+while the continuous measure disagrees with itself, is exactly the position
+#207 was in before four blocks reversed its reading. It wants blocks C and D on
+fresh seeds, run before as well as after, before anything is concluded - and if
+it holds, the question is whether a settlement that can hold a grudge is worth
+a settlement that survives, which is a design question and not a measurement
+one.
+
 #### What is still open
 
+- **Blocks C and D, before and after.** See above. Until they are run this
+  change is carrying an unresolved warning.
 - **A death by a predator leaves nothing.** `last_attacker` is an
   `Option<Uuid>` and only ever another agent, so a man taken by a wolf in front
   of his brother leaves his brother with no fear of wolves. Fixing it means
