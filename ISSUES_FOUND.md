@@ -15539,3 +15539,117 @@ So the honest summary, on 128 worlds a side:
 Both halves of that were true after two blocks as well. What the extra hour
 bought was knowing which of the three survival numbers to believe, and it was
 not the two I would have guessed.
+
+### 208. Hunger does not kill half of them. It lands the last blow on people a fight had already half killed, and when it does bite it bites people who are carrying food
+
+#207 ended with hunger at about half of all deaths and the binding constraint
+apparently moved to food. Chasing that turns up three separate things, and the
+first is that the death tally has been misread - by me, and by every note in
+this file that has quoted it.
+
+Eight worlds, one year, twelve founders, all figures counted.
+
+#### 1. The cause of death names the last straw, not the load
+
+`AgentState::lose_health` keeps one field, `what_last_took_health`, and the
+death tally is built from it. So a death is credited to whatever removed the
+final point of health, however little of the damage that thing did.
+
+Tallying every call to `lose_health` by what it actually took:
+
+| | health taken | share | kills | share of kills |
+|---|---|---|---|---|
+| **a blow** | **7,261** | **47.6%** | 36 | 25.9% |
+| **hunger** | 5,101 | 33.5% | **58** | **41.7%** |
+| the weather | 1,057 | 6.9% | 17 | 12.2% |
+| a fall | 747 | 4.9% | 3 | 2.2% |
+| illness | 713 | 4.7% | 4 | 2.9% |
+| starvation | 272 | 1.8% | 8 | 5.8% |
+| thirst | 90 | 0.6% | 13 | 9.4% |
+
+**Violence takes nearly half the health in this world and is credited with a
+quarter of the deaths. Hunger takes a third and is credited with two fifths.**
+
+The bias is structural rather than random: hunger is a *drip*, applied every
+turn of forty-eight in a day that a body is wasting, and a blow is a *lump*.
+Whatever else has ground a body down, the thing most likely to remove its last
+point is the one that fires most often. Any cause that ticks will out-rank any
+cause that strikes.
+
+This matters beyond the arithmetic. The month-by-month figures show mean health
+falling from 100 to **51.1 in the first month** while the reserve sits at 99%
+and not one agent in the sample is wasting. Half of everybody's health goes in
+the first month to something that is not food at all.
+
+#### 2. Nobody is chronically hungry, and hunger still does a third of the damage
+
+| month | mean reserve | mean health | wasting |
+|---|---|---|---|
+| 0–7 | **99–100%** | 100 → 57 | 0–2% |
+| 8 | 91% | 70 | 2% |
+| 10 | 64% | 71 | 24% |
+
+**2.5% of all agent-turns are spent below half the reserve.** Wasting spells
+are short: median 3.2 days, mean 5.0. The reserve is full nearly all the time,
+and only 2.1% of the dead have an empty one.
+
+So two and a half per cent of the turns produce a third of all the health lost.
+The drain is `0.1 / share` per turn, where `share` is what a body of that age
+eats relative to a grown adult:
+
+| | per turn | per day | dead from full health in |
+|---|---|---|---|
+| adult (share 1.00) | 0.1 | **4.8** | 20.8 days of wasting |
+| nine-year-old (0.50) | 0.2 | 9.6 | 10.4 days |
+| toddler (0.20) | 0.5 | **24.0** | **4.2 days** |
+
+against healing of 0.02 a turn, **0.96 a day** on the move. An adult must eat
+well for five days to undo one hungry one; a toddler for twenty-five. The mean
+damage per wasting turn measured 0.19, which says about half of all wasting
+turns are a child's.
+
+It is also worth recording that a *second*, unreachable implementation of this
+exists. `Agent::apply_starvation_damage` and `Agent::update_starvation` are
+called from tests and from nothing else, and the formula in the dead one is
+**graduated** - `days_into_the_reserve * 0.5`, nothing at the threshold rising
+to the full rate at the end - where the live one is flat from the first turn
+below half. The better of the two rules is the one nothing runs.
+
+#### 3. And it bites people who are carrying food
+
+Of the wasting turns:
+
+| | | |
+|---|---|---|
+| with food in a pit somewhere in the world | 26,941 | **100.0%** |
+| with food in the wasting person's own pack | 11,133 | 41.3% |
+| **with something `has_edible_food` would accept that turn** | **7,355** | **27.3%** |
+
+**Over a quarter of all hunger damage in this model is taken by somebody
+carrying something they could have eaten on the spot.** Not raw meat wanting a
+knife, not something spoiled - the commonest things in a wasting person's pack
+are fish (4,071 turns), nuts (3,053), roots (2,283) and legumes (896).
+
+And 45.8% of the dead die with food in the pack.
+
+#### What this actually is
+
+Three findings, and only the third is about food at all:
+
+1. **The death tally is a last-hit tally**, so it over-credits anything that
+   ticks and under-credits anything that strikes. Violence is the largest
+   single drain on health in this world and nothing in this file has ever said
+   so. Every previous reading of "what took them" in these notes is wrong in
+   the same direction.
+2. **The wasting drain is flat and savage** - five times healing for an adult,
+   twenty-five times for a small child - and the graduated version of the rule
+   is sitting in the file with no caller.
+3. **Hunger damage is being taken with food to hand.** A quarter of it is taken
+   by people holding something edible that turn, and all of it while the
+   settlement has a full pit somewhere.
+
+The cheapest thing to fix is the third, and it is a decision-layer question
+rather than an economy one: why does a wasting body carrying fish not eat the
+fish. The most *valuable* thing to fix is the first, because until the tally
+apportions damage rather than last blows, no measurement of what kills a
+settlement can be trusted - including the ones in #205 and #207.
