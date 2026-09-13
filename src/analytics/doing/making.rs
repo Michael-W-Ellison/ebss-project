@@ -478,11 +478,16 @@ impl Simulation {
             // Cuts and burns, which are the other tax on a bad hand and a bad
             // tool both.
             if let Some(hurt) = attempt.injury {
-                let harm = match hurt {
+                let harm: f32 = match hurt {
                     crate::agents::skills::InjuryType::Small => 2.0,
                     crate::agents::skills::InjuryType::Large => 8.0,
                 };
-                agent.state.health = (agent.state.health - harm).max(1.0);
+                // Never all the way down - a burn at the fire has never
+                // killed anybody in this model and this is not the change
+                // that starts it - but named, because a drain that says
+                // nothing is a drain booked to whatever spoke last.
+                let harm = harm.min((agent.state.health - 1.0).max(0.0));
+                agent.state.lose_health(harm, "a mishap");
             }
 
             // How good the makings are, read before they are consumed. The
@@ -981,11 +986,12 @@ impl Simulation {
 
         // Cuts and needle-stabs, which are a beginner's other tax
         if let Some(hurt) = attempt.injury {
-            let harm = match hurt {
+            let harm: f32 = match hurt {
                 crate::agents::skills::InjuryType::Small => 2.0,
                 crate::agents::skills::InjuryType::Large => 8.0,
             };
-            agent.state.health = (agent.state.health - harm).max(1.0);
+            let harm = harm.min((agent.state.health - 1.0).max(0.0));
+            agent.state.lose_health(harm, "a mishap");
         }
 
         if !attempt.success {

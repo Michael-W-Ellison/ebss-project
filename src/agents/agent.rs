@@ -1023,6 +1023,24 @@ pub struct AgentState {
     /// reckoning reads what is written rather than guessing from what is left.
     #[serde(default)]
     pub what_last_took_health: Option<String>,
+    /// What has taken health off this one, and how much of each is still
+    /// standing against the body.
+    ///
+    /// `what_last_took_health` answers a different and much smaller question
+    /// than the one the reckoning asks of it. A death credited to whatever
+    /// removed the final point credits the last straw and not the load: over
+    /// eight worlds a blow took **47.6%** of all the health lost in this model
+    /// and was credited with **25.9%** of the deaths, while thirst took 0.6%
+    /// and was credited with 9.4%. A drip out-ranks a lump, because the drip
+    /// is nearly always what happens to be last.
+    ///
+    /// So each thing that takes health is booked against its name, and mending
+    /// takes back what is outstanding in proportion to what each is still
+    /// holding - because health that has healed away killed nobody. What is
+    /// left is an apportionment of the living body: the entries sum to
+    /// `100.0 - health`, and at a death they sum to the whole man.
+    #[serde(default)]
+    pub what_has_taken_health: Vec<(String, f32)>,
     /// How much salt this one has drunk and not yet got rid of.
     ///
     /// "If they do so it should increase their hydration drive more over time
@@ -1071,6 +1089,7 @@ impl AgentState {
             waste_carried: 0.0,
             ailing: None,
             what_last_took_health: None,
+            what_has_taken_health: Vec::new(),
             salt_in_me: 0.0,
             an_open_wound: 0.0,
         }
@@ -1190,17 +1209,93 @@ impl AgentState {
             return;
         }
 
+        // What it took, not what it swung. A fall priced at a thousand on a
+        // man with thirty health left took thirty, and booking the thousand
+        // would let one overkill outweigh a lifetime of everything else.
+        let taken = amount.min(self.health);
+
         self.health = (self.health - amount).max(0.0);
         self.what_last_took_health = Some(to.to_string());
+        self.book_what_was_taken(taken, to);
 
         if self.health <= 0.0 {
             self.is_alive = false;
         }
     }
 
+    /// Book what a thing took, against its name.
+    fn book_what_was_taken(&mut self, taken: f32, to: &str) {
+        if taken <= 0.0 {
+            return;
+        }
+
+        // A list rather than a map, and walked in the order things first
+        // happened, because a map's order is not the same twice and the cause
+        // of death would stop being a fact about the world.
+        if let Some((_, so_far)) = self
+            .what_has_taken_health
+            .iter_mut()
+            .find(|(named, _)| named == to)
+        {
+            *so_far += taken;
+        } else {
+            self.what_has_taken_health.push((to.to_string(), taken));
+        }
+    }
+
+    /// Take mended health back off the ledger, in proportion to what each
+    /// thing is still holding.
+    ///
+    /// A man beaten half to death at twenty and starved at forty was killed by
+    /// the starving. The beating is in the tally only for as long as the body
+    /// has not made it good, which is what makes the remainder an account of
+    /// the death rather than of the life.
+    fn mend_the_ledger(&mut self, mended: f32) {
+        if mended <= 0.0 {
+            return;
+        }
+
+        let outstanding: f32 = self.what_has_taken_health.iter().map(|(_, x)| *x).sum();
+        if outstanding <= 0.0 {
+            return;
+        }
+
+        let what_is_left = ((outstanding - mended) / outstanding).max(0.0);
+        for (_, x) in &mut self.what_has_taken_health {
+            *x *= what_is_left;
+        }
+        self.what_has_taken_health.retain(|(_, x)| *x > 0.0);
+    }
+
+    /// What holds the largest part of this body, and so what killed it.
+    ///
+    /// Ties go to the first name alphabetically, so that two things which took
+    /// exactly as much as each other answer the same way every run.
+    pub fn what_took_the_most(&self) -> Option<&str> {
+        self.what_has_taken_health
+            .iter()
+            .filter(|(_, taken)| *taken > 0.0)
+            .max_by(|(this_name, this), (that_name, that)| {
+                this.partial_cmp(that)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| that_name.cmp(this_name))
+            })
+            .map(|(named, _)| named.as_str())
+    }
+
+    /// How much of this body is being held by something that took it.
+    ///
+    /// The same number as `100.0 - health`, arrived at from the other end,
+    /// which is what makes it worth asserting.
+    pub fn what_is_still_standing(&self) -> f32 {
+        self.what_has_taken_health.iter().map(|(_, x)| *x).sum()
+    }
+
     /// Heal
     pub fn heal(&mut self, amount: f32) {
+        let before = self.health;
         self.health = (self.health + amount).min(100.0);
+        self.mend_the_ledger(self.health - before);
     }
 
     /// Eat food and restore energy
@@ -4570,7 +4665,7 @@ impl Agent {
         // near perfect health, because the only harm that survived the tick
         // was a broken bone.
         let body_condition = self.body.overall_health() * 100.0;
-        self.state.health = self.state.health.min(body_condition);
+        self.take_health_down_to(body_condition);
 
         // Update energy (basic metabolism)
         self.state.energy = (self.state.energy - 0.1).max(0.0);
@@ -4840,7 +4935,7 @@ impl Agent {
             let body_condition = self.body.overall_health() * 100.0;
 
             self.regenerate_health(resting);
-            self.state.health = self.state.health.min(body_condition);
+            self.take_health_down_to(body_condition);
         }
 
         // Process fatigue (awake state)
@@ -7925,6 +8020,23 @@ impl Agent {
         let regeneration = base_rate * healing_bonus;
 
         self.state.heal(regeneration);
+    }
+
+    /// Cap health at what the body can carry, and say so.
+    ///
+    /// A broken body holds health down, and until now it did so silently: the
+    /// drop went straight into the field, named nothing, and the reckoning
+    /// went on crediting whatever had spoken last. It is the only drain in the
+    /// model that took health without saying what it was, so every point it
+    /// ever took was booked to something else.
+    ///
+    /// Wounds are the only thing that lowers a body's condition, so that is
+    /// what it is called.
+    fn take_health_down_to(&mut self, body_condition: f32) {
+        if self.state.health > body_condition {
+            self.state
+                .lose_health(self.state.health - body_condition, "a wound");
+        }
     }
 
     /// Check if agent is dead

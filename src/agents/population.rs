@@ -813,15 +813,21 @@ impl Population {
             .iter()
             .filter(|agent| !agent.state.is_alive)
             .map(|agent| {
-                // What killed this one, read off what was written at the time
-                // rather than worked out from what is left.
+                // What killed this one: the thing holding the largest part of
+                // the body, rather than whichever took the final point.
                 //
                 // The cascade this replaced asked a corpse whether it was
                 // hungry, and by then the hunger has been eaten away and the
                 // cold has worn off, so the honest answer to every question
                 // was no: **70% of every death in this model came out as
                 // "unknown cause"**, and a settlement could not say what
-                // killed its people. See `AgentState::lose_health`.
+                // killed its people. Writing it down at the time fixed that
+                // and left a second fault behind it: the last straw is not
+                // the load. A blow took 47.6% of all health lost in this
+                // model and was credited with 25.9% of the deaths; thirst
+                // took 0.6% and was credited with 9.4%, because a drip is
+                // nearly always what happens to be last. See
+                // `AgentState::what_has_taken_health`.
                 // Old age first, because it is a fact about the man and not
                 // about the last scratch he took: an ill man who reaches his
                 // years dies of his years, and reading the record alone would
@@ -831,9 +837,9 @@ impl Population {
                 } else {
                     agent
                         .state
-                        .what_last_took_health
-                        .clone()
-                        .unwrap_or_else(|| "unknown cause".to_string())
+                        .what_took_the_most()
+                        .unwrap_or("unknown cause")
+                        .to_string()
                 };
 
                 let cause_enum = match named.as_str() {

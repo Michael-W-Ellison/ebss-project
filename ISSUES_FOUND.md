@@ -15653,3 +15653,157 @@ rather than an economy one: why does a wasting body carrying fish not eat the
 fish. The most *valuable* thing to fix is the first, because until the tally
 apportions damage rather than last blows, no measurement of what kills a
 settlement can be trusted - including the ones in #205 and #207.
+
+### 209. The tally apportions the body instead of crediting the last blow, and three drains that took health without saying so
+
+#208 found that the cause of death in this model is a last-hit tally:
+`AgentState::lose_health` kept one field, `what_last_took_health`, and the
+reckoning read whatever had removed the final point. A blow took 47.6% of all
+the health lost in this world and was credited with 25.9% of the deaths;
+thirst took 0.6% and was credited with 9.4%. The bias is structural rather
+than random - hunger is a *drip*, applied every turn of forty-eight in a day
+that a body is wasting, and a blow is a *lump* - so any cause that ticks
+out-ranks any cause that strikes, whatever actually ground the body down.
+
+This is that fixed. It changes no behaviour at all: it changes what the model
+is able to say about behaviour it was already producing.
+
+#### The rule
+
+Each thing that takes health is booked against its name, in
+`what_has_taken_health`, and **mending takes back what is outstanding in
+proportion to what each name is still holding**. So the entries are not a
+history of everything that ever happened to a man - they are the missing part
+of him, and they sum to `100.0 - health`. At a death they sum to the whole
+man, and the cause of death is whichever name holds the largest share.
+
+Three details carry most of the weight:
+
+- **A thing is booked for what it took, not for what it swung.** A fall priced
+  at a thousand landing on a man with thirty health left takes thirty. Booking
+  the swing would let one overkill outweigh everything else that ever happened
+  to him, and would break the account besides.
+- **What healed away killed nobody.** A man beaten half to death at twenty and
+  starved at forty was killed by the starving. Without this the tally is an
+  account of a life rather than of a death.
+- **Ties break by name**, so a cause of death is a fact about the world rather
+  than about the order a list happened to be built in.
+
+#### Three drains that said nothing at all
+
+Fixing the reading turned up a second thing. The cause was only ever written
+by `lose_health`, and three places took health without going through it:
+
+| | what it was | now |
+|---|---|---|
+| `Agent::tick_with_percepts`, and again in the resting branch | `state.health = state.health.min(body_condition)` - a broken body holds health down | booked as **"a wound"** |
+| `making.rs`, the crafting injury | `state.health = (state.health - harm).max(1.0)` | booked as **"a mishap"** |
+| `making.rs`, the sewing injury | the same line again | the same |
+
+The body-condition cap is the one that matters: it is the only drain in the
+model that took health and named nothing, so **every point it ever took was
+left credited to whatever had spoken last**. It is also the second-largest
+drain in the model after the direct ones, because every injury from a fight, a
+fall or the cold lands on a body part first and arrives at the man later.
+
+All three now go through the one door. The crafting pair keep their floor of
+one - a burn at the fire has never killed anybody in this model and this is
+not the change that starts it - so the health arithmetic is untouched.
+
+#### What it changes: violence doubles, and thirst and the weather go to nothing
+
+Eight worlds, one year, twelve founders, seeds 0-7, read off the settlement's
+own reckoning inside the tick each body falls in.
+
+| | last blow | apportioned |
+|---|---|---|
+| **a blow** | 23.8% | **52.9%** |
+| hunger | 42.7% | 42.1% |
+| **the weather** | 14.7% | **0%** |
+| **thirst** | 9.8% | **0%** |
+| starvation | 4.2% | 2.1% |
+| illness | 2.8% | 2.9% |
+| a fall | 2.1% | **0%** |
+| *deaths in the block* | *143* | *140* |
+
+**Violence more than doubles its share of the dead.** And three causes go to
+nothing at all: the weather, thirst and falls are never the largest part of
+anybody who dies in this model, though between them the last-blow reading gave
+them a quarter of every death.
+
+Thirst is the starkest. It did 0.6% of all the health lost in the model and was
+credited with one death in ten; apportioned, it kills nobody. It is a drip of
+the purest kind - a small amount, very often, to a body that is usually being
+killed by something else.
+
+#### A correction to #208
+
+#208 read the gap between "health taken" and "kills credited" and concluded
+that **hunger** was the thing being over-credited. That is wrong, and the
+apportionment says so: hunger is credited with 42.7% of the dead under the old
+reading and 42.1% under the new one. Hunger was in very nearly the right place
+all along.
+
+The reason #208 got the direction wrong is that it compared two quantities that
+are not the same thing. *Share of all health ever lost* counts damage taken by
+people who went on to live, and damage that healed away; *share of the dead*
+counts only what was still standing on a body at the end. Hunger's share of the
+first is 33.5% and of the second 42%, because a man hunger kills dies with
+hunger holding most of him. Nothing was wrong with hunger's number. What was
+wrong was that **a blow was being under-credited by half**, and the credit it
+should have had was going to the weather, to thirst and to falls.
+
+So the headline of #208 stands in its general form - the tally named the last
+straw and not the load - but its specific accusation was aimed at the wrong
+cause.
+
+#### The reading is load-bearing, which it should not be
+
+The two columns above come from two runs on the same eight seeds, and they do
+not contain the same number of deaths: 143 against 140. That is not noise.
+Seeded worlds are deterministic, so the same eight seeds under two readings
+should be the same eight worlds - and they are not, because **the name a
+settlement gives to a death is an input to the settlement's behaviour**:
+
+```rust
+let cause_source = EmotionSource::Event(cause_description.clone());
+...
+Information::Death { agent: *deceased_id, cause: cause_description.clone() }
+```
+
+`EmotionSource` is a **map key** for grief and anger, and the cause string is
+carried in gossip as part of the information's identity. Two deaths named the
+same thing pool into one bucket of grief; named differently they do not. So
+correcting the diagnosis changes how the survivors feel, which changes what
+they do.
+
+This is not something this change introduced - it is a coupling that was
+already there and could not be seen while there was only one reading. But it
+means the instrument is wired into the thing it measures, and that is worth
+deciding about deliberately rather than leaving as it is.
+
+It also means **the draw-count tests are not sufficient here.** Both held
+(8,936 and 603,478), and seed 0's world really is unchanged - but seed 0 is one
+world, and across eight the two readings diverge. A count that holds on one
+seed proves less than it looks like it proves.
+
+#### What is still open
+
+- **Grief and gossip key on the cause string.** Either they should key on
+  something coarser that does not move when the diagnosis improves, or the
+  coupling should be made deliberate. Until then, any future change to how a
+  death is named is also a change to the world.
+- **`DeathCause`, the enum the timeline uses, cannot say most of these.** The
+  weather, a fall, illness, a wound and a mishap all fall through to
+  `DeathCause::Unknown`; only starvation, thirst, old age, exhaustion and a
+  blow have a variant. That is the same two-spellings fault as #204 and #206,
+  in a third place.
+- **`what_last_took_health` now has no production reader.** It is kept because
+  it answers a genuinely different question and the tests use it to pin the
+  distinction, but it is a field nothing in the model consults.
+- **#208's other two findings are untouched**: the wasting drain is still flat
+  and savage where a graduated version sits unused in the file, and a wasting
+  body carrying fish still does not eat the fish.
+- **Every reading of "what took them" in this file predates the fix**,
+  including the ones in #205 and #207. They are not wrong about what happened,
+  but they are wrong about what it was called.
