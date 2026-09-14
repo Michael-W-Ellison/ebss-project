@@ -16342,3 +16342,74 @@ Suite: 2,551 passed, 10 failed, the standing set exactly.
 My own new test also tripped `every_roll_comes_from_the_one_stream` by reaching
 for `Uuid::new_v4` - randomness outside `core::dice` that no seed can reach.
 That test earned its keep; the test now draws from the one stream.
+
+### 214. A pack that is empty reads as ninety per cent full: `current_weight` drifts up and never comes back
+
+**This is the pack famine, and #212's account of it was wrong.** The next thing
+to fix, and the root of a fault that has now been chased through three issues
+under three wrong names.
+
+#### The measurement
+
+Day 310, three worlds, every living agent's pack weighed two ways - the running
+total the model keeps, and the sum of what is actually in it:
+
+| | `current_weight` says | the items weigh | phantom |
+|---|---|---|---|
+| world 0 | **41.8 / 42.0** (99% full) | 7.8, in 5 stacks | **34.0** |
+| world 1 | 41.8 / 42.0 (99% full) | 34.2, in 10 stacks | 7.6 |
+| world 1, a child | **0.5 / 0.6** (83% full) | **0.0, in _no stacks at all_** | 0.5 |
+| world 2 | 20.7 / 42.0 (49% full) | 8.7, in 7 stacks | 12.0 |
+| world 2, a child | **0.5 / 0.5** (94% full) | **0.0, in no stacks** | 0.5 |
+
+**Two agents carrying nothing whatever read as 83% and 94% full.** A man
+carrying a spear, a metal spear, a handaxe, a basket and a knife - seven and a
+half units in a pack that holds forty-two - is told he is full.
+
+#### Why
+
+`Inventory::current_weight` is maintained incrementally: `+=` on add (two
+places), `-=` on remove, and again either way for filling and drinking a
+vessel. There is a recompute-from-scratch at `agent.rs:596` that sets it to the
+true sum, and it is plainly not reached often enough. Every path that changes
+what is in a pack without going through the four arithmetic sites leaves the
+number too high, and nothing ever brings it back down.
+
+#### What it explains
+
+- **The 33,486 refusals of "No room in the pack for what is in the store"** -
+  a man standing on ten thousand items of food, refused by a number that is
+  five times what he is carrying.
+- **Packs pinned at 86% to 105% "full" all year** whatever is in them, which
+  is what #212 read as a pack full of the kit.
+- **Why #213's successor made things worse.** The shedding change let a man
+  put his tools down beside the store; he did, lost the capability, and still
+  could not pick anything up, because the thirty-four units blocking him were
+  not there. Refusals went *up*, 33,486 to 35,136, and month 11 went from 42
+  deaths to 53.
+
+#### The correction to #212, which is mine
+
+#212 said the packs were full of the kit and named the rule that pins it there.
+The list it drew that from - wood 82, stoneknife 33, basket 31, handaxe 31 -
+was summed over **eight worlds by two months by about nine agents**, some 144
+agent-samples. That is 0.57 wood and 0.23 stone knives *each*: the whole list
+is about **2.3 light items per person**, which cannot fill anything. I read a
+top-twelve table without dividing by its own denominator, and built a fix on
+it.
+
+The lesson is the one this file keeps writing down in other people's code: a
+count means nothing without the thing it is counted over.
+
+#### What to do
+
+1. **Make the running weight agree with the pack.** Either recompute on every
+   change - the sum is over a handful of stacks and this is not a hot path - or
+   find the writes that bypass the four arithmetic sites. Recomputing is the
+   one-spelling answer and the one this document keeps arriving at.
+2. Then re-measure, because every carrying number in #205, #206, #207 and #212
+   was taken through this.
+3. **And a capacity of half a handful for a child** is a second thing, not
+   explained by the drift: `0.5` and `0.6` against a `WHAT_A_HANDFUL_OF_FOOD_WEIGHS`
+   of `0.5`. A child at that capacity can never take food out of a store even
+   with the arithmetic right. See the open #215 and #216.
