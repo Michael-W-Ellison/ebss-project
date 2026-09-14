@@ -16123,3 +16123,136 @@ dead - it wears people down and something else finishes them.
   something that sets `is_alive` directly. Rare, but the whole point of #209 is
   that a settlement can say what killed its people, and this is the remainder
   that still cannot.
+
+### 212. A settlement starves to death sitting on ten thousand items of food, because its hands are full of its own tools
+
+Three questions were put to this model: why starvation is still a problem when
+Stage 0 knowledge offers many ways to get food; whether starvation merely keeps
+a population low or actually ends it; and what is behind the rate of violent
+deaths. Eight worlds, two years, twelve founders, seeds 0-7.
+
+| month | alive | died | ate/needed | in pits | in packs | pack full |
+|---|---|---|---|---|---|---|
+| 1 | 11.8 | 2 | 110% | 716 | 44 | 86% |
+| 4 | 9.4 | 4 | 425% | 5,001 | 191 | **100%** |
+| 5 | 9.0 | 3 | **784%** | 5,081 | 137 | **103%** |
+| 9 | 9.6 | 10 | 330% | **10,402** | 40 | 94% |
+| 10 | 9.0 | 20 | 141% | 10,288 | 9 | 92% |
+| **11** | **3.8** | **42** | **33%** | **10,029** | **4** | **105%** |
+| 12 | 0.8 | 1 | 34% | 3,357 | 0 | 99% |
+| 24 | 0.0 | 0 | - | 0 | 0 | - |
+
+#### 1. It is not a food problem and never was
+
+The larder climbs to **10,402 items** and is still **10,029** in the month
+forty-two people die of hunger. `Gather` is chosen 437,444 times and fails 23.
+`Eat` is chosen 121,662 times and fails 33. Both ends of the food chain work
+perfectly. What fails is everything between the pit and the hand:
+
+```
+PickUp: No room in the pack for what is in the store    33,486
+GiveTo: No room in their pack for it                    12,777
+GoWithout: No room in their pack for it                 10,567
+```
+
+**Packs run 86% to 105% full all year**, over capacity in the month the
+settlement dies, holding four items of food. What is in them instead:
+
+```
+wood 82   stoneknife 33   basket 31   handaxe 31   diggingstick 30
+shovel 27   spear 24   bow 19   stone 17   iron 16
+```
+
+That is the kit. And the kit cannot be put down:
+
+```rust
+pub fn what_i_would_set_down(&self) -> Option<String> {
+    ...
+    .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
+```
+
+`is_this_part_of_the_kit` is the rule consolidated in #207 - it replaced two
+inline filters that already did the same thing, so the behaviour predates it,
+but #207 made it one explicit rule and, by stopping `trying_a_swap` destroying
+tools, left far more kit alive to fill packs with. **A man may not set down his
+axe to pick up his dinner.**
+
+The fault has been here before under another name. `what_i_would_swap`'s own
+doc records the previous round: *"127,477 refusals of 'No room in the pack for
+what is in the store', 71% of every refusal in the model"*. It was fixed, and
+it has come back at 33,486, because the fix that let a man shed weight
+exempted exactly the things he is carrying.
+
+**So Stage 0 knowledge is not the constraint and neither is the food. The
+constraint is carrying capacity**, which is the same famine as #205 and #206 in
+a third costume, and it lands on two issues already open and unfixed: #216 (a
+bare hand should hold twelve, not thirty) and #242 (shedding picks by weight
+alone).
+
+#### 2. Unsustainable, decisively - and the land is not what binds
+
+Twelve founders hold around nine for nine months. Month 11 takes forty-two and
+leaves 3.8; month 12 leaves 0.8; every world is empty by month 24.
+
+The tail is the sharpest part of it. In months 13-22 the one or two survivors
+eat **270% to 473%** of what a body needs, with 1,500 items still in the pits.
+**The same land that kills a settlement of twelve feeds one or two people
+comfortably.** This is not the country's carrying capacity binding. It is that
+a group cannot get food into its hands, and the constraint relaxes the moment
+there are few enough mouths that what one pair of hands can carry is enough.
+
+#### 3. The violence did not increase - it stopped being mis-filed
+
+#209 did not make people more violent; it stopped crediting a blow's damage to
+whatever spoke last. Violence was already taking 47.6% of all health lost while
+being credited with 25.9% of deaths. #210 did not move it either: a blow took
+37.9% and 34.5% of the dead before, 37.5% and 35.8% after.
+
+And most of it is not people. Tracing every site that deals a blow to an agent:
+one is people fighting each other (`fighting.rs:126`), and the rest are animals
+- a hungry predator striking (`beasts.rs:375`), an animal getting the better of
+a fight (`fighting.rs:471`), a hunt going wrong (`getting.rs:998`) - plus
+poisoning from a tasted plant. The code says so itself in `beasts.rs`: *"agents
+seldom set upon one another, but the country is full of things that will try
+them."* The tally has no way to say which, because they all say "a blow".
+
+#### A defect #210 introduced, found here
+
+```rust
+agent.take_damage(landed);
+agent.emotions.record_attack(animal_id, current_tick);   // beasts.rs:376
+```
+
+`animal_id` is a `Uuid` - animals carry them too. It goes into `last_attacker`,
+whose doc says "Record being attacked by another agent" and which a second
+comment asserts is *"only ever another agent"*. Both were already wrong. Before
+#210 it only fed `DeathCause::Combat`, which nothing acts on.
+
+**#210 made it load-bearing.** `recent_attacker` now keys grief as
+`EmotionSource::Agent(uuid)`, so in the common case a survivor comes away
+afraid of and angry at **a person who does not exist**, because the uuid
+belongs to a wolf. The failure tally shows it from the other side:
+**`Attack: Target agent not found` 2,185 times**.
+
+I checked what `recent_attacker` meant against a doc comment rather than
+against its callers, which is the one thing this file keeps saying not to do.
+
+#### Also worth its own look
+
+**A body eats up to 784% of what it burns** in the season of plenty, and none
+of the surplus is banked. Nothing caps a meal. The starving months read
+plausibly (33%, 34%) and the good months do not, which is what real gorging
+looks like rather than broken accounting - but a figure that large should be
+checked before anything is built on it.
+
+#### What to do, in order
+
+1. **`record_attack` should say what attacked** - a person or a creature - so
+   grief keys `Creature(species)` for an animal and `Agent(uuid)` for a person.
+   This is my bug from #210, and it closes that issue's open item as well: a
+   man whose brother was taken by wolves would fear wolves, and
+   `what_frightens_me_most` reads `Creature` sources, so for the first time the
+   fear would be one something can act on.
+2. **The pack famine**, which is what is actually killing settlements. A man
+   should be able to set his axe down beside his own larder.
+3. **The eight-fold meal.**
