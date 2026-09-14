@@ -16322,7 +16322,22 @@ filed as people. It now asks whether a *wolf* struck.
 
 A behaviour change, and a larger one than #210: seed 0 over a year goes from
 680,944 draws to **690,468**. Three decision branches stop firing at phantoms
-and one fear becomes expressible for the first time. Blocks are running.
+and one fear becomes expressible for the first time.
+
+**Survival is flat**, against the figures for these seeds at #210:
+
+| block | seeds | person-days before | after | | worlds emptied | out of the first winter |
+|---|---|---|---|---|---|---|
+| A | 0-31 | 105,780 | 105,581 | -0.19% | 27 -> 28 | 8 -> 7 |
+| B | 32-63 | 102,649 | 103,297 | +0.63% | 27 -> 28 | 7 -> 8 |
+| **both** | | **208,429** | **208,878** | **+0.22%** | **54 -> 56** of 64 | **15 -> 15** |
+
+First winters are exactly level, one block losing one and the other gaining
+one. Person-days move a fifth of a per cent with the blocks disagreeing in
+sign. Which is what a correctness fix should look like: it stops three branches
+aiming at nothing, and aiming at nothing was not what was killing anybody.
+
+Suite: 2,551 passed, 10 failed, the standing set exactly.
 
 My own new test also tripped `every_roll_comes_from_the_one_stream` by reaching
 for `Uuid::new_v4` - randomness outside `core::dice` that no seed can reach.
