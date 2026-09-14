@@ -108,8 +108,6 @@ fn a_man_with(how_much_food: u32) -> Simulation {
         .inventory
         .get_all_items_mut()
         .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-
     if how_much_food > 0 {
         let database = FoodDatabase::new();
         let mut fish = InventoryItem::new_with_weight("fish".to_string(), how_much_food, 0.1);

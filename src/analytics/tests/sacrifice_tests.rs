@@ -67,11 +67,7 @@ fn empty_the_pack(simulation: &mut Simulation, who: usize) {
     simulation.population.agents[who]
         .inventory
         .get_all_items_mut()
-        .clear();
-    simulation.population.agents[who]
-        .inventory
-        .recalculate_weight();
-}
+        .clear();}
 
 // --------------------------------------------------------------------------
 // Standing in the way

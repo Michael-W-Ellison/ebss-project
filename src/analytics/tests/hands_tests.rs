@@ -31,10 +31,6 @@ fn one_person() -> Simulation {
         .inventory
         .get_all_items_mut()
         .clear();
-    simulation.population.agents[0]
-        .inventory
-        .recalculate_weight();
-
     simulation
 }
 

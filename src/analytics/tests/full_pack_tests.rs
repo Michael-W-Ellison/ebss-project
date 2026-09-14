@@ -269,7 +269,15 @@ fn the_gate_weighs_a_stone_the_same_as_the_pack_does() {
         ResourceType::Stone,
     ) - 0.5;
     let load = simulation.population.agents[0].inventory.max_weight - room_for_no_stone;
-    simulation.population.agents[0].inventory.current_weight = load;
+    // Loaded with real weight rather than by writing the total down: there is
+    // no total to write any more, and forging one is what #214 was.
+    simulation.population.agents[0]
+        .inventory
+        .get_all_items_mut()
+        .insert(
+            "ballast".to_string(),
+            crate::agents::InventoryItem::new_with_weight("ballast".to_string(), 1, load),
+        );
 
     let agent = simulation.population.agents[0].clone();
     assert!(

@@ -624,7 +624,7 @@ impl Simulation {
             return 1.0;
         }
 
-        let loaded = (agent.inventory.current_weight / capacity).clamp(0.0, 1.0);
+        let loaded = (agent.inventory.current_weight() / capacity).clamp(0.0, 1.0);
         let felt = ((loaded - Self::WHAT_GOES_UNNOTICED) / (1.0 - Self::WHAT_GOES_UNNOTICED))
             .clamp(0.0, 1.0);
 

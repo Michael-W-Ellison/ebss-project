@@ -475,9 +475,7 @@ fn somebody_on_open_ground() -> crate::analytics::Simulation {
     simulation.population.agents[0]
         .inventory
         .get_all_items_mut()
-        .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-    simulation
+        .clear();    simulation
 }
 
 fn put_in_the_pack(simulation: &mut crate::analytics::Simulation, what: &str, how_many: u32) {

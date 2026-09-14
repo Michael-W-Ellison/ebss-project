@@ -58,9 +58,7 @@ fn a_settlement(how_many: usize) -> Simulation {
         simulation.population.agents[who]
             .inventory
             .get_all_items_mut()
-            .clear();
-        simulation.population.agents[who].inventory.recalculate_weight();
-    }
+            .clear();    }
     simulation
 }
 

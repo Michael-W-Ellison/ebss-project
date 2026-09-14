@@ -613,7 +613,7 @@ impl Simulation {
                     debug!(
                         "Agent {} gathered {} {} (total weight: {:.1}/{:.1})",
                         agent.id, harvested, item_id,
-                        agent.inventory.current_weight, agent.inventory.max_weight
+                        agent.inventory.current_weight(), agent.inventory.max_weight
                     );
 
                     ActionResult::success()

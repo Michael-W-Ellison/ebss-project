@@ -32,9 +32,7 @@ fn one_person(world: World) -> Simulation {
     simulation.population.agents[0]
         .inventory
         .get_all_items_mut()
-        .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-    simulation
+        .clear();    simulation
 }
 
 fn arm_them(simulation: &mut Simulation) {

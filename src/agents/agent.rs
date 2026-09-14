@@ -388,8 +388,6 @@ pub struct Inventory {
     pub max_slots: usize,
     /// Maximum weight that can be carried
     pub max_weight: f32,
-    /// Current total weight
-    pub current_weight: f32,
 }
 
 impl Inventory {
@@ -398,7 +396,6 @@ impl Inventory {
             items: std::collections::BTreeMap::new(),
             max_slots,
             max_weight,
-            current_weight: 0.0,
             what_would_not_go_in: 0,
         }
     }
@@ -413,7 +410,7 @@ impl Inventory {
 
         // Check weight limit
         let item_weight = item.total_weight();
-        if self.current_weight + item_weight > self.effective_max_weight() {
+        if self.current_weight() + item_weight > self.effective_max_weight() {
             // What will not go in is not carried, and something ought to know
             // it happened - see `what_would_not_go_in`.
             if item.is_food() {
@@ -422,23 +419,12 @@ impl Inventory {
             return false; // Too heavy
         }
 
-        // Add or stack item, and weigh the pack by what is actually in it.
-        //
-        // The weight added is **not** the incoming item's weight when the two
-        // stacks merge, because merging can change what the whole stack is:
-        // `absorb` settles the preparation, and preparation is what decides
-        // weight - a dried stack weighs a third of the same thing raw. Adding
-        // only the newcomer's weight left `current_weight` reading low, and
-        // the next `recalculate_weight` corrected it in one jump. If that jump
-        // put the pack over its limit, **every subsequent `add_item` returned
-        // false and the food was silently destroyed**, because almost every
-        // caller ignores the bool. See ISSUES_FOUND #65.
+        // Add or stack the item. Nothing is tallied, because nothing is
+        // stored: what the pack weighs is what is in it, asked for when it is
+        // wanted. See `current_weight`.
         if let Some(existing) = self.items.get_mut(&item.item_id) {
-            let before = existing.total_weight();
             existing.absorb(item);
-            self.current_weight += existing.total_weight() - before;
         } else {
-            self.current_weight += item_weight;
             self.items.insert(item.item_id.clone(), item);
         }
 
@@ -461,9 +447,6 @@ impl Inventory {
                     quality: item.quality,
                     food_data: item.food_data.clone(),
                 };
-
-                // Update weight
-                self.current_weight -= removed.total_weight();
 
                 if item.quantity == 0 {
                     self.items.remove(item_id);
@@ -514,9 +497,6 @@ impl Inventory {
 
         let drunk = amount - remaining;
 
-        // Update weight (water weighs 1kg per liter)
-        self.current_weight -= drunk;
-
         drunk // Return amount actually drunk
     }
 
@@ -541,9 +521,6 @@ impl Inventory {
         }
 
         let filled = available_water - remaining;
-
-        // Update weight (water weighs 1kg per liter)
-        self.current_weight += filled;
 
         filled // Return amount actually filled
     }
@@ -591,16 +568,35 @@ impl Inventory {
         &mut self.items
     }
 
-    /// Recalculate total weight from all items
-    pub fn recalculate_weight(&mut self) {
-        self.current_weight = self.items.values()
-            .map(|item| item.total_weight())
-            .sum();
+    /// What this pack weighs: the sum of what is in it, every time it is
+    /// asked.
+    ///
+    /// It was a stored `f32` kept up to date by five pieces of arithmetic -
+    /// two in `add_item`, one in `remove_item`, one each for drinking a vessel
+    /// and filling one - with a `recalculate_weight` to put it right when it
+    /// went wrong. **It went wrong constantly**, because `get_item_mut` and
+    /// `get_all_items_mut` hand out the items themselves, and anything that
+    /// changes a quantity, a fill level or a preparation through those changes
+    /// what the pack weighs without the tally hearing about it.
+    ///
+    /// Measured at day 310: a man carrying a spear, a metal spear, a handaxe,
+    /// a basket and a knife - **seven and a half units in a pack that holds
+    /// forty-two** - read as 41.8, and was refused everything. Two agents
+    /// carrying **no stacks at all** read as 83% and 94% full. See
+    /// ISSUES_FOUND #214.
+    ///
+    /// The tally had already been patched once for the same reason (#65, the
+    /// comment that used to sit in `add_item`) and drifted again. A number
+    /// that is stored *and* derivable has two answers and only one of them is
+    /// ever right, so this keeps the one that cannot be wrong. It is a sum
+    /// over a handful of stacks and is not a hot path.
+    pub fn current_weight(&self) -> f32 {
+        self.items.values().map(|item| item.total_weight()).sum()
     }
 
     /// Check if inventory is overweight
     pub fn is_overweight(&self) -> bool {
-        self.current_weight > self.effective_max_weight()
+        self.current_weight() > self.effective_max_weight()
     }
 
     /// How much this pack can hold, baskets and all.
@@ -632,7 +628,7 @@ impl Inventory {
 
     /// Get weight capacity remaining
     pub fn weight_capacity_remaining(&self) -> f32 {
-        (self.effective_max_weight() - self.current_weight).max(0.0)
+        (self.effective_max_weight() - self.current_weight()).max(0.0)
     }
 
     /// Get weight as percentage of max (0.0 to 1.0+)
@@ -640,7 +636,7 @@ impl Inventory {
         if self.max_weight == 0.0 {
             0.0
         } else {
-            self.current_weight / self.max_weight
+            self.current_weight() / self.max_weight
         }
     }
 
@@ -2055,7 +2051,7 @@ impl Agent {
     /// walk about carrying is a decision, and dressing one up as a law made it
     /// worse. This is only the law: what cannot be carried is not carried.
     pub fn how_much_too_much_i_am_carrying(&self) -> f32 {
-        (self.inventory.current_weight - self.inventory.effective_max_weight()).max(0.0)
+        (self.inventory.current_weight() - self.inventory.effective_max_weight()).max(0.0)
     }
 
     /// What a person sets down when the pack will not take any more food.
@@ -6006,7 +6002,7 @@ impl Agent {
 
     /// Check if agent can carry additional weight
     pub fn can_carry(&self, additional_weight: f32) -> bool {
-        self.inventory.current_weight + additional_weight <= self.inventory.max_weight
+        self.inventory.current_weight() + additional_weight <= self.inventory.max_weight
     }
 
     /// Get total carrying capacity (base + transport)

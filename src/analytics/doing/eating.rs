@@ -665,13 +665,7 @@ impl Simulation {
 
         // And what becomes of it afterwards, which is the only thing
         // about salting that is worth knowing. The salting itself is
-        // over in a turn; whether the meat is still good in a week is
-        // the question, and it stays in the pack where its owner can
-        // see it.
-        // What is in the pack weighs what it weighs, and preparing a
-        // thing changes that - the cached total has to be told.
-        agent.inventory.recalculate_weight();
-
+        // over in a turn;
         let watch_it = crate::agents::wondering::Watched::of(
             agent.inventory.get_item(what).expect("it is in there"),
         );
@@ -781,12 +775,6 @@ impl Simulation {
         food.set_preparation(how, tick_now);
 
         let how_many = item.quantity;
-
-        // Drying takes the water out, and water is most of what meat
-        // weighs. A pack of dried strips is a third of the pack of raw
-        // joints it was, which is the second thing preserving buys.
-        agent.inventory.recalculate_weight();
-
         agent
             .skills
             .practise(crate::agents::SkillType::Cooking, 14, tick_now);

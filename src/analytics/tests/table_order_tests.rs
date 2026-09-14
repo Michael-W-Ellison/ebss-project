@@ -38,9 +38,7 @@ fn a_settlement(how_many: usize) -> Simulation {
         simulation.population.agents[who]
             .inventory
             .get_all_items_mut()
-            .clear();
-        simulation.population.agents[who].inventory.recalculate_weight();
-    }
+            .clear();    }
     simulation
 }
 
@@ -63,9 +61,7 @@ fn a_people_with_the_same_materials_does_not_all_make_the_same_thing() {
             agent
                 .inventory
                 .add_item(InventoryItem::new_with_weight(what.to_string(), 40, 0.1));
-        }
-        agent.inventory.recalculate_weight();
-    }
+        }    }
 
     let chosen: std::collections::BTreeSet<(String, String)> = simulation
         .population
@@ -93,9 +89,7 @@ fn the_same_man_reaches_for_the_same_thing() {
             agent
                 .inventory
                 .add_item(InventoryItem::new_with_weight(what.to_string(), 40, 0.1));
-        }
-        agent.inventory.recalculate_weight();
-    }
+        }    }
 
     // Sampled rather than asserted once: whether he can be bothered today is a
     // coin toss by design - see `Lessons::will_try_this_again` - and it is only
@@ -166,9 +160,7 @@ fn a_bowl_is_reachable_by_somebody() {
             agent
                 .inventory
                 .add_item(InventoryItem::new_with_weight(what.to_string(), 40, 0.1));
-        }
-        agent.inventory.recalculate_weight();
-    }
+        }    }
 
     let anybody_carving = simulation
         .population

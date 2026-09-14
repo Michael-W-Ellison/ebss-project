@@ -40,9 +40,7 @@ fn one_person() -> Simulation {
     simulation.population.agents[0]
         .inventory
         .get_all_items_mut()
-        .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-    simulation
+        .clear();    simulation
 }
 
 // --------------------------------------------------------------------------
@@ -228,9 +226,7 @@ fn the_undirected_working_comes_first_and_that_is_where_bowls_come_from() {
             agent
                 .inventory
                 .add_item(InventoryItem::new_with_weight(what.to_string(), 20, 0.1));
-        }
-        agent.inventory.recalculate_weight();
-    }
+        }    }
 
     let chosen = simulation.what_this_drive_offers(
         crate::core::DriveType::Utility,
@@ -291,9 +287,7 @@ fn a_man_who_is_equipped_goes_back_to_pottering() {
                 );
             }
         }
-        let agent = &mut simulation.population.agents[0];
-        agent.inventory.recalculate_weight();
-    }
+        let agent = &mut simulation.population.agents[0];    }
 
     assert_eq!(
         simulation.population.agents[0].what_i_would_make(true),

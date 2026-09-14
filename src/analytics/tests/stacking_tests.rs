@@ -201,9 +201,7 @@ fn what_is_given_is_the_thing_and_not_its_name() {
 
     let mut simulation = Simulation::new(world, population);
     for agent in simulation.population.agents.iter_mut() {
-        agent.inventory.get_all_items_mut().clear();
-        agent.inventory.recalculate_weight();
-    }
+        agent.inventory.get_all_items_mut().clear();    }
 
     let _ = simulation.population.agents[0]
         .inventory

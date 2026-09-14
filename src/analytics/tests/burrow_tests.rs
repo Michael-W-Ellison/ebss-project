@@ -36,8 +36,6 @@ fn one_person() -> Simulation {
             .inventory
             .add_item(InventoryItem::new_with_weight(digger.called.to_string(), 1, 1.0));
     }
-    simulation.population.agents[0].inventory.recalculate_weight();
-
     // Ground a hole will go in, so these tests are about the decision rather
     // than about where the world happened to put a lake.
     for dy in -4..=4 {
