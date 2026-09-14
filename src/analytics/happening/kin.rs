@@ -469,7 +469,7 @@ impl Simulation {
                     // Apply health penalty if suffering
                     let penalty = nursing.health_penalty();
                     if penalty > 0.0 {
-                        agent.state.lose_health(penalty, "illness");
+                        agent.state.lose_health(penalty, crate::agents::AgentState::ILLNESS);
                         debug!(
                             "Infant {} suffering from lack of nursing: -{:.1} health",
                             agent.id, penalty

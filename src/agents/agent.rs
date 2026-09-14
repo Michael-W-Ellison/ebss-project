@@ -1136,17 +1136,17 @@ impl AgentState {
         // `Physiology::capability` take a quarter off everything the agent can
         // do at each of three-quarters, half and a quarter. Nought is death.
         if self.physiology.died_of_thirst() {
-            self.lose_health(self.health, "dehydration");
+            self.lose_health(self.health, Self::THIRST);
         } else if self.physiology.is_parched() {
             // Not damage so much as the body starting to fail at the edges
-            self.lose_health(0.15 * (1.0 - self.physiology.capability()), "thirst");
+            self.lose_health(0.15 * (1.0 - self.physiology.capability()), Self::THIRST);
         }
 
         // And the reserve running out is starvation. Three weeks for an adult.
         if self.physiology.starved() {
-            self.lose_health(self.health, "starvation");
+            self.lose_health(self.health, Self::HUNGER);
         } else if self.physiology.is_wasting() {
-            self.lose_health(0.1 / reserve, "hunger");
+            self.lose_health(0.1 / reserve, Self::HUNGER);
         }
 
         // Energy depletion (normal metabolism), made worse by working thirsty
@@ -1156,12 +1156,12 @@ impl AgentState {
 
         // When energy is depleted, health starts decreasing too
         if self.energy <= 0.0 {
-            self.lose_health(0.05, "exhaustion");
+            self.lose_health(0.05, Self::EXHAUSTION);
         }
 
         // Check for death from old age
         if self.age >= self.max_age {
-            self.what_last_took_health = Some("old age".to_string());
+            self.what_last_took_health = Some(Self::OLD_AGE.to_string());
             self.is_alive = false;
         }
 
@@ -1180,7 +1180,7 @@ impl AgentState {
         let opened = (amount / Self::WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND).clamp(0.0, 1.0);
         self.an_open_wound = self.an_open_wound.max(opened);
 
-        self.lose_health(amount, "a blow");
+        self.lose_health(amount, Self::A_BLOW);
     }
 
     /// Lose health to a named thing.
@@ -1190,6 +1190,51 @@ impl AgentState {
     /// gave **"unknown cause" for 70% of every death in this model** - by the
     /// time anybody asks, the hunger has been eaten away and the cold has
     /// worn off, and the honest answer to every question is no.
+    /// What takes health off a body, in the words the record keeps. One
+    /// spelling each.
+    ///
+    /// Two of these used to have two names apiece: the slow one and the blow
+    /// that finished it - "hunger" and "starvation", "thirst" and
+    /// "dehydration". While the reckoning only named the last thing to speak
+    /// that was untidy and no worse. Once it began apportioning a body *by
+    /// name* (#209) it became an arithmetic fault: one cause booked under two
+    /// headings is one cause counted half twice, and both halves lose. Blocks
+    /// C and D found "dehydration" taking 0.9% and 1.2% of the dead where
+    /// #209 had recorded thirst as nothing at all.
+    ///
+    /// `process_deaths` had always known they were one cause apiece - it
+    /// matched `"hunger" | "starvation"` onto a single `DeathCause` - which is
+    /// the tell that the two spellings were never meant to be two things.
+    ///
+    /// They are constants now because a constant cannot drift from itself.
+    pub const HUNGER: &'static str = "hunger";
+    pub const THIRST: &'static str = "thirst";
+    pub const A_BLOW: &'static str = "a blow";
+    pub const A_FALL: &'static str = "a fall";
+    pub const A_WOUND: &'static str = "a wound";
+    pub const A_MISHAP: &'static str = "a mishap";
+    pub const THE_WEATHER: &'static str = "the weather";
+    pub const ILLNESS: &'static str = "illness";
+    pub const A_POOR_DIET: &'static str = "a poor diet";
+    pub const EXHAUSTION: &'static str = "exhaustion";
+    pub const OLD_AGE: &'static str = "old age";
+
+    /// Every one of them, so that anything wanting to reason about the whole
+    /// vocabulary does not have to keep its own copy and watch it rot.
+    pub const EVERYTHING_THAT_TAKES_HEALTH: [&'static str; 11] = [
+        Self::HUNGER,
+        Self::THIRST,
+        Self::A_BLOW,
+        Self::A_FALL,
+        Self::A_WOUND,
+        Self::A_MISHAP,
+        Self::THE_WEATHER,
+        Self::ILLNESS,
+        Self::A_POOR_DIET,
+        Self::EXHAUSTION,
+        Self::OLD_AGE,
+    ];
+
     /// How hard a blow has to be before it leaves anything worth calling a
     /// wound.
     ///
@@ -4999,7 +5044,7 @@ impl Agent {
         // Apply deficiency health penalties
         let penalty = self.nutrition.deficiency_health_penalty();
         if penalty > 0.0 {
-            self.state.lose_health(penalty, "a poor diet");
+            self.state.lose_health(penalty, AgentState::A_POOR_DIET);
         }
 
         // Couple state energy to nutritional reserves.
@@ -5100,7 +5145,7 @@ impl Agent {
 
         // Apply exposure damage to health
         if damage > 0.0 {
-            self.state.lose_health(damage * 10.0, "the weather");
+            self.state.lose_health(damage * 10.0, AgentState::THE_WEATHER);
             // And a soaking in the cold is a thing people came down with,
             // rather than only a thing that wore them down.
             self.a_soaking_may_tell(damage, now);
@@ -7583,7 +7628,7 @@ impl Agent {
             self.inventory.remove_item(item_id, 1);
             self.food_i_ate = self.food_i_ate.saturating_add(1);
             let damage = 10.0;
-            self.state.lose_health(damage, "a blow");
+            self.state.lose_health(damage, AgentState::A_BLOW);
             return EatResult::MadeSick(damage);
         }
 
@@ -7983,7 +8028,7 @@ impl Agent {
 
         // When energy is depleted, health starts decreasing
         if self.state.energy <= 0.0 {
-            self.state.lose_health(0.05, "exhaustion");
+            self.state.lose_health(0.05, AgentState::EXHAUSTION);
         }
     }
 
@@ -8053,7 +8098,7 @@ impl Agent {
     fn take_health_down_to(&mut self, body_condition: f32) {
         if self.state.health > body_condition {
             self.state
-                .lose_health(self.state.health - body_condition, "a wound");
+                .lose_health(self.state.health - body_condition, AgentState::A_WOUND);
         }
     }
 
@@ -8084,14 +8129,14 @@ impl Agent {
     /// death whatever the calendar says. See `agents::physiology`.
     pub fn apply_starvation_damage(&mut self) {
         if self.state.physiology.starved() {
-            self.state.lose_health(self.state.health, "starvation");
+            self.state.lose_health(self.state.health, AgentState::HUNGER);
             return;
         }
         if self.state.physiology.is_wasting() {
             let days_into_the_reserve = (self.state.physiology.reserve_capacity
                 - self.state.physiology.reserve)
                 / physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY;
-            self.state.lose_health(days_into_the_reserve * 0.5, "starvation");
+            self.state.lose_health(days_into_the_reserve * 0.5, AgentState::HUNGER);
         }
     }
 

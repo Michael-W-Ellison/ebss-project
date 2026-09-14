@@ -254,26 +254,16 @@ fn test_grief_explanation_mentions_functional_loss() {
 // were not the same eight worlds.
 
 /// Every name this settlement has for a death. None of them may be an emotion.
-const WHAT_A_DEATH_GETS_CALLED: [&str; 12] = [
-    "a blow",
-    "a fall",
-    "a mishap",
-    "a poor diet",
-    "a wound",
-    "dehydration",
-    "exhaustion",
-    "hunger",
-    "illness",
-    "old age",
-    "starvation",
-    "the weather",
-];
+///
+/// Taken from the model rather than copied, so a cause added later is covered
+/// here without anybody remembering to come back.
+use crate::agents::AgentState;
 
 /// Nothing an agent feels is keyed on what the reckoning decided.
 fn nothing_is_felt_about_the_verdict(agent: &Agent) {
     use crate::agents::EmotionSource;
 
-    for named in WHAT_A_DEATH_GETS_CALLED {
+    for named in AgentState::EVERYTHING_THAT_TAKES_HEALTH {
         let verdict = EmotionSource::Event(named.to_string());
         assert!(
             !agent.emotions.fear_sources.contains_key(&verdict),

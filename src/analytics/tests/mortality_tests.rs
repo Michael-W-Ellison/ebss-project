@@ -350,3 +350,92 @@ fn an_unhurt_man_has_nothing_holding_him() {
     assert_eq!(agent.state.what_took_the_most(), None);
     assert_eq!(agent.state.what_is_still_standing(), 0.0);
 }
+
+// --------------------------------------------------------------------------
+// One spelling per cause
+// --------------------------------------------------------------------------
+
+/// A man the slow thing wore down and the quick thing finished is held by one
+/// name, not two.
+///
+/// Hunger arrives as a drip every turn a body is wasting, and when the reserve
+/// is gone a single blow takes whatever is left. Those were two strings -
+/// "hunger" and "starvation" - and the apportionment adds up *by name*, so one
+/// cause was booked under two headings and neither got its due. Thirst had the
+/// same pair, "thirst" and "dehydration"; blocks C and D of #210 found
+/// dehydration holding 0.9% and 1.2% of the dead where #209 had recorded
+/// thirst as nothing at all.
+#[test]
+fn the_slow_thing_and_the_blow_that_finishes_it_share_a_name() {
+    let mut population = one_person();
+    let agent = &mut population.agents[0];
+
+    // Worn down a turn at a time...
+    for _ in 0..60 {
+        agent.state.lose_health(0.5, crate::agents::AgentState::HUNGER);
+    }
+    // ...and then finished off.
+    let what_was_left = agent.state.health;
+    agent
+        .state
+        .lose_health(what_was_left, crate::agents::AgentState::HUNGER);
+
+    assert!(!agent.state.is_alive);
+    assert_eq!(
+        agent.state.what_has_taken_health.len(),
+        1,
+        "one cause, two headings: {:?}",
+        agent.state.what_has_taken_health
+    );
+    assert_eq!(agent.state.what_took_the_most(), Some("hunger"));
+    assert!(
+        (agent.state.what_is_still_standing() - 100.0).abs() < 0.001,
+        "and it holds the whole man"
+    );
+}
+
+/// No two of the names are the same name.
+#[test]
+fn every_cause_is_spelled_once() {
+    use crate::agents::AgentState;
+
+    let mut seen = AgentState::EVERYTHING_THAT_TAKES_HEALTH.to_vec();
+    seen.sort_unstable();
+    let mut once_each = seen.clone();
+    once_each.dedup();
+
+    assert_eq!(
+        once_each, seen,
+        "a cause is listed twice, which is how two names for one thing start"
+    );
+}
+
+/// And nothing in the model takes health under a name that is not on the list.
+///
+/// The list is what the tests, and anything else that wants to reason about
+/// the whole vocabulary, read instead of keeping their own copy.
+#[test]
+fn nothing_takes_health_under_a_name_nobody_wrote_down() {
+    use crate::agents::AgentState;
+    use crate::analytics::Simulation;
+    use crate::world::{World, WorldConfig};
+
+    crate::core::dice::seed(7);
+    let mut population = Population::new();
+    for _ in 0..12 {
+        population.spawn_agent(AgentConfig::default());
+    }
+    let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
+
+    for _ in 0..2_000 {
+        simulation.tick();
+        for agent in &simulation.population.agents {
+            for (named, _) in &agent.state.what_has_taken_health {
+                assert!(
+                    AgentState::EVERYTHING_THAT_TAKES_HEALTH.contains(&named.as_str()),
+                    "'{named}' took health and is not one of the names"
+                );
+            }
+        }
+    }
+}

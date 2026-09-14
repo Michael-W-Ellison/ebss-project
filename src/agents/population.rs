@@ -806,7 +806,7 @@ impl Population {
 
     /// Remove dead agents from population and process grief for survivors
     fn process_deaths(&mut self) {
-        use crate::agents::EmotionSource;
+        use crate::agents::{AgentState, EmotionSource};
 
         // Identify dead agents before removing them, collecting position and detailed cause
         // The fifth of these is who, if anybody, had a hand in it - asked of
@@ -837,7 +837,7 @@ impl Population {
                 // years dies of his years, and reading the record alone would
                 // book every one of them under whatever ailed him at the end.
                 let named = if agent.state.age >= agent.state.max_age {
-                    "old age".to_string()
+                    AgentState::OLD_AGE.to_string()
                 } else {
                     agent
                         .state
@@ -847,11 +847,17 @@ impl Population {
                 };
 
                 let cause_enum = match named.as_str() {
-                    "hunger" | "starvation" => DeathCause::Starvation,
-                    "thirst" | "dehydration" => DeathCause::Dehydration,
-                    "old age" => DeathCause::OldAge,
-                    "exhaustion" => DeathCause::Exhaustion,
-                    "a blow" => DeathCause::Combat {
+                    // One arm apiece now. These used to read
+                    // `"hunger" | "starvation"` and `"thirst" | "dehydration"`,
+                    // and that pair of alternations was the standing evidence
+                    // that the model had two names for each of two causes -
+                    // which the apportionment then counted as four. See
+                    // `AgentState::HUNGER`.
+                    AgentState::HUNGER => DeathCause::Starvation,
+                    AgentState::THIRST => DeathCause::Dehydration,
+                    AgentState::OLD_AGE => DeathCause::OldAge,
+                    AgentState::EXHAUSTION => DeathCause::Exhaustion,
+                    AgentState::A_BLOW => DeathCause::Combat {
                         killer_id: agent.emotions.recent_attacker(self.current_tick),
                     },
                     _ => DeathCause::Unknown,

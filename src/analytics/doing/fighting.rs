@@ -123,7 +123,7 @@ impl Simulation {
 
         // Also reduce target's overall health
         let target = &mut self.population.agents[target_index];
-        target.state.lose_health(actual_damage * 0.2, "a blow");
+        target.state.lose_health(actual_damage * 0.2, crate::agents::AgentState::A_BLOW);
 
         // Get IDs before borrowing
         let attacker_id = self.population.agents[agent_index].id;

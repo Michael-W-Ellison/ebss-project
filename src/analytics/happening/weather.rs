@@ -172,7 +172,7 @@ impl Simulation {
                         agent.id, terrain_type, fall_damage, injured_part, injury_severity);
                 }
 
-                agent.state.lose_health(fall_damage * 0.15, "a fall");
+                agent.state.lose_health(fall_damage * 0.15, crate::agents::AgentState::A_FALL);
             }
 
             // 3. DISEASE/INFECTION - Random chance

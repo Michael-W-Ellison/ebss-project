@@ -487,7 +487,7 @@ impl Simulation {
                 // that starts it - but named, because a drain that says
                 // nothing is a drain booked to whatever spoke last.
                 let harm = harm.min((agent.state.health - 1.0).max(0.0));
-                agent.state.lose_health(harm, "a mishap");
+                agent.state.lose_health(harm, crate::agents::AgentState::A_MISHAP);
             }
 
             // How good the makings are, read before they are consumed. The
@@ -991,7 +991,7 @@ impl Simulation {
                 crate::agents::skills::InjuryType::Large => 8.0,
             };
             let harm = harm.min((agent.state.health - 1.0).max(0.0));
-            agent.state.lose_health(harm, "a mishap");
+            agent.state.lose_health(harm, crate::agents::AgentState::A_MISHAP);
         }
 
         if !attempt.success {
