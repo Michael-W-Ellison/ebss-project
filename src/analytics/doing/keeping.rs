@@ -387,7 +387,7 @@ impl Simulation {
             // *made*, which is nought for a pack that had room already and
             // needed to shed nothing. What is wanted here is the room there
             // is, so it is asked for afterwards.
-            let _ = self.set_down_what_is_worth_less_than_food(
+            let _ = self.set_down_what_is_worth_less_than_food_at_a_store(
                 agent_index,
                 each * asking_for as f32,
             );
