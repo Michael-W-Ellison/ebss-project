@@ -16046,3 +16046,80 @@ level.
 - **The `Event` arm of `process_drive_source_loss_with_cause` now has no
   production caller.** A test still exercises it and the shape is a legitimate
   one for a general function, but nothing in the model builds it any more.
+
+### 211. One spelling per cause, and what the two spellings had been costing
+
+#210's blocks C and D found `"dehydration"` holding 0.9% and 1.2% of the dead
+where #209 had recorded thirst as nothing at all. The cause is spelled twice:
+
+```rust
+self.lose_health(self.health, "dehydration");   // the blow: all that is left
+self.lose_health(0.15 * (...), "thirst");       // the drip, every turn
+```
+
+and hunger the same way, `"starvation"` and `"hunger"`. While the reckoning
+only named the last thing to speak, two names for one cause was untidy and no
+worse. Once #209 began apportioning a body **by name** it became an arithmetic
+fault: one cause booked under two headings is one cause counted half twice, and
+both halves lose.
+
+`process_deaths` had always known better - it matched `"hunger" | "starvation"`
+onto a single `DeathCause`. That pair of alternations was the standing evidence
+that the two spellings were never meant to be two things.
+
+#### The fix
+
+Each killing blow takes its drip's name, and every cause is now a constant on
+`AgentState` rather than a literal, so two spellings cannot start again. All
+eighteen call sites across five files go through them, the alternations in
+`process_deaths` collapse to one arm apiece, and
+`EVERYTHING_THAT_TAKES_HEALTH` gives anything reasoning about the vocabulary
+somewhere to read it - the grief test of #210 had a hand-copied array of twelve
+names, which would have rotted the first time a cause was added.
+
+**Bookkeeping only, and the draw counts prove it**: 8,936 and 680,944, both
+unchanged, so the world is bit-identical and no survival blocks were needed.
+That is #210 paying for itself within a day - the cause string no longer
+reaches grief, so renaming it changes nothing but the tally. Before #210 this
+same change would have needed four blocks and four hours.
+
+#### What it was costing
+
+Measured directly, the slices that were being filed apart: **starvation held
+2.6% and 3.2%** of the dead in #210's blocks A and B, and **dehydration 0.9%
+and 1.2%** in C and D. Those are the halves that were being kept out of the
+hunger and thirst rows. Merging also re-ranks any body where neither half won
+alone but the two together would, so the true correction is a little larger
+than the sum.
+
+#### Where the tally stands now
+
+Eight worlds, one year, twelve founders, seeds 0-7, 151 deaths:
+
+| | share of the dead |
+|---|---|
+| hunger | **57.0%** |
+| a blow | **39.1%** |
+| illness | 3.3% |
+| unknown cause | 0.7% |
+
+**This is not comparable to the table in #209**, and it should not be read as a
+correction of it. #209 measured 140 deaths on the world as it stood *before*
+#210, and #210 changed the world - the draw count went from 603,478 to 680,944.
+These are the same eight seeds and not the same eight worlds. What carries over
+is the shape: hunger and violence are what kill a settlement, and violence is a
+far larger part of it than the last-hit tally ever said.
+
+Against the six still on their feet at the end, the weights are different
+again: hunger 79.8%, **the weather 17.0%**, a fall 1.7%, thirst 1.4%. The
+weather is a real drain on the living and almost never the largest share of the
+dead - it wears people down and something else finishes them.
+
+#### What is still open
+
+- **One death in this block is an `unknown cause`**, and one was in #210's
+  block B as well. That is a body whose ledger was empty at the end - health
+  reaching nothing without any named drain having taken it, or a life ended by
+  something that sets `is_alive` directly. Rare, but the whole point of #209 is
+  that a settlement can say what killed its people, and this is the remainder
+  that still cannot.
