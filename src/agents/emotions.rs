@@ -54,8 +54,22 @@ pub struct EmotionState {
     pub sadness_sources: BTreeMap<EmotionSource, f32>,
     pub happiness_sources: BTreeMap<EmotionSource, f32>,
     pub curiosity_sources: BTreeMap<EmotionSource, f32>,
-    /// Last agent who attacked this agent (for retaliation)
-    pub last_attacker: Option<Uuid>,
+    /// What last struck this one - a person or a creature.
+    ///
+    /// It was an `Option<Uuid>` called `last_attacker`, documented as "another
+    /// agent", and asserted a few lines below to be *"only ever another
+    /// agent"*. It never was: `beasts.rs` has always written the **animal's**
+    /// uuid here, and animals carry uuids too. While the only reader was
+    /// `DeathCause::Combat`, which is timeline decoration that nothing acts
+    /// on, the lie cost nothing and nobody found it.
+    ///
+    /// #210 made it load-bearing by keying grief on it, and a settlement began
+    /// mourning its dead by becoming afraid of, and angry at, **a person who
+    /// does not exist** - 2,185 refusals of "Attack: Target agent not found".
+    /// The type now says which it was, so it cannot be mistaken again. See
+    /// ISSUES #212.
+    #[serde(default)]
+    pub what_last_struck_me: Option<EmotionSource>,
     /// Tick when last attacked (for recency)
     pub last_attack_tick: u32,
 }
@@ -75,7 +89,7 @@ impl EmotionState {
             sadness_sources: BTreeMap::new(),
             happiness_sources: BTreeMap::new(),
             curiosity_sources: BTreeMap::new(),
-            last_attacker: None,
+            what_last_struck_me: None,
             last_attack_tick: 0,
         }
     }
@@ -91,20 +105,33 @@ impl EmotionState {
         self.should_flee() || self.should_attack()
     }
 
-    /// Record being attacked by another agent
-    pub fn record_attack(&mut self, attacker_id: Uuid, current_tick: u32) {
-        self.last_attacker = Some(attacker_id);
+    /// Record being struck, by whatever struck.
+    ///
+    /// `EmotionSource` rather than a bare id, because the two callers are a
+    /// person hitting a person and an animal biting a person, and the whole of
+    /// #212 is that those were the same thing here.
+    pub fn record_attack(&mut self, who: EmotionSource, current_tick: u32) {
+        self.what_last_struck_me = Some(who);
         self.last_attack_tick = current_tick;
     }
 
-    /// Get the last attacker if attack was recent (within 100 ticks)
-    pub fn recent_attacker(&self, current_tick: u32) -> Option<Uuid> {
-        if let Some(attacker) = self.last_attacker {
-            if current_tick.saturating_sub(self.last_attack_tick) < 100 {
-                return Some(attacker);
-            }
+    /// What struck this one, if it was recent enough to still matter.
+    pub fn recent_attacker(&self, current_tick: u32) -> Option<EmotionSource> {
+        if current_tick.saturating_sub(self.last_attack_tick) < 100 {
+            return self.what_last_struck_me.clone();
         }
         None
+    }
+
+    /// And the person who struck, if it was a person at all.
+    ///
+    /// For the one reader that can only mean somebody: a killing is laid at
+    /// the door of a man, and a wolf has no door.
+    pub fn whoever_struck_me(&self, current_tick: u32) -> Option<Uuid> {
+        match self.recent_attacker(current_tick) {
+            Some(EmotionSource::Agent(who)) => Some(who),
+            _ => None,
+        }
     }
 
 
@@ -190,7 +217,7 @@ impl EmotionState {
     /// indifferent to another. Running away is only possible if you know what
     /// you are running from, and until this existed nothing could read the
     /// sources back out: the flight branch of action selection was keyed on
-    /// `last_attacker`, which is only ever another agent, so an agent
+    /// `last_attacker`, which was taken to be only ever another agent, so an agent
     /// frightened of a wolf fell straight through it and carried on foraging.
     pub fn what_frightens_me_most(&self) -> Option<(&str, f32)> {
         Self::worst_creature(&self.fear_sources)

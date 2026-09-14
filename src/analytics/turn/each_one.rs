@@ -427,7 +427,14 @@ impl Simulation {
                     (away, false)
                 }
                 // High fear - flee from attacker or danger
-                else if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                // `whoever_struck_me`, not `recent_attacker`: this branch looks
+                // the striker up in the agent list, and what used to be stored
+                // was as often as not an animal's uuid, which is found in no
+                // agent list - so a man bitten by a wolf fell through to the
+                // arm below and **fled in a random direction** rather than
+                // away from the wolf. Something present is handled above, by
+                // the threat tree, which reads creatures properly. See #212.
+                else if let Some(attacker_id) = agent.emotions.whoever_struck_me(self.current_tick) {
                     // Find attacker position and flee away from them
                     if let Some(attacker) = self.population.agents.iter().find(|a| a.id == attacker_id) {
                         let attacker_pos = attacker.state.position;
@@ -485,7 +492,12 @@ impl Simulation {
                     (strike, false)
                 }
                 // High anger, low fear - retaliate against attacker
-                else if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                // And likewise here, where it was worse: this aimed an
+                // `Attack` at the stored uuid, so a man mauled by a bear
+                // swung at a person who does not exist - **2,185 refusals of
+                // "Attack: Target agent not found"**. Standing up to the
+                // animal itself is the branch above.
+                else if let Some(attacker_id) = agent.emotions.whoever_struck_me(self.current_tick) {
                     debug!(
                         "Agent {} RETALIATING against {} (anger={:.2}, fear={:.2})",
                         agent_id, attacker_id, agent.emotions.anger, agent.emotions.fear

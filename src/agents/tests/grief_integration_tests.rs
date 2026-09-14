@@ -330,7 +330,9 @@ fn a_death_somebody_had_a_hand_in_is_feared_as_that_person() {
     pop.spawn_agent(AgentConfig::default());
     let killer = pop.agents[2].id;
 
-    pop.agents[1].emotions.record_attack(killer, 0);
+    pop.agents[1]
+        .emotions
+        .record_attack(crate::agents::EmotionSource::Agent(killer), 0);
     pop.agents[1].state.is_alive = false;
     pop.tick();
 
@@ -357,7 +359,9 @@ fn the_man_who_did_it_is_somebody_to_be_angry_at() {
     pop.spawn_agent(AgentConfig::default());
     let killer = pop.agents[2].id;
 
-    pop.agents[1].emotions.record_attack(killer, 0);
+    pop.agents[1]
+        .emotions
+        .record_attack(crate::agents::EmotionSource::Agent(killer), 0);
     pop.agents[1].state.is_alive = false;
     pop.tick();
 
@@ -367,4 +371,87 @@ fn the_man_who_did_it_is_somebody_to_be_angry_at() {
         "nobody is held to account for it: {held_against:?}"
     );
     nothing_is_felt_about_the_verdict(&pop.agents[0]);
+}
+
+// --------------------------------------------------------------------------
+// A wolf is not a person
+// --------------------------------------------------------------------------
+
+/// A man taken by a wolf leaves his brother afraid of wolves.
+///
+/// This is the half #210 could not express and #212 found out why: the strike
+/// wrote the *animal's* uuid into a field meaning "the person who hit me", so
+/// keying grief on it made a survivor afraid of somebody who does not exist.
+/// Now it says which, and a fear of a creature is one the flight branch can
+/// actually read - `what_frightens_me_most` filters to `Creature` sources.
+#[test]
+fn a_man_taken_by_a_wolf_leaves_his_brother_afraid_of_wolves() {
+    use crate::agents::EmotionSource;
+
+    let mut pop = two_who_matter_to_each_other();
+    pop.agents[1]
+        .emotions
+        .record_attack(EmotionSource::Creature("wolf".to_string()), 0);
+    pop.agents[1].state.is_alive = false;
+    pop.tick();
+
+    let (what, how_much) = pop.agents[0]
+        .emotions
+        .what_frightens_me_most()
+        .expect("there is a thing to be afraid of, and it is a wolf");
+    assert_eq!(what, "wolf");
+    assert!(how_much > 0.0);
+
+    assert_eq!(
+        pop.agents[0].emotions.who_frightens_me_most(),
+        None,
+        "and no person is blamed for it"
+    );
+    nothing_is_felt_about_the_verdict(&pop.agents[0]);
+}
+
+/// A killing is laid at the door of a man, and a wolf has no door.
+#[test]
+fn only_a_person_is_named_as_a_killer() {
+    use crate::agents::EmotionSource;
+
+    let mut pop = Population::new();
+    pop.spawn_agent(AgentConfig::default());
+    let mauled = &mut pop.agents[0];
+
+    mauled
+        .emotions
+        .record_attack(EmotionSource::Creature("bear".to_string()), 0);
+    assert!(
+        mauled.emotions.recent_attacker(1).is_some(),
+        "something struck him"
+    );
+    assert_eq!(
+        mauled.emotions.whoever_struck_me(1),
+        None,
+        "but it was not anybody, and nobody may be blamed or struck back at"
+    );
+
+    let somebody = crate::core::dice::name();
+    mauled
+        .emotions
+        .record_attack(EmotionSource::Agent(somebody), 0);
+    assert_eq!(mauled.emotions.whoever_struck_me(1), Some(somebody));
+}
+
+/// And what struck is forgotten at the same rate whichever it was.
+#[test]
+fn what_struck_is_forgotten_at_the_same_rate_either_way() {
+    use crate::agents::EmotionSource;
+
+    let mut pop = Population::new();
+    pop.spawn_agent(AgentConfig::default());
+    let agent = &mut pop.agents[0];
+
+    agent
+        .emotions
+        .record_attack(EmotionSource::Creature("wolf".to_string()), 0);
+    assert!(agent.emotions.recent_attacker(99).is_some());
+    assert!(agent.emotions.recent_attacker(100).is_none());
+    assert!(agent.emotions.whoever_struck_me(100).is_none());
 }

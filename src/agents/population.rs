@@ -813,7 +813,7 @@ impl Population {
         // every death and not only of the ones the reckoning calls a blow.
         // Grief must not consult the verdict: see the note on `cause_source`
         // below.
-        let dead_agents: Vec<(uuid::Uuid, String, (i32, i32), DeathCause, Option<uuid::Uuid>)> = self.agents
+        let dead_agents: Vec<(uuid::Uuid, String, (i32, i32), DeathCause, Option<EmotionSource>)> = self.agents
             .iter()
             .filter(|agent| !agent.state.is_alive)
             .map(|agent| {
@@ -858,7 +858,9 @@ impl Population {
                     AgentState::OLD_AGE => DeathCause::OldAge,
                     AgentState::EXHAUSTION => DeathCause::Exhaustion,
                     AgentState::A_BLOW => DeathCause::Combat {
-                        killer_id: agent.emotions.recent_attacker(self.current_tick),
+                        // A killing is laid at the door of a man, and a wolf
+                        // has no door.
+                        killer_id: agent.emotions.whoever_struck_me(self.current_tick),
                     },
                     _ => DeathCause::Unknown,
                 };
@@ -925,7 +927,7 @@ impl Population {
             // A person is something an agent can be afraid of, be angry at,
             // remember and retaliate against, and it does not move when the
             // bookkeeping improves.
-            let killed_by = killed_by.map(EmotionSource::Agent);
+            let killed_by = killed_by.clone();
 
             // Notify all surviving agents about the death
             for agent in &mut self.agents {

@@ -16256,3 +16256,74 @@ checked before anything is built on it.
 2. **The pack famine**, which is what is actually killing settlements. A man
    should be able to set his axe down beside his own larder.
 3. **The eight-fold meal.**
+
+### 213. A wolf is not a person: the phantom attacker, and the three branches that were aiming at him
+
+First of the three fixes #212 called for, and the one I owed: a defect I
+introduced in #210 on top of a lie that had been sitting in the model since the
+threat work.
+
+#### The lie
+
+```rust
+/// Last agent who attacked this agent (for retaliation)
+pub last_attacker: Option<Uuid>,
+```
+
+and forty lines below, in the doc for `what_frightens_me_most`:
+
+> *"`last_attacker`, which is only ever another agent"*
+
+It never was. `beasts.rs` has always written the **animal's** uuid into it, and
+animals carry uuids too - the line above it in that file says so outright:
+*"agents seldom set upon one another, but the country is full of things that
+will try them."* Two comments asserted a thing the code had never done.
+
+#### What it cost, in three places
+
+| | what it did |
+|---|---|
+| `DeathCause::Combat { killer_id }` | named a wolf as a murderer, in timeline decoration nothing acts on - harmless, and the reason nobody found this |
+| the **flight** branch | looked the striker up in the agent list, did not find him, and **fled in a random direction** rather than away from the animal |
+| the **retaliation** branch | aimed `Action::Attack` at the stored uuid - **a man mauled by a bear swung at a person who does not exist**: 2,185 refusals of "Attack: Target agent not found" |
+| **grief**, as of #210 | keyed fear and anger on `EmotionSource::Agent(that uuid)`, so a settlement mourned its dead by becoming afraid of, and angry at, a phantom |
+
+The first three were all there before this session. #210 added the fourth, and
+it is the one I am answerable for: I made `recent_attacker` load-bearing and
+checked what it meant **against a doc comment rather than against its two
+callers**, which is the one thing this file keeps saying not to do.
+
+#### The rule
+
+`what_last_struck_me: Option<EmotionSource>` - the thing that struck, said in a
+type that can tell a person from a creature, which is a distinction the emotion
+system already had and this field was throwing away. `record_attack` takes it;
+`recent_attacker` returns it; `whoever_struck_me` returns the `Uuid` **only
+when it was a person**, for the one reader that can only mean somebody. A
+killing is laid at the door of a man, and a wolf has no door.
+
+Every consumer now asks the right question. The flight and retaliation branches
+take `whoever_struck_me`, so they aim at people and let the threat tree - which
+reads `Creature` sources properly, and runs first - handle anything with teeth.
+
+**And #210's open item closes.** A man whose brother was taken by wolves now
+comes away afraid of *wolves*, keyed `Creature("wolf")`, which is a source
+`what_frightens_me_most` can actually read. That fear could never be expressed
+before: the grief path had no way to say "a creature did this".
+
+#### A test was quietly depending on the confusion
+
+`a_hungry_predator_turns_on_the_settlement` counted maulings by checking
+whether `recent_attacker` was one of the eight wolf uuids it had spawned. It
+passed, for years, and was the evidence nobody read that animals were being
+filed as people. It now asks whether a *wolf* struck.
+
+#### What it changes
+
+A behaviour change, and a larger one than #210: seed 0 over a year goes from
+680,944 draws to **690,468**. Three decision branches stop firing at phantoms
+and one fear becomes expressible for the first time. Blocks are running.
+
+My own new test also tripped `every_roll_comes_from_the_one_stream` by reaching
+for `Uuid::new_v4` - randomness outside `core::dice` that no seed can reach.
+That test earned its keep; the test now draws from the one stream.

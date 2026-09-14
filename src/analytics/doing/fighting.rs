@@ -144,7 +144,10 @@ impl Simulation {
             let emotion_source = crate::agents::EmotionSource::Agent(attacker_id);
 
             // Record who attacked for potential retaliation
-            target.emotions.record_attack(attacker_id, self.current_tick);
+            target.emotions.record_attack(
+                crate::agents::EmotionSource::Agent(attacker_id),
+                self.current_tick,
+            );
 
             // Scale emotional response by damage severity
             let damage_severity = (actual_damage / 50.0).min(1.0);
