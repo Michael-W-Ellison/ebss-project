@@ -2104,42 +2104,12 @@ impl Agent {
     }
 
     pub fn what_i_would_set_down(&self) -> Option<String> {
-        self.the_heaviest_thing_i_would_put_down(false)
-    }
-
-    /// And what would go down **beside a store**, where a settlement's things
-    /// live and a man can pick his axe back up.
-    ///
-    /// Out on the moor a tool is not spare, and this does not make it so. But
-    /// the rule that stopped an experiment destroying a basket (#206) was
-    /// written as "the kit may never leave the pack for *any* reason - not to
-    /// make room for supper", and destroying a tool and setting one down at
-    /// your own larder are not the same act. Measured, that conflation is what
-    /// kills settlements: packs run **86% to 105% full all year**, carrying
-    /// wood, a stoneknife, a basket, a handaxe, a digging stick, a shovel, a
-    /// spear and a bow, with four items of food in them - and **33,486
-    /// refusals of "No room in the pack for what is in the store"** while the
-    /// larder holds ten thousand items and forty-two people die of hunger
-    /// beside it. See ISSUES_FOUND #212.
-    ///
-    /// Tools go down, and only after everything else has. **What carries does
-    /// not**: a basket is thirty of the capacity being made room in, so
-    /// setting it down to make room is a loss taken twice.
-    pub fn what_i_would_set_down_beside_a_store(&self) -> Option<String> {
-        self.the_heaviest_thing_i_would_put_down(false)
-            .or_else(|| self.the_heaviest_thing_i_would_put_down(true))
-    }
-
-    /// The heaviest thing that is not food, taken from one side of the kit or
-    /// the other. Nothing that carries is ever offered.
-    fn the_heaviest_thing_i_would_put_down(&self, out_of_the_kit: bool) -> Option<String> {
         self.inventory
             .get_all_items()
             .iter()
             .filter(|(_, item)| item.quantity > 0)
             .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
-            .filter(|(name, _)| !Self::is_this_what_carries(name))
-            .filter(|(name, _)| Self::is_this_part_of_the_kit(name) == out_of_the_kit)
+            .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
             .max_by(|a, b| {
                 let load = |item: &InventoryItem| item.quantity as f32 * item.weight_per_unit;
                 load(a.1)
@@ -2147,16 +2117,6 @@ impl Agent {
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|(name, _)| name.clone())
-    }
-
-    /// Whether this is the thing everything else is being carried in.
-    ///
-    /// Half of `is_this_part_of_the_kit`, and the half that may never go down
-    /// anywhere: what carries is what the room is measured in.
-    pub fn is_this_what_carries(called: &str) -> bool {
-        Self::WHAT_CARRIES
-            .iter()
-            .any(|(carrier, _)| *carrier == called)
     }
 
     /// Whether another handful would go in the pack, counting what this one
@@ -2175,19 +2135,6 @@ impl Agent {
     pub fn could_i_take_another_handful(&self, each: f32) -> bool {
         self.inventory.weight_capacity_remaining() >= each
             || self.what_i_would_set_down().is_some()
-    }
-
-    /// And the same question asked at a store, where a tool may go down.
-    ///
-    /// It has to be a second question for the same reason the first one
-    /// exists: the decision and the executor must answer alike. The store
-    /// branch gates on this and `taking_from_the_store` acts on
-    /// `set_down_what_is_worth_less_than_food_at_a_store`, and if the gate
-    /// were the narrower of the two a man would never be offered his own
-    /// larder. See #212.
-    pub fn could_i_take_another_handful_at_a_store(&self, each: f32) -> bool {
-        self.inventory.weight_capacity_remaining() >= each
-            || self.what_i_would_set_down_beside_a_store().is_some()
     }
 
     /// How much of this one goes on the grass, once it has been decided that

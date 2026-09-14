@@ -16386,7 +16386,9 @@ number too high, and nothing ever brings it back down.
   put his tools down beside the store; he did, lost the capability, and still
   could not pick anything up, because the thirty-four units blocking him were
   not there. Refusals went *up*, 33,486 to 35,136, and month 11 went from 42
-  deaths to 53.
+  deaths to 53. **That change has been undone** - the code is byte-identical to
+  what stood before it and seed 0 rolls its recorded 690,468 again. It was
+  argued from the misreading below and it does not touch the fault.
 
 #### The correction to #212, which is mine
 

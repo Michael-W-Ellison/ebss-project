@@ -708,7 +708,7 @@ impl Simulation {
             // and then refusing him is worse than not offering, because this
             // branch sits above every drive there is and he spends the turn on
             // it either way.
-            if !agent.could_i_take_another_handful_at_a_store(
+            if !agent.could_i_take_another_handful(
                 crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,
             ) {
                 return None;

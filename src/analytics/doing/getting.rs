@@ -49,29 +49,6 @@ impl Simulation {
         agent_index: usize,
         room_wanted: f32,
     ) -> f32 {
-        self.set_down_for_food(agent_index, room_wanted, false)
-    }
-
-    /// The same, beside a store, where a tool may go down as well.
-    ///
-    /// See `Agent::what_i_would_set_down_beside_a_store`: on the moor the kit
-    /// is not spare, but at a pit it can be picked up again, and a man who
-    /// will not set his axe down beside his own larder starves next to ten
-    /// thousand items of food. #212.
-    pub(in crate::analytics) fn set_down_what_is_worth_less_than_food_at_a_store(
-        &mut self,
-        agent_index: usize,
-        room_wanted: f32,
-    ) -> f32 {
-        self.set_down_for_food(agent_index, room_wanted, true)
-    }
-
-    fn set_down_for_food(
-        &mut self,
-        agent_index: usize,
-        room_wanted: f32,
-        beside_a_store: bool,
-    ) -> f32 {
         use crate::world::Position;
 
         let here = {
@@ -92,12 +69,7 @@ impl Simulation {
                 break;
             }
 
-            let agent = &self.population.agents[agent_index];
-            let Some(what) = (if beside_a_store {
-                agent.what_i_would_set_down_beside_a_store()
-            } else {
-                agent.what_i_would_set_down()
-            }) else {
+            let Some(what) = self.population.agents[agent_index].what_i_would_set_down() else {
                 break;
             };
 
