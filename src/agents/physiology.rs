@@ -926,6 +926,33 @@ impl Physiology {
             return 0.0;
         }
 
+        // And a body that has already eaten enough to put itself right does
+        // not want more.
+        //
+        // This is the term the three tables were missing. `by_reserve` bottoms
+        // out at 1.0 and never at nought, so a body carrying its whole
+        // three-week reserve still grew hungry the moment its stomach fell
+        // below a tenth of a sitting, ate again, banked what would fit and
+        // **wasted the rest**: measured, 6.52 sittings a day at 656 energy
+        // apiece against 1,440 burned - 297% of what a body spends.
+        //
+        // Satiety was keyed on an empty stomach rather than on a fed body.
+        // What is wanted is the specified rule: if what is in the stomach and
+        // the gut would carry this body back to a full reserve, it is
+        // satisfied. The deficit grows at a day's burn a day, and a meal
+        // covers about a third of it, which is where three meals a day comes
+        // from - the same figure `AN_ORDINARY_APPETITE` normalises the rate
+        // against, arrived at from the body instead of from the clock.
+        //
+        // It is stomach *and* gut against the deficit, not either alone: food
+        // still in the stomach has not been absorbed yet, and food in the gut
+        // is already on its way to the reserve. Both are owed to the body.
+        let owed = (self.reserve_capacity - self.reserve).max(0.0);
+        let already_coming = self.energy_in_the_stomach() + self.energy_in_the_gut();
+        if already_coming >= owed {
+            return 0.0;
+        }
+
         by_reserve * by_belly * by_gut
     }
 }

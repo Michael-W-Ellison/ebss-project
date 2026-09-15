@@ -549,3 +549,91 @@ fn an_empty_stomach_presses_harder_on_a_spent_body() {
         fed.how_fast_hunger_rises()
     );
 }
+
+/// A body that has eaten enough to put itself right does not want more.
+///
+/// The three tables - reserve, stomach, gut - were all present and all
+/// multiplied, but `by_reserve` bottoms out at 1.0 and never at nought. So
+/// nothing asked whether the body actually *needed* the food: one carrying its
+/// whole three-week reserve still grew hungry the moment its stomach fell
+/// below a tenth of a sitting. Measured over eight worlds, that came to 6.52
+/// sittings a day at 656 energy apiece against 1,440 burned - **297% of what a
+/// body spends**, banked as far as the reserve would take it and the rest
+/// thrown away.
+///
+/// The rule is that what is in the stomach and the gut is weighed against what
+/// the body is owed. See #217.
+#[test]
+fn a_body_that_has_eaten_enough_to_put_itself_right_stops_wanting_more() {
+    use crate::agents::physiology::{Physiology, UNITS_BURNED_IN_AN_ORDINARY_DAY};
+
+    // A body a day down on its reserve, with an empty stomach: it wants food.
+    let mut hungry = Physiology::new();
+    hungry.reserve = hungry.reserve_capacity - UNITS_BURNED_IN_AN_ORDINARY_DAY;
+    assert!(
+        hungry.how_fast_hunger_rises() > 0.0,
+        "a body a day into its reserve with an empty stomach should want food"
+    );
+
+    // The same body, with that day's food swallowed and on its way: it does
+    // not. What it is owed is already coming.
+    let mut fed = Physiology::new();
+    fed.reserve = fed.reserve_capacity - UNITS_BURNED_IN_AN_ORDINARY_DAY;
+    fed.eat(UNITS_BURNED_IN_AN_ORDINARY_DAY, 1.0);
+    assert_eq!(
+        fed.how_fast_hunger_rises(),
+        0.0,
+        "a body with what it is owed already in the stomach still wanted more"
+    );
+
+    // And a body carrying its whole reserve wants nothing, whatever its
+    // stomach is doing: it is owed nothing, so nothing is short.
+    let whole = Physiology::new();
+    assert_eq!(
+        whole.reserve, whole.reserve_capacity,
+        "a new body should start with its reserve intact"
+    );
+    assert_eq!(
+        whole.how_fast_hunger_rises(),
+        0.0,
+        "a body owed nothing grew hungry on an empty stomach alone"
+    );
+}
+
+/// What stops a meal is the stomach, not a target.
+///
+/// `WHAT_A_SITTING_AIMS_AT` is what a body aims at in one sitting, and it was
+/// being used as the cap on intake: four hundred and eighty energy and stop,
+/// whatever room was left. The stomach holds six hundred volume units and a
+/// sitting of ordinary food is twenty of them, so the target bound every meal
+/// and the stomach bound none.
+#[test]
+fn what_stops_a_meal_is_the_stomach() {
+    use crate::agents::physiology::{Physiology, ENERGY_OF_ORDINARY_FOOD, STOMACH_CAPACITY,
+                                    UNITS_IN_ONE_ITEM, WHAT_A_SITTING_AIMS_AT};
+
+    let mut body = Physiology::new();
+
+    // Offer it mouthful after mouthful of ordinary food and let it stop when
+    // it stops. Nothing here mentions a sitting.
+    let mut went_down = 0.0f32;
+    let mut energy_in = 0.0f32;
+    loop {
+        let took = body.eat(UNITS_IN_ONE_ITEM, ENERGY_OF_ORDINARY_FOOD);
+        if took <= 0.0 {
+            break;
+        }
+        went_down += took;
+        energy_in += took * ENERGY_OF_ORDINARY_FOOD;
+    }
+
+    assert!(
+        (went_down - STOMACH_CAPACITY).abs() < UNITS_IN_ONE_ITEM,
+        "a body should fill its stomach, took {went_down} of {STOMACH_CAPACITY}"
+    );
+    assert!(
+        energy_in > WHAT_A_SITTING_AIMS_AT,
+        "a stomachful of ordinary food is worth more than one sitting aims at: \
+         {energy_in} against {WHAT_A_SITTING_AIMS_AT}"
+    );
+}
