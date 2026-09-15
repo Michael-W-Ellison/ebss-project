@@ -4984,19 +4984,31 @@ impl Agent {
             self.skills.let_unused_skills_rust(current_tick);
         }
 
-        // Recover condition when nothing is wrong. `regenerate_health` had no
-        // callers at all, so agents only ever lost health over a lifetime.
-        let suffering = self.state.is_starving()
-            || self.state.is_dehydrated()
-            || !self.exposure_status.active_exposures.is_empty();
-
-        if !suffering {
+        // Recover condition. `regenerate_health` had no callers at all, so
+        // agents only ever lost health over a lifetime.
+        //
+        // A parched body does not mend, and that one is a cliff on purpose:
+        // water is not the reserve and there is no partial answer to having
+        // none of it. Everything else the old gate tested - hunger, cold,
+        // tiredness - is answered inside `regenerate_health` now, as a share
+        // of what the body has spare rather than as a switch. See #216.
+        if !self.state.is_dehydrated() {
             let resting = self.fatigue.is_sleeping;
-            let body_condition = self.body.overall_health() * 100.0;
-
             self.regenerate_health(resting);
-            self.take_health_down_to(body_condition);
         }
+
+        // And the cap comes off the gate altogether, because it is not a
+        // reward for being well - it is bookkeeping.
+        //
+        // `take_health_down_to` holds health down to what a broken body can
+        // carry and books the difference to `A_WOUND`. Sharing a gate with the
+        // healing meant **suffering exempted a man from his own wound cap**:
+        // exactly while starving, freezing or dying of thirst, his health was
+        // not held down to his body, and the ledger #209 built went unwritten
+        // in the months people actually die. Two questions, one gate, and the
+        // one that mattered was the one nobody was asking.
+        let body_condition = self.body.overall_health() * 100.0;
+        self.take_health_down_to(body_condition);
 
         // Process fatigue (awake state)
         if !self.fatigue.is_sleeping {
@@ -8093,9 +8105,28 @@ impl Agent {
         // Base regeneration rate
         let base_rate = if is_resting { 0.1 } else { 0.02 };
 
+        // Mending is work, and work is paid for out of what the body has
+        // spare. A body carrying its whole three-week reserve mends at the
+        // full rate; one that has eaten half of it mends at half; one that has
+        // eaten all of it does not mend at all.
+        //
+        // This used to be a cliff, and the cliff was the wrong shape twice
+        // over. The caller asked `is_starving() || is_dehydrated() || any
+        // active exposure`, and **any** active exposure means Hypothermia,
+        // Frostbite, Hyperthermia, Dehydration or Sunburn at any severity -
+        // which in winter is everybody, always. `is_starving()` is itself
+        // `physiology.is_starving() || energy < 20.0`, and that second half is
+        // the action-energy pool, which is tiredness and not starvation. So a
+        // tired man in mild cold healed at exactly nought.
+        //
+        // The share of the reserve is the same statement without the cliff,
+        // and it needs no number anybody picked: exposure is already in it,
+        // because being cold burns reserve, and so is going hungry. See #216.
+        let spare = self.state.physiology.what_this_body_has_spare();
+
         // Apply healing bonus from nearby medical buildings
         let healing_bonus = self.cached_healing_bonus;
-        let regeneration = base_rate * healing_bonus;
+        let regeneration = base_rate * spare * healing_bonus;
 
         self.state.heal(regeneration);
     }

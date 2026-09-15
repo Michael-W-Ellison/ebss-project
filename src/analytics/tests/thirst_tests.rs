@@ -9,7 +9,7 @@
 //!   being wiped by the body-condition sync every tick
 //! - health recovers once the agent is fed, watered and unhurt
 
-use crate::agents::{Agent, AgentConfig, InventoryItem, Population};
+use crate::agents::{Agent, AgentConfig, AgentState, InventoryItem, Population};
 use crate::analytics::Simulation;
 use crate::core::drives::DriveType;
 use crate::world::{World, WorldConfig};
@@ -186,5 +186,128 @@ fn agents_refuse_food_that_would_make_them_sick() {
     assert!(
         !agent.has_edible_food(),
         "an agent holding only rotten food is not carrying anything edible"
+    );
+}
+
+/// Mending is paid for out of what the body has spare, rather than switched
+/// off by a cliff.
+///
+/// The gate was `is_starving() || is_dehydrated() || any active exposure`, and
+/// each of those three is wider than it looks. **Any** active exposure means
+/// Hypothermia, Frostbite, Hyperthermia, Dehydration or Sunburn at any
+/// severity - in winter, everybody, always. And `is_starving()` is itself
+/// `physiology.is_starving() || energy < 20.0`, where that second half is the
+/// action-energy pool: tiredness, not starvation. So a tired man in mild cold
+/// healed at exactly nought, and so did most of a settlement for most of a
+/// winter - the months in which 35.8% of the dead are killed by a blow.
+///
+/// The share of the reserve says the same thing without the cliff and without
+/// a number anybody picked. See #216.
+#[test]
+fn a_body_mends_out_of_what_it_has_spare() {
+    let mend_from = |share: f32| {
+        let mut agent = Agent::new(AgentConfig::default());
+        agent.state.health = 50.0;
+        agent.state.physiology.reserve = agent.state.physiology.reserve_capacity * share;
+        let before = agent.state.health;
+        agent.regenerate_health(false);
+        agent.state.health - before
+    };
+
+    let whole = mend_from(1.0);
+    let half = mend_from(0.5);
+    let spent = mend_from(0.0);
+
+    assert!(whole > 0.0, "a well-found body should mend, got {whole}");
+    assert!(
+        half > 0.0 && half < whole,
+        "a body half through its reserve should mend, and slower: {half} against {whole}"
+    );
+    assert_eq!(
+        spent, 0.0,
+        "a body that has eaten its whole reserve has nothing to mend with"
+    );
+}
+
+/// The wound cap is bookkeeping, and bookkeeping does not stop because things
+/// are going badly.
+///
+/// `take_health_down_to` holds health down to what a broken body can carry and
+/// books the difference to `A_WOUND`. It shared a gate with the healing, so
+/// **suffering exempted a man from his own wound cap**: exactly while
+/// starving, freezing or parched, his health was not held down to his body.
+/// The whole point of #209 is that a settlement can say what killed its
+/// people, and this was the one drain that went unbooked in the months they
+/// actually die.
+#[test]
+fn a_starving_man_is_still_held_down_to_his_broken_body() {
+    use crate::agents::body::BodyPartType;
+
+    let mut agent = Agent::new(AgentConfig::default());
+
+    // Wreck the body, and badly: a tick of starvation takes health off by
+    // itself, so the gap between what he has and what his body can carry has
+    // to be wider than that, or the cap has nothing left to do and the test
+    // proves nothing either way.
+    for part in [
+        BodyPartType::Torso,
+        BodyPartType::LeftArm,
+        BodyPartType::RightArm,
+        BodyPartType::LeftLeg,
+        BodyPartType::RightLeg,
+    ] {
+        agent.body.damage_part(part, 60.0);
+    }
+    let body_condition = agent.body.overall_health() * 100.0;
+    agent.state.health = 100.0;
+    assert!(
+        body_condition < 80.0,
+        "the fixture meant to break him badly, got {body_condition}"
+    );
+
+    // And make him "suffering" in the sense the old gate meant, without
+    // actually harming him - so that what the cap does is the only thing
+    // moving. A body with an empty reserve dies of hunger inside one tick and
+    // takes the whole hundred with it, which tells you nothing about the cap.
+    //
+    // `is_starving()` is `physiology.is_starving() || energy < 20.0`, and that
+    // second half is the action-energy pool - tiredness, not starvation. So a
+    // well-fed, well-watered, tired man reads as suffering to the old gate and
+    // loses no health to anything. That is the over-reach and the instrument
+    // for measuring it at once.
+    agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
+    agent.state.physiology.hydration = 1.0;
+    agent.state.energy = 5.0;
+    assert!(
+        agent.state.is_starving(),
+        "the fixture meant him to read as starving on the tiredness clause"
+    );
+    assert!(
+        !agent.state.physiology.is_starving(),
+        "and to not actually be starving"
+    );
+
+    agent.process_survival_tick(100);
+
+    // Asked of the **ledger**, not of the health figure. A starving body
+    // loses health to hunger every tick anyway, so "his health came down"
+    // cannot tell the cap from the starvation - the first draft of this test
+    // passed against the old gate for exactly that reason. What only the cap
+    // does is book the drop to `A_WOUND`, which is the whole point of #209.
+    // Nothing else here books it: `tick_the_wound` returns at once unless
+    // there is an open wound, and this man has none.
+    let booked_to_wounds: f32 = agent
+        .state
+        .what_has_taken_health
+        .iter()
+        .filter(|(what, _)| what == AgentState::A_WOUND)
+        .map(|(_, how_much)| *how_much)
+        .sum();
+
+    assert!(
+        booked_to_wounds > 0.0,
+        "a starving man was exempted from his own wound cap: health {} on a \
+         body that can carry {body_condition}, and nothing booked to wounds",
+        agent.state.health
     );
 }

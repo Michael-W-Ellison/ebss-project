@@ -694,6 +694,23 @@ impl Physiology {
         (self.reserve_capacity - self.reserve) / a_day.max(1.0)
     }
 
+    /// What share of its reserve this body still has, from one down to nought.
+    ///
+    /// What it has spare, in other words: a body that has eaten enough carries
+    /// the full three weeks and answers one; a body that has eaten through all
+    /// of it answers nought. Reckoned against this body's own capacity, so a
+    /// child with a full small reserve is as well-found as its father with a
+    /// full large one.
+    ///
+    /// Mending is work and work is paid for out of this - see
+    /// `Agent::regenerate_health`.
+    pub fn what_this_body_has_spare(&self) -> f32 {
+        if self.reserve_capacity <= 0.0 {
+            return 0.0;
+        }
+        (self.reserve / self.reserve_capacity).clamp(0.0, 1.0)
+    }
+
     /// Far enough into the reserve that the body is taking it out of itself.
     ///
     /// Half of three weeks. Going a day without food is not this; going ten
