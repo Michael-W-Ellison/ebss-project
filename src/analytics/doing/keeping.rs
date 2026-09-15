@@ -381,7 +381,12 @@ impl Simulation {
             // A pack full of stone makes room for supper, the same way it does
             // at a bush - see `set_down_what_is_worth_less_than_food`. This is
             // the same situation and it should not have two answers.
-            let each = wanted.weight_per_unit.max(f32::EPSILON);
+            // What one of them actually weighs, drying and all - not
+            // `weight_per_unit` raw, which prices a dried fish at what a wet
+            // one weighs and so refuses room the pack has. One spelling,
+            // shared with the gate that offers this and with `total_weight`
+            // itself: see `InventoryItem::what_one_of_them_weighs`.
+            let each = wanted.what_one_of_them_weighs().max(f32::EPSILON);
             let asking_for = Self::WHAT_A_PERSON_TAKES_OUT.min(wanted.quantity);
             // `set_down_what_is_worth_less_than_food` answers with the room it
             // *made*, which is nought for a pack that had room already and
@@ -431,9 +436,7 @@ impl Simulation {
         let agent = &mut self.population.agents[agent_index];
 
         // A full pack cannot take it, and it stays where it was
-        if agent.inventory.weight_capacity_remaining()
-            < item.weight_per_unit * how_many as f32
-        {
+        if agent.inventory.weight_capacity_remaining() < item.total_weight() {
             self.world.somebody_left_this(item, here, tick_now);
             return ActionResult::failure("No room for it".to_string());
         }

@@ -650,7 +650,7 @@ impl Simulation {
         agent_index: usize,
         item: &crate::agents::InventoryItem,
     ) -> u32 {
-        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        let each = item.what_one_of_them_weighs();
         let room = self.population.agents[agent_index]
             .inventory
             .weight_capacity_remaining();

@@ -585,7 +585,7 @@ impl Simulation {
                 // with, never the thing he carries his load in. It stays
                 // where he was standing, for him or anybody else.
                 if it_is_food && took < harvested {
-                    let each = item.weight_per_unit * item.how_much_lighter_it_is();
+                    let each = item.what_one_of_them_weighs();
                     let short = (harvested - took) as f32 * each;
                     if self.set_down_what_is_worth_less_than_food(agent_index, short) > 0.0 {
                         let mut the_rest = item.clone();

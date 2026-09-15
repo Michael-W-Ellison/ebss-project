@@ -339,8 +339,7 @@ impl InventoryItem {
         // water out and water is most of what meat weighs, so a hunter who
         // dries a kill before walking home carries more of the animal home -
         // see `PreparationState::what_it_does_to_the_weight`.
-        let each = self.weight_per_unit * self.how_much_lighter_it_is();
-        let base_weight = each * self.quantity as f32;
+        let base_weight = self.what_one_of_them_weighs() * self.quantity as f32;
 
         // Add liquid weight if this is a filled container
         // Water weighs ~1 kg per liter
@@ -355,6 +354,20 @@ impl InventoryItem {
             .as_ref()
             .map(|food| food.preparation.what_it_does_to_the_weight())
             .unwrap_or(1.0)
+    }
+
+    /// What one of these weighs, drying and all.
+    ///
+    /// Seven places worked this out for themselves and two of them got it
+    /// wrong, taking `weight_per_unit` raw and so pricing a dried fish at
+    /// what a wet one weighs. Both wrong ones were in the `PickUp` executor,
+    /// which is the code that decides whether a man may take his own supper
+    /// out of his own larder.
+    ///
+    /// This is the per-unit twin of `total_weight`, which is this times the
+    /// quantity plus whatever is sloshing about in a vessel. See #215.
+    pub fn what_one_of_them_weighs(&self) -> f32 {
+        self.weight_per_unit * self.how_much_lighter_it_is()
     }
 }
 
@@ -2126,8 +2139,14 @@ impl Agent {
     /// in the model**, a man standing on his own larder asking for it every
     /// turn and being told no.
     ///
-    /// One handful is all it has to decide, so it does not need to know how
+    /// One unit is all it has to decide, so it does not need to know how
     /// much would come off - only whether anything would.
+    ///
+    /// `each` is the weight of one of whatever is actually being reached for,
+    /// and callers are expected to have asked the thing rather than assumed.
+    /// The store branch passed `WHAT_A_HANDFUL_OF_FOOD_WEIGHS` - a half - for
+    /// everything, and a pit of roots hands out whole units: 264,453 refusals
+    /// later, that is #215.
     pub fn could_i_take_another_handful(&self, each: f32) -> bool {
         self.inventory.weight_capacity_remaining() >= each
             || self.what_i_would_set_down().is_some()
@@ -2150,7 +2169,7 @@ impl Agent {
             return 0;
         };
 
-        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        let each = item.what_one_of_them_weighs();
         if each <= 0.0 {
             return item.quantity;
         }
@@ -2174,7 +2193,7 @@ impl Agent {
             return 0;
         };
 
-        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        let each = item.what_one_of_them_weighs();
         if each <= 0.0 {
             return item.quantity;
         }

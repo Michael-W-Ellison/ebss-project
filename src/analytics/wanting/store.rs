@@ -700,7 +700,8 @@ impl Simulation {
         // on arrival.
         let standing_on_it = self.world.pit_at(where_it_is);
         if paces == 0 {
-            let what = standing_on_it?.something_to_eat()?.to_string();
+            let pit = standing_on_it?;
+            let what = pit.something_to_eat()?.to_string();
 
             // And a pack that will not take it. The executor asks this and
             // used to be the only one asking - see
@@ -708,9 +709,29 @@ impl Simulation {
             // and then refusing him is worse than not offering, because this
             // branch sits above every drive there is and he spends the turn on
             // it either way.
-            if !agent.could_i_take_another_handful(
-                crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,
-            ) {
+            //
+            // So it is asked about **what is in this pit, at what that
+            // weighs**, and not about a notional handful. It used to ask for
+            // room for `WHAT_A_HANDFUL_OF_FOOD_WEIGHS`, which is a half, while
+            // the executor needed room for a whole unit of the thing - and in
+            // `what_one_of_these_weighs` only the generic `Food` is priced at
+            // a half. Roots, legumes, greens, nuts, fish, grain and meat all
+            // fall through to `_ => 1.0`, and those are four-fifths of what is
+            // ever in a pit: measured over eight worlds and two years, Roots
+            // 201,192, Legumes 168,388, Greens 100,092 against Food 113,953.
+            //
+            // A pack with between a half and a whole unit of room therefore
+            // passed the gate and was refused by the executor, every turn, for
+            // ever: **264,453 refusals of "No room in the pack for what is in
+            // the store", 98.7% of every `PickUp` anybody chose.** See #215.
+            let each = pit
+                .holds
+                .iter()
+                .find(|held| held.item_id == what)
+                .map(|held| held.what_one_of_them_weighs())
+                .unwrap_or(crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS);
+
+            if !agent.could_i_take_another_handful(each) {
                 return None;
             }
 
