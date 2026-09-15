@@ -16435,6 +16435,12 @@ Seed 0 rolls **823,832** over a year where it rolled 690,468 - up 19.3%, which
 is a heavily load-bearing change, as it should be when packs that were falsely
 full begin to measure true.
 
+Suite: **2,551 passed, 10 failed**, the standing set exactly - no test gained
+and none lost. It took 3,687s against roughly 2,400s before. Some of that is
+the sum replacing a stored read, but most of it is that actions which used to
+be refused instantly now succeed and do work, which is the same reason the
+draw count moved.
+
 **And the settlement dies on the same schedule.** Same harness, same eight
 seeds, two years, twelve founders:
 
