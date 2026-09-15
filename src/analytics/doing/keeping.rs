@@ -377,7 +377,75 @@ impl Simulation {
                 .cloned()
         });
 
-        if let Some(wanted) = in_the_pit {
+        if let Some(mut wanted) = in_the_pit {
+            // **Supper first.** A larder is a place to eat, not only a place
+            // to fetch from.
+            //
+            // There was no eating anywhere in this branch. A hungry man
+            // standing on a pit holding four thousand items opened it, put
+            // one and a third items in his pack - that is the measured figure,
+            // 4,153 items over 3,050 visits - and walked away as hungry as he
+            // came. Everything he was short of was under his feet and the only
+            // verb the store offered him was *carry*, which is the one thing
+            // his pack had no room for.
+            //
+            // Eating needs no pack room at all: see `a_sitting_from_the_hand`,
+            // where the same point is made about a bush. So the meal is taken
+            // first, out of the pit, and only what is left over is offered to
+            // the pack. The pack is what caps how much he can take home; it
+            // has never been what caps how much he can eat.
+            //
+            // `would_eat_if_it_were_here` is the whole gate, and it is the
+            // body's own question - room for a mouthful, and some want of one.
+            // A man who is not hungry still walks off with his armful and
+            // leaves the store alone.
+            let mut ate = 0u32;
+            let mut energy_in = 0.0f32;
+            if wanted.is_food()
+                && !wanted.is_spoiled()
+                && self.population.agents[agent_index]
+                    .state
+                    .physiology
+                    .would_eat_if_it_were_here()
+            {
+                // What it is actually worth now, freshness and drying and all,
+                // rather than what the kind of thing is worth in the abstract -
+                // the stack in the pit knows, and a stack rebuilt without its
+                // nutrition falls back on a mouthful's worth. See #232.
+                let nutrition = wanted
+                    .food_data
+                    .as_ref()
+                    .map(|food| food.effective_nutrition())
+                    .unwrap_or_else(
+                        crate::world::nutrition::what_an_untracked_mouthful_is_worth,
+                    );
+                let (eaten, went_in) =
+                    self.a_sitting_of(agent_index, what, nutrition, wanted.quantity);
+                ate = eaten.min(wanted.quantity);
+                energy_in = went_in;
+                if ate > 0 {
+                    if let Some(pit) = self.world.pit_at_mut(here) {
+                        pit.take_out(what, ate);
+                    }
+                    self.what_came_out_of_the_store += ate as u64;
+                    wanted.quantity -= ate;
+                }
+            }
+
+            // And the pit may have held exactly a supper.
+            if wanted.quantity == 0 {
+                return ActionResult::success()
+                    .with_drive_change(
+                        DriveType::Hunger,
+                        -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
+                            * crate::agents::physiology::what_this_meal_answers(energy_in),
+                    )
+                    .with_energy_cost(1.5)
+                    .with_message(format!(
+                        "Ate {ate} {what} at the store ({energy_in:.0} energy)"
+                    ));
+            }
+
             // A pack full of stone makes room for supper, the same way it does
             // at a bush - see `set_down_what_is_worth_less_than_food`. This is
             // the same situation and it should not have two answers.
@@ -416,6 +484,24 @@ impl Simulation {
             let taking = self.take_what_fits(agent_index, &offered);
 
             if taking == 0 {
+                // A meal is not a failed errand. Somebody who came for an
+                // armful, found no room for one and ate instead has done the
+                // thing that mattered, and reporting it as a refusal both
+                // loses the meal from the record and teaches him not to come
+                // back to the store.
+                if ate > 0 {
+                    return ActionResult::success()
+                        .with_drive_change(
+                            DriveType::Hunger,
+                            -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
+                                * crate::agents::physiology::what_this_meal_answers(energy_in),
+                        )
+                        .with_energy_cost(1.5)
+                        .with_message(format!(
+                            "Ate {ate} {what} at the store, with no room to \
+                             carry any ({energy_in:.0} energy)"
+                        ));
+                }
                 return ActionResult::failure(
                     "No room in the pack for what is in the store".to_string(),
                 );
@@ -429,10 +515,26 @@ impl Simulation {
             let agent = &mut self.population.agents[agent_index];
             debug!("Agent {} took {taking} {what} out of the pit", agent.id);
 
+            // What the hunger drive is told is what actually went down, when
+            // anything did. A tenth off for a pack of food is a guess about
+            // what he is going to eat later; a meal is not a guess.
+            let answered = if ate > 0 {
+                crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
+                    * crate::agents::physiology::what_this_meal_answers(energy_in)
+            } else {
+                0.1
+            };
+
             return ActionResult::success()
-                .with_drive_change(DriveType::Hunger, -0.1)
+                .with_drive_change(DriveType::Hunger, -answered)
                 .with_energy_cost(1.5)
-                .with_message(format!("Took {taking} {what} out of the pit"));
+                .with_message(if ate > 0 {
+                    format!(
+                        "Ate {ate} {what} at the store and took {taking} away"
+                    )
+                } else {
+                    format!("Took {taking} {what} out of the pit")
+                });
         }
 
         let Some(item) = self.world.take_off_the_ground(&here, what) else {

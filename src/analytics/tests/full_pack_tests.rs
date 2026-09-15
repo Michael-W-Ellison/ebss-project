@@ -451,3 +451,212 @@ fn a_man_with_room_for_a_root_is_offered_the_pit_and_gets_one() {
         "the executor said yes and no roots arrived"
     );
 }
+
+/// One hungry person with room in the pack, standing on a berry patch.
+///
+/// The counterpart to `a_pack_full_of`: the pack is *not* the thing on trial
+/// here. What is on trial is whether a man who could carry the berries home
+/// thinks to eat any of them first.
+fn a_man_on_a_berry_patch() -> crate::analytics::Simulation {
+    let mut world = World::new(WorldConfig::default());
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let here = population.agents[0].state.position;
+
+    world.resources.clear();
+    world.resources.push(ResourceNode::new(
+        ResourceType::Food,
+        Position::new(here.0, here.1),
+        500,
+    ));
+
+    let mut simulation = crate::analytics::Simulation::new(world, population);
+
+    // One turn, so the body is sized: `now_a_body_of` runs on the turn and a
+    // fixture that has never ticked has a reserve capacity that means nothing.
+    simulation.tick();
+    simulation
+}
+
+/// Empty the stomach and take the body down to `share` of its reserve.
+///
+/// A body left as it spawns has a full reserve and owes itself nothing, so it
+/// would not eat a berry it was standing on - which is correct, and is why
+/// every one of these fixtures has to say how hungry it means.
+fn a_body_at(simulation: &mut crate::analytics::Simulation, share: f32) {
+    let body = &mut simulation.population.agents[0].state.physiology;
+    body.reserve = body.reserve_capacity * share;
+}
+
+/// A hungry man eats off the bush he is picking.
+///
+/// Browsing was in the model already and reached almost nobody: it was the
+/// last resort of a man whose pack had no room at all, so anybody who *could*
+/// carry the armful carried it home and ate none of it. That is the wrong
+/// condition - what decides whether a berry goes in a mouth is hunger, not a
+/// full pack - and it is a good part of why `Eat` sits at a fraction of
+/// `Gather` in every run.
+#[test]
+fn a_hungry_man_eats_off_the_bush_he_is_picking() {
+    let mut simulation = a_man_on_a_berry_patch();
+    a_body_at(&mut simulation, 0.4);
+
+    let before = simulation.population.agents[0]
+        .state
+        .physiology
+        .in_the_stomach();
+
+    let result = simulation.execute_action(
+        &Action::Gather {
+            resource_type: "food".to_string(),
+        },
+        0,
+    );
+    assert!(
+        result.success,
+        "a hungry man with room in his pack was refused the bush: {:?}",
+        result.message
+    );
+
+    let after = simulation.population.agents[0]
+        .state
+        .physiology
+        .in_the_stomach();
+    assert!(
+        after > before,
+        "he had room to carry them, so he carried the lot home hungry: \
+         {before} in the stomach, then {after}"
+    );
+}
+
+/// And a fed man carries the whole armful home without touching it.
+///
+/// The other half: a rule that ate whenever there was food in the hand would
+/// pass the test above and empty every bush in the country into bellies that
+/// did not want it. The body's own question is the gate, and a body with its
+/// reserve intact answers no.
+#[test]
+fn a_fed_man_carries_the_armful_home_without_eating_it() {
+    let mut simulation = a_man_on_a_berry_patch();
+    a_body_at(&mut simulation, 1.0);
+
+    let before = simulation.population.agents[0]
+        .state
+        .physiology
+        .in_the_stomach();
+    let carried_before = simulation.population.agents[0].food_put_by();
+
+    let result = simulation.execute_action(
+        &Action::Gather {
+            resource_type: "food".to_string(),
+        },
+        0,
+    );
+    assert!(
+        result.success,
+        "a fed man was refused the bush: {:?}",
+        result.message
+    );
+
+    let after = simulation.population.agents[0]
+        .state
+        .physiology
+        .in_the_stomach();
+    assert_eq!(
+        after, before,
+        "a body with a full reserve ate off the bush anyway"
+    );
+    assert!(
+        simulation.population.agents[0].food_put_by() > carried_before,
+        "he ate none and carried none: the armful went nowhere"
+    );
+}
+
+/// A hungry man eats at the larder, with no room in his pack for any of it.
+///
+/// There was no eating anywhere in the store branch. A man standing on a pit
+/// holding thousands of items opened it, put one and a third items in his
+/// pack - 4,153 items over 3,050 visits, measured - and walked away as hungry
+/// as he came; and when his pack was full he was refused outright and came
+/// back next turn to be refused again. Everything he was short of was under
+/// his feet, and the only verb the store offered him was *carry*.
+#[test]
+fn a_hungry_man_at_the_larder_eats_what_he_cannot_carry() {
+    let mut simulation = a_starving_man_on_a_pit_of_roots(0.0);
+    a_body_at(&mut simulation, 0.4);
+
+    let before = simulation.population.agents[0]
+        .state
+        .physiology
+        .in_the_stomach();
+    let in_the_pit_before = simulation.world.pits[0].how_much_is_in_it();
+
+    let result = simulation.execute_action(
+        &Action::PickUp {
+            what: "roots".to_string(),
+        },
+        0,
+    );
+    assert!(
+        result.success,
+        "a hungry man on a full larder was refused for want of pack room: {:?}",
+        result.message
+    );
+
+    let after = simulation.population.agents[0]
+        .state
+        .physiology
+        .in_the_stomach();
+    assert!(
+        after > before,
+        "he opened the store and ate nothing: {before} in the stomach, then {after}"
+    );
+    assert!(
+        simulation.world.pits[0].how_much_is_in_it() < in_the_pit_before,
+        "he ate, and the pit is as full as it was: the meal came out of nowhere"
+    );
+}
+
+/// And a fed man at the same larder fills his pack and eats none of it.
+///
+/// A store is for carrying from. The meal is what a hungry body takes off the
+/// top of the trip, not something everybody does on the way past.
+#[test]
+fn a_fed_man_at_the_larder_carries_and_does_not_eat() {
+    let mut simulation = a_starving_man_on_a_pit_of_roots(5.0);
+    a_body_at(&mut simulation, 1.0);
+
+    let before = simulation.population.agents[0]
+        .state
+        .physiology
+        .in_the_stomach();
+
+    let result = simulation.execute_action(
+        &Action::PickUp {
+            what: "roots".to_string(),
+        },
+        0,
+    );
+    assert!(
+        result.success,
+        "a fed man was refused the store: {:?}",
+        result.message
+    );
+
+    let after = simulation.population.agents[0]
+        .state
+        .physiology
+        .in_the_stomach();
+    assert_eq!(
+        after, before,
+        "a body with a full reserve ate at the store anyway"
+    );
+    assert!(
+        simulation.population.agents[0]
+            .inventory
+            .get_item("roots")
+            .is_some_and(|got| got.quantity > 0),
+        "he ate none and carried none: the trip to the store was wasted"
+    );
+}

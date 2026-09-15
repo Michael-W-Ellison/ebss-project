@@ -479,6 +479,23 @@ impl Physiology {
             >= UNITS_IN_ONE_ITEM * ENERGY_OF_ORDINARY_FOOD * self.how_fast_this_body_burns()
     }
 
+    /// Whether this body would sit down to eat if food were in front of it.
+    ///
+    /// Both halves of the question, in the one place, so that everything which
+    /// offers a body food asks it the same way: is there room for a mouthful,
+    /// and is there any want of one. `how_fast_hunger_rises` already answers
+    /// the second - it is nought for a full stomach, nought for a full gut,
+    /// and nought for a body with enough already coming to put its reserve
+    /// right - so this adds nothing to the rule and only names it.
+    ///
+    /// It is what a man standing over food is asked, rather than what the
+    /// drive layer is asked: the drive decides where to walk, and this decides
+    /// whether to eat what is already underfoot. A body that would not eat
+    /// here would not eat anywhere.
+    pub fn would_eat_if_it_were_here(&self) -> bool {
+        self.room_for_another_mouthful() && self.how_fast_hunger_rises() > 0.0
+    }
+
     /// What this body burns against what a grown one burns.
     ///
     /// The share itself, because the share *is* the food a body this age

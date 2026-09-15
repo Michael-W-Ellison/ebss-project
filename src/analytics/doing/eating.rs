@@ -26,8 +26,10 @@ impl Simulation {
     /// **Eating never consults the pack.** A mouth is not a rucksack: a man
     /// with his arms full can still put a handful of berries in it. This is
     /// the one place the arithmetic lives, because two verbs end with food in
-    /// somebody's hand - `Eat` off a patch, and `Gather` that found no room -
-    /// and they had better agree about what a meal is.
+    /// somebody's hand - `Eat` off a patch, `Gather`, and `PickUp` at the
+    /// larder - and they had better agree about what a meal is. The
+    /// arithmetic itself is in `a_sitting_of`; this only says what a kind of
+    /// food is worth.
     ///
     /// How many items a sitting comes to depends on what they are: four fish
     /// or sixteen handfuls of leaf come to the same supper, which is the whole
@@ -47,6 +49,28 @@ impl Simulation {
             .map(|template| template.base_nutrition)
             .unwrap_or_else(|| NutritionalContent::new(20.0, 5.0, 35.0, 0.8));
 
+        let (eaten, energy_in) =
+            self.a_sitting_of(agent_index, &format!("{what:?}"), nutrition, in_the_hand);
+        (eaten, energy_in, nutrition)
+    }
+
+    /// The same sitting, for food that arrives as a stack rather than as a
+    /// kind.
+    ///
+    /// A pit holds `InventoryItem`s, which carry their own nutrition and their
+    /// own freshness, and a patch of ground holds a `ResourceType`, which
+    /// carries a kind. Both end with food in a hand, and a hand is a hand: the
+    /// arithmetic of a meal lives here once and both doors call it. See the
+    /// note on `a_sitting_from_the_hand` - the reason that function exists is
+    /// that two verbs had better agree about what a meal is, and there are
+    /// three of them now.
+    pub(in crate::analytics) fn a_sitting_of(
+        &mut self,
+        agent_index: usize,
+        name: &str,
+        nutrition: crate::world::nutrition::NutritionalContent,
+        in_the_hand: u32,
+    ) -> (u32, f32) {
         let now = self.current_tick;
         let agent = &mut self.population.agents[agent_index];
 
@@ -78,8 +102,7 @@ impl Simulation {
             eaten = 1;
         }
 
-        let name = format!("{what:?}");
-        *self.what_went_down.entry(name).or_default() += eaten as u64;
+        *self.what_went_down.entry(name.to_string()).or_default() += eaten as u64;
         self.energy_that_went_down += energy_in as f64;
         let agent = &mut self.population.agents[agent_index];
 
@@ -90,7 +113,7 @@ impl Simulation {
             }
         }
 
-        (eaten.min(in_the_hand.max(1)), energy_in, nutrition)
+        (eaten.min(in_the_hand.max(1)), energy_in)
     }
 
     /// `Action::Eat`.
