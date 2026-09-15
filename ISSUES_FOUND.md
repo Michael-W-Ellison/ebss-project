@@ -16561,3 +16561,85 @@ going to be there; the drift was hiding them by refusing the question earlier.
 3. `GiveTo` failing 99.6% of 80,254 is a second thing sitting in the same
    measurement and has not been looked at.
 
+#### What was done, and what it bought
+
+The gate now looks in the pit and asks about the thing it is going to reach
+for, at what that weighs. **The refusal is gone entirely - zero occurrences in
+the whole run, from 264,453.**
+
+| | before #214 | after #214 | after #215 |
+|---|---|---|---|
+| `PickUp` chosen | ~35,000 | 270,039 | 12,575 |
+| `PickUp` failed | 33,486 | 266,616 (98.7%) | 3,256 (25.9%) |
+| the store refusal | 33,486 | **264,453** | **0** |
+| `Gather` | 437,444 | 422,658 | **534,466** |
+| `Eat` | 121,662 | 155,720 | **223,551** |
+
+The 3,256 that remain are `PickUp: No room for it` - the *ground* branch, a
+different line, and honest. The turns that were being burned on the pit went
+into food: a quarter more gathering and nearly half again as much eating.
+
+| month | #212 baseline | after #214 | after #215 |
+|---|---|---|---|
+| 9 | 9.6 alive | 11.4 | 12.0 |
+| 11 | 3.8, 42 died | 3.0, 36 died | 4.8, 40 died |
+| 12 | 0.8 | 0.9 | **3.0** |
+| 18 | - | 0.8 | **2.9** |
+| 24 | 0.0 | 0.0 | 0.0 |
+
+**The month-11 collapse is untouched and every world is still empty by month
+24.** What changed is that three people come through the collapse and hold for
+a year where before it was under one. The larder still peaks at 11,401 and is
+still 10,060 in the month forty people die of hunger, so it remains not a food
+problem.
+
+Two more spellings of "what does one of these weigh" turned up in the `PickUp`
+executor, both taking `weight_per_unit` raw without `how_much_lighter_it_is` -
+pricing a dried fish at what a wet one weighs and refusing room the pack had.
+Five other places spelled it correctly and each spelled it out itself. There is
+one method now, `InventoryItem::what_one_of_them_weighs`, and `total_weight` is
+that times the quantity.
+
+#### And a third thing underneath: a pack out of slots with forty units of room
+
+The fix made `a_settlement_lives_through_a_winter` fail on a debug assertion in
+the same branch - "the room was measured a line ago". Instrumented:
+
+```
+each 0.175   room 40   slots 20/20   has false   fill None
+```
+
+**Forty units of room for a stack weighing 0.175.** Weight was never the
+question: the pack held twenty kinds of thing out of twenty and this was a
+twenty-first, so `add_item` refused it on the slot limit, which the line above
+had not measured and the assertion does not mention.
+
+That fault is older than the change that exposed it. The branch divided the
+room by the weight, worked out what would fit, and asserted the answer would go
+in; the gate fix altered which agents reached the line and a case that was
+always possible started firing. `take_what_fits` already answers the question -
+weight and slots together - and its own doc says so, so the duplicate
+arithmetic is deleted rather than the assertion patched. It also reports what
+actually went in, so the pit is emptied by what arrived rather than by what was
+hoped for.
+
+Suite: **2,554 passed, 9 failed** - one *better* than the standing ten, with
+`a_settlement_works_things_out_that_nobody_wrote_down` now passing and nothing
+new broken. All six determinism tests pass unchanged: seed 0 still rolls
+867,358 over a year, so routing the pit through `take_what_fits` gives the same
+answers the inline arithmetic did on that world.
+
+#### What this leaves
+
+The tail is now the loudest thing in the measurement. Months 13-22 run **342%
+to 412% of what a body needs** - three people eating four times their
+requirement off six thousand items in the ground. Before reading that as an
+eight-fold meal, note that `energy_that_went_down` is accumulated at three
+separate sites in `doing/eating.rs` and has not been checked for double
+counting. The arithmetic that *is* established: a sitting is capped at
+`WHAT_A_SITTING_AIMS_AT` = 480 **energy**, and one mouthful of ordinary food is
+`UNITS_IN_ONE_ITEM` = 5 volume units at 25 energy each, so a full sitting is
+four mouthfuls - **twenty volume units out of a six-hundred-unit stomach, 3.3%
+full.** The gastric schedule and the stomach's capacity are both implemented
+and both unreachable for anything but the thinnest forage.
+
