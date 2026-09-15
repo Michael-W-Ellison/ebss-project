@@ -396,12 +396,24 @@ impl Simulation {
                 agent_index,
                 each * asking_for as f32,
             );
-            let room = self.population.agents[agent_index]
-                .inventory
-                .weight_capacity_remaining();
-
-            let will_fit = (room / each).floor() as u32;
-            let taking = asking_for.min(will_fit);
+            // How much of it goes in, asked of the pack rather than worked out
+            // again here. This branch used to divide the room by the weight
+            // itself and then assert the result would go in - "the room was
+            // measured a line ago" - which is true of the *weight* and says
+            // nothing about the **slot limit**. Measured: a pack with forty
+            // units of room refused a stack weighing 0.175, because it already
+            // held twenty kinds of thing out of twenty and this was a
+            // twenty-first. The assertion fired in
+            // `a_settlement_lives_through_a_winter`.
+            //
+            // `take_what_fits` is the one place that answers this, weight and
+            // slots together, and its own doc says so. It puts in what will go
+            // and reports how much, so what comes out of the pit below is what
+            // actually arrived - nothing is taken out of the store and then
+            // dropped on the floor.
+            let mut offered = wanted.clone();
+            offered.quantity = asking_for;
+            let taking = self.take_what_fits(agent_index, &offered);
 
             if taking == 0 {
                 return ActionResult::failure(
@@ -413,13 +425,7 @@ impl Simulation {
                 pit.take_out(what, taking);
             }
 
-            let mut got = wanted;
-            got.quantity = taking;
-
             let agent = &mut self.population.agents[agent_index];
-            let went_in = agent.inventory.add_item(got);
-            debug_assert!(went_in, "the room was measured a line ago");
-
             debug!("Agent {} took {taking} {what} out of the pit", agent.id);
 
             return ActionResult::success()
