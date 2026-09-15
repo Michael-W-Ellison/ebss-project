@@ -158,6 +158,14 @@ pub struct Simulation {
     /// is a question about what. Nothing counted it until now.
     pub what_went_down: std::collections::BTreeMap<String, u64>,
 
+    /// What was actually lifted out of a pit, in items.
+    ///
+    /// The pits hold nine thousand items in the month forty people die of
+    /// hunger, and the packs hold nineteen. Something between the hole and the
+    /// hand is the constraint and the refusal tables no longer name it - the
+    /// store refusal went to nought in #215 - so this counts what comes out.
+    pub what_came_out_of_the_store: u64,
+
     /// And what all of it came to, in the units a day is measured in.
     pub energy_that_went_down: f64,
     /// Where the threat tree came out, by the name of the branch.
@@ -343,6 +351,7 @@ impl Simulation {
             what_went_back_on_the_bush: 0,
             food_items_into_packs: 0,
             what_went_down: std::collections::BTreeMap::new(),
+            what_came_out_of_the_store: 0,
             energy_that_went_down: 0.0,
         }
     }
@@ -1304,6 +1313,7 @@ impl Simulation {
             what_went_back_on_the_bush: 0,
             food_items_into_packs: 0,
             what_went_down: std::collections::BTreeMap::new(),
+            what_came_out_of_the_store: 0,
             energy_that_went_down: 0.0,
         };
 

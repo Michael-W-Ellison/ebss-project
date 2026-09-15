@@ -424,6 +424,7 @@ impl Simulation {
             if let Some(pit) = self.world.pit_at_mut(here) {
                 pit.take_out(what, taking);
             }
+            self.what_came_out_of_the_store += taking as u64;
 
             let agent = &mut self.population.agents[agent_index];
             debug!("Agent {} took {taking} {what} out of the pit", agent.id);
