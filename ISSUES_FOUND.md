@@ -16643,3 +16643,150 @@ four mouthfuls - **twenty volume units out of a six-hundred-unit stomach, 3.3%
 full.** The gastric schedule and the stomach's capacity are both implemented
 and both unreachable for anything but the thinnest forage.
 
+### 216. Three questions about the body, measured: the meal that is never capped, the fight nobody weighs a man for, and the healing that is switched off when it is needed
+
+Three things were asked of this model: why a body eats three to four times what
+it burns when a stomach is finite and digestion takes time; whether an injured
+agent is less willing to risk an animal; and whether anybody heals. Each was
+chased to the code and then measured over eight worlds, two years, twelve
+founders, seeds 0-7.
+
+#### 1. The stomach is right and it never binds
+
+There is no double count. `energy_that_went_down` is accumulated at three
+sites, and all three were traced: `a_sitting_from_the_hand` has exactly one
+caller - the eat-where-you-stand branch of `Gather` - and inside `eating()` the
+other two are mutually exclusive, because the carried-food branch always
+returns before the foraging branch is reached. The harness takes a correct
+delta. **The figure stands.**
+
+```
+person-days 34,284
+energy down per person-day 4,276 against 1,440 burned   (297%)
+  Eat chosen 223,551,  6.52 per person-day
+  Gather chosen 534,466, 15.59 per person-day
+```
+
+**Six and a half sittings a day, against the three the hunger clock is built
+for.** And the reason nothing stops the seventh is arithmetic:
+
+| | |
+|---|---|
+| `WHAT_A_SITTING_AIMS_AT` | 480, and its own doc says **energy, "Not a volume"** |
+| one mouthful | `UNITS_IN_ONE_ITEM` = 5 volume units |
+| ordinary food | 25 energy per unit, so a mouthful is 125 energy |
+| a full sitting | four mouthfuls = **20 volume units** |
+| `STOMACH_CAPACITY` | **600** |
+
+**A full sitting fills 3.3% of the stomach.** `physiology::eat` does clamp to
+`room_in_the_stomach`, and the six-hour gastric schedule is implemented and
+correct - they are simply unreachable for anything but the thinnest forage. The
+cap on a meal is on energy; the cap on the stomach is on volume; and the body
+sits down again whenever the drive says so, which is twice as often as the
+clock intends. Not fixed here: it is a balance change and wants its own pass.
+
+#### 2. The fight: the reactive half asks, the deciding half never did
+
+`own_strength()` includes `health / 100.0` and the body's movement multiplier,
+and it feeds the fear-or-anger appraisal - so a wounded man rates himself
+weaker and is likelier to run **when something comes at him.**
+
+Going to *start* the fight asked nothing about the man:
+
+```rust
+fn could_bring_it_down(agent, species) -> bool {
+    species.health <= AS_BIG_AS_A_STONE_WILL_KILL
+        || agent.what_i_have_to_work_with(SkillType::Hunting).is_some()
+}
+```
+
+`worth_hunting` asks only: is it alive, can this tool kill it, and if it is
+dangerous is there a weapon. `grep state.health src/analytics/wanting/` returns
+nothing. A man at ten health with a spear set off after a bear exactly as a
+whole man would, and so did a child.
+
+Fixed by calling `could_i_fight_at_all(species.attack_damage)` - the same
+predicate `between_us::threat` already uses on the same argument, so the
+question is asked in one place on both sides of it.
+
+**And it measured as an exact no-op.** A build carrying this change and nothing
+else produced output *byte-identical* to the baseline over eight worlds: the
+only difference between the two files was the harness header added afterwards.
+
+```
+$ diff why5.txt why8.txt
+2a3,7
+>   person-days 34284               <- the new header, and nothing else
+```
+
+Its condition needs an agent hurt, holding an equipped weapon, carrying a
+hunting tool in the pack, **and** facing an Aggressive or Territorial animal at
+once, and that conjunction does not occur in sixteen world-years. It is a guard
+against a state the model can reach in principle and does not reach in
+practice. Worth keeping, worth nothing yet, and not to be credited with
+anything.
+
+#### 3. The healing gate: two questions, one gate, and the one that mattered was unasked
+
+```rust
+let suffering = is_starving() || is_dehydrated()
+    || !exposure_status.active_exposures.is_empty();
+if !suffering {
+    self.regenerate_health(resting);
+    self.take_health_down_to(body_condition);
+}
+```
+
+**The second line is the serious one.** `take_health_down_to` holds health down
+to what a broken body can carry and books the difference to `A_WOUND`. That is
+bookkeeping, not a reward for being well - and sharing a gate with the healing
+meant **suffering exempted a man from his own wound cap.** Exactly while
+starving, freezing or parched, his health was not held down to his body, and
+the one drain #209 exists to name went unwritten in the months people die of it.
+
+The first is a cliff, and wider than it reads. **Any** active exposure means
+Hypothermia, Frostbite, Hyperthermia, Dehydration or Sunburn at any severity -
+in winter, everybody, always. And `is_starving()` is itself
+`physiology.is_starving() || energy < 20.0`, where the second half is the
+action-energy pool: tiredness, not starvation. **A tired man in mild cold
+healed at exactly nought.**
+
+Now: the cap always applies, and mending is paid out of
+`reserve / reserve_capacity` - the share of the three-week reserve still in
+hand. No number anybody picked, and exposure is already inside it because being
+cold burns reserve. Dehydration stays a hard stop on purpose: water is not the
+reserve.
+
+#### What it bought, attributed
+
+Three builds, same eight seeds. The middle row is the isolation run.
+
+| | deaths | hunger | a blow | mo. 11 | mo. 13-18 | mo. 23 |
+|---|---|---|---|---|---|---|
+| neither | 162 | 86 | 58 | 4.8 alive, 40 died | 2.9 | 0.9 |
+| **hunting gate only** | **162** | **86** | **58** | **4.8, 40** | **2.9** | **0.9** |
+| both | **130** | **62** | 59 | **5.8, 32** | **3.8** | **3.1** |
+
+**The healing gate is the whole of it: deaths down 20%, hunger deaths down
+28%.** The hunting gate is nil.
+
+Two things worth writing down. The gain is in **hunger**, not in blows - blows
+went 58 to 59, flat - which is the opposite of what was predicted when the gate
+was flagged. The guess was that the people dying of blows were the ones denied
+healing; the mechanism is evidently that a body that keeps its condition
+gathers and carries better, so fewer starve. Deaths by blow are 45.4% of the
+dead now only because the hunger denominator shrank.
+
+And seed 0's draw count **fell** 867,358 to 750,181, down 13.5%, which looked
+like a harsher world and was the reverse: fewer people dying is fewer deaths,
+births and re-decisions to draw for. The prediction that the wound cap would
+cost lives was wrong.
+
+Still empty by month 24. The month-11 collapse is softer and is not gone.
+
+Suite: **2,557 passed, 9 failed** - the standing set less one, nothing new
+broken. Both healing tests were checked against the old gate and go red on it;
+the cap test took three drafts to make honest, because asserting on the health
+figure passed for the wrong reason (a starving body loses health to hunger
+anyway) and an emptied reserve kills inside one tick. It asserts the ledger
+entry now.
