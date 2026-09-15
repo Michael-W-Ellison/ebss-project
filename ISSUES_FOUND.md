@@ -16415,3 +16415,143 @@ count means nothing without the thing it is counted over.
    explained by the drift: `0.5` and `0.6` against a `WHAT_A_HANDFUL_OF_FOOD_WEIGHS`
    of `0.5`. A child at that capacity can never take food out of a store even
    with the arithmetic right. See the open #215 and #216.
+
+#### What was done, and what it bought
+
+The field is gone. `current_weight` is a method that sums the stacks;
+`recalculate_weight` went with it, along with 41 calls across 29 files - two of
+them production calls in `doing/eating.rs`, which is to say two places that had
+already worked out the number could not be trusted and were papering over it.
+The five arithmetic sites are removed. `get_item_mut` and `get_all_items_mut`
+are left exactly as they were, because there is no longer a tally for them to
+get behind.
+
+Three tests forged the total rather than loading a pack, and so had passed for
+precisely as long as the bug existed: `test_recalculate_weight` set the stored
+total to nought by hand, recalculated, and checked it came back. It tested the
+mending and never once asked whether the mending was reached.
+
+Seed 0 rolls **823,832** over a year where it rolled 690,468 - up 19.3%, which
+is a heavily load-bearing change, as it should be when packs that were falsely
+full begin to measure true.
+
+**And the settlement dies on the same schedule.** Same harness, same eight
+seeds, two years, twelve founders:
+
+| month | before: alive / died / pack full | after: alive / died / pack full |
+|---|---|---|
+| 1 | 11.8 / 2 / 86% | 11.5 / 4 / 83% |
+| 4 | 9.4 / 4 / 100% | 9.9 / 3 / 99% |
+| 5 | 9.0 / 3 / 103% | 9.5 / 3 / 103% |
+| 9 | 9.6 / 10 / 94% | **11.4** / 7 / 86% |
+| 10 | 9.0 / 20 / 92% | 8.9 / 29 / 74% |
+| **11** | **3.8 / 42 / 105%** | **3.0 / 36 / 76%** |
+| 12 | 0.8 / 1 / 99% | 0.9 / 9 / 60% |
+| 24 | 0.0 | 0.0 |
+
+A month or two of a slightly larger population in high summer, the same
+collapse in month 11, every world empty by month 24. The fix is right and it is
+not the thing that was killing them.
+
+**The refusals did not clear. They went up eight-fold**, 33,486 to **264,453**,
+and `PickUp` now fails 266,616 times out of 270,039 - 98.7% of every time it is
+chosen. That is not a regression in the fix; it is the fix taking a blindfold
+off. The next section is what was underneath.
+
+### 215. The gate weighs a handful at a half and the store hands out whole units, so a man at his own larder is refused 98.7% of the time
+
+*(This document's own sequence. Not the task list's #215, which is the
+leg-health carrying capacity.)*
+
+Found by fixing #214 and re-measuring. Same harness: eight worlds, two years,
+twelve founders, seeds 0-7.
+
+```
+actions chosen                        failed
+  PickUp     270,039               266,616   98.7%
+  GiveTo      80,254                79,953   99.6%
+  Gather     422,658                    26    0.0%
+  Eat        155,720                    30    0.0%
+
+PickUp: No room in the pack for what is in the store    264,453
+GiveTo: Nothing of mine they have any use for            57,999
+GiveTo: No room in their pack for it                     21,954
+```
+
+#### The two spellings
+
+The decision offers `PickUp` at a pit through one question:
+
+```rust
+// wanting/store.rs
+if !agent.could_i_take_another_handful(
+    crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,   // 0.5
+) { return None; }
+```
+
+The executor then asks a different one:
+
+```rust
+// doing/keeping.rs
+let each = wanted.weight_per_unit.max(f32::EPSILON);
+let will_fit = (room / each).floor() as u32;
+if taking == 0 { return failure("No room in the pack for what is in the store") }
+```
+
+`each` is what the thing in the pit actually weighs, and for almost everything
+in the pit that is **1.0, not 0.5**:
+
+```rust
+fn what_one_of_these_weighs(what: ResourceType) -> f32 {
+    match what {
+        ResourceType::Wood  => 2.0,
+        ResourceType::Stone => 5.0,
+        ResourceType::Iron  => 8.0,
+        ResourceType::Food  => WHAT_A_HANDFUL_OF_FOOD_WEIGHS,   // 0.5
+        _ => 1.0,                                               // everything else
+    }
+}
+```
+
+`Roots`, `Legumes`, `Greens`, `Nuts`, `Fish`, `Grain` and `Meat` all fall
+through to the `_` arm. Only `ResourceType::Food` - the generic berry - is
+priced at a handful. And the pit is mostly the others:
+
+```
+Roots 201,192   Legumes 168,388   Food 113,953   Greens 100,092
+Fish 58,449     Nuts 33,580       Grain 9,906
+```
+
+**About four-fifths of the food in this world weighs twice what the gate that
+offers it thinks a handful of food weighs.** A pack with between a half and a
+whole unit of room passes the gate and is refused by the executor, and because
+the pit branch sits above every drive there is, the man spends the turn on it
+and comes back next turn to be refused again.
+
+`could_i_take_another_handful` was written *for* this - its own doc records the
+last round of it, "127,477 refusals, 71% of every refusal in the model" - and
+it closed the gap for berries only. This is the same fault as the already-fixed
+`the_gate_weighs_a_stone_the_same_as_the_pack_does`, and as the open Excavate
+one: **one question answered in two places that do not agree.** It is the fourth
+time this file has written that sentence.
+
+#### Why #214 made the count worse rather than better
+
+Inference from the two runs and the code, not yet measured directly: before the
+fix the drifted weight pinned `weight_capacity_remaining()` at nought, so the
+gate's first clause was false and `PickUp` was rarely offered at all. With the
+weight honest, real room lands in the half-to-one window a great deal of the
+time, the gate says yes, and the executor says no. The refusals were always
+going to be there; the drift was hiding them by refusing the question earlier.
+
+#### What to do
+
+1. **Give the gate and the executor one table.** The gate should ask about what
+   is in *this* pit at *its* weight, not about a notional handful. That is a
+   small change and it is the whole of the disagreement.
+2. **And then ask why `_ => 1.0` is the price of a root.** A handful of roots
+   and a handful of berries weighing differently may well be right; both being
+   set in a match arm that nothing states a reason for is not.
+3. `GiveTo` failing 99.6% of 80,254 is a second thing sitting in the same
+   measurement and has not been looked at.
+
