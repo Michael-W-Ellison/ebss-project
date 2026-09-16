@@ -708,7 +708,12 @@ impl Simulation {
         );
 
         agent.inventory.remove_item("salt", Self::WHAT_IT_TAKES_TO_SALT_A_LOT);
-        agent.lessons.record_particular("salt", true);
+        // And this is the same lesson the question about it writes when the
+        // answer comes back - `Wondering::called` is `salt:meat` and this was
+        // a bare `salt`, so salting a joint and finding out what became of
+        // the joint went into two different rows and neither ever saw the
+        // other's evidence. One spelling, shared with `what_was_tried`.
+        agent.lessons.record_particular(&format!("salt:{what}"), true);
 
         if asking {
             let where_i_am = {

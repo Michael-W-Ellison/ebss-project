@@ -59,7 +59,12 @@ impl Simulation {
                 // take from watching it is what it was worth: something that
                 // would have been carrion is supper.
                 debug!("Agent {} watched {what} dry out at {where_it_is:?}", agent.id);
-                agent.lessons.record_particular("dry", true);
+                // Named for the thing that dried, so it is the same lesson
+                // `Agent::what_was_tried` writes when somebody lays a thing
+                // out on purpose. It was a bare `dry` against that function's
+                // bare `dry`, and both have the object now: what a man learns
+                // from watching fish dry on a rock is about fish.
+                agent.lessons.record_particular(&format!("dry:{what}"), true);
             }
         }
     }

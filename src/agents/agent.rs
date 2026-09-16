@@ -6393,6 +6393,29 @@ impl Agent {
     /// opinion about are recorded.
     /// The particular thing an action attempts, named finely enough to learn
     /// about: `gather:water` rather than `foraging`.
+    ///
+    /// **A lesson is about a verb and the kind of thing it was tried on, and
+    /// the kind has to be in the key or there is no lesson.** Ten of these
+    /// arms threw the object away, so `PickUp` on a tree and `PickUp` on a
+    /// stone were written to the same row and averaged to *picking things up
+    /// works about half the time*. An agent could not learn it cannot lift a
+    /// tree, and could not learn it can lift a stone, because both facts went
+    /// to one place. `gather:`, `eat:`, `craft:`, `store:`, `build:`,
+    /// `examine:` and `Work` already kept it; the rest are brought into line.
+    ///
+    /// **A person is not a kind of thing, and neither is a place.** `Trade`,
+    /// `GiveTo` and `TakeFrom` carry a `Uuid` and `FleeFrom` a coordinate, so
+    /// keying on those would put one row per neighbour and one per tile in a
+    /// map that is meant to hold what an agent knows about *sorts* of thing -
+    /// unbounded, and never twice the same question. What is known about a
+    /// particular person lives in `relationships`, and what is known about a
+    /// particular place in the map memory and in `Patterns`' own `At` and
+    /// `Toward` elements. Those stay as they are on purpose.
+    ///
+    /// `Hunt` is the one that should be keyed and cannot be here: the right
+    /// key is the species - `Patterns` already separates `Did("hunt")` from
+    /// `On("Deer")` - but the action carries only the animal's `Uuid`, and
+    /// this function is handed the action and nothing to look it up in.
     pub fn what_was_tried(action: &Action) -> String {
         match action {
             Action::Gather { resource_type } => format!("gather:{resource_type}"),
@@ -6421,15 +6444,15 @@ impl Agent {
             Action::FleeFrom { .. } => "fleefrom".to_string(),
             Action::Freeze => "freeze".to_string(),
             Action::Examine { what } => format!("examine:{what}"),
-            Action::Equip { .. } => "equip".to_string(),
-            Action::Unequip { .. } => "unequip".to_string(),
-            Action::Dry { .. } => "dry".to_string(),
+            Action::Equip { what } => format!("equip:{what}"),
+            Action::Unequip { what } => format!("unequip:{what}"),
+            Action::Dry { what } => format!("dry:{what}"),
             Action::Boil => "boil".to_string(),
-            Action::Salt { .. } => "salt".to_string(),
+            Action::Salt { what } => format!("salt:{what}"),
             Action::Excavate => "excavate".to_string(),
-            Action::Cover { .. } => "cover".to_string(),
-            Action::PickUp { .. } => "pickup".to_string(),
-            Action::PutDown { .. } => "putdown".to_string(),
+            Action::Cover { what } => format!("cover:{what}"),
+            Action::PickUp { what } => format!("pickup:{what}"),
+            Action::PutDown { what } => format!("putdown:{what}"),
             Action::Trade { .. } => "trade".to_string(),
             Action::GiveTo { .. } => "giveto".to_string(),
             Action::GoWithout { .. } => "gowithout".to_string(),
