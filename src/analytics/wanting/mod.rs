@@ -27,6 +27,7 @@
 //! The move was behaviour-neutral, and proved so: three seeds run six hundred
 //! ticks give byte-identical worlds either side of it.
 
+pub mod afforded;
 pub mod goal;
 pub mod strategy;
 pub mod camp;

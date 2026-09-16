@@ -699,14 +699,32 @@ impl Simulation {
             return None;
         }
 
+        wanted
+            .into_iter()
+            .find(|wants| !Self::do_these_hands_do(agent, wants))
+    }
+
+    /// Whether this agent's hands answer what a verb wants of them.
+    ///
+    /// The four closures the matrix asks for, built in one place. They were
+    /// built inline here, which was fine while one caller asked the question;
+    /// `what_i_could_do_here` asks it of every verb in the matrix, and two
+    /// spellings of "can these hands do this job" is exactly how this project
+    /// has lost measurements before - see the note on
+    /// `what_this_wants_that_is_missing`.
+    pub(in crate::analytics) fn do_these_hands_do(
+        agent: &crate::agents::Agent,
+        wants: &crate::environment::verbs::Wants,
+    ) -> bool {
         let holding = |what: &str| agent.how_many_i_have(what);
         let helped_by = |trade| agent.what_i_have_to_work_with(trade).is_some();
-        let a_hand_to_spare = agent.a_hand_to_spare();
-        let carrying_liquid = agent.how_much_water_i_carry();
 
-        wanted.into_iter().find(|wants| {
-            !wants.satisfied_by_hands(&holding, &helped_by, a_hand_to_spare, carrying_liquid)
-        })
+        wants.satisfied_by_hands(
+            &holding,
+            &helped_by,
+            agent.a_hand_to_spare(),
+            agent.how_much_water_i_carry(),
+        )
     }
 
     /// The raw thing a tool's chain is waiting on, fetched now rather than
