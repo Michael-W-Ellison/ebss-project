@@ -1298,12 +1298,41 @@ impl Simulation {
 
                 let agent_has_none = agent.how_many_i_have("iron") < 2;
                 if agent_has_none && agent.have_i_seen("iron") {
-                    Some(Action::Gather {
+                    return Some(Action::Gather {
                         resource_type: "iron".to_string(),
-                    })
-                } else {
-                    Some(Self::generate_action_for_drive(drive_type, agent_position))
+                    });
                 }
+
+                // And when no particular experiment suggests itself: whatever
+                // there is to do here that this one has done least of.
+                //
+                // Everything above is a *named* experiment with consequences
+                // of its own - a taste can kill you, a thing left out opens a
+                // question whose answer arrives in a week. This is the general
+                // case underneath them, and it is the whole of what curiosity
+                // is: the verb matrix says what could be done here holding
+                // this, `how_new_is_this` says which of it has been done
+                // least, and neither asks whether any of it pays. See
+                // `wanting::afforded`.
+                //
+                // What it replaces is `generate_action_for_drive`, which
+                // answered curiosity with wandering - the one thing a curious
+                // man can do that cannot teach him anything about what he is
+                // holding.
+                //
+                // The loop closes without anybody closing it. Every action an
+                // agent takes is written down under the key novelty reads -
+                // see `learn_from_this_here`, called on every turn's result -
+                // so a thing tried is a thing that is one less new, and the
+                // next reach falls somewhere else. `Lessons::fade` brings it
+                // back round in a season.
+                if let Some((verb, key)) = self.what_i_have_tried_least_here(agent) {
+                    if let Some(action) = self.an_action_for(verb, &key, agent) {
+                        return Some(action);
+                    }
+                }
+
+                Some(Self::generate_action_for_drive(drive_type, agent_position))
             }
 
             // Company needs somebody to keep it

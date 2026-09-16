@@ -419,3 +419,126 @@ fn a_verb_with_no_arm_of_its_own_is_still_reachable() {
         "the working did not carry the verb it was given"
     );
 }
+
+/// The curiosity drive reaches for the novelty, rather than wandering.
+///
+/// The terminal of the curiosity ladder was `generate_action_for_drive`,
+/// which answered curiosity with walking somewhere - the one thing a curious
+/// man can do that cannot teach him anything about what he is holding. Every
+/// rung above it is a named experiment with its own consequences and they
+/// stay; this is the general case underneath them.
+#[test]
+fn curiosity_reaches_for_the_verb_it_has_tried_least() {
+    let mut simulation = one_person_on_bare_ground();
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("stone".to_string(), 2, 1.0));
+
+    let agent = simulation.population.agents[0].clone();
+    let at = agent.state.position;
+
+    let offered = simulation
+        .what_this_drive_offers(crate::core::DriveType::Curiosity, &agent, at)
+        .expect("a curious man holding a stone has something to do");
+
+    assert!(
+        !matches!(offered, crate::environment::Action::Move { .. }),
+        "curiosity answered with a walk: {offered:?}"
+    );
+
+    // And what it offers is a thing the matrix says he could do here.
+    let named = crate::agents::Agent::what_was_tried(&offered);
+    let family = named.split(':').next().unwrap_or(&named);
+    assert!(
+        simulation
+            .what_i_could_do_here_now(&agent)
+            .iter()
+            .any(|verb| verb.done_by == Some(family)),
+        "curiosity offered {named}, which the matrix does not say is open here"
+    );
+}
+
+/// How often the novelty terminal is actually reached, and with what.
+///
+/// The rungs above it are named experiments that fire on their own
+/// conditions, and a terminal that is always shadowed is a terminal that
+/// changes nothing. That is not answerable by reading the ladder - measured,
+/// `putdown` alone shadows it for anybody carrying a thing they would leave
+/// out - so this runs a settlement and counts.
+///
+/// Prints the split under `--nocapture`; asserts only that the terminal is
+/// reached at all, since the exact figures move with everything else.
+#[test]
+fn the_novelty_terminal_is_reached_by_a_living_settlement() {
+    use crate::agents::{AgentConfig, PopulationConfig};
+    use crate::core::DriveType;
+    use crate::environment::seasons::TICKS_PER_DAY;
+    use std::collections::BTreeMap;
+
+    crate::core::dice::seed(0);
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::with_config(PopulationConfig::default());
+    for _ in 0..12 {
+        population.spawn_agent(AgentConfig::default());
+    }
+    let mut simulation = crate::analytics::Simulation::new(world, population);
+
+    let mut chose: BTreeMap<String, u64> = BTreeMap::new();
+    let mut looks = 0u64;
+
+    for _ in 0..30 {
+        for _ in 0..TICKS_PER_DAY {
+            simulation.tick();
+        }
+
+        let who: Vec<_> = simulation
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .cloned()
+            .collect();
+        for agent in who {
+            looks += 1;
+            let at = agent.state.position;
+            match simulation.what_this_drive_offers(DriveType::Curiosity, &agent, at) {
+                Some(action) => {
+                    let named = crate::agents::Agent::what_was_tried(&action);
+                    let family = named.split(':').next().unwrap_or(&named).to_string();
+                    *chose.entry(family).or_default() += 1;
+                }
+                None => *chose.entry("(nothing)".to_string()).or_default() += 1,
+            }
+        }
+    }
+
+    let mut rows: Vec<_> = chose.iter().collect();
+    rows.sort_by_key(|(_, n)| std::cmp::Reverse(**n));
+    println!("what the curiosity drive chose over {looks} agent-days:");
+    for (what, n) in &rows {
+        println!("  {what:<16} {:>5.1}%", 100.0 * **n as f64 / looks.max(1) as f64);
+    }
+
+    // What the rungs above the terminal can produce, and nothing else.
+    // `TrySwapping` reports itself as `swap`, not `tryswapping` - see
+    // `what_that_swap_is_called`. Counting it as novelty overstated the
+    // terminal's share by a third when this was first measured.
+    let from_the_ladder = [
+        "taste", "examine", "ask", "putdown", "gather", "craft", "swap", "work", "(nothing)",
+    ];
+    let from_novelty: u64 = rows
+        .iter()
+        .filter(|(what, _)| !from_the_ladder.contains(&what.as_str()))
+        .map(|(_, n)| **n)
+        .sum();
+
+    println!(
+        "reached the novelty terminal: {from_novelty} of {looks} ({:.1}%)",
+        100.0 * from_novelty as f64 / looks.max(1) as f64
+    );
+    assert!(
+        from_novelty > 0,
+        "a settlement ran a month and the novelty terminal never fired, so \
+         wiring it in changed nothing: {rows:?}"
+    );
+}
