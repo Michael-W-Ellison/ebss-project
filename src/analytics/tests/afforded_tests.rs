@@ -190,3 +190,88 @@ fn what_is_offered_is_what_the_hands_can_actually_do() {
         );
     }
 }
+
+/// Curiosity reaches for the thing it has tried least.
+///
+/// "It should be the curious agents which try new things to satisfy their
+/// curiosity drive." Novelty alone picks, on `Lessons::how_new_is_this`, and
+/// nothing in the choosing asks whether the thing worked.
+#[test]
+fn what_is_reached_for_is_what_has_been_tried_least() {
+    let mut simulation = one_person_on_bare_ground();
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("stone".to_string(), 1, 1.0));
+
+    let first = {
+        let agent = &simulation.population.agents[0];
+        simulation
+            .what_i_have_tried_least_here(agent)
+            .expect("a man with a stone has something he has never done")
+            .1
+    };
+
+    // Do that one until it is stale, and something else should come up.
+    for _ in 0..8 {
+        simulation.population.agents[0]
+            .lessons
+            .record_particular(&first, true);
+    }
+
+    let next = {
+        let agent = &simulation.population.agents[0];
+        simulation
+            .what_i_have_tried_least_here(agent)
+            .expect("still standing there with a stone")
+            .1
+    };
+
+    assert_ne!(
+        first, next,
+        "he did the same thing eight times and it is still the newest thing he could do"
+    );
+}
+
+/// And what he reaches for is about a kind of thing, not about a verb.
+///
+/// The key has to name what it was tried on, or "I have stacked stones" and
+/// "I have stacked nothing of the sort" are one row - which is the defect the
+/// commit before this one fixed, and the reason novelty can be keyed at all.
+#[test]
+fn what_is_reached_for_names_the_thing_it_would_be_tried_on() {
+    let mut simulation = one_person_on_bare_ground();
+    for what in ["stone", "wood"] {
+        simulation.population.agents[0]
+            .inventory
+            .add_item(InventoryItem::new_with_weight(what.to_string(), 1, 1.0));
+    }
+
+    let agent = simulation.population.agents[0].clone();
+    let pairs = simulation.what_i_could_try_here(&agent);
+
+    let about_a_thing: Vec<_> = pairs
+        .iter()
+        .filter(|(_, key)| key.contains(':'))
+        .collect();
+    assert!(
+        !about_a_thing.is_empty(),
+        "not one candidate was about a kind of thing"
+    );
+
+    assert!(
+        about_a_thing
+            .iter()
+            .any(|(_, key)| key.ends_with(":stone"))
+            && about_a_thing.iter().any(|(_, key)| key.ends_with(":wood")),
+        "a stone and a stick came to the same candidates"
+    );
+
+    // And every key is one `Lessons` could actually have a record under - the
+    // same spelling `Agent::what_was_tried` writes.
+    for (verb, key) in &pairs {
+        assert!(
+            key == verb.called || key.starts_with(&format!("{}:", verb.called)),
+            "{key} is not a key anything writes"
+        );
+    }
+}

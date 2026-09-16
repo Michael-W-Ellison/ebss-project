@@ -143,3 +143,166 @@ fn a_person_is_not_a_kind_of_thing() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Novelty, and the forgetting that keeps it coming back
+// ---------------------------------------------------------------------------
+
+use crate::agents::practices::Lessons;
+use crate::environment::seasons::{DAYS_PER_SEASON, TICKS_PER_DAY};
+
+/// Diminishing returns, and no second rule to say so.
+///
+/// "Trying something new, even if it does not work, helps satisfy the drive...
+/// but it should be diminishing returns until they are forced to pick new
+/// unknown actions." One over one plus the count is the whole of it.
+#[test]
+fn each_go_at_a_thing_is_worth_less_than_the_one_before() {
+    let mut lessons = Lessons::default();
+
+    let never = lessons.how_new_is_this("stack:stone");
+    assert_eq!(never, 1.0, "an untried thing should be wholly new");
+
+    let mut worth = Vec::new();
+    for _ in 0..4 {
+        lessons.record_particular("stack:stone", true);
+        worth.push(lessons.how_new_is_this("stack:stone"));
+    }
+
+    assert_eq!(worth, vec![0.5, 1.0 / 3.0, 0.25, 0.2]);
+    for pair in worth.windows(2) {
+        assert!(
+            pair[1] < pair[0],
+            "the next go was worth as much as the last: {pair:?}"
+        );
+    }
+}
+
+/// Novelty is not about whether it worked.
+///
+/// A man is not curious about a thing because it pays. Four failures make a
+/// thing exactly as stale as four successes, and `how_likely_to_try_this` is
+/// where the difference lives.
+#[test]
+fn what_is_new_does_not_depend_on_what_came_of_it() {
+    let mut paid = Lessons::default();
+    let mut did_not = Lessons::default();
+
+    // A fair go apiece: below `A_FAIR_GO` the agent reserves judgement and
+    // both read as nearly certain, which would let this pass without
+    // measuring anything.
+    for _ in 0..12 {
+        paid.record_particular("stack:stone", true);
+        did_not.record_particular("stack:stone", false);
+    }
+
+    assert_eq!(
+        paid.how_new_is_this("stack:stone"),
+        did_not.how_new_is_this("stack:stone"),
+        "novelty read the outcome, which is the other question"
+    );
+    assert!(
+        paid.how_likely_to_try_this("stack:stone")
+            > did_not.how_likely_to_try_this("stack:stone"),
+        "and the other question stopped telling them apart"
+    );
+}
+
+/// A thing tried once and never again is new to its own agent by the autumn.
+///
+/// "Once an action is attempted, if it did nothing, the agent will need to
+/// forget that it tried the action to use it to satisfy its curiosity drive
+/// demand again."
+#[test]
+fn a_thing_tried_once_and_left_is_new_again_within_the_year() {
+    let mut lessons = Lessons::default();
+    lessons.record_particular("stack:stone", false);
+    assert_eq!(lessons.how_new_is_this("stack:stone"), 0.5);
+
+    // A season of not doing it. `fade` is charged by the day, so one call
+    // carrying a season's worth of ticks is the same as ninety daily ones.
+    lessons.fade(DAYS_PER_SEASON * TICKS_PER_DAY);
+
+    assert_eq!(
+        lessons.how_new_is_this("stack:stone"),
+        1.0,
+        "a season went by and he still remembers the one stone he stacked"
+    );
+}
+
+/// And a thing kept up is not forgotten.
+///
+/// The other half. A rule that forgot everything on a clock would make an
+/// agent new to its own trade every spring; what is wanted is that things go
+/// because nobody did them again.
+#[test]
+fn a_thing_done_often_survives_the_season() {
+    let mut lessons = Lessons::default();
+    for _ in 0..40 {
+        lessons.record_particular("gather:roots", true);
+    }
+    let before = lessons.tried_this("gather:roots");
+
+    lessons.fade(DAYS_PER_SEASON * TICKS_PER_DAY);
+    let after = lessons.tried_this("gather:roots");
+
+    assert!(after < before, "a season took nothing off it at all: {before}");
+    assert!(
+        after > 0,
+        "forty goes at the same thing and a single season wiped it: {before} then {after}"
+    );
+}
+
+/// Forgetting leaves a lesson where it started, not where it failed.
+///
+/// Drifting the belief towards nought would make forgetting the same thing as
+/// having found it useless, which is backwards: a man who cannot remember
+/// trying something is in the position of never having tried it - worth one
+/// attempt and no more.
+#[test]
+fn forgetting_a_failure_leaves_it_worth_one_more_go() {
+    let mut lessons = Lessons::default();
+    for _ in 0..12 {
+        lessons.record_particular("fold:hide", false);
+    }
+    let soured = lessons.how_likely_to_try_this("fold:hide");
+
+    // Long enough that the count is gone entirely. A dozen goes halve every
+    // season, so they fall under `TOO_FAINT_TO_COUNT` at about fourteen
+    // months - a thing done a dozen times is remembered for rather more than
+    // a year, which is the shape wanted.
+    lessons.fade(5 * DAYS_PER_SEASON * TICKS_PER_DAY);
+
+    assert!(
+        lessons.how_likely_to_try_this("fold:hide") > soured,
+        "he forgot failing at it and is still as sour on it: {soured:.2}"
+    );
+    assert_eq!(
+        lessons.how_new_is_this("fold:hide"),
+        1.0,
+        "the count outlived the forgetting"
+    );
+}
+
+/// Fade is charged by the day, so calling it every turn costs nothing.
+#[test]
+fn fading_twice_in_a_day_takes_no_more_than_fading_once() {
+    let mut once = Lessons::default();
+    let mut often = Lessons::default();
+    for _ in 0..40 {
+        once.record_particular("gather:roots", true);
+        often.record_particular("gather:roots", true);
+    }
+
+    let a_day = DAYS_PER_SEASON * TICKS_PER_DAY;
+    once.fade(a_day);
+    for tick in 0..=a_day {
+        often.fade(tick);
+    }
+
+    assert_eq!(
+        once.tried_this("gather:roots"),
+        often.tried_this("gather:roots"),
+        "fading every turn charged more than fading once"
+    );
+}

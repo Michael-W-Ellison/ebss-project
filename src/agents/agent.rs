@@ -4615,6 +4615,13 @@ impl Agent {
         // rather than all of the world it has ever seen.
         self.patterns.fade(current_tick);
 
+        // And so do the lessons, on their own season-long clock. A thing tried
+        // once and never again is forgotten, and is new to this agent
+        // afterwards - which is what makes curiosity come back round to it
+        // rather than spending a life on the same forty experiments. See
+        // `Lessons::fade` and `Lessons::how_new_is_this`.
+        self.lessons.fade(current_tick);
+
         // And the country fades with it, on its own arithmetic: a month's
         // grace and then five points a month off any area nobody has been
         // back to. See `agents::whereabouts`.

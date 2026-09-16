@@ -13,7 +13,7 @@
 //! something too, though less than doing it yourself - which is the difference
 //! between being told a thing works and finding out.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -213,19 +213,35 @@ pub struct Lessons {
     #[serde(default)]
     particular: BTreeMap<String, f32>,
     #[serde(default)]
-    particular_attempts: BTreeMap<String, u32>,
+    /// How much of having tried it this agent still has.
+    ///
+    /// Not an integer, because it is not a tally - it is how much of the
+    /// trying is still remembered, and that comes down with time in
+    /// `fade`. Held as a count it could not: a day takes under a per cent
+    /// off, which rounds straight back to where it was, so forty goes faded
+    /// a day at a time stayed forty for ever while the same forty faded in
+    /// one call came down by half. Memory is continuous; the tally was the
+    /// thing that was wrong.
+    particular_attempts: BTreeMap<String, f32>,
     /// How many of those went well. The running belief above is an opinion,
     /// slow to move and asymmetric on purpose; this is the plain count, and a
     /// plain count is what one circumstance has to be compared against
     /// another with.
     #[serde(default)]
-    particular_successes: BTreeMap<String, u32>,
+    particular_successes: BTreeMap<String, f32>,
     /// And the same count kept separately for each circumstance the thing was
     /// attempted under - see `Circumstance`. Nested rather than keyed by a
     /// pair so that it survives a round trip through a format whose map keys
     /// are strings.
     #[serde(default)]
     under: BTreeMap<String, BTreeMap<Circumstance, Tally>>,
+    /// When the counts were last taken down for the passing of time.
+    ///
+    /// So that `fade` can be called every turn and charge only for the days
+    /// that have actually gone by - the same arrangement `Patterns::fade`
+    /// uses, and for the same reason.
+    #[serde(default)]
+    faded_at: u32,
 }
 
 impl Lessons {
@@ -353,9 +369,9 @@ impl Lessons {
         } else {
             *belief = (*belief - Self::LEARNED_FROM_FAILURE).max(0.0);
         }
-        *self.particular_attempts.entry(what.clone()).or_insert(0) += 1;
+        *self.particular_attempts.entry(what.clone()).or_insert(0.0) += 1.0;
         if worked {
-            *self.particular_successes.entry(what).or_insert(0) += 1;
+            *self.particular_successes.entry(what).or_insert(0.0) += 1.0;
         }
     }
 
@@ -364,9 +380,112 @@ impl Lessons {
         self.note(what.to_string(), worked);
     }
 
+    /// How new this is to this agent: one for the never-tried, falling away
+    /// as it is tried.
+    ///
+    /// "Trying something new, even if it does not work, helps satisfy the
+    /// drive... it should be diminishing returns until they are forced to pick
+    /// new unknown actions."
+    ///
+    /// One over one plus the count, which is the whole rule. The first go is
+    /// worth a half of what the never-tried was worth, the second a third, the
+    /// tenth a eleventh: diminishing returns falls out of the arithmetic
+    /// rather than being a second rule laid on top of it. Nothing here is
+    /// about whether it *worked* - that is `how_likely_to_try_this`, and the
+    /// two are deliberately different questions. A man is not curious about a
+    /// thing because it pays; he is curious about it because he has not done
+    /// it.
+    ///
+    /// This is why the lesson key had to carry the object. While `pickup` was
+    /// one row for every thing anybody ever lifted, a man who had picked up
+    /// forty stones was as incurious about a strange fruit as about the
+    /// forty-first stone.
+    pub fn how_new_is_this(&self, what: &str) -> f32 {
+        let tried = self
+            .particular_attempts
+            .get(what)
+            .copied()
+            .unwrap_or(0.0)
+            .max(0.0);
+        1.0 / (1.0 + tried)
+    }
+
+    /// Below this, having tried a thing is not worth the room it takes.
+    ///
+    /// Half a go, which is where a count would have rounded to nought anyway.
+    /// The same argument `Patterns::TOO_FAINT_TO_FOLLOW` makes about trails:
+    /// nothing is pruned by age or by count, things go because nobody did
+    /// them again.
+    pub const TOO_FAINT_TO_COUNT: f32 = 0.5;
+
+    /// What a season takes off a lesson nobody has repeated.
+    ///
+    /// A lesson halves over a season. That is the constant, and everything
+    /// else here is that sentence divided by ninety.
+    ///
+    /// The shape wanted: a thing tried once and never again is forgotten
+    /// within the season, and is new to its own agent afterwards - which is
+    /// what "the agent will need to forget that it tried the action to use it
+    /// to satisfy its curiosity drive demand again" asks for. A thing done a
+    /// dozen times is still remembered a year later. Nothing is forgotten on a
+    /// clock of its own; it is forgotten because nobody did it again.
+    pub const WHAT_A_SEASON_TAKES: f32 = 0.5;
+
+    /// And what that comes to in a day.
+    fn what_a_day_keeps() -> f32 {
+        Self::WHAT_A_SEASON_TAKES
+            .powf(1.0 / crate::environment::seasons::DAYS_PER_SEASON as f32)
+    }
+
+    /// Take time off what has been tried, and forget what has gone.
+    ///
+    /// Charged by the day, like `Patterns::fade`: call it every turn and it
+    /// costs a subtraction until a day has actually passed.
+    ///
+    /// Three things come down together and they have to. The count is what
+    /// novelty reads; the successes are what the success *rate* is computed
+    /// from, so they fall in the same proportion or a forgotten lesson would
+    /// quietly change its mind about whether it worked. The belief drifts back
+    /// towards `UNTRIED` rather than towards nought, because forgetting a
+    /// thing is not the same as having found it useless - it is being left
+    /// where you started, worth one attempt and no more.
+    pub fn fade(&mut self, now: u32) {
+        let days = now.saturating_sub(self.faded_at)
+            / crate::environment::seasons::TICKS_PER_DAY;
+        if days == 0 {
+            return;
+        }
+        self.faded_at = now;
+
+        let kept = Self::what_a_day_keeps().powi(days as i32);
+
+        for (what, attempts) in self.particular_attempts.iter_mut() {
+            *attempts *= kept;
+
+            if let Some(successes) = self.particular_successes.get_mut(what) {
+                *successes = (*successes * kept).min(*attempts);
+            }
+        }
+
+        for belief in self.particular.values_mut() {
+            *belief = Self::UNTRIED + (*belief - Self::UNTRIED) * kept;
+        }
+
+        // And what is gone is gone, rather than sitting at nought taking up
+        // room. A head is not a filing cabinet - the same argument
+        // `record_particular_here` makes about circumstances.
+        self.particular_attempts
+            .retain(|_, attempts| *attempts >= Self::TOO_FAINT_TO_COUNT);
+        let remembered: BTreeSet<String> = self.particular_attempts.keys().cloned().collect();
+        self.particular_successes
+            .retain(|what, _| remembered.contains(what));
+        self.particular.retain(|what, _| remembered.contains(what));
+        self.under.retain(|what, _| remembered.contains(what));
+    }
+
     /// How willing this agent is to try this particular thing again.
     pub fn how_likely_to_try_this(&self, what: &str) -> f32 {
-        let tried = self.particular_attempts.get(what).copied().unwrap_or(0);
+        let tried = self.tried_this(what);
         if tried < Self::A_FAIR_GO {
             return Self::NEVER_QUITE_CERTAIN;
         }
@@ -385,7 +504,11 @@ impl Lessons {
 
     /// How many times this particular thing has been tried.
     pub fn tried_this(&self, what: &str) -> u32 {
-        self.particular_attempts.get(what).copied().unwrap_or(0)
+        self.particular_attempts
+            .get(what)
+            .copied()
+            .unwrap_or(0.0)
+            .round() as u32
     }
 
     /// Note how one particular attempt turned out, and what the world was
@@ -428,7 +551,11 @@ impl Lessons {
         let least = self
             .under
             .iter()
-            .min_by_key(|(what, _)| self.particular_attempts.get(*what).copied().unwrap_or(0))
+            .min_by(|(mine, _), (theirs, _)| {
+                let left = self.particular_attempts.get(*mine).copied().unwrap_or(0.0);
+                let right = self.particular_attempts.get(*theirs).copied().unwrap_or(0.0);
+                left.total_cmp(&right)
+            })
             .map(|(what, _)| what.clone());
 
         if let Some(what) = least {
@@ -447,7 +574,7 @@ impl Lessons {
     /// to compare with, and this returns nought for him, correctly. It takes
     /// one wet afternoon to teach him anything at all.
     pub fn what_this_changes(&self, what: &str, here: Circumstance) -> Option<f32> {
-        let tried = self.particular_attempts.get(what).copied().unwrap_or(0);
+        let tried = self.tried_this(what);
         if tried < Self::ENOUGH_TO_SEE_A_PATTERN {
             return None;
         }
@@ -457,7 +584,8 @@ impl Lessons {
             return None;
         }
 
-        let overall = self.particular_successes.get(what).copied().unwrap_or(0) as f32 / tried as f32;
+        let overall =
+            self.particular_successes.get(what).copied().unwrap_or(0.0) / tried as f32;
 
         Some(tally.rate()? - overall)
     }

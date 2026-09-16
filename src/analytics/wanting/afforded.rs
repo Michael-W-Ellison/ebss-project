@@ -134,6 +134,83 @@ impl Simulation {
         }
     }
 
+    /// Every verb open here, paired with the thing it would be tried on.
+    ///
+    /// A verb alone is not what an agent learns about. "I have picked things
+    /// up" is not a lesson; "I have picked up forty stones and never a strange
+    /// fruit" is, and it is the second that decides whether the fruit is worth
+    /// a look. So the candidates are verb-and-object pairs, named exactly as
+    /// `Agent::what_was_tried` names them, which is what makes them askable of
+    /// `Lessons` at all.
+    ///
+    /// The object comes from whatever the verb's target actually *is* here: a
+    /// verb wanting a thing held is offered once for each kind of thing in the
+    /// pack, one wanting a thing underfoot once for what is underfoot. Verbs
+    /// whose target is not a kind of thing - a place, a person, the ground -
+    /// come back once, keyed on the verb alone, because there is no kind for
+    /// them to be about.
+    pub fn what_i_could_try_here(&self, agent: &Agent) -> Vec<(&'static Verb, String)> {
+        let at = agent.state.position;
+        let here = Position::new(at.0, at.1);
+
+        let in_the_pack: Vec<String> = agent.inventory.get_all_items().keys().cloned().collect();
+        let mut underfoot: Vec<String> = self
+            .world
+            .what_is_lying_at(&here)
+            .iter()
+            .map(|dropped| dropped.item.item_id.clone())
+            .collect();
+        if let Some(node) = self.world.get_resource_at(&here).filter(|node| node.amount > 0) {
+            if let Some(called) = Self::gathered_as(node.resource_type) {
+                underfoot.push(called.to_string());
+            }
+        }
+        underfoot.sort_unstable();
+        underfoot.dedup();
+
+        let mut out = Vec::new();
+        for verb in self.what_i_could_do_here_now(agent) {
+            let things: &[String] = match verb.targets {
+                Targets::AThingHeld => &in_the_pack,
+                Targets::AThingUnderfoot => &underfoot,
+                _ => &[],
+            };
+
+            if things.is_empty() {
+                out.push((verb, verb.called.to_string()));
+                continue;
+            }
+            for what in things {
+                out.push((verb, format!("{}:{}", verb.called, what)));
+            }
+        }
+        out
+    }
+
+    /// The thing open here that this agent has tried least.
+    ///
+    /// "It should be the curious agents which try new things to satisfy their
+    /// curiosity drive. Trying something new, even if it does not work, helps
+    /// satisfy the drive."
+    ///
+    /// Novelty alone decides, on `Lessons::how_new_is_this` - one over one
+    /// plus the number of times this verb has been tried on this kind of
+    /// thing. Nothing here asks whether it worked, and that is the point: a
+    /// man is not curious about a thing because it pays. Whether it paid is
+    /// what the other drives read, off the same record.
+    ///
+    /// Ties break on the key so that two agents in the same state reach for
+    /// the same thing, which is what keeps a seeded world repeatable.
+    pub fn what_i_have_tried_least_here(&self, agent: &Agent) -> Option<(&'static Verb, String)> {
+        self.what_i_could_try_here(agent)
+            .into_iter()
+            .max_by(|(_, left), (_, right)| {
+                let mine = agent.lessons.how_new_is_this(left);
+                let theirs = agent.lessons.how_new_is_this(right);
+                mine.total_cmp(&theirs).then_with(|| right.cmp(left))
+            })
+    }
+
     /// Whether two people are near enough for one to act on the other.
     fn within_reach(one: (i32, i32, i32), other: (i32, i32, i32)) -> bool {
         let paces = (one.0 - other.0).abs().max((one.1 - other.1).abs());
