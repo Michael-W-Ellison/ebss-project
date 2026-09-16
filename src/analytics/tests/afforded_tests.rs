@@ -275,3 +275,147 @@ fn what_is_reached_for_names_the_thing_it_would_be_tried_on() {
         );
     }
 }
+
+/// What is built performs the verb the matrix said performs it.
+///
+/// `an_action_for` is the inverse of `Agent::what_was_tried` and has to stay
+/// so: one names an action, the other builds one back, and a drift between
+/// them means an agent choosing one thing and learning about another. That is
+/// the "two spellings of one question" this project has paid for repeatedly -
+/// see #215 and #243.
+///
+/// The invariant is the family rather than the whole key, because the builder
+/// legitimately fills in what the key does not carry: a hunt wants an animal
+/// and the key names none.
+#[test]
+fn what_is_built_performs_the_verb_it_was_built_from() {
+    let mut simulation = one_person_on_bare_ground();
+
+    // Something to hold, something underfoot, and somebody to talk to, so
+    // that the target-hungry arms have targets to find.
+    for what in ["stone", "wood", "meat"] {
+        simulation.population.agents[0]
+            .inventory
+            .add_item(InventoryItem::new_with_weight(what.to_string(), 2, 1.0));
+    }
+    let at = simulation.population.agents[0].state.position;
+    simulation.world.resources.push(ResourceNode::new(
+        ResourceType::Food,
+        Position::new(at.0, at.1),
+        50,
+    ));
+    simulation
+        .population
+        .spawn_agent(crate::agents::AgentConfig::default());
+    let mate = simulation.population.agents.len() - 1;
+    simulation.population.agents[mate].state.position = at;
+
+    let agent = simulation.population.agents[0].clone();
+
+    let mut built = 0;
+    let mut unbuilt = Vec::new();
+    for (verb, key) in simulation.what_i_could_try_here(&agent) {
+        let done_by = verb.done_by.expect("only performable verbs are offered");
+        match simulation.an_action_for(verb, &key, &agent) {
+            Some(action) => {
+                let named = crate::agents::Agent::what_was_tried(&action);
+                let family = named.split(':').next().unwrap_or(&named);
+                assert_eq!(
+                    family, done_by,
+                    "{} was built from {key} and came back as {named}",
+                    verb.called
+                );
+                built += 1;
+            }
+            None => unbuilt.push((verb.called, key)),
+        }
+    }
+
+    assert!(
+        built > 0,
+        "nothing at all could be built, so this test is not watching anything"
+    );
+    // What cannot be built is exactly the verbs that want somewhere to go.
+    // A destination is not a kind of thing, so the key cannot carry one, and
+    // where to walk has its own machinery - see the note in `an_action_for`.
+    // Anything else appearing here is a gap rather than a decision.
+    for (called, key) in &unbuilt {
+        let verb = EVERY_VERB
+            .iter()
+            .find(|verb| verb.called == *called)
+            .expect("it came out of the matrix");
+        assert_eq!(
+            verb.targets,
+            Targets::APlace,
+            "{called} could not be built from {key}, and it is not a question \
+             of where to go"
+        );
+    }
+}
+
+/// The thing curiosity reaches for is a thing it can actually do.
+///
+/// The whole chain in one assertion: the matrix says what is open, novelty
+/// picks the newest of it, and what comes back is an `Action` the executor
+/// takes. Each of the three has its own tests; this is the one that fails if
+/// they stop meeting.
+#[test]
+fn what_curiosity_reaches_for_can_be_carried_out() {
+    let mut simulation = one_person_on_bare_ground();
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("stone".to_string(), 1, 1.0));
+
+    let agent = simulation.population.agents[0].clone();
+    let (verb, key) = simulation
+        .what_i_have_tried_least_here(&agent)
+        .expect("a man with a stone has something he has never done");
+
+    let action = simulation
+        .an_action_for(verb, &key, &agent)
+        .unwrap_or_else(|| panic!("curiosity reached for {key}, which cannot be done"));
+
+    // And it survives the executor - which may well refuse it, since trying
+    // things that do not work is the point. What it must not do is panic or
+    // come back as some other verb.
+    let result = simulation.execute_action(&action, 0);
+    let named = crate::agents::Agent::what_was_tried(&action);
+    assert_eq!(
+        named.split(':').next(),
+        verb.done_by,
+        "what was carried out was not what was chosen: {named:?}"
+    );
+    let _ = result.success;
+}
+
+/// A verb nobody has written an arm for is still reachable, through `Work`.
+///
+/// This is the property that keeps the builder from being a second closed
+/// list beside the matrix. `Work` carries its verb as data, so a verb whose
+/// `done_by` names none of the particular actions falls through to it and
+/// still round-trips. Add a verb to the matrix tomorrow and it is reachable
+/// without touching `an_action_for`.
+#[test]
+fn a_verb_with_no_arm_of_its_own_is_still_reachable() {
+    let simulation = one_person_on_bare_ground();
+    let agent = simulation.population.agents[0].clone();
+
+    let made_up = crate::environment::verbs::Verb {
+        called: "burnish",
+        done_by: Some("burnish"),
+        ..*crate::environment::verbs::EVERY_VERB
+            .iter()
+            .find(|verb| verb.called == "scrape")
+            .expect("the matrix has a scraping in it")
+    };
+
+    let action = simulation
+        .an_action_for(&made_up, "burnish:stone", &agent)
+        .expect("a verb with no arm should fall through to a working");
+
+    assert_eq!(
+        crate::agents::Agent::what_was_tried(&action),
+        "burnish:stone",
+        "the working did not carry the verb it was given"
+    );
+}

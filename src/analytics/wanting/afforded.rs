@@ -33,6 +33,7 @@
 use super::super::Simulation;
 use crate::agents::Agent;
 use crate::environment::verbs::{Targets, Verb, EVERY_VERB};
+use crate::environment::Action;
 use crate::world::Position;
 
 impl Simulation {
@@ -199,16 +200,222 @@ impl Simulation {
     /// man is not curious about a thing because it pays. Whether it paid is
     /// what the other drives read, off the same record.
     ///
-    /// Ties break on the key so that two agents in the same state reach for
-    /// the same thing, which is what keeps a seeded world repeatable.
+    /// Ties are broken per person rather than by name, and that is not a
+    /// detail. Everything untried scores exactly one, so at the start of a
+    /// life almost every candidate ties - and breaking those ties on the key
+    /// means picking whatever sorts first. Measured that way, over 2,767
+    /// agent-days, a whole settlement reached for exactly two things: `ask
+    /// about` 64% of the time and `attach` the rest, both of them near the
+    /// front of the alphabet. Deterministic, and no kind of curiosity.
+    ///
+    /// So the tie is broken on the person *and* the thing together, which
+    /// spreads a settlement across the things there are to try while keeping
+    /// a seeded world repeatable: the same agent in the same state reaches for
+    /// the same thing every run, and their neighbour reaches for another.
     pub fn what_i_have_tried_least_here(&self, agent: &Agent) -> Option<(&'static Verb, String)> {
         self.what_i_could_try_here(agent)
             .into_iter()
+            // And only what can actually be carried out. `what_i_could_try_here`
+            // reports everything the matrix offers, which is right for a
+            // census and wrong for a choice: reaching for a verb that cannot
+            // be built spends the turn on nothing and teaches nothing. The
+            // whole of what this drops is the walking verbs, whose
+            // destinations belong to the travel layer - see `an_action_for`.
+            .filter(|(verb, key)| self.an_action_for(verb, key, agent).is_some())
             .max_by(|(_, left), (_, right)| {
                 let mine = agent.lessons.how_new_is_this(left);
                 let theirs = agent.lessons.how_new_is_this(right);
-                mine.total_cmp(&theirs).then_with(|| right.cmp(left))
+                mine.total_cmp(&theirs).then_with(|| {
+                    Self::whose_turn_it_is(agent, left).cmp(&Self::whose_turn_it_is(agent, right))
+                })
             })
+    }
+
+    /// A number this person would give this candidate, stable across runs.
+    ///
+    /// Written out rather than taken from `DefaultHasher`, whose values are
+    /// explicitly not promised to be stable - and a seeded world that rolls a
+    /// different number on a different build is no longer a baseline. FNV-1a,
+    /// over the person's id and the thing they might try.
+    fn whose_turn_it_is(agent: &Agent, key: &str) -> u64 {
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for byte in agent.id.as_bytes().iter().chain(key.as_bytes()) {
+            hash ^= *byte as u64;
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        hash
+    }
+
+    /// Turn a chosen verb, and the thing it is to be tried on, into an action.
+    ///
+    /// The inverse of `Agent::what_was_tried`, and it has to be: that function
+    /// names an action and this builds one back, so a drift between them would
+    /// mean an agent choosing one thing and learning about another. The test
+    /// `every_verb_the_matrix_performs_can_be_built` walks every verb and
+    /// asserts the round trip - what comes back out of `what_was_tried` is of
+    /// the family the matrix said performs it.
+    ///
+    /// **`Work` is why this is not a second closed list.** `what_was_tried`
+    /// spells `Work { verb, to }` as `"{verb}:{to}"` - the verb is *data* in
+    /// that action, not a variant - so any verb whose `done_by` names none of
+    /// the particular actions below falls through to it and round-trips
+    /// anyway. Twenty-odd of the matrix's verbs are worked that way already.
+    /// Add a verb to the matrix tomorrow and it is reachable without a line
+    /// here.
+    ///
+    /// What the key does not carry, this fills in from what is actually here:
+    /// a hunt wants an animal and the key names none, a trade wants somebody
+    /// and the key names nobody. Those are the targets that are not kinds of
+    /// thing - see `what_was_tried` on why they stay out of the lesson key -
+    /// and here they come from the ground rather than from the name.
+    ///
+    /// `None` where the verb wants something this place has not got, and for
+    /// the handful whose action wants more than a target to be well formed.
+    pub fn an_action_for(&self, verb: &Verb, key: &str, agent: &Agent) -> Option<Action> {
+        let done_by = verb.done_by?;
+        let what = key.split_once(':').map(|(_, thing)| thing.to_string());
+        let at = agent.state.position;
+
+        // A thing named in the key, for the verbs that want one. A verb that
+        // wants a kind of thing and was handed no kind is not an action.
+        let thing = || what.clone();
+
+        // And for the handful whose *target* is somebody but whose action
+        // still wants a thing - sharing something, asking about something -
+        // the thing comes off the agent's own back, because that is what it
+        // would be. The key cannot name it: the verb targets a person, so
+        // there is no kind in it. First by name, so a seeded world picks the
+        // same one twice.
+        let thing_or_carried = || {
+            what.clone()
+                .or_else(|| agent.inventory.get_all_items().keys().next().cloned())
+        };
+
+        Some(match done_by {
+            // ---- the verbs that act on a kind of thing --------------------
+            "gather" => Action::Gather { resource_type: thing()? },
+            "eat" => Action::Eat { food_type: thing()? },
+            "craft" => Action::Craft { item_type: thing()? },
+            "cook" => Action::Cook { food_type: thing()? },
+            "examine" => Action::Examine { what: thing()? },
+            "equip" => Action::Equip { what: thing()? },
+            "unequip" => Action::Unequip { what: thing()? },
+            "dry" => Action::Dry { what: thing()? },
+            "salt" => Action::Salt { what: thing()? },
+            "cover" => Action::Cover { what: thing()? },
+            "pickup" => Action::PickUp { what: thing()? },
+            "putdown" => Action::PutDown { what: thing()? },
+            "makeclothing" => Action::MakeClothing { garment: thing()? },
+            "wearclothing" => Action::WearClothing { garment: thing()? },
+            // One of them, because what a store wants is somewhere to put a
+            // thing and this is about finding out whether it can be done at
+            // all. How much is a question for the drive that means it.
+            "store" => Action::Store { item_type: thing_or_carried()?, amount: 1 },
+
+            // ---- the verbs that act on the ground here --------------------
+            "build" => Action::Build {
+                structure_type: thing().unwrap_or_else(|| "shelter".to_string()),
+                position: at,
+            },
+            // The matrix keeps digging yourself in apart from framing a tent,
+            // and `what_was_tried` keeps the same distinction: a burrow is a
+            // `Build` that is named for what it is.
+            "burrow" => Action::Build {
+                structure_type: "burrow".to_string(),
+                position: at,
+            },
+
+            // ---- the verbs that want nothing but a body and a place -------
+            "fish" => Action::Fish,
+            "boil" => Action::Boil,
+            "lightfire" => Action::LightFire,
+            "tillsoil" => Action::TillSoil,
+            "tendfield" => Action::TendField,
+            "excavate" => Action::Excavate,
+            "freeze" => Action::Freeze,
+            "taste" => Action::Taste,
+            "setsnare" => Action::SetSnare,
+            "checksnares" => Action::CheckSnares,
+            "spreadmuck" => Action::SpreadMuck,
+            "takecutting" => Action::TakeCutting,
+            "plantcutting" => Action::PlantCutting,
+            "seekshelter" => Action::SeekShelter,
+
+            // ---- the verbs that want a creature ---------------------------
+            "hunt" => Action::Hunt {
+                animal_id: self.an_animal_here(agent)?,
+                weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+            },
+
+            // ---- and the verbs that want somebody -------------------------
+            "trade" => Action::Trade { with: self.somebody_here(agent)? },
+            "giveto" => Action::GiveTo { to: self.somebody_here(agent)? },
+            "takefrom" => Action::TakeFrom { from: self.somebody_here(agent)? },
+            "gowithout" => Action::GoWithout { for_them: self.somebody_here(agent)? },
+            "socialize" => Action::Socialize {
+                target_agent_id: self.somebody_here(agent)?,
+            },
+            "shareinformation" => Action::ShareInformation {
+                target_agent_id: self.somebody_here(agent)?,
+            },
+            "ask" => Action::AskAbout {
+                who: self.somebody_here(agent)?,
+                what: thing_or_carried()?,
+            },
+            "attack" => Action::Attack {
+                target_agent_id: self.somebody_here(agent)?,
+                weapon: agent.equipment.get_weapon().map(|held| held.name.clone()),
+            },
+
+            // ---- and the one kind this does not answer --------------------
+            //
+            // A verb that targets `APlace` wants a destination, and a
+            // destination is not a kind of thing that could be named in the
+            // key - it is the same exclusion `what_was_tried` makes for
+            // people and places, and for the same reason. Where to walk is a
+            // question with its own machinery behind it: the map memory, and
+            // `Patterns::what_every_place_is_worth`. Answering it here with
+            // whatever tile was nearest would be a second, worse, spelling of
+            // it.
+            "move" => return None,
+
+            // ---- and everything else is a working -------------------------
+            //
+            // Not a fallback so much as the general case: `Work` carries its
+            // verb as data, so scraping, carving, cutting, drilling and the
+            // rest of the Disruption family are already done this way and
+            // need no arm of their own. This is the line that keeps the
+            // matrix, rather than this function, deciding what can be tried.
+            _ => Action::Work {
+                verb: done_by.to_string(),
+                to: thing()?,
+            },
+        })
+    }
+
+    /// An animal near enough to act on, picked so that two runs of the same
+    /// seed pick the same one.
+    fn an_animal_here(&self, agent: &Agent) -> Option<uuid::Uuid> {
+        let at = agent.state.position;
+        self.world
+            .get_animals_in_radius((at.0, at.1), Self::WITHIN_REACH)
+            .into_iter()
+            .map(|animal| animal.id)
+            .min()
+    }
+
+    /// Somebody else near enough to act on, picked the same way.
+    fn somebody_here(&self, agent: &Agent) -> Option<uuid::Uuid> {
+        self.population
+            .agents
+            .iter()
+            .filter(|other| {
+                other.state.is_alive
+                    && other.id != agent.id
+                    && Self::within_reach(other.state.position, agent.state.position)
+            })
+            .map(|other| other.id)
+            .min()
     }
 
     /// Whether two people are near enough for one to act on the other.
