@@ -116,6 +116,23 @@ pub struct Simulation {
     /// "the drives ask for things that do not happen" into a list of named
     /// defects.
     pub actions_failed_because: std::collections::BTreeMap<String, u64>,
+    /// How often curiosity ran out of named experiments and fell through to
+    /// the general case - see the terminal of the `DriveType::Curiosity`
+    /// branch in `what_this_drive_offers`.
+    ///
+    /// Counted rather than inferred. The settlement test that watches this
+    /// used to guess from the name of the action chosen, on the grounds that
+    /// the rungs above the terminal produce a known short list of them. That
+    /// worked only while the terminal produced something else, and it stopped
+    /// being true the moment the candidate list learned about products: the
+    /// terminal can now reach for `craft`, which is also what a rung above it
+    /// reaches for, so the guess read the whole of the ladder as ladder and
+    /// called the terminal dead. A count cannot be wrong about it.
+    ///
+    /// A `Cell` because the decision layer reads the world and does not write
+    /// to it - `what_this_drive_offers` takes `&self` - and this is a tally
+    /// rather than a fact about the world.
+    pub how_often_curiosity_reached_for_something_new: std::cell::Cell<u64>,
     /// Questions this settlement put to the world and got an answer to, by
     /// question - see `who_came_back_to_look`. Nobody wrote any of these down
     /// either; they are whatever anybody happened to leave lying about.
@@ -157,6 +174,14 @@ pub struct Simulation {
     /// eats enough is therefore not a question about how much it gathers, it
     /// is a question about what. Nothing counted it until now.
     pub what_went_down: std::collections::BTreeMap<String, u64>,
+
+    /// What was actually lifted out of a pit, in items.
+    ///
+    /// The pits hold nine thousand items in the month forty people die of
+    /// hunger, and the packs hold nineteen. Something between the hole and the
+    /// hand is the constraint and the refusal tables no longer name it - the
+    /// store refusal went to nought in #215 - so this counts what comes out.
+    pub what_came_out_of_the_store: u64,
 
     /// And what all of it came to, in the units a day is measured in.
     pub energy_that_went_down: f64,
@@ -335,6 +360,7 @@ impl Simulation {
             actions_taken: std::collections::BTreeMap::new(),
             actions_failed: std::collections::BTreeMap::new(),
             actions_failed_because: std::collections::BTreeMap::new(),
+            how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
             what_anybody_found_out: std::collections::BTreeMap::new(),
@@ -343,6 +369,7 @@ impl Simulation {
             what_went_back_on_the_bush: 0,
             food_items_into_packs: 0,
             what_went_down: std::collections::BTreeMap::new(),
+            what_came_out_of_the_store: 0,
             energy_that_went_down: 0.0,
         }
     }
@@ -629,7 +656,7 @@ impl Simulation {
     /// nutrition in it and skins that can become a coat.
     ///
     /// `with_a_knife` is what the tool in the butcher's hand multiplies the
-    /// carcass by - see `Agent::how_much_my_tools_help`. Taking a deer apart
+    /// carcass by - see `Agent::how_much_my_tools_bring_back`. Taking a deer apart
     /// with a sharp flake and taking it apart with your hands are not the
     /// same job, and until now they were.
     /// Put as much of a stack into the pack as will go, and say how much went.
@@ -650,7 +677,7 @@ impl Simulation {
         agent_index: usize,
         item: &crate::agents::InventoryItem,
     ) -> u32 {
-        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        let each = item.what_one_of_them_weighs();
         let room = self.population.agents[agent_index]
             .inventory
             .weight_capacity_remaining();
@@ -759,6 +786,14 @@ impl Simulation {
                 // else says otherwise
                 let mut item = InventoryItem::new_with_weight(item_id, off_the_carcass, 2.0);
                 item.food_data = food_data;
+
+                // And how good it is, which the caller decided when it read
+                // the flake in the hand. A hide is the first thing in this
+                // model whose worth is set by somebody's work rather than by
+                // its own making, and it is the thing a coat is cut from -
+                // so this is where the specification's "same clothing items
+                // but of differing quality" actually starts.
+                item.quality = stack.quality;
                 item
             })
             .collect()
@@ -1288,6 +1323,7 @@ impl Simulation {
             actions_taken: std::collections::BTreeMap::new(),
             actions_failed: std::collections::BTreeMap::new(),
             actions_failed_because: std::collections::BTreeMap::new(),
+            how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
             what_anybody_found_out: std::collections::BTreeMap::new(),
@@ -1296,6 +1332,7 @@ impl Simulation {
             what_went_back_on_the_bush: 0,
             food_items_into_packs: 0,
             what_went_down: std::collections::BTreeMap::new(),
+            what_came_out_of_the_store: 0,
             energy_that_went_down: 0.0,
         };
 

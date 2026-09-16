@@ -381,7 +381,12 @@ impl Simulation {
             // A pack full of stone makes room for supper, the same way it does
             // at a bush - see `set_down_what_is_worth_less_than_food`. This is
             // the same situation and it should not have two answers.
-            let each = wanted.weight_per_unit.max(f32::EPSILON);
+            // What one of them actually weighs, drying and all - not
+            // `weight_per_unit` raw, which prices a dried fish at what a wet
+            // one weighs and so refuses room the pack has. One spelling,
+            // shared with the gate that offers this and with `total_weight`
+            // itself: see `InventoryItem::what_one_of_them_weighs`.
+            let each = wanted.what_one_of_them_weighs().max(f32::EPSILON);
             let asking_for = Self::WHAT_A_PERSON_TAKES_OUT.min(wanted.quantity);
             // `set_down_what_is_worth_less_than_food` answers with the room it
             // *made*, which is nought for a pack that had room already and
@@ -391,12 +396,24 @@ impl Simulation {
                 agent_index,
                 each * asking_for as f32,
             );
-            let room = self.population.agents[agent_index]
-                .inventory
-                .weight_capacity_remaining();
-
-            let will_fit = (room / each).floor() as u32;
-            let taking = asking_for.min(will_fit);
+            // How much of it goes in, asked of the pack rather than worked out
+            // again here. This branch used to divide the room by the weight
+            // itself and then assert the result would go in - "the room was
+            // measured a line ago" - which is true of the *weight* and says
+            // nothing about the **slot limit**. Measured: a pack with forty
+            // units of room refused a stack weighing 0.175, because it already
+            // held twenty kinds of thing out of twenty and this was a
+            // twenty-first. The assertion fired in
+            // `a_settlement_lives_through_a_winter`.
+            //
+            // `take_what_fits` is the one place that answers this, weight and
+            // slots together, and its own doc says so. It puts in what will go
+            // and reports how much, so what comes out of the pit below is what
+            // actually arrived - nothing is taken out of the store and then
+            // dropped on the floor.
+            let mut offered = wanted.clone();
+            offered.quantity = asking_for;
+            let taking = self.take_what_fits(agent_index, &offered);
 
             if taking == 0 {
                 return ActionResult::failure(
@@ -407,14 +424,9 @@ impl Simulation {
             if let Some(pit) = self.world.pit_at_mut(here) {
                 pit.take_out(what, taking);
             }
-
-            let mut got = wanted;
-            got.quantity = taking;
+            self.what_came_out_of_the_store += taking as u64;
 
             let agent = &mut self.population.agents[agent_index];
-            let went_in = agent.inventory.add_item(got);
-            debug_assert!(went_in, "the room was measured a line ago");
-
             debug!("Agent {} took {taking} {what} out of the pit", agent.id);
 
             return ActionResult::success()
@@ -431,9 +443,7 @@ impl Simulation {
         let agent = &mut self.population.agents[agent_index];
 
         // A full pack cannot take it, and it stays where it was
-        if agent.inventory.weight_capacity_remaining()
-            < item.weight_per_unit * how_many as f32
-        {
+        if agent.inventory.weight_capacity_remaining() < item.total_weight() {
             self.world.somebody_left_this(item, here, tick_now);
             return ActionResult::failure("No room for it".to_string());
         }

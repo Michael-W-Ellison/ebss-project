@@ -110,7 +110,7 @@ fn a_thing_on_the_ground_is_the_thing_it_was() {
             "handaxe".to_string(),
             1,
             40.0,
-            Quality::Advanced,
+            Quality::Fine,
         ));
 
     // Worn most of the way through
@@ -144,7 +144,7 @@ fn a_thing_on_the_ground_is_the_thing_it_was() {
         Some(6.0),
         "as worn as it was when it went down"
     );
-    assert_eq!(axe.quality, Some(Quality::Advanced), "and as well made");
+    assert_eq!(axe.quality, Some(Quality::Fine), "and as well made");
 }
 
 /// Nothing lying here is nothing to pick up.
@@ -211,7 +211,7 @@ fn what_somebody_was_carrying_stays_where_they_fell() {
             "spear".to_string(),
             1,
             25.0,
-            Quality::Basic,
+            Quality::Common,
         ));
     give(&mut simulation, "flint", 4);
 
@@ -246,7 +246,7 @@ fn somebody_else_can_take_up_what_the_dead_left() {
     let mut simulation = a_person_at(here);
 
     simulation.world.somebody_left_this(
-        InventoryItem::new_with_durability("handaxe".to_string(), 1, 40.0, Quality::Basic),
+        InventoryItem::new_with_durability("handaxe".to_string(), 1, 40.0, Quality::Common),
         here,
         0,
     );
@@ -274,7 +274,7 @@ fn a_thing_a_little_way_off_is_worth_the_walk() {
     let mut simulation = a_person_at(here);
 
     simulation.world.somebody_left_this(
-        InventoryItem::new_with_durability("handaxe".to_string(), 1, 40.0, Quality::Basic),
+        InventoryItem::new_with_durability("handaxe".to_string(), 1, 40.0, Quality::Common),
         over_there,
         0,
     );
@@ -300,7 +300,7 @@ fn a_thing_across_the_map_is_not() {
     let mut simulation = a_person_at(here);
 
     simulation.world.somebody_left_this(
-        InventoryItem::new_with_durability("handaxe".to_string(), 1, 40.0, Quality::Basic),
+        InventoryItem::new_with_durability("handaxe".to_string(), 1, 40.0, Quality::Common),
         Position::new(80, 25),
         0,
     );
@@ -365,7 +365,7 @@ fn a_tool_keeps_longer_than_food_and_not_for_ever() {
     let mut simulation = a_person_at(here);
 
     simulation.world.somebody_left_this(
-        InventoryItem::new_with_durability("handaxe".to_string(), 1, 40.0, Quality::Basic),
+        InventoryItem::new_with_durability("handaxe".to_string(), 1, 40.0, Quality::Common),
         here,
         0,
     );

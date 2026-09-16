@@ -320,7 +320,24 @@ impl Simulation {
             // axe was, until now, a thing an agent counted and nothing
             // else: a man carrying one felled timber at exactly the
             // rate of a man with his bare hands.
-            let tool = self.population.agents[agent_index].how_much_my_tools_help(trade);
+            //
+            // The *yield* channel, which is blind to how worn the tool is: a
+            // better edge wastes less of what it takes, and a blunt one takes
+            // just as much but takes longer about it. What being blunt costs
+            // is charged below, against what the trip costs to make.
+            let tool = self.population.agents[agent_index].how_much_my_tools_bring_back(trade);
+
+            // And how fast the same pair of hands gets through it, which is
+            // where a worn edge tells. "An agent can slowly gather reeds by
+            // hand but gathers them faster with a flint knife. The more
+            // durable (sharper) the knife, the faster the gathering." A turn
+            // is a fixed slice of a day in this model and has no clock inside
+            // it, so the only currency "faster" has here is what the trip
+            // takes out of a body - and until now a gathering trip cost a
+            // flat ten whether the agent stripped the bush with a fresh flake
+            // or with its fingernails.
+            let how_fast_it_goes = self.population.agents[agent_index]
+                .how_fast_my_tools_make_this_go(trade);
 
             // And how old the hands are. A six-year-old strips a bush at
             // three tenths of what his father does, which is the working half
@@ -568,7 +585,7 @@ impl Simulation {
                 // with, never the thing he carries his load in. It stays
                 // where he was standing, for him or anybody else.
                 if it_is_food && took < harvested {
-                    let each = item.weight_per_unit * item.how_much_lighter_it_is();
+                    let each = item.what_one_of_them_weighs();
                     let short = (harvested - took) as f32 * each;
                     if self.set_down_what_is_worth_less_than_food(agent_index, short) > 0.0 {
                         let mut the_rest = item.clone();
@@ -596,12 +613,15 @@ impl Simulation {
                     debug!(
                         "Agent {} gathered {} {} (total weight: {:.1}/{:.1})",
                         agent.id, harvested, item_id,
-                        agent.inventory.current_weight, agent.inventory.max_weight
+                        agent.inventory.current_weight(), agent.inventory.max_weight
                     );
 
                     ActionResult::success()
                         .with_drive_change(DriveType::Industry, -0.15)
-                        .with_energy_cost(10.0)
+                        .with_energy_cost(
+                            Self::WHAT_A_GATHERING_TRIP_COSTS
+                                * Self::what_the_tool_saves_on_a_trip(trade, how_fast_it_goes),
+                        )
                         .with_message(format!("Gathered {} {}", harvested, resource_type))
                 } else {
                     // What you cannot carry stays where it fell.
@@ -777,7 +797,7 @@ impl Simulation {
             // hunting. `weapon` is the older flag and still counts;
             // what is in the pack counts for more, and counts for
             // less as it wears.
-            let spear = agent.how_much_my_tools_help(crate::agents::skills::SkillType::Hunting);
+            let spear = agent.how_fast_my_tools_make_this_go(crate::agents::skills::SkillType::Hunting);
 
             // Something in the hand, for anything bigger than a hare.
             //
@@ -829,18 +849,36 @@ impl Simulation {
                 // If killed, get drops
                 let mut items_gained = Vec::new();
                 if !animal.is_alive() {
+                    // What comes off it is as good as the flake that took it
+                    // off - see the same stamp on the fighting branch.
+                    let as_good_a_knife = self.population.agents[agent_index]
+                        .how_well_made_is_what_i_work_this_trade_with(
+                            crate::agents::skills::SkillType::Leatherworking,
+                        );
+
                     for drop in &species.drops {
                         if rng.gen_bool(drop.drop_chance as f64) {
                             let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
-                            items_gained.push(crate::environment::ItemStack {
-                                material_id: drop.material_id.clone(),
-                                quantity,
+                            items_gained.push(match as_good_a_knife {
+                                Some(quality) => crate::environment::ItemStack::of_quality(
+                                    drop.material_id.clone(),
+                                    quantity,
+                                    quality,
+                                ),
+                                None => crate::environment::ItemStack::new(
+                                    drop.material_id.clone(),
+                                    quantity,
+                                ),
                             });
                         }
                     }
 
+                    // How much comes off the carcass, which is the waste
+                    // question and so reads the yield channel: a fine flake
+                    // leaves less on the bone than a crude one, and a worn
+                    // flake leaves no more than a fresh one.
                     let knife = self.population.agents[agent_index]
-                        .how_much_my_tools_help(
+                        .how_much_my_tools_bring_back(
                             crate::agents::skills::SkillType::Leatherworking,
                         );
                     let butchered = self.butcher(&items_gained, knife);
@@ -1011,10 +1049,10 @@ impl Simulation {
                 if let Some(timer) = animal.product_timers.get(&product.material_id) {
                     if *timer == 0 {
                         // Product is ready
-                        collected_products.push(crate::environment::ItemStack {
-                            material_id: product.material_id.clone(),
-                            quantity: product.quantity,
-                        });
+                        collected_products.push(crate::environment::ItemStack::new(
+                            product.material_id.clone(),
+                            product.quantity,
+                        ));
 
                         // Reset timer
                         animal.product_timers.insert(product.material_id.clone(), product.production_time);
@@ -1113,10 +1151,10 @@ impl Simulation {
                 // Generate items from drops
                 for drop in &drops {
                     let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
-                    items_gained.push(crate::environment::ItemStack {
-                        material_id: drop.material_id.clone(),
+                    items_gained.push(crate::environment::ItemStack::new(
+                        drop.material_id.clone(),
                         quantity,
-                    });
+                    ));
                 }
 
                 // Add to agent inventory.
@@ -1255,7 +1293,7 @@ impl Simulation {
         // its fingers - which is most of a turn's work either way, and
         // a settlement that cannot dig cheaply cannot keep a larder.
         let shovel = self.population.agents[agent_index]
-            .how_much_my_tools_help(crate::agents::SkillType::Mining);
+            .how_fast_my_tools_make_this_go(crate::agents::SkillType::Mining);
         if shovel > 1.0 {
             self.population.agents[agent_index]
                 .wear_what_i_worked_with(crate::agents::SkillType::Mining);
@@ -1319,7 +1357,7 @@ impl Simulation {
         // is slow work: standing in the shallows waiting for
         // something to come within reach of a thrust.
         let spear = self.population.agents[agent_index]
-            .how_much_my_tools_help(crate::agents::SkillType::Fishing);
+            .how_fast_my_tools_make_this_go(crate::agents::SkillType::Fishing);
 
         let hand = (skill / 10.0).clamp(0.0, 0.5) + (spear - 1.0) * 0.3;
         let odds = (Self::A_THRUST_THAT_TELLS + 0.4 * thickness + hand).clamp(0.0, 0.9);

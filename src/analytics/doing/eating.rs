@@ -56,7 +56,14 @@ impl Simulation {
         let worth = physiology::what_a_unit_of_this_is_worth(nutrition.energy);
         let mut eaten = 0u32;
         let mut energy_in = 0.0f32;
-        while eaten < in_the_hand && energy_in < physiology::WHAT_A_SITTING_AIMS_AT {
+        // What stops a meal is the stomach, not a target.
+        //
+        // This read `energy_in < WHAT_A_SITTING_AIMS_AT` and stopped at four
+        // hundred and eighty whatever room was left. A sitting is what a body
+        // *aims* at, not what it can hold. `physiology::eat` charges the
+        // stomach in energy and returns what actually went down, so nought
+        // back is the stomach saying no. See #217.
+        while eaten < in_the_hand {
             let went_down = agent
                 .state
                 .physiology
@@ -132,9 +139,12 @@ impl Simulation {
             let mut mouthfuls = 0u32;
             let mut went_down_here = 0u64;
             let mut made_sick: Option<f32> = None;
-            while energy_in < physiology::WHAT_A_SITTING_AIMS_AT
-                && agent.state.physiology.room_in_the_stomach()
-                    >= physiology::UNITS_IN_ONE_ITEM
+            // The stomach is the cap, and it is asked in energy - a mouthful
+            // of this food is `UNITS_IN_ONE_ITEM` of it at what it is worth.
+            // See `a_sitting_from_the_hand`.
+            while agent.state.physiology.room_in_the_stomach()
+                >= physiology::UNITS_IN_ONE_ITEM
+                    * physiology::ENERGY_OF_ORDINARY_FOOD
             {
                 match agent.eat_food_item(&item_id, self.current_tick) {
                     EatResult::Success(nutrition) => {
@@ -665,13 +675,7 @@ impl Simulation {
 
         // And what becomes of it afterwards, which is the only thing
         // about salting that is worth knowing. The salting itself is
-        // over in a turn; whether the meat is still good in a week is
-        // the question, and it stays in the pack where its owner can
-        // see it.
-        // What is in the pack weighs what it weighs, and preparing a
-        // thing changes that - the cached total has to be told.
-        agent.inventory.recalculate_weight();
-
+        // over in a turn;
         let watch_it = crate::agents::wondering::Watched::of(
             agent.inventory.get_item(what).expect("it is in there"),
         );
@@ -681,7 +685,12 @@ impl Simulation {
         );
 
         agent.inventory.remove_item("salt", Self::WHAT_IT_TAKES_TO_SALT_A_LOT);
-        agent.lessons.record_particular("salt", true);
+        // And this is the same lesson the question about it writes when the
+        // answer comes back - `Wondering::called` is `salt:meat` and this was
+        // a bare `salt`, so salting a joint and finding out what became of
+        // the joint went into two different rows and neither ever saw the
+        // other's evidence. One spelling, shared with `what_was_tried`.
+        agent.lessons.record_particular(&format!("salt:{what}"), true);
 
         if asking {
             let where_i_am = {
@@ -781,12 +790,6 @@ impl Simulation {
         food.set_preparation(how, tick_now);
 
         let how_many = item.quantity;
-
-        // Drying takes the water out, and water is most of what meat
-        // weighs. A pack of dried strips is a third of the pack of raw
-        // joints it was, which is the second thing preserving buys.
-        agent.inventory.recalculate_weight();
-
         agent
             .skills
             .practise(crate::agents::SkillType::Cooking, 14, tick_now);

@@ -29,9 +29,7 @@ fn somebody_of(years: u32, at: (i32, i32, i32)) -> Agent {
     agent.state.position = at;
     agent.state.health = 100.0;
     agent.state.energy = 100.0;
-    agent.inventory.get_all_items_mut().clear();
-    agent.inventory.recalculate_weight();
-    agent.take_up_the_cart();
+    agent.inventory.get_all_items_mut().clear();    agent.take_up_the_cart();
     agent
 }
 
@@ -318,8 +316,6 @@ fn a_parent_with_an_empty_pack_gives_nothing() {
         .inventory
         .get_all_items_mut()
         .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-
     let parent = &simulation.population.agents[0];
     assert!(
         simulation

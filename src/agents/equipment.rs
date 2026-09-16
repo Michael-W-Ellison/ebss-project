@@ -1584,7 +1584,7 @@ mod tests {
 
     #[test]
     fn test_equipment_creation() {
-        let tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+        let tunic = ClothingTemplate::leather_tunic(Quality::Common);
         assert_eq!(tunic.name, "Leather Tunic");
         assert_eq!(tunic.slot, EquipmentSlot::Torso);
         assert_eq!(tunic.material, ClothingMaterial::Leather);
@@ -1606,15 +1606,15 @@ mod tests {
 
     #[test]
     fn test_quality_affects_durability() {
-        let basic = ClothingTemplate::leather_tunic(Quality::Basic);
-        let expert = ClothingTemplate::leather_tunic(Quality::Expert);
+        let basic = ClothingTemplate::leather_tunic(Quality::Common);
+        let expert = ClothingTemplate::leather_tunic(Quality::Masterwork);
 
         assert!(expert.max_durability > basic.max_durability);
     }
 
     #[test]
     fn test_wear_degradation() {
-        let mut tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+        let mut tunic = ClothingTemplate::leather_tunic(Quality::Common);
         let initial_effectiveness = tunic.cold_insulation();
 
         // Apply 50% wear
@@ -1627,7 +1627,7 @@ mod tests {
 
     #[test]
     fn test_tick_wear() {
-        let mut tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+        let mut tunic = ClothingTemplate::leather_tunic(Quality::Common);
         let initial_durability = tunic.durability;
 
         tunic.tick_wear();
@@ -1638,7 +1638,7 @@ mod tests {
 
     #[test]
     fn test_broken_equipment() {
-        let mut tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+        let mut tunic = ClothingTemplate::leather_tunic(Quality::Common);
         assert!(!tunic.is_broken());
 
         tunic.durability = 0.0;
@@ -1647,7 +1647,7 @@ mod tests {
 
     #[test]
     fn test_repair() {
-        let mut tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+        let mut tunic = ClothingTemplate::leather_tunic(Quality::Common);
         let max = tunic.max_durability;
 
         tunic.apply_wear(50.0);
@@ -1676,8 +1676,8 @@ mod tests {
 
     #[test]
     fn test_fur_vs_linen_temperature() {
-        let fur_coat = ClothingTemplate::fur_coat(Quality::Basic);
-        let linen_shirt = ClothingTemplate::linen_shirt(Quality::Basic);
+        let fur_coat = ClothingTemplate::fur_coat(Quality::Common);
+        let linen_shirt = ClothingTemplate::linen_shirt(Quality::Common);
 
         // Fur should be much better for cold
         assert!(fur_coat.cold_insulation() > linen_shirt.cold_insulation());
@@ -1688,8 +1688,8 @@ mod tests {
 
     #[test]
     fn test_hide_armor_protection() {
-        let hide_armor = ClothingTemplate::hide_armor(Quality::Basic);
-        let linen_shirt = ClothingTemplate::linen_shirt(Quality::Basic);
+        let hide_armor = ClothingTemplate::hide_armor(Quality::Common);
+        let linen_shirt = ClothingTemplate::linen_shirt(Quality::Common);
 
         assert!(hide_armor.armor_protection() > linen_shirt.armor_protection());
     }

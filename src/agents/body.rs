@@ -1023,7 +1023,7 @@ mod tests {
         use crate::agents::skills::Quality;
 
         let mut body = Body::new();
-        let tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+        let tunic = ClothingTemplate::leather_tunic(Quality::Common);
 
         // Equip the tunic
         body.equip(tunic);
@@ -1043,7 +1043,7 @@ mod tests {
         use crate::agents::skills::Quality;
 
         let mut body = Body::new();
-        let tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+        let tunic = ClothingTemplate::leather_tunic(Quality::Common);
 
         body.equip(tunic);
         let removed = body.unequip(EquipmentSlot::Torso);
@@ -1068,12 +1068,12 @@ mod tests {
         assert_eq!(body.total_cold_insulation(), 0.0);
 
         // Add fur coat (excellent cold protection)
-        body.equip(ClothingTemplate::fur_coat(Quality::Basic));
+        body.equip(ClothingTemplate::fur_coat(Quality::Common));
         let with_coat = body.total_cold_insulation();
         assert!(with_coat > 0.0);
 
         // Add fur hat
-        body.equip(ClothingTemplate::fur_hat(Quality::Basic));
+        body.equip(ClothingTemplate::fur_hat(Quality::Common));
         let with_hat = body.total_cold_insulation();
         assert!(with_hat > with_coat);
     }
@@ -1086,12 +1086,12 @@ mod tests {
         let mut body = Body::new();
 
         // Linen provides excellent heat resistance
-        body.equip(ClothingTemplate::linen_shirt(Quality::Basic));
+        body.equip(ClothingTemplate::linen_shirt(Quality::Common));
         let linen_resistance = body.total_heat_resistance();
 
         let mut body2 = Body::new();
         // Fur provides poor heat resistance
-        body2.equip(ClothingTemplate::fur_coat(Quality::Basic));
+        body2.equip(ClothingTemplate::fur_coat(Quality::Common));
         let fur_resistance = body2.total_heat_resistance();
 
         assert!(linen_resistance > fur_resistance);
@@ -1103,7 +1103,7 @@ mod tests {
         use crate::agents::skills::Quality;
 
         let mut body = Body::new();
-        let mut tunic = ClothingTemplate::leather_tunic(Quality::Basic);
+        let mut tunic = ClothingTemplate::leather_tunic(Quality::Common);
 
         // Set durability very low
         tunic.durability = 0.5;

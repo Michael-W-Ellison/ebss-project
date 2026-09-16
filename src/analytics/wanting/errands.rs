@@ -624,7 +624,7 @@ impl Simulation {
             return 1.0;
         }
 
-        let loaded = (agent.inventory.current_weight / capacity).clamp(0.0, 1.0);
+        let loaded = (agent.inventory.current_weight() / capacity).clamp(0.0, 1.0);
         let felt = ((loaded - Self::WHAT_GOES_UNNOTICED) / (1.0 - Self::WHAT_GOES_UNNOTICED))
             .clamp(0.0, 1.0);
 
@@ -699,14 +699,32 @@ impl Simulation {
             return None;
         }
 
+        wanted
+            .into_iter()
+            .find(|wants| !Self::do_these_hands_do(agent, wants))
+    }
+
+    /// Whether this agent's hands answer what a verb wants of them.
+    ///
+    /// The four closures the matrix asks for, built in one place. They were
+    /// built inline here, which was fine while one caller asked the question;
+    /// `what_i_could_do_here` asks it of every verb in the matrix, and two
+    /// spellings of "can these hands do this job" is exactly how this project
+    /// has lost measurements before - see the note on
+    /// `what_this_wants_that_is_missing`.
+    pub(in crate::analytics) fn do_these_hands_do(
+        agent: &crate::agents::Agent,
+        wants: &crate::environment::verbs::Wants,
+    ) -> bool {
         let holding = |what: &str| agent.how_many_i_have(what);
         let helped_by = |trade| agent.what_i_have_to_work_with(trade).is_some();
-        let a_hand_to_spare = agent.a_hand_to_spare();
-        let carrying_liquid = agent.how_much_water_i_carry();
 
-        wanted.into_iter().find(|wants| {
-            !wants.satisfied_by_hands(&holding, &helped_by, a_hand_to_spare, carrying_liquid)
-        })
+        wants.satisfied_by_hands(
+            &holding,
+            &helped_by,
+            agent.a_hand_to_spare(),
+            agent.how_much_water_i_carry(),
+        )
     }
 
     /// The raw thing a tool's chain is waiting on, fetched now rather than
@@ -783,6 +801,9 @@ impl Simulation {
                 }
                 verbs::Wants::AFreeHand => "Both hands full".to_string(),
                 verbs::Wants::AVessel => "Nothing to hold water in".to_string(),
+                verbs::Wants::ACapability(capability) => {
+                    format!("Nothing in hand that answers {}", capability.called())
+                }
                 verbs::Wants::BareHands => "Nothing wanting".to_string(),
             })
     }
@@ -872,7 +893,7 @@ impl Simulation {
     ///   in it. That is the horizon, and it is the honest one: a tool has to
     ///   pay for itself inside its own working life, and nothing has to be
     ///   assumed about how long the agent will go on wanting the trade.
-    /// - `how_much_my_tools_help` is what the work costs now, and
+    /// - `how_fast_my_tools_make_this_go` is what the work costs now, and
     ///   `how_much_better` what it would cost after.
     /// - `how_many_turns_to_make` is the price, counted along the same chain
     ///   the agent will actually walk.
@@ -933,7 +954,7 @@ impl Simulation {
             return action;
         };
 
-        let now = agent.how_much_my_tools_help(trade).max(0.01);
+        let now = agent.how_fast_my_tools_make_this_go(trade).max(0.01);
         let after = better.how_much_better.max(now);
         if after <= now {
             return action;
@@ -1163,6 +1184,18 @@ impl Simulation {
         let candidates: Vec<String> = match missing {
             Wants::ThisInHand(what) => vec![what.to_string()],
             Wants::AToolFor(trade) => agent.what_i_would_settle_for(trade),
+            // Everything that answers the want, best first. This is the whole
+            // reason for asking by capability rather than by name: a man who
+            // needs something to dig with has a *list* of things that would
+            // do, and the errand layer can go after whichever of them he can
+            // actually come by - rather than after the one thing somebody
+            // happened to type into a match arm.
+            Wants::ACapability(capability) => {
+                crate::environment::tags::everything_that_answers(capability)
+                    .into_iter()
+                    .map(|(called, _)| called.to_string())
+                    .collect()
+            }
             Wants::AVessel | Wants::AFreeHand | Wants::BareHands => return action,
         };
 

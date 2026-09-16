@@ -83,8 +83,6 @@ fn a_digger() -> Simulation {
         .inventory
         .get_all_items_mut()
         .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-
     // A mining tool, which is what the matrix says digging wants
     let mut pick = InventoryItem::new_with_weight("handaxe".to_string(), 1, 1.0);
     pick.current_durability = Some(40.0);
@@ -1594,7 +1592,7 @@ fn a_body_that_weakens_sets_down_what_it_can_no_longer_carry() {
         .inventory
         .add_item(InventoryItem::new_with_weight("wood".to_string(), 8, 2.0));
 
-    let carried = simulation.population.agents[0].inventory.current_weight;
+    let carried = simulation.population.agents[0].inventory.current_weight();
     assert!(carried > 0.0, "he is carrying something");
 
     // And a pack that will not take it any more
@@ -1610,7 +1608,7 @@ fn a_body_that_weakens_sets_down_what_it_can_no_longer_carry() {
         simulation.population.agents[0].how_much_too_much_i_am_carrying(),
         0.0,
         "he put down what he could not hold: {:.1} against {:.1}",
-        simulation.population.agents[0].inventory.current_weight,
+        simulation.population.agents[0].inventory.current_weight(),
         simulation.population.agents[0].inventory.max_weight,
     );
 }
@@ -1686,7 +1684,7 @@ fn only_as_much_goes_down_as_the_shortfall_wants() {
         .inventory
         .add_item(InventoryItem::new_with_weight("wood".to_string(), 20, 2.0));
 
-    let carried = simulation.population.agents[0].inventory.current_weight;
+    let carried = simulation.population.agents[0].inventory.current_weight();
     // A hair under what he is carrying: one stick's worth of shortfall, plus
     // the day's food the reckoning leaves room for.
     simulation.population.agents[0].inventory.max_weight = carried - 1.0;

@@ -103,30 +103,65 @@ impl Simulation {
             _ => BuildingType::SkinTent,
         };
 
-        // Get resource requirements for this building
+        // What this roof takes, and what would answer it.
+        //
+        // Two ways of asking, and the first one is the one the specification
+        // asks for: **a class rather than a name.** A tent wants poles, a
+        // flexible covering and cordage, and a people who scraped their hides
+        // into leather should be able to roof with the leather - which, asked
+        // by name, they could not.
+        //
+        // It also closes a hole. `SkinTent` has declared since it was written
+        // that it wants eight wood and four hides, and two comments in
+        // `world::buildings` say so - but the loop below resolves a
+        // `ResourceType` to an item name with three arms and `continue`s on
+        // everything else, in the checking pass *and* in the consuming pass.
+        // So the hides were neither required nor taken: **every tent ever
+        // raised in this model was poles and air.** Four of the nine
+        // requirements in the building table are for things that match no arm.
+        let by_class = crate::environment::tags::what_this_roof_takes(building_type);
+
         let requirements = building_type.requirements();
+        let mut taking: Vec<(&'static str, u32)> = Vec::new();
 
         // Check if agent has required resources in inventory
         let agent = &self.population.agents[agent_index];
         let mut has_all_resources = true;
         let mut missing_resources = Vec::new();
 
-        for req in &requirements {
-            let item_id = match req.resource_type {
-                ResourceType::Wood => "wood",
-                ResourceType::Stone => "stone",
-                ResourceType::Iron => "iron",
-                _ => continue,
-            };
+        if let Some(wants) = by_class {
+            let holding = |what: &str| agent.how_many_i_have(what);
 
-            if let Some(item) = agent.inventory.get_item(item_id) {
-                if item.quantity < req.amount {
+            match crate::environment::tags::what_would_be_used(wants, &holding) {
+                Ok(using) => taking = using,
+                Err((short_of, how_many)) => {
                     has_all_resources = false;
-                    missing_resources.push(format!("{} {} (have {})", req.amount - item.quantity, item_id, item.quantity));
+                    missing_resources.push(format!("{how_many} {}", short_of.called()));
                 }
-            } else {
-                has_all_resources = false;
-                missing_resources.push(format!("{} {}", req.amount, item_id));
+            }
+        } else {
+            for req in &requirements {
+                let item_id = match req.resource_type {
+                    ResourceType::Wood => "wood",
+                    ResourceType::Stone => "stone",
+                    ResourceType::Iron => "iron",
+                    ResourceType::Hides => "hides",
+                    // Provisioning a work party, presumably; nine buildings
+                    // want it and nothing has ever checked or taken it. Left
+                    // as it was rather than turned into a hard requirement on
+                    // nine buildings in the same change that fixes the tent.
+                    _ => continue,
+                };
+
+                if let Some(item) = agent.inventory.get_item(item_id) {
+                    if item.quantity < req.amount {
+                        has_all_resources = false;
+                        missing_resources.push(format!("{} {} (have {})", req.amount - item.quantity, item_id, item.quantity));
+                    }
+                } else {
+                    has_all_resources = false;
+                    missing_resources.push(format!("{} {}", req.amount, item_id));
+                }
             }
         }
 
@@ -237,17 +272,30 @@ impl Simulation {
             return ActionResult::failure("No suitable building location found (all positions occupied)".to_string());
         }
 
-        // Remove resources from agent inventory
+        // Remove resources from agent inventory.
+        //
+        // Whatever the check above settled on is what comes out of the pack -
+        // one list, resolved once. Two loops resolving the same requirements
+        // independently is how the hides came to be checked in neither and
+        // taken in neither.
         let agent = &mut self.population.agents[agent_index];
-        for req in &requirements {
-            let item_id = match req.resource_type {
-                ResourceType::Wood => "wood",
-                ResourceType::Stone => "stone",
-                ResourceType::Iron => "iron",
-                _ => continue,
-            };
 
-            agent.inventory.remove_item(item_id, req.amount);
+        if by_class.is_some() {
+            for (what, how_many) in &taking {
+                agent.inventory.remove_item(what, *how_many);
+            }
+        } else {
+            for req in &requirements {
+                let item_id = match req.resource_type {
+                    ResourceType::Wood => "wood",
+                    ResourceType::Stone => "stone",
+                    ResourceType::Iron => "iron",
+                    ResourceType::Hides => "hides",
+                    _ => continue,
+                };
+
+                agent.inventory.remove_item(item_id, req.amount);
+            }
         }
 
         // Create new building (under construction)
@@ -410,8 +458,67 @@ impl Simulation {
             }
 
             let agent = &mut self.population.agents[agent_index];
+
+            // Whether it comes off at all.
+            //
+            // "Skill level should determine crafting success chance, while
+            // tool quality should cap output quality." The success half was
+            // built long ago - `Skill::perform_check` - and had exactly one
+            // caller, the tailoring branch. Every other making in the model
+            // succeeded on the first try whoever attempted it, so a first-day
+            // knapper turned out spears as reliably as a lifetime's flintsman
+            // and nothing but the finished article was ever at stake.
+            //
+            // What is in the hand tells here too, and not on the quality: a
+            // poor tool is a *dangerous* tool, and `tool_risk_roll_count`
+            // rolls the failure and injury checks again for one.
+            let with_what = agent.how_well_made_is_what_i_work_this_trade_with(step.hands);
+            let attempt = agent.skills.perform_check(step.hands, with_what);
+
+            // Cuts and burns, which are the other tax on a bad hand and a bad
+            // tool both.
+            if let Some(hurt) = attempt.injury {
+                let harm: f32 = match hurt {
+                    crate::agents::skills::InjuryType::Small => 2.0,
+                    crate::agents::skills::InjuryType::Large => 8.0,
+                };
+                // Never all the way down - a burn at the fire has never
+                // killed anybody in this model and this is not the change
+                // that starts it - but named, because a drain that says
+                // nothing is a drain booked to whatever spoke last.
+                let harm = harm.min((agent.state.health - 1.0).max(0.0));
+                agent.state.lose_health(harm, crate::agents::AgentState::A_MISHAP);
+            }
+
+            // How good the makings are, read before they are consumed. The
+            // worst of them decides: a spear is a shaft, a point and a
+            // lashing, and it is only ever as good as the poorest of the
+            // three.
+            let out_of = step
+                .needs
+                .iter()
+                .filter_map(|(what, _)| {
+                    agent.inventory.get_item(what).and_then(|carried| carried.quality)
+                })
+                .min();
+
             for (what, how_many) in step.needs {
                 agent.inventory.remove_item(what, *how_many);
+            }
+
+            if !attempt.success {
+                // The makings are spoiled in the trying, and something is
+                // learned from having spoiled them - the same bargain the
+                // tailoring branch has always struck.
+                agent
+                    .skills
+                    .practise(step.hands, (step.effort / 8.0).round().max(1.0) as u32, tick_now);
+
+                return ActionResult::failure(format!(
+                    "Spoiled the makings of a {} in the trying",
+                    step.makes
+                ))
+                .spoiled_in_the_making();
             }
 
             // A thing that took more doing is the heavier thing to
@@ -429,10 +536,11 @@ impl Simulation {
                 agent.inventory.remove_item(step.makes, had);
             }
 
-            let made = agent.a_tool_fresh_from_these_hands(
+            let made = agent.a_tool_fresh_from_these_hands_out_of(
                 step.makes,
                 step.how_many,
                 step.effort / 4.0,
+                out_of,
             );
             if !agent.inventory.add_item(made) {
                 debug!(
@@ -866,18 +974,24 @@ impl Simulation {
         // attempts fail; a master's never do. That is what makes a
         // dedicated tailor quicker as well as better, without anything
         // in the model needing a notion of how long a job takes.
+        // What is in the hand tells here too. This passed `None`, so the one
+        // branch in the model that already asked whether an attempt came off
+        // asked it as though every tailor worked barehanded: a crude awl and
+        // a fine one spoiled hides at exactly the same rate.
+        let with_what = agent.how_well_made_is_what_i_work_this_trade_with(SkillType::Leatherworking);
         let attempt = agent
             .skills
             .get_skill_mut(SkillType::Leatherworking)
-            .perform_check(None);
+            .perform_check(with_what);
 
         // Cuts and needle-stabs, which are a beginner's other tax
         if let Some(hurt) = attempt.injury {
-            let harm = match hurt {
+            let harm: f32 = match hurt {
                 crate::agents::skills::InjuryType::Small => 2.0,
                 crate::agents::skills::InjuryType::Large => 8.0,
             };
-            agent.state.health = (agent.state.health - harm).max(1.0);
+            let harm = harm.min((agent.state.health - 1.0).max(0.0));
+            agent.state.lose_health(harm, crate::agents::AgentState::A_MISHAP);
         }
 
         if !attempt.success {
@@ -891,10 +1005,34 @@ impl Simulation {
             return ActionResult::failure(format!(
                 "Spoiled the {} in the making",
                 recipe.name
-            ));
+            ))
+            .spoiled_in_the_making();
         }
 
-        let quality = Self::expected_garment_quality(agent);
+        // What the hand would turn out, capped by what it is working with.
+        // "Tool quality should cap output quality" - a master tailor with a
+        // crude flake for a knife turns out good work and not fine work.
+        //
+        // And capped again by the hide itself, which now carries the worth
+        // of the flake that skinned it. This is the specification's own
+        // example running end to end: "two agents with the same clothing
+        // items but of differing quality should have different weather
+        // resistances", and what makes them differ is a butchering three
+        // actions back.
+        let out_of = agent
+            .inventory
+            .get_item(recipe.material_item)
+            .and_then(|carried| carried.quality);
+
+        let quality = {
+            let as_far_as_hand_and_tool_go = Self::expected_garment_quality(agent)
+                .min(agent.the_best_i_could_turn_out(SkillType::Leatherworking));
+
+            match out_of {
+                Some(hide) => as_far_as_hand_and_tool_go.limit_to_material(hide),
+                None => as_far_as_hand_and_tool_go,
+            }
+        };
 
         let made = match crate::agents::equipment::ClothingTemplate::from_id(
             recipe.id, quality,
@@ -984,7 +1122,7 @@ impl Simulation {
 
         let quality = carried
             .quality
-            .unwrap_or(crate::agents::skills::Quality::Basic);
+            .unwrap_or(crate::agents::skills::Quality::Common);
 
         let mut clothing = match ClothingTemplate::from_id(recipe.id, quality) {
             Some(clothing) => clothing,

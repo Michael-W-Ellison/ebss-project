@@ -116,7 +116,7 @@ fn a_kill_fills_the_pack_with_meat_and_skins() {
                 "spear".to_string(),
                 1,
                 25.0,
-                crate::agents::Quality::Basic,
+                crate::agents::Quality::Common,
             ));
     }
 
@@ -287,7 +287,7 @@ fn an_agent_hunts_for_the_skins_it_needs() {
             "spear".to_string(),
             1,
             25.0,
-            crate::agents::Quality::Basic,
+            crate::agents::Quality::Common,
         ));
 
     // Wants to be warmer than the weather will ever make it
@@ -367,3 +367,84 @@ fn skins_become_the_warm_clothing() {
     );
 }
 
+
+/// A man already hurt does not go looking for a bear, spear or no spear.
+///
+/// `worth_hunting` asked two things: can this tool kill it, and if it fights
+/// back is there a weapon in hand. Nothing about the man. So **an agent at ten
+/// health with a spear set off after a bear exactly as a whole man would**,
+/// and so did a child, and the settlement lost people to fights they had gone
+/// out of their way to start.
+///
+/// The reactive half of the question has always been asked - between_us::threat
+/// calls `could_i_fight_at_all(species.attack_damage)` to decide whether a man
+/// stands his ground when something comes at him. This is the same question on
+/// the other side of it: whether he goes looking for the fight. One predicate,
+/// both directions.
+#[test]
+fn a_hurt_man_with_a_spear_still_leaves_the_bear_alone() {
+    use crate::agents::equipment::WeaponTemplate;
+    use crate::agents::skills::Quality;
+
+    let mut world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+
+    world.animals.get_all_mut().clear();
+    world
+        .spawn_animal("bear".to_string(), (30, 31))
+        .expect("a bear should spawn");
+
+    let mut simulation = Simulation::new(world, population);
+    simulation.population.agents[0].state.position = (30, 30, 0);
+    simulation.population.agents[0].body_temperature.ideal = 45.0;
+    // Two things are wanted and they are asked of two different places, which
+    // is its own smell and not this test's business: `could_bring_it_down`
+    // looks for a hunting tool in the **pack**, and the dangerous-animal arm
+    // looks for a weapon in the **equipment**. A bear needs both.
+    simulation.population.agents[0]
+        .inventory
+        .add_item(crate::agents::InventoryItem::new_with_weight(
+            "spear".to_string(),
+            1,
+            2.0,
+        ));
+    simulation.population.agents[0]
+        .equipment
+        .equip(WeaponTemplate::wooden_spear(Quality::Common))
+        .expect("the spear should go in his hand");
+
+    let bear = simulation
+        .world
+        .animals
+        .get_all()
+        .iter()
+        .find(|animal| animal.species_id == "bear")
+        .expect("the bear should be there")
+        .clone();
+
+    // Whole and armed, he will take it on: a gate that says no to everything
+    // would pass the second half of this test and starve him.
+    assert!(
+        simulation.worth_hunting(&simulation.population.agents[0], &bear),
+        "a whole man with a spear should still be willing to hunt a bear"
+    );
+
+    // Now hurt him. Not a scratch - down to less than a bear's blow, which is
+    // what `could_i_fight_at_all` weighs it against.
+    simulation.population.agents[0].state.health = 5.0;
+
+    assert!(
+        !simulation.worth_hunting(&simulation.population.agents[0], &bear),
+        "a man with five points of health walked up to a bear because the \
+         decision never asked how he was"
+    );
+
+    let position = simulation.population.agents[0].state.position;
+    assert!(
+        simulation
+            .hunting_action(&simulation.population.agents[0], position)
+            .is_none(),
+        "and should not set out to"
+    );
+}

@@ -19,6 +19,23 @@ fn carrying(agent: &mut Agent, what: &str, how_many: u32) {
         .add_item(InventoryItem::new_with_weight(what.to_string(), how_many, 0.5));
 }
 
+/// A hand that will not spoil what it is making.
+///
+/// Making anything now turns on `Skill::perform_check`, so an unpractised
+/// agent spoils roughly a third of what it attempts. These tests are about
+/// what a recipe wants and what comes out of it, not about luck.
+fn a_hand_that_does_not_spoil_things(agent: &mut crate::agents::Agent) {
+    for trade in [
+        SkillType::Crafting,
+        SkillType::Mining,
+        SkillType::Woodcutting,
+        SkillType::Leatherworking,
+        SkillType::Construction,
+    ] {
+        agent.skills.set_skill_level(trade, 9);
+    }
+}
+
 fn one_agent_world() -> Simulation {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
@@ -103,7 +120,7 @@ fn a_founder_is_nobody_special_at_making_things() {
     let made = founder.a_tool_fresh_from_these_hands("spear", 1, 2.0);
     let quality = made.quality.expect("a made tool has a quality");
     assert!(
-        quality <= Quality::Basic,
+        quality <= Quality::Common,
         "a founder should turn out crude work, not {quality:?}"
     );
 }
@@ -149,7 +166,7 @@ fn a_tool_in_the_pack_makes_the_work_go_better() {
     // Bare hands are bare hands, and bare hands are poor at felling trees:
     // "without tools, these actions are not very efficient". See ISSUES #88.
     assert_eq!(
-        agent.how_much_my_tools_help(SkillType::Woodcutting),
+        agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting),
         Agent::what_bare_hands_manage(SkillType::Woodcutting),
     );
 
@@ -157,11 +174,11 @@ fn a_tool_in_the_pack_makes_the_work_go_better() {
     agent.inventory.add_item(axe);
 
     assert!(
-        agent.how_much_my_tools_help(SkillType::Woodcutting) > 1.0,
+        agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting) > 1.0,
         "an axe should make felling timber go faster"
     );
     assert!(
-        agent.how_much_my_tools_help(SkillType::Woodcutting) <= AXE_FOR_WOOD.how_much_better,
+        agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting) <= AXE_FOR_WOOD.how_much_better,
         "but no faster than the tool is worth"
     );
 }
@@ -173,13 +190,13 @@ fn a_worn_tool_is_worth_less_than_a_new_one() {
     population.spawn_agent(AgentConfig::default());
     let agent = &mut population.agents[0];
 
-    let fresh = agent.how_much_my_tools_help(SkillType::Woodcutting);
+    let fresh = agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting);
 
     let axe = agent.inventory.get_item_mut("handaxe").unwrap();
     let max = axe.max_durability.unwrap();
     axe.current_durability = Some(max * 0.1);
 
-    let nearly_done = agent.how_much_my_tools_help(SkillType::Woodcutting);
+    let nearly_done = agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting);
     assert!(
         nearly_done < fresh,
         "a blunt axe should be worth less than a sharp one: {nearly_done} against {fresh}"
@@ -224,7 +241,7 @@ fn enough_work_wears_a_tool_out() {
         "a stone axe should not outlast the man who made it"
     );
     assert_eq!(
-        agent.how_much_my_tools_help(SkillType::Woodcutting),
+        agent.how_fast_my_tools_make_this_go(SkillType::Woodcutting),
         Agent::what_bare_hands_manage(SkillType::Woodcutting),
         "and a worn-through axe is no axe"
     );
@@ -256,6 +273,7 @@ fn a_broken_tool_is_a_reason_to_make_a_new_one() {
     // a world and let the real crafting path work through the chain.
     let mut simulation = one_agent_world();
     simulation.population.agents[0] = population.agents.remove(0);
+    a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
 
     let mut made_an_axe = false;
     for _ in 0..12 {
@@ -278,7 +296,7 @@ fn a_broken_tool_is_a_reason_to_make_a_new_one() {
         "a man with a broken axe and the makings of one should make one"
     );
     assert!(
-        simulation.population.agents[0].how_much_my_tools_help(SkillType::Woodcutting) > 1.0,
+        simulation.population.agents[0].how_fast_my_tools_make_this_go(SkillType::Woodcutting) > 1.0,
         "and be back in business"
     );
 }
@@ -349,7 +367,7 @@ fn a_spear_makes_a_hunter_of_somebody() {
     let agent = &mut population.agents[0];
 
     assert_eq!(
-        agent.how_much_my_tools_help(SkillType::Hunting),
+        agent.how_fast_my_tools_make_this_go(SkillType::Hunting),
         Agent::what_bare_hands_manage(SkillType::Hunting),
         "a founder arrives without a spear, and throwing stones is poor work"
     );
@@ -357,7 +375,7 @@ fn a_spear_makes_a_hunter_of_somebody() {
     let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);
     agent.inventory.add_item(spear);
 
-    let helped = agent.how_much_my_tools_help(SkillType::Hunting);
+    let helped = agent.how_fast_my_tools_make_this_go(SkillType::Hunting);
     assert!(helped > 1.0, "a spear should count for something in a hunt");
     assert!(helped <= SPEAR_FOR_HUNTING.how_much_better);
 }
@@ -373,7 +391,7 @@ fn a_practised_hand_makes_a_tool_that_works_better() {
         agent.inventory.remove_item("spear", 1);
         let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);
         agent.inventory.add_item(spear);
-        agent.how_much_my_tools_help(SkillType::Hunting)
+        agent.how_fast_my_tools_make_this_go(SkillType::Hunting)
     }
 
     let agent = &mut population.agents[0];
@@ -399,11 +417,11 @@ fn even_crude_work_beats_bare_hands() {
     agent.skills.set_skill_level(SkillType::Crafting, -10);
 
     let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);
-    assert_eq!(spear.quality, Some(Quality::Pathetic));
+    assert_eq!(spear.quality, Some(Quality::Crude));
     agent.inventory.add_item(spear);
 
     assert!(
-        agent.how_much_my_tools_help(SkillType::Hunting) > 1.0,
+        agent.how_fast_my_tools_make_this_go(SkillType::Hunting) > 1.0,
         "the worst spear anybody ever made is still a spear"
     );
 }
@@ -426,10 +444,30 @@ fn making_the_same_thing_over_and_over_improves_it() {
             carrying(agent, "knappedtip", 1);
             carrying(agent, "lashing", 1);
         }
-        let result = simulation.execute_action(
+        // An unpractised hand spoils a good many attempts and the makings
+        // with them, so the spear is attempted until one comes off: what
+        // this test is about is how good the spear is, not how often the
+        // attempt fails. The hand is deliberately left where it started -
+        // raising it would be raising the very thing being measured.
+        let mut result = simulation.execute_action(
             &Action::Craft { item_type: "spear".to_string() },
             0,
         );
+        for _ in 0..40 {
+            if result.success {
+                break;
+            }
+            {
+                let agent = &mut simulation.population.agents[0];
+                carrying(agent, "wood", 1);
+                carrying(agent, "knappedtip", 1);
+                carrying(agent, "lashing", 1);
+            }
+            result = simulation.execute_action(
+                &Action::Craft { item_type: "spear".to_string() },
+                0,
+            );
+        }
         assert!(result.success, "{:?}", result.message);
         let made = simulation.population.agents[0]
             .inventory

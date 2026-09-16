@@ -227,7 +227,7 @@ fn print_population_status(population: &Population, tick: u32) {
             if let Some(food) = agent.inventory.get_item("food") {
                 total_food_inv += food.quantity;
             }
-            total_weight += agent.inventory.current_weight;
+            total_weight += agent.inventory.current_weight();
             total_max_weight += agent.inventory.max_weight;
         }
 

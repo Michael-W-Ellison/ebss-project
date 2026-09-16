@@ -374,10 +374,21 @@ impl Pit {
     ///
     /// A bowl or a basket between the food and the damp is worth as much as
     /// the hole is: see `World::what_is_buried_keeps`.
+    ///
+    /// Asked by class rather than by name. It was `"bowl" | "basket"`, written
+    /// when those were the only two vessels there were - so a settlement that
+    /// had gone as far as firing pots, which is several technologies past
+    /// carving a bowl, had **nothing to line a pit with** and stored its
+    /// winter in bare earth. That is the whole failure mode the tag layer
+    /// exists to stop: a check written against the world as it stood, which
+    /// then silently stops being true as the world moves on.
     pub fn is_lined(&self) -> bool {
-        self.holds
-            .iter()
-            .any(|item| matches!(item.item_id.as_str(), "bowl" | "basket"))
+        self.holds.iter().any(|item| {
+            crate::environment::tags::is_this_a(
+                &item.item_id,
+                crate::environment::tags::Tag::FoodContainer,
+            )
+        })
     }
 
     /// One tick in this many is the only one that tells on what is buried

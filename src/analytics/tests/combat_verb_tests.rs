@@ -55,7 +55,7 @@ fn arm(simulation: &mut Simulation, with: &str, how_many: u32) {
                 with.to_string(),
                 1,
                 40.0,
-                Quality::Basic,
+                Quality::Common,
             ));
     }
 }

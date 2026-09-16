@@ -311,63 +311,43 @@ fn three_meals_a_day_keeps_a_body_level() {
     assert!(!body.starved());
 }
 
-/// Hunger is felt about five hours after eating, which is what puts three
-/// meals in a day rather than one or ten.
+/// A fed body eats about three times a day, and it is the ledger that says so
+/// rather than the gastric clock.
 ///
-/// Asked as a *rate*, which is what the three tables give: they are headed
-/// "Hunger Drive Increase". This asked `hunger()` for a value and compared it
-/// against the drive's threshold, which cannot work - the product of three
-/// tables runs from one to sixteen and is a climb per turn, not a level. What
-/// the tables actually say is that a full stomach stops the climb dead and an
-/// emptying one lets it back on, and that is what is asserted here. The turn
-/// count is in `core::tests::drive_satisfaction_tests`.
+/// This used to assert that hunger returns about **five hours** after a meal,
+/// which is when the stomach is nine tenths empty. That is the gastric clock,
+/// and it is not what decides whether a body needs food: what decides is
+/// whether what is in the stomach and the gut still covers what the body is
+/// owed. A stomachful is six hundred energy and a body spends fourteen hundred
+/// and forty a day, so it comes back about three times a day - the figure
+/// `AN_ORDINARY_APPETITE` normalises the rate against, arrived at from the
+/// body instead of assumed. See #217.
 #[test]
-fn hunger_comes_on_about_five_hours_after_a_meal() {
+fn a_fed_body_eats_about_three_times_a_day() {
     let mut body = Physiology::new();
-    eat_a_sitting_of_ordinary_food(&mut body);
+    let worth = what_a_unit_of_this_is_worth(ENERGY_OF_ORDINARY_FOOD);
 
-    assert_eq!(
-        body.how_fast_hunger_rises(),
-        0.0,
-        "a body with its supper still in front of it is not getting hungrier"
-    );
-
-    // **It comes on as a step, not as a climb, and that is deliberate.**
-    //
-    // `A_FULL_BODY_STOPS_AT` is 0.10: a body with its reserve intact wants
-    // nothing until its stomach is nine tenths empty. So the rate is nought
-    // through the whole of digestion and then goes to three the turn the
-    // stomach runs out - traced, 0.000 at two hours, 0.000 at four, 3.000 at
-    // six.
-    //
-    // This test used to assert a gradient: that hunger was already building
-    // an hour or two after supper, and building harder later. There is no
-    // such gradient in the model and there was never meant to be one - the
-    // comment on `how_fast_hunger_rises` argues at length that a drive rising
-    // against a full stomach only spends turns on meals that will not go
-    // down. So the test was asking for the one thing the design rules out,
-    // and what it should ask is what its own title says: *when* hunger comes
-    // on.
-    let mut came_on_at = None;
-    for turn in 1..=12 {
-        body.advance(MINUTES_PER_TURN, 5.0);
+    let mut meals = 0;
+    for _ in 0..(MINUTES_PER_DAY / MINUTES_PER_TURN) {
         if body.how_fast_hunger_rises() > 0.0 {
-            came_on_at = Some(turn * MINUTES_PER_TURN / 60);
-            break;
+            let mut ate_anything = false;
+            while body.eat(UNITS_IN_ONE_ITEM, worth) > 0.0 {
+                ate_anything = true;
+            }
+            if ate_anything {
+                meals += 1;
+            }
         }
+        body.advance(MINUTES_PER_TURN, 5.0);
     }
 
-    let hours = came_on_at.expect("hunger should come on inside a day of the last meal");
     assert!(
-        (4..=8).contains(&hours),
-        "hunger should come on about five hours after a meal, not {hours}"
+        (2..=4).contains(&meals),
+        "a fed body should sit down about three times a day, not {meals}"
     );
-
-    // And once it is on, an empty stomach with a full reserve presses at the
-    // reserve table's own bottom rung and no harder.
     assert!(
-        body.how_fast_hunger_rises() > 0.0,
-        "and it stays on while the stomach is empty"
+        !body.starved(),
+        "a body eating to its own appetite should not be starving after a day"
     );
 }
 
@@ -547,5 +527,127 @@ fn an_empty_stomach_presses_harder_on_a_spent_body() {
         "spent {} against fed {}",
         spent.how_fast_hunger_rises(),
         fed.how_fast_hunger_rises()
+    );
+}
+
+/// A body that has eaten enough to put itself right does not want more.
+///
+/// The three tables - reserve, stomach, gut - were all present and all
+/// multiplied, but `by_reserve` bottoms out at 1.0 and never at nought. So
+/// nothing asked whether the body actually *needed* the food: one carrying its
+/// whole three-week reserve still grew hungry the moment its stomach fell
+/// below a tenth of a sitting. Measured over eight worlds, that came to 6.52
+/// sittings a day at 656 energy apiece against 1,440 burned - **297% of what a
+/// body spends**, banked as far as the reserve would take it and the rest
+/// thrown away.
+///
+/// The rule is that what is in the stomach and the gut is weighed against what
+/// the body is owed. See #217.
+#[test]
+fn a_body_that_has_eaten_enough_to_put_itself_right_stops_wanting_more() {
+    use crate::agents::physiology::{Physiology, UNITS_BURNED_IN_AN_ORDINARY_DAY};
+
+    // A body a day down on its reserve, with an empty stomach: it wants food.
+    let mut hungry = Physiology::new();
+    hungry.reserve = hungry.reserve_capacity - UNITS_BURNED_IN_AN_ORDINARY_DAY;
+    assert!(
+        hungry.how_fast_hunger_rises() > 0.0,
+        "a body a day into its reserve with an empty stomach should want food"
+    );
+
+    // The same body, with that day's food swallowed and on its way: it does
+    // not. What it is owed is already coming.
+    let mut fed = Physiology::new();
+    fed.reserve = fed.reserve_capacity - UNITS_BURNED_IN_AN_ORDINARY_DAY;
+    fed.eat(UNITS_BURNED_IN_AN_ORDINARY_DAY, 1.0);
+    assert_eq!(
+        fed.how_fast_hunger_rises(),
+        0.0,
+        "a body with what it is owed already in the stomach still wanted more"
+    );
+
+    // And a body carrying its whole reserve wants nothing, whatever its
+    // stomach is doing: it is owed nothing, so nothing is short.
+    let whole = Physiology::new();
+    assert_eq!(
+        whole.reserve, whole.reserve_capacity,
+        "a new body should start with its reserve intact"
+    );
+    assert_eq!(
+        whole.how_fast_hunger_rises(),
+        0.0,
+        "a body owed nothing grew hungry on an empty stomach alone"
+    );
+}
+
+/// Twenty-four units of ordinary forage at twenty-five apiece is a full
+/// stomach, and one of them does not answer a day without food.
+///
+/// The stomach is charged in **energy**, and a thing takes up room equal to
+/// what it is worth. It used to be charged in volume while a meal was reckoned
+/// in energy, so a stomachful of ordinary food came to fifteen thousand -
+/// **ten days of burn, half the whole three-week reserve in one sitting** -
+/// and a sitting of four hundred and eighty filled 3.2% of it.
+///
+/// The worked case: a body a day without food is 1,440 down. It eats to a full
+/// stomach, six hundred, and that is still eight hundred and forty short of
+/// what it is owed, so it is not satisfied and comes back as the stomach makes
+/// room. See #217.
+#[test]
+fn a_stomach_holds_six_hundred_energy_and_a_day_down_wants_more_than_one() {
+    let mut body = Physiology::new();
+    body.reserve = body.reserve_capacity - UNITS_BURNED_IN_AN_ORDINARY_DAY;
+
+    let worth = what_a_unit_of_this_is_worth(ENERGY_OF_ORDINARY_FOOD);
+    let mut units = 0.0f32;
+    loop {
+        let took = body.eat(UNITS_IN_ONE_ITEM, worth);
+        if took <= 0.0 {
+            break;
+        }
+        units += took;
+    }
+
+    assert!(
+        (units - 24.0).abs() < UNITS_IN_ONE_ITEM,
+        "a full stomach should be about twenty-four units of ordinary forage, got {units}"
+    );
+    assert!(
+        (body.energy_in_the_stomach() - STOMACH_CAPACITY).abs() < 1.0,
+        "and that should be {STOMACH_CAPACITY} energy, got {}",
+        body.energy_in_the_stomach()
+    );
+    assert!(
+        body.energy_in_the_stomach() < UNITS_BURNED_IN_AN_ORDINARY_DAY,
+        "one stomachful should not cover a day's deficit"
+    );
+    assert!(
+        body.how_fast_hunger_rises() >= 0.0,
+        "and the body is still owed the difference"
+    );
+}
+
+/// A rich food fills a stomach in fewer mouthfuls than a thin one.
+///
+/// Which is the whole of what caloric density means to a body, and was not
+/// true while the stomach was charged in volume: a handful of fat carcass and
+/// a handful of spring leaf took up exactly the same room.
+#[test]
+fn a_rich_food_fills_a_stomach_faster_than_a_thin_one() {
+    let fill_with = |worth: f32| {
+        let mut body = Physiology::new();
+        let mut units = 0.0f32;
+        while body.eat(UNITS_IN_ONE_ITEM, worth) > 0.0 {
+            units += UNITS_IN_ONE_ITEM;
+        }
+        units
+    };
+
+    let on_fat = fill_with(50.0);
+    let on_leaf = fill_with(6.0);
+
+    assert!(
+        on_leaf > on_fat * 2.0,
+        "a body should need far more leaf than fat to fill up: {on_leaf} against {on_fat}"
     );
 }

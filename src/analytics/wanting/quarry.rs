@@ -44,7 +44,32 @@ impl Simulation {
             AnimalBehavior::Aggressive | AnimalBehavior::Territorial
         );
 
-        !dangerous || agent.equipment.get_weapon().is_some()
+        if !dangerous {
+            return true;
+        }
+
+        // Anything that fights back is a job for someone with a weapon.
+        if agent.equipment.get_weapon().is_none() {
+            return false;
+        }
+
+        // And for a body that could take the blow it is inviting.
+        //
+        // The reactive half of this has always been asked:
+        // `could_i_fight_at_all` is what decides whether a man stands his
+        // ground when something comes at him, and `between_us::threat` asks it
+        // of exactly this argument - `species.attack_damage`. The decision to
+        // go and *start* the fight asked nothing at all about the man. Health,
+        // a working arm, and whether he is old enough to fight were all absent
+        // from `worth_hunting`, so **a man at ten health with a spear set off
+        // after a bear exactly as a whole man would**, and a child did too.
+        //
+        // One question, asked in one place, on both sides of it: the same
+        // predicate that lets him stand his ground decides whether he goes
+        // looking for the fight. Ordinary prey is untouched - a rabbit is not
+        // `dangerous` and a hurt man may still eat - so this declines the
+        // fights that would kill him and none of the ones that would feed him.
+        agent.could_i_fight_at_all(species.attack_damage)
     }
 
     /// The nearest animal this agent could reasonably take, and where it is

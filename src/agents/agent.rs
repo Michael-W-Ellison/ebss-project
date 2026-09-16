@@ -184,6 +184,61 @@ impl InventoryItem {
             (Some(only), None) | (None, Some(only)) => Some(only),
             (None, None) => None,
         };
+
+        // How well made the stack is, and how much life is left in it.
+        //
+        // These were simply **dropped**: whatever the newcomer was worth,
+        // the stack went on saying what it had said before. A pack holds one
+        // entry per kind of thing, so every second coat, every second spear,
+        // every second flake an agent ever made was merged into the first
+        // one and its workmanship went nowhere. The tailoring branch worked
+        // around it by putting a coat on the moment it was finished rather
+        // than folding it away - over eight thousand ticks one settlement
+        // made two hundred and eighty garments and wore a hundred and sixty
+        // - and the knapping branch worked around it by throwing a
+        // worn-through tool out before adding a fresh one, because stacking
+        // handed the new tool the broken one's durability.
+        //
+        // Blended by how much of each there is, which is what `the_older_clock`
+        // directly above already does for age. No free improvement for the
+        // items already in the stack, and nothing lost by the one going in.
+        self.quality = match (self.quality, other.quality) {
+            (Some(ours), Some(theirs_quality)) => {
+                Some(ours.mixed_into(theirs_quality, mine, theirs))
+            }
+            // An unrecorded stack is ordinary work - which is how every
+            // reader of this field already treats one - not an absence that
+            // the other side gets to speak for.
+            (Some(only), None) => {
+                Some(only.mixed_into(super::skills::Quality::Common, mine, theirs))
+            }
+            (None, Some(only)) => {
+                Some(super::skills::Quality::Common.mixed_into(only, mine, theirs))
+            }
+            (None, None) => None,
+        };
+
+        self.current_durability =
+            Self::blended(self.current_durability, other.current_durability, mine, theirs);
+        self.max_durability =
+            Self::blended(self.max_durability, other.max_durability, mine, theirs);
+    }
+
+    /// One measure blended into another by how much of each there is.
+    ///
+    /// A measure only one side records stands for the whole stack: a thing
+    /// with no durability at all is food or firewood, and averaging a tool's
+    /// life against nothing would say the tool was half worn out.
+    fn blended(mine_worth: Option<f32>, theirs_worth: Option<f32>, mine: u32, theirs: u32) -> Option<f32> {
+        match (mine_worth, theirs_worth) {
+            (Some(ours), Some(theirs_worth)) => {
+                let mine = mine.max(1) as f32;
+                let theirs = theirs.max(1) as f32;
+                Some((ours * mine + theirs_worth * theirs) / (mine + theirs))
+            }
+            (Some(only), None) | (None, Some(only)) => Some(only),
+            (None, None) => None,
+        }
     }
 
     /// Whether this is something to eat.
@@ -284,8 +339,7 @@ impl InventoryItem {
         // water out and water is most of what meat weighs, so a hunter who
         // dries a kill before walking home carries more of the animal home -
         // see `PreparationState::what_it_does_to_the_weight`.
-        let each = self.weight_per_unit * self.how_much_lighter_it_is();
-        let base_weight = each * self.quantity as f32;
+        let base_weight = self.what_one_of_them_weighs() * self.quantity as f32;
 
         // Add liquid weight if this is a filled container
         // Water weighs ~1 kg per liter
@@ -300,6 +354,20 @@ impl InventoryItem {
             .as_ref()
             .map(|food| food.preparation.what_it_does_to_the_weight())
             .unwrap_or(1.0)
+    }
+
+    /// What one of these weighs, drying and all.
+    ///
+    /// Seven places worked this out for themselves and two of them got it
+    /// wrong, taking `weight_per_unit` raw and so pricing a dried fish at
+    /// what a wet one weighs. Both wrong ones were in the `PickUp` executor,
+    /// which is the code that decides whether a man may take his own supper
+    /// out of his own larder.
+    ///
+    /// This is the per-unit twin of `total_weight`, which is this times the
+    /// quantity plus whatever is sloshing about in a vessel. See #215.
+    pub fn what_one_of_them_weighs(&self) -> f32 {
+        self.weight_per_unit * self.how_much_lighter_it_is()
     }
 }
 
@@ -333,8 +401,6 @@ pub struct Inventory {
     pub max_slots: usize,
     /// Maximum weight that can be carried
     pub max_weight: f32,
-    /// Current total weight
-    pub current_weight: f32,
 }
 
 impl Inventory {
@@ -343,7 +409,6 @@ impl Inventory {
             items: std::collections::BTreeMap::new(),
             max_slots,
             max_weight,
-            current_weight: 0.0,
             what_would_not_go_in: 0,
         }
     }
@@ -358,7 +423,7 @@ impl Inventory {
 
         // Check weight limit
         let item_weight = item.total_weight();
-        if self.current_weight + item_weight > self.effective_max_weight() {
+        if self.current_weight() + item_weight > self.effective_max_weight() {
             // What will not go in is not carried, and something ought to know
             // it happened - see `what_would_not_go_in`.
             if item.is_food() {
@@ -367,23 +432,12 @@ impl Inventory {
             return false; // Too heavy
         }
 
-        // Add or stack item, and weigh the pack by what is actually in it.
-        //
-        // The weight added is **not** the incoming item's weight when the two
-        // stacks merge, because merging can change what the whole stack is:
-        // `absorb` settles the preparation, and preparation is what decides
-        // weight - a dried stack weighs a third of the same thing raw. Adding
-        // only the newcomer's weight left `current_weight` reading low, and
-        // the next `recalculate_weight` corrected it in one jump. If that jump
-        // put the pack over its limit, **every subsequent `add_item` returned
-        // false and the food was silently destroyed**, because almost every
-        // caller ignores the bool. See ISSUES_FOUND #65.
+        // Add or stack the item. Nothing is tallied, because nothing is
+        // stored: what the pack weighs is what is in it, asked for when it is
+        // wanted. See `current_weight`.
         if let Some(existing) = self.items.get_mut(&item.item_id) {
-            let before = existing.total_weight();
             existing.absorb(item);
-            self.current_weight += existing.total_weight() - before;
         } else {
-            self.current_weight += item_weight;
             self.items.insert(item.item_id.clone(), item);
         }
 
@@ -407,9 +461,6 @@ impl Inventory {
                     food_data: item.food_data.clone(),
                 };
 
-                // Update weight
-                self.current_weight -= removed.total_weight();
-
                 if item.quantity == 0 {
                     self.items.remove(item_id);
                 }
@@ -428,6 +479,14 @@ impl Inventory {
     /// Get a mutable item from inventory
     pub fn get_item_mut(&mut self, item_id: &str) -> Option<&mut InventoryItem> {
         self.items.get_mut(item_id)
+    }
+
+    /// Whether there is anything here that will hold water.
+    ///
+    /// Layer 5 asked by Layer 2: a man with no vessel is not short of carried
+    /// water, he has no way to carry any. See `wanting::goal`.
+    pub fn has_a_container(&self) -> bool {
+        self.items.values().any(|item| item.is_container())
     }
 
     /// Get total water available from all containers
@@ -450,9 +509,6 @@ impl Inventory {
         }
 
         let drunk = amount - remaining;
-
-        // Update weight (water weighs 1kg per liter)
-        self.current_weight -= drunk;
 
         drunk // Return amount actually drunk
     }
@@ -478,9 +534,6 @@ impl Inventory {
         }
 
         let filled = available_water - remaining;
-
-        // Update weight (water weighs 1kg per liter)
-        self.current_weight += filled;
 
         filled // Return amount actually filled
     }
@@ -528,16 +581,35 @@ impl Inventory {
         &mut self.items
     }
 
-    /// Recalculate total weight from all items
-    pub fn recalculate_weight(&mut self) {
-        self.current_weight = self.items.values()
-            .map(|item| item.total_weight())
-            .sum();
+    /// What this pack weighs: the sum of what is in it, every time it is
+    /// asked.
+    ///
+    /// It was a stored `f32` kept up to date by five pieces of arithmetic -
+    /// two in `add_item`, one in `remove_item`, one each for drinking a vessel
+    /// and filling one - with a `recalculate_weight` to put it right when it
+    /// went wrong. **It went wrong constantly**, because `get_item_mut` and
+    /// `get_all_items_mut` hand out the items themselves, and anything that
+    /// changes a quantity, a fill level or a preparation through those changes
+    /// what the pack weighs without the tally hearing about it.
+    ///
+    /// Measured at day 310: a man carrying a spear, a metal spear, a handaxe,
+    /// a basket and a knife - **seven and a half units in a pack that holds
+    /// forty-two** - read as 41.8, and was refused everything. Two agents
+    /// carrying **no stacks at all** read as 83% and 94% full. See
+    /// ISSUES_FOUND #214.
+    ///
+    /// The tally had already been patched once for the same reason (#65, the
+    /// comment that used to sit in `add_item`) and drifted again. A number
+    /// that is stored *and* derivable has two answers and only one of them is
+    /// ever right, so this keeps the one that cannot be wrong. It is a sum
+    /// over a handful of stacks and is not a hot path.
+    pub fn current_weight(&self) -> f32 {
+        self.items.values().map(|item| item.total_weight()).sum()
     }
 
     /// Check if inventory is overweight
     pub fn is_overweight(&self) -> bool {
-        self.current_weight > self.effective_max_weight()
+        self.current_weight() > self.effective_max_weight()
     }
 
     /// How much this pack can hold, baskets and all.
@@ -569,7 +641,7 @@ impl Inventory {
 
     /// Get weight capacity remaining
     pub fn weight_capacity_remaining(&self) -> f32 {
-        (self.effective_max_weight() - self.current_weight).max(0.0)
+        (self.effective_max_weight() - self.current_weight()).max(0.0)
     }
 
     /// Get weight as percentage of max (0.0 to 1.0+)
@@ -577,7 +649,7 @@ impl Inventory {
         if self.max_weight == 0.0 {
             0.0
         } else {
-            self.current_weight / self.max_weight
+            self.current_weight() / self.max_weight
         }
     }
 
@@ -960,6 +1032,24 @@ pub struct AgentState {
     /// reckoning reads what is written rather than guessing from what is left.
     #[serde(default)]
     pub what_last_took_health: Option<String>,
+    /// What has taken health off this one, and how much of each is still
+    /// standing against the body.
+    ///
+    /// `what_last_took_health` answers a different and much smaller question
+    /// than the one the reckoning asks of it. A death credited to whatever
+    /// removed the final point credits the last straw and not the load: over
+    /// eight worlds a blow took **47.6%** of all the health lost in this model
+    /// and was credited with **25.9%** of the deaths, while thirst took 0.6%
+    /// and was credited with 9.4%. A drip out-ranks a lump, because the drip
+    /// is nearly always what happens to be last.
+    ///
+    /// So each thing that takes health is booked against its name, and mending
+    /// takes back what is outstanding in proportion to what each is still
+    /// holding - because health that has healed away killed nobody. What is
+    /// left is an apportionment of the living body: the entries sum to
+    /// `100.0 - health`, and at a death they sum to the whole man.
+    #[serde(default)]
+    pub what_has_taken_health: Vec<(String, f32)>,
     /// How much salt this one has drunk and not yet got rid of.
     ///
     /// "If they do so it should increase their hydration drive more over time
@@ -1008,6 +1098,7 @@ impl AgentState {
             waste_carried: 0.0,
             ailing: None,
             what_last_took_health: None,
+            what_has_taken_health: Vec::new(),
             salt_in_me: 0.0,
             an_open_wound: 0.0,
         }
@@ -1054,17 +1145,17 @@ impl AgentState {
         // `Physiology::capability` take a quarter off everything the agent can
         // do at each of three-quarters, half and a quarter. Nought is death.
         if self.physiology.died_of_thirst() {
-            self.lose_health(self.health, "dehydration");
+            self.lose_health(self.health, Self::THIRST);
         } else if self.physiology.is_parched() {
             // Not damage so much as the body starting to fail at the edges
-            self.lose_health(0.15 * (1.0 - self.physiology.capability()), "thirst");
+            self.lose_health(0.15 * (1.0 - self.physiology.capability()), Self::THIRST);
         }
 
         // And the reserve running out is starvation. Three weeks for an adult.
         if self.physiology.starved() {
-            self.lose_health(self.health, "starvation");
+            self.lose_health(self.health, Self::HUNGER);
         } else if self.physiology.is_wasting() {
-            self.lose_health(0.1 / reserve, "hunger");
+            self.lose_health(0.1 / reserve, Self::HUNGER);
         }
 
         // Energy depletion (normal metabolism), made worse by working thirsty
@@ -1074,12 +1165,12 @@ impl AgentState {
 
         // When energy is depleted, health starts decreasing too
         if self.energy <= 0.0 {
-            self.lose_health(0.05, "exhaustion");
+            self.lose_health(0.05, Self::EXHAUSTION);
         }
 
         // Check for death from old age
         if self.age >= self.max_age {
-            self.what_last_took_health = Some("old age".to_string());
+            self.what_last_took_health = Some(Self::OLD_AGE.to_string());
             self.is_alive = false;
         }
 
@@ -1098,7 +1189,7 @@ impl AgentState {
         let opened = (amount / Self::WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND).clamp(0.0, 1.0);
         self.an_open_wound = self.an_open_wound.max(opened);
 
-        self.lose_health(amount, "a blow");
+        self.lose_health(amount, Self::A_BLOW);
     }
 
     /// Lose health to a named thing.
@@ -1108,6 +1199,51 @@ impl AgentState {
     /// gave **"unknown cause" for 70% of every death in this model** - by the
     /// time anybody asks, the hunger has been eaten away and the cold has
     /// worn off, and the honest answer to every question is no.
+    /// What takes health off a body, in the words the record keeps. One
+    /// spelling each.
+    ///
+    /// Two of these used to have two names apiece: the slow one and the blow
+    /// that finished it - "hunger" and "starvation", "thirst" and
+    /// "dehydration". While the reckoning only named the last thing to speak
+    /// that was untidy and no worse. Once it began apportioning a body *by
+    /// name* (#209) it became an arithmetic fault: one cause booked under two
+    /// headings is one cause counted half twice, and both halves lose. Blocks
+    /// C and D found "dehydration" taking 0.9% and 1.2% of the dead where
+    /// #209 had recorded thirst as nothing at all.
+    ///
+    /// `process_deaths` had always known they were one cause apiece - it
+    /// matched `"hunger" | "starvation"` onto a single `DeathCause` - which is
+    /// the tell that the two spellings were never meant to be two things.
+    ///
+    /// They are constants now because a constant cannot drift from itself.
+    pub const HUNGER: &'static str = "hunger";
+    pub const THIRST: &'static str = "thirst";
+    pub const A_BLOW: &'static str = "a blow";
+    pub const A_FALL: &'static str = "a fall";
+    pub const A_WOUND: &'static str = "a wound";
+    pub const A_MISHAP: &'static str = "a mishap";
+    pub const THE_WEATHER: &'static str = "the weather";
+    pub const ILLNESS: &'static str = "illness";
+    pub const A_POOR_DIET: &'static str = "a poor diet";
+    pub const EXHAUSTION: &'static str = "exhaustion";
+    pub const OLD_AGE: &'static str = "old age";
+
+    /// Every one of them, so that anything wanting to reason about the whole
+    /// vocabulary does not have to keep its own copy and watch it rot.
+    pub const EVERYTHING_THAT_TAKES_HEALTH: [&'static str; 11] = [
+        Self::HUNGER,
+        Self::THIRST,
+        Self::A_BLOW,
+        Self::A_FALL,
+        Self::A_WOUND,
+        Self::A_MISHAP,
+        Self::THE_WEATHER,
+        Self::ILLNESS,
+        Self::A_POOR_DIET,
+        Self::EXHAUSTION,
+        Self::OLD_AGE,
+    ];
+
     /// How hard a blow has to be before it leaves anything worth calling a
     /// wound.
     ///
@@ -1127,17 +1263,93 @@ impl AgentState {
             return;
         }
 
+        // What it took, not what it swung. A fall priced at a thousand on a
+        // man with thirty health left took thirty, and booking the thousand
+        // would let one overkill outweigh a lifetime of everything else.
+        let taken = amount.min(self.health);
+
         self.health = (self.health - amount).max(0.0);
         self.what_last_took_health = Some(to.to_string());
+        self.book_what_was_taken(taken, to);
 
         if self.health <= 0.0 {
             self.is_alive = false;
         }
     }
 
+    /// Book what a thing took, against its name.
+    fn book_what_was_taken(&mut self, taken: f32, to: &str) {
+        if taken <= 0.0 {
+            return;
+        }
+
+        // A list rather than a map, and walked in the order things first
+        // happened, because a map's order is not the same twice and the cause
+        // of death would stop being a fact about the world.
+        if let Some((_, so_far)) = self
+            .what_has_taken_health
+            .iter_mut()
+            .find(|(named, _)| named == to)
+        {
+            *so_far += taken;
+        } else {
+            self.what_has_taken_health.push((to.to_string(), taken));
+        }
+    }
+
+    /// Take mended health back off the ledger, in proportion to what each
+    /// thing is still holding.
+    ///
+    /// A man beaten half to death at twenty and starved at forty was killed by
+    /// the starving. The beating is in the tally only for as long as the body
+    /// has not made it good, which is what makes the remainder an account of
+    /// the death rather than of the life.
+    fn mend_the_ledger(&mut self, mended: f32) {
+        if mended <= 0.0 {
+            return;
+        }
+
+        let outstanding: f32 = self.what_has_taken_health.iter().map(|(_, x)| *x).sum();
+        if outstanding <= 0.0 {
+            return;
+        }
+
+        let what_is_left = ((outstanding - mended) / outstanding).max(0.0);
+        for (_, x) in &mut self.what_has_taken_health {
+            *x *= what_is_left;
+        }
+        self.what_has_taken_health.retain(|(_, x)| *x > 0.0);
+    }
+
+    /// What holds the largest part of this body, and so what killed it.
+    ///
+    /// Ties go to the first name alphabetically, so that two things which took
+    /// exactly as much as each other answer the same way every run.
+    pub fn what_took_the_most(&self) -> Option<&str> {
+        self.what_has_taken_health
+            .iter()
+            .filter(|(_, taken)| *taken > 0.0)
+            .max_by(|(this_name, this), (that_name, that)| {
+                this.partial_cmp(that)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| that_name.cmp(this_name))
+            })
+            .map(|(named, _)| named.as_str())
+    }
+
+    /// How much of this body is being held by something that took it.
+    ///
+    /// The same number as `100.0 - health`, arrived at from the other end,
+    /// which is what makes it worth asserting.
+    pub fn what_is_still_standing(&self) -> f32 {
+        self.what_has_taken_health.iter().map(|(_, x)| *x).sum()
+    }
+
     /// Heal
     pub fn heal(&mut self, amount: f32) {
+        let before = self.health;
         self.health = (self.health + amount).min(100.0);
+        self.mend_the_ledger(self.health - before);
     }
 
     /// Eat food and restore energy
@@ -1852,7 +2064,7 @@ impl Agent {
     /// walk about carrying is a decision, and dressing one up as a law made it
     /// worse. This is only the law: what cannot be carried is not carried.
     pub fn how_much_too_much_i_am_carrying(&self) -> f32 {
-        (self.inventory.current_weight - self.inventory.effective_max_weight()).max(0.0)
+        (self.inventory.current_weight() - self.inventory.effective_max_weight()).max(0.0)
     }
 
     /// What a person sets down when the pack will not take any more food.
@@ -1874,20 +2086,39 @@ impl Agent {
     /// weighs two a stick, so the ten units of firewood filling every pack in
     /// the world were five sticks and five is not more than six. A reserve
     /// counted in things cannot answer a question asked in weight.
-    pub fn what_i_would_set_down(&self) -> Option<String> {
-        use crate::environment::making;
+    /// Whether this is part of somebody's kit rather than something they
+    /// happen to be carrying.
+    ///
+    /// **One rule, one place.** A tool is what you work with and a basket is
+    /// what everything else is in; neither is spare, and neither is spare for
+    /// *any* reason - not to make room for supper, and not on the chance that
+    /// a basket is what a digging stick was missing.
+    ///
+    /// That second clause is why this is a function. The rule existed, in
+    /// `what_i_would_set_down`, and was written as two inline filters; the
+    /// swap machinery in `what_i_would_swap` never asked. So a man would not
+    /// put his basket down to make room for food and would cheerfully destroy
+    /// it in an experiment - and measured over eight worlds and a year that
+    /// experiment ate **150 baskets and 156 tools** and succeeded not once.
+    /// Two places deciding whether a thing may leave the pack, and only one of
+    /// them holding the rule. See ISSUES_FOUND #206, and #203 and #204 for the
+    /// same defect in two other coats.
+    pub fn is_this_part_of_the_kit(called: &str) -> bool {
+        crate::environment::making::EVERY_TOOL
+            .iter()
+            .any(|tool| tool.called == called)
+            || Self::WHAT_CARRIES
+                .iter()
+                .any(|(carrier, _)| *carrier == called)
+    }
 
+    pub fn what_i_would_set_down(&self) -> Option<String> {
         self.inventory
             .get_all_items()
             .iter()
             .filter(|(_, item)| item.quantity > 0)
             .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
-            .filter(|(name, _)| {
-                !making::EVERY_TOOL.iter().any(|tool| tool.called == name.as_str())
-            })
-            .filter(|(name, _)| {
-                !Self::WHAT_CARRIES.iter().any(|(called, _)| *called == name.as_str())
-            })
+            .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
             .max_by(|a, b| {
                 let load = |item: &InventoryItem| item.quantity as f32 * item.weight_per_unit;
                 load(a.1)
@@ -1908,8 +2139,14 @@ impl Agent {
     /// in the model**, a man standing on his own larder asking for it every
     /// turn and being told no.
     ///
-    /// One handful is all it has to decide, so it does not need to know how
+    /// One unit is all it has to decide, so it does not need to know how
     /// much would come off - only whether anything would.
+    ///
+    /// `each` is the weight of one of whatever is actually being reached for,
+    /// and callers are expected to have asked the thing rather than assumed.
+    /// The store branch passed `WHAT_A_HANDFUL_OF_FOOD_WEIGHS` - a half - for
+    /// everything, and a pit of roots hands out whole units: 264,453 refusals
+    /// later, that is #215.
     pub fn could_i_take_another_handful(&self, each: f32) -> bool {
         self.inventory.weight_capacity_remaining() >= each
             || self.what_i_would_set_down().is_some()
@@ -1932,7 +2169,7 @@ impl Agent {
             return 0;
         };
 
-        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        let each = item.what_one_of_them_weighs();
         if each <= 0.0 {
             return item.quantity;
         }
@@ -1956,7 +2193,7 @@ impl Agent {
             return 0;
         };
 
-        let each = item.weight_per_unit * item.how_much_lighter_it_is();
+        let each = item.what_one_of_them_weighs();
         if each <= 0.0 {
             return item.quantity;
         }
@@ -2681,7 +2918,7 @@ impl Agent {
     /// And a basket, because a people that walked in carrying two days of food
     /// carried it in something. Without one an agent holds what two hands hold
     /// and nothing else - see `WHAT_TWO_HANDS_HOLD`.
-    const WHAT_THEY_CARRY: [(&'static str, u32, f32); 3] = [
+    pub(crate) const WHAT_THEY_CARRY: [(&'static str, u32, f32); 3] = [
         ("handaxe", 1, 2.0),
         ("stoneknife", 1, 0.5),
         ("basket", 1, 1.0),
@@ -3303,6 +3540,19 @@ impl Agent {
                         continue;
                     }
 
+                    // And not the axe in his hand or the basket on his back.
+                    //
+                    // Spending the makings on a failed attempt is the honest
+                    // cost of trying things - `trying_a_swap` says so and is
+                    // right. Spending the *substitute* means every trial
+                    // destroys a thing chosen precisely because it was not
+                    // part of the recipe, and nothing said that a man's tools
+                    // and the thing he carries everything in were off that
+                    // list. See `is_this_part_of_the_kit`.
+                    if Self::is_this_part_of_the_kit(put_in) {
+                        continue;
+                    }
+
                     let called =
                         making::what_that_swap_is_called(step.makes, left_out, put_in);
 
@@ -3492,7 +3742,7 @@ impl Agent {
     /// Putting a shaft in the way of something is hard on the shaft, so the
     /// caller is expected to wear it afterwards.
     pub fn what_a_blow_costs_me(&self, coming: f32) -> f32 {
-        let turned = self.how_much_my_tools_help(super::SkillType::MeleeCombat);
+        let turned = self.how_fast_my_tools_make_this_go(super::SkillType::MeleeCombat);
         coming / turned.max(1.0)
     }
 
@@ -3664,37 +3914,195 @@ impl Agent {
         }
     }
 
-    pub fn how_much_my_tools_help(&self, trade: super::SkillType) -> f32 {
-        let bare_hands = Self::what_bare_hands_manage(trade);
+    /// What workmanship is worth at the work, squeezed onto the band.
+    ///
+    /// This was a `clamp`, and a clamp is the wrong shape. The six rungs of
+    /// `Quality` run 0.5 to 2.0 and the band is 0.7 to 1.5, so clamping put
+    /// **both Advanced and Expert on 1.5** - the top two rungs of the ladder
+    /// doing identical work, against "higher quality items... are more
+    /// effective" and "agents with the same type of tool but differing
+    /// quality should finish the same task at different speeds". Two of the
+    /// six rungs were indistinguishable at the end that a settlement spends
+    /// its life climbing towards.
+    ///
+    /// A squeeze keeps the band and keeps the order: the whole quality range
+    /// is mapped onto it linearly, so every rung is worth more than the one
+    /// below and none of them escapes the band.
+    pub fn what_this_workmanship_is_worth(quality: super::skills::Quality) -> f32 {
+        use super::skills::Quality;
 
-        let Some(tool) = self.what_i_have_to_work_with(trade) else {
-            return bare_hands;
-        };
-
-        let Some(carried) = self.inventory.get_item(tool.called) else {
-            return bare_hands;
-        };
-
-        let left = carried.durability_percentage();
         let (worst, best) = Self::WHAT_GOOD_WORK_IS_WORTH;
+        let (lowest, highest) = (
+            Quality::Crude.modifier(),
+            Quality::Masterwork.modifier(),
+        );
+
+        // Hinged on ordinary work rather than stretched from end to end.
+        //
+        // A straight line from the worst rung to the best moves *every* rung,
+        // and the one it moves that nobody asked to move is `Basic` - plain
+        // serviceable work, which is what most things in this world are - so
+        // a flat line quietly taxed the common case by three per cent to
+        // separate two rungs at the top. Hinging at `Basic` leaves ordinary
+        // work worth exactly what it was worth and spreads the rungs either
+        // side of it.
+        let ordinary = Quality::Common.modifier();
+
+        if quality.modifier() >= ordinary {
+            let along = (quality.modifier() - ordinary) / (highest - ordinary);
+            1.0 + (best - 1.0) * along.clamp(0.0, 1.0)
+        } else {
+            let along = (quality.modifier() - lowest) / (ordinary - lowest);
+            worst + (1.0 - worst) * along.clamp(0.0, 1.0)
+        }
+    }
+
+    /// The best a pair of empty hands can turn out.
+    ///
+    /// Not nothing - fingers can twist a cord and shape a lump of clay, and
+    /// the result is serviceable. What they cannot do is fine work.
+    pub const WHAT_BARE_HANDS_CAN_TURN_OUT: super::skills::Quality =
+        super::skills::Quality::Common;
+
+    /// The best thing these hands could turn out at this trade, given what
+    /// they have to work with.
+    ///
+    /// **"An agent with a master crafting level should not be capable of
+    /// making masterwork goods using the worst quality tools. Skill level
+    /// should determine crafting success chance, while tool quality should
+    /// cap output quality."** This is the cap. A man can get a little more
+    /// out of a tool than it deserves - `material_quality_limit` is one rung
+    /// up - and no more than that, so the ladder has to be climbed a tool at
+    /// a time rather than jumped by a good hand alone.
+    pub fn the_best_i_could_turn_out(&self, trade: super::SkillType) -> super::skills::Quality {
+        self.how_well_made_is_what_i_work_this_trade_with(trade)
+            .map(|quality| quality.material_quality_limit())
+            .unwrap_or(Self::WHAT_BARE_HANDS_CAN_TURN_OUT)
+    }
+
+    /// How well made the tool is that this agent would bring to a trade, if
+    /// it has one at all.
+    ///
+    /// Both of the questions the specification asks about tool quality want
+    /// this and nothing else about the tool: what it caps the work at, and
+    /// how badly the work can go wrong with it in the hand.
+    pub fn how_well_made_is_what_i_work_this_trade_with(
+        &self,
+        trade: super::SkillType,
+    ) -> Option<super::skills::Quality> {
+        let tool = self.what_i_have_to_work_with(trade)?;
+        self.inventory.get_item(tool.called)?.quality
+    }
+
+    /// How much of a tool's advantage a worn edge still carries.
+    ///
+    /// A blunt axe is still an axe. A quarter of what the tool is worth is in
+    /// being the right shape at all - a haft, a weight, an edge of some sort -
+    /// and that much survives to the last stroke. The other three quarters is
+    /// the edge, and that wears away with it.
+    pub const WHAT_A_BLUNT_EDGE_STILL_CARRIES: f32 = 0.25;
+
+    /// What is left of a tool's edge, at this much life remaining.
+    ///
+    /// **Gradual, and deliberately not banded.** A step function would make a
+    /// tool at 75% and one at 100% identical and then drop a quarter of its
+    /// worth between 75% and 74%, which is neither how an edge behaves nor
+    /// something an agent could sensibly plan around. This is a straight line
+    /// from a fresh edge to a blunt one, so every stroke of use tells a
+    /// little and none of them tells suddenly.
+    pub fn how_much_edge_is_left(left: f32) -> f32 {
+        Self::WHAT_A_BLUNT_EDGE_STILL_CARRIES
+            + (1.0 - Self::WHAT_A_BLUNT_EDGE_STILL_CARRIES) * left.clamp(0.0, 1.0)
+    }
+
+    /// The tool this agent would bring to a trade, and the three things about
+    /// it that decide what it is worth.
+    ///
+    /// Returns the tool, how well it was made, how much life is left in it,
+    /// and whether it is already in the hand. The two questions worth asking
+    /// of a tool - how fast does this go, and how much comes back - read
+    /// different subsets of these, which is the whole point of separating
+    /// them here rather than collapsing them into one number.
+    fn what_i_am_working_with(
+        &self,
+        trade: super::SkillType,
+    ) -> Option<(&'static crate::environment::making::Tool, f32, f32, f32)> {
+        let tool = self.what_i_have_to_work_with(trade)?;
+        let carried = self.inventory.get_item(tool.called)?;
+
         let how_well_made = carried
             .quality
-            .map(|quality| quality.modifier().clamp(worst, best))
+            .map(Self::what_this_workmanship_is_worth)
             .unwrap_or(1.0);
 
         // An axe in the pack is an axe you have to stop and dig out. It still
         // works - a person is not helpless because the thing is in the bag -
         // but a tool already in the hand is worth appreciably more, and that
         // difference is the whole reason anybody bothers to take one out.
-        let out = if self.is_in_my_hand(tool.called) {
+        let in_hand = if self.is_in_my_hand(tool.called) {
             1.0
         } else {
             Self::WHAT_A_TOOL_STILL_IN_THE_PACK_IS_WORTH
         };
 
-        // A blunt axe is still an axe, so half the gain survives to the end
-        // of its life and the other half wears away with it.
-        1.0 + (tool.how_much_better - 1.0) * (0.5 + 0.5 * left) * how_well_made * out
+        Some((
+            tool,
+            how_well_made,
+            carried.durability_percentage(),
+            in_hand,
+        ))
+    }
+
+    /// How fast the work goes with what this agent has to hand.
+    ///
+    /// **This is the only place durability is allowed to matter.** "Tools
+    /// increase task completion speed or enable task completion... the more
+    /// durable (sharper) the knife, the faster the gathering." A blunt knife
+    /// cuts reeds more slowly than a sharp one; it does not cut fewer reeds
+    /// out of the ones it cuts. What wears away is the rate.
+    ///
+    /// Which currency "faster" is spelled in depends on the job, because this
+    /// model has no clock inside a turn: it is the energy a trip costs, the
+    /// odds that a cast or a throw tells, and the work a turn of making gets
+    /// through. All three are the same quantity - how much of the job one
+    /// turn finishes - and all three read this.
+    ///
+    /// Whether the thing is in the hand or in the pack belongs here too, and
+    /// only here: stopping to dig an axe out of a bag costs time, not timber.
+    pub fn how_fast_my_tools_make_this_go(&self, trade: super::SkillType) -> f32 {
+        let bare_hands = Self::what_bare_hands_manage(trade);
+
+        let Some((tool, how_well_made, left, in_hand)) = self.what_i_am_working_with(trade) else {
+            return bare_hands;
+        };
+
+        1.0 + (tool.how_much_better - 1.0)
+            * how_well_made
+            * in_hand
+            * Self::how_much_edge_is_left(left)
+    }
+
+    /// How much of the job comes back usable, with what this agent has to
+    /// hand.
+    ///
+    /// **Deliberately blind to durability.** "Task output amount should depend
+    /// on quality and technology, as a better quality tool should produce less
+    /// waste. Durability should only apply to speed, not output amount." So
+    /// what decides this is which tool it is and how well it was made, and a
+    /// tool on its last job takes a carcass apart no more wastefully than a
+    /// fresh one - it just takes longer about it.
+    ///
+    /// A tool that is worn *out* still gets nothing, because a tool at no
+    /// durability is not carried into the job at all: see the filters on
+    /// `durability_percentage`.
+    pub fn how_much_my_tools_bring_back(&self, trade: super::SkillType) -> f32 {
+        let bare_hands = Self::what_bare_hands_manage(trade);
+
+        let Some((tool, how_well_made, _left, _in_hand)) = self.what_i_am_working_with(trade) else {
+            return bare_hands;
+        };
+
+        1.0 + (tool.how_much_better - 1.0) * how_well_made
     }
 
     /// What a tool you have not got out is worth against one you have.
@@ -3784,6 +4192,26 @@ impl Agent {
         how_many: u32,
         weight: f32,
     ) -> super::InventoryItem {
+        self.a_tool_fresh_from_these_hands_out_of(called, how_many, weight, None)
+    }
+
+    /// The same, out of makings whose own worth is known.
+    ///
+    /// The hand caps the work, the tool in the hand caps the work, and so
+    /// does what the work is *made of*: a length of crude cordage does not
+    /// become a fine spear because a good man lashed it. `limit_to_material`
+    /// has expressed exactly this since long before I got here and had no
+    /// caller at all - it was a rule written down and never applied.
+    ///
+    /// `None` for makings nobody decided the worth of, which is most of them:
+    /// a flint nodule out of a riverbed is a flint nodule.
+    pub fn a_tool_fresh_from_these_hands_out_of(
+        &self,
+        called: &str,
+        how_many: u32,
+        weight: f32,
+        out_of: Option<super::skills::Quality>,
+    ) -> super::InventoryItem {
         let mut made = super::InventoryItem::new_with_weight(called.to_string(), how_many, weight);
 
         if let Some(tool) = crate::environment::making::EVERY_TOOL
@@ -3798,10 +4226,38 @@ impl Agent {
                 .unwrap_or(tool.helps);
             let hand = self.skills.hand_for(trade);
 
-            let lasts = crate::environment::making::how_long_this_one_lasts(tool, hand);
+            // What the hand would turn out, and what it is working with will
+            // let it. Skill alone used to decide this, so a master with
+            // nothing but a crude flake turned out masterwork - see
+            // `the_best_i_could_turn_out`.
+            let as_good_as_the_hand = super::skills::Quality::from_hand(hand);
+            let as_good_as_the_tools_allow = self.the_best_i_could_turn_out(trade);
+            let quality = match out_of {
+                Some(makings) => as_good_as_the_hand
+                    .min(as_good_as_the_tools_allow)
+                    .limit_to_material(makings),
+                None => as_good_as_the_hand.min(as_good_as_the_tools_allow),
+            };
+
+            // And a better-made thing lasts longer - which this model already
+            // said, through the hand: `how_long_this_one_lasts` takes the
+            // hand that did the making and scales the life by it. Multiplying
+            // in the quality as well **double-counts the same fact**, and
+            // because a founder's work is Crude it does so downwards: every
+            // founder tool lost a quarter of its life. Measured, the whole
+            // batch cost nine more worlds emptied and half the first winters.
+            //
+            // So what is charged here is only the part the hand does not
+            // already account for: how far the tools being worked with held
+            // the work below what the hand would otherwise have turned out.
+            // One when nothing held it back, less when something did.
+            let held_back = quality.tool_durability_modifier()
+                / as_good_as_the_hand.tool_durability_modifier();
+            let lasts = crate::environment::making::how_long_this_one_lasts(tool, hand)
+                * held_back.min(1.0);
             made.current_durability = Some(lasts);
             made.max_durability = Some(lasts);
-            made.quality = Some(super::skills::Quality::from_hand(hand));
+            made.quality = Some(quality);
         }
 
         made
@@ -4159,6 +4615,13 @@ impl Agent {
         // rather than all of the world it has ever seen.
         self.patterns.fade(current_tick);
 
+        // And so do the lessons, on their own season-long clock. A thing tried
+        // once and never again is forgotten, and is new to this agent
+        // afterwards - which is what makes curiosity come back round to it
+        // rather than spending a life on the same forty experiments. See
+        // `Lessons::fade` and `Lessons::how_new_is_this`.
+        self.lessons.fade(current_tick);
+
         // And the country fades with it, on its own arithmetic: a month's
         // grace and then five points a month off any area nobody has been
         // back to. See `agents::whereabouts`.
@@ -4269,7 +4732,7 @@ impl Agent {
         // near perfect health, because the only harm that survived the tick
         // was a broken bone.
         let body_condition = self.body.overall_health() * 100.0;
-        self.state.health = self.state.health.min(body_condition);
+        self.take_health_down_to(body_condition);
 
         // Update energy (basic metabolism)
         self.state.energy = (self.state.energy - 0.1).max(0.0);
@@ -4528,19 +4991,31 @@ impl Agent {
             self.skills.let_unused_skills_rust(current_tick);
         }
 
-        // Recover condition when nothing is wrong. `regenerate_health` had no
-        // callers at all, so agents only ever lost health over a lifetime.
-        let suffering = self.state.is_starving()
-            || self.state.is_dehydrated()
-            || !self.exposure_status.active_exposures.is_empty();
-
-        if !suffering {
+        // Recover condition. `regenerate_health` had no callers at all, so
+        // agents only ever lost health over a lifetime.
+        //
+        // A parched body does not mend, and that one is a cliff on purpose:
+        // water is not the reserve and there is no partial answer to having
+        // none of it. Everything else the old gate tested - hunger, cold,
+        // tiredness - is answered inside `regenerate_health` now, as a share
+        // of what the body has spare rather than as a switch. See #216.
+        if !self.state.is_dehydrated() {
             let resting = self.fatigue.is_sleeping;
-            let body_condition = self.body.overall_health() * 100.0;
-
             self.regenerate_health(resting);
-            self.state.health = self.state.health.min(body_condition);
         }
+
+        // And the cap comes off the gate altogether, because it is not a
+        // reward for being well - it is bookkeeping.
+        //
+        // `take_health_down_to` holds health down to what a broken body can
+        // carry and books the difference to `A_WOUND`. Sharing a gate with the
+        // healing meant **suffering exempted a man from his own wound cap**:
+        // exactly while starving, freezing or dying of thirst, his health was
+        // not held down to his body, and the ledger #209 built went unwritten
+        // in the months people actually die. Two questions, one gate, and the
+        // one that mattered was the one nobody was asking.
+        let body_condition = self.body.overall_health() * 100.0;
+        self.take_health_down_to(body_condition);
 
         // Process fatigue (awake state)
         if !self.fatigue.is_sleeping {
@@ -4603,7 +5078,7 @@ impl Agent {
         // Apply deficiency health penalties
         let penalty = self.nutrition.deficiency_health_penalty();
         if penalty > 0.0 {
-            self.state.lose_health(penalty, "a poor diet");
+            self.state.lose_health(penalty, AgentState::A_POOR_DIET);
         }
 
         // Couple state energy to nutritional reserves.
@@ -4704,7 +5179,7 @@ impl Agent {
 
         // Apply exposure damage to health
         if damage > 0.0 {
-            self.state.lose_health(damage * 10.0, "the weather");
+            self.state.lose_health(damage * 10.0, AgentState::THE_WEATHER);
             // And a soaking in the cold is a thing people came down with,
             // rather than only a thing that wore them down.
             self.a_soaking_may_tell(damage, now);
@@ -4982,15 +5457,33 @@ impl Agent {
     /// # Arguments
     /// * `deceased_id` - UUID of the deceased
     /// * `source` - Source of the death (what killed them)
-    pub fn respond_to_loved_one_death(&mut self, deceased_id: &Uuid, source: super::EmotionSource) {
+    /// Grieve somebody, and be afraid of whoever had a hand in it.
+    ///
+    /// `killed_by` is a person or nobody. It used to be the reckoning's name
+    /// for what took them - "hunger", "the weather" - and that was a fear of
+    /// something nothing can run from: `what_frightens_me_most` reads only
+    /// `Creature` sources and `who_frightens_me_most` only `Agent` ones, so an
+    /// `Event` source was written and never read. See the note in
+    /// `Population::process_deaths` for what it cost.
+    ///
+    /// A death nobody had a hand in leaves sadness and no fear, which is the
+    /// honest answer: there is nothing there to be afraid *of*. What it should
+    /// leave instead - a dread of the winter that took him - is worry rather
+    /// than fear, and is not wired up.
+    pub fn respond_to_loved_one_death(
+        &mut self,
+        deceased_id: &Uuid,
+        killed_by: Option<super::EmotionSource>,
+    ) {
         // Maximum sadness for death of loved one
         if let Some(relationship) = self.relationships.get_relationship(deceased_id) {
             if relationship.is_loved_one() {
                 let sadness_amount = relationship.bond_strength * 0.9;
                 self.emotions.add_sadness_with_traits(EmotionSource::Agent(*deceased_id), sadness_amount, &self.traits);
 
-                // Fear of the source that killed them
-                self.emotions.add_fear_with_traits(source, 0.4, &self.traits);
+                if let Some(killed_by) = killed_by {
+                    self.emotions.add_fear_with_traits(killed_by, 0.4, &self.traits);
+                }
             }
         }
     }
@@ -5547,7 +6040,7 @@ impl Agent {
 
     /// Check if agent can carry additional weight
     pub fn can_carry(&self, additional_weight: f32) -> bool {
-        self.inventory.current_weight + additional_weight <= self.inventory.max_weight
+        self.inventory.current_weight() + additional_weight <= self.inventory.max_weight
     }
 
     /// Get total carrying capacity (base + transport)
@@ -5907,6 +6400,29 @@ impl Agent {
     /// opinion about are recorded.
     /// The particular thing an action attempts, named finely enough to learn
     /// about: `gather:water` rather than `foraging`.
+    ///
+    /// **A lesson is about a verb and the kind of thing it was tried on, and
+    /// the kind has to be in the key or there is no lesson.** Ten of these
+    /// arms threw the object away, so `PickUp` on a tree and `PickUp` on a
+    /// stone were written to the same row and averaged to *picking things up
+    /// works about half the time*. An agent could not learn it cannot lift a
+    /// tree, and could not learn it can lift a stone, because both facts went
+    /// to one place. `gather:`, `eat:`, `craft:`, `store:`, `build:`,
+    /// `examine:` and `Work` already kept it; the rest are brought into line.
+    ///
+    /// **A person is not a kind of thing, and neither is a place.** `Trade`,
+    /// `GiveTo` and `TakeFrom` carry a `Uuid` and `FleeFrom` a coordinate, so
+    /// keying on those would put one row per neighbour and one per tile in a
+    /// map that is meant to hold what an agent knows about *sorts* of thing -
+    /// unbounded, and never twice the same question. What is known about a
+    /// particular person lives in `relationships`, and what is known about a
+    /// particular place in the map memory and in `Patterns`' own `At` and
+    /// `Toward` elements. Those stay as they are on purpose.
+    ///
+    /// `Hunt` is the one that should be keyed and cannot be here: the right
+    /// key is the species - `Patterns` already separates `Did("hunt")` from
+    /// `On("Deer")` - but the action carries only the animal's `Uuid`, and
+    /// this function is handed the action and nothing to look it up in.
     pub fn what_was_tried(action: &Action) -> String {
         match action {
             Action::Gather { resource_type } => format!("gather:{resource_type}"),
@@ -5935,15 +6451,15 @@ impl Agent {
             Action::FleeFrom { .. } => "fleefrom".to_string(),
             Action::Freeze => "freeze".to_string(),
             Action::Examine { what } => format!("examine:{what}"),
-            Action::Equip { .. } => "equip".to_string(),
-            Action::Unequip { .. } => "unequip".to_string(),
-            Action::Dry { .. } => "dry".to_string(),
+            Action::Equip { what } => format!("equip:{what}"),
+            Action::Unequip { what } => format!("unequip:{what}"),
+            Action::Dry { what } => format!("dry:{what}"),
             Action::Boil => "boil".to_string(),
-            Action::Salt { .. } => "salt".to_string(),
+            Action::Salt { what } => format!("salt:{what}"),
             Action::Excavate => "excavate".to_string(),
-            Action::Cover { .. } => "cover".to_string(),
-            Action::PickUp { .. } => "pickup".to_string(),
-            Action::PutDown { .. } => "putdown".to_string(),
+            Action::Cover { what } => format!("cover:{what}"),
+            Action::PickUp { what } => format!("pickup:{what}"),
+            Action::PutDown { what } => format!("putdown:{what}"),
             Action::Trade { .. } => "trade".to_string(),
             Action::GiveTo { .. } => "giveto".to_string(),
             Action::GoWithout { .. } => "gowithout".to_string(),
@@ -7169,7 +7685,7 @@ impl Agent {
             self.inventory.remove_item(item_id, 1);
             self.food_i_ate = self.food_i_ate.saturating_add(1);
             let damage = 10.0;
-            self.state.lose_health(damage, "a blow");
+            self.state.lose_health(damage, AgentState::A_BLOW);
             return EatResult::MadeSick(damage);
         }
 
@@ -7569,7 +8085,7 @@ impl Agent {
 
         // When energy is depleted, health starts decreasing
         if self.state.energy <= 0.0 {
-            self.state.lose_health(0.05, "exhaustion");
+            self.state.lose_health(0.05, AgentState::EXHAUSTION);
         }
     }
 
@@ -7619,11 +8135,47 @@ impl Agent {
         // Base regeneration rate
         let base_rate = if is_resting { 0.1 } else { 0.02 };
 
+        // Mending is work, and work is paid for out of what the body has
+        // spare. A body carrying its whole three-week reserve mends at the
+        // full rate; one that has eaten half of it mends at half; one that has
+        // eaten all of it does not mend at all.
+        //
+        // This used to be a cliff, and the cliff was the wrong shape twice
+        // over. The caller asked `is_starving() || is_dehydrated() || any
+        // active exposure`, and **any** active exposure means Hypothermia,
+        // Frostbite, Hyperthermia, Dehydration or Sunburn at any severity -
+        // which in winter is everybody, always. `is_starving()` is itself
+        // `physiology.is_starving() || energy < 20.0`, and that second half is
+        // the action-energy pool, which is tiredness and not starvation. So a
+        // tired man in mild cold healed at exactly nought.
+        //
+        // The share of the reserve is the same statement without the cliff,
+        // and it needs no number anybody picked: exposure is already in it,
+        // because being cold burns reserve, and so is going hungry. See #216.
+        let spare = self.state.physiology.what_this_body_has_spare();
+
         // Apply healing bonus from nearby medical buildings
         let healing_bonus = self.cached_healing_bonus;
-        let regeneration = base_rate * healing_bonus;
+        let regeneration = base_rate * spare * healing_bonus;
 
         self.state.heal(regeneration);
+    }
+
+    /// Cap health at what the body can carry, and say so.
+    ///
+    /// A broken body holds health down, and until now it did so silently: the
+    /// drop went straight into the field, named nothing, and the reckoning
+    /// went on crediting whatever had spoken last. It is the only drain in the
+    /// model that took health without saying what it was, so every point it
+    /// ever took was booked to something else.
+    ///
+    /// Wounds are the only thing that lowers a body's condition, so that is
+    /// what it is called.
+    fn take_health_down_to(&mut self, body_condition: f32) {
+        if self.state.health > body_condition {
+            self.state
+                .lose_health(self.state.health - body_condition, AgentState::A_WOUND);
+        }
     }
 
     /// Check if agent is dead
@@ -7653,14 +8205,14 @@ impl Agent {
     /// death whatever the calendar says. See `agents::physiology`.
     pub fn apply_starvation_damage(&mut self) {
         if self.state.physiology.starved() {
-            self.state.lose_health(self.state.health, "starvation");
+            self.state.lose_health(self.state.health, AgentState::HUNGER);
             return;
         }
         if self.state.physiology.is_wasting() {
             let days_into_the_reserve = (self.state.physiology.reserve_capacity
                 - self.state.physiology.reserve)
                 / physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY;
-            self.state.lose_health(days_into_the_reserve * 0.5, "starvation");
+            self.state.lose_health(days_into_the_reserve * 0.5, AgentState::HUNGER);
         }
     }
 

@@ -606,6 +606,19 @@ pub const MOLD_CLAY: Working = Working {
     how_many: 1,
     hands: SkillType::Crafting,
     effort: 5.0,
+    // The specification puts this at Stage 0 - "hand-shaped clay vessels, pit
+    // firing, low temperature firing, porous pottery" - and it was made
+    // obvious to match. **It cost 4.9% of person-days and eight of
+    // twenty-one first winters, on both blocks of thirty-two seeded worlds,
+    // and it is back.**
+    //
+    // Why, and it is not about clay. `what_i_would_work_on` breaks down
+    // anything it knows the working for, has the makings of, and holds fewer
+    // than `A_FEW_SPARE` of the output of. It has no notion of whether the
+    // output is worth having. Every other obvious working makes something a
+    // person eats, carries things in, or builds with; a shape in unfired clay
+    // is the first that makes nothing at all, and a people that starts
+    // knowing how spends its winters making them. See ISSUES_FOUND.md #199.
     obvious: false,
     holds: None,
     feeds: None,
@@ -784,6 +797,11 @@ pub const WEAVE_A_BASKET: Working = Working {
 /// as well would have paid a man twice for one trade, and it is the material
 /// that gates this rather than the hand.
 pub const SEW_A_BAG: Working = Working {
+    // `weave`, though the constant is called SEW_A_BAG. It looks like a typo
+    // and is not one: the matrix's `sew` is performed by `MakeClothing`,
+    // which is a different act with a different executor, so moving this
+    // working onto `sew` would route it to the garment-maker and lose it.
+    // The name is the loose thing here, not the verb.
     verb: "weave",
     to: "leather",
     how_much: 3,
@@ -905,7 +923,74 @@ pub const EVERY_WORKING: &[Working] = &[
     SOAK_FLAX,
     FERMENT_FRUIT,
     BOIL_FLOUR,
+    GRIND_NUTS,
+    SPLIT_WOOD,
+    DRILL_ANTLER,
 ];
+
+/// Nuts beaten to a meal between two stones.
+///
+/// Grinding is not crushing and the difference is the point: crushing breaks a
+/// thing open, grinding keeps going until what is left is the same all the way
+/// through. `CRUSH_GRAIN` is the first; this is the second, and it is what
+/// makes a mast year worth anything past the fortnight the nuts keep. A nut
+/// is a hard thing that a body gets little out of whole.
+pub const GRIND_NUTS: Working = Working {
+    verb: "grind",
+    to: "nuts",
+    how_much: 3,
+    makes: "nutmeal",
+    how_many: 3,
+    hands: SkillType::Mining,
+    effort: 8.0,
+    obvious: false,
+    holds: None,
+    feeds: Some(crate::world::ItemType::Flour),
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// A log opened along its grain, which is how you get a straight stick.
+///
+/// Not the same as cutting it: wood splits where it wants to and what comes
+/// off is straighter and stronger than anything carved out of the round. The
+/// shaft of everything in this world is a stave, and until now the only way to
+/// a shaft was to call a log a shaft.
+pub const SPLIT_WOOD: Working = Working {
+    verb: "split",
+    to: "wood",
+    how_much: 2,
+    makes: "staves",
+    how_many: 3,
+    hands: SkillType::Crafting,
+    effort: 6.0,
+    obvious: false,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
+/// A hole worked through a piece of antler, which is a needle.
+///
+/// Antler comes off a deer already - see `fauna::AnimalDrop` - and nothing in
+/// this world has ever done anything with it. It is the right stuff for this:
+/// harder than bone to work and less apt to split, which is why every people
+/// that had deer had antler needles.
+pub const DRILL_ANTLER: Working = Working {
+    verb: "drill",
+    to: "antler",
+    how_much: 1,
+    makes: "needle",
+    how_many: 2,
+    hands: SkillType::Crafting,
+    effort: 9.0,
+    obvious: false,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
+};
 
 /// The working of that verb on that thing, if there is one.
 pub fn how_to_work(verb: &str, to: &str) -> Option<&'static Working> {

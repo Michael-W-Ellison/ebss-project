@@ -111,7 +111,7 @@ impl Simulation {
 
     /// What an agent of this much practice turns a given material into.
     ///
-    /// The generic skill quality curve puts every untrained agent at Pathetic,
+    /// The generic skill quality curve puts every untrained agent at Crude,
     /// and skills start ten levels below untrained, so a first cloak was worth
     /// half of nothing and no agent ever cooked or sewed often enough to climb
     /// out. A first attempt here is crude but wearable, and practice tells.
@@ -125,11 +125,11 @@ impl Simulation {
             .unwrap_or(-10);
 
         match practice {
-            level if level < 0 => Quality::Crude,
-            0..=3 => Quality::Basic,
-            4..=6 => Quality::Moderate,
-            7..=8 => Quality::Advanced,
-            _ => Quality::Expert,
+            level if level < 0 => Quality::Poor,
+            0..=3 => Quality::Common,
+            4..=6 => Quality::Good,
+            7..=8 => Quality::Fine,
+            _ => Quality::Masterwork,
         }
     }
 
@@ -162,7 +162,7 @@ impl Simulation {
             .filter(|item| item.quantity > 0)
             .filter_map(|item| {
                 let recipe = garment_recipe(&item.item_id)?;
-                let quality = item.quality.unwrap_or(crate::agents::skills::Quality::Crude);
+                let quality = item.quality.unwrap_or(crate::agents::skills::Quality::Poor);
                 let wear = match (item.current_durability, item.max_durability) {
                     (Some(current), Some(max)) if max > 0.0 => (current / max).clamp(0.0, 1.0),
                     _ => 1.0,
@@ -182,7 +182,37 @@ impl Simulation {
 
     /// The warmest garment the agent could make right now that would be an
     /// improvement on what it is wearing
+    /// Whether this one is carrying anything that will make a hole.
+    ///
+    /// Asked through `do_these_hands_do`, which is the same question the
+    /// executor asks before it refuses - see `verbs::SEW`. Two spellings of
+    /// "can this man sew" is how a decision layer comes to spend a settlement's
+    /// turns on an action that cannot succeed.
+    pub(in crate::analytics) fn has_something_to_pierce_with(
+        agent: &crate::agents::Agent,
+    ) -> bool {
+        Self::do_these_hands_do(
+            agent,
+            &crate::environment::verbs::Wants::ACapability(
+                crate::environment::tags::Capability::PiercingTool,
+            ),
+        )
+    }
+
     pub(in crate::analytics) fn garment_to_make(agent: &crate::agents::Agent) -> Option<String> {
+        // Nothing to make the holes with, nothing to make.
+        //
+        // The want was put on `sew` and the decision layer was not told, and
+        // the measurement is the reason this line exists: `MakeClothing`
+        // chosen 150,936 times over eight world-years and refused 150,585 of
+        // them - 99.8% - every one of them "Nothing in hand that answers
+        // piercing_tool". That is the shape of #215 and #243, where a gate
+        // the executor enforces and the decision does not know about turns
+        // into the largest refusal in the model.
+        if !Self::has_something_to_pierce_with(agent) {
+            return None;
+        }
+
         let quality = Self::expected_garment_quality(agent);
 
         crate::agents::equipment::GARMENT_RECIPES
@@ -669,6 +699,26 @@ impl Simulation {
 
         if let Some(garment) = Self::garment_to_make(agent) {
             return Some(Action::MakeClothing { garment });
+        }
+
+        // And where the only thing wanting is a point to sew with, getting one
+        // is the errand. Flint answers `PiercingTool`, `smash:stone` makes
+        // flint, and that working is one everybody is born knowing - so the
+        // whole of the want is a stone, and a stone is the commonest thing
+        // there is. This is what makes the tool load-bearing rather than
+        // merely required: wanting a coat is now a reason to go and knap.
+        if !Self::has_something_to_pierce_with(agent) {
+            if agent.how_many_i_have("stone") > 0 {
+                return Some(Action::Work {
+                    verb: "smash".to_string(),
+                    to: "stone".to_string(),
+                });
+            }
+            if self.could_this_gather_come_to_anything(agent, agent_position, "stone") {
+                return Some(Action::Gather {
+                    resource_type: "stone".to_string(),
+                });
+            }
         }
 
         if immediate_only {

@@ -43,9 +43,7 @@ fn one_person() -> Simulation {
     simulation.population.agents[0]
         .inventory
         .get_all_items_mut()
-        .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-    simulation
+        .clear();    simulation
 }
 
 fn set_the_sky(simulation: &mut Simulation, to: WeatherType) {
@@ -274,7 +272,13 @@ fn whoever_is_standing_near_learns_what_the_sun_did() {
     // `Agent::what_anybody_is_born_knowing` - so what is still taken from
     // watching it happen is what it was worth, which is a lesson rather than
     // a discovery.
-    let before = simulation.population.agents[0].lessons.tried_this("dry");
+    //
+    // Keyed by what dried, because `Agent::what_was_tried` writes `dry:<what>`
+    // when somebody lays a thing out on purpose and the two have to be the
+    // same lesson. A bare `dry` read nothing once the object went into the
+    // key, which is what this line is for.
+    let watched = "dry:fishstrips";
+    let before = simulation.population.agents[0].lessons.tried_this(watched);
 
     simulation.world.somebody_left_this(
         a_meal(ItemType::Fish, "fishstrips", 6, 0),
@@ -288,7 +292,7 @@ fn whoever_is_standing_near_learns_what_the_sun_did() {
         simulation.who_saw_that_dry();
     }
 
-    let after = simulation.population.agents[0].lessons.tried_this("dry");
+    let after = simulation.population.agents[0].lessons.tried_this(watched);
 
     assert!(
         after > before,

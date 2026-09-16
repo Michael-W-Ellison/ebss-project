@@ -14206,3 +14206,2587 @@ against 201,777. Knowing where the clay is is worth having and not worth
 crossing a valley for, so the record exists and nothing acts on it. Until
 something does, every improvement to what a map remembers is an improvement to
 a thing only the craft layer reads.
+
+### 197. Where the map already is the first step, and the one place it cannot pay
+
+A survey against the five layers, and one measurement that came out against the
+obvious answer twice.
+
+#### What of the layers is standing
+
+**Layer 1, drives**, and **Layer 4, actions**, are whole. **Layer 3,
+strategies**, is `wanting::strategy` - twenty-four ways declared, fourteen
+reachable, each costed by `Utility` in one currency, each with a `Horizon`. The
+hydration list is the specification's own six, one for one.
+
+**Layer 2, goals, does not exist.** There is no object between a drive and the
+ways of answering it, and so no threshold: "potable_water_quantity >= threshold"
+is nowhere written. What stands in for it is `how_hard_it_presses`, which is a
+pressure rather than a target. Nothing is obviously broken for want of it -
+`Utility::relief` reads that pressure and prices every way against it - but the
+layer the specification names is not there, and a threshold is what would let a
+man stop gathering because he has *enough* rather than because the drive has
+gone quiet.
+
+**Layer 5, capabilities**, is half there. A way that wants a tool asks for it;
+a way that wants a *material* has nowhere to ask, because - see #196 - nothing
+in the decision layer reads a `SpatialMemoryType::Resource` memory at all.
+
+#### Knowing where it is already is the first step, for the things that kill
+
+For water, food and the store the map is consulted before anything else, and
+correctly. `known_source_position` asks the nose, then the spatial memory, then
+the exploration record; there is no omniscience in it. `FetchFromKnownSource`
+is a way that exists only because a place is remembered. Foraging is bounded by
+`FORAGE_RADIUS`, which is one turn of gathering's reach and matches an
+unimpaired agent's sight, so what looks like scanning the world is the
+neighbourhood he is standing in.
+
+One narrow exception worth writing down: **that radius is a constant, so a
+blind agent forages exactly as far as a sighted one.** `Trait::Blind` sets
+`sight_range` to nought and the hunger path never asks. Not measured, because
+the blast radius is however many agents are blind or short-sighted, but it is
+the one place in the food chain where knowing is skipped.
+
+#### And the measurement: ranking a remembered place by worth costs
+
+`known_source_position` chose between remembered places **on distance alone**,
+and `SpatialMemory::value` - how much was standing there - had one reader in
+the whole model, which used it as a boolean. The note on
+`remember_how_much_is_there` says exactly what that means: "an agent remembered
+a spring and a puddle as the same place. Foraging and migration both read this
+store, and both of them chose between remembered places on distance alone."
+
+So: rank them by `what_this_patch_is_worth`, which is the model's one opinion
+about what a trip is worth and is what the gather executor already picks by -
+making the walk and the harvest one opinion instead of two.
+
+Against 218,588 person-days / 48 worlds emptied / 21 out of the first winter:
+
+- **By worth**: 108,345 / 28 / 12 and 102,135 / 27 / 7 - a total of
+  210,480 / 55 / 19. Person-days down 3.1% and 4.3%, **both blocks**; eight
+  more worlds emptied, both blocks.
+- **By worth, discounted by confidence** - the specification's own term, and
+  the obvious diagnosis, since `value` never falls while `confidence` does, so
+  a man banks on a count that may be a month stale: 110,012 / 27 / 12 and
+  101,682 / 29 / 7, a total of 211,694 / 56 / 19. It recovered **a seventh** of
+  what was lost and left the rest.
+
+Reverted. What is left behind is the finding.
+
+#### Why, and it is the third time this model has said the same thing
+
+**Distance is not only a cost here. It is the error-correcting term.** A near
+place is cheap to check, and `forget_location` mends the memory the moment he
+arrives and finds nothing. A far place is a long walk to discover you were
+wrong, and the walk is charged in turns, which are the scarcest thing anybody
+in this world has. Sorting by nearness keeps a man inside a tight loop that
+corrects itself; sorting by remembered worth sends him on errands priced from
+stale information, and the better the remembered place looks the further he
+will go on it.
+
+This is now measured three separate times, in three different mechanisms:
+
+1. **Fetching a material you remember**: 215,333 person-days to 201,777, and
+   four fifths of a settlement's finished burrows. See
+   `what_forgetting_this_would_cost`.
+2. **Putting a place you were told about on your map** (#196): 6.3% of all
+   person-days and two thirds of the first winters.
+3. **Walking to the remembered place that looks richest** (here): 3.2-3.7% of
+   all person-days and eight more worlds emptied.
+
+Three mechanisms, one law: **in this model, acting on a remembered distant
+place loses to acting on what is under your feet.** That is not an argument
+against map memory - the map is what makes water, the larder and the innovation
+path work, and all three are measured. It is a statement about where map
+knowledge can pay, and it says the payoff is in *recognising* and *retaining*,
+not in *travelling*.
+
+Which points at what would have to change first for any of the three to pay:
+the walk is priced at `TURNS_A_PACE_TAKES = 2.0` turns a pace and an agent
+re-decides every tick, so a long errand is both expensive and constantly liable
+to be abandoned half-way. **Until an agent can commit to a trip, a better
+answer further off is worse than a poor answer to hand.** See #214, which is
+the same finding from the other end.
+
+### 198. Layer 2 was never absent. It was distributed, and one goal of six was asked by nobody
+
+Building the goals layer turned out to be mostly a matter of finding it. Four
+spellings, none of them called a goal, and between them they cover five of the
+six goals the specification names:
+
+| What | Where it lives | What it answers |
+|---|---|---|
+| The thresholds | `Preparedness`, `Sustenance` - `ENOUGH_FOOD`, `ENOUGH_MATERIALS`, `ENOUGH_TOOLS` | how much is enough |
+| The commitment | `Errand`, `stick_to_the_errand` | holding to it until it is met |
+| The food reckoning | `provision::WhatIsPutBy` | days in hand against a winter |
+| The name `Goal` | `core::goals` | emotions and property, and neither of the above |
+
+The sharpest of these: **"enough put by to see a winter out" is not a goal
+under Hunger in this model. It was promoted to a drive of its own.**
+`Preparedness` *is* `short_of(food_put_by, ENOUGH_FOOD)` and `Sustenance` is
+the food half of the same. That is a design decision rather than an oversight -
+it is why a full man with an empty pit still goes to work - and it is exactly
+why the layer reads as missing when it is mostly standing.
+
+So `wanting::goal::Goal` does not add a fifth mechanism. It names the six
+goals and, for each, says what enough means **and which of the above already
+asks it** (`who_already_asks_it`). Where a threshold exists it is read from
+where it lives rather than restated, and
+`the_goal_table_and_the_drives_cannot_drift` fails if anybody changes one
+without the other - so naming the layer did not fork the model into two
+opinions about what enough is.
+
+`ImproveLocalShelter` is declared and unanswerable, with the reason, on the
+same footing as `Strategy::reach`: a building has a condition and nothing mends
+one, so there is no better roof to be had.
+
+#### The one goal nobody asks, and why it barely fires
+
+**Obtain potable water.** A container is filled as a side effect of drinking at
+a source, and thirst only rises once the body is already dry, so nobody in this
+model has ever filled a skin against tomorrow. A dry spell then empties a
+world - #189.
+
+It is now taken, and deliberately last of all: only on a turn that would
+otherwise have been spent standing still. A goal that can outrank a pressing
+drive is a drive, and this layer is not for making more of those.
+
+**It fires twenty-eight times in a year, in a world of twelve.** That is 0.007%
+of agent-ticks, and the reason is a Layer 5 gap the goal table made countable:
+
+- 5,589 agent-days sampled over four worlds: **68 with a vessel at all**, which
+  is 1.2%.
+- All 68 of them already had water in it, because drinking fills the skin.
+- Nought short of the goal on any sampled day.
+
+So "obtain potable water" is not unmet in this world, it is **unmeetable**:
+almost nobody has anything to carry water in, and `how_short_of` returns nought
+for a man with no vessel rather than asking for ever. That is Layer 5 gating
+Layer 2 doing exactly what it should, and the number is the finding.
+
+#### Free, and a note on how little it takes to move a seeded world
+
+Against 218,588 person-days / 48 worlds emptied / 21 out of the first winter:
+**217,753 / 49 / 21.** Person-days down 0.4% on both blocks, one more world
+emptied, first winters unchanged. Inside the noise on every measure.
+
+Worth recording for the next person: **twenty-eight substituted turns in one
+world moved that world's year draw count by 8%** - 1,064,189 to 982,776 - and
+its emptying day by thirty-three days. The dice stream is shared world-wide, so
+a handful of `Wait`s becoming `Gather`s re-shuffles everything downstream of
+them. A moved draw count is not evidence that a change did much; it is evidence
+that it did anything at all.
+
+#### What is still not built
+
+- **`core::goals` is left where it stands.** It answers a different question
+  badly, #187 has the measurement, and folding it in would be two changes at
+  once.
+- **A threshold nobody can reach is not a goal.** Until a settlement can make a
+  vessel, `ObtainPotableWater` will go on firing twenty-eight times a year.
+  That is a Layer 5 job and it is the obvious next one.
+- **The commitment half is `Errand`'s and stays there.** #197 argues that what
+  blocks three separate reverted changes is an agent's inability to commit to a
+  long trip; a goal with a threshold does not fix that on its own, because the
+  threshold says when to stop and not how long to persist.
+
+---
+
+### 199. Stage 0 was never written down, and measuring the one disagreement found a defect worth more than the flag
+
+Every technology in this model arrives one of two ways: somebody finds it out,
+or a people simply has it. The second kind is Stage 0, and it had no name and
+no list. It was spelled once per recipe, in `Making::obvious` - thirty-two
+flags with the reasoning in doc comments beside them, no way to ask the model
+what a people starts with, and no way at all to ask what it *ought* to start
+with and be told where the two disagree.
+
+`environment::stage` is that list. Thirty-five development paths, each with
+what a people has in its hands on the first day, what that lets it do, and
+what it cannot do until the path advances. The shape - `Stage { number, .. }` -
+takes the stages after this one without changing.
+
+#### What writing it down found
+
+| | Paths |
+|---|---|
+| Carried whole | 19 |
+| Carried in part | 12 |
+| Not carried at all | 4 |
+
+The four not carried at all are **boatbuilding** (nothing crosses water: no
+swimming, no float, no crossing), **masonry** (nothing is ever stacked: no
+wall, no cairn, no hearth ring), **pottery beyond stoneware** (nothing in this
+model is valued for being looked at, so there is no ornament, bead or
+figurine) and **stoneware**, which is the interesting one - see below.
+
+The twelve half-carried paths are the useful list, because each names the half
+that is missing. Among them:
+
+- **Fire.** Hearths, firewood and cooking all work. Nobody carries an ember,
+  so a fire that goes out is lit from nothing every time.
+- **Fishing.** A rod is obvious and the run is on the calendar. There is no
+  shellfish and no wading, so a river is a thing you fish and not a thing you
+  pick over.
+- **Animal husbandry.** Hunting pressure genuinely shapes prey - animals grow
+  shy where they are hunted, which is Stage 0's first line. Nothing follows a
+  camp, scavenges waste, or is tolerated, which is the rest of it.
+- **Governance.** Households, kinship and feeding children from a parent's
+  stores are all here. There is no leader, and nothing anybody can tell
+  anybody to do.
+- **Water.** Rivers, springs and rain are all drinkable and salt water is
+  worse than nothing. The carrying half is one carved bowl that almost nobody
+  ever makes - #292, restated where somebody counting Stage 0 will trip over
+  it.
+- **Footwear.** Bark boots exist and nothing asks for them, because feet are
+  not a place the exposure model wounds.
+
+#### The one disagreement, and what it cost to try
+
+**Hand-shaping a clay vessel is Stage 0 and this model makes it a discovery.**
+The specification is unambiguous - "hand-shaped clay vessels, pit firing, low
+temperature firing, porous pottery" is where the stoneware path *starts* - and
+`MOLD_CLAY` had `obvious: false`. So it was set true, on the reasoning that
+what is still found out is the fire: "fuel supply and kiln design are required
+for stoneware", which leaves `FIRE_A_POT` a discovery and keeps #156's whole
+narrative at the step the specification puts it.
+
+Against 217,753 person-days / 49 worlds emptied / 21 out of the first winter:
+
+| | Baseline | Shaping made obvious |
+|---|---|---|
+| person-days | 217,753 | **207,080** |
+| worlds emptied | 49 of 64 | **55 of 64** |
+| out of the first winter | 21 | **13** |
+
+Both blocks agreed - block A 9 of 32 first winters, block B 4 of 32 - so it is
+**4.9% of person-days and eight of twenty-one first winters**, well outside
+the ~10% block noise on the measure that moved furthest. It is reverted.
+
+#### And this is the finding: nothing asks whether what a working makes is worth making
+
+The cost is not about clay. `what_i_would_work_on` picks something in the pack
+worth breaking down, and its filters are: a working this agent knows, enough
+of the input to hand, fewer than `A_FEW_SPARE` of the output already, and no
+lesson against it. **There is no filter on the output being worth having.**
+
+It has never mattered, because every obvious working in the table makes
+something a person eats (portions, strips), carries things in (basket, bag,
+bowl) or builds with (flint, leather). A shape in unfired clay is the first
+that makes nothing at all: it holds nothing, feeds nothing, and at Stage 0 it
+is not an ingredient of any step anybody knows, because the only thing that
+consumes a claypot is the firing nobody has discovered yet. So a people born
+knowing how to shape clay spends its winters shaping clay.
+
+The right filter is not "does this hold or feed something" but **"can I eat
+it, carry things in it, or use it in a step I know?"** - which would make a
+claypot worthless at Stage 0 and worth making the day somebody finds out what
+a fire does to one. That is the correct model and it is not a one-line change:
+the same rule would make flint worthless too, since `KNAPPED_TIP_FROM_FLINT`
+is a discovery and `KNAPPED_TIP` takes ordinary stone, so smashing cores would
+stop. Recorded as its own job rather than smuggled in here.
+
+#### What holds the table honest
+
+It is a declaration, in the same sense as `Strategy::reach`, and a declaration
+nothing checks is a wish list. Two rules:
+
+- **`the_stage_table_and_the_making_tables_cannot_drift`.** A path that says a
+  people is born knowing how to make a thing, and a making table that says the
+  thing wants discovering, are two answers to one question. The suite goes red
+  rather than letting both stand. It is also what makes the stoneware row
+  honest: the path says `Short` and claims no born knowledge, so the table and
+  the flag agree about the disagreement.
+- **A Stage 0 product that is also discovered must have a road that needs no
+  discovery.** This one caught what it was written to catch on its first run.
+  A knapped tip is born knowledge off ordinary stone and a discovery off flint:
+  one product, two roads, the second better. That is the innovation path and it
+  is correct. What would be wrong is a product handed over at Stage 0 that can
+  *only* be reached by finding something out.
+
+The table is not a second source of truth about recipes. It names products and
+the recipe tables own them; the coupling is the drift test and nothing else.
+
+#### One test moved, and it is not being claimed as a win
+
+With shaping made obvious, `a_settlement_works_things_out_that_nobody_wrote_down`
+- one of the ten standing failures - passed. It is a single-world test of
+whether anybody notices anything over a year and a season, the dice stream is
+shared world-wide, and the change re-shuffled it. On the reverted tree it fails
+again. Recorded because a failure that flickers on an unrelated change is worth
+knowing about, not because anything was fixed.
+
+#### What is still not built
+
+- **Nothing at runtime reads the table.** Its consumers are the two drift
+  tests and a reader. That is the same footing `Strategy::reach`'s `NotYet`
+  arms sit on and it is deliberate - but it means the table can only make gaps
+  countable, not close them.
+- **`born_knowing` is keyed on the product, not the recipe**, because
+  `Making::obvious` and `Agent::found_out` both are. That is #195's wart
+  inherited, not a new one.
+- **The cross-domain dependencies and the common prerequisites are not
+  modelled.** "Cordage enables sewing, nets, loom use and footwear assembly"
+  is true of the recipe graph by construction - a net needs four lengths of
+  lashing - but "salt access strongly accelerates food preservation" and
+  "tanning chemistry transforms footwear quality" are statements about rates
+  that nothing computes. They belong with the stages after this one.
+- **The stages above zero are the user's to write**, which is the whole point
+  of the `number` field. Nothing here assumes Stage 0 is the last word.
+
+---
+
+### 200. Durability was one number doing three jobs, and one of the three was wrong
+
+"The intention is for tools to increase task completion speed or enable task
+completion... The more durable (sharper) the knife, the faster the gathering...
+Task output amount should depend on quality and technology, as a better quality
+tool should produce less waste. **Durability should only apply to speed, not
+output amount.**"
+
+That is two channels. This world had one. `how_much_my_tools_help` multiplied
+technology, workmanship and wear together into a single number and handed it
+to every question anybody asked about a tool:
+
+| Call site | What the number set | Which channel it wanted |
+|---|---|---|
+| harvest | how much came back off the bush | yield |
+| butchery | how much came off the carcass | yield |
+| a working | how many came off the core | yield |
+| digging a pit | what the hole cost | speed |
+| hunting | the odds a throw told | speed |
+| fishing | the odds a cast told | speed |
+| the tool-planning decision | whether a better one would pay | speed |
+
+So a blunt flake made a man bring home fewer berries as well as taking longer
+over them, which is not what being blunt does.
+
+#### The split
+
+- **`how_fast_my_tools_make_this_go`** - technology, workmanship, **wear**,
+  and whether the thing is in the hand or in the pack. The only place
+  durability is allowed to matter.
+- **`how_much_my_tools_bring_back`** - technology and workmanship, and nothing
+  else. A tool on its last job takes a carcass apart no more wastefully than a
+  fresh one; it just takes longer about it.
+
+Whether the thing is in the hand moved to the speed channel and only there:
+stopping to dig an axe out of a bag costs time, not timber.
+
+**Speed has no single spelling in this model, because a turn is a fixed slice
+of a day with no clock inside it.** It is the energy a trip costs, the odds a
+cast or a throw tells, and the work a turn of making gets through. All three
+are the same quantity - how much of the job one turn finishes - and all three
+now read one function.
+
+#### Gradual, and stated as such
+
+`how_much_edge_is_left` is a straight line from a fresh edge to a blunt one:
+`WHAT_A_BLUNT_EDGE_STILL_CARRIES` (a quarter - being the right shape at all)
+plus three quarters scaled by what is left.
+`the_wear_curve_is_gradual_and_has_no_cliff_in_it` checks that every tenth of
+wear costs the same as every other tenth, so nobody can quietly band it later.
+
+The banded alternative was considered and rejected on its own terms: it would
+make a tool at 76% and one at 100% identical and then drop a quarter of its
+worth between 76% and 74%, which is neither how an edge behaves nor anything
+an agent could plan around.
+
+#### Gathering had no speed channel at all, and giving it one cost 2.3% before it paid
+
+A gathering trip cost a flat ten whether the agent stripped the bush with a
+fresh flake or with its fingernails, so there was nowhere for "the sharper the
+knife, the faster the gathering" to show. Dividing that flat cost through by
+the speed channel is the obvious move and it is **wrong**, in a way worth
+recording because it looks right:
+
+`how_fast_my_tools_make_this_go` answers `what_bare_hands_manage` when there is
+no tool - a quarter for woodcutting, a quarter for fishing, three tenths for
+mining. So dividing by it quadrupled the cost of a barehanded trip. A man with
+nothing in his hands, who had always paid ten, was suddenly charged forty.
+
+| | Baseline | Divided through | Anchored on bare hands |
+|---|---|---|---|
+| person-days | 217,753 | 212,846 | **212,906** |
+| worlds emptied | 49 of 64 | 53 of 64 | **46 of 64** |
+| out of the first winter | 21 | 17 | **22** |
+
+Person-days are the same to within a tenth of a per cent between the two
+versions. **Seven fewer worlds emptied and five more first winters** came from
+nothing but anchoring the ratio so that bare hands pay what bare hands have
+always paid, and the tool is what buys the speed. The lesson generalises past
+tools: *a change meant to reward the top of a ladder can punish the bottom of
+it instead, and the two look identical in the person-day total.*
+
+`what_the_tool_saves_on_a_trip` is the anchored form, and
+`bare_hands_pay_what_bare_hands_have_always_paid` is what stops it drifting
+back. `WHAT_NO_TOOL_CAN_SAVE_YOU` floors it: walking to the patch and back is
+most of a foraging trip and no edge in the world shortens it.
+
+#### What it came to
+
+Against 217,753 person-days / 49 worlds emptied / 21 out of the first winter:
+**212,906 / 46 / 22.** Person-days down 2.2%, **three fewer worlds emptied and
+one more settlement out of its first winter**, with both blocks agreeing on the
+direction of each. Inside the noise on person-days and slightly to the good on
+the two measures that say whether a people lives.
+
+Recorded draw counts moved twice and were re-recorded twice, which is what
+they are for: 8,824 → 8,566 for seed 4242, and 982,776 → 936,464 for seed 0
+over a year.
+
+#### What is still not built
+
+- **The enablement half is only half spelled.** "An agent cannot cut down a
+  tree barehanded" is a hard gate, and this model has one of those only for
+  hunting - `could_bring_it_down`, which refuses anything bigger than a hare
+  to empty hands. Everywhere else enablement is a fraction in
+  `what_bare_hands_manage`, so felling a tree barehanded is a quarter as good
+  rather than impossible. Making it impossible wants a felling action distinct
+  from gathering deadfall, which does not exist: picking up fallen wood is
+  genuinely something hands can do.
+- **Quality's top two rungs still do identical work.** `WHAT_GOOD_WORK_IS_WORTH`
+  clamps the quality modifier to (0.7, 1.5), and both Advanced (1.6) and Expert
+  (2.0) land on 1.5. Under the specification's naming that means Fine and
+  Masterwork cut at the same speed, against "Masterwork - maximum efficiency".
+  Untouched here because it is a quality question rather than a durability one.
+- **Catastrophic break risk and waste rate during manufacture** are named in
+  the specification and have no counterpart in the model.
+- **Quality sits on made items only.** "Poor leather: uneven thickness, tears
+  at stress points" wants it on raw materials too, and a hide off a carcass
+  carries none.
+
+---
+
+### 201. Quality: nearly all of it was built, none of it was connected, and three of my own additions decided the whole measurement
+
+"Higher quality items last longer, are more effective, and decrease task
+completion [time]... Two agents with the same clothing items but of differing
+quality should have different weather resistances... **Skill level should
+determine crafting success chance, while tool quality should cap output
+quality.**"
+
+Almost all of this already existed in `skills.rs` and had no callers. The
+pattern is by now the most reliable single finding about this codebase: the
+machinery is written, the wiring is not.
+
+| Built | Callers before |
+|---|---|
+| `Skill::perform_check(tool_quality)` - success, injury and speed off skill and tool | one, the tailoring branch, passing `None` |
+| `Quality::material_quality_limit` - one rung above the tool, the cap the specification asks for | none outside its own unit test |
+| `Quality::tool_risk_roll_count` - a bad tool rolls the failure check again | reachable only through `perform_check` |
+| `Quality::determine_quality` - skill to quality | reachable only through `perform_check` |
+
+#### What was genuinely missing
+
+- **The cap.** `a_tool_fresh_from_these_hands` set quality from
+  `Quality::from_hand` alone, so a master with nothing but a crude flake
+  turned out masterwork. Output quality is now `min(hand, tool cap)` in both
+  making paths.
+- **A success roll on making anything that is not a garment.** Every other
+  making in the model succeeded on the first attempt whoever tried it, so a
+  first-day knapper turned out spears as reliably as a lifetime's flintsman.
+- **The tailoring branch's tool quality**, which was `None` - the one place
+  that already asked whether an attempt came off asked it as though every
+  tailor worked barehanded.
+- **Two of the six quality rungs were indistinguishable.** The band was
+  applied with a `clamp` and the quality range runs past the top of it, so
+  Advanced and Expert both landed on 1.5 - the top two rungs doing identical
+  work, at the end a settlement spends its life climbing towards.
+
+#### And three things I got wrong, each of which cost more than the wiring gained
+
+| | person-days | emptied | first winters |
+|---|---|---|---|
+| baseline | 212,906 | 46 of 64 | 22 |
+| the specification, wired, with all three faults | 210,960 | 55 | **11** |
+| two removed | 209,212 | 51 | 19 |
+| all three removed | **213,826** | **42** | **26** |
+
+**A second opinion about how long a tool lasts.** "Higher quality items last
+longer" was already true here, through the hand: `how_long_this_one_lasts`
+takes the hand that did the making and scales the life by it. Multiplying the
+quality in as well double-counts one fact - and because a founder's work is
+Crude, `tool_durability_modifier` is 0.75, so it double-counted *downwards*:
+**every founder tool lost a quarter of its life.** What is charged now is only
+the part the hand does not already account for - how far the tools being
+worked with held the work below what the hand would otherwise have turned out.
+
+**A band that moved the rung nobody asked to move.** Spreading the six rungs
+evenly from worst to best separates the top two, which was the point, and
+shifts every other rung while doing it - including `Basic`, plain serviceable
+work, which is what most things in this world are. A flat line quietly taxed
+the common case by three per cent to fix a problem at the top. The band is
+hinged on ordinary work instead, so `Basic` is worth exactly 1.0 as it always
+was and the rungs spread either side of it.
+
+**And the one that mattered most: a spoiled attempt taught despair.**
+`learn_from_this_here(&action, action_result.success, ..)` is fed by every
+action, and a spoiled making went through the same failure path as "no
+materials" and "no fire". So a beginner who spoiled a third of what he tried
+learned that **making does not work** - and a beginner who concludes that
+never practises into a master, which is the entire point of a skill deciding
+the odds. The mechanism defeated itself.
+
+`ActionResult::attempted` separates the two. Being refused means the world
+would not let the work begin, and is worth counting and worth learning from.
+Spoiling the makings means the work began and went wrong, which costs the turn
+and the materials and teaches only that the hand wants practice - which the
+skill has already been given.
+
+**That one change is the difference between 19 first winters and 26.** It was
+caught by `knife_chain_tests::a_settlement_crafts_without_being_refused`, a
+test written long before any of this, whose comment says exactly why: *"a
+refusal is worse than a wasted turn, because it teaches a man that making does
+not work."* The guard was right and had been right for months.
+
+#### Where it landed
+
+Against 212,906 person-days / 46 worlds emptied / 22 out of the first winter:
+**213,826 / 42 / 26.** Worlds emptied and first winters improve **on both
+blocks independently** - block A 24 against 27 and 10 against 8, block B 18
+against 19 and 16 against 14 - which is this project's bar for a trusted
+result. Person-days are up 0.4% overall with the blocks disagreeing on sign,
+so that measure is noise as usual; the two that say whether a people lives are
+not.
+
+So the specification's quality model, wired as asked, is a small net gain -
+and the three-stage measurement is the finding, not the total. **Each
+intermediate version looked like a regression caused by the specification, and
+all three times it was caused by me.**
+
+#### What the success roll costs, and why it stays
+
+A founder sits at −4 or −5 in the making trades, which is `SkillCategory::Low`
+and a 30% failure chance, so roughly a third of a founder's attempts now spoil
+the makings. That is a real tax and it is the specification's: "skill level
+should determine crafting success chance". It is also exactly the bargain the
+tailoring branch has struck since it was written, and the reasoning there
+holds here - it is what makes a dedicated hand quicker as well as better,
+without the model needing a notion of how long a job takes.
+
+Twenty-three `Action::Craft` calls across seven test files became subject to a
+roll. Nine of them asserted success and are given a practised hand, which is
+the right fixture for testing a chain rather than luck; the one test that is
+*about* an unpractised hand improving retries instead, because raising its
+skill would raise the very thing it measures.
+
+#### What is still not built
+
+- **Quality on raw materials.** "Poor leather: uneven thickness, tears at
+  stress points" wants it on what comes off a carcass, and a hide carries
+  none. `limit_to_material` is written and waiting for it.
+- **Catastrophic break risk** and **waste rate during manufacture**, both
+  named in the specification, have no counterpart.
+- ~~**The quality names differ from the specification's.**~~ Done
+  separately, once the measured work was in and could not be confused with
+  it - see #202.
+
+
+---
+
+### 202. The quality ladder now goes by the names the specification gives it
+
+A rename, and worth recording only for the trap in it and the way it was
+proved free.
+
+| Rung | Was | Is |
+|---|---|---|
+| 0 | Pathetic | **Crude** |
+| 1 | Crude | **Poor** |
+| 2 | Basic | **Common** |
+| 3 | Moderate | **Good** |
+| 4 | Advanced | **Fine** |
+| 5 | Expert | **Masterwork** |
+
+#### The trap
+
+**`Crude` appears in both ladders at different rungs.** It is the bottom of
+the specification's and the second of this model's, so a rename done in the
+obvious order - walk the list top to bottom - maps `Pathetic → Crude` first
+and then `Crude → Poor` second, which sweeps the new bottom rung into the
+second one and **collapses two rungs into one**. The enum would still compile,
+every match would still be exhaustive, and the ladder would silently have five
+rungs where it had six.
+
+Doing `Crude → Poor` before `Pathetic → Crude` is all it takes, and the reason
+to write it down is that nothing in the language would have caught the other
+order.
+
+`the_quality_ladder_is_the_one_the_specification_names` pins the six names,
+their order, and that `Common` is the neutral rung where `modifier`,
+`value_multiplier` and `tool_durability_modifier` all read exactly one.
+
+#### Proved free rather than measured
+
+A pure rename should cost nothing, and this project has a cheaper proof of
+that than a two-hour world run: **the recorded draw counts.** If the world
+takes a single different branch, seed 4242 over 120 ticks and seed 0 over a
+year stop rolling the number of times they have always rolled. Both were
+unchanged, so the world is byte-identical and no measurement was needed.
+
+Worth remembering as a general rule for this codebase: *a change that claims
+to be behaviour-preserving can be held to it by the draw counts, in a minute,
+instead of being taken on trust or measured for two hours.*
+
+#### One thing it does break
+
+`Quality` derives `Serialize`/`Deserialize` and serialises by variant name, so
+a save written before this will not load. There are no committed saves and the
+save/load tests round-trip within a run, so nothing in the repository is
+affected - but a save file kept outside it is now stale.
+
+### 203. A stack threw away the workmanship put into it, and quality could not travel from one action to the next
+
+Two halves of one thing: quality was recorded in two places and could not
+survive being put down in either of them.
+
+#### The stacking fault
+
+A pack is a `BTreeMap` keyed by item id - **one entry per kind of thing** -
+so the second coat an agent makes does not sit beside the first, it is merged
+into it by `InventoryItem::absorb`. That function merged the quantity, merged
+the food clock properly (`the_older_clock`, quantity-weighted, fixed years of
+world-time ago in #61), and **dropped the newcomer's quality and durability
+outright**. Whatever the better thing was worth, the stack went on saying what
+it had said before.
+
+That is not an edge case. It is every second coat, every second spear, every
+second flake anybody ever makes.
+
+What makes it worth writing down is that **it had been worked around twice
+rather than fixed, and both workarounds are load-bearing comments in the
+source**:
+
+- `making_clothing` puts a coat on the instant it is finished rather than
+  folding it away, with the comment "an inventory stack carries one quality
+  for the whole stack, so a better second coat merged into the first and was
+  recorded as no better than it... one settlement made two hundred and eighty
+  garments and put on a hundred and sixty."
+- `crafting` throws a worn-through tool away before adding a fresh one,
+  because "stacking would hand the fresh tool the broken one's durability."
+
+Two independent authors hit the same fault, described it accurately in a
+comment, routed around it, and left it. Both routes are still there and both
+are still right on their own merits - a coat on a back beats a coat in a bag -
+but neither is holding anything up now.
+
+The rule is the one sitting immediately above it in the same function: blend
+by how much of each there is.
+
+| | Was | Is |
+|---|---|---|
+| food clock | quantity-weighted blend | unchanged |
+| quality | **discarded** | quantity-weighted blend, `Quality::mixed_into` |
+| durability | **discarded** | quantity-weighted blend |
+
+Two details worth stating because either could have gone the other way:
+
+- **Integer division, so the blend never rounds up.** One masterwork coat
+  among nine plain ones reads as plain. Rounding to nearest would have handed
+  nine plain coats a free rung, which is the same class of lie as the one
+  being fixed, pointing the other way.
+- **An unrecorded lot counts as ordinary, not as nothing.** `None` merged
+  against `Some` the way the food clock does it - "the one record we have
+  stands for the stack" - would let one fine coat make four fine coats.
+  Every reader of this field already treats an unmarked item as `Common`, so
+  the blend does too. `(None, None)` stays `None`: nobody made a blackberry.
+
+#### Where quality attaches
+
+`ItemStack { material_id, quantity }` is the produced-goods channel - what a
+working hands to whatever comes next - and it could not say how good the goods
+were. So a hide skinned with a fine flake and a hide hacked off with a broken
+one arrived indistinguishable and made the same coat. It now carries an
+`Option<Quality>`, and butchery is the first thing to set it: what comes off a
+carcass is as good as the flake that took it off.
+
+That gives `limit_to_material` its first callers. **It had been written down
+since the beginning of the project and called from nowhere but its own unit
+test** - the third cap the specification asks for, one rung above the
+material, sitting in `skills.rs` as a rule in the codebase that was not a rule
+in the model. Both making paths read it now:
+
+- the stone-age chain caps what it turns out at one rung above **the worst of
+  the makings**, read before they are consumed - a spear is a shaft, a point
+  and a lashing, and it is only as good as the poorest of the three;
+- tailoring caps the garment at one rung above **the hide**, which is now the
+  specification's own example running end to end: two agents in the same coat
+  differ in warmth because of a butchering three actions back.
+
+The cap is a cap and not a floor in both places, which has its own tests: the
+best leather in the world does not make a beginner's coat a good coat.
+
+#### A second defect found on the way
+
+`fighting.rs` butchered a kill with `how_fast_my_tools_make_this_go` and
+`getting.rs` butchered the same kill with `how_much_my_tools_bring_back`. How
+much comes off a carcass is a *waste* question, so the yield channel is the
+right one; the speed channel counts a worn edge and a tool still in the pack,
+neither of which has anything to do with how much meat there is. The same kill
+was butchered by two different rules depending on whether it was hunted or
+fought. Now both read the yield channel. This is the third time this codebase
+has lost something to two spellings of one question - see `could_bring_it_down`
+- and the first two both cost measurable behaviour.
+
+#### Measured: null, and why that was the expected answer
+
+| | Before | After |
+|---|---|---|
+| person-days | 213,826 | **213,850** (+0.01%) |
+| worlds emptied | 42 of 64 | **42 of 64** |
+| out of the first winter | 26 of 64 | **26 of 64** |
+
+Both blocks agree, and the two measures that say whether a people lives -
+worlds emptied and first winters - are identical. The recorded draw counts are
+also unchanged, so the world takes the same branches over seed 4242's 120
+ticks and seed 0's year; the twenty-four person-days say something moved
+somewhere across sixty-four worlds and two years, and nothing more than that.
+
+That is the answer this should have given, and it is worth writing down why,
+because a null result is easy to mistake for a change that did not land:
+
+- **A founder is crude-handed and crude-tooled.** Every new cap binds at one
+  rung above Crude, and the hand was already turning out Crude. The material
+  cap and the tool cap agree on every value a two-year settlement actually
+  reaches, so the cap that is now correct was not previously wrong *for these
+  settlements*. It bites when a people climbs, and in two years none of them
+  do.
+- **The stacking fault was worked around at both of its live sites.** Coats go
+  straight onto a back and worn tools are thrown out before a fresh one is
+  added, so the merge that was losing workmanship was rarely reached by
+  anything that had workmanship to lose.
+
+So the effect is latent by construction: it is correctness banked against the
+technology ladder rather than a change in what happens now. Which also means
+the honest thing to say is that this is **unmeasured in the direction that
+matters** - it will first tell when a settlement survives long enough to make
+something better than crude, and the measurement to watch for it is a longer
+run, not this one.
+
+### 204. Everything in this world was addressed by name, so a check written once silently stopped being true
+
+Four things the specification asks for, and they turn out to be one thing
+looked at from four sides: **the model could say what a thing was called and
+could not say what it was.**
+
+#### Tags: what a thing is
+
+`src/environment/tags.rs`. A thing carries every class that is true of it, and
+the classes that sound like drawbacks are as load-bearing as the ones that
+sound like virtues - a fired pot is a food container, a water container **and
+a fragile container**, and without the third nothing in the model can explain
+why anybody would ever prefer a leather bag.
+
+The specification's three worked examples map onto this world's vocabulary
+directly: its gourd is a fired pot, its flint spear is a spear, its cordage
+grass is flax and cotton. And the distinction it draws in passing - a fibre
+*source* is not cordage - is one the recipe chain already made in named steps
+and could not state.
+
+#### Capabilities: what a job wants, and how well a thing answers it
+
+Eight, graded, `0.0` for bare hands and `1.0` for the best answer this world
+has: digging, cutting, piercing, carrying, holding water, roofing, fishing,
+hunting.
+
+**Four of the eight are derived from the tool table rather than declared
+beside it.** `EVERY_TOOL` has said for a long time that a shovel multiplies
+mining by 1.9 and a digging stick by 1.2 - the same fact the specification
+writes as `digging_tool 1.0 / 0.7 / 0.3`, on the axis of the *trade* instead
+of of the *capability*. Writing a second table of digging coefficients would be
+two spellings of one question, which this codebase has paid for at least three
+times, most recently in #203. So the coefficient is a *view*: the fraction of
+the best available advantage a thing delivers, computed as
+`(how_much_better - 1) / (best - 1)`, which puts bare hands at nought by
+construction and renormalises the whole ladder the moment somebody makes a
+better shovel. A test asserts that nothing is described in both places.
+
+The remaining four have no trade behind them and are declared outright. One
+caveat is written into the source rather than hidden: **a capability is only as
+fine-grained as the trade behind it.** `Mining` here is both quarrying stone
+and digging a hole, so a metal axe outranks a shovel as a digging tool - right
+for a seam of flint and wrong for a storage pit. Splitting the trade is the
+fix; papering over it with a second number is not.
+
+#### Three places where a name had gone stale
+
+The point is not tidiness. A check written by name is a check written against
+the world as it stood, and it stops being true as the world moves on - silently,
+because nothing fails.
+
+1. **A pit could only be lined with a bowl or a basket.** `Pit::is_lined` was
+   `matches!(item_id, "bowl" | "basket")`, written when those were the only
+   vessels there were. A settlement that had got as far as *firing pots* -
+   several technologies past carving a bowl - had nothing to line a pit with
+   and stored its winter in bare earth. Lining is worth double what the hole is
+   worth on its own.
+
+2. **Every tent ever raised in this model was poles and air.**
+   `BuildingType::SkinTent` has declared since it was written that it wants
+   eight wood and four hides, and two separate comments say so. The builder
+   resolved a `ResourceType` to an item name with a `match` of three arms -
+   wood, stone, iron - and `continue`d on everything else, in the checking pass
+   *and* in the consuming pass. The hides were neither required nor taken.
+   Four of the nine distinct requirements in the building table match no arm.
+
+   It is now asked for as the specification writes it - poles, a flexible
+   covering, cordage - which also means a people who scraped their hides into
+   leather can roof with the leather, where by name they could not. **This
+   makes tents dearer**, and the measurement below is the thing to read.
+
+3. **`POUR` wanted a waterskin, and there is no waterskin.** Nothing in this
+   world's recipe chain makes one; the vessels it can make are a bowl, a fired
+   pot, stoneware and a leather bag. The want was unsatisfiable by
+   construction, so had the verb ever been performed it would have been refused
+   every single time. A test now asserts that no verb wants a thing this world
+   cannot make or dig up.
+
+#### Satisfiers against enablers
+
+"Hydration is satisfied by water. A gourd is a transport/storage enabler."
+
+Obvious written down, and exactly the confusion a goal system falls into when
+it is built out of preconditions alone: a planner that scores *has water
+container* as progress towards *not being thirsty* will send a dying man to
+fetch a pot. `Satisfier` and `Enabler` are separate types, so the two cannot be
+added up.
+
+The strategy layer already had the ways and their prices. What it did not have
+was any statement of which of the things a way needs is the point and which are
+the means - and `TradeForWater`, the one of the specification's six ways this
+world had not named, which arrives declared and out of reach.
+
+The useful product is a distinction I did not expect to have to draw. `Reach`
+has always carried a sentence of prose about what is missing, and translating
+those into the enabler vocabulary showed that **they are not all the same kind
+of missing**:
+
+| kind | example | fixed by |
+|---|---|---|
+| a thing | nothing is left out in the rain to catch it | giving somebody a thing |
+| a mechanism | there is no water table, so a well has nowhere to go | modelling something |
+| wiring | building is answered by Construction and not by Shelter | connecting two things that exist |
+
+`the_enabler_it_waits_on` returns `None` for the last two on purpose. Reading
+them as enabler shortfalls would say a settlement could sink a well if only
+somebody fetched a better shovel, which is false and would send people after
+shovels. Two ways wait on a vessel, which makes "give a settlement something to
+carry water in" worth two ways rather than one - the sort of sum the vocabulary
+exists to let anybody do.
+
+#### Actions as operators
+
+The verb matrix already held three of the six things the specification asks for
+under other names: `targets` and `wants` are the preconditions, `changes` are
+the effects. Inputs, costs and risks were nowhere, and skill was nowhere.
+
+The distinction worth being careful about is **wants against inputs**: a knife
+is *wanted* and comes back out of the job, a hide is an *input* and does not.
+Conflating them is how a model ends up eating its own tools - every verb that
+wanted one would consume one, and a settlement would burn a knife per hide.
+
+`Wants::ACapability` is the live wiring of the tag layer into the matrix, and
+it earns its place immediately in the errand layer: when somebody is short of
+what a verb wants, the candidates to go and make are now *everything that
+answers the want, best first*, rather than the one thing somebody typed into a
+match arm.
+
+`FILL` is the specification's worked operator written out in full, with
+`done_by: None` - **nothing in this simulation fills a container.** Drinking is
+done at the water or out of what somebody is already carrying, and how the
+carrying came about is a question the model has never asked. A verb declared
+and unperformed is a gap somebody can count; the same argument as
+`everything_still_to_build`, one level down, and `everything_still_to_price`
+counts the other half.
+
+#### Measured: exactly null, and the reason is a finding of its own
+
+| | Before | After |
+|---|---|---|
+| person-days | 213,850 | **213,850** |
+| worlds emptied | 42 of 64 | **42 of 64** |
+| out of the first winter | 26 of 64 | **26 of 64** |
+
+Not "within noise" - **identical**, down to the day each of the forty-two
+worlds emptied and the tally of what took every one of the 773 dead. The
+recorded draw counts are unchanged too. Standing suite failures held at ten.
+
+That is a stronger result than it looks, because it is not consistent with
+"the changes are small". A tent that now costs four hides and two cordage
+where it cost nothing would move the pack, and a moved pack diverges the world
+within a day. Identical output means the path is **never taken**.
+
+So it was counted rather than inferred. Over eight worlds and a year:
+
+```
+roofs somebody started, and how many were finished:
+  Burrow           started    13   finished     9
+```
+
+**Not one tent, in eight worlds, in a year.** The source calls a skin tent
+"what stands between a stone-age people and the weather", and between a fifth
+and a quarter of everybody who dies in these runs dies of the weather. The
+burrow - added as the way out for a people with neither timber nor skins - is
+the only roof anybody ever raises, and it is worse than a tent in every way
+except that it can be built.
+
+Which recasts what was fixed here. A tent made of poles and air was not
+costing this model anything, because no tent was ever made of anything. The
+defect was real and the fix is right; what the measurement says is that
+**shelter is blocked somewhere upstream of the materials**, and that is the
+thing worth going after next. The same is true of the pit lining: a settlement
+would have to fire a pot to feel it, and none does inside two years.
+
+A null that is *exactly* null, on a change that could not have been null if
+the code had run, is worth more than a null within noise. It says where the
+live edge of the model is.
+
+### 205. Shelter is not blocked by shelter: a tool famine, a stone famine, and a pack with no room in it
+
+#204 ended on a count that did not fit its own explanation - thirteen burrows
+started and nine finished across eight worlds in a year, and **not one tent** -
+and concluded that shelter was blocked somewhere upstream of its materials.
+This is where. Every link below is counted over the same eight worlds and one
+year, twelve founders each.
+
+#### 1. Every refusal of a roof is a missing tool, and not one is a missing material
+
+```
+Build          11,817 attempted   11,722 refused  (99.2%)
+  11,722  Build: Nothing in hand that is any use for Mining
+```
+
+That is the **whole** of the refusal record for building. Not one refusal says
+"no wood in hand" - which is what a tent short of poles would say - because
+`Action::Build { structure_type: "tent" }` **is never issued at all**. The
+11,817 are burrows, refused at the verb matrix before the executor is reached,
+because `BURROW` wants something to dig with.
+
+So the materials fix in #204 was correct and was never going to show: the roof
+branch does not get as far as materials.
+
+#### 2. Tool ownership collapses inside the first month
+
+Of everybody alive, sampled monthly:
+
+| month | alive | something to dig with | a knife |
+|---|---|---|---|
+| 0 | 96 | 96 (100%) | 96 (100%) |
+| 1 | 93 | 8 (**9%**) | 7 (8%) |
+| 3 | 82 | 2 (2%) | 1 (1%) |
+| 7 | 57 | **0** | **0** |
+| 10 | 58 | 0 | 0 |
+
+The founders' handaxe and stone knife wear out - forty uses and thirty - and
+are never replaced. From month seven nobody in any world has anything to dig
+with, for the rest of the run.
+
+The nine burrows that do get finished are dug in the window where the founders'
+axes still have life in them. That is the whole of this model's shelter.
+
+#### 3. They *can* remake a tool. They have no stone to do it with
+
+Nothing bars the way: `HAND_AXE` and `STONE_KNIFE` both want **nothing in
+hand**, so the chain restarts bare-handed - two stone into a knapped tip, two
+flax into a lashing, and the two together into a fresh axe.
+
+They have the fibre all year and never the stone:
+
+| month | carrying stone (2 stone, a tip, or a flint) | carrying fibre |
+|---|---|---|
+| 1 | 13 | 37 |
+| 2 | 5 | 39 |
+| 3 | 1 | 28 |
+| 4 | **0** | 22 |
+| 7 | 0 | 5 |
+
+#### 4. Why there is no stone: a stone weighs five and a pack has one unit free
+
+| month | mean room left in a pack | mean pack capacity | people with room for one stone |
+|---|---|---|---|
+| 0 | 38.5 | 42.0 | 96 (100%) |
+| 1 | **0.7** | 13.9 | 2 (2%) |
+| 4 | 1.5 | 12.3 | 9 (11%) |
+| 9 | 0.8 | 11.7 | 2 (4%) |
+
+**A stone weighs 5.0 units. From the end of the first month a pack has between
+0.7 and 1.9 units of room in it.** Two to seventeen per cent of people can fit
+a single stone, and a knapped tip wants two. `PickUp: No room for it` is
+refused 6,298 times, and that is the shape of it.
+
+Note the second column as well, which is a separate question and a sharp one:
+**pack capacity itself falls from 42 to about 12 within the first month** and
+stays there. That is not the pack filling up - it is the pack getting smaller.
+`update_inventory_capacity_from_transport` computes it from
+`how_much_this_body_can_lift()`, age and whether a hand has a child in it, and
+something in that product drops threefold in thirty days. I have not chased
+which; it is the sharpest single lead here.
+
+#### 5. And the tent, separately, is gated on a thing that does not exist
+
+`raising_a_roof` reads `SkinTent.requirements()` - eight wood, four hides -
+and takes whichever it is shortest of. Wood it can gather: 90 of 96 people
+held eight at some point. Hides it cannot:
+
+```
+Hunt               50 attempted   41 refused
+people who ever held one hide:  0 of 96
+most hides anybody held at once: 0     (a tent wants 4)
+```
+
+**Not one person in ninety-six person-years ever holds a single hide.** So the
+hide arm - hunt, or failing that dig in - is the only arm the tent branch ever
+takes, and the burrow is not a fallback in this model. It is the only thing
+there is.
+
+#### What this actually is
+
+One root with four symptoms, and only the last of them looks like shelter:
+
+- nothing to dig with → **no burrows** after month one;
+- nothing to dig with → **`Excavate` refused 8,020 of 8,095 (99.1%)**, which
+  is the larder, which is the winter store. That is issue #243 from the other
+  end;
+- nothing in hand for Crafting or Leatherworking → **`Work` refused 5,621 of
+  10,092**;
+- and no hides, ever → **no tent**, which is what #204 went looking for.
+
+Shelter is blocked by a tool famine. The tool famine is a stone famine. The
+stone famine is a pack with a unit of room in it and a stone that weighs five.
+
+#### What would move it, in the order I would try
+
+1. **Find out why a pack shrinks from 42 to 12 in a month.** It is one
+   product of three terms and it is measurable in an afternoon. If it is
+   wrong, everything above unblocks at once and nothing needs rebalancing.
+2. **Let a working stock be counted against what it is for.** The gate that
+   decides whether a thing is worth picking up is weight against a third of
+   the pack; a stone is five units against a working stock of under six even
+   at full strength, so a knapped tip is at the edge of possible on a good day
+   and off it on every other.
+3. **Let somebody make a tool out of what is under their feet without
+   carrying it home.** Knapping happens where the stone is; the model makes
+   people carry the stone to the decision instead.
+
+None of these is a shelter change, which is the point.
+
+### 206. The pack shrinks because an experiment that cannot succeed eats the basket, and 156 tools, and 2,210 units of food
+
+#205 left a number hanging: pack capacity falls from 42 to about 12 within a
+month and stays there, and I flagged it as the sharpest lead without chasing
+it. This is it, and it turns out to be the same root as the tool famine above.
+
+#### The arithmetic is not about bodies at all
+
+`WHAT_TWO_HANDS_HOLD` is 12. A basket is `TransportType::Backpack`, which adds
+30. **42 is a basket. 12 is two hands.** Nothing in between.
+
+The other terms of `update_inventory_capacity_from_transport` never move:
+
+| month | mean pack | holds a carrier | has a transport | mean lift | age factor | a child in hand |
+|---|---|---|---|---|---|---|
+| 0 | 42.0 | 96 (100%) | 96 (100%) | 1.00 | 1.00 | 0% |
+| 1 | 13.9 | 6 (**6%**) | 6 (6%) | 1.00 | 1.00 | 0% |
+| 4 | 12.3 | 1 (1%) | 1 (1%) | 1.00 | 1.00 | 0% |
+| 7 | 12.0 | **0** | 0 | 1.00 | 1.00 | 0% |
+
+`how_much_this_body_can_lift()` is **1.00 for the whole year**. The age factor
+holds at 1.00 until month nine. Nobody has a child in hand. So the guess in
+#205 - that a weakening body carries less - is wrong, and it is worth saying
+so plainly: the body never weakens in this respect at all. `has a transport`
+tracks `holds a carrier` exactly, so the transport machinery is working
+correctly too.
+
+The basket simply leaves the pack. Of ninety-six founders, ninety-five lose
+theirs: **29 in the first week, 60 in the first month, 6 in the first season.**
+
+#### Where it goes
+
+A backtrace on the first removal, which took one short run:
+
+```
+ebss::agents::agent::Inventory::remove_item
+ebss::analytics::doing::making::…::trying_a_swap
+```
+
+`Action::TrySwapping` - putting the wrong thing where a part goes, which is
+how a people is meant to get past what it already knows how to make.
+
+`trying_a_swap` says what it does, in a comment, and means it:
+
+> The materials go whether it works or not. That is the whole cost of trying
+> things: a man who puts a lump of iron where the flake goes has spent a stick
+> and a length of cord and has a lump of iron tied to a stick.
+
+That is a fair rule. The problem is what it is applied to. `what_i_would_swap`
+walks **every stack in the pack** looking for something to put in, with three
+filters: the stack is not empty, it is not already an input to the step, and
+the lesson has not already been learned. **Nothing excludes a tool, a vessel,
+food, or the thing everything else is being carried in.**
+
+And the model already knows better twenty lines away. `what_i_would_set_down` -
+the rule for what a person sheds when the pack is too full - reads:
+
+```rust
+.filter(|(name, _)| !making::EVERY_TOOL.iter().any(|tool| tool.called == name))
+.filter(|(name, _)| !Self::WHAT_CARRIES.iter().any(|(called, _)| *called == name))
+```
+
+**Two places decide whether a thing may leave the pack, and only one of them
+has the rule.** A man will not put his basket down to make room for food, and
+will cheerfully destroy it on the chance that a basket is what a digging stick
+was missing. That is this project's signature defect - two spellings of one
+question - for the third time in as many issues; compare the butchery channels
+in #203 and the name-versus-class checks in #204.
+
+#### What it costs, counted
+
+Over eight worlds and a year, `trying_a_swap` destroyed **4,629 items** and
+succeeded **zero times** (`TrySwapping`: 11,391 attempted, 11,391 refused):
+
+| | |
+|---|---|
+| baskets | **150** |
+| tools | **156** (53 handaxe, 35 diggingstick, 31 sharpenedstick, 24 spear, 13 stoneknife) |
+| vessels | 47 (25 claypot, 22 bowl) |
+| food | **2,210** (574 fish, 406 roots, 400 legumes, 372 food, 260 nuts, 107 grain, 70 meat, 21 greens) |
+| materials | 634 wood, 405 lashing, 274 stone, 272 cotton, 208 flax, 22 knappedtip |
+
+Ninety-six founders start with a basket, so a hundred and fifty is every
+founder's and then some. A hundred and fifty-six tools is most of the tool
+famine in #205 - the founders' axes are not only wearing out, they are being
+fed into a machine that cannot return anything. And two thousand two hundred
+units of food, in a model where hunger is the commonest single cause of death.
+
+#### And it cannot succeed. Not "does not" - cannot
+
+`EVERY_SWAP` has three entries, and in a stone-age settlement every one of them
+is unreachable **by construction**:
+
+| swap | wants | why it never fires |
+|---|---|---|
+| thong for cord | `hides` | #205: nobody in ninety-six person-years ever holds one |
+| blade for flake in an axe | `metalblade` | wants smelting, which no settlement reaches |
+| blade for flake in a spear | `metalblade` | the same |
+
+So the zero success rate is not bad luck and not a tuning problem. In every
+world this model can currently produce, `TrySwapping` is a pure destructor.
+That is the counted half of standing issue #191.
+
+#### What would fix it, cheapest first
+
+1. **One function for "may this leave the pack".** `what_i_would_swap` should
+   ask what `what_i_would_set_down` asks. Two filters, and it is the same rule
+   in both places rather than a second copy - the lesson of #203.
+2. **Do not offer a swap whose substitute the world cannot supply.** An
+   experiment nobody can run should not be proposed at all, let alone charged
+   for. `Strategy::reach` already has the vocabulary for saying so.
+3. **Reconsider what an experiment costs.** Spending the makings on a failed
+   attempt is right; spending the *substitute* as well means every trial
+   destroys a thing chosen precisely because it was not part of the recipe.
+
+None of these is measured yet. Each changes behaviour, and 2,210 units of food
+a year is large enough that removing the loss could move the headline in either
+direction - a settlement that keeps its food also breeds sooner.
+
+### 207. One rule for what may leave the pack: the chain unblocks, and food becomes the constraint
+
+The first of the three fixes #206 named. `what_i_would_swap` now asks the
+question `what_i_would_set_down` was already answering, through one function
+(`Agent::is_this_part_of_the_kit`) rather than two copies of a filter. A man's
+tools and the thing everything else is carried in are not spare - not to make
+room for supper, and not on the chance that a basket is what a digging stick
+was missing.
+
+Nine lines of change. Food is deliberately **not** in the shared rule: the
+shedding path excludes it for a reason local to shedding (you shed to make room
+*for* food), and folding in a third change would have made the measurement
+unreadable.
+
+#### The chain unblocks, comprehensively
+
+Eight worlds, one year, twelve founders. Both columns are the same harness:
+
+| | before | after |
+|---|---|---|
+| mean pack at month 1 | 13.9 | **42.0** |
+| holding a carrier at month 1 | 6% | **100%** |
+| something to dig with, month 1 | 9% | **52%** |
+| something to dig with, month 6 | 4% | **92%** |
+| burrows started / finished | 13 / 9 | **206 / 189** |
+| `Build` refused | 11,722 of 11,817 (99.2%) | 1,093 of 2,688 (**40.7%**) |
+| `Excavate` refused | 8,020 of 8,095 (99.1%) | 899 of 1,232 (**73%**) |
+| `Craft` attempted | 1,182 | **5,435** |
+| `TrySwapping` succeeded | 0 of 11,391 | **2** of 6,663 |
+
+**Twenty-one times as many roofs finished.** The larder goes from one success
+in a hundred to one in four. And `TrySwapping` succeeded for the first time in
+this project's recorded history - twice - because agents now live with their
+materials long enough to hold a hide and a length of flax at once.
+
+Every one of those was a symptom named in #205. All of them moved, and moved
+together, which is what a correctly identified root cause looks like.
+
+#### And survival does not improve
+
+Two blocks of thirty-two seeded worlds, two years:
+
+| | before | after |
+|---|---|---|
+| person-days | 213,850 | **212,527** (−0.6%) |
+| worlds emptied | 42 of 64 | **44 of 64** |
+| out of the first winter | 26 of 64 | **24 of 64** |
+| deaths | 773 | **1,193** |
+
+Person-days is flat - six tenths of a per cent, against a block-to-block noise
+of about ten. The other two look slightly worse and **the blocks disagree in
+direction**: block A emptied one world fewer and held its first winters level,
+block B emptied three more and lost two. By this project's own rule a result is
+only trusted when both blocks agree, so the honest statement is *no measurable
+effect on survival*, not *slightly worse*.
+
+What did move, in both blocks and by a lot, is the shape of the year:
+
+| | before (A / B) | after (A / B) |
+|---|---|---|
+| population at month 3 | 10.9 / 10.8 | 9.8 / 10.2 |
+| population at month 6 | 10.5 / 10.7 | 9.2 / 9.6 |
+| **population at month 9** | 7.9 / 7.8 | **10.0 / 10.9** |
+| hunger's share of deaths | 35.5% / 39.1% | **46.9% / 52.2%** |
+| the weather's share | 22.6% / 19.0% | 13.6% / 14.9% |
+
+Fewer people at three and six months, half as many again at nine, and the
+collapse at the year mark unchanged. Deaths up by half while person-days holds:
+the settlement turns over faster.
+
+#### Why, and it was predicted in this repository years before I got here
+
+The docstring on `WHAT_TWO_HANDS_HOLD` records a sweep of exactly this:
+
+> A bigger pack is not a kindness. What it buys is turns: at 120 the share of
+> the settlement's turns spent on `Work` rises by twenty-seven per cent and the
+> share spent on `Eat` falls, because a person with materials in hand has
+> something to make and making competes with eating.
+
+That is what happened. Restoring the basket restored the forty-two-unit pack
+the founders were always meant to have, agents filled it with materials,
+`Craft` went up four and a half times and `Work` by a quarter - and hunger went
+from a third of deaths to a half while the weather's share fell by a third.
+
+**The block is gone and the binding constraint has moved.** Shelter, tools and
+the larder are no longer what stops a settlement; food is, and harder than
+before. That is a better model than the one that preceded it - it is doing
+what its own source says it does - and it is not yet a longer-lived one.
+
+#### What this change is and is not
+
+It is a correctness fix, and I would keep it on those grounds alone: an action
+that cannot succeed in any world this model can produce was destroying 150
+baskets, 156 tools and 2,210 units of food a year, and two places deciding
+whether a thing may leave the pack now hold one rule between them.
+
+It is not a survival improvement, and nothing here should be read as one.
+
+The draw counts are re-recorded (8,733 → 8,936 over 120 ticks; 847,722 →
+603,478 over a year - the year count falls by a third because the settlements
+are smaller for most of it). Standing suite failures unchanged at ten.
+
+The next thing to try is not the other two fixes from #206 - those are small
+and will not move food. It is the hunger constraint itself, now that it is
+the one holding.
+
+#### Measured again, four blocks a side, and one thing above is wrong
+
+The two blocks in the table above were not enough to separate a small effect
+from noise, so the whole thing was re-run on two fresh seed blocks - and
+**before as well as after**, because a new block with no matching baseline
+answers nothing. Both binaries were built from the two commits, checksummed
+apart, and smoke-tested on one seed to prove they were not the same program
+twice.
+
+| block | seeds | person-days before | after | | worlds emptied | out of the first winter |
+|---|---|---|---|---|---|---|
+| A | 0–31 | 105,533 | 103,958 | −1.5% | 24 → 23 | 10 → 10 |
+| B | 32–63 | 108,317 | 108,569 | +0.2% | 18 → 21 | 16 → 14 |
+| C | 64–95 | 107,942 | 103,229 | −4.4% | 24 → 24 | 15 → 14 |
+| D | 96–127 | 102,875 | 99,678 | −3.1% | 27 → 28 | 8 → 10 |
+| **all** | | **424,667** | **415,434** | **−2.2%** | **93 → 96** of 128 | **49 → 48** of 128 |
+
+**The correction.** On two blocks I read worlds emptied and first winters as
+"slightly worse, but the blocks disagree". On four blocks that does not hold:
+**first winters is flat** - 49 against 48 out of 128, which is one settlement -
+and worlds emptied moves by three in a hundred and twenty-eight, 72.7% to
+75.0%, inside what a block of this size varies by anyway. The measure I said
+looked worse is the one that turns out to be level.
+
+What does survive four blocks is the measure I called flat: **person-days are
+down about two per cent, and three of the four blocks agree.** Per block:
+−1.5%, +0.2%, −4.4%, −3.1%; mean −2.2% with a spread of about four and a half
+points, which is roughly two standard errors. That is weak evidence of a real
+small loss rather than proof of one - but it is the only survival signal in the
+set that points anywhere consistently, and it points down.
+
+So the honest summary, on 128 worlds a side:
+
+- **the chain unblocks, enormously** - twenty-one times the roofs, the larder
+  from one success in a hundred to one in four, and every symptom in #205
+  moving together;
+- **survival is flat to two per cent worse**, and nothing here is an
+  improvement in how long a people lasts.
+
+Both halves of that were true after two blocks as well. What the extra hour
+bought was knowing which of the three survival numbers to believe, and it was
+not the two I would have guessed.
+
+### 208. Hunger does not kill half of them. It lands the last blow on people a fight had already half killed, and when it does bite it bites people who are carrying food
+
+#207 ended with hunger at about half of all deaths and the binding constraint
+apparently moved to food. Chasing that turns up three separate things, and the
+first is that the death tally has been misread - by me, and by every note in
+this file that has quoted it.
+
+Eight worlds, one year, twelve founders, all figures counted.
+
+#### 1. The cause of death names the last straw, not the load
+
+`AgentState::lose_health` keeps one field, `what_last_took_health`, and the
+death tally is built from it. So a death is credited to whatever removed the
+final point of health, however little of the damage that thing did.
+
+Tallying every call to `lose_health` by what it actually took:
+
+| | health taken | share | kills | share of kills |
+|---|---|---|---|---|
+| **a blow** | **7,261** | **47.6%** | 36 | 25.9% |
+| **hunger** | 5,101 | 33.5% | **58** | **41.7%** |
+| the weather | 1,057 | 6.9% | 17 | 12.2% |
+| a fall | 747 | 4.9% | 3 | 2.2% |
+| illness | 713 | 4.7% | 4 | 2.9% |
+| starvation | 272 | 1.8% | 8 | 5.8% |
+| thirst | 90 | 0.6% | 13 | 9.4% |
+
+**Violence takes nearly half the health in this world and is credited with a
+quarter of the deaths. Hunger takes a third and is credited with two fifths.**
+
+The bias is structural rather than random: hunger is a *drip*, applied every
+turn of forty-eight in a day that a body is wasting, and a blow is a *lump*.
+Whatever else has ground a body down, the thing most likely to remove its last
+point is the one that fires most often. Any cause that ticks will out-rank any
+cause that strikes.
+
+This matters beyond the arithmetic. The month-by-month figures show mean health
+falling from 100 to **51.1 in the first month** while the reserve sits at 99%
+and not one agent in the sample is wasting. Half of everybody's health goes in
+the first month to something that is not food at all.
+
+#### 2. Nobody is chronically hungry, and hunger still does a third of the damage
+
+| month | mean reserve | mean health | wasting |
+|---|---|---|---|
+| 0–7 | **99–100%** | 100 → 57 | 0–2% |
+| 8 | 91% | 70 | 2% |
+| 10 | 64% | 71 | 24% |
+
+**2.5% of all agent-turns are spent below half the reserve.** Wasting spells
+are short: median 3.2 days, mean 5.0. The reserve is full nearly all the time,
+and only 2.1% of the dead have an empty one.
+
+So two and a half per cent of the turns produce a third of all the health lost.
+The drain is `0.1 / share` per turn, where `share` is what a body of that age
+eats relative to a grown adult:
+
+| | per turn | per day | dead from full health in |
+|---|---|---|---|
+| adult (share 1.00) | 0.1 | **4.8** | 20.8 days of wasting |
+| nine-year-old (0.50) | 0.2 | 9.6 | 10.4 days |
+| toddler (0.20) | 0.5 | **24.0** | **4.2 days** |
+
+against healing of 0.02 a turn, **0.96 a day** on the move. An adult must eat
+well for five days to undo one hungry one; a toddler for twenty-five. The mean
+damage per wasting turn measured 0.19, which says about half of all wasting
+turns are a child's.
+
+It is also worth recording that a *second*, unreachable implementation of this
+exists. `Agent::apply_starvation_damage` and `Agent::update_starvation` are
+called from tests and from nothing else, and the formula in the dead one is
+**graduated** - `days_into_the_reserve * 0.5`, nothing at the threshold rising
+to the full rate at the end - where the live one is flat from the first turn
+below half. The better of the two rules is the one nothing runs.
+
+#### 3. And it bites people who are carrying food
+
+Of the wasting turns:
+
+| | | |
+|---|---|---|
+| with food in a pit somewhere in the world | 26,941 | **100.0%** |
+| with food in the wasting person's own pack | 11,133 | 41.3% |
+| **with something `has_edible_food` would accept that turn** | **7,355** | **27.3%** |
+
+**Over a quarter of all hunger damage in this model is taken by somebody
+carrying something they could have eaten on the spot.** Not raw meat wanting a
+knife, not something spoiled - the commonest things in a wasting person's pack
+are fish (4,071 turns), nuts (3,053), roots (2,283) and legumes (896).
+
+And 45.8% of the dead die with food in the pack.
+
+#### What this actually is
+
+Three findings, and only the third is about food at all:
+
+1. **The death tally is a last-hit tally**, so it over-credits anything that
+   ticks and under-credits anything that strikes. Violence is the largest
+   single drain on health in this world and nothing in this file has ever said
+   so. Every previous reading of "what took them" in these notes is wrong in
+   the same direction.
+2. **The wasting drain is flat and savage** - five times healing for an adult,
+   twenty-five times for a small child - and the graduated version of the rule
+   is sitting in the file with no caller.
+3. **Hunger damage is being taken with food to hand.** A quarter of it is taken
+   by people holding something edible that turn, and all of it while the
+   settlement has a full pit somewhere.
+
+The cheapest thing to fix is the third, and it is a decision-layer question
+rather than an economy one: why does a wasting body carrying fish not eat the
+fish. The most *valuable* thing to fix is the first, because until the tally
+apportions damage rather than last blows, no measurement of what kills a
+settlement can be trusted - including the ones in #205 and #207.
+
+### 209. The tally apportions the body instead of crediting the last blow, and three drains that took health without saying so
+
+#208 found that the cause of death in this model is a last-hit tally:
+`AgentState::lose_health` kept one field, `what_last_took_health`, and the
+reckoning read whatever had removed the final point. A blow took 47.6% of all
+the health lost in this world and was credited with 25.9% of the deaths;
+thirst took 0.6% and was credited with 9.4%. The bias is structural rather
+than random - hunger is a *drip*, applied every turn of forty-eight in a day
+that a body is wasting, and a blow is a *lump* - so any cause that ticks
+out-ranks any cause that strikes, whatever actually ground the body down.
+
+This is that fixed. It changes no behaviour at all: it changes what the model
+is able to say about behaviour it was already producing.
+
+#### The rule
+
+Each thing that takes health is booked against its name, in
+`what_has_taken_health`, and **mending takes back what is outstanding in
+proportion to what each name is still holding**. So the entries are not a
+history of everything that ever happened to a man - they are the missing part
+of him, and they sum to `100.0 - health`. At a death they sum to the whole
+man, and the cause of death is whichever name holds the largest share.
+
+Three details carry most of the weight:
+
+- **A thing is booked for what it took, not for what it swung.** A fall priced
+  at a thousand landing on a man with thirty health left takes thirty. Booking
+  the swing would let one overkill outweigh everything else that ever happened
+  to him, and would break the account besides.
+- **What healed away killed nobody.** A man beaten half to death at twenty and
+  starved at forty was killed by the starving. Without this the tally is an
+  account of a life rather than of a death.
+- **Ties break by name**, so a cause of death is a fact about the world rather
+  than about the order a list happened to be built in.
+
+#### Three drains that said nothing at all
+
+Fixing the reading turned up a second thing. The cause was only ever written
+by `lose_health`, and three places took health without going through it:
+
+| | what it was | now |
+|---|---|---|
+| `Agent::tick_with_percepts`, and again in the resting branch | `state.health = state.health.min(body_condition)` - a broken body holds health down | booked as **"a wound"** |
+| `making.rs`, the crafting injury | `state.health = (state.health - harm).max(1.0)` | booked as **"a mishap"** |
+| `making.rs`, the sewing injury | the same line again | the same |
+
+The body-condition cap is the one that matters: it is the only drain in the
+model that took health and named nothing, so **every point it ever took was
+left credited to whatever had spoken last**. It is also the second-largest
+drain in the model after the direct ones, because every injury from a fight, a
+fall or the cold lands on a body part first and arrives at the man later.
+
+All three now go through the one door. The crafting pair keep their floor of
+one - a burn at the fire has never killed anybody in this model and this is
+not the change that starts it - so the health arithmetic is untouched.
+
+#### What it changes: violence doubles, and thirst and the weather go to nothing
+
+Eight worlds, one year, twelve founders, seeds 0-7, read off the settlement's
+own reckoning inside the tick each body falls in.
+
+| | last blow | apportioned |
+|---|---|---|
+| **a blow** | 23.8% | **52.9%** |
+| hunger | 42.7% | 42.1% |
+| **the weather** | 14.7% | **0%** |
+| **thirst** | 9.8% | **0%** |
+| starvation | 4.2% | 2.1% |
+| illness | 2.8% | 2.9% |
+| a fall | 2.1% | **0%** |
+| *deaths in the block* | *143* | *140* |
+
+**Violence more than doubles its share of the dead.** And three causes very
+nearly vanish: the weather, thirst and falls are hardly ever the largest part
+of anybody who dies, though between them the last-blow reading gave them a
+quarter of every death.
+
+Thirst is the starkest. It did 0.6% of all the health lost in the model and was
+credited with one death in ten; apportioned, it kills nobody at all - not in
+this block, and not in either of the 32-world blocks below. It is a drip of the
+purest kind: a small amount, very often, to a body that is being killed by
+something else.
+
+**A correction to the three zeroes.** On the larger sample below - 128 worlds
+over two years, 2,324 deaths - the weather and falls are not quite zero: the
+weather takes between 0.2% and 0.7% of a block and a fall up to 0.7%. So the
+right statement is *hardly ever*, not *never*; eight worlds over one year was
+too small a sample to tell a small number from nothing. A wound is genuinely
+zero across all of it, and a mishap at the workbench turns up in every block,
+which is the evidence that routing it was worth doing.
+
+**And a second correction, which is a fault in this change rather than in the
+sample.** Thirst is *not* zero - it is spelled two ways, and the apportionment
+tallies by name:
+
+```rust
+self.lose_health(self.health, "dehydration");   // the killing blow: all that is left
+self.lose_health(0.15 * (...), "thirst");       // the drip, every turn
+```
+
+Blocks C and D show **"dehydration" at 0.9% and 1.2%** of the dead, where "thirst"
+is nil. They are one cause under two names, and `process_deaths` already knows
+it - `"thirst" | "dehydration" => DeathCause::Dehydration`. **Hunger is the same
+shape**: "hunger" is the drip and "starvation" the blow that takes whatever is
+left, mapping to one `DeathCause::Starvation`.
+
+So the table above splits both survival causes in half and under-credits each.
+Read properly, hunger-and-starvation is 44.2% of the eight-world block rather
+than 42.1%, and thirst-and-dehydration is not zero anywhere C and D can see.
+The headline is unaffected - a blow at 52.9% still leads - but the arithmetic
+is wrong in a way I introduced by apportioning on a string.
+
+This is the two-spellings fault again, now inside my own fix. It is cheap to
+put right, and **#210 is what makes it safe to**: the cause name no longer
+reaches grief, so renaming the killing blows to match their drips changes
+nothing but the tally. Recorded as open.
+
+#### A correction to #208
+
+#208 read the gap between "health taken" and "kills credited" and concluded
+that **hunger** was the thing being over-credited. That is wrong, and the
+apportionment says so: hunger is credited with 42.7% of the dead under the old
+reading and 42.1% under the new one. Hunger was in very nearly the right place
+all along.
+
+The reason #208 got the direction wrong is that it compared two quantities that
+are not the same thing. *Share of all health ever lost* counts damage taken by
+people who went on to live, and damage that healed away; *share of the dead*
+counts only what was still standing on a body at the end. Hunger's share of the
+first is 33.5% and of the second 42%, because a man hunger kills dies with
+hunger holding most of him. Nothing was wrong with hunger's number. What was
+wrong was that **a blow was being under-credited by half**, and the credit it
+should have had was going to the weather, to thirst and to falls.
+
+So the headline of #208 stands in its general form - the tally named the last
+straw and not the load - but its specific accusation was aimed at the wrong
+cause.
+
+#### The reading is load-bearing, which it should not be
+
+The two columns above come from two runs on the same eight seeds, and they do
+not contain the same number of deaths: 143 against 140. That is not noise.
+Seeded worlds are deterministic, so the same eight seeds under two readings
+should be the same eight worlds - and they are not, because **the name a
+settlement gives to a death is an input to the settlement's behaviour**:
+
+```rust
+let cause_source = EmotionSource::Event(cause_description.clone());
+...
+Information::Death { agent: *deceased_id, cause: cause_description.clone() }
+```
+
+`EmotionSource` is a **map key** for grief and anger, and the cause string is
+carried in gossip as part of the information's identity. Two deaths named the
+same thing pool into one bucket of grief; named differently they do not. So
+correcting the diagnosis changes how the survivors feel, which changes what
+they do.
+
+This is not something this change introduced - it is a coupling that was
+already there and could not be seen while there was only one reading. But it
+means the instrument is wired into the thing it measures, and that is worth
+deciding about deliberately rather than leaving as it is.
+
+It also means **the draw-count tests are not sufficient here.** Both held
+(8,936 and 603,478), and seed 0's world really is unchanged - but seed 0 is one
+world, and across eight the two readings diverge. A count that holds on one
+seed proves less than it looks like it proves.
+
+#### Survival: unchanged
+
+The apportionment perturbs the world, so it needs a survival reading of its
+own. The standard two blocks, against the figures recorded for exactly these
+seeds at the end of #207:
+
+| block | seeds | person-days before | after | | worlds emptied | out of the first winter |
+|---|---|---|---|---|---|---|
+| A | 0-31 | 103,958 | 103,795 | -0.16% | 23 -> 27 | 10 -> 10 |
+| B | 32-63 | 108,569 | 107,630 | -0.87% | 21 -> 22 | 14 -> 14 |
+| **both** | | **212,527** | **211,425** | **-0.52%** | **44 -> 49** of 64 | **24 -> 24** of 64 |
+
+**Survival is flat.** Person-days move half a per cent against a block-to-block
+noise of about ten; first winters are identical, 24 and 24. Worlds emptied is
+up five in sixty-four, but the blocks disagree by four to one, and block A's
+four are all worlds that had a single survivor limping to the end and emptied
+around day 700 instead of day 720 - which is why person-days barely notice
+them. By the rule this project has been using since #207, that is inside what
+a block of this size varies by anyway.
+
+Which is what should have happened. Nothing about how a body works was
+changed; only what the record calls the result.
+
+#### What is still open
+
+- ~~**Grief and gossip key on the cause string.**~~ **Fixed in #210** - grief
+  now keys on the person who had a hand in it, or on nobody. Half of this
+  claim was also wrong as written: the cause string reaches gossip as a
+  *payload*, not as part of an item's identity, so gossip was never a coupling
+  point. See #210.
+- **Two causes are spelled two ways each, and the tally apportions by name.**
+  "hunger"/"starvation" and "thirst"/"dehydration" are one cause apiece - the
+  drip and the blow that finishes it - and each is booked separately, so each
+  half is under-credited. The fix is to give the blow the drip's name; #210
+  made that safe by taking the cause string out of grief.
+- **`DeathCause`, the enum the timeline uses, cannot say most of these.** The
+  weather, a fall, illness, a wound and a mishap all fall through to
+  `DeathCause::Unknown`; only starvation, thirst, old age, exhaustion and a
+  blow have a variant. That is the same two-spellings fault as #204 and #206,
+  in a third place.
+- **`what_last_took_health` now has no production reader.** It is kept because
+  it answers a genuinely different question and the tests use it to pin the
+  distinction, but it is a field nothing in the model consults.
+- **#208's other two findings are untouched**: the wasting drain is still flat
+  and savage where a graduated version sits unused in the file, and a wasting
+  body carrying fish still does not eat the fish.
+- **Every reading of "what took them" in this file predates the fix**,
+  including the ones in #205 and #207. They are not wrong about what happened,
+  but they are wrong about what it was called.
+
+### 210. Grief was keyed on the settlement's own verdict, which nothing could act on and everything depended on
+
+#209 left this standing: correcting the diagnosis of a death changed the world.
+The same eight seeds read two ways held 143 deaths and 140. This is that, and
+it turns out to be a smaller and sharper fault than #209 described - and one
+half of what #209 said about it was wrong.
+
+#### What it was
+
+Every death handed the survivors a cause by name:
+
+```rust
+let cause_source = EmotionSource::Event(cause_description.clone());
+...
+agent.respond_to_loved_one_death(deceased_id, cause_source.clone());
+agent.process_drive_source_loss_with_cause(drive_type, *deceased_id, Some(cause_source.clone()));
+```
+
+So an agent came away from a friend's death **afraid of the word "hunger"**.
+
+That is not a thing anybody can do anything about, and the model knows it:
+
+```rust
+pub fn what_frightens_me_most(&self) -> Option<(&str, f32)> { Self::worst_creature(&self.fear_sources) }
+pub fn who_frightens_me_most(&self) -> Option<(Uuid, f32)> { Self::worst_agent(&self.fear_sources) }
+```
+
+Every reader of the fear and anger maps filters to `Creature` or to `Agent`.
+**An `Event` source is written and never read** - it can never reach the flight
+branch, the fight branch, a grudge or a retaliation.
+
+#### What it cost
+
+Write-only was not the same as harmless, because the maps are keyed by it:
+
+```rust
+pub fear_sources: BTreeMap<EmotionSource, f32>,
+```
+
+Two consequences, and both of them run on the cause *names*:
+
+1. **How many buckets.** Every distinct name is its own entry, and `tick`
+   decays **each entry** by the decay rate. Being afraid of four things drains
+   four times as fast as being afraid of one. So the number of different words
+   a settlement had for death set the rate at which its people stopped being
+   afraid.
+2. **What order they are summed in.** `BTreeMap` walks in key order, which for
+   `Event(String)` is alphabetical by the cause. `update_totals` adds the
+   entries up in that order, and floating-point addition is not associative.
+
+So the verdict of the reckoning reached behaviour twice, and for no gain at all.
+
+#### The correction to #209
+
+#209 said the cause string was also "part of a gossip item's identity". **That
+is wrong.** An `Information`'s identity is `id: crate::core::dice::name()`, a
+fresh draw, and the cause is carried in `InformationType::Death { agent, cause }`
+as a payload. Tracing every read of it: three distortion arms decorate it
+("painful {cause}"), and `meeting.rs` formats it into a debug line. Nothing
+decides anything on it. Gossip was never a coupling point - the emotions were
+the whole of it.
+
+#### The rule
+
+**What the survivors grieve at is a person, or nobody.** The death hands on
+`recent_attacker` - who, if anybody, had a hand in it - and that is asked of
+every death rather than only of the ones the reckoning calls a blow, which is
+the whole point: grief must not consult the verdict at all.
+
+- **Sadness** is at the person who died, which it already was.
+- **Fear** is of whoever had a hand in it, and there is none if nobody did.
+- **Anger** is at whoever had a hand in it, through the arm of
+  `process_drive_source_loss_with_cause` that has always been there and that
+  the only caller in the model could never reach:
+
+  ```rust
+  EmotionSource::Agent(_) | EmotionSource::Creature(_) => {
+      // Anger at whoever took away our satisfaction source
+  ```
+
+  That is the fourth dead branch this run of work has turned up, and it is dead
+  for the same reason as the others: one caller that only ever builds one shape.
+
+A death nobody had a hand in now leaves grief and nothing to be afraid of,
+which is the honest answer - there is no *thing* there. What it ought to leave
+is a dread of the winter that took him, and that is worry rather than fear.
+Worry exists in this model (#282, #283) and is not wired to bereavement; that
+is the right home for it and it is not done here.
+
+#### What this changes
+
+This is a behaviour change and not a bookkeeping one, because anger at a person
+is read - by `anger_at_people`, by the relationship machinery, by retaliation.
+Seed 0 over a year goes from 603,478 draws to **680,944**, up 12.8%, and the
+constant is re-recorded.
+
+#### Survival: one measure says this costs a settlement its first winter
+
+Against the figures for exactly these seeds at #209 (that is, with the
+apportionment in and the grief keying not yet changed):
+
+| block | seeds | person-days before | after | | worlds emptied | out of the first winter |
+|---|---|---|---|---|---|---|
+| A | 0-31 | 103,795 | 105,780 | **+1.9%** | 27 -> 27 | 10 -> 8 |
+| B | 32-63 | 107,630 | 102,649 | **-4.6%** | 22 -> 27 | 14 -> 7 |
+| **both** | | **211,425** | **208,429** | **-1.4%** | **49 -> 54** of 64 | **24 -> 15** of 64 |
+
+**Person-days cannot be read: the blocks disagree in direction**, +1.9% against
+-4.6%. By the rule this project has used since #207 that is not a result.
+
+**Out of the first winter is the one measure both blocks agree on, and it is
+down by more than a third** - 24 of 64 to 15, block A losing two and block B
+seven. That is a large enough move to take seriously, with one caveat that cuts
+against it: it is a *threshold* measure sitting directly on a cliff. A
+settlement is counted as out of the first winter if anybody is alive on day
+360, and the days these worlds actually empty on cluster hard just short of it
+- block B's list runs 212, 271, 314, 316, 316, 317, 320, 320, 323, 325, 325,
+326, 326, 328, 328, 330, 331, 333, 335, 335, 336, 338, 341, 345, 350, 358, 360.
+Two dozen worlds die within forty days of the line, so a small worsening
+anywhere tips a lot of them across it, and the same small worsening barely
+shows in person-days.
+
+What it is *not* is more killing. The cause mix hardly moves: a blow takes
+37.5% and 35.8% of the dead against 37.9% and 34.5% before, and hunger 56.0%
+and 54.7% against 53.7% and 57.2%. People are not fighting each other to death
+in greater numbers; the settlements are simply going a little sooner.
+
+**This is not decided** on two blocks, and it wants C and D on fresh seeds -
+run before as well as after, because a fresh block has no recorded baseline.
+
+#### Four blocks: it was block B, and survival is flat
+
+Blocks C and D were run from two binaries built at the two commits and
+checksummed apart (`c735c5b6` before, `e17c591d` after), so that no part of
+this is the same program measured twice.
+
+| block | seeds | person-days before | after | | worlds emptied | out of the first winter |
+|---|---|---|---|---|---|---|
+| A | 0-31 | 103,795 | 105,780 | +1.9% | 27 -> 27 | 10 -> 8 |
+| B | 32-63 | 107,630 | 102,649 | -4.6% | 22 -> 27 | 14 -> 7 |
+| C | 64-95 | 104,470 | 106,766 | +2.2% | 28 -> 25 | 11 -> 10 |
+| D | 96-127 | 99,520 | 100,638 | +1.1% | 27 -> 24 | 9 -> 12 |
+| **all** | | **415,415** | **415,833** | **+0.10%** | **104 -> 103** of 128 | **44 -> 37** of 128 |
+
+**Every measure the two-block reading raised an alarm about dissolves.**
+
+- **Person-days are flat and if anything up**: +0.10% over 128 worlds, with
+  three of the four blocks positive (+1.9%, +2.2%, +1.1%) and only B negative.
+- **Worlds emptied, which looked five worse on A and B, is one better on all
+  four** - 104 against 103 - because C and D both went the other way, 28 to 25
+  and 27 to 24.
+- **Out of the first winter is 44 against 37, and the blocks disagree**: -2,
+  -7, -1, **+3**. Block B's seven is the whole of it; no other block loses more
+  than one, and D gains three. It was never a signal.
+
+Deaths are down slightly, 2,361 to 2,324, which is the same story.
+
+So: **letting a settlement hold a grudge costs it nothing measurable.** Block B
+was an outlier and the two-block reading was wrong - which is the second time
+in this file that two blocks have said something four blocks took back (see
+#207), and the second time the measure that looked worst was the one that was
+level.
+
+#### What is still open
+
+- **A death by a predator leaves nothing.** `last_attacker` is an
+  `Option<Uuid>` and only ever another agent, so a man taken by a wolf in front
+  of his brother leaves his brother with no fear of wolves. Fixing it means
+  recording the killing creature at death, and it would make a real difference,
+  because `what_frightens_me_most` reads `Creature` sources and would see it.
+- **Bereavement should feed worry.** See above.
+- **The `Event` arm of `process_drive_source_loss_with_cause` now has no
+  production caller.** A test still exercises it and the shape is a legitimate
+  one for a general function, but nothing in the model builds it any more.
+
+### 211. One spelling per cause, and what the two spellings had been costing
+
+#210's blocks C and D found `"dehydration"` holding 0.9% and 1.2% of the dead
+where #209 had recorded thirst as nothing at all. The cause is spelled twice:
+
+```rust
+self.lose_health(self.health, "dehydration");   // the blow: all that is left
+self.lose_health(0.15 * (...), "thirst");       // the drip, every turn
+```
+
+and hunger the same way, `"starvation"` and `"hunger"`. While the reckoning
+only named the last thing to speak, two names for one cause was untidy and no
+worse. Once #209 began apportioning a body **by name** it became an arithmetic
+fault: one cause booked under two headings is one cause counted half twice, and
+both halves lose.
+
+`process_deaths` had always known better - it matched `"hunger" | "starvation"`
+onto a single `DeathCause`. That pair of alternations was the standing evidence
+that the two spellings were never meant to be two things.
+
+#### The fix
+
+Each killing blow takes its drip's name, and every cause is now a constant on
+`AgentState` rather than a literal, so two spellings cannot start again. All
+eighteen call sites across five files go through them, the alternations in
+`process_deaths` collapse to one arm apiece, and
+`EVERYTHING_THAT_TAKES_HEALTH` gives anything reasoning about the vocabulary
+somewhere to read it - the grief test of #210 had a hand-copied array of twelve
+names, which would have rotted the first time a cause was added.
+
+**Bookkeeping only, and the draw counts prove it**: 8,936 and 680,944, both
+unchanged, so the world is bit-identical and no survival blocks were needed.
+That is #210 paying for itself within a day - the cause string no longer
+reaches grief, so renaming it changes nothing but the tally. Before #210 this
+same change would have needed four blocks and four hours.
+
+#### What it was costing
+
+Measured directly, the slices that were being filed apart: **starvation held
+2.6% and 3.2%** of the dead in #210's blocks A and B, and **dehydration 0.9%
+and 1.2%** in C and D. Those are the halves that were being kept out of the
+hunger and thirst rows. Merging also re-ranks any body where neither half won
+alone but the two together would, so the true correction is a little larger
+than the sum.
+
+#### Where the tally stands now
+
+Eight worlds, one year, twelve founders, seeds 0-7, 151 deaths:
+
+| | share of the dead |
+|---|---|
+| hunger | **57.0%** |
+| a blow | **39.1%** |
+| illness | 3.3% |
+| unknown cause | 0.7% |
+
+**This is not comparable to the table in #209**, and it should not be read as a
+correction of it. #209 measured 140 deaths on the world as it stood *before*
+#210, and #210 changed the world - the draw count went from 603,478 to 680,944.
+These are the same eight seeds and not the same eight worlds. What carries over
+is the shape: hunger and violence are what kill a settlement, and violence is a
+far larger part of it than the last-hit tally ever said.
+
+Against the six still on their feet at the end, the weights are different
+again: hunger 79.8%, **the weather 17.0%**, a fall 1.7%, thirst 1.4%. The
+weather is a real drain on the living and almost never the largest share of the
+dead - it wears people down and something else finishes them.
+
+#### What is still open
+
+- **One death in this block is an `unknown cause`**, and one was in #210's
+  block B as well. That is a body whose ledger was empty at the end - health
+  reaching nothing without any named drain having taken it, or a life ended by
+  something that sets `is_alive` directly. Rare, but the whole point of #209 is
+  that a settlement can say what killed its people, and this is the remainder
+  that still cannot.
+
+### 212. A settlement starves to death sitting on ten thousand items of food, because its hands are full of its own tools
+
+Three questions were put to this model: why starvation is still a problem when
+Stage 0 knowledge offers many ways to get food; whether starvation merely keeps
+a population low or actually ends it; and what is behind the rate of violent
+deaths. Eight worlds, two years, twelve founders, seeds 0-7.
+
+| month | alive | died | ate/needed | in pits | in packs | pack full |
+|---|---|---|---|---|---|---|
+| 1 | 11.8 | 2 | 110% | 716 | 44 | 86% |
+| 4 | 9.4 | 4 | 425% | 5,001 | 191 | **100%** |
+| 5 | 9.0 | 3 | **784%** | 5,081 | 137 | **103%** |
+| 9 | 9.6 | 10 | 330% | **10,402** | 40 | 94% |
+| 10 | 9.0 | 20 | 141% | 10,288 | 9 | 92% |
+| **11** | **3.8** | **42** | **33%** | **10,029** | **4** | **105%** |
+| 12 | 0.8 | 1 | 34% | 3,357 | 0 | 99% |
+| 24 | 0.0 | 0 | - | 0 | 0 | - |
+
+#### 1. It is not a food problem and never was
+
+The larder climbs to **10,402 items** and is still **10,029** in the month
+forty-two people die of hunger. `Gather` is chosen 437,444 times and fails 23.
+`Eat` is chosen 121,662 times and fails 33. Both ends of the food chain work
+perfectly. What fails is everything between the pit and the hand:
+
+```
+PickUp: No room in the pack for what is in the store    33,486
+GiveTo: No room in their pack for it                    12,777
+GoWithout: No room in their pack for it                 10,567
+```
+
+**Packs run 86% to 105% full all year**, over capacity in the month the
+settlement dies, holding four items of food. What is in them instead:
+
+```
+wood 82   stoneknife 33   basket 31   handaxe 31   diggingstick 30
+shovel 27   spear 24   bow 19   stone 17   iron 16
+```
+
+That is the kit. And the kit cannot be put down:
+
+```rust
+pub fn what_i_would_set_down(&self) -> Option<String> {
+    ...
+    .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
+```
+
+`is_this_part_of_the_kit` is the rule consolidated in #207 - it replaced two
+inline filters that already did the same thing, so the behaviour predates it,
+but #207 made it one explicit rule and, by stopping `trying_a_swap` destroying
+tools, left far more kit alive to fill packs with. **A man may not set down his
+axe to pick up his dinner.**
+
+The fault has been here before under another name. `what_i_would_swap`'s own
+doc records the previous round: *"127,477 refusals of 'No room in the pack for
+what is in the store', 71% of every refusal in the model"*. It was fixed, and
+it has come back at 33,486, because the fix that let a man shed weight
+exempted exactly the things he is carrying.
+
+**So Stage 0 knowledge is not the constraint and neither is the food. The
+constraint is carrying capacity**, which is the same famine as #205 and #206 in
+a third costume, and it lands on two issues already open and unfixed: #216 (a
+bare hand should hold twelve, not thirty) and #242 (shedding picks by weight
+alone).
+
+#### 2. Unsustainable, decisively - and the land is not what binds
+
+Twelve founders hold around nine for nine months. Month 11 takes forty-two and
+leaves 3.8; month 12 leaves 0.8; every world is empty by month 24.
+
+The tail is the sharpest part of it. In months 13-22 the one or two survivors
+eat **270% to 473%** of what a body needs, with 1,500 items still in the pits.
+**The same land that kills a settlement of twelve feeds one or two people
+comfortably.** This is not the country's carrying capacity binding. It is that
+a group cannot get food into its hands, and the constraint relaxes the moment
+there are few enough mouths that what one pair of hands can carry is enough.
+
+#### 3. The violence did not increase - it stopped being mis-filed
+
+#209 did not make people more violent; it stopped crediting a blow's damage to
+whatever spoke last. Violence was already taking 47.6% of all health lost while
+being credited with 25.9% of deaths. #210 did not move it either: a blow took
+37.9% and 34.5% of the dead before, 37.5% and 35.8% after.
+
+And most of it is not people. Tracing every site that deals a blow to an agent:
+one is people fighting each other (`fighting.rs:126`), and the rest are animals
+- a hungry predator striking (`beasts.rs:375`), an animal getting the better of
+a fight (`fighting.rs:471`), a hunt going wrong (`getting.rs:998`) - plus
+poisoning from a tasted plant. The code says so itself in `beasts.rs`: *"agents
+seldom set upon one another, but the country is full of things that will try
+them."* The tally has no way to say which, because they all say "a blow".
+
+#### A defect #210 introduced, found here
+
+```rust
+agent.take_damage(landed);
+agent.emotions.record_attack(animal_id, current_tick);   // beasts.rs:376
+```
+
+`animal_id` is a `Uuid` - animals carry them too. It goes into `last_attacker`,
+whose doc says "Record being attacked by another agent" and which a second
+comment asserts is *"only ever another agent"*. Both were already wrong. Before
+#210 it only fed `DeathCause::Combat`, which nothing acts on.
+
+**#210 made it load-bearing.** `recent_attacker` now keys grief as
+`EmotionSource::Agent(uuid)`, so in the common case a survivor comes away
+afraid of and angry at **a person who does not exist**, because the uuid
+belongs to a wolf. The failure tally shows it from the other side:
+**`Attack: Target agent not found` 2,185 times**.
+
+I checked what `recent_attacker` meant against a doc comment rather than
+against its callers, which is the one thing this file keeps saying not to do.
+
+#### Also worth its own look
+
+**A body eats up to 784% of what it burns** in the season of plenty, and none
+of the surplus is banked. Nothing caps a meal. The starving months read
+plausibly (33%, 34%) and the good months do not, which is what real gorging
+looks like rather than broken accounting - but a figure that large should be
+checked before anything is built on it.
+
+#### What to do, in order
+
+1. **`record_attack` should say what attacked** - a person or a creature - so
+   grief keys `Creature(species)` for an animal and `Agent(uuid)` for a person.
+   This is my bug from #210, and it closes that issue's open item as well: a
+   man whose brother was taken by wolves would fear wolves, and
+   `what_frightens_me_most` reads `Creature` sources, so for the first time the
+   fear would be one something can act on.
+2. **The pack famine**, which is what is actually killing settlements. A man
+   should be able to set his axe down beside his own larder.
+3. **The eight-fold meal.**
+
+### 213. A wolf is not a person: the phantom attacker, and the three branches that were aiming at him
+
+First of the three fixes #212 called for, and the one I owed: a defect I
+introduced in #210 on top of a lie that had been sitting in the model since the
+threat work.
+
+#### The lie
+
+```rust
+/// Last agent who attacked this agent (for retaliation)
+pub last_attacker: Option<Uuid>,
+```
+
+and forty lines below, in the doc for `what_frightens_me_most`:
+
+> *"`last_attacker`, which is only ever another agent"*
+
+It never was. `beasts.rs` has always written the **animal's** uuid into it, and
+animals carry uuids too - the line above it in that file says so outright:
+*"agents seldom set upon one another, but the country is full of things that
+will try them."* Two comments asserted a thing the code had never done.
+
+#### What it cost, in three places
+
+| | what it did |
+|---|---|
+| `DeathCause::Combat { killer_id }` | named a wolf as a murderer, in timeline decoration nothing acts on - harmless, and the reason nobody found this |
+| the **flight** branch | looked the striker up in the agent list, did not find him, and **fled in a random direction** rather than away from the animal |
+| the **retaliation** branch | aimed `Action::Attack` at the stored uuid - **a man mauled by a bear swung at a person who does not exist**: 2,185 refusals of "Attack: Target agent not found" |
+| **grief**, as of #210 | keyed fear and anger on `EmotionSource::Agent(that uuid)`, so a settlement mourned its dead by becoming afraid of, and angry at, a phantom |
+
+The first three were all there before this session. #210 added the fourth, and
+it is the one I am answerable for: I made `recent_attacker` load-bearing and
+checked what it meant **against a doc comment rather than against its two
+callers**, which is the one thing this file keeps saying not to do.
+
+#### The rule
+
+`what_last_struck_me: Option<EmotionSource>` - the thing that struck, said in a
+type that can tell a person from a creature, which is a distinction the emotion
+system already had and this field was throwing away. `record_attack` takes it;
+`recent_attacker` returns it; `whoever_struck_me` returns the `Uuid` **only
+when it was a person**, for the one reader that can only mean somebody. A
+killing is laid at the door of a man, and a wolf has no door.
+
+Every consumer now asks the right question. The flight and retaliation branches
+take `whoever_struck_me`, so they aim at people and let the threat tree - which
+reads `Creature` sources properly, and runs first - handle anything with teeth.
+
+**And #210's open item closes.** A man whose brother was taken by wolves now
+comes away afraid of *wolves*, keyed `Creature("wolf")`, which is a source
+`what_frightens_me_most` can actually read. That fear could never be expressed
+before: the grief path had no way to say "a creature did this".
+
+#### A test was quietly depending on the confusion
+
+`a_hungry_predator_turns_on_the_settlement` counted maulings by checking
+whether `recent_attacker` was one of the eight wolf uuids it had spawned. It
+passed, for years, and was the evidence nobody read that animals were being
+filed as people. It now asks whether a *wolf* struck.
+
+#### What it changes
+
+A behaviour change, and a larger one than #210: seed 0 over a year goes from
+680,944 draws to **690,468**. Three decision branches stop firing at phantoms
+and one fear becomes expressible for the first time.
+
+**Survival is flat**, against the figures for these seeds at #210:
+
+| block | seeds | person-days before | after | | worlds emptied | out of the first winter |
+|---|---|---|---|---|---|---|
+| A | 0-31 | 105,780 | 105,581 | -0.19% | 27 -> 28 | 8 -> 7 |
+| B | 32-63 | 102,649 | 103,297 | +0.63% | 27 -> 28 | 7 -> 8 |
+| **both** | | **208,429** | **208,878** | **+0.22%** | **54 -> 56** of 64 | **15 -> 15** |
+
+First winters are exactly level, one block losing one and the other gaining
+one. Person-days move a fifth of a per cent with the blocks disagreeing in
+sign. Which is what a correctness fix should look like: it stops three branches
+aiming at nothing, and aiming at nothing was not what was killing anybody.
+
+Suite: 2,551 passed, 10 failed, the standing set exactly.
+
+My own new test also tripped `every_roll_comes_from_the_one_stream` by reaching
+for `Uuid::new_v4` - randomness outside `core::dice` that no seed can reach.
+That test earned its keep; the test now draws from the one stream.
+
+### 214. A pack that is empty reads as ninety per cent full: `current_weight` drifts up and never comes back
+
+**This is the pack famine, and #212's account of it was wrong.** The next thing
+to fix, and the root of a fault that has now been chased through three issues
+under three wrong names.
+
+#### The measurement
+
+Day 310, three worlds, every living agent's pack weighed two ways - the running
+total the model keeps, and the sum of what is actually in it:
+
+| | `current_weight` says | the items weigh | phantom |
+|---|---|---|---|
+| world 0 | **41.8 / 42.0** (99% full) | 7.8, in 5 stacks | **34.0** |
+| world 1 | 41.8 / 42.0 (99% full) | 34.2, in 10 stacks | 7.6 |
+| world 1, a child | **0.5 / 0.6** (83% full) | **0.0, in _no stacks at all_** | 0.5 |
+| world 2 | 20.7 / 42.0 (49% full) | 8.7, in 7 stacks | 12.0 |
+| world 2, a child | **0.5 / 0.5** (94% full) | **0.0, in no stacks** | 0.5 |
+
+**Two agents carrying nothing whatever read as 83% and 94% full.** A man
+carrying a spear, a metal spear, a handaxe, a basket and a knife - seven and a
+half units in a pack that holds forty-two - is told he is full.
+
+#### Why
+
+`Inventory::current_weight` is maintained incrementally: `+=` on add (two
+places), `-=` on remove, and again either way for filling and drinking a
+vessel. There is a recompute-from-scratch at `agent.rs:596` that sets it to the
+true sum, and it is plainly not reached often enough. Every path that changes
+what is in a pack without going through the four arithmetic sites leaves the
+number too high, and nothing ever brings it back down.
+
+#### What it explains
+
+- **The 33,486 refusals of "No room in the pack for what is in the store"** -
+  a man standing on ten thousand items of food, refused by a number that is
+  five times what he is carrying.
+- **Packs pinned at 86% to 105% "full" all year** whatever is in them, which
+  is what #212 read as a pack full of the kit.
+- **Why #213's successor made things worse.** The shedding change let a man
+  put his tools down beside the store; he did, lost the capability, and still
+  could not pick anything up, because the thirty-four units blocking him were
+  not there. Refusals went *up*, 33,486 to 35,136, and month 11 went from 42
+  deaths to 53. **That change has been undone** - the code is byte-identical to
+  what stood before it and seed 0 rolls its recorded 690,468 again. It was
+  argued from the misreading below and it does not touch the fault.
+
+#### The correction to #212, which is mine
+
+#212 said the packs were full of the kit and named the rule that pins it there.
+The list it drew that from - wood 82, stoneknife 33, basket 31, handaxe 31 -
+was summed over **eight worlds by two months by about nine agents**, some 144
+agent-samples. That is 0.57 wood and 0.23 stone knives *each*: the whole list
+is about **2.3 light items per person**, which cannot fill anything. I read a
+top-twelve table without dividing by its own denominator, and built a fix on
+it.
+
+The lesson is the one this file keeps writing down in other people's code: a
+count means nothing without the thing it is counted over.
+
+#### What to do
+
+1. **Make the running weight agree with the pack.** Either recompute on every
+   change - the sum is over a handful of stacks and this is not a hot path - or
+   find the writes that bypass the four arithmetic sites. Recomputing is the
+   one-spelling answer and the one this document keeps arriving at.
+2. Then re-measure, because every carrying number in #205, #206, #207 and #212
+   was taken through this.
+3. **And a capacity of half a handful for a child** is a second thing, not
+   explained by the drift: `0.5` and `0.6` against a `WHAT_A_HANDFUL_OF_FOOD_WEIGHS`
+   of `0.5`. A child at that capacity can never take food out of a store even
+   with the arithmetic right. See the open #215 and #216.
+
+#### What was done, and what it bought
+
+The field is gone. `current_weight` is a method that sums the stacks;
+`recalculate_weight` went with it, along with 41 calls across 29 files - two of
+them production calls in `doing/eating.rs`, which is to say two places that had
+already worked out the number could not be trusted and were papering over it.
+The five arithmetic sites are removed. `get_item_mut` and `get_all_items_mut`
+are left exactly as they were, because there is no longer a tally for them to
+get behind.
+
+Three tests forged the total rather than loading a pack, and so had passed for
+precisely as long as the bug existed: `test_recalculate_weight` set the stored
+total to nought by hand, recalculated, and checked it came back. It tested the
+mending and never once asked whether the mending was reached.
+
+Seed 0 rolls **823,832** over a year where it rolled 690,468 - up 19.3%, which
+is a heavily load-bearing change, as it should be when packs that were falsely
+full begin to measure true.
+
+Suite: **2,551 passed, 10 failed**, the standing set exactly - no test gained
+and none lost. It took 3,687s against roughly 2,400s before. Some of that is
+the sum replacing a stored read, but most of it is that actions which used to
+be refused instantly now succeed and do work, which is the same reason the
+draw count moved.
+
+**And the settlement dies on the same schedule.** Same harness, same eight
+seeds, two years, twelve founders:
+
+| month | before: alive / died / pack full | after: alive / died / pack full |
+|---|---|---|
+| 1 | 11.8 / 2 / 86% | 11.5 / 4 / 83% |
+| 4 | 9.4 / 4 / 100% | 9.9 / 3 / 99% |
+| 5 | 9.0 / 3 / 103% | 9.5 / 3 / 103% |
+| 9 | 9.6 / 10 / 94% | **11.4** / 7 / 86% |
+| 10 | 9.0 / 20 / 92% | 8.9 / 29 / 74% |
+| **11** | **3.8 / 42 / 105%** | **3.0 / 36 / 76%** |
+| 12 | 0.8 / 1 / 99% | 0.9 / 9 / 60% |
+| 24 | 0.0 | 0.0 |
+
+A month or two of a slightly larger population in high summer, the same
+collapse in month 11, every world empty by month 24. The fix is right and it is
+not the thing that was killing them.
+
+**The refusals did not clear. They went up eight-fold**, 33,486 to **264,453**,
+and `PickUp` now fails 266,616 times out of 270,039 - 98.7% of every time it is
+chosen. That is not a regression in the fix; it is the fix taking a blindfold
+off. The next section is what was underneath.
+
+### 215. The gate weighs a handful at a half and the store hands out whole units, so a man at his own larder is refused 98.7% of the time
+
+*(This document's own sequence. Not the task list's #215, which is the
+leg-health carrying capacity.)*
+
+Found by fixing #214 and re-measuring. Same harness: eight worlds, two years,
+twelve founders, seeds 0-7.
+
+```
+actions chosen                        failed
+  PickUp     270,039               266,616   98.7%
+  GiveTo      80,254                79,953   99.6%
+  Gather     422,658                    26    0.0%
+  Eat        155,720                    30    0.0%
+
+PickUp: No room in the pack for what is in the store    264,453
+GiveTo: Nothing of mine they have any use for            57,999
+GiveTo: No room in their pack for it                     21,954
+```
+
+#### The two spellings
+
+The decision offers `PickUp` at a pit through one question:
+
+```rust
+// wanting/store.rs
+if !agent.could_i_take_another_handful(
+    crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,   // 0.5
+) { return None; }
+```
+
+The executor then asks a different one:
+
+```rust
+// doing/keeping.rs
+let each = wanted.weight_per_unit.max(f32::EPSILON);
+let will_fit = (room / each).floor() as u32;
+if taking == 0 { return failure("No room in the pack for what is in the store") }
+```
+
+`each` is what the thing in the pit actually weighs, and for almost everything
+in the pit that is **1.0, not 0.5**:
+
+```rust
+fn what_one_of_these_weighs(what: ResourceType) -> f32 {
+    match what {
+        ResourceType::Wood  => 2.0,
+        ResourceType::Stone => 5.0,
+        ResourceType::Iron  => 8.0,
+        ResourceType::Food  => WHAT_A_HANDFUL_OF_FOOD_WEIGHS,   // 0.5
+        _ => 1.0,                                               // everything else
+    }
+}
+```
+
+`Roots`, `Legumes`, `Greens`, `Nuts`, `Fish`, `Grain` and `Meat` all fall
+through to the `_` arm. Only `ResourceType::Food` - the generic berry - is
+priced at a handful. And the pit is mostly the others:
+
+```
+Roots 201,192   Legumes 168,388   Food 113,953   Greens 100,092
+Fish 58,449     Nuts 33,580       Grain 9,906
+```
+
+**About four-fifths of the food in this world weighs twice what the gate that
+offers it thinks a handful of food weighs.** A pack with between a half and a
+whole unit of room passes the gate and is refused by the executor, and because
+the pit branch sits above every drive there is, the man spends the turn on it
+and comes back next turn to be refused again.
+
+`could_i_take_another_handful` was written *for* this - its own doc records the
+last round of it, "127,477 refusals, 71% of every refusal in the model" - and
+it closed the gap for berries only. This is the same fault as the already-fixed
+`the_gate_weighs_a_stone_the_same_as_the_pack_does`, and as the open Excavate
+one: **one question answered in two places that do not agree.** It is the fourth
+time this file has written that sentence.
+
+#### Why #214 made the count worse rather than better
+
+Inference from the two runs and the code, not yet measured directly: before the
+fix the drifted weight pinned `weight_capacity_remaining()` at nought, so the
+gate's first clause was false and `PickUp` was rarely offered at all. With the
+weight honest, real room lands in the half-to-one window a great deal of the
+time, the gate says yes, and the executor says no. The refusals were always
+going to be there; the drift was hiding them by refusing the question earlier.
+
+#### What to do
+
+1. **Give the gate and the executor one table.** The gate should ask about what
+   is in *this* pit at *its* weight, not about a notional handful. That is a
+   small change and it is the whole of the disagreement.
+2. **And then ask why `_ => 1.0` is the price of a root.** A handful of roots
+   and a handful of berries weighing differently may well be right; both being
+   set in a match arm that nothing states a reason for is not.
+3. `GiveTo` failing 99.6% of 80,254 is a second thing sitting in the same
+   measurement and has not been looked at.
+
+#### What was done, and what it bought
+
+The gate now looks in the pit and asks about the thing it is going to reach
+for, at what that weighs. **The refusal is gone entirely - zero occurrences in
+the whole run, from 264,453.**
+
+| | before #214 | after #214 | after #215 |
+|---|---|---|---|
+| `PickUp` chosen | ~35,000 | 270,039 | 12,575 |
+| `PickUp` failed | 33,486 | 266,616 (98.7%) | 3,256 (25.9%) |
+| the store refusal | 33,486 | **264,453** | **0** |
+| `Gather` | 437,444 | 422,658 | **534,466** |
+| `Eat` | 121,662 | 155,720 | **223,551** |
+
+The 3,256 that remain are `PickUp: No room for it` - the *ground* branch, a
+different line, and honest. The turns that were being burned on the pit went
+into food: a quarter more gathering and nearly half again as much eating.
+
+| month | #212 baseline | after #214 | after #215 |
+|---|---|---|---|
+| 9 | 9.6 alive | 11.4 | 12.0 |
+| 11 | 3.8, 42 died | 3.0, 36 died | 4.8, 40 died |
+| 12 | 0.8 | 0.9 | **3.0** |
+| 18 | - | 0.8 | **2.9** |
+| 24 | 0.0 | 0.0 | 0.0 |
+
+**The month-11 collapse is untouched and every world is still empty by month
+24.** What changed is that three people come through the collapse and hold for
+a year where before it was under one. The larder still peaks at 11,401 and is
+still 10,060 in the month forty people die of hunger, so it remains not a food
+problem.
+
+Two more spellings of "what does one of these weigh" turned up in the `PickUp`
+executor, both taking `weight_per_unit` raw without `how_much_lighter_it_is` -
+pricing a dried fish at what a wet one weighs and refusing room the pack had.
+Five other places spelled it correctly and each spelled it out itself. There is
+one method now, `InventoryItem::what_one_of_them_weighs`, and `total_weight` is
+that times the quantity.
+
+#### And a third thing underneath: a pack out of slots with forty units of room
+
+The fix made `a_settlement_lives_through_a_winter` fail on a debug assertion in
+the same branch - "the room was measured a line ago". Instrumented:
+
+```
+each 0.175   room 40   slots 20/20   has false   fill None
+```
+
+**Forty units of room for a stack weighing 0.175.** Weight was never the
+question: the pack held twenty kinds of thing out of twenty and this was a
+twenty-first, so `add_item` refused it on the slot limit, which the line above
+had not measured and the assertion does not mention.
+
+That fault is older than the change that exposed it. The branch divided the
+room by the weight, worked out what would fit, and asserted the answer would go
+in; the gate fix altered which agents reached the line and a case that was
+always possible started firing. `take_what_fits` already answers the question -
+weight and slots together - and its own doc says so, so the duplicate
+arithmetic is deleted rather than the assertion patched. It also reports what
+actually went in, so the pit is emptied by what arrived rather than by what was
+hoped for.
+
+Suite: **2,554 passed, 9 failed** - one *better* than the standing ten, with
+`a_settlement_works_things_out_that_nobody_wrote_down` now passing and nothing
+new broken. All six determinism tests pass unchanged: seed 0 still rolls
+867,358 over a year, so routing the pit through `take_what_fits` gives the same
+answers the inline arithmetic did on that world.
+
+#### What this leaves
+
+The tail is now the loudest thing in the measurement. Months 13-22 run **342%
+to 412% of what a body needs** - three people eating four times their
+requirement off six thousand items in the ground. Before reading that as an
+eight-fold meal, note that `energy_that_went_down` is accumulated at three
+separate sites in `doing/eating.rs` and has not been checked for double
+counting. The arithmetic that *is* established: a sitting is capped at
+`WHAT_A_SITTING_AIMS_AT` = 480 **energy**, and one mouthful of ordinary food is
+`UNITS_IN_ONE_ITEM` = 5 volume units at 25 energy each, so a full sitting is
+four mouthfuls - **twenty volume units out of a six-hundred-unit stomach, 3.3%
+full.** The gastric schedule and the stomach's capacity are both implemented
+and both unreachable for anything but the thinnest forage.
+
+### 216. Three questions about the body, measured: the meal that is never capped, the fight nobody weighs a man for, and the healing that is switched off when it is needed
+
+Three things were asked of this model: why a body eats three to four times what
+it burns when a stomach is finite and digestion takes time; whether an injured
+agent is less willing to risk an animal; and whether anybody heals. Each was
+chased to the code and then measured over eight worlds, two years, twelve
+founders, seeds 0-7.
+
+#### 1. The stomach is right and it never binds
+
+There is no double count. `energy_that_went_down` is accumulated at three
+sites, and all three were traced: `a_sitting_from_the_hand` has exactly one
+caller - the eat-where-you-stand branch of `Gather` - and inside `eating()` the
+other two are mutually exclusive, because the carried-food branch always
+returns before the foraging branch is reached. The harness takes a correct
+delta. **The figure stands.**
+
+```
+person-days 34,284
+energy down per person-day 4,276 against 1,440 burned   (297%)
+  Eat chosen 223,551,  6.52 per person-day
+  Gather chosen 534,466, 15.59 per person-day
+```
+
+**Six and a half sittings a day, against the three the hunger clock is built
+for.** And the reason nothing stops the seventh is arithmetic:
+
+| | |
+|---|---|
+| `WHAT_A_SITTING_AIMS_AT` | 480, and its own doc says **energy, "Not a volume"** |
+| one mouthful | `UNITS_IN_ONE_ITEM` = 5 volume units |
+| ordinary food | 25 energy per unit, so a mouthful is 125 energy |
+| a full sitting | four mouthfuls = **20 volume units** |
+| `STOMACH_CAPACITY` | **600** |
+
+**A full sitting fills 3.3% of the stomach.** `physiology::eat` does clamp to
+`room_in_the_stomach`, and the six-hour gastric schedule is implemented and
+correct - they are simply unreachable for anything but the thinnest forage. The
+cap on a meal is on energy; the cap on the stomach is on volume; and the body
+sits down again whenever the drive says so, which is twice as often as the
+clock intends. Not fixed here: it is a balance change and wants its own pass.
+
+#### 2. The fight: the reactive half asks, the deciding half never did
+
+`own_strength()` includes `health / 100.0` and the body's movement multiplier,
+and it feeds the fear-or-anger appraisal - so a wounded man rates himself
+weaker and is likelier to run **when something comes at him.**
+
+Going to *start* the fight asked nothing about the man:
+
+```rust
+fn could_bring_it_down(agent, species) -> bool {
+    species.health <= AS_BIG_AS_A_STONE_WILL_KILL
+        || agent.what_i_have_to_work_with(SkillType::Hunting).is_some()
+}
+```
+
+`worth_hunting` asks only: is it alive, can this tool kill it, and if it is
+dangerous is there a weapon. `grep state.health src/analytics/wanting/` returns
+nothing. A man at ten health with a spear set off after a bear exactly as a
+whole man would, and so did a child.
+
+Fixed by calling `could_i_fight_at_all(species.attack_damage)` - the same
+predicate `between_us::threat` already uses on the same argument, so the
+question is asked in one place on both sides of it.
+
+**And it measured as an exact no-op.** A build carrying this change and nothing
+else produced output *byte-identical* to the baseline over eight worlds: the
+only difference between the two files was the harness header added afterwards.
+
+```
+$ diff why5.txt why8.txt
+2a3,7
+>   person-days 34284               <- the new header, and nothing else
+```
+
+Its condition needs an agent hurt, holding an equipped weapon, carrying a
+hunting tool in the pack, **and** facing an Aggressive or Territorial animal at
+once, and that conjunction does not occur in sixteen world-years. It is a guard
+against a state the model can reach in principle and does not reach in
+practice. Worth keeping, worth nothing yet, and not to be credited with
+anything.
+
+#### 3. The healing gate: two questions, one gate, and the one that mattered was unasked
+
+```rust
+let suffering = is_starving() || is_dehydrated()
+    || !exposure_status.active_exposures.is_empty();
+if !suffering {
+    self.regenerate_health(resting);
+    self.take_health_down_to(body_condition);
+}
+```
+
+**The second line is the serious one.** `take_health_down_to` holds health down
+to what a broken body can carry and books the difference to `A_WOUND`. That is
+bookkeeping, not a reward for being well - and sharing a gate with the healing
+meant **suffering exempted a man from his own wound cap.** Exactly while
+starving, freezing or parched, his health was not held down to his body, and
+the one drain #209 exists to name went unwritten in the months people die of it.
+
+The first is a cliff, and wider than it reads. **Any** active exposure means
+Hypothermia, Frostbite, Hyperthermia, Dehydration or Sunburn at any severity -
+in winter, everybody, always. And `is_starving()` is itself
+`physiology.is_starving() || energy < 20.0`, where the second half is the
+action-energy pool: tiredness, not starvation. **A tired man in mild cold
+healed at exactly nought.**
+
+Now: the cap always applies, and mending is paid out of
+`reserve / reserve_capacity` - the share of the three-week reserve still in
+hand. No number anybody picked, and exposure is already inside it because being
+cold burns reserve. Dehydration stays a hard stop on purpose: water is not the
+reserve.
+
+#### What it bought, attributed
+
+Three builds, same eight seeds. The middle row is the isolation run.
+
+| | deaths | hunger | a blow | mo. 11 | mo. 13-18 | mo. 23 |
+|---|---|---|---|---|---|---|
+| neither | 162 | 86 | 58 | 4.8 alive, 40 died | 2.9 | 0.9 |
+| **hunting gate only** | **162** | **86** | **58** | **4.8, 40** | **2.9** | **0.9** |
+| both | **130** | **62** | 59 | **5.8, 32** | **3.8** | **3.1** |
+
+**The healing gate is the whole of it: deaths down 20%, hunger deaths down
+28%.** The hunting gate is nil.
+
+Two things worth writing down. The gain is in **hunger**, not in blows - blows
+went 58 to 59, flat - which is the opposite of what was predicted when the gate
+was flagged. The guess was that the people dying of blows were the ones denied
+healing; the mechanism is evidently that a body that keeps its condition
+gathers and carries better, so fewer starve. Deaths by blow are 45.4% of the
+dead now only because the hunger denominator shrank.
+
+And seed 0's draw count **fell** 867,358 to 750,181, down 13.5%, which looked
+like a harsher world and was the reverse: fewer people dying is fewer deaths,
+births and re-decisions to draw for. The prediction that the wound cap would
+cost lives was wrong.
+
+Still empty by month 24. The month-11 collapse is softer and is not gone.
+
+Suite: **2,557 passed, 9 failed** - the standing set less one, nothing new
+broken. Both healing tests were checked against the old gate and go red on it;
+the cap test took three drafts to make honest, because asserting on the health
+figure passed for the wrong reason (a starving body loses health to hunger
+anyway) and an emptied reserve kills inside one tick. It asserts the ledger
+entry now.

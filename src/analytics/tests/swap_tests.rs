@@ -302,3 +302,126 @@ fn nobody_substitutes_into_a_job_they_cannot_do() {
     }
 }
 
+
+// --------------------------------------------------------------------------
+// What is never put in
+// --------------------------------------------------------------------------
+//
+// **The defect these exist for.** `what_i_would_swap` walked every stack in
+// the pack looking for something to substitute, filtered only on being
+// non-empty, not already an input, and not a lesson already learned. Nothing
+// excluded a man's tools or the basket everything else was in.
+//
+// Twenty lines away, `what_i_would_set_down` - the rule for what a person
+// sheds when the pack will not take another handful - has always excluded
+// exactly those two. So a man would not put his basket down to make room for
+// supper, and would cheerfully destroy it on the chance that a basket was what
+// a digging stick had been missing. Two places deciding whether a thing may
+// leave the pack, and only one of them holding the rule.
+//
+// Measured over eight worlds and a year before this: `trying_a_swap` destroyed
+// 4,629 items and succeeded not once, among them **150 baskets and 156 tools**
+// - and a basket is thirty of the forty-two units a founder can carry, so
+// losing it takes a pack from forty-two down to the twelve two hands hold.
+// See ISSUES_FOUND #206.
+
+use crate::agents::Agent;
+
+/// The axe in his hand is not spare.
+#[test]
+fn nobody_puts_the_tool_they_work_with_into_an_experiment() {
+    for tool in making::EVERY_TOOL {
+        assert!(
+            Agent::is_this_part_of_the_kit(tool.called),
+            "{} is a tool and should never be put in as a substitute",
+            tool.called
+        );
+    }
+}
+
+/// Nor the thing everything else is in.
+#[test]
+fn nobody_puts_the_basket_everything_is_in_into_an_experiment() {
+    for (carrier, _) in Agent::WHAT_CARRIES {
+        assert!(
+            Agent::is_this_part_of_the_kit(carrier),
+            "{carrier} is what a load is carried in and should never be spent"
+        );
+    }
+
+    // A basket is thirty of a founder's forty-two units.
+    assert!(Agent::is_this_part_of_the_kit("basket"));
+    assert!(Agent::is_this_part_of_the_kit("leatherbag"));
+}
+
+/// And ordinary stuff still is.
+#[test]
+fn the_rule_only_covers_the_kit() {
+    for ordinary in ["wood", "stone", "flax", "clay", "fish", "hides", "iron"] {
+        assert!(
+            !Agent::is_this_part_of_the_kit(ordinary),
+            "{ordinary} is not kit and is a fair thing to try in a recipe"
+        );
+    }
+}
+
+/// **The whole of it, end to end.** A man holding nothing but his kit and the
+/// makings of a step proposes a swap that does not spend his kit.
+#[test]
+fn a_swap_is_never_proposed_that_would_cost_a_man_his_kit() {
+    let mut simulation = a_person();
+    empty_the_pack(&mut simulation);
+
+    // The makings of a lashing, and nothing else loose to try.
+    give(&mut simulation, "flax", 4);
+    // And his kit: an axe to work with, a basket to carry it all in.
+    give(&mut simulation, "handaxe", 1);
+    give(&mut simulation, "basket", 1);
+
+    for _ in 0..50 {
+        let Some((_, _, put_in)) = simulation.population.agents[0].what_i_would_swap() else {
+            break;
+        };
+
+        assert!(
+            !Agent::is_this_part_of_the_kit(&put_in),
+            "he proposed to spend his {put_in} on an experiment"
+        );
+
+        // Learn the lesson so the next turn round proposes something else,
+        // rather than the same thing for ever.
+        let agent = &mut simulation.population.agents[0];
+        let called = making::what_that_swap_is_called("lashing", "flax", &put_in);
+        for _ in 0..20 {
+            agent.lessons.record_particular(&called, false);
+        }
+    }
+}
+
+/// The two rules are one rule, and the shedding one still holds.
+///
+/// Guarding the extraction: `what_i_would_set_down` had these filters inline
+/// and now reads them from the shared answer, so a change to one is a change
+/// to both - which is the point of it.
+#[test]
+fn a_man_still_does_not_shed_his_axe_or_his_basket_to_make_room() {
+    let mut simulation = a_person();
+    empty_the_pack(&mut simulation);
+
+    give(&mut simulation, "handaxe", 1);
+    give(&mut simulation, "basket", 1);
+
+    assert!(
+        simulation.population.agents[0]
+            .what_i_would_set_down()
+            .is_none(),
+        "a man with an axe and a basket has nothing he would put down"
+    );
+
+    // A load of wood is another matter.
+    give(&mut simulation, "wood", 6);
+    assert_eq!(
+        simulation.population.agents[0].what_i_would_set_down(),
+        Some("wood".to_string())
+    );
+}

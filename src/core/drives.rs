@@ -174,7 +174,7 @@ impl DriveType {
     /// The specification's decrease conditions are worded as sufficiency -
     /// "sufficient stockpiled food, tools, materials", "sufficient tool variety
     /// stored" - so each of them needs a number for what sufficient means.
-    const ENOUGH_FOOD: f32 = 20.0;
+    pub const ENOUGH_FOOD: f32 = 20.0;
 
     /// The most that dreading a need can add to the fear drive.
     ///
@@ -185,8 +185,8 @@ impl DriveType {
     /// point. Fear about a need has to press in the same direction as the
     /// need, not in front of it.
     const WHAT_DREAD_IS_WORTH: f32 = 0.4;
-    const ENOUGH_MATERIALS: f32 = 30.0;
-    const ENOUGH_TOOLS: f32 = 3.0;
+    pub const ENOUGH_MATERIALS: f32 = 30.0;
+    pub const ENOUGH_TOOLS: f32 = 3.0;
     const ENOUGH_FINERY: f32 = 2.0;
 
     /// How much the agent's situation is asking for this drive right now, from

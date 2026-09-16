@@ -42,6 +42,13 @@ pub enum Strategy {
     ExploitRainCatchment,
     DigOrRepairWell,
     RelocateTowardWater,
+    /// Getting water off somebody who has some.
+    ///
+    /// The specification lists six ways to answer thirst and this world named
+    /// five of them. It is the water twin of `TradeForFood`, which is itself
+    /// measured as never once firing - so this arrives declared and
+    /// unreachable, which is the honest state of it rather than a claim.
+    TradeForWater,
 
     // ---- hunger ---------------------------------------------------------
     EatCarriedFood,
@@ -102,7 +109,205 @@ pub enum Horizon {
     LongTerm,
 }
 
+/// The thing whose getting actually answers a need.
+///
+/// **One per need, and it is never a tool.** "Hydration is satisfied by water.
+/// A gourd is a transport/storage enabler." That sounds obvious written down
+/// and is exactly the confusion a goal system falls into when it is built out
+/// of preconditions alone: a planner that scores "has water container" as
+/// progress towards not being thirsty will happily send a dying man to fetch a
+/// pot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Satisfier {
+    /// Water fit to drink, drunk
+    PotableWater,
+    /// Food, eaten
+    Food,
+    /// Being out of the weather
+    Cover,
+}
+
+impl Satisfier {
+    pub fn called(&self) -> &'static str {
+        match self {
+            Satisfier::PotableWater => "potable_water",
+            Satisfier::Food => "food",
+            Satisfier::Cover => "cover",
+        }
+    }
+}
+
+/// What has to be true before a satisfier can be got at, which is not the same
+/// as getting at it.
+///
+/// The specification's list for thirst, and it generalises: a container, a
+/// source, a way to the source, leave to take from it, the time to go, and
+/// coming back alive. None of these reduces thirst by a drop. All of them can
+/// stop it being reduced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Enabler {
+    /// Something to carry or store it in
+    AContainer,
+    /// A source that exists and has something left in it
+    ASource,
+    /// A way from here to there
+    APathToIt,
+    /// Leave to take from it - whose it is, and whether they mind
+    LeaveToTake,
+    /// The turns to spend going and coming
+    Time,
+    /// Getting back
+    Safety,
+    /// Something in the hand to do it with
+    ATool,
+    /// Knowing where it is at all
+    KnowingWhere,
+    /// Somebody else, willing
+    AnotherPerson,
+}
+
+impl Enabler {
+    pub fn called(&self) -> &'static str {
+        match self {
+            Enabler::AContainer => "container",
+            Enabler::ASource => "source_access",
+            Enabler::APathToIt => "path_to_source",
+            Enabler::LeaveToTake => "permission",
+            Enabler::Time => "time",
+            Enabler::Safety => "safety",
+            Enabler::ATool => "tool",
+            Enabler::KnowingWhere => "knowing_where",
+            Enabler::AnotherPerson => "another_person",
+        }
+    }
+}
+
+/// What answers this need.
+///
+/// Needs with no satisfier here are the ones this layer does not yet carry -
+/// `Strategy::all_for` returns nothing for them either, and the two are
+/// checked against each other in the tests so that a need cannot acquire ways
+/// of being answered without anybody saying what would answer it.
+pub fn what_answers(need: DriveType) -> Option<Satisfier> {
+    match need {
+        DriveType::Thirst => Some(Satisfier::PotableWater),
+        DriveType::Hunger => Some(Satisfier::Food),
+        DriveType::Shelter => Some(Satisfier::Cover),
+        _ => None,
+    }
+}
+
 impl Strategy {
+    /// What this way needs of the world before it can be taken.
+    ///
+    /// Enablers, every one of them - so the list can be read as "what would
+    /// have to change for this to become possible", which is a different and
+    /// more useful question than "is it possible".
+    ///
+    /// Note what is *not* here: the satisfier. Drinking carried water wants a
+    /// container; it does not want water-as-an-enabler, because the water is
+    /// the point rather than the means.
+    pub fn what_it_takes(&self) -> &'static [Enabler] {
+        match self {
+            // The specification's worked example. A skin of water in the pack
+            // is the one way that wants nothing of the world outside the pack
+            // - and it still wants the container, which is why a settlement
+            // with nothing to carry water in has only the ways that need a
+            // river in front of them.
+            Strategy::ConsumeCarriedWater => &[Enabler::AContainer],
+            Strategy::DrinkFromLocalSource => &[Enabler::ASource, Enabler::Safety],
+            Strategy::FetchFromKnownSource => &[
+                Enabler::AContainer,
+                Enabler::ASource,
+                Enabler::APathToIt,
+                Enabler::KnowingWhere,
+                Enabler::Time,
+                Enabler::Safety,
+            ],
+            Strategy::AskOrFollowAnotherToWater => {
+                &[Enabler::AnotherPerson, Enabler::Time, Enabler::Safety]
+            }
+            Strategy::ExploitRainCatchment => &[Enabler::AContainer, Enabler::Time],
+            Strategy::DigOrRepairWell => &[Enabler::ATool, Enabler::Time, Enabler::ASource],
+            Strategy::RelocateTowardWater => {
+                &[Enabler::KnowingWhere, Enabler::APathToIt, Enabler::Time, Enabler::Safety]
+            }
+            Strategy::TradeForWater => {
+                &[Enabler::AnotherPerson, Enabler::AContainer, Enabler::LeaveToTake]
+            }
+
+            Strategy::EatCarriedFood => &[],
+            Strategy::EatStoredFood => &[Enabler::LeaveToTake, Enabler::APathToIt],
+            Strategy::GatherWildFood => &[Enabler::ASource, Enabler::Time, Enabler::Safety],
+            Strategy::ScavengeWhatIsLyingAbout => &[Enabler::ASource, Enabler::Safety],
+            Strategy::WalkTheTrapline => &[Enabler::ATool, Enabler::Time, Enabler::KnowingWhere],
+            Strategy::FishLocalWaters => &[Enabler::ATool, Enabler::ASource, Enabler::Time],
+            Strategy::HuntLocalAnimals => {
+                &[Enabler::ATool, Enabler::ASource, Enabler::Time, Enabler::Safety]
+            }
+            Strategy::TradeForFood => &[Enabler::AnotherPerson, Enabler::LeaveToTake],
+            Strategy::StealFood => &[Enabler::ASource, Enabler::Safety],
+            Strategy::RequestCommunalAllocation => {
+                &[Enabler::AnotherPerson, Enabler::LeaveToTake]
+            }
+            Strategy::ProcessStoredRawFood => &[Enabler::ATool, Enabler::Time],
+
+            Strategy::UseOwnedShelter => &[Enabler::APathToIt],
+            Strategy::UseHouseholdShelter => &[Enabler::APathToIt, Enabler::LeaveToTake],
+            Strategy::ShareCommunalShelter => {
+                &[Enabler::APathToIt, Enabler::LeaveToTake, Enabler::AnotherPerson]
+            }
+            Strategy::RepairDamagedShelter => &[Enabler::ATool, Enabler::Time],
+            Strategy::BuildTemporaryShelter => &[Enabler::Time, Enabler::ASource],
+            Strategy::BuildDurableShelter => &[Enabler::ATool, Enabler::Time, Enabler::ASource],
+            Strategy::RelocateToNaturalShelter => {
+                &[Enabler::KnowingWhere, Enabler::APathToIt, Enabler::Time]
+            }
+        }
+    }
+
+    /// The enabler this world cannot supply, for a way that is out of reach.
+    ///
+    /// `Reach::NotYet` has always carried a sentence of prose saying what is
+    /// missing. This says the same thing in the vocabulary where the vocabulary
+    /// can say it, so that "what is this world short of" is countable rather
+    /// than a paragraph to read.
+    ///
+    /// **`None` on an out-of-reach way means the missing thing is not an
+    /// enabler at all**, and that is a distinction worth keeping rather than
+    /// papering over. Three quite different kinds of missing turn up here:
+    ///
+    /// - a *thing* the world does not have, which is an enabler: no vessel
+    ///   left out in the rain, nothing to carry water in;
+    /// - a *mechanism* the world does not model, which is not: there is no
+    ///   water table, so a well has nowhere to go, and nothing mends a
+    ///   building so there is no repair to choose;
+    /// - *wiring*: building is answered by the Construction drive and not by
+    ///   the Shelter one, and the two do not meet.
+    ///
+    /// Only the first is fixed by giving somebody a thing. Reading the other
+    /// two as enabler shortfalls would say a settlement could dig a well if
+    /// only it had a better shovel, which is false and would send people after
+    /// shovels.
+    pub fn the_enabler_it_waits_on(&self) -> Option<Enabler> {
+        match self {
+            // Rain falls and nothing is left out in it. A thing.
+            Strategy::ExploitRainCatchment => Some(Enabler::AContainer),
+            // Nobody ever has water to spare, because nobody can hold any.
+            Strategy::TradeForWater => Some(Enabler::AContainer),
+            // There are people, and knowing where one of them is *going* is
+            // not something anybody can ask about, so the person is present
+            // and not usable.
+            Strategy::AskOrFollowAnotherToWater => Some(Enabler::AnotherPerson),
+            // A camp is derived from its ground and its people and has no
+            // voice, so there is nobody to ask for a share.
+            Strategy::RequestCommunalAllocation => Some(Enabler::AnotherPerson),
+
+            // Mechanism or wiring, not a thing. See the note above.
+            _ => None,
+        }
+    }
+
     /// What it is called, which is what goes in the record.
     ///
     /// Short, lower case and stable: it is written into `Element::By`, so
@@ -116,6 +321,7 @@ impl Strategy {
             Strategy::ExploitRainCatchment => "catch-rain",
             Strategy::DigOrRepairWell => "dig-well",
             Strategy::RelocateTowardWater => "move-to-water",
+            Strategy::TradeForWater => "trade-for-water",
 
             Strategy::EatCarriedFood => "eat-carried",
             Strategy::EatStoredFood => "eat-stored",
@@ -165,6 +371,8 @@ impl Strategy {
             | Strategy::RelocateToNaturalShelter => Horizon::Immediate,
 
             // A trip, a cast, a stalk, a bargain: this afternoon or tomorrow.
+            // `TradeForWater` sits with `TradeForFood` on the same reasoning
+            // and is written beside it below.
             Strategy::FetchFromKnownSource
             | Strategy::AskOrFollowAnotherToWater
             | Strategy::ExploitRainCatchment
@@ -172,6 +380,7 @@ impl Strategy {
             | Strategy::FishLocalWaters
             | Strategy::HuntLocalAnimals
             | Strategy::TradeForFood
+            | Strategy::TradeForWater
             | Strategy::StealFood
             | Strategy::RequestCommunalAllocation
             | Strategy::ProcessStoredRawFood
@@ -219,6 +428,12 @@ impl Strategy {
             Strategy::RelocateTowardWater => {
                 Reach::NotYet("moving camp never fires - see ISSUES_FOUND #237")
             }
+            Strategy::TradeForWater => {
+                Reach::NotYet("there is nothing to carry water in, so nobody \
+                    ever has a surplus of it to trade - and `TradeForFood`, \
+                    which has every piece of machinery it needs, is measured \
+                    as never once firing anyway")
+            }
             Strategy::StealFood => {
                 Reach::NotYet("theft exists but sits at the tail of a chain \
                     almost nobody reaches - see ISSUES_FOUND #226")
@@ -258,6 +473,7 @@ impl Strategy {
                 Strategy::ExploitRainCatchment,
                 Strategy::DigOrRepairWell,
                 Strategy::RelocateTowardWater,
+                Strategy::TradeForWater,
             ],
             // The order is the one the old arm was measured into, not a
             // tidier one. **The store sits behind the ordinary food branch**,

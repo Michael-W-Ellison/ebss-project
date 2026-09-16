@@ -34,9 +34,7 @@ fn one_person() -> Simulation {
     simulation.population.agents[0]
         .inventory
         .get_all_items_mut()
-        .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-    simulation
+        .clear();    simulation
 }
 
 // --------------------------------------------------------------------------
@@ -360,9 +358,7 @@ fn nobody_tops_up_with_their_arms_full() {
         let full = agent.inventory.effective_max_weight();
         agent
             .inventory
-            .add_item(InventoryItem::new_with_weight("stone".to_string(), 1, full));
-        agent.inventory.recalculate_weight();
-    }
+            .add_item(InventoryItem::new_with_weight("stone".to_string(), 1, full));    }
 
     assert_eq!(
         simulation.what_i_should_take_while_i_am_here(&simulation.population.agents[0], here),

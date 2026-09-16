@@ -269,7 +269,15 @@ fn the_gate_weighs_a_stone_the_same_as_the_pack_does() {
         ResourceType::Stone,
     ) - 0.5;
     let load = simulation.population.agents[0].inventory.max_weight - room_for_no_stone;
-    simulation.population.agents[0].inventory.current_weight = load;
+    // Loaded with real weight rather than by writing the total down: there is
+    // no total to write any more, and forging one is what #214 was.
+    simulation.population.agents[0]
+        .inventory
+        .get_all_items_mut()
+        .insert(
+            "ballast".to_string(),
+            crate::agents::InventoryItem::new_with_weight("ballast".to_string(), 1, load),
+        );
 
     let agent = simulation.population.agents[0].clone();
     assert!(
@@ -287,5 +295,159 @@ fn the_gate_weighs_a_stone_the_same_as_the_pack_does() {
     assert!(
         !result.success,
         "the executor took a stone the decision said would not fit"
+    );
+}
+
+/// A man standing on his own larder, with a pack that has room for half a
+/// root and not a whole one.
+///
+/// `room` is what is left in the pack, and it is left as *food*, because
+/// `what_i_would_set_down` never offers food or kit - so there is genuinely
+/// nothing he could put down to make room, and the gate has to answer on the
+/// weight alone.
+fn a_starving_man_on_a_pit_of_roots(room: f32) -> crate::analytics::Simulation {
+    let mut world = World::new(WorldConfig::default());
+    // No bush anywhere: a bush underfoot beats the larder, and rightly, so
+    // the country has to be bare for the store branch to be the one on trial.
+    world.resources.clear();
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+
+    let mut simulation = crate::analytics::Simulation::new(world, population);
+
+    // Where he actually ended up, read *after* the world is built rather than
+    // before: `Simulation::new` places people, so a position taken at spawn
+    // is not where the pit wants digging. The whole point of this fixture is
+    // that he is standing on it.
+    let here = simulation.population.agents[0].state.position;
+
+    // Roots, at what the model says a root weighs - which is the `_ => 1.0`
+    // arm, twice what `WHAT_A_HANDFUL_OF_FOOD_WEIGHS` calls a handful. Taken
+    // from the table rather than written down here, so the fixture cannot
+    // drift away from the thing it is testing.
+    let each = crate::analytics::Simulation::what_one_of_these_weighs(ResourceType::Roots);
+    let mut buried = InventoryItem::new_with_weight("roots".to_string(), 150, each);
+    buried.food_data = simulation
+        .food_database
+        .create_food_data(&crate::world::ItemType::Roots, 0);
+
+    let mut pit = crate::world::Pit {
+        where_it_is: Position::new(here.0, here.1),
+        holds: Vec::new(),
+        covered: true,
+        dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
+    };
+    pit.put_in(buried);
+    simulation.world.pits.push(pit);
+
+    simulation.population.agents[0]
+        .memory
+        .remember_how_much_is_there(
+            crate::core::memory::SpatialMemoryType::Storage,
+            (here.0, here.1, 0),
+            150,
+        );
+
+    // Load the pack with food until exactly `room` is left. The starting kit
+    // goes out first, so that what is left is exactly what was put in and
+    // there is nothing of somebody else's in the way.
+    simulation.population.agents[0]
+        .inventory
+        .get_all_items_mut()
+        .clear();
+    let fill = simulation.population.agents[0].inventory.max_weight - room;
+    let mut ballast = InventoryItem::new_with_weight("meat".to_string(), 1, fill);
+    ballast.food_data = simulation
+        .food_database
+        .create_food_data(&crate::world::ItemType::Meat, 0);
+    simulation.population.agents[0]
+        .inventory
+        .get_all_items_mut()
+        .insert("meat".to_string(), ballast);
+
+    let left = simulation.population.agents[0]
+        .inventory
+        .weight_capacity_remaining();
+    assert!(
+        (left - room).abs() < 0.01,
+        "the fixture meant to leave {room} of room and left {left}"
+    );
+    assert!(
+        simulation.population.agents[0]
+            .what_i_would_set_down()
+            .is_none(),
+        "the fixture meant to leave him nothing he would put down"
+    );
+
+    // Starving, which is what opens a store at all.
+    if let Some(hunger) = simulation.population.agents[0]
+        .drives
+        .get_mut(DriveType::Hunger)
+    {
+        hunger.value = 1.0;
+    }
+    simulation.population.agents[0].state.energy = 5.0;
+
+    simulation
+}
+
+/// The gate weighs what is in the pit, not a notional handful.
+///
+/// It asked `could_i_take_another_handful(WHAT_A_HANDFUL_OF_FOOD_WEIGHS)` - a
+/// half - while the executor needed room for a whole unit of the thing, and
+/// in `what_one_of_these_weighs` only the generic `Food` is priced at a half.
+/// Roots, legumes, greens, nuts, fish, grain and meat all fall through to
+/// `_ => 1.0`, and those are four-fifths of what is ever in a pit.
+///
+/// So a pack with between a half and a whole unit of room passed the gate and
+/// was refused by the executor - and because the store branch sits above
+/// every drive there is, he spent the turn on it and came back next turn to
+/// be refused again. Measured over eight worlds and two years: **264,453
+/// refusals of "No room in the pack for what is in the store", 98.7% of every
+/// `PickUp` anybody chose.** See #215.
+#[test]
+fn the_gate_weighs_what_is_in_the_pit_and_not_a_handful() {
+    let simulation = a_starving_man_on_a_pit_of_roots(0.75);
+    let agent = simulation.population.agents[0].clone();
+    let here = agent.state.position;
+
+    if let Some(Action::PickUp { .. }) = simulation.something_out_of_the_store(&agent, here) {
+        panic!(
+            "he was sent to a pit of roots with room for three-quarters of one: \
+             the gate asked about a handful and the store hands out whole roots"
+        );
+    }
+}
+
+/// And with room for a whole root he is sent, and served.
+///
+/// The other half of the same question: a gate that answers "no" to
+/// everything would pass the test above and starve him. What is wanted is
+/// that the gate and the executor agree, not that the gate is timid.
+#[test]
+fn a_man_with_room_for_a_root_is_offered_the_pit_and_gets_one() {
+    let mut simulation = a_starving_man_on_a_pit_of_roots(1.5);
+    let agent = simulation.population.agents[0].clone();
+    let here = agent.state.position;
+
+    let what = simulation.something_out_of_the_store(&agent, here);
+    let Some(Action::PickUp { what }) = what else {
+        panic!("a starving man standing on a pit of roots with room for one was not offered it: {what:?}");
+    };
+
+    let result = simulation.execute_action(&Action::PickUp { what }, 0);
+    assert!(
+        result.success,
+        "the decision sent him to the pit and the executor refused him: {:?}",
+        result.message
+    );
+    assert!(
+        simulation.population.agents[0]
+            .inventory
+            .get_item("roots")
+            .is_some_and(|got| got.quantity > 0),
+        "the executor said yes and no roots arrived"
     );
 }

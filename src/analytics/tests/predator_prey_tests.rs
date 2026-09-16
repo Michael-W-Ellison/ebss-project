@@ -349,11 +349,16 @@ fn a_hungry_predator_turns_on_the_settlement() {
                 .agents
                 .iter()
                 .filter(|agent| {
-                    agent
-                        .emotions
-                        .recent_attacker(simulation.current_tick)
-                        .map(|id| wolves.contains(&id))
-                        .unwrap_or(false)
+                    // What struck is a *wolf*, not one particular wolf's
+                    // uuid. This used to read the id out of a field meaning
+                    // "the person who hit me" and look it up among the eight
+                    // spawned here - which worked, and was the evidence
+                    // nobody read that animals were being filed as people.
+                    // See #212.
+                    matches!(
+                        agent.emotions.recent_attacker(simulation.current_tick),
+                        Some(crate::agents::EmotionSource::Creature(ref what)) if what == "wolf"
+                    )
                 })
                 .count();
         }

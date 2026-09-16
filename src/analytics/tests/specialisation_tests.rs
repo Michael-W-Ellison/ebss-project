@@ -297,7 +297,7 @@ fn a_dedicated_tailor_wastes_less_and_makes_better() {
                 "stoneknife".to_string(),
                 1,
                 30.0,
-                Quality::Basic,
+                Quality::Common,
             ));
 
             let made = simulation.execute_action(

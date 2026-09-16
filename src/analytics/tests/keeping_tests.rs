@@ -40,8 +40,6 @@ fn one_person() -> Simulation {
         .inventory
         .get_all_items_mut()
         .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-
     // Laying food out is something somebody has to have watched happen
     // before they will do it on purpose — see `weather_tests`. These tests
     // are about what drying is worth, not about finding out that it works.

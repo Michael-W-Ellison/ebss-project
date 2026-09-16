@@ -237,3 +237,221 @@ fn test_grief_explanation_mentions_functional_loss() {
         "Explanation should express grief: {}", explanation
     );
 }
+
+// --------------------------------------------------------------------------
+// What the survivors grieve at is a person, not the reckoning's verdict
+// --------------------------------------------------------------------------
+//
+// Grief used to be keyed on `EmotionSource::Event(cause)` - the settlement's
+// own name for what killed somebody. That bought nothing, because an `Event`
+// source is write-only: `what_frightens_me_most` reads only `Creature` sources
+// and `who_frightens_me_most` only `Agent` ones, so nothing in the model can
+// act on being afraid of "hunger". And it cost the model its independence from
+// its own bookkeeping: the sources are a `BTreeMap` keyed by the cause, so how
+// many distinct names a death could have decided how many buckets fear was
+// split across - and every bucket decays on its own - and decided the order
+// they were summed in. #209 measured it: the same eight seeds read two ways
+// were not the same eight worlds.
+
+/// Every name this settlement has for a death. None of them may be an emotion.
+///
+/// Taken from the model rather than copied, so a cause added later is covered
+/// here without anybody remembering to come back.
+use crate::agents::AgentState;
+
+/// Nothing an agent feels is keyed on what the reckoning decided.
+fn nothing_is_felt_about_the_verdict(agent: &Agent) {
+    use crate::agents::EmotionSource;
+
+    for named in AgentState::EVERYTHING_THAT_TAKES_HEALTH {
+        let verdict = EmotionSource::Event(named.to_string());
+        assert!(
+            !agent.emotions.fear_sources.contains_key(&verdict),
+            "afraid of '{named}', which is a word this model made up about a corpse"
+        );
+        assert!(
+            !agent.emotions.anger_sources.contains_key(&verdict),
+            "angry at '{named}', which is not a thing that can be got back at"
+        );
+    }
+}
+
+/// A pair who care about each other, and a drive that one of them answers.
+fn two_who_matter_to_each_other() -> Population {
+    let mut pop = Population::new();
+    pop.spawn_agent(AgentConfig::default());
+    pop.spawn_agent(AgentConfig::default());
+
+    let doomed = pop.agents[1].id;
+    let mut bond = Relationship::new(doomed, crate::agents::RelationshipType::Friend);
+    bond.bond_strength = 0.9;
+    pop.agents[0].relationships.add_relationship(bond);
+
+    for _ in 0..5 {
+        pop.agents[0].record_drive_satisfaction(DriveType::Social, doomed, 0.3, 0);
+    }
+
+    pop
+}
+
+/// A death nobody had a hand in leaves grief and nothing to run from.
+///
+/// There is no thing there to be afraid *of*. A dread of the winter that took
+/// him is worry rather than fear, and is not wired up - but writing it down as
+/// a fear of the word "hunger" was not that either.
+#[test]
+fn a_death_nobody_had_a_hand_in_leaves_nothing_to_run_from() {
+    let mut pop = two_who_matter_to_each_other();
+    let before = pop.agents[0].emotions.sadness;
+
+    pop.agents[1].state.is_alive = false;
+    pop.tick();
+
+    assert!(
+        pop.agents[0].emotions.sadness > before,
+        "he is still grieved for"
+    );
+    assert_eq!(
+        pop.agents[0].emotions.who_frightens_me_most(),
+        None,
+        "and there is nobody to be frightened of"
+    );
+    nothing_is_felt_about_the_verdict(&pop.agents[0]);
+}
+
+/// A death somebody had a hand in is feared as that person.
+///
+/// This is the half that could not be expressed before. `who_frightens_me_most`
+/// reads `Agent` sources, so for the first time the fear a death leaves is one
+/// the flight branch of action selection can actually see.
+#[test]
+fn a_death_somebody_had_a_hand_in_is_feared_as_that_person() {
+    let mut pop = two_who_matter_to_each_other();
+    pop.spawn_agent(AgentConfig::default());
+    let killer = pop.agents[2].id;
+
+    pop.agents[1]
+        .emotions
+        .record_attack(crate::agents::EmotionSource::Agent(killer), 0);
+    pop.agents[1].state.is_alive = false;
+    pop.tick();
+
+    let (frightened_of, how_much) = pop.agents[0]
+        .emotions
+        .who_frightens_me_most()
+        .expect("the man who did it is somebody to be afraid of");
+
+    assert_eq!(frightened_of, killer);
+    assert!(how_much > 0.0);
+    nothing_is_felt_about_the_verdict(&pop.agents[0]);
+}
+
+/// And he is somebody to be angry at, which is what makes a grudge possible.
+///
+/// `process_drive_source_loss_with_cause` has always had an arm for this -
+/// "anger at whoever took away our satisfaction source" - and the only caller
+/// in the model could never reach it, because it passed an `Event` every time.
+/// Anger at a person is what `anger_at_people` reads, and that is what feeds
+/// the relationship and the retaliation.
+#[test]
+fn the_man_who_did_it_is_somebody_to_be_angry_at() {
+    let mut pop = two_who_matter_to_each_other();
+    pop.spawn_agent(AgentConfig::default());
+    let killer = pop.agents[2].id;
+
+    pop.agents[1]
+        .emotions
+        .record_attack(crate::agents::EmotionSource::Agent(killer), 0);
+    pop.agents[1].state.is_alive = false;
+    pop.tick();
+
+    let held_against = pop.agents[0].emotions.anger_at_people();
+    assert!(
+        held_against.iter().any(|(who, much)| *who == killer && *much > 0.0),
+        "nobody is held to account for it: {held_against:?}"
+    );
+    nothing_is_felt_about_the_verdict(&pop.agents[0]);
+}
+
+// --------------------------------------------------------------------------
+// A wolf is not a person
+// --------------------------------------------------------------------------
+
+/// A man taken by a wolf leaves his brother afraid of wolves.
+///
+/// This is the half #210 could not express and #212 found out why: the strike
+/// wrote the *animal's* uuid into a field meaning "the person who hit me", so
+/// keying grief on it made a survivor afraid of somebody who does not exist.
+/// Now it says which, and a fear of a creature is one the flight branch can
+/// actually read - `what_frightens_me_most` filters to `Creature` sources.
+#[test]
+fn a_man_taken_by_a_wolf_leaves_his_brother_afraid_of_wolves() {
+    use crate::agents::EmotionSource;
+
+    let mut pop = two_who_matter_to_each_other();
+    pop.agents[1]
+        .emotions
+        .record_attack(EmotionSource::Creature("wolf".to_string()), 0);
+    pop.agents[1].state.is_alive = false;
+    pop.tick();
+
+    let (what, how_much) = pop.agents[0]
+        .emotions
+        .what_frightens_me_most()
+        .expect("there is a thing to be afraid of, and it is a wolf");
+    assert_eq!(what, "wolf");
+    assert!(how_much > 0.0);
+
+    assert_eq!(
+        pop.agents[0].emotions.who_frightens_me_most(),
+        None,
+        "and no person is blamed for it"
+    );
+    nothing_is_felt_about_the_verdict(&pop.agents[0]);
+}
+
+/// A killing is laid at the door of a man, and a wolf has no door.
+#[test]
+fn only_a_person_is_named_as_a_killer() {
+    use crate::agents::EmotionSource;
+
+    let mut pop = Population::new();
+    pop.spawn_agent(AgentConfig::default());
+    let mauled = &mut pop.agents[0];
+
+    mauled
+        .emotions
+        .record_attack(EmotionSource::Creature("bear".to_string()), 0);
+    assert!(
+        mauled.emotions.recent_attacker(1).is_some(),
+        "something struck him"
+    );
+    assert_eq!(
+        mauled.emotions.whoever_struck_me(1),
+        None,
+        "but it was not anybody, and nobody may be blamed or struck back at"
+    );
+
+    let somebody = crate::core::dice::name();
+    mauled
+        .emotions
+        .record_attack(EmotionSource::Agent(somebody), 0);
+    assert_eq!(mauled.emotions.whoever_struck_me(1), Some(somebody));
+}
+
+/// And what struck is forgotten at the same rate whichever it was.
+#[test]
+fn what_struck_is_forgotten_at_the_same_rate_either_way() {
+    use crate::agents::EmotionSource;
+
+    let mut pop = Population::new();
+    pop.spawn_agent(AgentConfig::default());
+    let agent = &mut pop.agents[0];
+
+    agent
+        .emotions
+        .record_attack(EmotionSource::Creature("wolf".to_string()), 0);
+    assert!(agent.emotions.recent_attacker(99).is_some());
+    assert!(agent.emotions.recent_attacker(100).is_none());
+    assert!(agent.emotions.whoever_struck_me(100).is_none());
+}

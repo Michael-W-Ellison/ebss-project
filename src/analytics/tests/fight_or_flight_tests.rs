@@ -505,7 +505,7 @@ fn anger_ends_in_going_at_it() {
             "spear".to_string(),
             1,
             25.0,
-            crate::agents::Quality::Basic,
+            crate::agents::Quality::Common,
         ));
 
     simulation.read_the_situation();

@@ -38,9 +38,7 @@ fn one_person() -> Simulation {
     simulation.population.agents[0]
         .inventory
         .get_all_items_mut()
-        .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-    simulation
+        .clear();    simulation
 }
 
 /// Put an edge in somebody's pack, so `cut` is a thing they can actually do.

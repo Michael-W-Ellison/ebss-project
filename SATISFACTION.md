@@ -27,15 +27,36 @@ What answering the drive would look like. Obtain potable water; obtain edible
 calories; secure a sleeping place; acquire a cutting tool; preserve food;
 improve local shelter.
 
-**In the model: `core::goals`, and it is the wrong shape.** `InternalGoal` is
-about emotions - `IncreaseEmotion`, `ReduceStress`, `SeekEntertainment` - and
-`ExternalGoal` is about property - `OwnHouse`, `StockHouseFood`. Neither says
-"obtain potable water". #187 measured the branch that carries them and found it
-nearly dead: un-gating it cost five per cent of person-days, because what it
-carried was not worth carrying.
+**In the model: `wanting::goal`, and the finding is that the layer was never
+absent - it was distributed.** Four spellings, none of them called a goal:
 
-So the layer exists, is occupied by something else, and the something else does
-not work. It wants rewriting into the shape above rather than extending.
+| What | Where it lives | What it answers |
+|---|---|---|
+| The thresholds | `Preparedness` and `Sustenance` - `ENOUGH_FOOD`, `ENOUGH_MATERIALS`, `ENOUGH_TOOLS` | how much is enough |
+| The commitment | `Errand` and `stick_to_the_errand` | holding to it until it is met |
+| The food reckoning | `provision::WhatIsPutBy` | days in hand against a winter |
+| The name `Goal` | `core::goals` | emotions and property, and neither of the above |
+
+So "enough put by to see a winter out" is not a goal under Hunger here. It was
+**promoted to a drive of its own**, with the threshold as a constant inside it.
+That is a design decision rather than a mistake - it is why a full man with an
+empty pit still goes to work - but it is why the layer reads as missing.
+
+`wanting::goal::Goal` names the six goals and, for each, says what enough means
+and **which of the above already asks it** (`who_already_asks_it`). Where a
+threshold already exists it is read from where it lives rather than restated,
+and `the_goal_table_and_the_drives_cannot_drift` holds it to that, so naming the
+layer did not fork the model into two opinions about what enough is.
+
+Exactly one goal is asked by nobody: **obtain potable water**. A container is
+filled as a side effect of drinking at a source, and thirst only rises once the
+body is already dry, so nobody ever fills a skin against tomorrow. That one is
+now taken, last of all, on a turn that would otherwise have been spent standing
+still - a goal that can outrank a pressing drive is a drive, and this layer is
+not for making more of those.
+
+`core::goals` is left where it stands. It answers a different question badly,
+#187 has the measurement, and folding it in here would be two changes at once.
 
 ---
 
@@ -218,6 +239,25 @@ no settlement to *ask*, so `ToUsAll` means "anybody here may use it" rather
 than naming a body that owns it. Multi-agent
 coordination sits on top of this and is much the larger piece.
 
+### Satisfiers and enablers - what answers a need, and what merely lets it be
+
+"Hydration is satisfied by water. A gourd is a transport/storage enabler."
+
+Obvious written down, and exactly the confusion a goal system falls into when
+it is built out of preconditions alone: a planner that scores *has water
+container* as progress towards *not being thirsty* will send a dying man to
+fetch a pot. `Satisfier` and `Enabler` are separate types, so the two cannot be
+added together.
+
+Translating `Reach`'s prose into the enabler vocabulary turned up a
+distinction worth keeping. **Not every way that is out of reach is out of
+reach for want of a thing.** Three kinds of missing turn up: a *thing* (nothing
+is left out in the rain to catch it), a *mechanism* (there is no water table,
+so a well has nowhere to go), and *wiring* (building is answered by the
+Construction drive and not by the Shelter one). Only the first is fixed by
+giving somebody something, and reading the other two as enabler shortfalls
+would send people after shovels for a well that has nowhere to go.
+
 ### Reach
 
 Ten of the twenty-five ways are declared and cannot fire: no rain catchment, no
@@ -243,8 +283,26 @@ data - `Wants::{BareHands, AFreeHand, AToolFor(trade), ThisInHand(name),
 AVessel}` - and effects and costs as data, through
 `ActionResult::with_drive_change` and `with_energy_cost`.
 
-Preconditions, inputs, effects and costs are there. Risks and skill
-requirements are scattered rather than declared.
+### Operators: the six things a verb declares
+
+**In the model: `environment::verbs::Verb`.** The matrix held three of the six
+under other names since it was built - `targets` and `wants` are the
+preconditions, `changes` are the effects - and it now carries the other three:
+`inputs`, `costs` and `risks`, plus the trade a verb is done with.
+
+The one distinction worth being careful about is **wants against inputs**. A
+knife is *wanted* and comes back out of the job; a hide is an *input* and does
+not. Conflating them is how a model ends up eating its own tools: every verb
+that wanted one would consume one, and a settlement would burn a knife per
+hide.
+
+`FILL` is the specification's own worked example written out in full, and it is
+declared with nothing performing it - because **nothing in this simulation
+fills a container**. Drinking is done at the water or out of what somebody is
+already carrying, and how the carrying came about is a question the model has
+never asked. `everything_still_to_price` counts the verbs that have been named
+and not yet thought about as operators, the same way `everything_still_to_build`
+counts the ones nothing performs.
 
 ---
 
@@ -283,6 +341,142 @@ Three of the seven tags already have an axis. Four do not, and containers are a
 second mechanism answering the same question - which is this project's
 recurring defect, already in place.
 
+### What a thing is, as against what it is called
+
+**In the model: `environment::tags`.** Two vocabularies, and the difference
+between them is the whole point.
+
+**`Tag` is what a thing is** - descriptive, ungraded, plural. A fired pot is a
+food container, a water container *and a fragile container*, and the third
+tag is why you do not take it hunting. There is no such thing as being more of
+a pole than something else is.
+
+**`Capability` is what a job wants**, and it is graded, because "I need
+something to dig with" has better and worse answers. `0.0` is bare hands,
+`1.0` is the best thing in this world. Four of the eight are **derived from
+the tool table** rather than declared beside it: `EVERY_TOOL` already prices
+digging, cutting, fishing and hunting on the axis of the *trade*, and a second
+table on the axis of the *capability* would be two spellings of one question.
+The coefficient is the fraction of the best available advantage, so adding a
+better shovel renormalises the ladder rather than leaving a stale 1.0 behind.
+
+The reason this matters is not tidiness. **A check written by name is a check
+written against the world as it stood**, and it stops being true as the world
+moves on without anything failing. Three of those were sitting in the code: a
+pit could only be lined with a bowl or a basket, so a settlement that had got
+as far as firing pots stored its winter in bare earth; a tent's hides fell off
+the end of a three-armed `match`, so every tent ever raised was poles and air;
+and one verb wanted a waterskin, which nothing in this world makes.
+
+See ISSUES_FOUND.md #204.
+
+### What a tool is worth: two questions, not one
+
+A tool answers two questions and they have different inputs.
+
+| | Reads | Sets |
+|---|---|---|
+| `how_fast_my_tools_make_this_go` | technology, workmanship, **wear**, in hand or in pack | the energy a trip costs, the odds a cast or throw tells, the work a turn of making gets through |
+| `how_much_my_tools_bring_back` | technology, workmanship | what comes back off a bush, off a carcass, off a core |
+
+**Durability lives on the first and nowhere else.** A blunt flake takes longer
+over a carcass; it does not leave more on the bone. Speed has no single
+spelling here because a turn is a fixed slice of a day with no clock inside
+it - the three currencies above are all the same quantity, how much of the job
+one turn finishes.
+
+The wear curve is a straight line rather than a set of bands, so every stroke
+of use tells a little and none of them tells suddenly. See ISSUES_FOUND.md
+#200, including what it cost to anchor a gathering trip's cost wrongly.
+
+### What workmanship is worth, and what decides it
+
+Quality is the third input, beside technology and wear, and it is the one that
+reaches furthest: it tells on how fast the work goes, on how much comes back,
+on how long the thing lasts, and - on a garment - on how much weather it keeps
+off. Two agents in the same coat cut to the same pattern are not equally warm.
+
+The ladder is the specification's own: Crude, Poor, Common, Good, Fine,
+Masterwork, with `Common` the neutral rung that everything else is priced
+against.
+
+What decides the quality of what comes out is **the hand and the tool
+together**: `min(Quality::from_hand, tool.material_quality_limit())`. Skill
+decides whether the attempt comes off at all; the tool caps how good the
+result can be. A master with nothing but a crude flake turns out good work and
+not fine work, and a beginner with a fine knife still turns out a beginner's
+work.
+
+A spoiled attempt is not a refusal - `ActionResult::attempted` holds the two
+apart - because a beginner who learns from spoiling a hide that *making does
+not work* never practises into a master, and the whole point of a skill
+deciding the odds is that practice pays.
+
+See ISSUES_FOUND.md #201, including three things added there that the
+specification did not ask for, each of which made the measurement look like a
+regression caused by the specification.
+
+### Where workmanship attaches, and whether it survives being put down
+
+The cap has a third input beside the hand and the tool: **what the thing is
+made of**. A length of crude cordage does not become a fine spear because a
+good man lashed it, and a coat is only as good as the hide it is cut from. So
+the stone-age chain caps its output at one rung above the worst of its
+makings, and tailoring caps the garment at one rung above the hide - which is
+the specification's own example running end to end, since the hide now carries
+the worth of the flake that skinned it. Two agents in the same coat differ in
+warmth because of a butchering three actions back.
+
+That needed quality to be able to *travel*. It lived in two places - a tool in
+a pack, a garment on a back - and the produced-goods channel between them
+carried a name and a number and nothing else, so a hide taken with a fine
+flake and a hide hacked off with a broken one arrived indistinguishable.
+
+And it needed a stack to stop throwing it away. A pack holds one entry per
+kind of thing, so the second coat is merged into the first, and the merge
+dropped the newcomer's quality and durability outright: every improvement
+anybody ever made to anything they already had went nowhere. Both are now
+blended by how much of each there is - the rule the food clock has used for
+age since #61 - with integer division, so the blend can never round a stack
+*up* into a rung it has not earned.
+
+See ISSUES_FOUND.md #203, including the two places in the source where this
+fault had been correctly described in a comment and worked around rather than
+fixed.
+
+### Stage 0: what the layer starts holding
+
+A capability table says what a people *can* use. It says nothing about what a
+people *has* on the first day, and until now nothing did: that was spelled
+thirty-two times over, once per recipe, in `Making::obvious`.
+
+`environment::stage` names it. Thirty-five development paths, each with a
+Stage 0 - what is in a people's hands, what that lets it do, what it cannot do
+until the path advances - and, honestly, whether this world carries it:
+
+| | Paths |
+|---|---|
+| Carried whole | 19 |
+| Carried in part | 12 |
+| Not carried at all | 4 |
+
+The twelve half-carried paths are the layer's real gap list, each naming its
+missing half: no ember is ever carried, no shellfish is ever gathered, nothing
+follows a camp for its scraps, nobody can tell anybody what to do, and the
+carrying half of the water path is one carved bowl that almost nobody makes.
+
+One path the table and the model disagree about, and the disagreement was
+measured rather than argued: the specification starts a people able to
+hand-shape a clay vessel, and making that so cost **4.9% of person-days and
+eight of twenty-one first winters**. Not because of clay - because nothing in
+the model asks whether what a working makes is worth making, and an unfired
+shape is the first obvious product that is worth nothing.
+
+The stages above zero are the user's to write. What is here is the shape that
+takes them - `Stage { number, .. }` - and two rules that stop the table and the
+recipe tables drifting into two opinions about what a people knows. See
+ISSUES_FOUND.md #199.
+
 ---
 
 ## Satisfiers and enablers
@@ -312,4 +506,6 @@ For hydration:
 3. **Satisfier and enabler**, which is small and which Layer 3 will make
    obvious.
 4. **Layer 2**, last, because it is the largest blast radius and because a
-   goal is worth little until there are strategies underneath it.
+   goal is worth little until there are strategies underneath it. Done: and
+   the blast radius turned out to be small, because three quarters of the
+   layer was already standing under other names. See Layer 2 above.

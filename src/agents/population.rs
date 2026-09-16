@@ -806,54 +806,73 @@ impl Population {
 
     /// Remove dead agents from population and process grief for survivors
     fn process_deaths(&mut self) {
-        use crate::agents::EmotionSource;
+        use crate::agents::{AgentState, EmotionSource};
 
         // Identify dead agents before removing them, collecting position and detailed cause
-        let dead_agents: Vec<(uuid::Uuid, String, (i32, i32), DeathCause)> = self.agents
+        // The fifth of these is who, if anybody, had a hand in it - asked of
+        // every death and not only of the ones the reckoning calls a blow.
+        // Grief must not consult the verdict: see the note on `cause_source`
+        // below.
+        let dead_agents: Vec<(uuid::Uuid, String, (i32, i32), DeathCause, Option<EmotionSource>)> = self.agents
             .iter()
             .filter(|agent| !agent.state.is_alive)
             .map(|agent| {
-                // What killed this one, read off what was written at the time
-                // rather than worked out from what is left.
+                // What killed this one: the thing holding the largest part of
+                // the body, rather than whichever took the final point.
                 //
                 // The cascade this replaced asked a corpse whether it was
                 // hungry, and by then the hunger has been eaten away and the
                 // cold has worn off, so the honest answer to every question
                 // was no: **70% of every death in this model came out as
                 // "unknown cause"**, and a settlement could not say what
-                // killed its people. See `AgentState::lose_health`.
+                // killed its people. Writing it down at the time fixed that
+                // and left a second fault behind it: the last straw is not
+                // the load. A blow took 47.6% of all health lost in this
+                // model and was credited with 25.9% of the deaths; thirst
+                // took 0.6% and was credited with 9.4%, because a drip is
+                // nearly always what happens to be last. See
+                // `AgentState::what_has_taken_health`.
                 // Old age first, because it is a fact about the man and not
                 // about the last scratch he took: an ill man who reaches his
                 // years dies of his years, and reading the record alone would
                 // book every one of them under whatever ailed him at the end.
                 let named = if agent.state.age >= agent.state.max_age {
-                    "old age".to_string()
+                    AgentState::OLD_AGE.to_string()
                 } else {
                     agent
                         .state
-                        .what_last_took_health
-                        .clone()
-                        .unwrap_or_else(|| "unknown cause".to_string())
+                        .what_took_the_most()
+                        .unwrap_or("unknown cause")
+                        .to_string()
                 };
 
                 let cause_enum = match named.as_str() {
-                    "hunger" | "starvation" => DeathCause::Starvation,
-                    "thirst" | "dehydration" => DeathCause::Dehydration,
-                    "old age" => DeathCause::OldAge,
-                    "exhaustion" => DeathCause::Exhaustion,
-                    "a blow" => DeathCause::Combat {
-                        killer_id: agent.emotions.recent_attacker(self.current_tick),
+                    // One arm apiece now. These used to read
+                    // `"hunger" | "starvation"` and `"thirst" | "dehydration"`,
+                    // and that pair of alternations was the standing evidence
+                    // that the model had two names for each of two causes -
+                    // which the apportionment then counted as four. See
+                    // `AgentState::HUNGER`.
+                    AgentState::HUNGER => DeathCause::Starvation,
+                    AgentState::THIRST => DeathCause::Dehydration,
+                    AgentState::OLD_AGE => DeathCause::OldAge,
+                    AgentState::EXHAUSTION => DeathCause::Exhaustion,
+                    AgentState::A_BLOW => DeathCause::Combat {
+                        // A killing is laid at the door of a man, and a wolf
+                        // has no door.
+                        killer_id: agent.emotions.whoever_struck_me(self.current_tick),
                     },
                     _ => DeathCause::Unknown,
                 };
 
                 let (cause_str, cause_enum) = (named, cause_enum);
                 let pos = (agent.state.position.0, agent.state.position.1);
-                (agent.id, cause_str, pos, cause_enum)
+                let killed_by = agent.emotions.recent_attacker(self.current_tick);
+                (agent.id, cause_str, pos, cause_enum, killed_by)
             })
             .collect();
 
-        for (_, cause, _, _) in &dead_agents {
+        for (_, cause, _, _, _) in &dead_agents {
             *self
                 .stats
                 .how_it_went
@@ -875,7 +894,7 @@ impl Population {
         }
 
         // Emit death events for timeline
-        for (deceased_id, _cause_str, pos, cause_enum) in &dead_agents {
+        for (deceased_id, _cause_str, pos, cause_enum, _) in &dead_agents {
             self.pending_events.push(SimulationEvent::new(
                 self.current_tick,
                 SimulationEventType::Death {
@@ -887,8 +906,28 @@ impl Population {
         }
 
         // Process grief for each death
-        for (deceased_id, cause_description, _, _) in &dead_agents {
-            let cause_source = EmotionSource::Event(cause_description.clone());
+        for (deceased_id, cause_description, _, _, killed_by) in &dead_agents {
+            // What the survivors grieve *at* is a person, never the reckoning's
+            // verdict about what did the killing.
+            //
+            // It used to be `EmotionSource::Event(cause_description)`, and that
+            // was wrong twice over. It bought nothing: an `Event` source is
+            // write-only, because `what_frightens_me_most` reads only
+            // `Creature` and `who_frightens_me_most` reads only `Agent`, so
+            // nothing in the model can ever act on being afraid of "hunger".
+            // And it cost a great deal: the sources are a `BTreeMap` keyed by
+            // this, so the set of cause names decided how many buckets the fear
+            // was split across - and each bucket decays on its own, so being
+            // afraid of four things drained four times as fast as being afraid
+            // of one - and decided the order the buckets were summed in. So
+            // improving the *diagnosis* of a death changed how the survivors
+            // felt about it, and #209 measured exactly that: the same eight
+            // seeds under two readings were not the same eight worlds.
+            //
+            // A person is something an agent can be afraid of, be angry at,
+            // remember and retaliate against, and it does not move when the
+            // bookkeeping improves.
+            let killed_by = killed_by.clone();
 
             // Notify all surviving agents about the death
             for agent in &mut self.agents {
@@ -920,7 +959,7 @@ impl Population {
                     // 1. Existing relationship grief (if they were loved ones)
                     if let Some(relationship) = agent.relationships.get_relationship(deceased_id) {
                         if relationship.is_loved_one() {
-                            agent.respond_to_loved_one_death(deceased_id, cause_source.clone());
+                            agent.respond_to_loved_one_death(deceased_id, killed_by.clone());
                         }
                     }
 
@@ -930,7 +969,7 @@ impl Population {
                         agent.process_drive_source_loss_with_cause(
                             drive_type,
                             *deceased_id,
-                            Some(cause_source.clone())
+                            killed_by.clone(),
                         );
                     }
 
@@ -979,7 +1018,7 @@ impl Population {
         self.stats.deaths_this_tick += deaths as u32;
 
         // Clean up tracking for dead agents
-        for (deceased_id, _, _, _) in &dead_agents {
+        for (deceased_id, _, _, _, _) in &dead_agents {
             self.unhappiness_tracker.remove(deceased_id);
             self.reproduction_cooldown.remove(deceased_id);
         }

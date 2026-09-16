@@ -283,7 +283,11 @@ impl Simulation {
             return;
         }
 
-        let mut strikes: Vec<(uuid::Uuid, usize, f32, f32)> = Vec::new();
+        // The species as well as the beast, because what a survivor takes
+        // away from this is a fear of *wolves*, not of one wolf - and until
+        // #212 what went on the record here was the animal's uuid in a field
+        // that means "the person who hit me".
+        let mut strikes: Vec<(uuid::Uuid, String, usize, f32, f32)> = Vec::new();
 
         for animal in self.world.animals.get_all() {
             if !animal.is_alive() || animal.is_domesticated || !animal.is_hungry() {
@@ -325,6 +329,7 @@ impl Simulation {
             if rng.gen::<f32>() < odds {
                 strikes.push((
                     animal.id,
+                    animal.species_id.clone(),
                     *agent_index,
                     species.attack_damage,
                     species.food_value * 0.25,
@@ -332,7 +337,7 @@ impl Simulation {
             }
         }
 
-        for (animal_id, agent_index, damage, fed) in strikes {
+        for (animal_id, what_it_was, agent_index, damage, fed) in strikes {
             // Standing there while something bites you is a fight, and how it
             // goes is what the agent takes away from it. This is where the
             // record mostly comes from: agents seldom set upon one another,
@@ -373,7 +378,10 @@ impl Simulation {
                 }
 
                 agent.take_damage(landed);
-                agent.emotions.record_attack(animal_id, current_tick);
+                agent.emotions.record_attack(
+                    crate::agents::EmotionSource::Creature(what_it_was.clone()),
+                    current_tick,
+                );
 
                 debug!(
                     "Agent {} was attacked by a hungry animal ({landed:.0} of {damage:.0} damage got through)",

@@ -122,8 +122,11 @@ impl Simulation {
         let hand = self.population.agents[agent_index]
             .skills
             .hand_for(working.hands);
+        // The yield channel: a good edge wastes less of the core. How worn
+        // the tool is decides how long the work takes, not how much of it
+        // survives, so it is charged against the turn rather than the count.
         let tool = self.population.agents[agent_index]
-            .how_much_my_tools_help(working.hands);
+            .how_much_my_tools_bring_back(working.hands);
 
         let worth = working.how_many as f32 * hand.min(2.0) * tool.min(2.0);
         let whole = worth.floor();

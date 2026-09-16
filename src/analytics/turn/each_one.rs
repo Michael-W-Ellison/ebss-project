@@ -427,7 +427,14 @@ impl Simulation {
                     (away, false)
                 }
                 // High fear - flee from attacker or danger
-                else if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                // `whoever_struck_me`, not `recent_attacker`: this branch looks
+                // the striker up in the agent list, and what used to be stored
+                // was as often as not an animal's uuid, which is found in no
+                // agent list - so a man bitten by a wolf fell through to the
+                // arm below and **fled in a random direction** rather than
+                // away from the wolf. Something present is handled above, by
+                // the threat tree, which reads creatures properly. See #212.
+                else if let Some(attacker_id) = agent.emotions.whoever_struck_me(self.current_tick) {
                     // Find attacker position and flee away from them
                     if let Some(attacker) = self.population.agents.iter().find(|a| a.id == attacker_id) {
                         let attacker_pos = attacker.state.position;
@@ -485,7 +492,12 @@ impl Simulation {
                     (strike, false)
                 }
                 // High anger, low fear - retaliate against attacker
-                else if let Some(attacker_id) = agent.emotions.recent_attacker(self.current_tick) {
+                // And likewise here, where it was worse: this aimed an
+                // `Attack` at the stored uuid, so a man mauled by a bear
+                // swung at a person who does not exist - **2,185 refusals of
+                // "Attack: Target agent not found"**. Standing up to the
+                // animal itself is the branch above.
+                else if let Some(attacker_id) = agent.emotions.whoever_struck_me(self.current_tick) {
                     debug!(
                         "Agent {} RETALIATING against {} (anger={:.2}, fear={:.2})",
                         agent_id, attacker_id, agent.emotions.anger, agent.emotions.fear
@@ -627,7 +639,10 @@ impl Simulation {
         self.population.agents[agent_index].state.effort_this_turn +=
             action_result.energy_cost;
 
-        if !action_result.success {
+        // A refusal is counted; a spoiled attempt is not. The work began and
+        // went wrong, which costs the turn and the makings - see
+        // `ActionResult::attempted`.
+        if !action_result.success && !action_result.attempted {
             *self
                 .actions_failed
                 .entry(Self::name_of(&action))
@@ -679,7 +694,14 @@ impl Simulation {
         // And note how it went, so the agent does more of what pays
         // and less of what does not - and note what the afternoon was
         // like, so it can work out for itself which afternoons pay
-        agent.learn_from_this_here(&action, action_result.success, &what_it_was_like);
+        // Spoiling the makings teaches that this hand wants practice, which
+        // the skill has already been given. What it must not teach is that
+        // the undertaking does not work: a beginner who concludes that never
+        // practises into a master, which is the whole point of a skill
+        // deciding the odds.
+        if action_result.success || !action_result.attempted {
+            agent.learn_from_this_here(&action, action_result.success, &what_it_was_like);
+        }
 
         // Then join the doing to the need it answered and the ground
         // it was answered on, which is what lets a thirsty man walk

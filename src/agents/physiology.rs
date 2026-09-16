@@ -43,7 +43,18 @@ pub const MINUTES_TO_STARVE: u32 = 21 * MINUTES_PER_DAY;
 /// and a day's food are the same number.
 pub const UNITS_BURNED_IN_AN_ORDINARY_DAY: f32 = MINUTES_PER_DAY as f32;
 
-/// What an adult's stomach holds.
+/// What an adult's stomach holds, **in energy**.
+///
+/// A thing takes up room in the stomach equal to what it is worth: twenty-four
+/// units of ordinary forage at twenty-five apiece is six hundred, and that is
+/// a full stomach. Dense food fills it in fewer units and thin food in more,
+/// which is the whole of what caloric density means to a body.
+///
+/// This used to be six hundred *volume* units charged against food measured in
+/// volume, while what a meal was worth was reckoned in energy - so a stomachful
+/// of ordinary food came to fifteen thousand energy, **ten days of burn, half
+/// the whole three-week reserve in one sitting**, and a sitting of four hundred
+/// and eighty filled 3.2% of it. One scale now. See #217.
 pub const STOMACH_CAPACITY: f32 = 600.0;
 
 /// What one gathered thing comes to in a stomach - a berry, a fish, a root.
@@ -462,7 +473,10 @@ impl Physiology {
         // the room in their stomach and if they have a hunger drive" - a body
         // that is a little short and has a little room sits down to what there
         // is, rather than waiting for the stomach to clear.
-        self.room_in_the_stomach() >= UNITS_IN_ONE_ITEM * self.how_fast_this_body_burns()
+        // In energy, like the stomach it is asked of: a mouthful of ordinary
+        // forage is `UNITS_IN_ONE_ITEM` of it at `ENERGY_OF_ORDINARY_FOOD`.
+        self.room_in_the_stomach()
+            >= UNITS_IN_ONE_ITEM * ENERGY_OF_ORDINARY_FOOD * self.how_fast_this_body_burns()
     }
 
     /// What this body burns against what a grown one burns.
@@ -526,19 +540,32 @@ impl Physiology {
     /// eat, however hungry the reserve says it is, which is the whole reason
     /// somebody who has gone without cannot put it right in one sitting.
     pub fn eat(&mut self, units_offered: f32, richness: f32) -> f32 {
-        let taken = units_offered.min(self.room_in_the_stomach()).max(0.0);
+        // What goes in is charged to the stomach in **energy**, because that
+        // is what a stomach is measured in - see `STOMACH_CAPACITY`. A handful
+        // of fat carcass takes up more room than a handful of leaf, and ought
+        // to.
+        let each = richness.max(1e-6);
+        let offered = units_offered.max(0.0) * each;
+        let taken = offered.min(self.room_in_the_stomach()).max(0.0);
         if taken <= 0.0 {
             return 0.0;
         }
-        self.units_ever_eaten += taken;
+
+        let in_units = taken / each;
+        self.units_ever_eaten += in_units;
         self.meals_ever_eaten += 1;
         self.stomach.push(Meal {
             eaten_at: self.minute,
             initial: taken,
             remaining: taken,
-            richness,
+            // The energy is already in `remaining`, so there is nothing left
+            // for a multiplier to do downstream: the gut takes what the
+            // stomach passes and `energy_in_the_*` read it straight.
+            richness: 1.0,
         });
-        taken
+
+        // Reported in units, which is what every caller counts in.
+        in_units
     }
 
     /// Live for this many minutes, having spent this much energy doing it.
@@ -692,6 +719,23 @@ impl Physiology {
     pub fn days_into_the_reserve(&self) -> f32 {
         let a_day = UNITS_BURNED_IN_AN_ORDINARY_DAY * self.how_fast_this_body_burns();
         (self.reserve_capacity - self.reserve) / a_day.max(1.0)
+    }
+
+    /// What share of its reserve this body still has, from one down to nought.
+    ///
+    /// What it has spare, in other words: a body that has eaten enough carries
+    /// the full three weeks and answers one; a body that has eaten through all
+    /// of it answers nought. Reckoned against this body's own capacity, so a
+    /// child with a full small reserve is as well-found as its father with a
+    /// full large one.
+    ///
+    /// Mending is work and work is paid for out of this - see
+    /// `Agent::regenerate_health`.
+    pub fn what_this_body_has_spare(&self) -> f32 {
+        if self.reserve_capacity <= 0.0 {
+            return 0.0;
+        }
+        (self.reserve / self.reserve_capacity).clamp(0.0, 1.0)
     }
 
     /// Far enough into the reserve that the body is taking it out of itself.
@@ -906,6 +950,33 @@ impl Physiology {
         // Full is full. What the reserve changes is *when* full arrives, which
         // both tables above have already taken from it.
         if by_belly == 0.0 || by_gut == 0.0 {
+            return 0.0;
+        }
+
+        // And a body that has already eaten enough to put itself right does
+        // not want more.
+        //
+        // This is the term the three tables were missing. `by_reserve` bottoms
+        // out at 1.0 and never at nought, so a body carrying its whole
+        // three-week reserve still grew hungry the moment its stomach fell
+        // below a tenth of a sitting, ate again, banked what would fit and
+        // **wasted the rest**: measured, 6.52 sittings a day at 656 energy
+        // apiece against 1,440 burned - 297% of what a body spends.
+        //
+        // Satiety was keyed on an empty stomach rather than on a fed body.
+        // What is wanted is the specified rule: if what is in the stomach and
+        // the gut would carry this body back to a full reserve, it is
+        // satisfied. The deficit grows at a day's burn a day, and a meal
+        // covers about a third of it, which is where three meals a day comes
+        // from - the same figure `AN_ORDINARY_APPETITE` normalises the rate
+        // against, arrived at from the body instead of from the clock.
+        //
+        // It is stomach *and* gut against the deficit, not either alone: food
+        // still in the stomach has not been absorbed yet, and food in the gut
+        // is already on its way to the reserve. Both are owed to the body.
+        let owed = (self.reserve_capacity - self.reserve).max(0.0);
+        let already_coming = self.energy_in_the_stomach() + self.energy_in_the_gut();
+        if already_coming >= owed {
             return 0.0;
         }
 

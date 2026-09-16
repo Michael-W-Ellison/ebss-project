@@ -1,3 +1,5 @@
+mod afforded_tests;
+mod workings_tests;
 pub mod save_load_tests;
 pub mod autosave_tests;
 pub mod config_tests;
@@ -79,6 +81,10 @@ pub mod beast_tests;
 pub mod belonging_tests;
 pub mod innovation_tests;
 pub mod map_memory_tests;
+pub mod goal_tests;
+pub mod stage_zero_tests;
+pub mod durability_tests;
+pub mod quality_tests;
 pub mod retention_tests;
 pub mod working_together_tests;
 pub mod keeping_tests;

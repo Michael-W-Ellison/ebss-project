@@ -156,6 +156,7 @@ fn every_verb_is_performed_by_something_real() {
         // Working a thing down into another thing: `Action::Work` carries the
         // verb in it, so the verb's own name is what the action is called
         "smash", "crush", "cut", "scrape", "drill", "split", "weave", "carve",
+        "grind",
         // And the ones done with a vessel of water
         "soak", "ferment", "boil",
         // Handing things over

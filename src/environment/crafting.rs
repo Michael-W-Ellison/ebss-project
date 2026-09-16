@@ -480,15 +480,15 @@ mod tests {
             .with_input(Ingredient::new("iron".to_string(), 100))
             .with_input(Ingredient::new("wood".to_string(), 50));
 
-        let recycled = calculate_recycle_returns(&recipe, 0.0, Quality::Advanced);
+        let recycled = calculate_recycle_returns(&recipe, 0.0, Quality::Fine);
 
         // 20% of materials
         assert_eq!(recycled[0].quantity, 20); // 100 * 0.2
         assert_eq!(recycled[1].quantity, 10); // 50 * 0.2
 
         // Quality downgraded by 2 (Advanced=4 -> Basic=2)
-        assert_eq!(recycled[0].quality, Quality::Basic);
-        assert_eq!(recycled[1].quality, Quality::Basic);
+        assert_eq!(recycled[0].quality, Quality::Common);
+        assert_eq!(recycled[1].quality, Quality::Common);
     }
 
     #[test]
@@ -497,13 +497,13 @@ mod tests {
         let recipe = CraftingTemplate::new("tool".to_string(), "Tool".to_string())
             .with_input(Ingredient::new("iron".to_string(), 100));
 
-        let recycled = calculate_recycle_returns(&recipe, 0.3, Quality::Moderate);
+        let recycled = calculate_recycle_returns(&recipe, 0.3, Quality::Good);
 
         // 50% of materials
         assert_eq!(recycled[0].quantity, 50);
 
         // Quality downgraded by 1 (Moderate -> Basic)
-        assert_eq!(recycled[0].quality, Quality::Basic);
+        assert_eq!(recycled[0].quality, Quality::Common);
     }
 
     #[test]
@@ -512,13 +512,13 @@ mod tests {
         let recipe = CraftingTemplate::new("tool".to_string(), "Tool".to_string())
             .with_input(Ingredient::new("iron".to_string(), 100));
 
-        let recycled = calculate_recycle_returns(&recipe, 0.7, Quality::Expert);
+        let recycled = calculate_recycle_returns(&recipe, 0.7, Quality::Masterwork);
 
         // 75% of materials
         assert_eq!(recycled[0].quantity, 75);
 
         // Quality unchanged
-        assert_eq!(recycled[0].quality, Quality::Expert);
+        assert_eq!(recycled[0].quality, Quality::Masterwork);
     }
 
     #[test]
@@ -528,7 +528,7 @@ mod tests {
             .with_input(Ingredient::new("iron".to_string(), 3));
 
         // Broken: 20% of 3 = 0.6, floors to 0, should be filtered out
-        let recycled = calculate_recycle_returns(&recipe, 0.0, Quality::Basic);
+        let recycled = calculate_recycle_returns(&recipe, 0.0, Quality::Common);
 
         assert_eq!(recycled.len(), 0); // No materials returned
     }

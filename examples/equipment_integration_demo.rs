@@ -60,7 +60,7 @@ fn main() {
         EquipmentType::Sword,
         EquipmentSlot::MainHand,
         EquipmentMaterial::Metal(MetalMaterial::Iron),
-        Quality::Advanced,
+        Quality::Fine,
     );
 
     match agent.equipment.equip(sword) {
@@ -74,7 +74,7 @@ fn main() {
         EquipmentType::Shield,
         EquipmentSlot::OffHand,
         EquipmentMaterial::Wood(WoodMaterial::Oak),
-        Quality::Moderate,
+        Quality::Good,
     );
 
     match agent.equipment.equip(shield) {
@@ -88,7 +88,7 @@ fn main() {
         EquipmentType::LightArmor,
         EquipmentSlot::Head,
         EquipmentMaterial::Cloth(ClothingMaterial::Leather),
-        Quality::Basic,
+        Quality::Common,
     );
 
     agent.equipment.equip(head_armor).ok();
@@ -99,7 +99,7 @@ fn main() {
         EquipmentType::LightArmor,
         EquipmentSlot::Torso,
         EquipmentMaterial::Cloth(ClothingMaterial::Leather),
-        Quality::Basic,
+        Quality::Common,
     );
 
     agent.equipment.equip(torso_armor).ok();
@@ -110,7 +110,7 @@ fn main() {
         EquipmentType::MediumArmor,
         EquipmentSlot::Feet,
         EquipmentMaterial::Metal(MetalMaterial::Iron),
-        Quality::Advanced,
+        Quality::Fine,
     );
 
     agent.equipment.equip(boots).ok();
@@ -138,7 +138,7 @@ fn main() {
         EquipmentType::HeavyArmor,
         EquipmentSlot::Legs,
         EquipmentMaterial::Metal(MetalMaterial::Iron),
-        Quality::Moderate,
+        Quality::Good,
     );
 
     match agent.equipment.equip(iron_armor) {
@@ -156,7 +156,7 @@ fn main() {
         EquipmentType::Pickaxe,
         EquipmentSlot::MainHand,
         EquipmentMaterial::Metal(MetalMaterial::Iron),
-        Quality::Advanced,
+        Quality::Fine,
     );
 
     println!("\nProtection stats:");
@@ -175,7 +175,7 @@ fn main() {
         EquipmentType::Hatchet,
         EquipmentSlot::MainHand,
         EquipmentMaterial::Stone(StoneMaterial::Flint),
-        Quality::Moderate,
+        Quality::Good,
     );
 
     agent.equipment.unequip(EquipmentSlot::MainHand);
@@ -265,7 +265,7 @@ fn main() {
         EquipmentType::HeavyArmor,
         EquipmentSlot::Torso,
         EquipmentMaterial::Metal(MetalMaterial::Steel),
-        Quality::Expert,
+        Quality::Masterwork,
     );
 
     // Unequip leather first

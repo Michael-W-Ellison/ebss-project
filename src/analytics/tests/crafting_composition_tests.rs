@@ -355,9 +355,7 @@ fn a_making_somebody_chose_is_held_on_to() {
             agent
                 .inventory
                 .add_item(InventoryItem::new_with_weight(what.to_string(), 8, 0.5));
-        }
-        agent.inventory.recalculate_weight();
-        agent.errand = None;
+        }        agent.errand = None;
         // Something has to be pressing for an errand to be set out on, and in
         // the live model the arm was reached because this one was.
         if let Some(utility) = agent.drives.get_mut(DriveType::Utility) {

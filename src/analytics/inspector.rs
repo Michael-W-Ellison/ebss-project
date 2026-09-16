@@ -265,7 +265,7 @@ impl AgentInspectorData {
             },
             inventory_summary: InventorySummary {
                 total_items,
-                total_weight: agent.inventory.current_weight,
+                total_weight: agent.inventory.current_weight(),
                 water_available,
                 container_count,
                 slot_usage,

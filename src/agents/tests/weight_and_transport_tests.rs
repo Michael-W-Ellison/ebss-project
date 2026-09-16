@@ -12,13 +12,13 @@ fn test_inventory_weight_enforcement() {
     // An agent with nothing to carry things in holds what two hands hold
     let room = agent.inventory.max_weight;
     assert_eq!(room, Agent::WHAT_TWO_HANDS_HOLD);
-    assert_eq!(agent.inventory.current_weight, 0.0);
+    assert_eq!(agent.inventory.current_weight(), 0.0);
 
     // A stone in each hand goes in
     let a_couple = (room / 4.0).floor() as u32;
     let light_item = InventoryItem::new_with_weight("stone".to_string(), a_couple, 1.0);
     assert!(agent.inventory.add_item(light_item));
-    assert_eq!(agent.inventory.current_weight, a_couple as f32);
+    assert_eq!(agent.inventory.current_weight(), a_couple as f32);
 
     // And so does an armful on top of it
     let an_armful = ((room - a_couple as f32) / 1.0).floor() as u32;
@@ -43,19 +43,19 @@ fn test_inventory_weight_with_containers() {
     waterskin.weight_per_unit = 0.5;
     agent.inventory.add_item(waterskin);
 
-    assert_eq!(agent.inventory.current_weight, 0.5);
+    assert_eq!(agent.inventory.current_weight(), 0.5);
 
     // Fill with 5L of water (5kg)
     agent.inventory.fill_containers(5.0);
 
     // Total weight should be 5.5kg (0.5 container + 5.0 water)
-    assert_eq!(agent.inventory.current_weight, 5.5);
+    assert_eq!(agent.inventory.current_weight(), 5.5);
 
     // Drink 2L of water
     agent.inventory.drink_water(2.0);
 
     // Weight should be 3.5kg (0.5 container + 3.0 water)
-    assert_eq!(agent.inventory.current_weight, 3.5);
+    assert_eq!(agent.inventory.current_weight(), 3.5);
 }
 
 #[test]
@@ -174,9 +174,14 @@ fn test_movement_speed_with_cart() {
 fn test_overweight_penalty() {
     let mut agent = Agent::new(AgentConfig::default());
 
-    // Add items over capacity
-    let overweight_item = InventoryItem::new_with_weight("stone".to_string(), 150, 1.0);
-    agent.inventory.current_weight = 150.0; // Force overweight
+    // More stone than the man can carry, put in the way the world puts it
+    // there - straight into the items. `add_item` would refuse it, which is
+    // the point: a pack gets over its limit by the load changing or the
+    // carrier weakening, never by being handed something politely.
+    agent.inventory.get_all_items_mut().insert(
+        "stone".to_string(),
+        InventoryItem::new_with_weight("stone".to_string(), 150, 1.0),
+    );
 
     assert!(agent.inventory.is_overweight());
 
@@ -254,40 +259,75 @@ fn test_remove_item_updates_weight() {
     let an_armful = agent.inventory.max_weight.floor() as u32;
     let item = InventoryItem::new_with_weight("stone".to_string(), an_armful, 1.0);
     assert!(agent.inventory.add_item(item));
-    assert_eq!(agent.inventory.current_weight, an_armful as f32);
+    assert_eq!(agent.inventory.current_weight(), an_armful as f32);
 
     // Remove some
     let put_down = an_armful / 2;
     agent.inventory.remove_item("stone", put_down);
     assert_eq!(
-        agent.inventory.current_weight,
+        agent.inventory.current_weight(),
         (an_armful - put_down) as f32
     );
 
     // Remove rest
     agent.inventory.remove_item("stone", an_armful - put_down);
-    assert_eq!(agent.inventory.current_weight, 0.0);
+    assert_eq!(agent.inventory.current_weight(), 0.0);
 }
 
+/// What a pack weighs follows what is in it, however the items got changed.
+///
+/// This used to test `recalculate_weight`: it added two things, set the stored
+/// total to nought by hand, recalculated, and checked the total came back.
+/// That passed for as long as the bug existed, because it tested the mending
+/// and never once asked whether the mending was reached. It was not:
+/// `get_item_mut` and `get_all_items_mut` hand out the items themselves, and
+/// every change made through them went unfelt. Measured at day 310, a man
+/// carrying seven and a half units in a forty-two pack read as 41.8, and two
+/// agents carrying **nothing at all** read as 83% and 94% full. See #214.
+///
+/// There is nothing to recalculate now, so what is asserted is the property
+/// that matters: change the items by any road and the weight has already
+/// changed with them.
 #[test]
-fn test_recalculate_weight() {
+fn what_a_pack_weighs_is_whatever_is_in_it() {
     let mut agent = Agent::new(AgentConfig::default());
 
-    // Add items
-    let item1 = InventoryItem::new_with_weight("stone".to_string(), 4, 2.0);
-    let item2 = InventoryItem::new_with_weight("wood".to_string(), 2, 1.0);
+    assert_eq!(agent.inventory.current_weight(), 0.0, "an empty pack weighs nothing");
 
-    assert!(agent.inventory.add_item(item1));
-    assert!(agent.inventory.add_item(item2));
-    let actually_carrying = agent.inventory.current_weight;
+    assert!(agent
+        .inventory
+        .add_item(InventoryItem::new_with_weight("stone".to_string(), 4, 2.0)));
+    assert!(agent
+        .inventory
+        .add_item(InventoryItem::new_with_weight("wood".to_string(), 2, 1.0)));
+    assert_eq!(agent.inventory.current_weight(), 10.0);
 
-    // Manually corrupt weight
-    agent.inventory.current_weight = 0.0;
+    // Behind the back of anything that might have kept a tally.
+    agent
+        .inventory
+        .get_item_mut("stone")
+        .expect("the stone is there")
+        .quantity = 1;
+    assert_eq!(
+        agent.inventory.current_weight(),
+        4.0,
+        "changing a quantity through `get_item_mut` changes what the pack weighs"
+    );
 
-    // Recalculate
-    agent.inventory.recalculate_weight();
+    agent.inventory.get_all_items_mut().remove("wood");
+    assert_eq!(
+        agent.inventory.current_weight(),
+        2.0,
+        "and so does taking a stack out through `get_all_items_mut`"
+    );
 
-    assert_eq!(agent.inventory.current_weight, actually_carrying);
+    agent.inventory.get_all_items_mut().clear();
+    assert_eq!(
+        agent.inventory.current_weight(),
+        0.0,
+        "a pack with nothing in it weighs nothing, which is the case that was \
+         reading ninety-four per cent full"
+    );
 }
 
 #[test]

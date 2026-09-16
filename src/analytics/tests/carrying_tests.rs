@@ -41,9 +41,7 @@ fn one_person() -> Simulation {
     simulation.population.agents[0]
         .inventory
         .get_all_items_mut()
-        .clear();
-    simulation.population.agents[0].inventory.recalculate_weight();
-    simulation
+        .clear();    simulation
 }
 
 // --------------------------------------------------------------------------
@@ -103,21 +101,17 @@ fn drying_what_is_in_the_pack_lightens_the_pack() {
         10,
         2.0,
         PreparationState::Raw,
-    ));
-    agent.inventory.recalculate_weight();
-    let laden = agent.inventory.current_weight;
+    ));    let laden = agent.inventory.current_weight();
 
     if let Some(item) = agent.inventory.get_item_mut("meatstrips") {
         if let Some(food) = item.food_data.as_mut() {
             food.preparation = PreparationState::Dried;
         }
     }
-    agent.inventory.recalculate_weight();
-
     assert!(
-        agent.inventory.current_weight < laden,
+        agent.inventory.current_weight() < laden,
         "{} against {laden}",
-        agent.inventory.current_weight
+        agent.inventory.current_weight()
     );
 }
 
@@ -331,9 +325,7 @@ fn a_kill_too_big_to_carry_leaves_meat_in_the_field() {
         let full = agent.inventory.effective_max_weight();
         agent
             .inventory
-            .add_item(InventoryItem::new_with_weight("stone".to_string(), 1, full));
-        agent.inventory.recalculate_weight();
-    }
+            .add_item(InventoryItem::new_with_weight("stone".to_string(), 1, full));    }
 
     simulation.into_the_pack_or_on_the_ground(
         0,
