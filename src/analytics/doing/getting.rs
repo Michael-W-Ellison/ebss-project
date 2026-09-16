@@ -543,58 +543,6 @@ impl Simulation {
                 // added, and clay would have done the same.
                 let item_id = Self::gathered_as(resource_type_enum).unwrap_or("generic");
 
-                // **A hungry man eats off the bush he is picking.**
-                //
-                // Browsing while gathering was already here, at the bottom of
-                // this function, but only for somebody whose pack had no room
-                // at all - a last resort to stop the harvest being deleted.
-                // That is the wrong condition. What decides whether a man puts
-                // a berry in his mouth is whether he is hungry, not whether
-                // his pack is full; a man with room for the armful carried it
-                // home unhungry and ate none of it, which is why `Eat` sits at
-                // a fraction of `Gather` in every run.
-                //
-                // So: the meal comes off the top of the harvest, and what is
-                // left goes in the pack. The body's own question decides, the
-                // same one the larder asks - see
-                // `Physiology::would_eat_if_it_were_here` - so a fed man
-                // carries the lot home and nothing is eaten that was not
-                // wanted.
-                let mut harvested = harvested;
-                let mut browsed = 0u32;
-                let mut browsed_energy = 0.0f32;
-                if let Some(kind) = Self::edible_item_for(resource_type_enum) {
-                    if self.population.agents[agent_index]
-                        .state
-                        .physiology
-                        .would_eat_if_it_were_here()
-                    {
-                        let (eaten, went_in, _) =
-                            self.a_sitting_from_the_hand(agent_index, kind, harvested);
-                        browsed = eaten.min(harvested);
-                        browsed_energy = went_in;
-                        harvested -= browsed;
-                    }
-                }
-
-                // And a patch that came to exactly a supper is a finished
-                // errand: there is nothing left to carry and nothing to put
-                // back on the bush.
-                if browsed > 0 && harvested == 0 {
-                    return ActionResult::success()
-                        .with_drive_change(
-                            DriveType::Hunger,
-                            -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
-                                * physiology::what_this_meal_answers(browsed_energy),
-                        )
-                        .with_energy_cost(Self::WHAT_A_GATHERING_TRIP_COSTS)
-                        .with_message(format!(
-                            "Ate {browsed} {resource_type} where it grew \
-                             ({browsed_energy:.0} energy)"
-                        ));
-                }
-                let harvested = harvested;
-
                 // One table for what a thing weighs, shared with the decision
                 // that asks whether there is room for it - see
                 // `what_one_of_these_weighs`. There were two, and the gate's
@@ -668,24 +616,13 @@ impl Simulation {
                         agent.inventory.current_weight(), agent.inventory.max_weight
                     );
 
-                    let trip = ActionResult::success()
+                    ActionResult::success()
+                        .with_drive_change(DriveType::Industry, -0.15)
                         .with_energy_cost(
                             Self::WHAT_A_GATHERING_TRIP_COSTS
                                 * Self::what_the_tool_saves_on_a_trip(trade, how_fast_it_goes),
-                        );
-                    if browsed > 0 {
-                        trip.with_drive_change(
-                            DriveType::Hunger,
-                            -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
-                                * physiology::what_this_meal_answers(browsed_energy),
                         )
-                        .with_message(format!(
-                            "Ate {browsed} {resource_type} and gathered {harvested} more"
-                        ))
-                    } else {
-                        trip.with_drive_change(DriveType::Industry, -0.15)
-                            .with_message(format!("Gathered {} {}", harvested, resource_type))
-                    }
+                        .with_message(format!("Gathered {} {}", harvested, resource_type))
                 } else {
                     // What you cannot carry stays where it fell.
                     //
@@ -715,13 +652,7 @@ impl Simulation {
                     // the bush. Nothing else changes: a full pack still cannot
                     // carry wood, and a man who is not hungry still cannot
                     // pick up what he has no room for.
-                    // Unless he has already eaten off this armful, a line
-                    // above. `a_sitting_from_the_hand` hands out a mouthful
-                    // even to a stomach that says no - which is right for
-                    // somebody who has walked to a bush and wrong for somebody
-                    // who has just had his supper off it, and would quietly
-                    // delete an item a trip.
-                    if it_is_food && browsed == 0 {
+                    if it_is_food {
                         if let Some(kind) = Self::edible_item_for(resource_type_enum) {
                             let (eaten, went_in, nutrition) =
                                 self.a_sitting_from_the_hand(agent_index, kind, harvested);
