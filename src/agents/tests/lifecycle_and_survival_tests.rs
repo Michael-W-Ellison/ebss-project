@@ -316,7 +316,7 @@ fn test_life_stage_progression() {
     // The thresholds themselves are `LifeStage`'s own, so this cannot drift
     // again when somebody decides childhood ends at twelve.
     for (years, expected) in [
-        (LifeStage::KEPT_IN_ARMS_UNTIL - 1, LifeStage::Infant),
+        (LifeStage::KEPT_WITH_A_PARENT_UNTIL - 1, LifeStage::Infant),
         (LifeStage::KEPT_IN_SIGHT_UNTIL - 1, LifeStage::Child),
         (LifeStage::KEPT_WITHIN_AN_HOUR_UNTIL - 1, LifeStage::Adolescent),
         (LifeStage::STRENGTH_STARTS_GOING_AT - 1, LifeStage::Adult),

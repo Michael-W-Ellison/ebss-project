@@ -773,7 +773,17 @@ pub enum LifeStage {
 
 impl LifeStage {
     /// The year of life each stage begins in.
-    pub const KEPT_IN_ARMS_UNTIL: u32 = 6;
+    ///
+    /// Not *in arms*, which is a different and shorter thing. The lifecycle
+    /// specification gives two bands under six and the same rule for both -
+    /// "must remain with a parent agent at all times" - and separates them
+    /// only by what it costs the parent: under two occupies one of the
+    /// parent's hands, two to five does not. So this is the age at which a
+    /// child stops having to be *with* somebody, and
+    /// `Simulation::CARRIED_IN_ARMS_UNTIL` is the age at which it stops being
+    /// *carried*. It was called `KEPT_IN_ARMS_UNTIL` and held 6, which is
+    /// neither of the two numbers the specification gives for being carried.
+    pub const KEPT_WITH_A_PARENT_UNTIL: u32 = 6;
     pub const KEPT_IN_SIGHT_UNTIL: u32 = 11;
     pub const KEPT_WITHIN_AN_HOUR_UNTIL: u32 = 16;
     pub const STRENGTH_STARTS_GOING_AT: u32 = 50;
@@ -785,7 +795,7 @@ impl LifeStage {
 
     /// The same, from years already counted.
     pub fn from_years(years: u32) -> Self {
-        if years < Self::KEPT_IN_ARMS_UNTIL {
+        if years < Self::KEPT_WITH_A_PARENT_UNTIL {
             LifeStage::Infant
         } else if years < Self::KEPT_IN_SIGHT_UNTIL {
             LifeStage::Child
@@ -1158,9 +1168,25 @@ impl AgentState {
             self.lose_health(0.1 / reserve, Self::HUNGER);
         }
 
-        // Energy depletion (normal metabolism), made worse by working thirsty
-        let base_energy_loss = 0.05 * energy_multiplier;
-        let energy_loss = base_energy_loss / self.physiology.capability().max(0.25);
+        // Energy depletion (normal metabolism), made worse by working thirsty.
+        //
+        // Nobody under six pays it. This pool is what a turn of being awake
+        // and doing things takes out of a body, and it is filled by exactly
+        // one thing in the model - `AgentState::eat`, which hangs off
+        // `Action::Eat`. A child under six takes no turn, so it never reaches
+        // that, and everything it gets comes through
+        // `feed_the_small_children` straight into its physiology. Left paying
+        // this, such a child drained to nothing whatever its reserve said and
+        // died of exhaustion: ten of eighteen under-six deaths in a measured
+        // year, once its food and its water had both been seen to. The cost
+        // is not waived so much as moved - it is the carrier who is spending
+        // the turn, and who is short a hand for it.
+        let energy_loss = if self.years_old() < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL {
+            0.0
+        } else {
+            Self::WHAT_A_TURN_OF_LIVING_COSTS * energy_multiplier
+                / self.physiology.capability().max(0.25)
+        };
         self.energy = (self.energy - energy_loss).max(0.0);
 
         // When energy is depleted, health starts decreasing too
@@ -1217,6 +1243,17 @@ impl AgentState {
     ///
     /// They are constants now because a constant cannot drift from itself.
     pub const HUNGER: &'static str = "hunger";
+
+    /// What a turn takes out of a body's energy just by being lived.
+    ///
+    /// Named because a second place has to know it: a child under six takes no
+    /// turn of its own and so never reaches `AgentState::eat`, which is the
+    /// only thing in the model that puts energy back. It is fed straight into
+    /// its physiology by `feed_the_small_children`, which filled its reserve
+    /// and left this pool draining. Ten of eighteen under-six deaths in one
+    /// measured year came out as exhaustion once the food and the water had
+    /// been seen to - the third clock, found the same way as the other two.
+    pub const WHAT_A_TURN_OF_LIVING_COSTS: f32 = 0.05;
     pub const THIRST: &'static str = "thirst";
     pub const A_BLOW: &'static str = "a blow";
     pub const A_FALL: &'static str = "a fall";

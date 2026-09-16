@@ -185,6 +185,11 @@ impl Simulation {
         // comes from: "child agents automatically receive their food/water
         // from their parent agent's internal food energy and water". This also
         // fills the hands of whoever is carrying somebody under two.
+        // And before that, the small ones are where their people are: the
+        // specification makes "must remain with a parent agent at all times" a
+        // fact about the child's position, and the feeding pass below reads
+        // position. See `the_small_stay_with_their_people`.
+        self.the_small_stay_with_their_people();
         self.feed_the_small_children();
         self.process_nursing();
 

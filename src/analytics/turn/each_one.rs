@@ -111,6 +111,27 @@ impl Simulation {
                 return;
             };
 
+            // The small ones do not take a turn at all.
+            //
+            // "Age 0-2: ... This age skips decision/planning periods which
+            // occur 48 times a day. Age 2-5: ... This age skips
+            // decision/planning periods."
+            //
+            // Which is what a body that small does: it is carried, it is fed
+            // out of whoever carries it - see `feed_the_small_children` - and
+            // it is put where that person is by
+            // `the_small_stay_with_their_people`. Everything a turn does from
+            // here down is choosing and doing, and a child under six does
+            // neither. Letting one through meant a two-year-old walking off
+            // after whatever its drives said, which is the other half of why
+            // only 41.9% of them had a parent in reach when it came to
+            // feeding them.
+            if self.population.agents[agent_index].state.years_old()
+                < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+            {
+                return;
+            }
+
             // What is pressing hardest, and where this one is standing.
             let (drive_type, drive_value, agent_position) = {
                 let agent = &self.population.agents[agent_index];
