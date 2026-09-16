@@ -2918,7 +2918,7 @@ impl Agent {
     /// And a basket, because a people that walked in carrying two days of food
     /// carried it in something. Without one an agent holds what two hands hold
     /// and nothing else - see `WHAT_TWO_HANDS_HOLD`.
-    const WHAT_THEY_CARRY: [(&'static str, u32, f32); 3] = [
+    pub(crate) const WHAT_THEY_CARRY: [(&'static str, u32, f32); 3] = [
         ("handaxe", 1, 2.0),
         ("stoneknife", 1, 0.5),
         ("basket", 1, 1.0),

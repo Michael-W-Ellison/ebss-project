@@ -290,3 +290,105 @@ fn the_paths_this_world_does_not_carry_at_all_are_named_anyway() {
         );
     }
 }
+
+// --------------------------------------------------------------------------
+// And the other way round: what a people starts with *is* Stage 0
+// --------------------------------------------------------------------------
+//
+// The drift test above holds one direction - a product the table claims must
+// be obvious. That leaves the direction that actually decides what agents
+// start with: something the recipe tables call obvious that no stage grants
+// is technology a people has and the table never gave it. Audited when these
+// were written, the two sets are exactly equal at twenty products apiece, so
+// what is pinned here is a state the model is already in rather than one it
+// is being moved to.
+
+/// Nothing is obvious that no stage grants.
+///
+/// `Agent::knows_how_to` is `step.obvious || self.found_out.contains(..)`, so
+/// the obvious flag *is* what a founder starts knowing. If a step is obvious
+/// and no path claims it, a people begins with a technology the Stage 0 table
+/// never handed them - which is the table quietly not being the answer to
+/// what agents start with.
+#[test]
+fn nothing_is_born_known_that_no_stage_grants() {
+    let granted = everything_a_people_starts_knowing();
+
+    let mut ungranted: Vec<&str> = making::EVERY_STEP
+        .iter()
+        .filter(|step| step.obvious)
+        .map(|step| step.makes)
+        .chain(
+            making::EVERY_WORKING
+                .iter()
+                .filter(|working| working.obvious)
+                .map(|working| working.makes),
+        )
+        .filter(|makes| !granted.contains(*makes))
+        .collect();
+    ungranted.sort_unstable();
+    ungranted.dedup();
+
+    assert!(
+        ungranted.is_empty(),
+        "the recipe tables call these obvious - so every founder is born able \
+         to make them - and no path in the Stage 0 table grants them: \
+         {ungranted:?}"
+    );
+}
+
+/// What founders carry is what their people know how to replace.
+///
+/// `Agent::WHAT_THEY_CARRY` says so in a doc comment - "the same named things
+/// the chain in `environment::making` turns out, so that what a founder wears
+/// through is a thing his people know how to replace" - and nothing checked
+/// it. A kit item that is not Stage 0 is a people starting above its stage
+/// with a thing it cannot make again, which is the sharper half of the same
+/// question: a stoneknife in the pack now decides whether anybody can sew
+/// (see `verbs::SEW`), so a kit that drifted above the stage table would hand
+/// out a capability the stage never granted.
+#[test]
+fn what_founders_carry_is_something_their_people_can_make() {
+    let granted = everything_a_people_starts_knowing();
+
+    for (what, _, _) in crate::agents::Agent::WHAT_THEY_CARRY {
+        assert!(
+            granted.contains(what),
+            "founders walk in carrying a {what} and no Stage 0 path says \
+             anybody knows how to make one"
+        );
+    }
+}
+
+/// And the one lesson everybody is born with is one a stage grants.
+///
+/// The third surface, and the one the product-keyed drift test cannot see:
+/// `found_out` is seeded with `THAT_LAYING_IT_OUT_KEEPS_IT`, which is a fact
+/// rather than a product, so nothing tied it to the table. `FoodPreservation`
+/// begins at "sun drying, air drying", which is exactly that lesson - so the
+/// seed is right, and this is what keeps it right.
+#[test]
+fn the_lesson_founders_are_seeded_with_belongs_to_a_stage() {
+    let born = crate::agents::Agent::what_anybody_is_born_knowing();
+
+    assert_eq!(
+        born.len(),
+        1,
+        "somebody added to what everybody is born knowing without saying \
+         which stage grants it: {born:?}"
+    );
+
+    let preservation = Path::FoodPreservation.stage_zero();
+    assert!(
+        preservation
+            .starts_with
+            .iter()
+            .any(|had| had.contains("drying")),
+        "founders are seeded with the lesson that laying food out keeps it, \
+         and food preservation does not start with drying"
+    );
+    assert!(
+        matches!(preservation.standing, Standing::Stands(_)),
+        "the stage that grants the one born-known lesson does not stand"
+    );
+}
