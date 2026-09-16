@@ -170,3 +170,67 @@ fn a_new_working_is_something_to_be_found_out() {
         );
     }
 }
+
+/// A man with nothing to make a hole with is not sent to sew.
+///
+/// The measurement that produced this test: putting the want on `sew` and
+/// leaving the decision layer ignorant of it had `MakeClothing` chosen
+/// 150,936 times over eight world-years and refused 150,585 of them - 99.8%,
+/// every one "Nothing in hand that answers piercing_tool". A gate the
+/// executor enforces and the decision does not know about is the largest
+/// refusal in the model, twice before (#215, #243) and nearly a third time.
+#[test]
+fn nobody_is_sent_to_sew_without_something_to_pierce_with() {
+    let mut simulation = somebody_holding("hides", 10);
+    // The starting kit carries a knife, and a knife is a piercing tool - so
+    // the pack has to be emptied first or this passes without measuring
+    // anything. Worth knowing in itself: a founder can sew on day one and it
+    // is the generation after that has to knap.
+    simulation.population.agents[0]
+        .inventory
+        .get_all_items_mut()
+        .clear();
+    for what in ["hides", "leather"] {
+        simulation.population.agents[0]
+            .inventory
+            .add_item(InventoryItem::new_with_weight(what.to_string(), 10, 1.0));
+    }
+
+    let bare_handed = simulation.population.agents[0].clone();
+    assert!(
+        crate::analytics::Simulation::garment_to_make(&bare_handed).is_none(),
+        "a man with no point was offered a garment to make, which the \
+         executor will refuse"
+    );
+
+    // And flint answers it - which is the whole reason the gate is bearable:
+    // `smash:stone` is a working everybody is born knowing.
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("flint".to_string(), 1, 1.0));
+    let armed = simulation.population.agents[0].clone();
+    assert!(
+        crate::analytics::Simulation::has_something_to_pierce_with(&armed),
+        "flint is ranked as a piercing tool and does not answer the want"
+    );
+}
+
+/// And the want is one the world can actually meet on its first day.
+///
+/// A gate nothing satisfies is not a gate, it is a wall. Flint is the cheap
+/// answer and `smash:stone` is marked obvious, so the chain from wanting a
+/// coat to having a point is: pick up a stone, break it.
+#[test]
+fn the_cheapest_answer_to_a_piercing_tool_is_one_days_work() {
+    let cheapest = making::EVERY_WORKING
+        .iter()
+        .find(|working| working.makes == "flint")
+        .expect("something makes flint");
+
+    assert!(
+        cheapest.obvious,
+        "flint is the cheap answer to the sewing gate and nobody is born \
+         knowing how to make it"
+    );
+    assert_eq!(cheapest.to, "stone", "and the stuff it comes from is not stone");
+}

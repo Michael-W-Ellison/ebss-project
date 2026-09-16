@@ -499,19 +499,27 @@ pub const EVERYTHING_THAT_SERVES: &[Serves] = &[
     Serves { called: "bricks", capability: Capability::ShelterMaterial, how_well: 1.0 },
     Serves { called: "hides", capability: Capability::ShelterMaterial, how_well: 0.9 },
     Serves { called: "leather", capability: Capability::ShelterMaterial, how_well: 0.9 },
+    // A split stave is a better pole than the log it came out of: straighter,
+    // and it does not want hewing to sit flat. See `making::SPLIT_WOOD`.
+    Serves { called: "staves", capability: Capability::ShelterMaterial, how_well: 0.85 },
     Serves { called: "wood", capability: Capability::ShelterMaterial, how_well: 0.8 },
     Serves { called: "stone", capability: Capability::ShelterMaterial, how_well: 0.7 },
     Serves { called: "lashing", capability: Capability::ShelterMaterial, how_well: 0.4 },
 
     // ---- making holes ----------------------------------------------------
     //
-    // There is no awl in this world and no trade of boring holes, so this is
-    // the pointed things ranked by how fine a point they carry. Declared
-    // rather than derived precisely because nothing stands behind it: it is a
-    // capability the world can express and has no job for yet, which is a gap
-    // somebody can count.
-    Serves { called: "metalknife", capability: Capability::PiercingTool, how_well: 1.0 },
-    Serves { called: "metalblade", capability: Capability::PiercingTool, how_well: 0.9 },
+    // The pointed things, ranked by how fine a point they carry. This used to
+    // end with a note that it was a capability with no job yet and a gap
+    // somebody could count. `sew` is the job now - see `verbs::SEW` - so the
+    // ranking has to mean something, and a knife is no longer the best of
+    // them. A knife makes a hole by tearing one; a needle is the thing the
+    // job is named after.
+    Serves { called: "needle", capability: Capability::PiercingTool, how_well: 1.0 },
+    // Demoted from 1.0 for the same reason. Nothing wanted a piercing tool
+    // when it was written, so nothing measured whether a knife was the best
+    // answer to it; something does now.
+    Serves { called: "metalknife", capability: Capability::PiercingTool, how_well: 0.5 },
+    Serves { called: "metalblade", capability: Capability::PiercingTool, how_well: 0.45 },
     Serves { called: "stoneknife", capability: Capability::PiercingTool, how_well: 0.6 },
     Serves { called: "knappedtip", capability: Capability::PiercingTool, how_well: 0.5 },
     Serves { called: "flint", capability: Capability::PiercingTool, how_well: 0.25 },

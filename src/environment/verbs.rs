@@ -898,7 +898,13 @@ pub const FRAME: Verb = verb(
     "frame",
     Family::Assembly,
     Targets::TheGroundUnderfoot,
-    Wants::ThisInHand("wood"),
+    // `ThisInHand("wood")`, which is the objection the tag layer makes to
+    // itself in its own header: true of one named thing and silently false of
+    // every other thing that would do. A roof goes over hides and bricks and
+    // split staves as readily as over a log. Widened, so nothing that framed
+    // a shelter before stops framing one and three other materials start
+    // counting - see `tags::Capability::ShelterMaterial`.
+    Wants::ACapability(Capability::ShelterMaterial),
     &[Changes::TheGround],
     Some("build"),
 );
@@ -931,7 +937,17 @@ pub const SEW: Verb = an_operator(
     "sew",
     Family::Assembly,
     Targets::AThingHeld,
-    Wants::AFreeHand,
+    // Something to make the hole with. `PiercingTool` has been declared and
+    // ranked since the tag layer was written, and its own note says so: "a
+    // capability the world can express and has no job for yet, which is a gap
+    // somebody can count." This is the job.
+    //
+    // It is a narrowing rather than a widening, and the only one here: a man
+    // with two empty hands could sew before and cannot now. It is satisfiable
+    // from the first day - flint answers it, `smash:stone` makes flint, and
+    // that working is one everybody is born knowing - so what it costs is a
+    // turn spent getting a point, not a people who cannot clothe themselves.
+    Wants::ACapability(Capability::PiercingTool),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
     Some("makeclothing"),
     ),
