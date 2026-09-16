@@ -572,7 +572,11 @@ pub const DRILL: Verb = verb(
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Crafting),
     &[Changes::WhatAThingIs],
-    None,
+    // Performed as a working - see `making::DRILL_ANTLER`. It was `None`,
+    // which is what "declared and nothing does it" means, and a working
+    // added under a verb the matrix says nobody performs is a working
+    // nothing can reach.
+    Some("drill"),
 );
 
 pub const SPLIT: Verb = verb(
@@ -581,7 +585,23 @@ pub const SPLIT: Verb = verb(
     Targets::AThingHeld,
     Wants::AToolFor(SkillType::Woodcutting),
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
-    None,
+    // See `making::SPLIT_WOOD`.
+    Some("split"),
+);
+
+/// Two stones and a handful of something hard between them.
+///
+/// The matrix had `crush` and not this, and they are not the same act:
+/// crushing breaks a thing open and stops, grinding keeps going until what is
+/// left is the same all the way through. Nuts are the case that wants it - see
+/// `making::GRIND_NUTS`.
+pub const GRIND: Verb = verb(
+    "grind",
+    Family::Disruption,
+    Targets::AThingHeld,
+    Wants::AToolFor(SkillType::Mining),
+    &[Changes::WhatAThingIs, Changes::WhatIsHeld],
+    Some("grind"),
 );
 
 // ---------------------------------------------------------------------------
@@ -1333,7 +1353,7 @@ pub const EVERY_VERB: &[Verb] = &[
     // 2
     PICK_UP, PLACE_DOWN, CARRY, DROP, HOLD, RELEASE,
     // 3
-    SMASH, CRUSH, CUT, SCRAPE, PIERCE, DRILL, SPLIT,
+    SMASH, CRUSH, GRIND, CUT, SCRAPE, PIERCE, DRILL, SPLIT,
     // 4
     HEAT, DRY, SALT, FIRE, COOL, QUENCH, IGNITE, MELT, ROAST,
     // 5
