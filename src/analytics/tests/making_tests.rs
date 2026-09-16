@@ -133,7 +133,15 @@ fn nothing_in_the_chain_asks_for_a_thing_that_cannot_be_had() {
                              // word for until lately: clay off a riverbank,
                              // salt off a flat, and the thin stuff a hedgerow
                              // offers before anything has ripened.
-                             "clay", "salt", "greens", "roots"];
+                             "clay", "salt", "greens", "roots",
+                             // What a mast year drops - `ResourceType::Nuts`
+                             // is gathered by this name - and what comes off
+                             // a deer that nobody had a use for until the
+                             // drilling working gave it one. The same shape
+                             // as meat and fish above: the world has had both
+                             // of these for a while and this list is the last
+                             // thing to hear about it.
+                             "nuts", "antler"];
 
     // And what comes off a thing that is worked down rather than assembled -
     // a flake off a core, leather off a hide, shavings off a stick

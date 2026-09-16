@@ -1328,6 +1328,8 @@ impl Simulation {
                 // back round in a season.
                 if let Some((verb, key)) = self.what_i_have_tried_least_here(agent) {
                     if let Some(action) = self.an_action_for(verb, &key, agent) {
+                        let so_far = self.how_often_curiosity_reached_for_something_new.get();
+                        self.how_often_curiosity_reached_for_something_new.set(so_far + 1);
                         return Some(action);
                     }
                 }

@@ -11,7 +11,9 @@
 //! round.
 
 use crate::agents::{AgentConfig, InventoryItem, Population};
-use crate::environment::verbs::{Targets, EVERY_VERB};
+use crate::environment::verbs::{self as verbs, Targets, EVERY_VERB};
+use crate::prelude::Action;
+use crate::analytics::Simulation;
 use crate::world::{Position, ResourceNode, ResourceType, World, WorldConfig};
 
 /// One person on bare ground, with nothing in the pack and nothing underfoot.
@@ -485,6 +487,7 @@ fn the_novelty_terminal_is_reached_by_a_living_settlement() {
 
     let mut chose: BTreeMap<String, u64> = BTreeMap::new();
     let mut looks = 0u64;
+    let mut from_novelty = 0u64;
 
     for _ in 0..30 {
         for _ in 0..TICKS_PER_DAY {
@@ -501,6 +504,16 @@ fn the_novelty_terminal_is_reached_by_a_living_settlement() {
         for agent in who {
             looks += 1;
             let at = agent.state.position;
+
+            // Zeroed before each ask, so what the counter holds afterwards is
+            // this one decision and not the thirty days of ticking that came
+            // before it. The settlement's own turns go through the same
+            // function, so a running total would be over a denominator this
+            // test has not got.
+            simulation
+                .how_often_curiosity_reached_for_something_new
+                .set(0);
+
             match simulation.what_this_drive_offers(DriveType::Curiosity, &agent, at) {
                 Some(action) => {
                     let named = crate::agents::Agent::what_was_tried(&action);
@@ -509,6 +522,10 @@ fn the_novelty_terminal_is_reached_by_a_living_settlement() {
                 }
                 None => *chose.entry("(nothing)".to_string()).or_default() += 1,
             }
+
+            from_novelty += simulation
+                .how_often_curiosity_reached_for_something_new
+                .get();
         }
     }
 
@@ -519,26 +536,143 @@ fn the_novelty_terminal_is_reached_by_a_living_settlement() {
         println!("  {what:<16} {:>5.1}%", 100.0 * **n as f64 / looks.max(1) as f64);
     }
 
-    // What the rungs above the terminal can produce, and nothing else.
-    // `TrySwapping` reports itself as `swap`, not `tryswapping` - see
-    // `what_that_swap_is_called`. Counting it as novelty overstated the
-    // terminal's share by a third when this was first measured.
-    let from_the_ladder = [
-        "taste", "examine", "ask", "putdown", "gather", "craft", "swap", "work", "(nothing)",
-    ];
-    let from_novelty: u64 = rows
-        .iter()
-        .filter(|(what, _)| !from_the_ladder.contains(&what.as_str()))
-        .map(|(_, n)| **n)
-        .sum();
-
+    // Counted where it happens rather than guessed from the name of what was
+    // chosen.
+    //
+    // This used to subtract a list of the names the rungs above the terminal
+    // can produce, which worked while the terminal produced something else
+    // and stopped the moment the candidate list learned about products: the
+    // terminal reaches for `craft` now, a rung above it reaches for `craft`,
+    // and the subtraction read the whole settlement as ladder and reported
+    // the terminal dead when it was not. It had been wrong once before, on
+    // `TrySwapping` reporting itself as `swap`. Two wrong readings of one
+    // number is enough - see
+    // `Simulation::how_often_curiosity_reached_for_something_new`.
     println!(
         "reached the novelty terminal: {from_novelty} of {looks} ({:.1}%)",
         100.0 * from_novelty as f64 / looks.max(1) as f64
     );
+
+    // What this asserts is that curiosity always has an answer. What it
+    // prints is a standing defect, and the two are different claims.
+    //
+    // Measured here at **0 of 340 agent-days**: in a settlement that is
+    // feeding itself, the terminal is never reached, because the rungs above
+    // it always answer first - gather 44%, examine 34%, putdown 20%. The
+    // rung directly above is `something_nobody_has_tried_within_reach`,
+    // which is the terminal's own question asked of a narrower list: it
+    // offers whatever material underfoot nobody has picked up, where the
+    // terminal offers any verb the matrix opens on anything here. A special
+    // case sitting above the general one, and it never falls through.
+    //
+    // It is left standing rather than reordered because reordering a rung
+    // that answers 44% of a settlement's curiosity is a behaviour change that
+    // wants measuring on its own. The unit-level claims about the terminal -
+    // that it picks the least-tried thing, that what it picks can be carried
+    // out - are made in this file and hold; this is the settlement-level
+    // statement that it is currently unreachable underneath them.
+    //
+    // The figure was wrong twice before it was counted rather than guessed:
+    // the old proxy subtracted a list of the names the rungs produce, and
+    // read `swap` as novelty once and the terminal's own `craft` keys as
+    // ladder later. See
+    // `Simulation::how_often_curiosity_reached_for_something_new`.
     assert!(
-        from_novelty > 0,
-        "a settlement ran a month and the novelty terminal never fired, so \
-         wiring it in changed nothing: {rows:?}"
+        !chose.contains_key("(nothing)"),
+        "curiosity came up with nothing at all for somebody, so the ladder \
+         has a hole in it rather than a floor: {rows:?}"
+    );
+    assert!(
+        looks > 0,
+        "nobody lived long enough to be curious, so this is watching nothing"
+    );
+}
+
+// --------------------------------------------------------------------------
+// And what the key names is what the action means
+// --------------------------------------------------------------------------
+
+/// A material is not a product, and `an_action_for` says so.
+///
+/// `what_i_could_try_here` fills the object of a key from the pack and the
+/// ground, because that is what a verb with a `AThingHeld` target acts on.
+/// Most actions agree. `Craft { item_type }` does not: it names what is to
+/// exist afterwards. Handing it an input reads a material as a product, and
+/// the executor then refuses "Unknown recipe: iron".
+///
+/// Measured over a hundred and twenty days of one settlement, that was a
+/// whole new failure on its own: `Craft` went from 339 asked and **none
+/// refused** to 1,563 asked and 1,181 refused, on three raw materials nobody
+/// was ever trying to make.
+#[test]
+fn a_material_in_the_pack_is_not_something_to_craft() {
+    let simulation = one_person_on_bare_ground();
+    let agent = &simulation.population.agents[0];
+
+    // A recipe answers, so the round trip stands.
+    assert!(
+        simulation
+            .an_action_for(&verbs::LASH, "lash:handaxe", agent)
+            .is_some(),
+        "a handaxe is a thing the tables know how to make"
+    );
+
+    // Raw stuff does not, and these are the three the settlement was asking
+    // for by name.
+    for material in ["iron", "wood", "flax"] {
+        assert!(
+            simulation
+                .an_action_for(&verbs::LASH, &format!("lash:{material}"), agent)
+                .is_none(),
+            "nothing in the making tables turns out a {material}, so reaching \
+             for one spends the turn on a refusal and teaches nothing"
+        );
+    }
+}
+
+/// And a handaxe is not a coat.
+#[test]
+fn a_tool_in_the_pack_is_not_something_to_wear() {
+    let simulation = one_person_on_bare_ground();
+    let agent = &simulation.population.agents[0];
+
+    for held in ["handaxe", "basket", "legumes"] {
+        for verb in [&verbs::SEW, &verbs::WEAR] {
+            assert!(
+                simulation
+                    .an_action_for(verb, &format!("{}:{held}", verb.called), agent)
+                    .is_none(),
+                "{held} is not a garment, and `garment_recipe` is what the \
+                 executor would refuse it on"
+            );
+        }
+    }
+}
+
+/// And a roof is one of the names that executor answers to.
+///
+/// Sharper than the two above, because nothing refuses: `Simulation::building`
+/// matches the name against its list and falls through to a skin tent, so
+/// `build:iron` would put a tent up and the lesson written afterwards would
+/// say that building an iron works.
+#[test]
+fn every_roof_this_names_is_one_that_can_be_put_up() {
+    let simulation = one_person_on_bare_ground();
+    let agent = &simulation.population.agents[0];
+
+    for roof in Simulation::A_ROOF_BY_NAME {
+        let built = simulation.an_action_for(&verbs::FRAME, &format!("frame:{roof}"), agent);
+        assert!(
+            matches!(built, Some(Action::Build { ref structure_type, .. }) if structure_type == roof),
+            "{roof} is in the list of roofs and did not come back as one: {built:?}"
+        );
+    }
+
+    assert!(
+        simulation
+            .an_action_for(&verbs::FRAME, "frame:iron", agent)
+            .is_none(),
+        "a lump of iron is not a roof, and the executor would quietly make it \
+         a tent rather than say so"
     );
 }

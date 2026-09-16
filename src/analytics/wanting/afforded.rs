@@ -171,6 +171,45 @@ impl Simulation {
 
         let mut out = Vec::new();
         for verb in self.what_i_could_do_here_now(agent) {
+            // The handful of actions whose payload names what comes *out*
+            // are not offered here at all.
+            //
+            // The object of a key is filled from the pack and the ground,
+            // because that is what a verb with a `AThingHeld` or
+            // `AThingUnderfoot` target acts on, and most actions agree:
+            // `Dry { what }`, `Examine { what }` and `Work { to }` all name
+            // the thing in hand. `Craft { item_type }` names the tool that is
+            // to exist afterwards and `MakeClothing { garment }` names the
+            // coat, so handing either an input reads a material as a product.
+            // Measured over a hundred and twenty days of one settlement, that
+            // was a failure all by itself: `Craft` went from 339 asked and
+            // **none refused** to 1,563 asked and 1,181 refused, on "Unknown
+            // recipe: iron", "Unknown recipe: wood" and "Unknown recipe:
+            // flax", three raw materials nobody was ever trying to make.
+            // `Build` was worse, because nothing refuses: its executor falls
+            // through to a skin tent for any name it does not know, so
+            // `build:iron` put a tent up and the lesson written afterwards
+            // said that building an iron works.
+            //
+            // Filling them from the recipe book instead was the obvious
+            // repair and was the wrong one: 1,913 asked and 1,512 refused,
+            // now on "Cannot make fishingrod: short 1 lashing" and "Nobody
+            // here knows how to make a handcart". Choosing *what to make* is
+            // a question with an owner - `Agent::what_i_would_try_out`, a
+            // rung above this one in the curiosity ladder, which asks what a
+            // man knows how to make and whether there is a fire to hand.
+            // Offering the whole book here duplicated that rung and did it
+            // without either check.
+            //
+            // So this list is what it says it is: verbs applied to what is
+            // actually here. What to make is asked one rung up.
+            if matches!(
+                verb.done_by,
+                Some("craft") | Some("makeclothing") | Some("wearclothing") | Some("build")
+            ) {
+                continue;
+            }
+
             let things: &[String] = match verb.targets {
                 Targets::AThingHeld => &in_the_pack,
                 Targets::AThingUnderfoot => &underfoot,
@@ -280,6 +319,39 @@ impl Simulation {
         // wants a kind of thing and was handed no kind is not an action.
         let thing = || what.clone();
 
+        // And the same, for the handful of actions whose payload names what
+        // comes *out* rather than what is worked on.
+        //
+        // `what_i_could_try_here` fills the object of a key from the pack and
+        // the ground, because that is what a verb with a `AThingHeld` or
+        // `AThingUnderfoot` target acts on. Most actions agree: `Dry { what }`,
+        // `Examine { what }` and `Work { to }` all name the thing in hand. But
+        // `Craft { item_type }` names the tool that is to exist afterwards and
+        // `MakeClothing { garment }` names the coat, so handing either of them
+        // an input reads a material as a product. Measured over a hundred and
+        // twenty days of one settlement, that was the whole of a new failure:
+        // `Craft` went from 339 asked and **none refused** to 1,563 asked and
+        // 1,181 refused, on "Unknown recipe: iron", "Unknown recipe: wood",
+        // "Unknown recipe: flax" - three raw materials nobody was ever trying
+        // to make.
+        //
+        // The predicates here are the executor's own - `every_way_to_make` is
+        // what `crafting` looks the recipe up in, `garment_recipe` is what
+        // `making_clothing` refuses on - so this cannot drift from what would
+        // actually happen. Asking the question here rather than letting the
+        // turn be spent is what `what_i_have_tried_least_here` says its filter
+        // is for: "reaching for a verb that cannot be built spends the turn on
+        // nothing and teaches nothing."
+        let a_thing_that_can_be_made = || {
+            let named = what.clone()?;
+            let any = crate::environment::making::every_way_to_make(&named).next().is_some();
+            any.then_some(named)
+        };
+        let a_garment = || {
+            let named = what.clone()?;
+            crate::agents::equipment::garment_recipe(&named).map(|_| named)
+        };
+
         // And for the handful whose *target* is somebody but whose action
         // still wants a thing - sharing something, asking about something -
         // the thing comes off the agent's own back, because that is what it
@@ -295,7 +367,7 @@ impl Simulation {
             // ---- the verbs that act on a kind of thing --------------------
             "gather" => Action::Gather { resource_type: thing()? },
             "eat" => Action::Eat { food_type: thing()? },
-            "craft" => Action::Craft { item_type: thing()? },
+            "craft" => Action::Craft { item_type: a_thing_that_can_be_made()? },
             "cook" => Action::Cook { food_type: thing()? },
             "examine" => Action::Examine { what: thing()? },
             "equip" => Action::Equip { what: thing()? },
@@ -305,16 +377,27 @@ impl Simulation {
             "cover" => Action::Cover { what: thing()? },
             "pickup" => Action::PickUp { what: thing()? },
             "putdown" => Action::PutDown { what: thing()? },
-            "makeclothing" => Action::MakeClothing { garment: thing()? },
-            "wearclothing" => Action::WearClothing { garment: thing()? },
+            "makeclothing" => Action::MakeClothing { garment: a_garment()? },
+            "wearclothing" => Action::WearClothing { garment: a_garment()? },
             // One of them, because what a store wants is somewhere to put a
             // thing and this is about finding out whether it can be done at
             // all. How much is a question for the drive that means it.
             "store" => Action::Store { item_type: thing_or_carried()?, amount: 1 },
 
             // ---- the verbs that act on the ground here --------------------
+            //
+            // The same question as `craft` above, and worse, because nothing
+            // refuses: `building` matches the name against its list and falls
+            // through to a skin tent, so `build:iron` puts up a tent and the
+            // lesson written afterwards says building an iron works. The
+            // structure names are the ones that executor answers to; anything
+            // else here is a material, not a roof, and is not an action.
             "build" => Action::Build {
-                structure_type: thing().unwrap_or_else(|| "shelter".to_string()),
+                structure_type: match what.as_deref() {
+                    None => "shelter".to_string(),
+                    Some(named) if Self::A_ROOF_BY_NAME.contains(&named) => named.to_string(),
+                    Some(_) => return None,
+                },
                 position: at,
             },
             // The matrix keeps digging yourself in apart from framing a tent,
@@ -392,6 +475,22 @@ impl Simulation {
             },
         })
     }
+
+    /// What `Simulation::building` answers to by name.
+    ///
+    /// Held here rather than derived because that executor's match is over
+    /// string literals and has no list to read. It is a short one and it is
+    /// checked: `every_roof_this_names_is_one_that_can_be_put_up` walks it
+    /// against the executor so the two cannot drift apart quietly.
+    /// Digging yourself in is not here. The matrix keeps a burrow apart from
+    /// a framed tent and `what_was_tried` keeps the same distinction - it
+    /// spells that `Build` as `burrow`, not `build` - so offering `frame` a
+    /// burrow builds an action that answers to the wrong verb. `BURROW` has
+    /// its own arm below and needs no name in the key.
+    pub(crate) const A_ROOF_BY_NAME: [&'static str; 9] = [
+        "tent", "skintent", "shelter", "smallhouse",
+        "mediumhouse", "largehouse", "workshop", "storehouse", "farm",
+    ];
 
     /// An animal near enough to act on, picked so that two runs of the same
     /// seed pick the same one.

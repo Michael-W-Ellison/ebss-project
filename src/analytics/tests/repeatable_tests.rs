@@ -115,7 +115,11 @@ fn the_same_seed_is_the_same_world() {
 /// should have to be restated when the model is restated.
 #[test]
 fn a_fixed_world_rolls_a_recorded_number_of_times() {
-    const WHAT_SEED_4242_ROLLS_IN_120_TICKS: u64 = 8_887;
+    // 8,887 until the curiosity terminal was wired into the drive ladder and
+    // the candidate list stopped offering verbs whose action names a product
+    // rather than a target - see `wanting::afforded::what_i_could_try_here`.
+    // Both change which branch a turn takes, and so how many times it rolls.
+    const WHAT_SEED_4242_ROLLS_IN_120_TICKS: u64 = 8_717;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -138,7 +142,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
 #[test]
 fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     use crate::environment::seasons::{DAYS_PER_YEAR, TICKS_PER_DAY};
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 732_915;
+    // 732,915 until the same two changes. This one had already drifted before
+    // them and was standing red, so the number here is the first recorded
+    // count since it was last true rather than a step from the one above it.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 793_014;
 
     let a_year = (DAYS_PER_YEAR * TICKS_PER_DAY) as usize;
     let (_, rolled) = a_world_from(0, a_year);

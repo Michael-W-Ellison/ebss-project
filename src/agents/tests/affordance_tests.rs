@@ -127,7 +127,7 @@ fn salting_a_joint_and_the_question_about_it_are_one_lesson() {
 /// arms into line with the rest by sweep will fail here and read why.
 #[test]
 fn a_person_is_not_a_kind_of_thing() {
-    let somebody = uuid::Uuid::new_v4();
+    let somebody = crate::core::dice::name();
     let them = somebody.to_string();
 
     for action in [

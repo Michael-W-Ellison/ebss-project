@@ -932,22 +932,48 @@ pub const ATTACH: Verb = sometimes(
 /// in one hand and a spear in the other is not stitching anything - and it is
 /// the one this economy can actually carry. What a knife is worth to the work
 /// is still what it always was: how well the garment comes out.
+/// And the hole the thread goes through.
+///
+/// Not `PIERCE`, which is a spear going into a deer and is spoken for. This is
+/// an awl through a hide, and it is named for what it does so that the two
+/// cannot be confused for one question.
+///
+/// `Wants` holds one thing, so a verb states one requirement, and an action
+/// that wants two states them at two verbs -
+/// `what_this_action_cannot_do_without` gathers every verb whose `done_by` is
+/// the same word for exactly this reason. Writing the piercing requirement
+/// into `SEW` itself took `AFreeHand` out with it and nobody noticed until a
+/// test that had been guarding the free hand since it was written went red:
+/// a requirement stated in one place is unstated the moment you write over
+/// it, which is the mirror of what `THROW` says about stating one twice.
+///
+/// `PiercingTool` had been declared and ranked since the tag layer was
+/// written, and its own note said so: "a capability the world can express and
+/// has no job for yet, which is a gap somebody can count." This is the job.
+/// It is a narrowing - a man with two empty hands could sew before and cannot
+/// now - and it is satisfiable from the first day, because flint answers it,
+/// `smash:stone` makes flint, and that working is one everybody is born
+/// knowing. What it costs is a turn spent getting a point, not a people who
+/// cannot clothe themselves.
+///
+/// It carries the quiet defaults rather than a turn of work of its own: the
+/// piercing is part of the stitching, not a second job beside it, and
+/// `what_an_action_costs` adds up every verb an action always performs.
+pub const PUNCH_A_HOLE: Verb = verb(
+    "punch a hole",
+    Family::Disruption,
+    Targets::AThingHeld,
+    Wants::ACapability(Capability::PiercingTool),
+    &[Changes::WhatAThingIs],
+    Some("makeclothing"),
+);
+
 pub const SEW: Verb = an_operator(
     verb(
     "sew",
     Family::Assembly,
     Targets::AThingHeld,
-    // Something to make the hole with. `PiercingTool` has been declared and
-    // ranked since the tag layer was written, and its own note says so: "a
-    // capability the world can express and has no job for yet, which is a gap
-    // somebody can count." This is the job.
-    //
-    // It is a narrowing rather than a widening, and the only one here: a man
-    // with two empty hands could sew before and cannot now. It is satisfiable
-    // from the first day - flint answers it, `smash:stone` makes flint, and
-    // that working is one everybody is born knowing - so what it costs is a
-    // turn spent getting a point, not a people who cannot clothe themselves.
-    Wants::ACapability(Capability::PiercingTool),
+    Wants::AFreeHand,
     &[Changes::WhatAThingIs, Changes::WhatIsHeld],
     Some("makeclothing"),
     ),
@@ -1375,7 +1401,7 @@ pub const EVERY_VERB: &[Verb] = &[
     // 5
     MIX, FILL, POUR, SOAK, COAT, BOIL, LEACH, FERMENT,
     // 6
-    LASH, WEAVE, CARVE, MOLD, FOLD, STACK, FRAME, ATTACH, SEW,
+    LASH, WEAVE, CARVE, MOLD, FOLD, STACK, FRAME, ATTACH, SEW, PUNCH_A_HOLE,
     // 7
     DIG, BURROW, EXCAVATE, COVER,
     // 8

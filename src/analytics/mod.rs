@@ -116,6 +116,23 @@ pub struct Simulation {
     /// "the drives ask for things that do not happen" into a list of named
     /// defects.
     pub actions_failed_because: std::collections::BTreeMap<String, u64>,
+    /// How often curiosity ran out of named experiments and fell through to
+    /// the general case - see the terminal of the `DriveType::Curiosity`
+    /// branch in `what_this_drive_offers`.
+    ///
+    /// Counted rather than inferred. The settlement test that watches this
+    /// used to guess from the name of the action chosen, on the grounds that
+    /// the rungs above the terminal produce a known short list of them. That
+    /// worked only while the terminal produced something else, and it stopped
+    /// being true the moment the candidate list learned about products: the
+    /// terminal can now reach for `craft`, which is also what a rung above it
+    /// reaches for, so the guess read the whole of the ladder as ladder and
+    /// called the terminal dead. A count cannot be wrong about it.
+    ///
+    /// A `Cell` because the decision layer reads the world and does not write
+    /// to it - `what_this_drive_offers` takes `&self` - and this is a tally
+    /// rather than a fact about the world.
+    pub how_often_curiosity_reached_for_something_new: std::cell::Cell<u64>,
     /// Questions this settlement put to the world and got an answer to, by
     /// question - see `who_came_back_to_look`. Nobody wrote any of these down
     /// either; they are whatever anybody happened to leave lying about.
@@ -343,6 +360,7 @@ impl Simulation {
             actions_taken: std::collections::BTreeMap::new(),
             actions_failed: std::collections::BTreeMap::new(),
             actions_failed_because: std::collections::BTreeMap::new(),
+            how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
             what_anybody_found_out: std::collections::BTreeMap::new(),
@@ -1305,6 +1323,7 @@ impl Simulation {
             actions_taken: std::collections::BTreeMap::new(),
             actions_failed: std::collections::BTreeMap::new(),
             actions_failed_because: std::collections::BTreeMap::new(),
+            how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
             what_anybody_found_out: std::collections::BTreeMap::new(),
