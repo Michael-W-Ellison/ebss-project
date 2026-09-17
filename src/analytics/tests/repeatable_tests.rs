@@ -171,7 +171,21 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // modifiers, and over a whole year the difference is a settlement holding
     // a different amount of different things and deciding differently about
     // all of it.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 615_814;
+    //
+    // And up a third from there when the fishery went back to holding a
+    // season's run rather than a rate per pass. That is the largest single
+    // move any of these has made, and it is the one to be least surprised by:
+    // a full spring used to bring ninety fish into a reach that holds sixty,
+    // so a river was never empty, and it is 28.8 now. A year is exactly where
+    // that tells - the short run above did not move at all - because what it
+    // changes is whether standing in the water goes on being the answer after
+    // the run is past. It is not, now, and a people who cannot fish in July
+    // do something else in July.
+    //
+    // The short count and the long one moving separately is the useful part.
+    // A change that moves both is in the decision loop; one that moves only
+    // the year is in the world.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 817_463;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

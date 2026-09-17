@@ -1244,7 +1244,13 @@ impl ResourceNode {
     /// Spring and autumn are heavy; high summer is thin because the run is
     /// past; winter is thinnest of all, and a frozen river gives up almost
     /// nothing.
-    pub fn fish_run(&self, terrain: TerrainType, season: Season, freezing: bool) -> f32 {
+    pub fn fish_run(
+        &self,
+        terrain: TerrainType,
+        season: Season,
+        freezing: bool,
+        how_long_this_pass_stands_for: u32,
+    ) -> f32 {
         if !self.resource_type.grows_in_water() {
             return 0.0;
         }
@@ -1267,7 +1273,7 @@ impl ResourceNode {
             Season::Winter => 0.15,
         };
 
-        let flow = Self::FISH_PER_PASS_AT_FULL_RUN * reach * run;
+        let flow = Self::what_a_pass_of_full_run_brings(how_long_this_pass_stands_for) * reach * run;
 
         if freezing {
             flow * 0.2
@@ -1276,35 +1282,56 @@ impl ResourceNode {
         }
     }
 
-    /// What a full spring run brings into one reach of river in one pass.
+    /// What a full run brings in one pass, given how long the pass stands for.
     ///
-    /// **A rate per pass, and a pass is now a day.** The pass used to come
-    /// round every ten turns on a twelve-turn day, so this was about one and a
-    /// fifth fish a day; it is one a day now, which is near enough the same
-    /// river.
+    /// The season is the thing that is fixed and the pass is whatever the
+    /// world happens to schedule, so the division goes this way round. See
+    /// [`Self::WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON`].
+    fn what_a_pass_of_full_run_brings(how_long_this_pass_stands_for: u32) -> f32 {
+        use crate::environment::seasons::{DAYS_PER_SEASON, TICKS_PER_DAY};
+
+        let a_season = (DAYS_PER_SEASON * TICKS_PER_DAY) as f32;
+        let passes_in_a_season = a_season / how_long_this_pass_stands_for.max(1) as f32;
+
+        if passes_in_a_season <= 0.0 {
+            return 0.0;
+        }
+
+        Self::WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON / passes_in_a_season
+    }
+
+    /// What a full spring run brings into one reach of river, across the
+    /// whole season.
     ///
-    /// What is *not* the same is the season. The note that stood here read: "a
-    /// spring season of twenty-four days is twenty-eight or nine passes, which
-    /// at this rate is a good half of what a reach holds", and reasoned from
-    /// that to "a reach fished down to nothing is full again inside a year,
-    /// most of it arriving in the two runs". A spring is ninety days now, so a
-    /// full run brings ninety - three times what that sentence was fitted to -
-    /// and a reach refills in a fraction of a year rather than across one.
+    /// **A season, not a pass.** The run is a thing that happens to a river
+    /// once in the spring and once in the autumn; how many times the world
+    /// happens to look at the river while it is happening is an implementation
+    /// detail of the tick, and the fish do not know about it.
     ///
-    /// The rate is left where it is on purpose, because which of the two the
-    /// fishery was meant to hold fixed is a question about the world and not
-    /// about arithmetic: a longer spring arguably *should* be a bigger run.
-    /// But the consequence is worth saying plainly rather than leaving in a
-    /// sentence that quietly stopped being true. The shape the fishery was
-    /// written for - a river worth nobody's time for most of the year and
-    /// thick with fish twice in it, with a people arranging what they do
-    /// around those two stretches - is weaker than it was, because summer at
-    /// 0.4 a day now brings thirty-six into a reach on its own. If that shape
-    /// is wanted back, the thing to state is what a *season's* run is worth
-    /// and to divide by `DAYS_PER_SEASON` here, the way
-    /// `SmallLife::WHAT_A_SNARE_TAKES_ON_FULL_GROUND` states a day's chance
-    /// and divides by the day.
-    const FISH_PER_PASS_AT_FULL_RUN: f32 = 1.0;
+    /// This was `FISH_PER_PASS_AT_FULL_RUN = 1.0`, fitted when the pass came
+    /// round every ten turns on a twelve-turn day - so a spring of twenty-four
+    /// days was twenty-eight or nine passes, and a full run brought
+    /// twenty-eight or nine fish. The note under it reasoned from that to the
+    /// shape the fishery is for: "a reach fished down to nothing is full again
+    /// inside a year, most of it arriving in the two runs".
+    ///
+    /// Then a season became ninety days and a pass became a day, and the
+    /// per-pass number went on saying one. A full spring brought ninety into a
+    /// reach that holds sixty, high summer brought thirty-six on its own, and
+    /// the river was never empty enough to be worth leaving - which is the
+    /// opposite of the thing a fishing people arrange their year around. The
+    /// number had not changed and what it meant had.
+    ///
+    /// Stated as a season's worth, it survives both: what a year brings is
+    /// 28.8 in the spring, 24.5 in the autumn, 11.5 across high summer and 4.3
+    /// through the winter - sixty-nine into a reach of sixty, three quarters of
+    /// it in the two runs. That is the sentence the original note wrote down,
+    /// and now the arithmetic says it too.
+    ///
+    /// The fraction is not a tuning knob; it is the old fit carried over
+    /// exactly. Twenty-eight point eight is twenty-four days of twenty-hour
+    /// passes at one fish each, which is what this was.
+    pub const WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON: f32 = 28.8;
 
     /// Regenerate resources based on climate and weather conditions
     /// Returns the amount regenerated

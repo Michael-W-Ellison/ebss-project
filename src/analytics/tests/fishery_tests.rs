@@ -14,7 +14,7 @@
 use crate::agents::practices::Undertaking;
 use crate::agents::{Agent, AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
-use crate::environment::seasons::Season;
+use crate::environment::seasons::{Season, DAYS_PER_SEASON, ONCE_A_DAY, PLANNING_PERIODS_PER_YEAR};
 use crate::environment::Action;
 use crate::world::soil::Soil;
 use crate::world::{Position, ResourceNode, ResourceType, TerrainType, World, WorldConfig};
@@ -80,6 +80,16 @@ fn a_fish_takes_nothing_out_of_the_bank() {
 /// This is the whole difference between a fishery and a berry hedge. A hedge
 /// regrows out of what is left of itself, so taking all of it ends it. Fish
 /// are spawned upstream and fed at sea and come back regardless.
+///
+/// **A year, because a year is what the fishery is fitted to.** This used to
+/// wind on four thousand turns and assert that a reach of sixty was half full.
+/// Four thousand turns is eighty-three days - not quite a season - and at the
+/// per-pass rate the run then had, a single spring brought ninety fish into a
+/// reach that holds sixty, so eighty-three days was ample and the assertion
+/// was easy. It is the wrong question either way: what
+/// `WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON` is fitted to is that a reach comes
+/// back *across a year*, most of it in the two runs, and a test that gives it
+/// a quarter of one is testing something nobody designed.
 #[test]
 fn a_reach_fished_out_fills_again() {
     let mut world = a_world_with_a_river();
@@ -89,21 +99,79 @@ fn a_reach_fished_out_fills_again() {
     reach.amount = 0; // fished to nothing
     world.resources.push(reach);
 
-    for _ in 0..4_000 {
+    let holds = 60;
+    let mut after_a_season = 0;
+
+    for turn in 0..PLANNING_PERIODS_PER_YEAR {
         world.take_a_turn();
+
+        if turn == PLANNING_PERIODS_PER_YEAR / 4 {
+            after_a_season = what_is_in_the_reach(&world);
+        }
     }
 
-    let after = world
+    let after_a_year = what_is_in_the_reach(&world);
+
+    assert!(
+        after_a_season > 0,
+        "the spring run should have started putting fish back inside a season; \
+         the reach held {after_a_season}"
+    );
+    assert!(
+        after_a_season < holds,
+        "and should not have filled a whole reach in one season, or there is \
+         no lean stretch for anybody to arrange a year around: {after_a_season}"
+    );
+    assert!(
+        after_a_year > holds / 2,
+        "a reach fished to nothing comes back across a year, most of it in the \
+         two runs; after one it held {after_a_year} of {holds}"
+    );
+}
+
+/// What is in the one reach this file's worlds have.
+fn what_is_in_the_reach(world: &World) -> u32 {
+    world
         .resources
         .iter()
         .find(|r| r.resource_type == ResourceType::Fish)
         .map(|r| r.amount)
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
+
+/// A season's run is a season's run, whatever the tick happens to be.
+///
+/// The thing the fishery holds fixed. A run is something that happens to a
+/// river over a spring; how many times the world looks at the river while it
+/// is happening is an implementation detail of the tick, and used to be the
+/// number the fishery was written in. When a pass went from twenty hours to a
+/// day and a season from twenty-four days to ninety, a full spring quietly
+/// went from twenty-nine fish to ninety.
+#[test]
+fn a_full_run_brings_the_same_season_whatever_the_pass_is() {
+    let reach = ResourceNode::new(ResourceType::Fish, Position::new(2, 0), 60);
+    let wanted = ResourceNode::WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON;
+
+    // Counted a day at a time, which is what the world does.
+    let a_day = ONCE_A_DAY;
+    let daily = reach.fish_run(TerrainType::Water, Season::Spring, false, a_day)
+        * DAYS_PER_SEASON as f32;
 
     assert!(
-        after > 30,
-        "an empty reach should be carrying fish again inside four thousand \
-         turns, not stay empty for ever; it held {after}"
+        (daily - wanted).abs() < 0.01,
+        "a spring of daily passes should bring {wanted}, and brought {daily}"
+    );
+
+    // And half a day at a time, which it does not - but the fishery must not
+    // notice the difference, because that is the whole point of stating the
+    // season rather than the pass.
+    let twice_a_day = ONCE_A_DAY / 2;
+    let halved = reach.fish_run(TerrainType::Water, Season::Spring, false, twice_a_day)
+        * (DAYS_PER_SEASON * 2) as f32;
+
+    assert!(
+        (halved - wanted).abs() < 0.01,
+        "twice as many passes should each bring half as much, and brought {halved}"
     );
 }
 
@@ -112,21 +180,22 @@ fn a_reach_fished_out_fills_again() {
 fn the_run_comes_in_spring_and_autumn() {
     let reach = ResourceNode::new(ResourceType::Fish, Position::new(2, 0), 60);
 
-    let spring = reach.fish_run(TerrainType::Water, Season::Spring, false);
-    let summer = reach.fish_run(TerrainType::Water, Season::Summer, false);
-    let fall = reach.fish_run(TerrainType::Water, Season::Fall, false);
-    let winter = reach.fish_run(TerrainType::Water, Season::Winter, false);
+    let a_day = ONCE_A_DAY;
+    let spring = reach.fish_run(TerrainType::Water, Season::Spring, false, a_day);
+    let summer = reach.fish_run(TerrainType::Water, Season::Summer, false, a_day);
+    let fall = reach.fish_run(TerrainType::Water, Season::Fall, false, a_day);
+    let winter = reach.fish_run(TerrainType::Water, Season::Winter, false, a_day);
 
     assert!(spring > fall, "the spring run is the heavier of the two");
     assert!(fall > summer, "high summer is after the run, not in it");
     assert!(summer > winter, "and winter is thinnest of all");
     assert!(winter > 0.0, "but a river is never quite empty");
 
-    let frozen = reach.fish_run(TerrainType::Water, Season::Winter, true);
+    let frozen = reach.fish_run(TerrainType::Water, Season::Winter, true, a_day);
     assert!(frozen < winter, "a frozen river gives up almost nothing");
 
     // A river carries a run; a pond gets whatever wandered in
-    let pond = reach.fish_run(TerrainType::Plains, Season::Spring, false);
+    let pond = reach.fish_run(TerrainType::Plains, Season::Spring, false, a_day);
     assert!(
         pond < spring,
         "the run comes up the river, not across the fields"

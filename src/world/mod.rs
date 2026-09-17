@@ -2516,7 +2516,15 @@ impl World {
             // what last year's fishing left behind, so a reach that was taken
             // down to nothing fills again - see `fish_run`.
             if resource.resource_type.grows_in_water() {
-                let run = resource.fish_run(terrain_type, current_season, frozen_water);
+                // How long this pass stands for, so that what a *season's* run
+                // is worth stays the fixed thing and the cadence is free to
+                // change - see `ResourceNode::WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON`.
+                let run = resource.fish_run(
+                    terrain_type,
+                    current_season,
+                    frozen_water,
+                    crate::environment::seasons::ONCE_A_DAY,
+                );
                 resource.take_inflow(run);
                 continue;
             }
