@@ -10,9 +10,18 @@
 //! cold biomes, the length of a day - was in practice a constant, and the
 //! constant it was stuck on was winter's.
 //!
-//! A turn is now two hours, a day twelve turns, a season twenty-four days and
-//! a year 1,152 turns. A life covers eight or nine years and thirty-odd
-//! seasons, and a settlement has to get through a winter to see a spring.
+//! A tick is now a minute and a planning period thirty of them, so a day is
+//! 1,440 ticks and forty-eight chances to stop and think; a month is thirty
+//! days, a season ninety, and a year three hundred and sixty. A life covers
+//! seventy years and two hundred and eighty seasons, and a settlement has to
+//! get through a winter to see a spring.
+//!
+//! That paragraph has been wrong twice, which is the point of the last test
+//! in this file. Both times it was wrong in the same way: the calendar moved
+//! and the numbers written down beside it did not, so a span that read "a
+//! season" went on meaning twenty-four days in a world where a season was
+//! ninety. Nothing in here states a span of calendar time as a number any
+//! more - it states it in days, and asks the calendar how long a day is.
 
 use crate::agents::{AgentConfig, Population};
 use crate::analytics::Simulation;
@@ -31,30 +40,92 @@ fn a_year_is_shorter_than_a_run() {
 
     // A year has to be inside a run this suite actually does.
     //
-    // This asserted `TICKS_PER_YEAR <= 2000`, which is the *old* calendar -
-    // the one where a year was about eleven hundred turns and a life did not
-    // fit inside a run. The calendar was deliberately changed to 4,320 so
-    // that ninety-day seasons and a lifetime would both fit; see
-    // ISSUES_FOUND.md #42 and #209. This test was left asserting the figure
-    // that was replaced, so it did not measure a risk, it forbade the
-    // decision. See #206.
+    // **Counted in planning periods, because that is what a run counts.** A
+    // test winds the world on by calling `take_a_turn`, and a turn is thirty
+    // ticks; comparing a year of *ticks* against a bound on the number of
+    // *calls* is the tick-for-turn mistake that `core::clock` exists to stop,
+    // and this assertion was making it. It read `TICKS_PER_YEAR <= 2000`, then
+    // `< 8_000`, against a figure that is now 518,400 - so what it actually
+    // said was that the calendar must never have been changed.
     //
-    // What it is for is still worth keeping: a year has to be short enough
-    // that the long runs in this suite - eight and nine thousand turns -
-    // cover more than one, or nothing in here ever sees a second spring.
-    const THE_LONGEST_RUNS_IN_THIS_SUITE: u32 = 8_000;
+    // What it is for is worth keeping and is a real risk: a year has to be
+    // short enough that the long runs in this suite cover more than one, or
+    // nothing in here ever sees a second spring. The longest of them is
+    // `turn_the_year_to` in the larder tests, which winds on until the season
+    // it wants arrives and gives up after four hundred days.
+    const THE_LONGEST_RUN_IN_THIS_SUITE: u32 = PLANNING_PERIODS_PER_DAY * 400;
     assert!(
-        TICKS_PER_YEAR < THE_LONGEST_RUNS_IN_THIS_SUITE,
-        "a year is {TICKS_PER_YEAR} turns and the longest run in this suite is \
-         {THE_LONGEST_RUNS_IN_THIS_SUITE}, so nothing here would see a second \
-         spring"
+        PLANNING_PERIODS_PER_YEAR < THE_LONGEST_RUN_IN_THIS_SUITE,
+        "a year is {PLANNING_PERIODS_PER_YEAR} planning periods and the longest \
+         run in this suite is {THE_LONGEST_RUN_IN_THIS_SUITE}, so nothing here \
+         would see a second spring"
     );
 
-    // And a day has to be more than one turn, or dawn, noon and midnight stop
-    // being separate moments an agent can be cold or blind in.
+    // And a day has to have more than one decision in it, or dawn, noon and
+    // midnight stop being separate moments an agent can be cold or blind in.
     assert!(
-        TICKS_PER_DAY >= 8,
-        "a day of {TICKS_PER_DAY} turns is too coarse to have a night in it"
+        PLANNING_PERIODS_PER_DAY >= 8,
+        "a day of {PLANNING_PERIODS_PER_DAY} decisions is too coarse to have a \
+         night in it"
+    );
+}
+
+/// Every span this model names in words is the span the calendar says it is.
+///
+/// **The guard against the defect this file's own header describes.** A week,
+/// a month, a season and a year are named in several modules, and each time
+/// one of them is written down as a number rather than asked for, it becomes
+/// a memory of whatever the calendar was on the day it was typed. The family
+/// has bitten at least five times: the food tables (#143), the exposure rates
+/// (#288), the snare (`small_life`), the pattern half-life (`patterns`), and
+/// the provisioning ladder, whose "month" was half a season - forty-five days
+/// - in a calendar whose months are thirty.
+///
+/// Nothing here is arithmetic anybody needs at run time. It is the assertion
+/// that the words and the numbers have not come apart.
+#[test]
+fn the_named_spans_are_the_calendar_and_not_a_memory_of_one() {
+    use crate::agents::provision;
+    use crate::environment::seasons::{
+        DAYS_IN_A_SHORT_WEEK, DAYS_PER_MONTH, MONTHS_PER_SEASON, MONTHS_PER_YEAR,
+        TICKS_BETWEEN_PLANS,
+    };
+
+    // The calendar agrees with itself.
+    assert_eq!(DAYS_PER_SEASON, DAYS_PER_MONTH * MONTHS_PER_SEASON);
+    assert_eq!(DAYS_PER_YEAR, DAYS_PER_MONTH * MONTHS_PER_YEAR);
+    assert_eq!(DAYS_PER_YEAR, DAYS_PER_SEASON * 4, "four seasons to a year");
+
+    // The two clocks agree about how long a year is. A year of ticks and a
+    // year of decisions are the same year, and the only thing between them is
+    // `TICKS_BETWEEN_PLANS`.
+    assert_eq!(TICKS_PER_YEAR, PLANNING_PERIODS_PER_YEAR * TICKS_BETWEEN_PLANS);
+    assert_eq!(TICKS_PER_YEAR, TICKS_PER_DAY * DAYS_PER_YEAR);
+    assert_eq!(PLANNING_PERIODS_PER_YEAR, PLANNING_PERIODS_PER_DAY * DAYS_PER_YEAR);
+
+    // And the horizons an agent is uneasy over are those same spans, not a
+    // second set of numbers that happen to have the same names.
+    assert_eq!(
+        provision::DAYS_IN_A_WEEK,
+        DAYS_IN_A_SHORT_WEEK,
+        "a week in the larder is a week in the calendar"
+    );
+    assert_eq!(
+        provision::DAYS_IN_A_MONTH,
+        DAYS_PER_MONTH,
+        "and a month is a month"
+    );
+
+    // The ladder the horizons exist to make: each rung further off than the
+    // one before, and the last of them inside a winter.
+    assert!(1 < provision::DAYS_IN_A_WEEK);
+    assert!(provision::DAYS_IN_A_WEEK < provision::DAYS_IN_A_MONTH);
+    assert!(
+        (provision::DAYS_IN_A_MONTH as f32) < provision::how_long_a_winter_is_supposed_to_be(),
+        "a month of {} days has to sit inside a winter of {}, or the winter \
+         rung can never be reached",
+        provision::DAYS_IN_A_MONTH,
+        provision::how_long_a_winter_is_supposed_to_be()
     );
 }
 

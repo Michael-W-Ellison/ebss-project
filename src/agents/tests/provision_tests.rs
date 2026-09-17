@@ -155,10 +155,13 @@ fn a_winter_is_counted_rather_than_known() {
 #[test]
 fn the_same_day_is_not_counted_twice() {
     let mut seen = WintersSeen::default();
-    for _ in 0..12 {
+    for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_DAY {
         seen.another_day(Season::Winter, 80);
     }
-    assert_eq!(seen.days_counted, 1, "twelve turns is one day");
+    assert_eq!(
+        seen.days_counted, 1,
+        "a day of thinking is one day, however many decisions are in it"
+    );
 }
 
 /// The walk, the food, and the getting of it.

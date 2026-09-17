@@ -963,9 +963,13 @@ impl Ailment {
 
     /// How long somebody is laid up for, at the mildest and the worst.
     ///
-    /// Two days to a week and a half, on a calendar of twelve turns to the
-    /// day. Long enough to cost a settlement work, short enough that it is
-    /// not simply a slower way of dying.
+    /// Two days to a week and a half. Long enough to cost a settlement work,
+    /// short enough that it is not simply a slower way of dying.
+    ///
+    /// Said in days and converted, so it stays two days and ten. The clause
+    /// that used to end that first sentence - "on a calendar of twelve turns
+    /// to the day" - was the calendar before last, and a reader who believed
+    /// it would have read these as four hours and twenty.
     pub const THE_SHORTEST_IT_LASTS: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
     pub const THE_LONGEST_IT_LASTS: u32 = 10 * crate::environment::seasons::TICKS_PER_DAY;
 

@@ -3,12 +3,15 @@
 //!
 //! Everything else in this model counts turns. A turn is a decision - the unit
 //! at which an agent looks around and picks something to do - and there are
-//! twelve of them in a day, so a turn is two hours of living.
+//! `PLANNING_PERIODS_PER_DAY` of them in a day, so a turn is half an hour of
+//! living. It was two hours and twelve to the day when this was written, and
+//! the paragraph said so in words; the words are now asked for rather than
+//! written down, because that is the whole argument this module makes.
 //!
 //! A body does not work at that resolution. Water leaves it steadily over
 //! three days; a meal sits in the stomach for half an hour before anything
 //! moves, and is gone from it in six; what leaves the stomach is worth nothing
-//! for a further day. None of that can be said in two-hour steps.
+//! for a further day. None of that can be said in decision-sized steps.
 //!
 //! So the body keeps its own clock, in minutes, and `MINUTES_PER_TURN` of it
 //! passes every turn. The physiology below is written in the units it was

@@ -332,30 +332,60 @@ fn food_left_lying_goes_into_the_ground() {
 
     simulation.world.somebody_left_this(supper, here, 0);
 
-    let litter_before = simulation
-        .world
-        .grid
-        .get_tile(&here)
-        .map(|tile| tile.soil.litter())
-        .unwrap_or(0.0);
-
-    for _ in 0..(World::HOW_LONG_A_THING_LIES_THERE / 2 / TICKS_BETWEEN_PLANS) {
-        simulation.world.take_a_turn();
-    }
-
-    assert!(
-        simulation.world.what_is_lying_at(&here).is_empty(),
-        "a basket of berries does not keep on open ground"
-    );
-    assert!(
+    let litter = |simulation: &Simulation| {
         simulation
             .world
             .grid
             .get_tile(&here)
             .map(|tile| tile.soil.litter())
             .unwrap_or(0.0)
-            > litter_before,
-        "and what it was is in the ground now"
+    };
+
+    // **Measured across the moment the berries go, not across the run.**
+    //
+    // This used to read the litter at turn nought, wind the world on for
+    // `HOW_LONG_A_THING_LIES_THERE / 2`, and assert the litter had gone up.
+    // Two things were wrong with that and the second is the interesting one.
+    //
+    // Litter decomposes - that is what litter is for - so the reading at turn
+    // nought is not a floor, it is the start of a curve going down. The tile
+    // begins with a quarter of a unit of leaf on it and is under a hundredth
+    // of that within twenty days, so the comparison only means anything over
+    // a span short enough that what was already there has not gone.
+    //
+    // And that span grew. `HOW_LONG_A_THING_LIES_THERE` is a season and a
+    // half, so it went from thirty-six days to a hundred and thirty-five when
+    // a season went from twenty-four days to ninety - and half of that is
+    // sixty-seven days, by which point the quarter-unit the tile started with
+    // has decomposed to nine ten-thousandths whatever the berries did. The
+    // test had stopped being about the berries and become a test that leaf
+    // litter does not rot, which is the opposite of what this file is for.
+    //
+    // So: watch the turn they go, and read the ground either side of it.
+    let mut before_they_went = litter(&simulation);
+    let mut after_they_went = None;
+
+    for _ in 0..(World::HOW_LONG_A_THING_LIES_THERE / 2 / TICKS_BETWEEN_PLANS) {
+        let last_reading = litter(&simulation);
+        simulation.world.take_a_turn();
+
+        if simulation.world.what_is_lying_at(&here).is_empty() {
+            before_they_went = last_reading;
+            after_they_went = Some(litter(&simulation));
+            break;
+        }
+    }
+
+    assert!(
+        simulation.world.what_is_lying_at(&here).is_empty(),
+        "a basket of berries does not keep on open ground"
+    );
+
+    let after = after_they_went.expect("they went, so there is a turn they went on");
+    assert!(
+        after > before_they_went,
+        "and what it was is in the ground now: {before_they_went} before they \
+         went, {after} after"
     );
 }
 

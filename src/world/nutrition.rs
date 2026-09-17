@@ -710,12 +710,17 @@ impl FoodDatabase {
     /// actually keeps.
     ///
     /// Every one of these tables was written as a day-count and stored as a
-    /// number of turns at 1440 turns to the day. The calendar was later put on
-    /// a scale a life fits inside - `TICKS_PER_DAY` is 12, a season is
-    /// twenty-four days and a year is 1,152 turns - and the food tables were
-    /// not brought with it. So meat, written down as lasting a day, lasted a
+    /// number of turns at 1,440 turns to the day. The calendar was then put on
+    /// a scale a life fits inside - a day of twelve turns, a season of
+    /// twenty-four days, a year of 1,152 - and the food tables were not
+    /// brought with it. So meat, written down as lasting a day, lasted a
     /// hundred and twenty of them; grain written down as ten days lasted
     /// twelve and a half years.
+    ///
+    /// The calendar has moved twice more since. That is the argument for
+    /// stating the intent in days and converting here rather than storing the
+    /// product: the conversion is one line and it follows, and the twenty-odd
+    /// figures below say what they mean whatever a day turns out to be.
     ///
     /// Nothing in this world spoiled, and everything downstream followed from
     /// that: nobody ever went hungry, a larder was insurance against nothing,

@@ -384,10 +384,15 @@ impl SmallLife {
     /// **Derived rather than written down, because the number that was
     /// written down was on a different calendar.** The docstring above this
     /// used to read "twelve turns to the day" and the constant was 0.02 - and
-    /// `TICKS_PER_DAY` is **48**, so a snare took four fifths of a chance a
-    /// day rather than a fifth, and the sentence beside it was wrong by four
-    /// times. The same defect as #143 and #288: a rate calibrated on a
-    /// calendar the world no longer keeps.
+    /// there are **forty-eight** planning periods in a day, so a snare took
+    /// four fifths of a chance a day rather than a fifth, and the sentence
+    /// beside it was wrong by four times. The same defect as #143 and #288: a
+    /// rate calibrated on a calendar the world no longer keeps.
+    ///
+    /// The note here said `TICKS_PER_DAY` where it meant
+    /// `PLANNING_PERIODS_PER_DAY`, which are 1,440 and 48 and are the two
+    /// units this family of defects is made of. The code below always read the
+    /// right one; only the sentence was wrong.
     pub const WHAT_A_SNARE_TAKES_ON_FULL_GROUND: f32 =
         Self::WHAT_A_SNARE_TAKES_ON_FULL_GROUND_IN_A_DAY
             / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
@@ -421,9 +426,9 @@ impl SmallLife {
     /// And the same, in a turn.
     ///
     /// **The other half of the calendar defect above.** This was 0.01 a turn
-    /// on a twelve-turn day - "most of a week" - and at 48 turns to the day
-    /// it came to four times that, so a catch was gone in a day and a half
-    /// rather than most of a week. Measured over twelve worlds before this
+    /// on a twelve-turn day - "most of a week" - and at forty-eight planning
+    /// periods to the day it came to four times that, so a catch was gone in a
+    /// day and a half rather than most of a week. Measured over twelve worlds before this
     /// was mended: a settlement's snares caught **816 head in a winter and
     /// carried home 21**, losing 96.7% of them to the fox. Trapping is the
     /// one food source that does not stop when the hedgerows do, and it was

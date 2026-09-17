@@ -21,8 +21,25 @@
 
 use crate::agents::{AgentConfig, InventoryItem, Inventory, Population};
 use crate::analytics::Simulation;
+use crate::environment::seasons::{DAYS_PER_SEASON, TICKS_PER_DAY};
 use crate::world::nutrition::{FoodDatabase, PreparationState};
 use crate::world::{ItemType, Pit, Position, World, WorldConfig};
+
+/// A day and a season, on the calendar the world actually keeps.
+///
+/// **These were bare numbers** - 4,000 for "this morning", 5,000 for "a season
+/// apart", 1,001 for "a day later" - and every one of them was right on the
+/// calendar before last, where a day was twelve turns and a season 288 of
+/// them. At 1,440 ticks to the day, 5,000 ticks is three and a half days,
+/// which is *inside* `Pit::CLOSE_ENOUGH_IN_AGE_TO_JOIN`. So
+/// `a_pit_puts_this_load_beside_the_last_one` - the test whose whole subject
+/// is that two loads a season apart stay two loads - was putting them in
+/// three days apart and then asserting that they had not joined.
+///
+/// A span of calendar time is not a number. It is a number of days, and the
+/// days are the calendar's to say.
+const A_DAY: u32 = TICKS_PER_DAY;
+const A_SEASON: u32 = DAYS_PER_SEASON * TICKS_PER_DAY;
 
 fn a_lot_of(what: &str, how_many: u32, picked_on: u32) -> InventoryItem {
     let database = FoodDatabase::new();
@@ -36,14 +53,14 @@ fn a_lot_of(what: &str, how_many: u32, picked_on: u32) -> InventoryItem {
 #[test]
 fn fresh_food_tipped_onto_old_comes_down_to_meet_it() {
     let mut older = a_lot_of("food", 10, 0);
-    let this_morning = a_lot_of("food", 10, 4_000);
+    let this_morning = a_lot_of("food", 10, A_DAY);
 
     older.absorb(this_morning);
 
     assert_eq!(older.quantity, 20, "it is all one basket now");
 
     let clock = older.food_data.as_ref().unwrap().created_turn;
-    assert!(clock < 4_000, "the new food does not keep its own timer: {clock}");
+    assert!(clock < A_DAY, "the new food does not keep its own timer: {clock}");
     assert!(
         clock > 0,
         "and the basket is not pinned at the age of its very first berry: {clock}"
@@ -55,11 +72,11 @@ fn fresh_food_tipped_onto_old_comes_down_to_meet_it() {
 /// that half, and it is the same bug seen from the other side.
 #[test]
 fn old_food_tipped_onto_fresh_does_not_come_up_to_meet_it() {
-    let mut this_morning = a_lot_of("food", 10, 4_000);
+    let mut this_morning = a_lot_of("food", 10, A_DAY);
     this_morning.absorb(a_lot_of("food", 10, 0));
 
     let clock = this_morning.food_data.as_ref().unwrap().created_turn;
-    assert!(clock < 4_000, "a stale handful tells on the basket: {clock}");
+    assert!(clock < A_DAY, "a stale handful tells on the basket: {clock}");
 }
 
 /// Once mould has actually manifested it takes the whole basket. Nothing
@@ -71,7 +88,7 @@ fn good_fruit_does_not_rescue_a_basket_that_has_gone_over() {
         clock.freshness = 0.0;
     }
 
-    gone_over.absorb(a_lot_of("food", 100, 9_000));
+    gone_over.absorb(a_lot_of("food", 100, A_SEASON));
 
     assert_eq!(
         gone_over.food_data.as_ref().unwrap().created_turn,
@@ -130,13 +147,13 @@ fn nothing_becomes_immortal_by_being_stacked_on() {
 fn a_pack_stacks_on_the_same_terms() {
     let mut pack = Inventory::new(1000, 1000.0);
     let _ = pack.add_item(a_lot_of("food", 10, 0));
-    let _ = pack.add_item(a_lot_of("food", 10, 5_000));
+    let _ = pack.add_item(a_lot_of("food", 10, A_SEASON));
 
     let stack = pack.get_item("food").expect("he is carrying berries");
 
     assert_eq!(stack.quantity, 20);
     assert!(
-        stack.food_data.as_ref().unwrap().created_turn < 5_000,
+        stack.food_data.as_ref().unwrap().created_turn < A_SEASON,
         "a pack does not forget what it was already carrying"
     );
 }
@@ -154,7 +171,7 @@ fn a_pit_puts_this_load_beside_the_last_one() {
         belongs: crate::world::Belongs::ToNobody,
     };
 
-    pit.put_in(a_lot_of("food", 10, 5_000));
+    pit.put_in(a_lot_of("food", 10, A_SEASON));
 
     assert_eq!(pit.how_much_is_in_it(), 50, "it is all in the hole");
     assert_eq!(
@@ -174,13 +191,13 @@ fn a_pit_puts_this_load_beside_the_last_one() {
 fn a_pit_joins_up_what_went_in_together() {
     let mut pit = Pit {
         where_it_is: Position::new(0, 0),
-        holds: vec![a_lot_of("food", 40, 1_000)],
+        holds: vec![a_lot_of("food", 40, A_DAY)],
         covered: true,
         dug: 0,
         belongs: crate::world::Belongs::ToNobody,
     };
 
-    pit.put_in(a_lot_of("food", 10, 1_001));
+    pit.put_in(a_lot_of("food", 10, A_DAY * 2));
 
     assert_eq!(pit.holds.len(), 1, "a day apart is one load");
     assert_eq!(pit.how_much_is_in_it(), 50);

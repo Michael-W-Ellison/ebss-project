@@ -126,7 +126,14 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // agent read itself as half a day from dying, so every agent took the
     // frightened branch, and the minute-by-minute danger cadence rolled for
     // each of them. Fewer rolls now because fewer people are terrified.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_894;
+    //
+    // Then 7,894 until how fast a thing goes off became the product of its
+    // tags and what it is kept in. What a pack holds now keeps at a rate that
+    // depends on what is in the pack, and what is buried keeps at a rate
+    // rather than by having its own clock wound forward - so what a person
+    // finds worth eating, worth burying and worth carrying is a different
+    // set, and a different set of branches gets taken.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_908;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -157,7 +164,14 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // figure also stopped meaning what it said: the run above it asked for a
     // year and took `DAYS_PER_YEAR * TICKS_PER_DAY` steps, which is thirty
     // years. Counted in planning periods, a year is a year again.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 693_720;
+    //
+    // Down eleven per cent again for the decay conversion. A year is where
+    // that one shows: food in a pack, food in a hole and food lying in the
+    // weather all go off at rates that are now read off the same three
+    // modifiers, and over a whole year the difference is a settlement holding
+    // a different amount of different things and deciding differently about
+    // all of it.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 615_814;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

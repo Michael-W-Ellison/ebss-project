@@ -1278,13 +1278,32 @@ impl ResourceNode {
 
     /// What a full spring run brings into one reach of river in one pass.
     ///
-    /// Set so that a reach fished down to nothing is full again inside a year,
-    /// most of it arriving in the two runs: a spring season of twenty-four days
-    /// is twenty-eight or nine passes, which at this rate is a good half of
-    /// what a reach holds. That is the shape of the thing - a river is empty
-    /// enough to be worth nobody's time for most of the year and thick with
-    /// fish twice in it, and a people who live on one arrange the rest of what
-    /// they do around those two stretches.
+    /// **A rate per pass, and a pass is now a day.** The pass used to come
+    /// round every ten turns on a twelve-turn day, so this was about one and a
+    /// fifth fish a day; it is one a day now, which is near enough the same
+    /// river.
+    ///
+    /// What is *not* the same is the season. The note that stood here read: "a
+    /// spring season of twenty-four days is twenty-eight or nine passes, which
+    /// at this rate is a good half of what a reach holds", and reasoned from
+    /// that to "a reach fished down to nothing is full again inside a year,
+    /// most of it arriving in the two runs". A spring is ninety days now, so a
+    /// full run brings ninety - three times what that sentence was fitted to -
+    /// and a reach refills in a fraction of a year rather than across one.
+    ///
+    /// The rate is left where it is on purpose, because which of the two the
+    /// fishery was meant to hold fixed is a question about the world and not
+    /// about arithmetic: a longer spring arguably *should* be a bigger run.
+    /// But the consequence is worth saying plainly rather than leaving in a
+    /// sentence that quietly stopped being true. The shape the fishery was
+    /// written for - a river worth nobody's time for most of the year and
+    /// thick with fish twice in it, with a people arranging what they do
+    /// around those two stretches - is weaker than it was, because summer at
+    /// 0.4 a day now brings thirty-six into a reach on its own. If that shape
+    /// is wanted back, the thing to state is what a *season's* run is worth
+    /// and to divide by `DAYS_PER_SEASON` here, the way
+    /// `SmallLife::WHAT_A_SNARE_TAKES_ON_FULL_GROUND` states a day's chance
+    /// and divides by the day.
     const FISH_PER_PASS_AT_FULL_RUN: f32 = 1.0;
 
     /// Regenerate resources based on climate and weather conditions

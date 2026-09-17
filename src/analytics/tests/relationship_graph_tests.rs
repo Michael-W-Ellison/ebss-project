@@ -46,8 +46,14 @@ fn two_neighbours() -> Simulation {
 fn standing_beside_a_man_for_a_year_does_not_make_him_a_friend() {
     let mut bond = Relationship::new_neutral(crate::core::dice::name(), 0);
 
-    // A whole year of never once leaving his side
-    for _ in 0..1152 {
+    // A whole year of never once leaving his side.
+    //
+    // This was a bare `1152`, which was a year of turns on the calendar
+    // before last and is a fortnight of them now. The test still passed,
+    // because the bond saturates long before either figure - but it had
+    // stopped measuring the thing it names, and the next span written down
+    // like this will not be so lucky.
+    for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_YEAR {
         bond.keep_company(1.0);
     }
 
