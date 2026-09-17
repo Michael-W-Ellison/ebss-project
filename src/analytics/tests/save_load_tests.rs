@@ -100,7 +100,7 @@ fn test_loaded_simulation_can_resume() {
     }
 
     // Should now be at turn 15
-    assert_eq!(loaded_sim.current_turn, 15);
+    assert_eq!(loaded_sim.current_turn, 15 * crate::environment::seasons::TICKS_BETWEEN_PLANS);
 }
 
 #[test]
