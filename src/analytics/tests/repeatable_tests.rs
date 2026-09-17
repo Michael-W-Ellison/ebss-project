@@ -119,7 +119,14 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // the candidate list stopped offering verbs whose action names a product
     // rather than a target - see `wanting::afforded::what_i_could_try_here`.
     // Both change which branch a turn takes, and so how many times it rolls.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 8_717;
+    //
+    // Then 8,717 until the clock was split into ticks and turns, and the
+    // constants derived from `TICKS_PER_DAY` were put back on the one they
+    // are counted in. The dread horizon is the one that shows here: every
+    // agent read itself as half a day from dying, so every agent took the
+    // frightened branch, and the minute-by-minute danger cadence rolled for
+    // each of them. Fewer rolls now because fewer people are terrified.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_894;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -146,7 +153,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // now this for the lifecycle work: a child under six takes no turn of its
     // own and is put where its keeper is, which moves both how many turns a
     // year contains and where the people in it are standing.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 804_474;
+    // And down again with the clock fixes - see the note on seed 4242. This
+    // figure also stopped meaning what it said: the run above it asked for a
+    // year and took `DAYS_PER_YEAR * TICKS_PER_DAY` steps, which is thirty
+    // years. Counted in planning periods, a year is a year again.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 693_720;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

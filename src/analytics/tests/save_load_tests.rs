@@ -92,7 +92,7 @@ fn test_loaded_simulation_can_resume() {
     let mut loaded_sim = Simulation::load(&save_path).unwrap();
 
     // Should start from where we left off
-    assert_eq!(loaded_sim.current_turn, 10);
+    assert_eq!(loaded_sim.current_turn, 10 * crate::environment::seasons::TICKS_BETWEEN_PLANS);
 
     // Run for 5 more turns
     for _ in 0..5 {
