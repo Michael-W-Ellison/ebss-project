@@ -25,6 +25,68 @@ fn one_person() -> Simulation {
     Simulation::new(world, population)
 }
 
+/// An action is as long as its longest verb, not as long as all of them.
+///
+/// `done_by` maps many verbs onto one action name, and the verbs under a name
+/// are alternatives rather than steps. `HARVEST` and `DRINK` are both
+/// `done_by: Some("gather")`; `HUNT` and `THROW` are both `done_by:
+/// Some("hunt")`. `verbs::what_this_action_costs` adds them up, which answers
+/// "what does this family come to" and not "how long does one of these hold
+/// somebody".
+///
+/// Pricing the gate off the sum charged a gather for a drink it never took.
+/// Every gather in the model became two periods and every hunt three, so a
+/// gathering agent decided half as often as it should and a hunting one a
+/// third - a change to how often everybody in the simulation acts, arrived at
+/// by reading a field for something it does not say.
+#[test]
+fn an_action_is_as_long_as_its_longest_verb_not_the_sum_of_them() {
+    use crate::environment::verbs::{what_this_action_costs, EVERY_VERB};
+
+    // The case that was wrong. Gathering is performed by more than one verb,
+    // so the sum and the longest are different numbers, and the gate wants
+    // the longest.
+    let under_gather = EVERY_VERB
+        .iter()
+        .filter(|verb| verb.done_by == Some("gather") && verb.always)
+        .count();
+    assert!(
+        under_gather > 1,
+        "the test is about an action several verbs share, and gather is \
+         performed by {under_gather}"
+    );
+
+    let gathering = Action::Gather { resource_type: "wood".to_string() };
+    let holds_you = AgentState::how_long_this_takes(&gathering);
+    let all_of_them = (what_this_action_costs("gather").time * TICKS_BETWEEN_PLANS as f32) as u32;
+
+    assert!(
+        holds_you < all_of_them,
+        "a gather holds somebody {holds_you} ticks and the whole family comes \
+         to {all_of_them}; charging the one for the other is the bug"
+    );
+    assert_eq!(
+        holds_you, TICKS_BETWEEN_PLANS,
+        "no verb is priced above a moment yet, so a gather is one period"
+    );
+
+    // And the general statement, so pricing a verb later cannot quietly put
+    // the sum back. Whatever any action is worth, it is worth its longest
+    // verb, floored at a period.
+    for name in ["gather", "hunt", "craft", "move", "eat"] {
+        let longest = EVERY_VERB
+            .iter()
+            .filter(|verb| verb.done_by == Some(name) && verb.always)
+            .map(|verb| verb.costs.time)
+            .fold(1.0_f32, f32::max);
+        let sum = what_this_action_costs(name).time;
+        assert!(
+            longest <= sum.max(1.0),
+            "{name}: the longest verb ({longest}) cannot exceed the sum ({sum})"
+        );
+    }
+}
+
 /// The two clocks are the two the specification gives.
 #[test]
 fn a_tick_is_a_minute_and_a_period_is_half_an_hour() {

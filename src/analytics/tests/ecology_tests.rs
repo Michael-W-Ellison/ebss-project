@@ -24,7 +24,7 @@
 
 use crate::agents::Population;
 use crate::analytics::Simulation;
-use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
+use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, PLANNING_PERIODS_PER_YEAR};
 use crate::world::{World, WorldConfig};
 use std::collections::BTreeSet;
 
@@ -34,8 +34,16 @@ fn an_empty_world() -> Simulation {
     Simulation::new(world, Population::new())
 }
 
+/// Run the world for this many years.
+///
+/// Counted in *planning periods*, because that is what `take_a_turn` is: a
+/// step of the simulation is thirty ticks, not one. This said
+/// `years * 360 * TICKS_PER_DAY`, which was right while a tick and a step
+/// were the same thing and became thirty times too long the moment they
+/// were not - a three-year run asked for 1,555,200 steps instead of 51,840,
+/// and simulated ninety years to do it. The suite did not fail; it stopped.
 fn how_many_years(simulation: &mut Simulation, years: u32) {
-    for _ in 0..(years * 360 * TICKS_PER_DAY) {
+    for _ in 0..(years * PLANNING_PERIODS_PER_YEAR) {
         simulation.take_a_turn();
     }
 }
@@ -556,7 +564,7 @@ fn a_herd_settles_at_what_the_ground_will_feed() {
     let started_with = world.animals.how_many_are_alive();
 
     // Five years is well past where the old model was pinned to its ceiling.
-    for _ in 0..(5 * crate::environment::seasons::TICKS_PER_YEAR) {
+    for _ in 0..(5 * crate::environment::seasons::PLANNING_PERIODS_PER_YEAR) {
         world.take_a_turn();
     }
 
@@ -1516,7 +1524,7 @@ fn the_predator_tiers_are_still_there_two_years_on() {
     };
 
     let at_the_start = of_each_tier(&world);
-    for _ in 0..(2 * crate::environment::seasons::TICKS_PER_YEAR) {
+    for _ in 0..(2 * crate::environment::seasons::PLANNING_PERIODS_PER_YEAR) {
         world.take_a_turn();
     }
     let after_two_years = of_each_tier(&world);

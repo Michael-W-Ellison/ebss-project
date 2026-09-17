@@ -380,7 +380,7 @@ fn a_settlement_lives_through_a_winter() {
                 .count()
         };
 
-        let winter_opens = Season::Winter.first_day() * TICKS_PER_DAY;
+        let winter_opens = Season::Winter.first_day() * PLANNING_PERIODS_PER_DAY;
         for _ in 0..winter_opens {
             simulation.take_a_turn();
         }
@@ -388,7 +388,7 @@ fn a_settlement_lives_through_a_winter() {
 
         // Far enough to be out the other side of the winter and into the
         // second spring.
-        for _ in winter_opens..(TICKS_PER_YEAR + TICKS_PER_DAY * 4) {
+        for _ in winter_opens..(PLANNING_PERIODS_PER_YEAR + PLANNING_PERIODS_PER_DAY * 4) {
             simulation.take_a_turn();
         }
 

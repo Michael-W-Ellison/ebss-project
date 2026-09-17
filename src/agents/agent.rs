@@ -1556,16 +1556,28 @@ impl AgentState {
 
     /// How long this undertaking holds somebody, in ticks.
     ///
-    /// The verb matrix already prices every action - `Costs { time, effort }`
-    /// on each verb, added up over the verbs an action always performs by
-    /// `verbs::what_this_action_costs`. That function was written, documented
-    /// and tested, and had no caller outside its own test until this one. It
-    /// is what decides how many planning periods an agent walks past.
+    /// The verb matrix prices every verb - `Costs { time, effort }` - and
+    /// `time` is counted in planning periods, because that is the grain the
+    /// costs were written at: `A_TURN_OF_WORK` is one turn of work. A period
+    /// is `TICKS_BETWEEN_PLANS` ticks, so the conversion is the
+    /// multiplication below and nothing more.
     ///
-    /// `time` is counted in periods, because that is the grain the costs were
-    /// written at: `A_TURN_OF_WORK` is one turn of work. A period is
-    /// `TICKS_BETWEEN_PLANS` ticks, so the conversion is the multiplication
-    /// below and nothing more.
+    /// The **longest** of the verbs an action can perform, not their sum.
+    ///
+    /// `done_by` is a map from many verbs to one action name, and the verbs
+    /// under a name are alternatives rather than steps: `HARVEST` and `DRINK`
+    /// are both `done_by: Some("gather")`, and a hunt asks both `HUNT` and
+    /// `THROW`. `verbs::what_this_action_costs` adds them up, which is the
+    /// right question for "what does this whole family come to" and the wrong
+    /// one for "how long does one of these hold somebody" - it made a gather
+    /// take two periods by charging it for a drink it never took, and a hunt
+    /// three. Reusing it here priced every gather, hunt and craft in the
+    /// model off a reading of `done_by` that `done_by` does not carry.
+    ///
+    /// The longest instead. Every verb is `A_MOMENT` today, so this is one
+    /// period for everything - which is the honest state of the verb table:
+    /// the gate machinery is in place and nothing has been priced through it
+    /// yet. When the hunt chain gets its 145 ticks, this is where they arrive.
     ///
     /// Sleeping is the exception and says its own length. It is the case the
     /// specification calls out - "these could be skipped when an agent is
@@ -1584,9 +1596,11 @@ impl AgentState {
 
         let named = Agent::what_was_tried(action);
         let named = named.split(':').next().unwrap_or(&named);
-        let periods = crate::environment::verbs::what_this_action_costs(named)
-            .time
-            .max(1.0);
+        let periods = crate::environment::verbs::EVERY_VERB
+            .iter()
+            .filter(|verb| verb.done_by == Some(named) && verb.always)
+            .map(|verb| verb.costs.time)
+            .fold(1.0_f32, f32::max);
 
         (periods * TICKS_BETWEEN_PLANS as f32).round() as u32
     }
