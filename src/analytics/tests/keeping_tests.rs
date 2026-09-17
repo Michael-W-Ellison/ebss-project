@@ -15,7 +15,7 @@
 
 use crate::agents::{AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
-use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
+use crate::environment::seasons::{DAYS_PER_YEAR, PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 use crate::environment::{verbs, Action};
 use crate::world::nutrition::{FoodDatabase, PreparationState};
 use crate::world::{ItemType, Position, World, WorldConfig};
@@ -126,7 +126,18 @@ fn grain_keeps_a_season() {
 /// Nothing keeps for a lifetime except honey.
 #[test]
 fn nothing_but_honey_outlasts_a_person() {
-    let a_life = 8000;
+    // A year of the world's calendar.
+    //
+    // This was a bare `8000`, which sat between meat at ten days and honey at
+    // three thousand while a turn was a tick, and means five and a half days
+    // now that a tick is a minute. Said in days it stays put.
+    //
+    // A year rather than a life, and the name overstates what the model
+    // holds: honey keeps three thousand days, which is eight years and not
+    // seventy. What the test is really pinning is that nothing else keeps
+    // from one year to the next, and the longest of the others is grain at
+    // ninety-six days. Renaming it is a separate question from the clock.
+    let a_life = DAYS_PER_YEAR * TICKS_PER_DAY;
 
     for (what, of) in [
         ("meat", ItemType::Meat),
@@ -369,7 +380,10 @@ fn what_is_left_out_goes_off_faster_than_what_is_carried() {
 
     let mut in_the_pack = a_meal(ItemType::Fish, "fish", 10, 0);
 
-    for _ in 0..40 {
+    // Two days of weather. This was a bare `40`, which was most of a day
+    // while a turn was two hours and is under an hour's worth of spoiling
+    // now. Said in days it stays two days.
+    for _ in 0..(2 * PLANNING_PERIODS_PER_DAY) {
         simulation.world.take_a_turn();
     }
     if let Some(food) = in_the_pack.food_data.as_mut() {

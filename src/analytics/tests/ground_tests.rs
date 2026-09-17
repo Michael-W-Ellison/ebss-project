@@ -13,6 +13,7 @@
 
 use crate::agents::{AgentConfig, InventoryItem, Population, Quality};
 use crate::analytics::Simulation;
+use crate::environment::seasons::TICKS_BETWEEN_PLANS;
 use crate::environment::Action;
 use crate::world::{Position, World, WorldConfig};
 
@@ -338,7 +339,7 @@ fn food_left_lying_goes_into_the_ground() {
         .map(|tile| tile.soil.litter())
         .unwrap_or(0.0);
 
-    for _ in 0..(World::HOW_LONG_A_THING_LIES_THERE / 2) {
+    for _ in 0..(World::HOW_LONG_A_THING_LIES_THERE / 2 / TICKS_BETWEEN_PLANS) {
         simulation.world.take_a_turn();
     }
 
@@ -370,7 +371,7 @@ fn a_tool_keeps_longer_than_food_and_not_for_ever() {
         0,
     );
 
-    for _ in 0..(World::HOW_LONG_A_THING_LIES_THERE / 2) {
+    for _ in 0..(World::HOW_LONG_A_THING_LIES_THERE / 2 / TICKS_BETWEEN_PLANS) {
         simulation.world.take_a_turn();
     }
     assert_eq!(
@@ -379,7 +380,7 @@ fn a_tool_keeps_longer_than_food_and_not_for_ever() {
         "still there when the berries would have gone"
     );
 
-    for _ in 0..World::HOW_LONG_A_THING_LIES_THERE {
+    for _ in 0..(World::HOW_LONG_A_THING_LIES_THERE / TICKS_BETWEEN_PLANS) {
         simulation.world.take_a_turn();
     }
     assert!(

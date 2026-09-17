@@ -265,10 +265,12 @@ fn what_is_buried_outlasts_what_is_carried() {
     // comparison with it.
     let mut in_the_pack = supper(20, 0);
 
-    // Berries last three days in a pack, which on this calendar is
-    // thirty-six turns. Thirty is long enough that the difference shows and
-    // short enough that there is anything left to compare.
-    for _ in 0..30 {
+    // Berries last three days in a pack, so two days is long enough that the
+    // difference shows and short enough that there is anything left to
+    // compare. This was a bare `30`, and the comment beside it said thirty-six
+    // turns to three days - twelve turns to the day, which is the calendar
+    // before last. Said in days it does not go stale again.
+    for _ in 0..(2 * PLANNING_PERIODS_PER_DAY) {
         simulation.world.take_a_turn();
     }
     if let Some(food) = in_the_pack.food_data.as_mut() {
