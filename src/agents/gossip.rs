@@ -676,7 +676,7 @@ impl TrustRating {
     /// itself, and it stops there.
     ///
     /// Treating this the same as a lie made every agent in a settlement a
-    /// proven liar to two dozen others inside fifteen thousand ticks, which is
+    /// proven liar to two dozen others inside fifteen thousand turns, which is
     /// what "should not be seen as a liar" is there to prevent.
     pub fn update_on_stale_news(&mut self) {
         self.trust = (self.trust - 0.025).max(0.0);
@@ -743,7 +743,7 @@ impl KnowledgeBase {
     /// agents started telling each other where things are - which is the
     /// point of the whole apparatus - a settlement of a hundred was carrying
     /// tens of thousands of remembered claims and scanning all of them every
-    /// hundred ticks. Enough to hold a grudge about, not a ledger.
+    /// hundred turns. Enough to hold a grudge about, not a ledger.
     pub const WHAT_A_MAN_CAN_KEEP_TRACK_OF: usize = 64;
 
     /// Forget the oldest claim, so that what is remembered is what is recent.

@@ -214,19 +214,19 @@ fn main() {
     println!();
 
     // ===== Part 9: Observational Learning Over Time =====
-    println!("--- Part 9: Learning Over Multiple Ticks ---");
+    println!("--- Part 9: Learning Over Multiple Turns ---");
 
     // Process observational learning through population system
-    println!("Running 5 population ticks with observational learning...");
+    println!("Running 5 population turns with observational learning...");
 
-    for tick in 0..5 {
+    for turn in 0..5 {
         population.process_observational_learning();
 
-        let stats_after_tick = population.get_population_learning_stats();
-        println!("  Tick {}: {} adopted, {} ready",
-            tick + 1,
-            stats_after_tick.total_behaviors_adopted,
-            stats_after_tick.total_ready_to_adopt);
+        let stats_after_turn = population.get_population_learning_stats();
+        println!("  Turn {}: {} adopted, {} ready",
+            turn + 1,
+            stats_after_turn.total_behaviors_adopted,
+            stats_after_turn.total_ready_to_adopt);
     }
 
     println!();

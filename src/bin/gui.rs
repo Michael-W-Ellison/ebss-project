@@ -143,8 +143,8 @@ fn run_simulation_thread(
     let mut selected = EntitySelection::None;
 
     // Timing
-    let base_tick_duration = Duration::from_millis(16); // ~60 ticks per second at 1x speed
-    let mut last_tick = Instant::now();
+    let base_turn_duration = Duration::from_millis(16); // ~60 turns per second at 1x speed
+    let mut last_turn = Instant::now();
     let mut last_snapshot = Instant::now();
     let snapshot_interval = Duration::from_millis(50); // Send snapshots at ~20 FPS
 
@@ -255,7 +255,7 @@ fn run_simulation_thread(
                 *request = false;
                 let snapshot = relationship_graph_to_snapshot(
                     &simulation.population,
-                    simulation.current_tick,
+                    simulation.current_turn,
                 );
                 if let Ok(mut response) = relationship_graph_response.try_lock() {
                     *response = Some(snapshot);
@@ -263,21 +263,21 @@ fn run_simulation_thread(
             }
         }
 
-        // Run simulation tick if appropriate
-        let should_tick = match state {
+        // Run simulation turn if appropriate
+        let should_turn = match state {
             SimState::Running => {
-                let tick_duration = Duration::from_secs_f32(
-                    base_tick_duration.as_secs_f32() / speed
+                let turn_duration = Duration::from_secs_f32(
+                    base_turn_duration.as_secs_f32() / speed
                 );
-                last_tick.elapsed() >= tick_duration
+                last_turn.elapsed() >= turn_duration
             }
             SimState::Stepping => true,
             SimState::Paused => false,
         };
 
-        if should_tick {
-            simulation.tick();
-            last_tick = Instant::now();
+        if should_turn {
+            simulation.take_a_turn();
+            last_turn = Instant::now();
 
             // After stepping, go back to paused
             if state == SimState::Stepping {

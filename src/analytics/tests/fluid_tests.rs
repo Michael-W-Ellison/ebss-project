@@ -192,7 +192,7 @@ fn what_ferments_keeps_far_longer_than_what_went_in() {
             .food_database
             .create_food_data(&what, 0)
             .expect("food")
-            .base_spoilage_ticks
+            .base_spoilage_turns
     };
 
     assert!(

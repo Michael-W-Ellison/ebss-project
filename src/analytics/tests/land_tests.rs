@@ -195,7 +195,7 @@ fn a_field_helps_a_plant_feed_itself_but_cannot_hurry_it() {
 ///
 /// The yield floor used to be four tenths of the full crop whatever the ground
 /// was like, so a field mined down to a twentieth of its fertility still
-/// nominally carried nearly half a crop. Traced over thirty thousand ticks
+/// nominally carried nearly half a crop. Traced over thirty thousand turns
 /// that hid the whole cost of farming: fertility fell by ninety-five per cent
 /// and stated yield by four.
 #[test]
@@ -325,7 +325,7 @@ fn a_wood_feeds_itself() {
     }
 
     for _ in 0..3000 {
-        world.tick();
+        world.take_a_turn();
     }
 
     let under_plants: f32 = world

@@ -4,7 +4,7 @@
 //! This example shows:
 //! - Spawning animals in the world
 //! - Spawning plants in the world
-//! - World tick updating both animals and plants
+//! - World turn updating both animals and plants
 //! - Spatial queries for nearby animals and plants
 //! - Animal interactions (taming, feeding)
 //! - Plant interactions (planting, harvesting)
@@ -199,15 +199,15 @@ fn main() {
     }
     println!();
 
-    // ===== Part 7: World Tick Simulation =====
+    // ===== Part 7: World Turn Simulation =====
     println!("--- Part 7: Simulating World Over Time ---");
 
-    println!("Running 100 ticks...");
-    for tick in 1..=100 {
-        world.tick();
+    println!("Running 100 turns...");
+    for turn in 1..=100 {
+        world.take_a_turn();
 
-        if tick % 25 == 0 {
-            println!("\n  Tick {}:", tick);
+        if turn % 25 == 0 {
+            println!("\n  Turn {}:", turn);
             println!("    Animals: {}", world.animals.population_count());
             println!("    Plants: {}", world.plants.total_count());
 
@@ -218,7 +218,7 @@ fn main() {
             // Sample some animals
             let all_animals = world.animals.get_all();
             if let Some(sample) = all_animals.first() {
-                println!("    Sample animal: {} - age: {} ticks, state: {:?}",
+                println!("    Sample animal: {} - age: {} turns, state: {:?}",
                     sample.species_id,
                     sample.age,
                     sample.state);
@@ -355,7 +355,7 @@ fn main() {
     println!("Buildings: {}", world.buildings.len());
     println!("Heat Sources: {}", world.heat_sources.all().len());
     println!("Resources: {}", world.resources.len());
-    println!("World Tick: {}", world.tick);
+    println!("World Turn: {}", world.turn);
 
     println!("\n=== Key Features Demonstrated ===");
     println!("✓ AnimalManager integrated into World");
@@ -363,7 +363,7 @@ fn main() {
     println!("✓ spawn_animal() and spawn_animal_group()");
     println!("✓ spawn_plant() and plant_crop()");
     println!("✓ spawn_plant_patch() for forests/fields");
-    println!("✓ World tick updating animals and plants");
+    println!("✓ World turn updating animals and plants");
     println!("✓ Spatial queries (get_in_radius, get_at_position)");
     println!("✓ Animal taming and domestication");
     println!("✓ Animal feeding");

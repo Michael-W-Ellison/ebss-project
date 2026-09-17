@@ -469,8 +469,8 @@ fn nobody_counts_themselves_as_company() {
 fn an_attempt_goes_down_with_the_afternoon_it_was_made_in() {
     let mut simulation = one_person();
 
-    for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 4) {
-        simulation.tick();
+    for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 4) {
+        simulation.take_a_turn();
         if !simulation.population.agents[0].state.is_alive {
             break;
         }
@@ -512,8 +512,8 @@ fn a_settlement_works_things_out_that_nobody_wrote_down() {
 
     // Long enough for a year to turn, which is what most of these lessons are
     // about.
-    for _ in 0..(crate::environment::seasons::TICKS_PER_YEAR + 400) {
-        simulation.tick();
+    for _ in 0..(crate::environment::seasons::TURNS_PER_YEAR + 400) {
+        simulation.take_a_turn();
         if !simulation.population.agents.iter().any(|a| a.state.is_alive) {
             break;
         }

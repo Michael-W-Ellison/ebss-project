@@ -537,7 +537,7 @@ impl Simulation {
     ) -> Option<Action> {
         use crate::agents::practices::Undertaking;
 
-        if !agent.is_it_time_i(Undertaking::Trapping, self.current_tick) {
+        if !agent.is_it_time_i(Undertaking::Trapping, self.current_turn) {
             return None;
         }
 

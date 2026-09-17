@@ -24,7 +24,7 @@ use crate::analytics::Simulation;
 use crate::agents::{AgentConfig, Population};
 use crate::environment::seasons::{
     first_day_of, last_day_of, PartOfSeason, Season, DAYS_PER_SEASON, DAYS_PER_YEAR,
-    TICKS_PER_DAY,
+    TURNS_PER_DAY,
 };
 use crate::world::{Bearing, ItemType, Position, ResourceNode, ResourceType, World, WorldConfig};
 
@@ -37,11 +37,11 @@ fn a_world() -> Simulation {
 }
 
 fn turn_the_year_to(simulation: &mut Simulation, wanted: Season) {
-    for _ in 0..(TICKS_PER_DAY * 400) {
+    for _ in 0..(TURNS_PER_DAY * 400) {
         if simulation.world.climate.current_season() == wanted {
             return;
         }
-        simulation.world.tick();
+        simulation.world.take_a_turn();
     }
     panic!("the year never reached {wanted:?}");
 }
@@ -357,8 +357,8 @@ fn what_a_bush_carries_falls_off_out_of_season() {
     turn_the_year_to(&mut simulation, Season::Winter);
 
     // A good few weeks of winter
-    for _ in 0..(TICKS_PER_DAY * 20) {
-        simulation.world.tick();
+    for _ in 0..(TURNS_PER_DAY * 20) {
+        simulation.world.take_a_turn();
     }
 
     let still_on_it = simulation
@@ -400,8 +400,8 @@ fn a_bush_keeps_what_it_carries_in_its_own_season() {
         bush.amount = 40;
     }
 
-    for _ in 0..(TICKS_PER_DAY * 5) {
-        simulation.world.tick();
+    for _ in 0..(TURNS_PER_DAY * 5) {
+        simulation.world.take_a_turn();
     }
 
     let still_on_it = simulation
@@ -474,20 +474,20 @@ fn what_nobody_picks_goes_back_into_the_ground() {
 /// even is the steady state, and by year five it is one.
 #[test]
 fn ground_nobody_harvests_is_no_poorer_a_year_later() {
-    use crate::environment::seasons::TICKS_PER_DAY;
+    use crate::environment::seasons::TURNS_PER_DAY;
 
     let mut world = World::new(WorldConfig::default());
     world.animals.get_all_mut().clear();
 
-    let a_year = TICKS_PER_DAY * 360;
+    let a_year = TURNS_PER_DAY * 360;
 
     for _ in 0..(a_year * 5) {
-        world.tick();
+        world.take_a_turn();
     }
     let before = mean_fertility_under(&world, ResourceType::Greens);
 
     for _ in 0..a_year {
-        world.tick();
+        world.take_a_turn();
     }
     let after = mean_fertility_under(&world, ResourceType::Greens);
 

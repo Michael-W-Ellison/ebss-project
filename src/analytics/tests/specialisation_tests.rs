@@ -2,8 +2,8 @@
 //! Tests that a trade is worth having, and that nobody has all of them.
 //!
 //! Experience was granted for *looking* rather than doing: the resource
-//! discovery pass filtered on the tick a thing was found and ran every tick,
-//! so a thing seen once paid out on ten consecutive ticks - fifty Farming
+//! discovery pass filtered on the turn a thing was found and ran every turn,
+//! so a thing seen once paid out on ten consecutive turns - fifty Farming
 //! experience for walking past a grain field, in a settled world holding
 //! ninety of them. A level cost a flat hundred at every level. Between them,
 //! skill measured how much of the map somebody had wandered over: across
@@ -164,7 +164,7 @@ fn walking_past_a_field_does_not_make_a_farmer() {
 
     let mut simulation = Simulation::new(world, population);
     for _ in 0..600 {
-        simulation.tick();
+        simulation.take_a_turn();
 
         // Keep him alive. This test is about whether being *near* a field
         // teaches farming, and a country of nothing but grain in spring feeds
@@ -191,7 +191,7 @@ fn walking_past_a_field_does_not_make_a_farmer() {
 
     assert!(
         farming < 0,
-        "a hundred and forty fields in sight for six hundred ticks should not \
+        "a hundred and forty fields in sight for six hundred turns should not \
          make somebody a farmer; this one reached {farming}"
     );
 }

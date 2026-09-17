@@ -5,7 +5,7 @@
 //! explicitly excluded food, and the only place to put anything was a single
 //! global bag of counts with no position that nothing ever spoiled in — so a
 //! people stored materials it rarely needed and never once stored a meal.
-//! Measured at ten thousand ticks, not one of sixty-five living agents was
+//! Measured at ten thousand turns, not one of sixty-five living agents was
 //! carrying so much as supper: see ISSUES_FOUND #21.
 //!
 //! Cold ground with the earth back over it keeps food four times as long as a
@@ -16,16 +16,16 @@ use crate::agents::{Agent, AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
 use crate::environment::{verbs, Action};
 use crate::world::nutrition::FoodDatabase;
-use crate::environment::seasons::{Season, TICKS_PER_DAY};
+use crate::environment::seasons::{Season, TURNS_PER_DAY};
 use crate::world::{ItemType, Pit, Position, Terrain, TerrainType, World, WorldConfig};
 
 /// Wind the world on until the year reaches the season wanted.
 fn turn_the_year_to(simulation: &mut Simulation, wanted: Season) {
-    for _ in 0..(TICKS_PER_DAY * 400) {
+    for _ in 0..(TURNS_PER_DAY * 400) {
         if simulation.world.climate.current_season() == wanted {
             return;
         }
-        simulation.world.tick();
+        simulation.world.take_a_turn();
     }
     panic!("the year never reached {wanted:?}");
 }
@@ -260,19 +260,19 @@ fn what_is_buried_outlasts_what_is_carried() {
         0,
     );
 
-    // The same meal, out in the weather. Only the world is ticked: a
-    // settlement of one starves inside three thousand ticks and takes the
+    // The same meal, out in the weather. Only the world is turned: a
+    // settlement of one starves inside three thousand turns and takes the
     // comparison with it.
     let mut in_the_pack = supper(20, 0);
 
     // Berries last three days in a pack, which on this calendar is
-    // thirty-six ticks. Thirty is long enough that the difference shows and
+    // thirty-six turns. Thirty is long enough that the difference shows and
     // short enough that there is anything left to compare.
     for _ in 0..30 {
-        simulation.world.tick();
+        simulation.world.take_a_turn();
     }
     if let Some(food) = in_the_pack.food_data.as_mut() {
-        food.update_freshness(simulation.world.tick);
+        food.update_freshness(simulation.world.turn);
     }
 
     let buried = simulation
@@ -342,7 +342,7 @@ fn an_open_pit_keeps_nothing() {
     });
 
     for _ in 0..3000 {
-        simulation.world.tick();
+        simulation.world.take_a_turn();
     }
 
     let left = simulation
@@ -569,7 +569,7 @@ fn a_surplus_in_the_hand_gets_buried_in_any_season() {
     turn_the_year_to(&mut simulation, Season::Summer);
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(supper(30, simulation.world.tick));
+        .add_item(supper(30, simulation.world.turn));
     let dried = simulation.execute_action(
         &Action::Dry {
             what: "food".to_string(),
@@ -709,7 +709,7 @@ fn a_load_gathered_in_autumn_is_not_eaten_on_the_spot() {
 
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(supper(4, simulation.world.tick));
+        .add_item(supper(4, simulation.world.turn));
 
     let here = simulation.population.agents[0].state.position;
 
@@ -728,7 +728,7 @@ fn the_same_armful_in_summer_is_just_supper() {
 
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(supper(4, simulation.world.tick));
+        .add_item(supper(4, simulation.world.turn));
 
     let here = simulation.population.agents[0].state.position;
 
@@ -748,7 +748,7 @@ fn a_starving_man_eats_the_harvest() {
 
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(supper(4, simulation.world.tick));
+        .add_item(supper(4, simulation.world.turn));
     simulation.population.agents[0].state.energy = 1.0;
     simulation.population.agents[0].nutrition.energy_reserves = 1.0;
 
@@ -773,7 +773,7 @@ fn a_full_load_gets_taken_to_the_store() {
 
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(supper(20, simulation.world.tick));
+        .add_item(supper(20, simulation.world.turn));
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation
@@ -803,7 +803,7 @@ fn a_full_load_with_the_store_across_the_camp_gets_walked_over() {
 
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(supper(20, simulation.world.tick));
+        .add_item(supper(20, simulation.world.turn));
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation
@@ -842,7 +842,7 @@ fn putting_by_waits_on_hunger_and_thirst_and_nothing_else() {
 // --------------------------------------------------------------------------
 // Getting back into it
 //
-// The store was a one-way valve. Measured over ten thousand ticks: nine
+// The store was a one-way valve. Measured over ten thousand turns: nine
 // hundred and ninety-one things buried, sixty-eight taken back out, nine
 // hundred units of food still in the ground at the end and four hundred and
 // seventy rotted where they lay. See ISSUES_FOUND #43.
@@ -1509,7 +1509,7 @@ fn raw_food_that_will_not_last_the_winter_is_not_buried() {
     simulation.execute_action(&Action::Excavate, 0);
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(supper(30, simulation.world.tick));
+        .add_item(supper(30, simulation.world.turn));
 
     let here = simulation.population.agents[0].state.position;
     let answer = simulation.putting_food_by(&simulation.population.agents[0], here);
@@ -1556,7 +1556,7 @@ fn somebody_who_has_never_been_shown_can_still_put_food_by() {
     simulation.execute_action(&Action::Excavate, 0);
     let _ = simulation.population.agents[0]
         .inventory
-        .add_item(supper(30, simulation.world.tick));
+        .add_item(supper(30, simulation.world.turn));
 
     let dried = simulation.execute_action(
         &Action::Dry { what: "food".to_string() },

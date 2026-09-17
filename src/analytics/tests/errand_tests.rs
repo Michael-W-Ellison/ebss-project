@@ -16,7 +16,7 @@ fn a_settlement(founders: usize, turns: usize) -> Simulation {
     }
     let mut simulation = Simulation::new(world, population);
     for _ in 0..turns {
-        simulation.tick();
+        simulation.take_a_turn();
     }
     simulation
 }

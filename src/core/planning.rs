@@ -21,13 +21,13 @@
 //!
 //! # Example: "Get wood" plan
 //!
-//! 1. Walk to forest (30 ticks)
-//! 2. Equip axe (5 ticks)
-//! 3. Chop tree (20 ticks with iron axe, 40 with stone)
-//! 4. Return to storehouse (30 ticks)
-//! 5. Deposit wood (5 ticks)
+//! 1. Walk to forest (30 turns)
+//! 2. Equip axe (5 turns)
+//! 3. Chop tree (20 turns with iron axe, 40 with stone)
+//! 4. Return to storehouse (30 turns)
+//! 5. Deposit wood (5 turns)
 //!
-//! Total: 90 ticks with iron axe vs 110 with stone axe
+//! Total: 90 turns with iron axe vs 110 with stone axe
 //!
 //! # Extending the Planner
 //!
@@ -43,7 +43,7 @@ use crate::core::Trait;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanStep {
     pub action: PlanActionType,
-    pub estimated_ticks: u32,
+    pub estimated_turns: u32,
     pub required_tool: Option<String>,
     pub required_resources: Vec<(String, u32)>,
     pub target_location: Option<(i32, i32, i32)>,
@@ -92,24 +92,24 @@ pub struct ActionPlan {
     pub id: uuid::Uuid,
     pub goal_description: String,
     pub steps: Vec<PlanStep>,
-    pub total_estimated_ticks: u32,
+    pub total_estimated_turns: u32,
     pub current_step: usize,
-    pub created_at: u32, // tick
+    pub created_at: u32, // turn
     pub method: String, // Description of method (e.g., "using iron axe")
 }
 
 impl ActionPlan {
     /// Create a new action plan
-    pub fn new(goal_description: String, steps: Vec<PlanStep>, tick: u32, method: String) -> Self {
-        let total_estimated_ticks = steps.iter().map(|s| s.estimated_ticks).sum();
+    pub fn new(goal_description: String, steps: Vec<PlanStep>, turn: u32, method: String) -> Self {
+        let total_estimated_turns = steps.iter().map(|s| s.estimated_turns).sum();
 
         Self {
             id: crate::core::dice::name(),
             goal_description,
             steps,
-            total_estimated_ticks,
+            total_estimated_turns,
             current_step: 0,
-            created_at: tick,
+            created_at: turn,
             method,
         }
     }
@@ -242,11 +242,11 @@ pub struct Planner {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionOutcome {
     pub action_type: PlanActionType,
-    pub estimated_ticks: u32,
-    pub actual_ticks: u32,
+    pub estimated_turns: u32,
+    pub actual_turns: u32,
     pub success: bool,
     pub tool_used: Option<String>,
-    pub tick: u32,
+    pub turn: u32,
 }
 
 /// Context for planning that provides location information.
@@ -304,7 +304,7 @@ impl Planner {
             return None;
         }
 
-        let total: u32 = matching.iter().map(|o| o.actual_ticks).sum();
+        let total: u32 = matching.iter().map(|o| o.actual_turns).sum();
         Some(total / matching.len() as u32)
     }
 
@@ -338,7 +338,7 @@ impl Planner {
             return None;
         }
 
-        let total: u32 = matching.iter().map(|o| o.actual_ticks).sum();
+        let total: u32 = matching.iter().map(|o| o.actual_turns).sum();
         Some(total / matching.len() as u32)
     }
 
@@ -358,7 +358,7 @@ impl Planner {
         let move_time = distance_to_forest as u32;
         steps.push(PlanStep {
             action: PlanActionType::MoveTo { location: forest_position },
-            estimated_ticks: move_time,
+            estimated_turns: move_time,
             required_tool: None,
             required_resources: vec![],
             target_location: Some(forest_position),
@@ -371,7 +371,7 @@ impl Planner {
         if let Some(axe) = &best_axe {
             steps.push(PlanStep {
                 action: PlanActionType::EquipItem { item: axe.clone() },
-                estimated_ticks: equip_time,
+                estimated_turns: equip_time,
                 required_tool: None,
                 required_resources: vec![],
                 target_location: None,
@@ -383,7 +383,7 @@ impl Planner {
         let chop_time = self.estimate_gathering_time(&best_axe, "wood", amount);
         steps.push(PlanStep {
             action: PlanActionType::GatherResource { resource: "wood".to_string(), amount },
-            estimated_ticks: chop_time,
+            estimated_turns: chop_time,
             required_tool: best_axe.clone(),
             required_resources: vec![],
             target_location: Some(forest_position),
@@ -398,7 +398,7 @@ impl Planner {
         let return_time = distance_to_storehouse as u32;
         steps.push(PlanStep {
             action: PlanActionType::MoveTo { location: storehouse_position },
-            estimated_ticks: return_time,
+            estimated_turns: return_time,
             required_tool: None,
             required_resources: vec![],
             target_location: Some(storehouse_position),
@@ -409,7 +409,7 @@ impl Planner {
         let deposit_time = 5;
         steps.push(PlanStep {
             action: PlanActionType::Deposit { resource: "wood".to_string(), amount },
-            estimated_ticks: deposit_time,
+            estimated_turns: deposit_time,
             required_tool: None,
             required_resources: vec![("wood".to_string(), amount)],
             target_location: Some(storehouse_position),
@@ -488,7 +488,7 @@ mod tests {
         let steps = vec![
             PlanStep {
                 action: PlanActionType::MoveTo { location: (10, 10, 0) },
-                estimated_ticks: 20,
+                estimated_turns: 20,
                 required_tool: None,
                 required_resources: vec![],
                 target_location: Some((10, 10, 0)),
@@ -497,7 +497,7 @@ mod tests {
         ];
 
         let plan = ActionPlan::new("Test".to_string(), steps, 0, "test method".to_string());
-        assert_eq!(plan.total_estimated_ticks, 20);
+        assert_eq!(plan.total_estimated_turns, 20);
         assert!(!plan.is_complete());
     }
 
@@ -506,7 +506,7 @@ mod tests {
         let steps = vec![
             PlanStep {
                 action: PlanActionType::MoveTo { location: (10, 10, 0) },
-                estimated_ticks: 20,
+                estimated_turns: 20,
                 required_tool: None,
                 required_resources: vec![],
                 target_location: Some((10, 10, 0)),
@@ -514,7 +514,7 @@ mod tests {
             },
             PlanStep {
                 action: PlanActionType::Rest { duration: 10 },
-                estimated_ticks: 10,
+                estimated_turns: 10,
                 required_tool: None,
                 required_resources: vec![],
                 target_location: None,
@@ -540,7 +540,7 @@ mod tests {
         for i in 0..15 {
             steps.push(PlanStep {
                 action: PlanActionType::Rest { duration: 1 },
-                estimated_ticks: 1,
+                estimated_turns: 1,
                 required_tool: None,
                 required_resources: vec![],
                 target_location: None,
@@ -569,11 +569,11 @@ mod tests {
                 resource: "wood".to_string(),
                 amount: 10
             },
-            estimated_ticks: 100,
-            actual_ticks: 90,
+            estimated_turns: 100,
+            actual_turns: 90,
             success: true,
             tool_used: Some("iron_axe".to_string()),
-            tick: 0,
+            turn: 0,
         };
 
         planner.record_outcome(outcome);
@@ -593,11 +593,11 @@ mod tests {
         for i in 0..4 {
             planner.record_outcome(ActionOutcome {
                 action_type: action_type.clone(),
-                estimated_ticks: 100,
-                actual_ticks: 90,
+                estimated_turns: 100,
+                actual_turns: 90,
                 success: i < 3, // First 3 succeed
                 tool_used: Some("iron_axe".to_string()),
-                tick: i as u32,
+                turn: i as u32,
             });
         }
 
@@ -614,24 +614,24 @@ mod tests {
             amount: 10
         };
 
-        // Record iron axe as faster (50 ticks)
+        // Record iron axe as faster (50 turns)
         planner.record_outcome(ActionOutcome {
             action_type: action_type.clone(),
-            estimated_ticks: 100,
-            actual_ticks: 50,
+            estimated_turns: 100,
+            actual_turns: 50,
             success: true,
             tool_used: Some("iron_axe".to_string()),
-            tick: 0,
+            turn: 0,
         });
 
-        // Record stone axe as slower (80 ticks)
+        // Record stone axe as slower (80 turns)
         planner.record_outcome(ActionOutcome {
             action_type: action_type.clone(),
-            estimated_ticks: 100,
-            actual_ticks: 80,
+            estimated_turns: 100,
+            actual_turns: 80,
             success: true,
             tool_used: Some("stone_axe".to_string()),
-            tick: 1,
+            turn: 1,
         });
 
         let iron_time = planner.get_tool_efficiency(&action_type, "iron_axe");
@@ -661,6 +661,6 @@ mod tests {
         );
 
         assert_eq!(plan.steps.len(), 5); // Move, equip, gather, return, deposit
-        assert!(plan.total_estimated_ticks > 0);
+        assert!(plan.total_estimated_turns > 0);
     }
 }

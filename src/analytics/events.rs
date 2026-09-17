@@ -44,7 +44,7 @@ pub enum EventType {
     BuildingDestroyed,
 
     // Simulation events
-    TickCompleted,
+    TurnCompleted,
     EmergenceDetected,
     MilestoneReached,
 
@@ -59,8 +59,8 @@ pub struct EventData {
     pub id: Uuid,
     /// Event type
     pub event_type: EventType,
-    /// Tick when event occurred
-    pub tick: u64,
+    /// Turn when event occurred
+    pub turn: u64,
     /// Primary agent involved (if any)
     pub agent_id: Option<Uuid>,
     /// Secondary agent involved (if any)
@@ -88,11 +88,11 @@ pub enum EventValue {
 
 impl EventData {
     /// Create a new event
-    pub fn new(event_type: EventType, tick: u64, description: String) -> Self {
+    pub fn new(event_type: EventType, turn: u64, description: String) -> Self {
         Self {
             id: crate::core::dice::name(),
             event_type,
-            tick,
+            turn,
             agent_id: None,
             secondary_agent_id: None,
             position: None,
@@ -330,13 +330,13 @@ impl EventBus {
     }
 
 
-    /// Get events in tick range from history
-    pub fn get_events_in_range(&self, start_tick: u64, end_tick: u64) -> Vec<EventData> {
+    /// Get events in turn range from history
+    pub fn get_events_in_range(&self, start_turn: u64, end_turn: u64) -> Vec<EventData> {
         self.history
             .read()
             .unwrap()
             .iter()
-            .filter(|e| e.tick >= start_tick && e.tick <= end_tick)
+            .filter(|e| e.turn >= start_turn && e.turn <= end_turn)
             .cloned()
             .collect()
     }
@@ -370,10 +370,10 @@ pub trait EventEmitter {
     }
 
     /// Emit agent birth event
-    fn emit_agent_born(&self, tick: u64, agent_id: Uuid, parent_ids: Option<(Uuid, Uuid)>) {
+    fn emit_agent_born(&self, turn: u64, agent_id: Uuid, parent_ids: Option<(Uuid, Uuid)>) {
         let mut event = EventData::new(
             EventType::AgentBorn,
-            tick,
+            turn,
             format!("Agent {} was born", agent_id),
         )
         .with_agent(agent_id)
@@ -389,11 +389,11 @@ pub trait EventEmitter {
     }
 
     /// Emit agent death event
-    fn emit_agent_died(&self, tick: u64, agent_id: Uuid, cause: &str) {
+    fn emit_agent_died(&self, turn: u64, agent_id: Uuid, cause: &str) {
         self.emit(
             EventData::new(
                 EventType::AgentDied,
-                tick,
+                turn,
                 format!("Agent {} died: {}", agent_id, cause),
             )
             .with_agent(agent_id)
@@ -403,11 +403,11 @@ pub trait EventEmitter {
     }
 
     /// Emit drive critical event
-    fn emit_drive_critical(&self, tick: u64, agent_id: Uuid, drive: &str, value: f32) {
+    fn emit_drive_critical(&self, turn: u64, agent_id: Uuid, drive: &str, value: f32) {
         self.emit(
             EventData::new(
                 EventType::AgentDriveCritical,
-                tick,
+                turn,
                 format!("Agent {} has critical {} drive: {:.2}", agent_id, drive, value),
             )
             .with_agent(agent_id)
@@ -417,13 +417,13 @@ pub trait EventEmitter {
         );
     }
 
-    /// Emit tick completed event
-    fn emit_tick_completed(&self, tick: u64, population: usize) {
+    /// Emit turn completed event
+    fn emit_turn_completed(&self, turn: u64, population: usize) {
         self.emit(
             EventData::new(
-                EventType::TickCompleted,
-                tick,
-                format!("Tick {} completed, population: {}", tick, population),
+                EventType::TurnCompleted,
+                turn,
+                format!("Turn {} completed, population: {}", turn, population),
             )
             .with_int("population", population as i64)
             .with_severity(0.1),
@@ -431,11 +431,11 @@ pub trait EventEmitter {
     }
 
     /// Emit emergence detected event
-    fn emit_emergence(&self, tick: u64, pattern: &str, severity: f32) {
+    fn emit_emergence(&self, turn: u64, pattern: &str, severity: f32) {
         self.emit(
             EventData::new(
                 EventType::EmergenceDetected,
-                tick,
+                turn,
                 format!("Emergence detected: {}", pattern),
             )
             .with_string("pattern", pattern.to_string())
@@ -457,7 +457,7 @@ mod tests {
             .with_severity(0.8)
             .with_string("test", "value".to_string());
 
-        assert_eq!(event.tick, 100);
+        assert_eq!(event.turn, 100);
         assert_eq!(event.severity, 0.8);
         assert_eq!(event.get_string("test"), Some("value"));
     }
@@ -468,18 +468,18 @@ mod tests {
 
         let birth_event = EventData::new(EventType::AgentBorn, 1, "Birth".to_string());
         let death_event = EventData::new(EventType::AgentDied, 2, "Death".to_string());
-        let tick_event = EventData::new(EventType::TickCompleted, 3, "Tick".to_string());
+        let turn_event = EventData::new(EventType::TurnCompleted, 3, "Turn".to_string());
 
         assert!(filter.matches(&birth_event));
         assert!(filter.matches(&death_event));
-        assert!(!filter.matches(&tick_event));
+        assert!(!filter.matches(&turn_event));
     }
 
     #[test]
     fn test_severity_filter() {
         let filter = EventFilter::high_severity();
 
-        let low_event = EventData::new(EventType::TickCompleted, 1, "Low".to_string())
+        let low_event = EventData::new(EventType::TurnCompleted, 1, "Low".to_string())
             .with_severity(0.3);
         let high_event = EventData::new(EventType::AgentDied, 2, "High".to_string())
             .with_severity(0.9);
@@ -498,8 +498,8 @@ mod tests {
             counter_clone.fetch_add(1, Ordering::SeqCst);
         });
 
-        bus.publish(EventData::new(EventType::TickCompleted, 1, "Test".to_string()));
-        bus.publish(EventData::new(EventType::TickCompleted, 2, "Test".to_string()));
+        bus.publish(EventData::new(EventType::TurnCompleted, 1, "Test".to_string()));
+        bus.publish(EventData::new(EventType::TurnCompleted, 2, "Test".to_string()));
 
         assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
@@ -514,11 +514,11 @@ mod tests {
             counter_clone.fetch_add(1, Ordering::SeqCst);
         });
 
-        bus.publish(EventData::new(EventType::TickCompleted, 1, "Test".to_string()));
+        bus.publish(EventData::new(EventType::TurnCompleted, 1, "Test".to_string()));
         assert_eq!(counter.load(Ordering::SeqCst), 1);
 
         bus.unsubscribe(sub_id);
-        bus.publish(EventData::new(EventType::TickCompleted, 2, "Test".to_string()));
+        bus.publish(EventData::new(EventType::TurnCompleted, 2, "Test".to_string()));
         assert_eq!(counter.load(Ordering::SeqCst), 1); // Still 1, callback not called
     }
 
@@ -559,7 +559,7 @@ mod tests {
         bus.publish(EventData::new(EventType::AgentBorn, 1, "Birth".to_string()));
         bus.publish(EventData::new(EventType::AgentBorn, 2, "Birth".to_string()));
         bus.publish(EventData::new(EventType::AgentDied, 3, "Death".to_string()));
-        bus.publish(EventData::new(EventType::TickCompleted, 4, "Tick".to_string()));
+        bus.publish(EventData::new(EventType::TurnCompleted, 4, "Turn".to_string()));
 
         assert_eq!(birth_counter.load(Ordering::SeqCst), 2);
         assert_eq!(death_counter.load(Ordering::SeqCst), 1);

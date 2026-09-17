@@ -16,8 +16,8 @@
 //! calendar is ever made finer, `MINUTES_PER_TURN` follows it down and nothing
 //! here changes.
 //!
-//! This replaces `ticks_without_food` and `ticks_without_water`, which counted
-//! turns against thresholds written for a one-minute tick and were therefore a
+//! This replaces `turns_without_food` and `turns_without_water`, which counted
+//! turns against thresholds written for a one-minute turn and were therefore a
 //! hundred and twenty times too slow to ever fire. See ISSUES #73.
 
 use serde::{Deserialize, Serialize};
@@ -749,7 +749,7 @@ impl Physiology {
     /// Put this body where it would be after this long without food.
     ///
     /// For tests and for setting a scene. The argument is minutes, which is
-    /// the scale the old `ticks_without_food` figures were written on.
+    /// the scale the old `turns_without_food` figures were written on.
     pub fn gone_without_food_for(&mut self, minutes: u32) {
         self.stomach.clear();
         self.gut.clear();

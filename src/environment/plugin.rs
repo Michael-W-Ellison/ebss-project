@@ -44,8 +44,8 @@ impl PluginMetadata {
 pub struct WorldState {
     /// World seed for generation
     pub seed: u64,
-    /// Simulation tick count
-    pub tick: u64,
+    /// Simulation turn count
+    pub turn: u64,
     /// Time of day (0.0 to 1.0, where 0.5 is noon)
     pub time_of_day: f32,
     /// Current weather
@@ -60,7 +60,7 @@ impl WorldState {
     pub fn new(seed: u64) -> Self {
         Self {
             seed,
-            tick: 0,
+            turn: 0,
             time_of_day: 0.0,
             weather: "clear".to_string(),
             temperature: 20.0,
@@ -68,8 +68,8 @@ impl WorldState {
         }
     }
 
-    pub fn advance_tick(&mut self, time_rate: f32) {
-        self.tick += 1;
+    pub fn advance_turn(&mut self, time_rate: f32) {
+        self.turn += 1;
         self.time_of_day = (self.time_of_day + time_rate).rem_euclid(1.0);
     }
 }
@@ -206,8 +206,8 @@ pub trait EnvironmentPlugin: Send + Sync {
         context: ActionContext,
     ) -> EnvironmentResult<ActionResult>;
 
-    /// Update world state (called each tick)
-    fn tick(&mut self);
+    /// Update world state (called each turn)
+    fn take_a_turn(&mut self);
 
     /// Get material at a specific position
     fn get_material_at(&self, position: Position) -> Option<&Material>;
@@ -268,11 +268,11 @@ mod tests {
     #[test]
     fn test_world_state() {
         let mut state = WorldState::new(12345);
-        assert_eq!(state.tick, 0);
+        assert_eq!(state.turn, 0);
         assert_eq!(state.time_of_day, 0.0);
 
-        state.advance_tick(0.01);
-        assert_eq!(state.tick, 1);
+        state.advance_turn(0.01);
+        assert_eq!(state.turn, 1);
         assert_eq!(state.time_of_day, 0.01);
     }
 

@@ -141,7 +141,7 @@ impl Wants {
 /// question is at least askable; see the standing task on weighing the trip.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Costs {
-    /// Turns it takes, where a turn is the unit the tick runs in
+    /// Turns it takes, where a turn is the unit the turn runs in
     pub time: f32,
     /// What it takes out of somebody, on the scale `ActionResult` uses
     pub effort: f32,
@@ -454,7 +454,7 @@ pub const PLACE_DOWN: Verb = verb(
     Some("putdown"),
 );
 
-/// Not an act so much as a state: what carrying costs is paid every tick.
+/// Not an act so much as a state: what carrying costs is paid every turn.
 pub const CARRY: Verb = happens_when(
     "carry",
     Family::Manipulation,

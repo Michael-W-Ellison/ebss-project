@@ -143,17 +143,17 @@ fn main() {
         Err(e) => println!("✗ Eat failed: {}", e),
     }
 
-    // Simulate world ticks
+    // Simulate world turns
     println!("\n--- World Simulation ---");
-    println!("Initial tick: {}", plugin.get_world_state().tick);
+    println!("Initial turn: {}", plugin.get_world_state().turn);
     println!("Initial time of day: {:.3}", plugin.get_world_state().time_of_day);
 
     for _ in 0..100 {
-        plugin.tick();
+        plugin.take_a_turn();
     }
 
-    println!("\nAfter 100 ticks:");
-    println!("  Current tick: {}", plugin.get_world_state().tick);
+    println!("\nAfter 100 turns:");
+    println!("  Current turn: {}", plugin.get_world_state().turn);
     println!("  Time of day: {:.3}", plugin.get_world_state().time_of_day);
 
     // Demonstrate material lookup at position
@@ -214,7 +214,7 @@ fn main() {
     println!("✓ Crafting recipes with inputs/outputs");
     println!("✓ Action execution with results");
     println!("✓ Drive system integration");
-    println!("✓ World state and tick simulation");
+    println!("✓ World state and turn simulation");
     println!("✓ Spatial queries (material at position)");
     println!("✓ Plugin registry for management");
 

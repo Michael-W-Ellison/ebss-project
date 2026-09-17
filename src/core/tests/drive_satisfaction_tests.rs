@@ -12,13 +12,13 @@ use crate::core::drives::{Drive, DriveType, DriveState};
 // Floating-point comparison tolerance
 const EPSILON: f32 = 0.0001;
 
-/// What one tick of an unopposed drive adds.
+/// What one turn of an unopposed drive adds.
 ///
 /// Asked of the drive rather than written down here. Hunger's rate is derived
 /// from the stomach's emptying schedule now - see ISSUES #80 - so a test that
 /// spells `0.01` out is testing a number rather than the accumulator, and stops
 /// compiling with the body it is supposed to be about.
-fn a_tick_of(what: DriveType) -> f32 {
+fn a_turn_of(what: DriveType) -> f32 {
     what.base_accumulation_rate()
 }
 
@@ -29,24 +29,24 @@ fn test_drive_accumulation_over_time() {
     // Start at zero
     assert_eq!(drive.value, 0.0);
 
-    // One tick adds one tick's worth
-    let a_tick = a_tick_of(DriveType::Hunger);
-    drive.tick();
+    // One turn adds one turn's worth
+    let a_turn = a_turn_of(DriveType::Hunger);
+    drive.take_a_turn();
     assert!(
-        (drive.value - a_tick).abs() < EPSILON,
-        "Expected ~{a_tick}, got {}",
+        (drive.value - a_turn).abs() < EPSILON,
+        "Expected ~{a_turn}, got {}",
         drive.value
     );
 
     // And it keeps adding, in a straight line, until it is full
-    let to_fill = (1.0 / a_tick).ceil() as u32;
+    let to_fill = (1.0 / a_turn).ceil() as u32;
     for _ in 0..to_fill {
-        drive.tick();
+        drive.take_a_turn();
     }
     assert!((drive.value - 1.0).abs() < EPSILON, "Expected ~1.0, got {}", drive.value);
 
     // Should not exceed 1.0
-    drive.tick();
+    drive.take_a_turn();
     assert!((drive.value - 1.0).abs() < EPSILON, "Expected ~1.0, got {}", drive.value);
 }
 
@@ -60,10 +60,10 @@ fn test_drive_threshold_activation() {
     // Not active yet
     assert!(!drive.is_active());
 
-    // Accumulate past threshold (use 71 ticks to account for floating-point precision)
+    // Accumulate past threshold (use 71 turns to account for floating-point precision)
     // 71 * 0.01 = 0.71, ensuring we're definitely above 0.7
     for _ in 0..71 {
-        drive.tick();
+        drive.take_a_turn();
     }
 
     // Now should be active
@@ -77,15 +77,15 @@ fn test_drive_satisfaction_resets_value() {
     let mut drive = Drive::new(DriveType::Hunger);
 
     // Accumulate some hunger
-    let a_tick = a_tick_of(DriveType::Hunger);
+    let a_turn = a_turn_of(DriveType::Hunger);
     for _ in 0..5 {
-        drive.tick();
+        drive.take_a_turn();
     }
 
-    let five_ticks = (a_tick * 5.0).min(1.0);
+    let five_turns = (a_turn * 5.0).min(1.0);
     assert!(
-        (drive.value - five_ticks).abs() < EPSILON,
-        "Expected ~{five_ticks}, got {}",
+        (drive.value - five_turns).abs() < EPSILON,
+        "Expected ~{five_turns}, got {}",
         drive.value
     );
     assert!(drive.value > 0.0, "and it is somewhere above nothing");
@@ -119,18 +119,18 @@ fn test_multiple_drives_accumulate_independently() {
     let mut thirst = Drive::new(DriveType::Thirst);
     let mut rest = Drive::new(DriveType::Rest);
 
-    // Accumulate for 100 ticks
+    // Accumulate for 100 turns
     for _ in 0..100 {
-        hunger.tick();  // 0.01/tick
-        thirst.tick();  // 0.012/tick
-        rest.tick();    // 0.008/tick
+        hunger.take_a_turn();  // 0.01/turn
+        thirst.take_a_turn();  // 0.012/turn
+        rest.take_a_turn();    // 0.008/turn
     }
 
     // Each should accumulate at its own rate
     assert!((hunger.value - 1.0).abs() < EPSILON, "Hunger expected ~1.0, got {}", hunger.value);  // Capped at 1.0
     assert!((thirst.value - 1.0).abs() < 0.01, "Thirst expected ~1.0, got {}", thirst.value); // Should be at cap
 
-    // Rest passes its threshold of 0.6 around tick 75 and builds faster from
+    // Rest passes its threshold of 0.6 around turn 75 and builds faster from
     // there, because a drive that is asking and not being answered presses
     // harder the longer it waits. So it ends above the 0.8 a flat rate would
     // give, but nowhere near the cap the two faster drives reach.
@@ -152,8 +152,8 @@ fn test_satisfying_one_drive_doesnt_affect_others() {
 
     // Accumulate both
     for _ in 0..50 {
-        hunger.tick();
-        thirst.tick();
+        hunger.take_a_turn();
+        thirst.take_a_turn();
     }
 
     let hunger_before = hunger.value;
@@ -199,16 +199,16 @@ fn test_drive_state_get_drive() {
 fn test_drive_state_update_all_drives() {
     let mut drive_state = DriveState::new();
 
-    // Tick all drives
-    drive_state.tick();
+    // Turn all drives
+    drive_state.take_a_turn();
 
-    // Each drive should have accumulated its own tick's worth
+    // Each drive should have accumulated its own turn's worth
     for what in [DriveType::Hunger, DriveType::Thirst, DriveType::Rest] {
-        let a_tick = a_tick_of(what);
+        let a_turn = a_turn_of(what);
         let drive = drive_state.get(what).unwrap();
         assert!(
-            (drive.value - a_tick).abs() < EPSILON,
-            "{what:?} expected ~{a_tick}, got {}",
+            (drive.value - a_turn).abs() < EPSILON,
+            "{what:?} expected ~{a_turn}, got {}",
             drive.value
         );
     }
@@ -220,7 +220,7 @@ fn test_drive_state_get_most_urgent() {
 
     // Accumulate drives at different rates
     for _ in 0..100 {
-        drive_state.tick();
+        drive_state.take_a_turn();
     }
 
     // Most urgent should be the one with highest weighted value
@@ -286,7 +286,7 @@ fn hunger_climbs_its_threshold_in_the_time_a_meal_holds() {
 
     let mut turns = 0;
     while hunger.value < hunger.threshold {
-        hunger.value = (hunger.value + a_tick_of(DriveType::Hunger) * ordinary).min(1.0);
+        hunger.value = (hunger.value + a_turn_of(DriveType::Hunger) * ordinary).min(1.0);
         turns += 1;
         assert!(turns < 1000, "hunger never reached its threshold at all");
     }

@@ -288,7 +288,7 @@ fn a_settlement_fouls_the_ground_it_stands_on() {
     let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
 
     for _ in 0..400 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let fouled = simulation

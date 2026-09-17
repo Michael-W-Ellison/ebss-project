@@ -154,13 +154,13 @@ impl MemoryEntry {
 pub struct MemoryConfig {
     /// Maximum number of memories to store (None = unlimited)
     pub max_memories: Option<usize>,
-    /// Memory decay rate per tick
+    /// Memory decay rate per turn
     pub decay_rate: f32,
     /// Whether to automatically forget weak memories
     pub auto_forget: bool,
     /// Minimum strength to keep when auto-forgetting
     pub forget_threshold: f32,
-    /// How often to run batch pruning (in ticks) - optimizes large populations
+    /// How often to run batch pruning (in turns) - optimizes large populations
     pub prune_interval: u32,
     /// Whether to use batch decay (more efficient for large populations)
     pub batch_decay: bool,
@@ -170,10 +170,10 @@ impl Default for MemoryConfig {
     fn default() -> Self {
         Self {
             max_memories: Some(1000), // Default limit of 1000 memories
-            decay_rate: 0.001,        // Very slow decay (0.1% per tick)
+            decay_rate: 0.001,        // Very slow decay (0.1% per turn)
             auto_forget: true,
             forget_threshold: 0.1,
-            prune_interval: 100,      // Batch prune every 100 ticks
+            prune_interval: 100,      // Batch prune every 100 turns
             batch_decay: true,        // Use batch decay by default
         }
     }
@@ -199,7 +199,7 @@ impl SpatialMemoryType {
     /// How much forgetting this place would cost.
     ///
     /// A spatial memory had no importance at all: `SpatialMemory::decay` took
-    /// a flat thousandth a tick, so **the pit a man dug and filled with his
+    /// a flat thousandth a turn, so **the pit a man dug and filled with his
     /// winter food was forgotten at exactly the rate of a bush he once glanced
     /// at**. `MemoryImportance::decay_multiplier` has described five bands of
     /// this since memories were written and only the episodic entries ever
@@ -207,8 +207,8 @@ impl SpatialMemoryType {
     /// project's recurring defect wearing its plainest face.
     ///
     /// The arithmetic it was hiding: confidence starts at 1.0, `recall_locations`
-    /// wants it above 0.3, and a flat thousandth a tick spends that in 700
-    /// ticks - **fourteen and a half days**. The lean season is seventy-five.
+    /// wants it above 0.3, and a flat thousandth a turn spends that in 700
+    /// turns - **fourteen and a half days**. The lean season is seventy-five.
     /// So a store laid down in autumn was forgotten a fortnight later and its
     /// owner starved thirty paces from it: measured, of the turns taken by a
     /// body under a quarter of its reserve, **0.6% could remember a store at
@@ -319,8 +319,8 @@ impl HowIKnow {
     /// footings, with a further year for each trip back. Confidence starts at
     /// 1.0 and `recall_locations` wants it above 0.3, so a multiplier of `m`
     /// spends the place in `0.7 / (m * HOW_FAST_AN_ORDINARY_PLACE_IS_FORGOTTEN)`
-    /// ticks. The three numbers below are that arithmetic run backwards
-    /// against a 48-tick day and a 360-day year.
+    /// turns. The three numbers below are that arithmetic run backwards
+    /// against a 48-turn day and a 360-day year.
     pub fn how_fast_this_fades(&self) -> f32 {
         match self {
             // A week.
@@ -411,7 +411,7 @@ impl Default for HowSteady {
 pub struct SpatialMemory {
     pub memory_type: SpatialMemoryType,
     pub position: (i32, i32, i32),
-    pub last_seen: u32, // Tick when last observed
+    pub last_seen: u32, // Turn when last observed
     pub confidence: f32, // 0.0 to 1.0, decays over time
     pub value: f32, // Estimated value/usefulness
     /// What was there, where the rememberer knew what it was for.
@@ -432,11 +432,11 @@ pub struct SpatialMemory {
 }
 
 impl SpatialMemory {
-    pub fn new(memory_type: SpatialMemoryType, position: (i32, i32, i32), tick: u32) -> Self {
+    pub fn new(memory_type: SpatialMemoryType, position: (i32, i32, i32), turn: u32) -> Self {
         Self {
             memory_type,
             position,
-            last_seen: tick,
+            last_seen: turn,
             confidence: 1.0,
             value: 1.0,
             what_it_is: None,
@@ -559,23 +559,23 @@ impl SpatialMemory {
     pub const STILL_KNOWS_WHAT_IT_WAS: f32 = 0.85;
 
     /// Decay confidence over time
-    pub fn forget_a_little(&mut self, ticks: u32) {
-        // A thousandth a tick, at the pace this kind of place is forgotten -
+    pub fn forget_a_little(&mut self, turns: u32) {
+        // A thousandth a turn, at the pace this kind of place is forgotten -
         // see `SpatialMemoryType::how_much_this_matters`. It was flat, and a
         // winter store went the way of a berry bush.
         //
-        // Denominated in **ticks since this was last called**, not in the tick
-        // it is now. It used to take `current_tick` and read `last_seen`,
+        // Denominated in **turns since this was last called**, not in the turn
+        // it is now. It used to take `current_turn` and read `last_seen`,
         // which is an absolute reading - correct if you call it once, and
-        // quadratic if you call it every tick, because each call subtracts the
+        // quadratic if you call it every turn, because each call subtracts the
         // whole elapsed span again from an already-decayed confidence. Both
-        // callers existed. `Memory::tick` called it every tick, so a memory
+        // callers existed. `Memory::take_a_turn` called it every turn, so a memory
         // was gone in under a minute; `batch_decay_and_prune` called it every
         // hundred with its own copy of the arithmetic. Two callers with
         // opposite contracts and one function to satisfy them, which is why
         // neither was right. This has one meaning and both callers now say how
         // much time has passed.
-        let spent = ticks as f32
+        let spent = turns as f32
             * Self::HOW_FAST_AN_ORDINARY_PLACE_IS_FORGOTTEN
             * self.what_forgetting_this_would_cost().decay_multiplier()
             * self.how_long_this_footing_holds();
@@ -644,16 +644,16 @@ impl SpatialMemory {
         }
     }
 
-    /// What a tick costs an ordinary place's confidence.
+    /// What a turn costs an ordinary place's confidence.
     ///
     /// At `MemoryImportance::Normal` this spends a fresh memory's confidence
-    /// down to the 0.3 `recall_locations` wants in 700 ticks, which is a
+    /// down to the 0.3 `recall_locations` wants in 700 turns, which is a
     /// fortnight - about right for a bush somebody walked past once.
     pub const HOW_FAST_AN_ORDINARY_PLACE_IS_FORGOTTEN: f32 = 0.001;
 
     /// Refresh memory (saw it again)
-    pub fn refresh(&mut self, tick: u32) {
-        self.last_seen = tick;
+    pub fn refresh(&mut self, turn: u32) {
+        self.last_seen = turn;
         self.confidence = (self.confidence + 0.2).min(1.0);
     }
 }
@@ -666,18 +666,18 @@ impl SpatialMemory {
 pub struct KnowledgeMemory {
     pub name: String,
     pub description: String,
-    pub learned_at: u32, // Tick when learned
+    pub learned_at: u32, // Turn when learned
     pub proficiency: f32, // 0.0 to 1.0, improves with practice
     pub success_count: u32,
     pub failure_count: u32,
 }
 
 impl KnowledgeMemory {
-    pub fn new(name: String, description: String, tick: u32) -> Self {
+    pub fn new(name: String, description: String, turn: u32) -> Self {
         Self {
             name,
             description,
-            learned_at: tick,
+            learned_at: turn,
             proficiency: 0.1,
             success_count: 0,
             failure_count: 0,
@@ -712,13 +712,13 @@ impl KnowledgeMemory {
 pub struct Memory {
     pub spatial_memories: Vec<SpatialMemory>,
     pub knowledge: Vec<KnowledgeMemory>,
-    pub current_tick: u32,
+    pub current_turn: u32,
     /// Configuration for memory behavior
     #[serde(default)]
     pub config: MemoryConfig,
-    /// Tick counter for batch operations
+    /// Turn counter for batch operations
     #[serde(default)]
-    ticks_since_prune: u32,
+    turns_since_prune: u32,
 }
 
 impl Memory {
@@ -726,9 +726,9 @@ impl Memory {
         Self {
             spatial_memories: Vec::new(),
             knowledge: Vec::new(),
-            current_tick: 0,
+            current_turn: 0,
             config: MemoryConfig::default(),
-            ticks_since_prune: 0,
+            turns_since_prune: 0,
         }
     }
 
@@ -737,25 +737,25 @@ impl Memory {
         Self {
             spatial_memories: Vec::new(),
             knowledge: Vec::new(),
-            current_tick: 0,
+            current_turn: 0,
             config,
-            ticks_since_prune: 0,
+            turns_since_prune: 0,
         }
     }
 
-    /// Update memory for a new tick (optimized for large populations)
-    pub fn tick(&mut self) {
-        self.current_tick += 1;
-        self.ticks_since_prune += 1;
+    /// Update memory for a new turn (optimized for large populations)
+    pub fn take_a_turn(&mut self) {
+        self.current_turn += 1;
+        self.turns_since_prune += 1;
 
         if self.config.batch_decay {
             // Batch mode: only decay and prune at intervals
-            if self.ticks_since_prune >= self.config.prune_interval {
+            if self.turns_since_prune >= self.config.prune_interval {
                 self.batch_decay_and_prune();
-                self.ticks_since_prune = 0;
+                self.turns_since_prune = 0;
             }
         } else {
-            // Per-tick mode: decay every tick (original behavior)
+            // Per-turn mode: decay every turn (original behavior)
             for memory in &mut self.spatial_memories {
                 memory.forget_a_little(1);
             }
@@ -768,13 +768,13 @@ impl Memory {
     fn batch_decay_and_prune(&mut self) {
         // One spelling of forgetting, and this is not where it lives.
         //
-        // This had its own copy of the thousandth-a-tick rule, ignored
+        // This had its own copy of the thousandth-a-turn rule, ignored
         // `how_much_this_matters`, and then multiplied by `prune_interval` on
         // top of `time_elapsed` - which double-counts, because `decay` already
         // measures from `last_seen` and is not an increment. With the default
-        // interval of a hundred that came to **a tenth of confidence per tick
+        // interval of a hundred that came to **a tenth of confidence per turn
         // elapsed**: a fresh memory fell below the 0.3 `recall_locations` wants
-        // in seven ticks and was pruned outright in nine, so **anywhere a
+        // in seven turns and was pruned outright in nine, so **anywhere a
         // person had not looked in the last four hours was gone**.
         //
         // Measured over eight seeded world-years: of the turns taken by a body
@@ -784,7 +784,7 @@ impl Memory {
         //
         // `SpatialMemory::decay` computes from `last_seen` absolutely, so
         // calling it on an interval is exactly the same as calling it every
-        // tick and there is nothing to accumulate.
+        // turn and there is nothing to accumulate.
         let since = self.config.prune_interval;
         for memory in &mut self.spatial_memories {
             memory.forget_a_little(since);
@@ -883,9 +883,9 @@ impl Memory {
             matches!(&m.memory_type, mt if std::mem::discriminant(mt) == std::mem::discriminant(&memory_type))
                 && m.position == position
         }) {
-            existing.refresh(self.current_tick);
+            existing.refresh(self.current_turn);
         } else {
-            self.spatial_memories.push(SpatialMemory::new(memory_type, position, self.current_tick));
+            self.spatial_memories.push(SpatialMemory::new(memory_type, position, self.current_turn));
         }
     }
 
@@ -1020,7 +1020,7 @@ impl Memory {
     /// Learn new knowledge
     pub fn learn(&mut self, name: String, description: String) {
         if !self.knowledge.iter().any(|k| k.name == name) {
-            self.knowledge.push(KnowledgeMemory::new(name, description, self.current_tick));
+            self.knowledge.push(KnowledgeMemory::new(name, description, self.current_turn));
         }
     }
 
@@ -1073,7 +1073,7 @@ mod tests {
 
         // Fast forward time
         for _ in 0..2000 {
-            memory.tick();
+            memory.take_a_turn();
         }
 
         // Low confidence memories should be removed

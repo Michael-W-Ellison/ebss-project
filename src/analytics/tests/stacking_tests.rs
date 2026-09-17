@@ -42,7 +42,7 @@ fn fresh_food_tipped_onto_old_comes_down_to_meet_it() {
 
     assert_eq!(older.quantity, 20, "it is all one basket now");
 
-    let clock = older.food_data.as_ref().unwrap().created_tick;
+    let clock = older.food_data.as_ref().unwrap().created_turn;
     assert!(clock < 4_000, "the new food does not keep its own timer: {clock}");
     assert!(
         clock > 0,
@@ -58,7 +58,7 @@ fn old_food_tipped_onto_fresh_does_not_come_up_to_meet_it() {
     let mut this_morning = a_lot_of("food", 10, 4_000);
     this_morning.absorb(a_lot_of("food", 10, 0));
 
-    let clock = this_morning.food_data.as_ref().unwrap().created_tick;
+    let clock = this_morning.food_data.as_ref().unwrap().created_turn;
     assert!(clock < 4_000, "a stale handful tells on the basket: {clock}");
 }
 
@@ -74,7 +74,7 @@ fn good_fruit_does_not_rescue_a_basket_that_has_gone_over() {
     gone_over.absorb(a_lot_of("food", 100, 9_000));
 
     assert_eq!(
-        gone_over.food_data.as_ref().unwrap().created_tick,
+        gone_over.food_data.as_ref().unwrap().created_turn,
         0,
         "a hundred fresh berries do not save two mouldy ones - they join them"
     );
@@ -136,7 +136,7 @@ fn a_pack_stacks_on_the_same_terms() {
 
     assert_eq!(stack.quantity, 20);
     assert!(
-        stack.food_data.as_ref().unwrap().created_tick < 5_000,
+        stack.food_data.as_ref().unwrap().created_turn < 5_000,
         "a pack does not forget what it was already carrying"
     );
 }
@@ -163,7 +163,7 @@ fn a_pit_puts_this_load_beside_the_last_one() {
         "and a season apart is two loads, not one"
     );
     assert_eq!(
-        pit.holds[0].food_data.as_ref().unwrap().created_tick,
+        pit.holds[0].food_data.as_ref().unwrap().created_turn,
         0,
         "last autumn's load is untouched by this autumn's"
     );
@@ -229,7 +229,7 @@ fn what_is_given_is_the_thing_and_not_its_name() {
         "and so does what arrives in the other pack"
     );
     assert_eq!(
-        got.food_data.as_ref().unwrap().created_tick,
+        got.food_data.as_ref().unwrap().created_turn,
         0,
         "with the same clock it had before it changed hands"
     );
@@ -249,7 +249,7 @@ fn what_is_given_is_the_thing_and_not_its_name() {
 // makes. The silence had been worked around twice rather than fixed. The
 // tailoring branch puts a coat on the moment it is finished rather than
 // folding it away, because a folded one lost its worth - over eight thousand
-// ticks one settlement made two hundred and eighty garments and wore a
+// turns one settlement made two hundred and eighty garments and wore a
 // hundred and sixty. The knapping branch throws a worn-through tool out
 // before adding a fresh one, because stacking handed the new tool the broken
 // one's life. Both workarounds are still there and both are still right; they

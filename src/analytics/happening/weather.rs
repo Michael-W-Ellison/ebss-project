@@ -108,7 +108,7 @@ impl Simulation {
                     let part = affected_parts[rng.gen_range(0..affected_parts.len())];
 
                     if let Some(body_part) = agent.body.get_part_mut(part) {
-                        body_part.apply_injury(InjuryType::Minor, cold_damage, self.current_tick as u64);
+                        body_part.apply_injury(InjuryType::Minor, cold_damage, self.current_turn as u64);
                         debug!("Agent {} suffered cold exposure at {:.1}°C: {:.1} damage to {:?}",
                             agent.id, temp_celsius, cold_damage, part);
                     }
@@ -127,7 +127,7 @@ impl Simulation {
                     let part = affected_parts[rng.gen_range(0..affected_parts.len())];
 
                     if let Some(body_part) = agent.body.get_part_mut(part) {
-                        body_part.apply_injury(InjuryType::Minor, heat_damage, self.current_tick as u64);
+                        body_part.apply_injury(InjuryType::Minor, heat_damage, self.current_turn as u64);
                         debug!("Agent {} suffered heat exposure at {:.1}°C: {:.1} damage to {:?}",
                             agent.id, temp_celsius, heat_damage, part);
                     }
@@ -172,7 +172,7 @@ impl Simulation {
                 };
 
                 if let Some(body_part) = agent.body.get_part_mut(injured_part) {
-                    body_part.apply_injury(injury_severity, fall_damage, self.current_tick as u64);
+                    body_part.apply_injury(injury_severity, fall_damage, self.current_turn as u64);
                     debug!("Agent {} fell on {:?} terrain: {:.1} damage to {:?} ({:?})",
                         agent.id, terrain_type, fall_damage, injured_part, injury_severity);
                 }
@@ -187,7 +187,7 @@ impl Simulation {
                 .sum();
 
             if injury_count > 0 {
-                let infection_chance = (injury_count as f64) * 0.0001; // 0.01% per injury per tick
+                let infection_chance = (injury_count as f64) * 0.0001; // 0.01% per injury per turn
                 if rng.gen_bool(infection_chance) {
                     // Random body part gets infected
                     let parts: Vec<BodyPartType> = agent.body.parts.keys().cloned().collect();
@@ -199,7 +199,7 @@ impl Simulation {
                             body_part.add_condition(crate::agents::body::Condition {
                                 condition_type: crate::agents::body::ConditionType::Infected,
                                 severity: rng.gen_range(0.3..0.8),
-                                duration: rng.gen_range(100..500), // Lasts 100-500 ticks
+                                duration: rng.gen_range(100..500), // Lasts 100-500 turns
                             });
                             debug!("Agent {} developed infection on {:?}", agent.id, part);
                         }
@@ -207,15 +207,15 @@ impl Simulation {
                 }
             }
 
-            // 4. NATURAL HEALING - Process body tick (handles conditions, bleeding, etc.)
-            agent.body.tick();
+            // 4. NATURAL HEALING - Process body turn (handles conditions, bleeding, etc.)
+            agent.body.take_a_turn();
         }
     }
 
     pub(in crate::analytics) fn update_agent_exposure(&mut self) {
         let weather = self.world.climate.weather.clone();
         let time_of_day = self.world.climate.calendar.time_of_day;
-        let now = self.current_tick;
+        let now = self.current_turn;
 
         // Collect position data first to avoid borrow issues with climate.get_climate
         let agent_data: Vec<_> = self.population.agents.iter()
@@ -287,7 +287,7 @@ impl Simulation {
             // the weather it runs two or three degrees colder than the adults
             // around it and dies of that. Nearly half of everyone ever born
             // died before growing up, which no birth rate can carry: it is
-            // what emptied every settlement inside thirty thousand ticks.
+            // what emptied every settlement inside thirty thousand turns.
             let too_young_to_manage = matches!(
                 agent.state.life_stage,
                 crate::agents::LifeStage::Infant | crate::agents::LifeStage::Child

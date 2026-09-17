@@ -21,7 +21,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::seasons::TURNS_PER_DAY;
 use crate::world::nutrition::PreparationState;
 use crate::world::Position;
 
@@ -224,7 +224,7 @@ impl Wondering {
         now.saturating_sub(self.since) > Self::HOW_LONG_ANYBODY_WONDERS
     }
 
-    pub const HOW_LONG_ANYBODY_WONDERS: u32 = TICKS_PER_DAY * 7;
+    pub const HOW_LONG_ANYBODY_WONDERS: u32 = TURNS_PER_DAY * 7;
 
     /// How near you have to be to see what became of it. You would notice a
     /// thing you left five paces off.

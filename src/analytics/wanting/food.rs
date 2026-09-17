@@ -23,7 +23,7 @@ impl Simulation {
     ///
     /// With `critical_only` this reports only what an agent already dying of
     /// hunger must do, which is the one thing urgent enough to outrank fleeing
-    /// a threat. Fear can stay pinned for hundreds of ticks with no attacker
+    /// a threat. Fear can stay pinned for hundreds of turns with no attacker
     /// left to run from, and an agent that flees until it starves has not
     /// survived either.
     pub(in crate::analytics) fn survival_action(
@@ -164,14 +164,14 @@ impl Simulation {
         // kept because it is the answer of last resort before striking out
         // blind, and because it costs nothing.
         if let Some(there) =
-            agent.somewhere_that_answered(DriveType::Thirst, agent_position, self.current_tick)
+            agent.somewhere_that_answered(DriveType::Thirst, agent_position, self.current_turn)
         {
             return Some(Action::Move { target: there });
         }
 
         // Nowhere known to drink: go looking, if it has come to that
         if desperate {
-            return Some(Self::search_leg(agent, agent_position, self.current_tick));
+            return Some(Self::search_leg(agent, agent_position, self.current_turn));
         }
 
         None
@@ -248,9 +248,9 @@ impl Simulation {
         }
 
         // A fire right here turns a third of what is in raw meat into nearly
-        // all of it, so one tick spent cooking buys back several meals' worth.
+        // all of it, so one turn spent cooking buys back several meals' worth.
         // Not when starving: then the difference between a poor meal now and a
-        // good one next tick is the difference between eating and dying. And
+        // good one next turn is the difference between eating and dying. And
         // not on a harvest, because cooking a thing stops it being dried, and
         // drying is worth twenty times what cooking is.
         if !desperate
@@ -335,9 +335,9 @@ impl Simulation {
         // This branch is the reason ISSUES #229 never fired. Measured over six
         // worlds, an agent that had been hungry long enough to give up on the
         // country it was standing in took this branch in **69% of those
-        // ticks**, and the place it was sent to had nothing standing on it in
+        // turns**, and the place it was sent to had nothing standing on it in
         // **99.6%** of them - a patch a pace and a half away, picked bare, that
-        // it walked back to every tick until it died. The gather that came out
+        // it walked back to every turn until it died. The gather that came out
         // of it was refused by `could_this_gather_come_to_anything` every
         // single time, so the turn bought nothing and the branches below -
         // moving camp, and leaving altogether - were reached five times in
@@ -346,7 +346,7 @@ impl Simulation {
         // The check is the settlement's own, and asks nothing the agent does
         // not know: is there anything within foraging reach that this one has
         // not already picked out. When the answer is no, somewhere within that
-        // reach is not somewhere to go, and the tick falls through to the
+        // reach is not somewhere to go, and the turn falls through to the
         // question of whether to live here at all. A source further off than
         // foraging reach is outside what that check looked at, so it still
         // stands.
@@ -399,13 +399,13 @@ impl Simulation {
 
         // Ground that has fed this agent before, when nothing nearer will.
         if let Some(there) =
-            agent.somewhere_that_answered(DriveType::Hunger, agent_position, self.current_tick)
+            agent.somewhere_that_answered(DriveType::Hunger, agent_position, self.current_turn)
         {
             return Some(Action::Move { target: there });
         }
 
         // Starving with nowhere known to go: search rather than stand still
-        // and wait to die. Agents that are merely hungry let the tick go to
+        // and wait to die. Agents that are merely hungry let the turn go to
         // whatever comes next - sheltering from the cold, a plan, a goal -
         // because gathering thin air on the spot accomplishes nothing and
         // blocks everything they could usefully be doing.
@@ -450,12 +450,12 @@ impl Simulation {
 
             // And only then, with nothing standing anywhere that would pay
             // for the walk, strike out and hope.
-            return Some(Self::search_leg(agent, agent_position, self.current_tick));
+            return Some(Self::search_leg(agent, agent_position, self.current_turn));
         }
 
         // Merely hungry, with nothing in reach and nothing known: set out for
         // the best thing standing, wherever it is. This fell through to
-        // whatever else the tick had going, which is right when there is
+        // whatever else the turn had going, which is right when there is
         // something nearer to do about the hunger and wrong when the answer
         // is simply that the food is further off than the circle. A walk
         // begun today is a meal tomorrow; standing still is neither.
@@ -560,7 +560,7 @@ impl Simulation {
         use crate::world::Position;
 
         let here = Position::new(agent_position.0, agent_position.1);
-        let now = self.current_tick;
+        let now = self.current_turn;
         let remembers = &agent.exploration_knowledge;
 
         let mut best: Option<(Position, f32)> = None;
@@ -668,7 +668,7 @@ impl Simulation {
                 // the bramble he found in September. It is the same defect as
                 // a memory of a spring that has dried up: a decision offering
                 // food the world will not give. Measured over twelve worlds,
-                // `Gather` is refused 14.6 times a thousand person-ticks in
+                // `Gather` is refused 14.6 times a thousand person-turns in
                 // winter and **0.0 in every other season** - every one of
                 // those a turn spent walking to an empty hedgerow in the one
                 // season when there is nothing to spare. See ISSUES #183.
@@ -692,7 +692,7 @@ impl Simulation {
                     .filter(|where_it_is| {
                         !agent
                             .exploration_knowledge
-                            .is_it_picked_out(*where_it_is, self.current_tick)
+                            .is_it_picked_out(*where_it_is, self.current_turn)
                     })
                     .map(|where_it_is| {
                         (where_it_is.x, where_it_is.y, agent_position.2)
@@ -703,7 +703,7 @@ impl Simulation {
 
     /// One leg of a search for something the agent cannot find nearby.
     ///
-    /// The heading holds for a stretch of ticks: re-rolling it every tick
+    /// The heading holds for a stretch of turns: re-rolling it every turn
     /// produces a random walk that barely leaves the spot it started from, so
     /// an agent would jitter in place while what it needed sat just outside
     /// its range. It varies per agent and per leg, so agents setting out from
@@ -731,7 +731,7 @@ impl Simulation {
     /// feeding it.
     ///
     /// Nobody decides this on the settlement's behalf. It falls out of the
-    /// drive: hunger that keeps being denied presses harder every tick it
+    /// drive: hunger that keeps being denied presses harder every turn it
     /// waits, and past a certain point the agent stops working the fields it
     /// has and walks. Where it walks to is the best thing it can remember
     /// that is far enough away to be different country; failing any memory,
@@ -748,7 +748,7 @@ impl Simulation {
     /// onto the one tile of it. At four tiles they concentrated hard enough to
     /// work the ground out under themselves: the nutrient-loop regression,
     /// which asks that farmed ground not lose half its fertility in ten
-    /// thousand ticks, started failing about one run in three.
+    /// thousand turns, started failing about one run in three.
     pub(in crate::analytics) const CAMPED_ON_IT: i32 = 4;
 
     /// How much of what is in the pack is something to eat.
@@ -870,16 +870,16 @@ impl Simulation {
     /// How much warmer a garment has to be before it is worth changing into.
     ///
     /// Without a margin an agent swaps between two near-identical coats every
-    /// tick forever: whatever it is wearing wears down a little each tick, so
+    /// turn forever: whatever it is wearing wears down a little each turn, so
     /// the one folded in its pack is always fractionally better.
     pub(in crate::analytics) const WARMTH_WORTH_CHANGING_FOR: f32 = 0.05;
 
     /// How much better a new garment has to be before it is worth the material
     /// and the work of making one.
     ///
-    /// Whatever is on an agent's back wears a little thinner every tick, so
+    /// Whatever is on an agent's back wears a little thinner every turn, so
     /// against a bare comparison there is always a fresh coat worth making:
-    /// agents replaced their clothes every few hundred ticks and ended up
+    /// agents replaced their clothes every few hundred turns and ended up
     /// carrying dozens of cast-offs. A quarter better means a real
     /// improvement - a better material, or a hand that has learned something -
     /// rather than ordinary wear.
@@ -979,7 +979,7 @@ impl Simulation {
         use crate::world::Position;
 
         let here = Position::new(position.0, position.1);
-        let now = self.current_tick;
+        let now = self.current_turn;
 
         let best = self
             .world

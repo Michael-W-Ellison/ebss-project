@@ -27,7 +27,7 @@ fn main() {
     let mut sim = Simulation::new(world, population)
         .with_visualization();
 
-    // Run for 100 ticks, updating display every 5 ticks
+    // Run for 100 turns, updating display every 5 turns
     sim.run_visual(100, 5);
 
     println!("\n✅ Simulation complete! Agents have learned optimal strategies.");

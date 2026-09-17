@@ -183,67 +183,67 @@ pub struct Relationship {
     pub other_agent_id: Uuid,
     pub relationship_level: RelationshipLevel,
     pub trust_level: TrustLevel,
-    pub last_interaction_tick: u32,
+    pub last_interaction_turn: u32,
     pub total_interactions: u32,
 }
 
 impl Relationship {
-    pub fn new(other_agent_id: Uuid, current_tick: u32) -> Self {
+    pub fn new(other_agent_id: Uuid, current_turn: u32) -> Self {
         Self {
             other_agent_id,
             relationship_level: RelationshipLevel::neutral(),
             trust_level: TrustLevel::neutral(),
-            last_interaction_tick: current_tick,
+            last_interaction_turn: current_turn,
             total_interactions: 0,
         }
     }
 
-    pub fn parent_child(other_agent_id: Uuid, current_tick: u32) -> Self {
+    pub fn parent_child(other_agent_id: Uuid, current_turn: u32) -> Self {
         Self {
             other_agent_id,
             relationship_level: RelationshipLevel::parent_child(),
             trust_level: TrustLevel::neutral(),
-            last_interaction_tick: current_tick,
+            last_interaction_turn: current_turn,
             total_interactions: 0,
         }
     }
 
     /// Record a positive interaction
-    pub fn positive_interaction(&mut self, delta: i8, current_tick: u32) {
+    pub fn positive_interaction(&mut self, delta: i8, current_turn: u32) {
         self.relationship_level.adjust(delta);
-        self.last_interaction_tick = current_tick;
+        self.last_interaction_turn = current_turn;
         self.total_interactions += 1;
     }
 
     /// Record a negative interaction
-    pub fn negative_interaction(&mut self, delta: i8, current_tick: u32) {
+    pub fn negative_interaction(&mut self, delta: i8, current_turn: u32) {
         self.relationship_level.adjust(-delta);
-        self.last_interaction_tick = current_tick;
+        self.last_interaction_turn = current_turn;
         self.total_interactions += 1;
     }
 
     /// Information was verified as correct - increase trust
-    pub fn verify_information(&mut self, info_age_ticks: u32, current_tick: u32) {
+    pub fn verify_information(&mut self, info_age_turns: u32, current_turn: u32) {
         // Recent info = more trust gain
-        let trust_gain = if info_age_ticks < 100 {
+        let trust_gain = if info_age_turns < 100 {
             3 // "Just saw it" - big trust gain
-        } else if info_age_ticks < 500 {
+        } else if info_age_turns < 500 {
             2 // Recent - moderate trust gain
         } else {
             1 // Old info - small trust gain
         };
 
         self.trust_level.adjust(trust_gain);
-        self.last_interaction_tick = current_tick;
+        self.last_interaction_turn = current_turn;
         self.total_interactions += 1;
     }
 
     /// Information was proven wrong - decrease trust
-    pub fn incorrect_information(&mut self, info_age_ticks: u32, current_tick: u32) {
+    pub fn incorrect_information(&mut self, info_age_turns: u32, current_turn: u32) {
         // Calculate base trust penalty
-        let base_penalty = if info_age_ticks < 100 {
+        let base_penalty = if info_age_turns < 100 {
             5 // "Just saw it" but was wrong - big penalty
-        } else if info_age_ticks < 500 {
+        } else if info_age_turns < 500 {
             3 // Recent but wrong - moderate penalty
         } else {
             1 // Old info wrong - small penalty (expected)
@@ -266,7 +266,7 @@ impl Relationship {
 
         let adjusted_penalty = (base_penalty as f32 * forgiveness_factor) as i8;
         self.trust_level.adjust(-adjusted_penalty.max(1));
-        self.last_interaction_tick = current_tick;
+        self.last_interaction_turn = current_turn;
         self.total_interactions += 1;
     }
 
@@ -289,11 +289,11 @@ impl SocialNetwork {
     pub fn get_or_create_relationship(
         &mut self,
         other_agent_id: Uuid,
-        current_tick: u32,
+        current_turn: u32,
     ) -> &mut Relationship {
         self.relationships
             .entry(other_agent_id)
-            .or_insert_with(|| Relationship::new(other_agent_id, current_tick))
+            .or_insert_with(|| Relationship::new(other_agent_id, current_turn))
     }
 
     /// Get relationship if it exists

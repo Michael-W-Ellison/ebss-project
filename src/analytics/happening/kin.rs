@@ -63,7 +63,7 @@ impl Simulation {
         use crate::agents::reproduction::give_birth;
         use crate::agents::gossip::{Information, InformationType};
 
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // Collect births to process (to avoid borrowing issues)
         let mut births_to_process: Vec<(usize, uuid::Uuid)> = Vec::new();
@@ -78,7 +78,7 @@ impl Simulation {
                 pregnancy.update_nutrition(hunger_drive, agent.state.health);
 
                 // Check if due
-                if pregnancy.is_due(current_tick) {
+                if pregnancy.is_due(current_turn) {
                     births_to_process.push((idx, pregnancy.father_id));
                 }
             }
@@ -98,11 +98,11 @@ impl Simulation {
                 let offspring = if let Some(f_idx) = father_idx {
                     let mother = &self.population.agents[mother_idx];
                     let father = &self.population.agents[f_idx];
-                    give_birth(mother, father, &preg, current_tick)
+                    give_birth(mother, father, &preg, current_turn)
                 } else {
                     // Father not found (dead?), use mother twice (not ideal but handles edge case)
                     let mother = &self.population.agents[mother_idx];
-                    give_birth(mother, mother, &preg, current_tick)
+                    give_birth(mother, mother, &preg, current_turn)
                 };
 
                 let offspring_id = offspring.id;
@@ -126,7 +126,7 @@ impl Simulation {
                     },
                     mother_id,
                     true,
-                    current_tick as u64,
+                    current_turn as u64,
                 );
 
                 // Share birth information with nearby agents
@@ -144,7 +144,7 @@ impl Simulation {
                                 mother_id,
                                 other_agent.id,
                                 &other_agent.traits,
-                                current_tick as u64,
+                                current_turn as u64,
                             );
                         }
                     }
@@ -249,7 +249,7 @@ impl Simulation {
     /// and that is the whole difference. `feed_the_small_children` reads it as
     /// a condition to test before feeding - a parent within a few paces - and
     /// a child that had wandered, or whose parent had, simply went unfed.
-    /// Measured over four world-years before this existed: **67,706 child-ticks
+    /// Measured over four world-years before this existed: **67,706 child-turns
     /// wanting feeding and 28,391 with a parent in reach, 41.9%.** The other
     /// 58% could never be made up, because what a turn feeds is exactly what
     /// that body burns in a turn - see `wants_food` - so there is no surplus
@@ -474,7 +474,7 @@ impl Simulation {
         use crate::agents::childcare::{MAX_CAREGIVER_DISTANCE, NURSING_ENERGY_GAIN};
         use crate::agents::LifeStage;
 
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // Collect caregiver positions for distance checks
         let caregiver_positions: std::collections::BTreeMap<uuid::Uuid, (i32, i32, i32)> =
@@ -494,7 +494,7 @@ impl Simulation {
 
             if let Some(ref mut nursing) = agent.nursing {
                 // Check if still in nursing period
-                if !nursing.needs_nursing(current_tick) {
+                if !nursing.needs_nursing(current_turn) {
                     // Nursing period ended
                     agent.nursing = None;
                     continue;
@@ -559,7 +559,7 @@ impl Simulation {
                         0.0
                     };
                     if taken > 0.0 {
-                        agent.state.took_a_meal(current_tick, 0.0);
+                        agent.state.took_a_meal(current_turn, 0.0);
                         what_the_milk_cost.push((
                             nursing.primary_caregiver,
                             taken * crate::agents::physiology::WHAT_MILK_IS_WORTH,
@@ -573,7 +573,7 @@ impl Simulation {
                     agent.developmental_nutrition.update_infant_nutrition(hunger_satisfaction, true);
                 } else {
                     // Not being nursed
-                    nursing.tick_without_nursing();
+                    nursing.turn_without_nursing();
 
                     // Apply health penalty if suffering
                     let penalty = nursing.health_penalty();

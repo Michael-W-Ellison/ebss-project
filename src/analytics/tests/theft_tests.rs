@@ -499,7 +499,7 @@ fn on_an_ordinary_day_nobody_steals() {
     ] {
         if let Some(asking) = simulation.population.agents[0].drives.get_mut(drive) {
             asking.value = 0.3;
-            asking.denied_ticks = 0;
+            asking.denied_turns = 0;
             // `urgency` is value times weight times lean, and founders are
             // born with both randomised - so a test that pins only the value
             // is not pinning the urgency, and failed about one run in twenty
@@ -537,7 +537,7 @@ fn a_survival_drive_past_bearing_sets_the_cost_aside() {
         .get_mut(DriveType::Hunger)
     {
         hunger.value = 1.0;
-        hunger.denied_ticks = 400;
+        hunger.denied_turns = 400;
     }
 
     assert!(
@@ -561,7 +561,7 @@ fn even_a_starving_man_does_not_take_what_would_not_help() {
         .get_mut(DriveType::Hunger)
     {
         hunger.value = 1.0;
-        hunger.denied_ticks = 400;
+        hunger.denied_turns = 400;
     }
 
     assert!(

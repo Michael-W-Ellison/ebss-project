@@ -29,7 +29,7 @@ struct Block {
 pub struct FurnaceState {
     /// Current temperature (0-1500 degrees)
     pub temperature: f32,
-    /// Fuel remaining (in ticks)
+    /// Fuel remaining (in turns)
     pub fuel_remaining: u32,
     /// Items being smelted
     pub input_item: Option<String>,
@@ -82,7 +82,7 @@ impl FurnaceState {
         }
     }
 
-    /// Get smelting time in ticks for an item
+    /// Get smelting time in turns for an item
     fn get_smelt_time(item: &str) -> u32 {
         match item {
             "iron_ore" => 200,        // 10 seconds
@@ -111,8 +111,8 @@ impl FurnaceState {
     }
 
 
-    /// Tick the furnace simulation
-    pub fn tick(&mut self) {
+    /// Turn the furnace simulation
+    pub fn take_a_turn(&mut self) {
         // Burn fuel to maintain/increase temperature
         if self.fuel_remaining > 0 {
             self.fuel_remaining -= 1;
@@ -624,15 +624,15 @@ impl EnvironmentPlugin for MinecraftSurvivalPlugin {
             Action::Sleep { duration } => {
                 Ok(ActionResult::success()
                     .with_drive_change(DriveType::Rest, -0.5)
-                    .with_message(format!("Slept for {} ticks", duration)))
+                    .with_message(format!("Slept for {} turns", duration)))
             }
             _ => Ok(ActionResult::success()
                 .with_message("Action completed".to_string()))
         }
     }
 
-    fn tick(&mut self) {
-        self.world_state.advance_tick(0.001);
+    fn take_a_turn(&mut self) {
+        self.world_state.advance_turn(0.001);
     }
 
     fn get_material_at(&self, position: Position) -> Option<&Material> {
@@ -771,14 +771,14 @@ mod tests {
     }
 
     #[test]
-    fn test_world_tick() {
+    fn test_world_turn() {
         let mut plugin = MinecraftSurvivalPlugin::new();
         let config = PluginConfig::tiny(0);
         plugin.initialize(config).unwrap();
 
-        let initial_tick = plugin.world_state.tick;
-        plugin.tick();
-        assert_eq!(plugin.world_state.tick, initial_tick + 1);
+        let initial_turn = plugin.world_state.turn;
+        plugin.take_a_turn();
+        assert_eq!(plugin.world_state.turn, initial_turn + 1);
     }
 
     #[test]

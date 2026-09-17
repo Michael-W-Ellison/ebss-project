@@ -13,11 +13,11 @@ use crate::gui::state::{
     SelectedAgentData, SelectedBuildingData, SelectedResourceData,
     DriveData, SkillData, InventoryItemData, GoalData,
 };
-use crate::environment::TICKS_PER_YEAR;
+use crate::environment::TURNS_PER_YEAR;
 
-/// How many ticks make a year, in the shape the age fields want.
+/// How many turns make a year, in the shape the age fields want.
 fn ebss_years() -> u32 {
-    TICKS_PER_YEAR.max(1)
+    TURNS_PER_YEAR.max(1)
 }
 
 pub fn render_inspector_panel(
@@ -273,8 +273,8 @@ fn render_agent_header(ui: &mut egui::Ui, agent: &SelectedAgentData, notificatio
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("  🍖").color(egui::Color32::YELLOW));
                     ui.label(egui::RichText::new(format!(
-                        "Starving ({} ticks)",
-                        agent.survival_status.ticks_without_food
+                        "Starving ({} turns)",
+                        agent.survival_status.turns_without_food
                     )).color(egui::Color32::YELLOW).small());
                 });
             }
@@ -283,8 +283,8 @@ fn render_agent_header(ui: &mut egui::Ui, agent: &SelectedAgentData, notificatio
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("  💧").color(egui::Color32::LIGHT_BLUE));
                     ui.label(egui::RichText::new(format!(
-                        "Dehydrated ({} ticks)",
-                        agent.survival_status.ticks_without_water
+                        "Dehydrated ({} turns)",
+                        agent.survival_status.turns_without_water
                     )).color(egui::Color32::LIGHT_BLUE).small());
                 });
             }
@@ -329,7 +329,7 @@ fn render_agent_overview(ui: &mut egui::Ui, agent: &SelectedAgentData) {
             ui.add(egui::ProgressBar::new(age_pct)
                 .fill(age_color)
                 .text(format!("{} / {} years", age_years, max_years)))
-                .on_hover_text(format!("{} / {} ticks", agent.age, agent.max_age));
+                .on_hover_text(format!("{} / {} turns", agent.age, agent.max_age));
         });
     }).header_response.on_hover_text("Health, energy, and age information");
 

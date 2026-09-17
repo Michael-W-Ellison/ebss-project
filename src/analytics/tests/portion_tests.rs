@@ -318,7 +318,7 @@ fn a_hungry_agent_with_a_deer_ends_up_with_joints() {
     }
 
     for _ in 0..40 {
-        simulation.tick();
+        simulation.take_a_turn();
         let agent = &simulation.population.agents[0];
         if agent.how_many_i_have("meatportions") > 0 {
             return;
@@ -326,7 +326,7 @@ fn a_hungry_agent_with_a_deer_ends_up_with_joints() {
     }
 
     panic!(
-        "forty ticks with a deer, a knife and an empty stomach and not one joint cut: {:?}",
+        "forty turns with a deer, a knife and an empty stomach and not one joint cut: {:?}",
         simulation.population.agents[0].inventory.get_all_items().keys()
     );
 }

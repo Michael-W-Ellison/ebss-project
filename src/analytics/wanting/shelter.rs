@@ -36,7 +36,7 @@ impl Simulation {
     ///
     /// **The Shelter drive decides this, not the thermometer.** It used to be
     /// "am I cold at this instant, and am I bare", which made the drive a
-    /// router rather than a cause: `DriveType::Shelter` sent the tick here and
+    /// router rather than a cause: `DriveType::Shelter` sent the turn here and
     /// this line sent it straight back unless the body was already below its
     /// ideal. Nobody made a coat in autumn, because in autumn nobody is
     /// shivering yet - and the coat that is wanted in December has to be cut,
@@ -560,7 +560,7 @@ impl Simulation {
     ///
     /// Two paces. A settlement is people living beside each other, not people
     /// living on top of each other, and without this a camp digs a burrow
-    /// every tick for ever.
+    /// every turn for ever.
     pub(in crate::analytics) const HOW_CLOSE_TWO_ROOFS_GET: i32 = 2;
 
     /// Going to a child of one's own.

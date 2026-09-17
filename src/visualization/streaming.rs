@@ -154,8 +154,8 @@ impl Default for MultiOutput {
 pub struct StreamEvent {
     /// Event type
     pub event_type: String,
-    /// Tick number
-    pub tick: u64,
+    /// Turn number
+    pub turn: u64,
     /// Timestamp (milliseconds)
     pub timestamp: u64,
     /// Event data
@@ -163,10 +163,10 @@ pub struct StreamEvent {
 }
 
 impl StreamEvent {
-    pub fn new(event_type: &str, tick: u64, data: serde_json::Value) -> Self {
+    pub fn new(event_type: &str, turn: u64, data: serde_json::Value) -> Self {
         Self {
             event_type: event_type.to_string(),
-            tick,
+            turn,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -175,11 +175,11 @@ impl StreamEvent {
         }
     }
 
-    /// Create a tick event
-    pub fn tick(tick: u64, population: usize, health: f32, happiness: f32) -> Self {
+    /// Create a turn event
+    pub fn take_a_turn(turn: u64, population: usize, health: f32, happiness: f32) -> Self {
         Self::new(
-            "tick",
-            tick,
+            "turn",
+            turn,
             serde_json::json!({
                 "population": population,
                 "average_health": health,
@@ -189,10 +189,10 @@ impl StreamEvent {
     }
 
     /// Create a birth event
-    pub fn birth(tick: u64, agent_id: Uuid, position: (i32, i32, i32)) -> Self {
+    pub fn birth(turn: u64, agent_id: Uuid, position: (i32, i32, i32)) -> Self {
         Self::new(
             "birth",
-            tick,
+            turn,
             serde_json::json!({
                 "agent_id": agent_id.to_string(),
                 "position": position,
@@ -201,10 +201,10 @@ impl StreamEvent {
     }
 
     /// Create a death event
-    pub fn death(tick: u64, agent_id: Uuid, cause: &str) -> Self {
+    pub fn death(turn: u64, agent_id: Uuid, cause: &str) -> Self {
         Self::new(
             "death",
-            tick,
+            turn,
             serde_json::json!({
                 "agent_id": agent_id.to_string(),
                 "cause": cause,
@@ -213,10 +213,10 @@ impl StreamEvent {
     }
 
     /// Create an emergence event
-    pub fn emergence(tick: u64, pattern: &str, severity: f32) -> Self {
+    pub fn emergence(turn: u64, pattern: &str, severity: f32) -> Self {
         Self::new(
             "emergence",
-            tick,
+            turn,
             serde_json::json!({
                 "pattern": pattern,
                 "severity": severity,
@@ -251,14 +251,14 @@ impl StreamFormatter {
             }
             StreamFormat::PlainText => {
                 format!(
-                    "[{}] Tick {}: {} - {:?}",
-                    event.timestamp, event.tick, event.event_type, event.data
+                    "[{}] Turn {}: {} - {:?}",
+                    event.timestamp, event.turn, event.event_type, event.data
                 )
             }
             StreamFormat::Compact => {
                 format!(
                     "{}:{}:{}",
-                    event.tick, event.event_type,
+                    event.turn, event.event_type,
                     serde_json::to_string(&event.data).unwrap_or_default()
                 )
             }
@@ -269,7 +269,7 @@ impl StreamFormatter {
         let mut result = String::new();
 
         if !self.csv_headers_written {
-            result.push_str("timestamp,tick,event_type,data\n");
+            result.push_str("timestamp,turn,event_type,data\n");
             self.csv_headers_written = true;
         }
 
@@ -279,7 +279,7 @@ impl StreamFormatter {
 
         result.push_str(&format!(
             "{},{},{},\"{}\"\n",
-            event.timestamp, event.tick, event.event_type, data_str
+            event.timestamp, event.turn, event.event_type, data_str
         ));
 
         result
@@ -292,9 +292,9 @@ pub struct StreamingVisualizer {
     formatter: StreamFormatter,
     /// Filter event types (empty = all)
     event_filter: Vec<String>,
-    /// Minimum tick interval between outputs (0 = every tick)
-    tick_interval: u64,
-    last_output_tick: u64,
+    /// Minimum turn interval between outputs (0 = every turn)
+    turn_interval: u64,
+    last_output_turn: u64,
 }
 
 impl StreamingVisualizer {
@@ -303,8 +303,8 @@ impl StreamingVisualizer {
             output,
             formatter: StreamFormatter::new(format),
             event_filter: Vec::new(),
-            tick_interval: 0,
-            last_output_tick: 0,
+            turn_interval: 0,
+            last_output_turn: 0,
         }
     }
 
@@ -332,12 +332,12 @@ impl StreamingVisualizer {
             return Ok(());
         }
 
-        // Check interval for tick events
-        if event.event_type == "tick" && self.tick_interval > 0 {
-            if event.tick < self.last_output_tick + self.tick_interval {
+        // Check interval for turn events
+        if event.event_type == "turn" && self.turn_interval > 0 {
+            if event.turn < self.last_output_turn + self.turn_interval {
                 return Ok(());
             }
-            self.last_output_tick = event.tick;
+            self.last_output_turn = event.turn;
         }
 
         let line = self.formatter.format(&event);
@@ -356,7 +356,7 @@ pub struct StreamConfig {
     pub format: StreamFormat,
     pub output_path: Option<String>,
     pub event_filter: Vec<String>,
-    pub tick_interval: u64,
+    pub turn_interval: u64,
     pub buffer_size: usize,
 }
 
@@ -366,7 +366,7 @@ impl Default for StreamConfig {
             format: StreamFormat::JsonLines,
             output_path: None,
             event_filter: Vec::new(),
-            tick_interval: 1,
+            turn_interval: 1,
             buffer_size: 1000,
         }
     }
@@ -390,7 +390,7 @@ pub trait DisplayWidget: Send + Sync {
 /// Data passed to widgets for rendering
 #[derive(Debug, Clone, Default)]
 pub struct WidgetData {
-    pub tick: u64,
+    pub turn: u64,
     pub population_size: usize,
     pub average_health: f32,
     pub average_happiness: f32,
@@ -433,7 +433,7 @@ impl DisplayWidget for TextWidget {
 
     fn render(&self, data: &WidgetData) -> Vec<String> {
         let text = self.template
-            .replace("{tick}", &data.tick.to_string())
+            .replace("{turn}", &data.turn.to_string())
             .replace("{population}", &data.population_size.to_string())
             .replace("{health}", &format!("{:.1}", data.average_health))
             .replace("{happiness}", &format!("{:.2}", data.average_happiness))
@@ -545,29 +545,29 @@ mod tests {
 
     #[test]
     fn test_stream_event_creation() {
-        let event = StreamEvent::tick(100, 50, 75.0, 0.6);
-        assert_eq!(event.event_type, "tick");
-        assert_eq!(event.tick, 100);
+        let event = StreamEvent::take_a_turn(100, 50, 75.0, 0.6);
+        assert_eq!(event.event_type, "turn");
+        assert_eq!(event.turn, 100);
     }
 
     #[test]
     fn test_formatter_jsonl() {
         let mut formatter = StreamFormatter::new(StreamFormat::JsonLines);
-        let event = StreamEvent::tick(100, 50, 75.0, 0.6);
+        let event = StreamEvent::take_a_turn(100, 50, 75.0, 0.6);
         let output = formatter.format(&event);
 
-        assert!(output.contains("\"tick\":100"));
-        assert!(output.contains("\"event_type\":\"tick\""));
+        assert!(output.contains("\"turn\":100"));
+        assert!(output.contains("\"event_type\":\"turn\""));
     }
 
     #[test]
     fn test_formatter_csv() {
         let mut formatter = StreamFormatter::new(StreamFormat::Csv);
-        let event = StreamEvent::tick(100, 50, 75.0, 0.6);
+        let event = StreamEvent::take_a_turn(100, 50, 75.0, 0.6);
         let output = formatter.format(&event);
 
-        assert!(output.contains("timestamp,tick,event_type,data"));
-        assert!(output.contains("100,tick,"));
+        assert!(output.contains("timestamp,turn,event_type,data"));
+        assert!(output.contains("100,turn,"));
     }
 
     #[test]
@@ -584,9 +584,9 @@ mod tests {
 
     #[test]
     fn test_text_widget() {
-        let widget = TextWidget::new("test", 30, 2, "Tick: {tick}\nPop: {population}");
+        let widget = TextWidget::new("test", 30, 2, "Turn: {turn}\nPop: {population}");
         let data = WidgetData {
-            tick: 100,
+            turn: 100,
             population_size: 50,
             ..Default::default()
         };
@@ -604,7 +604,7 @@ mod tests {
             .with_filter(vec!["birth".to_string(), "death".to_string()]);
 
         // This should be filtered out
-        viz.emit(StreamEvent::tick(1, 50, 75.0, 0.6)).unwrap();
+        viz.emit(StreamEvent::take_a_turn(1, 50, 75.0, 0.6)).unwrap();
 
         // This should pass through
         viz.emit(StreamEvent::birth(1, crate::core::dice::name(), (0, 0, 0))).unwrap();

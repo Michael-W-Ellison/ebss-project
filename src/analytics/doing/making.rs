@@ -18,10 +18,10 @@ use log::debug;
 impl Simulation {
     /// How much of a roof one turn of work puts up.
     ///
-    /// `BuildingType::construction_time` is denominated in ticks - ninety for
-    /// a burrow, which is just under two days on a forty-eight tick day. A
+    /// `BuildingType::construction_time` is denominated in turns - ninety for
+    /// a burrow, which is just under two days on a forty-eight turn day. A
     /// turn is half an hour, and half an hour with a digging stick does not
-    /// make a dugout, so this is not one tick: it is a solid stretch of a
+    /// make a dugout, so this is not one turn: it is a solid stretch of a
     /// morning's work, and a burrow comes to about four turns of it. A tent
     /// is quicker and a longhouse is the work of a season, which is the
     /// ordering the table already has and this leaves alone.
@@ -53,7 +53,7 @@ impl Simulation {
         &mut self,
         under: crate::world::Position,
         agent_index: usize,
-        tick_now: u32,
+        turn_now: u32,
     ) {
         if self.world.pit_at(under).is_some() {
             return;
@@ -67,7 +67,7 @@ impl Simulation {
             where_it_is: under,
             holds: Vec::new(),
             covered: true,
-            dug: tick_now,
+            dug: turn_now,
             belongs: crate::world::Belongs::ToUsAll,
         });
 
@@ -80,7 +80,7 @@ impl Simulation {
     }
 
     /// `Action::Build`.
-    pub(in crate::analytics) fn building(&mut self, structure_type: &String, position: &(i32, i32, i32), agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn building(&mut self, structure_type: &String, position: &(i32, i32, i32), agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::{BuildingType, Building, Position, ResourceType};
 
         // Map structure string to BuildingType
@@ -231,11 +231,11 @@ impl Simulation {
             agent.skills.practise(
                 crate::agents::skills::SkillType::Construction,
                 Self::WHAT_A_TURN_OF_BUILDING_TEACHES,
-                tick_now,
+                turn_now,
             );
 
             if finished {
-                self.dig_the_store_under_the_roof(here, agent_index, tick_now);
+                self.dig_the_store_under_the_roof(here, agent_index, turn_now);
                 return ActionResult::success()
                     .with_drive_change(DriveType::Construction, -0.4)
                     .with_energy_cost(20.0)
@@ -328,7 +328,7 @@ impl Simulation {
             use crate::gui::events::{SimulationEvent, SimulationEventType};
             let agent = &self.population.agents[agent_index];
             let event = SimulationEvent::new(
-                self.current_tick,
+                self.current_turn,
                 SimulationEventType::BuildingStarted {
                     building_type,
                     position: build_pos,
@@ -350,7 +350,7 @@ impl Simulation {
             _ => 5,
         };
         let agent = &mut self.population.agents[agent_index];
-        agent.skills.practise(crate::agents::skills::SkillType::Construction, construction_xp, tick_now);
+        agent.skills.practise(crate::agents::skills::SkillType::Construction, construction_xp, turn_now);
 
         debug!(
             "Agent {} started construction of {:?} at ({}, {})",
@@ -364,7 +364,7 @@ impl Simulation {
     }
 
     /// `Action::Craft`.
-    pub(in crate::analytics) fn crafting(&mut self, item_type: &String, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn crafting(&mut self, item_type: &String, agent_index: usize, turn_now: u32) -> ActionResult {
         // The stone-age chain comes first. These steps take named
         // things and turn out named things, so what one step produces
         // the next can pick up; the table below it cannot express that,
@@ -512,7 +512,7 @@ impl Simulation {
                 // tailoring branch has always struck.
                 agent
                     .skills
-                    .practise(step.hands, (step.effort / 8.0).round().max(1.0) as u32, tick_now);
+                    .practise(step.hands, (step.effort / 8.0).round().max(1.0) as u32, turn_now);
 
                 return ActionResult::failure(format!(
                     "Spoiled the makings of a {} in the trying",
@@ -555,7 +555,7 @@ impl Simulation {
                 let learned = (step.effort / 4.0).round().max(1.0) as u32;
                 let skill = agent.skills.get_skill_mut(step.hands);
                 skill.gain_experience(learned);
-                skill.last_used = tick_now;
+                skill.last_used = turn_now;
             }
 
             return ActionResult::success()
@@ -845,7 +845,7 @@ impl Simulation {
         {
             let skill = agent.skills.get_skill_mut(SkillType::Crafting);
             skill.gain_experience(experience_gained);
-            skill.last_used = tick_now;
+            skill.last_used = turn_now;
         }
 
         debug!(
@@ -937,7 +937,7 @@ impl Simulation {
     }
 
     /// `Action::MakeClothing`.
-    pub(in crate::analytics) fn making_clothing(&mut self, garment: &String, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn making_clothing(&mut self, garment: &String, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::agents::equipment::garment_recipe;
         use crate::agents::skills::SkillType;
 
@@ -1000,7 +1000,7 @@ impl Simulation {
             agent
                 .inventory
                 .remove_item(recipe.material_item, recipe.material_amount);
-            agent.skills.practise(SkillType::Leatherworking, 8, tick_now);
+            agent.skills.practise(SkillType::Leatherworking, 8, turn_now);
 
             return ActionResult::failure(format!(
                 "Spoiled the {} in the making",
@@ -1047,7 +1047,7 @@ impl Simulation {
             .inventory
             .remove_item(recipe.material_item, recipe.material_amount);
 
-        agent.skills.practise(SkillType::Leatherworking, 25, tick_now);
+        agent.skills.practise(SkillType::Leatherworking, 25, turn_now);
 
         // Making a coat and putting it on is one act.
         //
@@ -1056,7 +1056,7 @@ impl Simulation {
         // a better second coat merged into the first and was recorded
         // as no better than it. Agents made coat after coat, each an
         // improvement, and wore none of them - over eight thousand
-        // ticks one settlement made two hundred and eighty garments
+        // turns one settlement made two hundred and eighty garments
         // and put on a hundred and sixty.
         let worn_now = Self::warmth_worn(agent, recipe.slot);
         let put_on = made.cold_insulation() > worn_now;
@@ -1156,7 +1156,7 @@ impl Simulation {
     }
 
     /// `Action::TrySwapping`.
-    pub(in crate::analytics) fn trying_a_swap(&mut self, instead_of_making: &String, instead_of: &String, put_in: &String, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn trying_a_swap(&mut self, instead_of_making: &String, instead_of: &String, put_in: &String, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::environment::making;
 
         let Some(step) = making::how_to_make(instead_of_making) else {
@@ -1214,7 +1214,7 @@ impl Simulation {
             // And he knows how to do it now, which is what makes it a
             // discovery rather than an accident
             agent.found_out_how_to(swap.makes);
-            agent.skills.practise(step.hands, 20, tick_now);
+            agent.skills.practise(step.hands, 20, turn_now);
 
             debug!(
                 "Agent {} put {put_in} where the {instead_of} goes and got a {}",

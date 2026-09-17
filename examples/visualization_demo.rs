@@ -59,9 +59,9 @@ fn main() {
         (RenderMode::Compact, "Compact Mode", 100),
     ];
 
-    let mut tick = 0u32;
+    let mut turn = 0u32;
     let mut mode_index = 0;
-    let mut ticks_in_mode = 0;
+    let mut turns_in_mode = 0;
 
     println!("Starting visualization demo in 2 seconds...\n");
     thread::sleep(Duration::from_secs(2));
@@ -70,7 +70,7 @@ fn main() {
         let (mode, mode_name, mode_duration) = modes[mode_index];
 
         // Switch mode at start of each mode's run
-        if ticks_in_mode == 0 {
+        if turns_in_mode == 0 {
             renderer.set_mode(mode);
 
             // Log the mode change event
@@ -78,38 +78,38 @@ fn main() {
         }
 
         // Simulate agent activity
-        population.tick();
+        population.take_a_turn();
 
         // Record history for trend tracking
-        renderer.record_history(&population, tick);
+        renderer.record_history(&population, turn);
 
         // Log periodic events
-        if tick % 10 == 0 {
+        if turn % 10 == 0 {
             let alive = population.agents.iter().filter(|a| a.state.health > 0.0).count();
-            renderer.log_event(format!("Tick {}: {} agents alive", tick, alive));
+            renderer.log_event(format!("Turn {}: {} agents alive", turn, alive));
         }
 
         // Render based on current mode
-        renderer.render(&population, tick);
+        renderer.render(&population, turn);
 
         // For compact mode, add a newline periodically
-        if mode == RenderMode::Compact && tick % 10 == 0 {
+        if mode == RenderMode::Compact && turn % 10 == 0 {
             println!();
         }
 
         // Progress tracking
-        tick += 1;
-        ticks_in_mode += 1;
+        turn += 1;
+        turns_in_mode += 1;
 
         // Switch to next mode after duration
-        if ticks_in_mode >= mode_duration {
-            ticks_in_mode = 0;
+        if turns_in_mode >= mode_duration {
+            turns_in_mode = 0;
             mode_index = (mode_index + 1) % modes.len();
 
             // If we've completed all modes, cycle back
-            if mode_index == 0 && tick > 0 {
+            if mode_index == 0 && turn > 0 {
                 println!("\n\n=== Completed one full cycle of all modes ===");
-                println!("Total ticks: {}", tick);
+                println!("Total turns: {}", turn);
                 println!("Continuing to cycle...\n");
                 thread::sleep(Duration::from_secs(2));
             }

@@ -17,7 +17,7 @@ use rand::Rng;
 
 impl Simulation {
     /// `Action::Attack`.
-    pub(in crate::analytics) fn attacking(&mut self, target_agent_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn attacking(&mut self, target_agent_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         use crate::agents::body::{BodyPartType, InjuryType};
 
         // Find target agent
@@ -118,7 +118,7 @@ impl Simulation {
         // Apply damage to target
         let target = &mut self.population.agents[target_index];
         if let Some(part) = target.body.get_part_mut(target_part) {
-            part.apply_injury(injury_type, actual_damage, self.current_tick as u64);
+            part.apply_injury(injury_type, actual_damage, self.current_turn as u64);
         }
 
         // Also reduce target's overall health
@@ -146,7 +146,7 @@ impl Simulation {
             // Record who attacked for potential retaliation
             target.emotions.record_attack(
                 crate::agents::EmotionSource::Agent(attacker_id),
-                self.current_tick,
+                self.current_turn,
             );
 
             // Scale emotional response by damage severity
@@ -171,18 +171,18 @@ impl Simulation {
         {
             use crate::agents::Relationship;
 
-            let current_tick = self.current_tick;
+            let current_turn = self.current_turn;
 
             let struck = self.population.agents[target_index]
                 .relationships
-                .get_or_create_relationship(attacker_id, current_tick);
+                .get_or_create_relationship(attacker_id, current_turn);
             struck.weaken(Relationship::WHAT_A_BLOW_COSTS);
             struck.settle_what_we_are();
 
             // You do not warm to somebody you have just hit either
             let striking = self.population.agents[agent_index]
                 .relationships
-                .get_or_create_relationship(target_id, current_tick);
+                .get_or_create_relationship(target_id, current_turn);
             striking.weaken(Relationship::WHAT_THROWING_ONE_COSTS);
             striking.settle_what_we_are();
         }
@@ -238,7 +238,7 @@ impl Simulation {
         {
             use crate::gui::events::{SimulationEvent, SimulationEventType};
             let event = SimulationEvent::new(
-                self.current_tick,
+                self.current_turn,
                 SimulationEventType::Conflict {
                     attacker_id,
                     target_id,
@@ -266,7 +266,7 @@ impl Simulation {
         let attacker = &mut self.population.agents[agent_index];
         let combat_xp = if !target_alive { 5 } else { 2 };
         // TODO: Check weapon type for Archery vs MeleeCombat
-        attacker.skills.practise(crate::agents::skills::SkillType::MeleeCombat, combat_xp, tick_now);
+        attacker.skills.practise(crate::agents::skills::SkillType::MeleeCombat, combat_xp, turn_now);
 
         if !target_alive {
             ActionResult::success()
@@ -288,7 +288,7 @@ impl Simulation {
     }
 
     /// `Action::Fight`.
-    pub(in crate::analytics) fn fighting_a_beast(&mut self, animal_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn fighting_a_beast(&mut self, animal_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         // Standing your ground. The agent is not after this thing's
         // skin - it is here because the thing is close enough to be a
         // problem and the agent reckons it can be driven off.
@@ -372,7 +372,7 @@ impl Simulation {
         self.population.agents[agent_index].skills.practise(
             crate::agents::skills::SkillType::MeleeCombat,
             if landed { 25 } else { 10 },
-            tick_now,
+            turn_now,
         );
 
         if landed {
@@ -485,7 +485,7 @@ impl Simulation {
     }
 
     /// `Action::Tame`.
-    pub(in crate::analytics) fn taming(&mut self, animal_id: &uuid::Uuid, food_type: &Option<String>, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn taming(&mut self, animal_id: &uuid::Uuid, food_type: &Option<String>, agent_index: usize, turn_now: u32) -> ActionResult {
         // Get species data first (clone to avoid borrow issues)
         let species = {
             if let Some(animal) = self.world.animals.get(animal_id) {
@@ -537,7 +537,7 @@ impl Simulation {
 
                 // Increase social skill
                 let agent = &mut self.population.agents[agent_index];
-                agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, tick_now);
+                agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, turn_now);
 
                 // Add transport to agent's inventory if applicable
                 if let Some(t_type) = transport_type {
@@ -567,7 +567,7 @@ impl Simulation {
         // purpose: it is what is left when a body can neither run nor
         // raise a hand. Nothing happens. The agent stays exactly where
         // it is, which is the whole of what freezing costs - whatever
-        // was coming is still coming, and is now a tick closer.
+        // was coming is still coming, and is now a turn closer.
         let agent = &self.population.agents[agent_index];
         debug!("Agent {} froze", agent.id);
 

@@ -4,10 +4,10 @@
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-/// Duration of pregnancy in ticks
+/// Duration of pregnancy in turns
 pub const PREGNANCY_DURATION: u32 = 800;
 
-/// Extra energy cost per tick while pregnant (percentage multiplier)
+/// Extra energy cost per turn while pregnant (percentage multiplier)
 pub const PREGNANCY_ENERGY_MULTIPLIER: f32 = 1.3;
 
 /// Movement speed reduction while pregnant (late stages)
@@ -16,12 +16,12 @@ pub const PREGNANCY_SPEED_PENALTY: f32 = 0.7;
 /// Pregnancy state, held by whichever agent is carrying
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PregnancyState {
-    /// Tick when conception occurred
-    pub conception_tick: u32,
+    /// Turn when conception occurred
+    pub conception_turn: u32,
     /// ID of the father
     pub father_id: Uuid,
-    /// Tick when birth is due
-    pub due_tick: u32,
+    /// Turn when birth is due
+    pub due_turn: u32,
     /// Nutrition quality during pregnancy (0.0 to 1.0)
     /// Affects offspring's developmental potential
     pub nutrition_quality: f32,
@@ -31,30 +31,30 @@ pub struct PregnancyState {
 
 impl PregnancyState {
     /// Create a new pregnancy
-    pub fn new(conception_tick: u32, father_id: Uuid) -> Self {
+    pub fn new(conception_turn: u32, father_id: Uuid) -> Self {
         Self {
-            conception_tick,
+            conception_turn,
             father_id,
-            due_tick: conception_tick + PREGNANCY_DURATION,
+            due_turn: conception_turn + PREGNANCY_DURATION,
             nutrition_quality: 1.0,
             nutrition_samples: 0,
         }
     }
 
     /// Check if pregnancy has reached term
-    pub fn is_due(&self, current_tick: u32) -> bool {
-        current_tick >= self.due_tick
+    pub fn is_due(&self, current_turn: u32) -> bool {
+        current_turn >= self.due_turn
     }
 
     /// Get pregnancy progress (0.0 to 1.0)
-    pub fn progress(&self, current_tick: u32) -> f32 {
-        let elapsed = current_tick.saturating_sub(self.conception_tick) as f32;
+    pub fn progress(&self, current_turn: u32) -> f32 {
+        let elapsed = current_turn.saturating_sub(self.conception_turn) as f32;
         (elapsed / PREGNANCY_DURATION as f32).min(1.0)
     }
 
     /// Get trimester (1, 2, or 3)
-    pub fn trimester(&self, current_tick: u32) -> u8 {
-        let progress = self.progress(current_tick);
+    pub fn trimester(&self, current_turn: u32) -> u8 {
+        let progress = self.progress(current_turn);
         if progress < 0.33 {
             1
         } else if progress < 0.66 {
@@ -65,20 +65,20 @@ impl PregnancyState {
     }
 
     /// Update nutrition quality based on mother's current satiation
-    /// Should be called each tick during pregnancy
+    /// Should be called each turn during pregnancy
     pub fn update_nutrition(&mut self, mother_hunger_drive: f32, mother_health: f32) {
         // Lower hunger drive value = better fed (drives are urgency, not satisfaction)
-        let nutrition_this_tick = (1.0 - mother_hunger_drive) * (mother_health / 100.0);
+        let nutrition_this_turn = (1.0 - mother_hunger_drive) * (mother_health / 100.0);
 
         self.nutrition_samples += 1;
         // Rolling average of nutrition quality
         let weight = 1.0 / self.nutrition_samples as f32;
-        self.nutrition_quality = self.nutrition_quality * (1.0 - weight) + nutrition_this_tick * weight;
+        self.nutrition_quality = self.nutrition_quality * (1.0 - weight) + nutrition_this_turn * weight;
     }
 
     /// Get movement speed modifier based on pregnancy stage
-    pub fn speed_modifier(&self, current_tick: u32) -> f32 {
-        let progress = self.progress(current_tick);
+    pub fn speed_modifier(&self, current_turn: u32) -> f32 {
+        let progress = self.progress(current_turn);
         if progress < 0.5 {
             1.0 // No penalty in first half
         } else {
@@ -89,8 +89,8 @@ impl PregnancyState {
     }
 
     /// Get energy cost multiplier based on pregnancy stage
-    pub fn energy_multiplier(&self, current_tick: u32) -> f32 {
-        let progress = self.progress(current_tick);
+    pub fn energy_multiplier(&self, current_turn: u32) -> f32 {
+        let progress = self.progress(current_turn);
         // Energy cost increases throughout pregnancy
         1.0 + (progress * (PREGNANCY_ENERGY_MULTIPLIER - 1.0))
     }

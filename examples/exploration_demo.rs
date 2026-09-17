@@ -45,12 +45,12 @@ fn main() {
             agent.exploration_knowledge.total_tiles_explored);
     }
 
-    // Run simulation for several ticks
-    println!("\n=== Running exploration simulation for 100 ticks ===\n");
+    // Run simulation for several turns
+    println!("\n=== Running exploration simulation for 100 turns ===\n");
 
-    for tick in 0..100 {
-        // Update population tick counter
-        population.current_tick = tick;
+    for turn in 0..100 {
+        // Update population turn counter
+        population.current_turn = turn;
 
         // Process exploration with world
         population.process_exploration_with_world(&mut world);
@@ -75,12 +75,12 @@ fn main() {
 
         // Update agent drives
         for agent in &mut population.agents {
-            agent.drives.tick();
+            agent.drives.take_a_turn();
         }
 
-        // Report every 25 ticks
-        if tick % 25 == 0 && tick > 0 {
-            println!("--- Tick {} ---", tick);
+        // Report every 25 turns
+        if turn % 25 == 0 && turn > 0 {
+            println!("--- Turn {} ---", turn);
             for (idx, agent) in population.agents.iter().enumerate() {
                 let curiosity = agent.drives.get(DriveType::Curiosity)
                     .map(|d| d.value)
@@ -126,24 +126,24 @@ fn main() {
             for discovery in knowledge.recent_discoveries(5) {
                 match &discovery.discovery_type {
                     ebss::agents::DiscoveryType::Terrain(terrain_type) => {
-                        println!("    - Terrain: {:?} at ({}, {}) on tick {}",
-                            terrain_type, discovery.position.x, discovery.position.y, discovery.tick);
+                        println!("    - Terrain: {:?} at ({}, {}) on turn {}",
+                            terrain_type, discovery.position.x, discovery.position.y, discovery.turn);
                     }
                     ebss::agents::DiscoveryType::Resource { resource_type, position } => {
-                        println!("    - Resource: {:?} at ({}, {}) on tick {}",
-                            resource_type, position.x, position.y, discovery.tick);
+                        println!("    - Resource: {:?} at ({}, {}) on turn {}",
+                            resource_type, position.x, position.y, discovery.turn);
                     }
                     ebss::agents::DiscoveryType::Building { building_type, position } => {
-                        println!("    - Building: {:?} at ({}, {}) on tick {}",
-                            building_type, position.x, position.y, discovery.tick);
+                        println!("    - Building: {:?} at ({}, {}) on turn {}",
+                            building_type, position.x, position.y, discovery.turn);
                     }
                     ebss::agents::DiscoveryType::AreaExplored { tiles_count } => {
-                        println!("    - Explored {} tiles at ({}, {}) on tick {}",
-                            tiles_count, discovery.position.x, discovery.position.y, discovery.tick);
+                        println!("    - Explored {} tiles at ({}, {}) on turn {}",
+                            tiles_count, discovery.position.x, discovery.position.y, discovery.turn);
                     }
                     ebss::agents::DiscoveryType::Storage { storage_type, position, capacity } => {
-                        println!("    - Storage: {} at ({}, {}) capacity {:.0}% on tick {}",
-                            storage_type, position.x, position.y, capacity * 100.0, discovery.tick);
+                        println!("    - Storage: {} at ({}, {}) capacity {:.0}% on turn {}",
+                            storage_type, position.x, position.y, capacity * 100.0, discovery.turn);
                     }
                 }
             }

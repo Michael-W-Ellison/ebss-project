@@ -105,13 +105,13 @@ fn a_pack_full_of(filler: &str) -> crate::analytics::Simulation {
 fn a_hungry_man_with_a_full_pack_eats_where_he_stands() {
     let mut simulation = a_pack_of_nothing_but_food_on_a_berry_patch();
 
-    // One tick first, so the body has a reserve and a stomach to put
+    // One turn first, so the body has a reserve and a stomach to put
     // anything in: `now_a_body_of` runs on the turn, and a fixture that has
-    // never ticked has a body that has never been sized. The turn is a whole
+    // never turned has a body that has never been sized. The turn is a whole
     // turn, though - he may set something down or eat something in it - so
     // the pack is filled again afterwards, and it is the second filling that
     // the gather is put to.
-    simulation.tick();
+    simulation.take_a_turn();
     fill_the_pack(&mut simulation, "meat");
 
     let in_the_belly_before = simulation.population.agents[0]
@@ -198,7 +198,7 @@ fn a_full_pack_still_cannot_carry_rocks() {
 fn a_full_pack_of_stone_makes_room_for_the_berries() {
     let mut simulation = a_full_pack_on_a_berry_patch();
 
-    simulation.tick();
+    simulation.take_a_turn();
     fill_the_pack(&mut simulation, "stone");
 
     let stone_before = simulation.population.agents[0]

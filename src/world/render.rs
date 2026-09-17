@@ -130,7 +130,7 @@ impl AsciiRenderer {
         let mut output = String::new();
         let stats = world.stats();
 
-        output.push_str(&format!("\n=== WORLD STATISTICS (Tick {}) ===\n", world.tick));
+        output.push_str(&format!("\n=== WORLD STATISTICS (Turn {}) ===\n", world.turn));
 
         // Population
         output.push_str(&format!("Population: {} agents\n", population.agents.len()));

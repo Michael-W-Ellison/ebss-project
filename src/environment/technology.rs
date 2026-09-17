@@ -158,7 +158,7 @@ pub struct Technology {
     /// Can this be discovered accidentally?
     pub accidental_discovery: bool,
 
-    /// Chance of accidental discovery per tick when conditions met
+    /// Chance of accidental discovery per turn when conditions met
     pub accident_chance: f32,
 
     /// Related recipe ID (if any)

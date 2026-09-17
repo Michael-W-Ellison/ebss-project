@@ -59,7 +59,7 @@ fn what_the_ground_holds(simulation: &Simulation, where_it_is: &Position) -> f32
 
 /// Growing wheat costs the ground; growing beans does not.
 ///
-/// The same tile, the same starting nutrient, the same number of ticks, and
+/// The same tile, the same starting nutrient, the same number of turns, and
 /// the only difference is which plant is standing on it.
 #[test]
 fn a_pod_row_leaves_the_ground_better_than_it_found_it() {
@@ -77,8 +77,8 @@ fn a_pod_row_leaves_the_ground_better_than_it_found_it() {
     }
 
     for _ in 0..600 {
-        wheat.world.tick();
-        beans.world.tick();
+        wheat.world.take_a_turn();
+        beans.world.take_a_turn();
     }
 
     let after_wheat = what_the_ground_holds(&wheat, &field);

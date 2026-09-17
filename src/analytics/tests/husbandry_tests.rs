@@ -156,8 +156,8 @@ fn the_long_view_belongs_to_the_well_fed() {
     let mut hungry = Drive::new(DriveType::Sustenance);
 
     for _ in 0..200 {
-        fed.tick_with_security(true);
-        hungry.tick_with_security(false);
+        fed.turn_with_security(true);
+        hungry.turn_with_security(false);
     }
 
     assert!(
@@ -172,8 +172,8 @@ fn the_long_view_belongs_to_the_well_fed() {
     let mut easy = Drive::new(DriveType::Hunger);
     let mut hard = Drive::new(DriveType::Hunger);
     for _ in 0..200 {
-        easy.tick_with_security(true);
-        hard.tick_with_security(false);
+        easy.turn_with_security(true);
+        hard.turn_with_security(false);
     }
     assert!(
         (easy.value - hard.value).abs() < 0.001,
@@ -322,7 +322,7 @@ fn children_learn_by_watching_their_parents() {
         simulation.population.agents[1].update_life_stage();
 
         // The adult works within sight of the child, over and over
-        for tick in 0..40 {
+        for turn in 0..40 {
             simulation.population.update_who_can_see_whom();
             simulation.population.broadcast_action(
                 adult_id,
@@ -330,7 +330,7 @@ fn children_learn_by_watching_their_parents() {
                 crate::agents::observational_learning::ActionType::Farming,
                 true,
                 "TillSoil".to_string(),
-                tick as u64,
+                turn as u64,
             );
         }
 
@@ -359,7 +359,7 @@ fn children_learn_by_watching_their_parents() {
 /// Agents can see one another at all.
 ///
 /// Nothing populated `vision.visible_agents`, and observation is gated on it,
-/// so the whole observational learning system ran every twenty ticks over an
+/// so the whole observational learning system ran every twenty turns over an
 /// empty list and no agent had ever recorded seeing another do anything.
 #[test]
 fn agents_can_see_each_other() {

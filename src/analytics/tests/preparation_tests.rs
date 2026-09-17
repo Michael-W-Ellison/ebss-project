@@ -333,7 +333,7 @@ fn nobody_tops_up_at_a_patch_they_picked_bare() {
 
     simulation.population.agents[0]
         .exploration_knowledge
-        .found_none_at(underfoot, simulation.current_tick);
+        .found_none_at(underfoot, simulation.current_turn);
 
     assert_eq!(
         simulation.what_i_should_take_while_i_am_here(&simulation.population.agents[0], here),

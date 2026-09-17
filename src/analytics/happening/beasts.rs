@@ -266,7 +266,7 @@ impl Simulation {
         use rand::Rng;
 
         let mut rng = crate::core::dice::roll();
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // Who is where, and who is desperate enough to try
         let agent_positions: Vec<(usize, (i32, i32))> = self
@@ -380,7 +380,7 @@ impl Simulation {
                 agent.take_damage(landed);
                 agent.emotions.record_attack(
                     crate::agents::EmotionSource::Creature(what_it_was.clone()),
-                    current_tick,
+                    current_turn,
                 );
 
                 debug!(

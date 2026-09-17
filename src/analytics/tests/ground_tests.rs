@@ -218,9 +218,9 @@ fn what_somebody_was_carrying_stays_where_they_fell() {
     simulation.population.agents[0].state.is_alive = false;
     simulation.population.agents[0].state.health = 0.0;
 
-    // A tick, so the population clears its dead and the world takes what
+    // A turn, so the population clears its dead and the world takes what
     // they were carrying
-    simulation.tick();
+    simulation.take_a_turn();
 
     let left: Vec<String> = simulation
         .world
@@ -339,7 +339,7 @@ fn food_left_lying_goes_into_the_ground() {
         .unwrap_or(0.0);
 
     for _ in 0..(World::HOW_LONG_A_THING_LIES_THERE / 2) {
-        simulation.world.tick();
+        simulation.world.take_a_turn();
     }
 
     assert!(
@@ -371,7 +371,7 @@ fn a_tool_keeps_longer_than_food_and_not_for_ever() {
     );
 
     for _ in 0..(World::HOW_LONG_A_THING_LIES_THERE / 2) {
-        simulation.world.tick();
+        simulation.world.take_a_turn();
     }
     assert_eq!(
         simulation.world.what_is_lying_at(&here).len(),
@@ -380,7 +380,7 @@ fn a_tool_keeps_longer_than_food_and_not_for_ever() {
     );
 
     for _ in 0..World::HOW_LONG_A_THING_LIES_THERE {
-        simulation.world.tick();
+        simulation.world.take_a_turn();
     }
     assert!(
         simulation.world.what_is_lying_at(&here).is_empty(),

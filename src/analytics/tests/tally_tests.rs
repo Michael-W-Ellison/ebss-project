@@ -17,7 +17,7 @@ use crate::analytics::Simulation;
 use crate::environment::Action;
 use crate::world::{World, WorldConfig};
 
-fn a_settlement(founders: usize, ticks: u32) -> Simulation {
+fn a_settlement(founders: usize, turns: u32) -> Simulation {
     let world = World::new(WorldConfig::default());
     let mut population = Population::new();
     for _ in 0..founders {
@@ -25,8 +25,8 @@ fn a_settlement(founders: usize, ticks: u32) -> Simulation {
     }
 
     let mut simulation = Simulation::new(world, population);
-    for _ in 0..ticks {
-        simulation.tick();
+    for _ in 0..turns {
+        simulation.take_a_turn();
     }
 
     simulation
@@ -97,7 +97,7 @@ fn every_turn_a_decision_was_made_on_is_counted() {
         .copied()
         .unwrap_or(0);
 
-    assert!(turns > 0, "a settlement of twelve over 400 ticks decides something");
+    assert!(turns > 0, "a settlement of twelve over 400 turns decides something");
 
     for (what, n) in &simulation.what_a_threat_came_to {
         assert!(
@@ -151,7 +151,7 @@ fn the_branches_of_the_tree_account_for_every_time_it_was_asked() {
 /// And the instrument is wired to the decision rather than only to its own
 /// denominator. Put a wolf at somebody's elbow rather than hoping a random
 /// world produces one: the first cut of this test ran a settlement for 600
-/// ticks and asserted that *something* had been booked, which is a coin toss
+/// turns and asserted that *something* had been booked, which is a coin toss
 /// on whether anybody met an animal.
 #[test]
 fn the_instrument_is_actually_wired_to_the_decision() {
@@ -172,14 +172,14 @@ fn the_instrument_is_actually_wired_to_the_decision() {
     simulation.population.agents[0].state.health = 100.0;
 
     // Kept at his elbow on purpose. A lone wolf reads the odds against a
-    // healthy adult, decides against it and leaves at six paces a tick — see
+    // healthy adult, decides against it and leaves at six paces a turn — see
     // `what_the_beasts_make_of_us` — which is the fauna model working and not
     // what this test is about.
     for _ in 0..24 {
         if let Some(wolf) = simulation.world.animals.get_all_mut().first_mut() {
             wolf.position = (31, 30);
         }
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let on_the_mind = simulation

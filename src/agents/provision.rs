@@ -61,7 +61,7 @@ pub const UNITS_IN_ONE_STORED_ITEM: f32 =
 /// It is worth saying plainly what having to write this down cost. The store
 /// wanted **seven items put by per mouth for a whole winter** - a figure
 /// picked, with a doc comment reasoning carefully from "a person gets through
-/// about a hundred units in ten thousand ticks", which was true of the body
+/// about a hundred units in ten thousand turns", which was true of the body
 /// this model had before the starvation clock was corrected and is out by
 /// something over two orders of magnitude against the body it has now. Seven
 /// items is half a day. Measured, a person eats **15.4 items a day**, which is

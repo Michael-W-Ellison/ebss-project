@@ -93,14 +93,14 @@ fn a_settlement_keeps_a_reckoning_of_how_it_went() {
     let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
 
     for _ in 0..400 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let went = &simulation.population.stats.how_it_went;
 
     assert!(
         !went.is_empty(),
-        "the breeding pass alone should have booked something in 400 ticks"
+        "the breeding pass alone should have booked something in 400 turns"
     );
     assert!(
         went.keys().any(|what| what.contains("breed")
@@ -183,7 +183,7 @@ fn what_is_missing_off_a_man_is_all_of_it_accounted_for() {
 /// A drip that lands last does not out-rank the lump that did the work.
 ///
 /// The case the old reading got wrong every time: a man beaten to within a
-/// point of his life, finished by the next tick of hunger. The hunger took a
+/// point of his life, finished by the next turn of hunger. The hunger took a
 /// tenth of a point and the reckoning called it starvation.
 #[test]
 fn the_last_straw_does_not_take_the_credit_for_the_load() {
@@ -311,7 +311,7 @@ fn a_broken_body_says_that_it_is_what_is_holding_him_down() {
     let condition = agent.body.overall_health() * 100.0;
     assert!(condition < 100.0, "the body is hurt");
 
-    agent.tick_with_percepts(1);
+    agent.turn_with_percepts(1);
 
     assert!(agent.state.health <= condition + 0.001);
     assert!(
@@ -428,7 +428,7 @@ fn nothing_takes_health_under_a_name_nobody_wrote_down() {
     let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
 
     for _ in 0..2_000 {
-        simulation.tick();
+        simulation.take_a_turn();
         for agent in &simulation.population.agents {
             for (named, _) in &agent.state.what_has_taken_health {
                 assert!(

@@ -150,7 +150,7 @@ fn everybody_standing_there_sees_the_last_of_it_go() {
         assert!(
             simulation.population.agents[who]
                 .exploration_knowledge
-                .is_it_picked_out(here, simulation.current_tick),
+                .is_it_picked_out(here, simulation.current_turn),
             "agent {who} was standing on it when the last of it went"
         );
     }
@@ -183,7 +183,7 @@ fn carrying_something_home_off_it_takes_it_back_off_the_list() {
     assert!(
         !simulation.population.agents[0]
             .exploration_knowledge
-            .is_it_picked_out(here, simulation.current_tick),
+            .is_it_picked_out(here, simulation.current_turn),
         "there was plenty there after all"
     );
 }
@@ -223,7 +223,7 @@ fn nobody_walks_back_to_ground_they_stripped() {
 
     simulation.population.agents[0]
         .exploration_knowledge
-        .found_none_at(near, simulation.current_tick);
+        .found_none_at(near, simulation.current_turn);
 
     assert_eq!(
         simulation.nearest_edible_this_one_would_go_to(
@@ -252,7 +252,7 @@ fn the_only_patch_there_is_gets_walked_to_anyway() {
 
     simulation.population.agents[0]
         .exploration_knowledge
-        .found_none_at(only, simulation.current_tick);
+        .found_none_at(only, simulation.current_turn);
 
     assert_eq!(
         simulation.nearest_edible_this_one_would_go_to(

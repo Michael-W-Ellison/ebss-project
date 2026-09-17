@@ -7,10 +7,10 @@ use std::collections::BTreeMap;
 use crate::agents::Population;
 use crate::core::{DriveType, EmotionType, Trait};
 
-/// Complete snapshot of simulation state at a specific tick
+/// Complete snapshot of simulation state at a specific turn
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TickSnapshot {
-    pub tick: u32,
+pub struct Turnsnapshot {
+    pub turn: u32,
     pub population: PopulationSnapshot,
     pub drives: BTreeMap<DriveType, DriveSnapshot>,
     pub emotions: BTreeMap<EmotionType, EmotionSnapshot>,
@@ -20,14 +20,14 @@ pub struct TickSnapshot {
     pub curiosity: CuriositySnapshot,
 }
 
-/// Population metrics at a specific tick
+/// Population metrics at a specific turn
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PopulationSnapshot {
     pub total: usize,
     pub by_life_stage: BTreeMap<String, usize>, // Infant, Child, etc.
-    pub births_this_tick: u32,
-    pub deaths_this_tick: u32,
-    pub abandonments_this_tick: u32,
+    pub births_this_turn: u32,
+    pub deaths_this_turn: u32,
+    pub abandonments_this_turn: u32,
     pub average_happiness: f32,
     pub average_age: f32,
 }
@@ -88,8 +88,8 @@ pub struct CuriositySnapshot {
 /// Complete time-series metrics for simulation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimulationMetrics {
-    pub snapshots: Vec<TickSnapshot>,
-    pub sampling_interval: u32, // Take snapshot every N ticks
+    pub snapshots: Vec<Turnsnapshot>,
+    pub sampling_interval: u32, // Take snapshot every N turns
     pub max_snapshots: usize,   // Keep only last N snapshots
     pub world_size: (usize, usize), // World dimensions (width, height) for exploration calculation
 }
@@ -107,15 +107,15 @@ impl SimulationMetrics {
 
 
     /// Record a snapshot if it's time to sample
-    pub fn record_if_time(&mut self, tick: u32, population: &Population) {
-        if tick % self.sampling_interval == 0 {
-            self.record_snapshot(tick, population);
+    pub fn record_if_time(&mut self, turn: u32, population: &Population) {
+        if turn % self.sampling_interval == 0 {
+            self.record_snapshot(turn, population);
         }
     }
 
     /// Record a snapshot of current simulation state
-    pub fn record_snapshot(&mut self, tick: u32, population: &Population) {
-        let snapshot = self.create_snapshot(tick, population);
+    pub fn record_snapshot(&mut self, turn: u32, population: &Population) {
+        let snapshot = self.create_snapshot(turn, population);
         self.snapshots.push(snapshot);
 
         // Keep only recent snapshots
@@ -125,9 +125,9 @@ impl SimulationMetrics {
     }
 
     /// Create a snapshot from current population state
-    fn create_snapshot(&self, tick: u32, population: &Population) -> TickSnapshot {
-        TickSnapshot {
-            tick,
+    fn create_snapshot(&self, turn: u32, population: &Population) -> Turnsnapshot {
+        Turnsnapshot {
+            turn,
             population: self.snapshot_population(population),
             drives: self.snapshot_drives(population),
             emotions: self.snapshot_emotions(population),
@@ -159,9 +159,9 @@ impl SimulationMetrics {
         PopulationSnapshot {
             total,
             by_life_stage,
-            births_this_tick: population.stats.births_this_tick,
-            deaths_this_tick: population.stats.deaths_this_tick,
-            abandonments_this_tick: population.stats.abandonments_this_tick,
+            births_this_turn: population.stats.births_this_turn,
+            deaths_this_turn: population.stats.deaths_this_turn,
+            abandonments_this_turn: population.stats.abandonments_this_turn,
             average_happiness: population.stats.average_happiness,
             average_age,
         }
@@ -437,7 +437,7 @@ impl SimulationMetrics {
     pub fn population_trend(&self) -> Vec<(u32, usize)> {
         self.snapshots
             .iter()
-            .map(|s| (s.tick, s.population.total))
+            .map(|s| (s.turn, s.population.total))
             .collect()
     }
 
@@ -445,7 +445,7 @@ impl SimulationMetrics {
     pub fn happiness_trend(&self) -> Vec<(u32, f32)> {
         self.snapshots
             .iter()
-            .map(|s| (s.tick, s.population.average_happiness))
+            .map(|s| (s.turn, s.population.average_happiness))
             .collect()
     }
 
@@ -466,7 +466,7 @@ impl SimulationMetrics {
         let last = self.snapshots.last().unwrap();
 
         SimulationSummary {
-            total_ticks: last.tick - first.tick,
+            total_turns: last.turn - first.turn,
             initial_population: first.population.total,
             final_population: last.population.total,
             population_change: last.population.total as i32 - first.population.total as i32,
@@ -498,7 +498,7 @@ impl SimulationMetrics {
 /// Summary statistics for entire simulation run
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SimulationSummary {
-    pub total_ticks: u32,
+    pub total_turns: u32,
     pub initial_population: usize,
     pub final_population: usize,
     pub population_change: i32,
@@ -540,13 +540,13 @@ mod tests {
         let mut metrics = SimulationMetrics::new(1, 5);
         let population = Population::new();
 
-        for tick in 0..10 {
-            metrics.record_snapshot(tick, &population);
+        for turn in 0..10 {
+            metrics.record_snapshot(turn, &population);
         }
 
         assert_eq!(metrics.snapshots.len(), 5); // Should keep only last 5
-        assert_eq!(metrics.snapshots.first().unwrap().tick, 5);
-        assert_eq!(metrics.snapshots.last().unwrap().tick, 9);
+        assert_eq!(metrics.snapshots.first().unwrap().turn, 5);
+        assert_eq!(metrics.snapshots.last().unwrap().turn, 9);
     }
 
     #[test]

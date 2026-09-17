@@ -80,31 +80,31 @@ fn main() {
     thread::sleep(Duration::from_secs(2));
 
     // Main simulation loop
-    for tick in 0..10000 {
-        performance.start_tick();
+    for turn in 0..10000 {
+        performance.start_turn();
 
         // Process agents (they move and take actions autonomously)
-        process_agent_actions(&mut world, &mut population, tick);
+        process_agent_actions(&mut world, &mut population, turn);
 
         // Update population (aging, reproduction, death, abandonment)
-        population.tick();
+        population.take_a_turn();
 
         // Update world (building construction, resource respawn)
-        world.tick();
+        world.take_a_turn();
 
         // Record metrics
-        metrics.record_if_time(tick, &population);
+        metrics.record_if_time(turn, &population);
 
         // Detect emergence
-        if tick % 100 == 0 && tick > 0 {
-            emergence.detect_patterns(&metrics, tick);
+        if turn % 100 == 0 && turn > 0 {
+            emergence.detect_patterns(&metrics, turn);
         }
 
-        performance.end_tick(tick, population.agents.len());
+        performance.end_turn(turn, population.agents.len());
 
-        // Render frame every 10 ticks
-        if tick % 10 == 0 {
-            render_frame(&renderer, &world, &population, tick, &metrics, &emergence, &performance);
+        // Render frame every 10 turns
+        if turn % 10 == 0 {
+            render_frame(&renderer, &world, &population, turn, &metrics, &emergence, &performance);
 
             // Slow down for visibility
             thread::sleep(Duration::from_millis(100));
@@ -124,7 +124,7 @@ fn main() {
     // Final summary
     let summary = metrics.summary();
     println!("\nFinal Statistics:");
-    println!("  Total Ticks: {}", summary.total_ticks);
+    println!("  Total Turns: {}", summary.total_turns);
     println!("  Initial Population: {}", summary.initial_population);
     println!("  Final Population: {}", population.agents.len());
     println!("  Population Change: {:+}", summary.population_change);
@@ -145,9 +145,9 @@ fn main() {
         println!("\nEmergent Patterns Detected: {}", emergence.detected_patterns.len());
         for (i, pattern) in emergence.most_severe_patterns(3).iter().enumerate() {
             println!(
-                "  {}. [Tick {}] {}",
+                "  {}. [Turn {}] {}",
                 i + 1,
-                pattern.detected_at_tick,
+                pattern.detected_at_turn,
                 pattern.description
             );
         }
@@ -168,7 +168,7 @@ fn verify_information(
     _agent: &mut ebss::agents::Agent,
     resource_position: &Position,
     resource_type: ResourceType,
-    _current_tick: u32,
+    _current_turn: u32,
 ) {
     // Check if the resource actually exists at this location
     let _resource_exists = world.resources.iter().any(|r| {
@@ -189,7 +189,7 @@ fn find_closest_resource(world: &World, from: &Position, resource_type: Resource
 }
 
 /// Process agent actions (simplified autonomous behavior with survival-first priority)
-fn process_agent_actions(world: &mut World, population: &mut Population, tick: u32) {
+fn process_agent_actions(world: &mut World, population: &mut Population, turn: u32) {
     use rand::Rng;
     let mut rng = rand::thread_rng();
 
@@ -212,7 +212,7 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
             // Try to eat if we have food and are hungry
             if has_food && (needs_food || is_critical) {
                 if agent.inventory.remove_item("food", 1).is_some() {
-                    agent.state.eat(tick, 25.0); // Restore 25 energy
+                    agent.state.eat(turn, 25.0); // Restore 25 energy
                     if let Some(hunger_drive) = agent.drives.get_mut(DriveType::Hunger) {
                         hunger_drive.partial_satisfy(0.3);
                     }
@@ -220,9 +220,9 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
             }
 
             // Debug logging
-            if tick % 50 == 0 && tick < 150 {
-                eprintln!("[DEBUG Tick {}] Agent: critical={}, needs_food={}, hunger={:.2}, energy={:.1}, food_inv={}",
-                    tick, is_critical, needs_food, hunger_value, agent.state.energy,
+            if turn % 50 == 0 && turn < 150 {
+                eprintln!("[DEBUG Turn {}] Agent: critical={}, needs_food={}, hunger={:.2}, energy={:.1}, food_inv={}",
+                    turn, is_critical, needs_food, hunger_value, agent.state.energy,
                     agent.inventory.count_item("food"));
             }
 
@@ -325,14 +325,14 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
 
                 // Debug: Log failed food harvesting
                 if matches!(action, Action::HarvestResource { resource_type: ResourceType::Food, .. }) {
-                    if !result.is_success() && tick % 100 < 5 {
+                    if !result.is_success() && turn % 100 < 5 {
                         if let Action::HarvestResource { resource_position, .. } = action {
-                            eprintln!("[DEBUG Tick {}] Food harvest FAILED at ({}, {}) - Agent at ({}, {})",
-                                tick, resource_position.x, resource_position.y,
+                            eprintln!("[DEBUG Turn {}] Food harvest FAILED at ({}, {}) - Agent at ({}, {})",
+                                turn, resource_position.x, resource_position.y,
                                 agent_pos.x, agent_pos.y);
                         }
-                    } else if result.is_success() && tick % 100 < 5 {
-                        eprintln!("[DEBUG Tick {}] Food harvest SUCCESS", tick);
+                    } else if result.is_success() && turn % 100 < 5 {
+                        eprintln!("[DEBUG Turn {}] Food harvest SUCCESS", turn);
                     }
                 }
 
@@ -353,8 +353,8 @@ fn process_agent_actions(world: &mut World, population: &mut Population, tick: u
                             };
                             let item = InventoryItem::new(item_id.to_string(), quantity);
                             agent.inventory.add_item(item);
-                            if matches!(item_type, ItemType::Food) && tick % 100 < 5 {
-                                eprintln!("[DEBUG Tick {}] Added {} food to inventory", tick, quantity);
+                            if matches!(item_type, ItemType::Food) && turn % 100 < 5 {
+                                eprintln!("[DEBUG Turn {}] Added {} food to inventory", turn, quantity);
                             }
                         }
                     }
@@ -369,7 +369,7 @@ fn render_frame(
     renderer: &AsciiRenderer,
     world: &World,
     population: &Population,
-    tick: u32,
+    turn: u32,
     _metrics: &SimulationMetrics,
     emergence: &EmergenceDetector,
     performance: &PerformanceMonitor,
@@ -383,10 +383,10 @@ fn render_frame(
 
     // Show additional info
     println!("╔═══════════════════════════ SIMULATION INFO ════════════════════════════╗");
-    println!("║ Tick: {:6}  │  Population: {:3}  │  TPS: {:6.1}  │  Emergent Patterns: {:2} ║",
-        tick,
+    println!("║ Turn: {:6}  │  Population: {:3}  │  TPS: {:6.1}  │  Emergent Patterns: {:2} ║",
+        turn,
         population.agents.len(),
-        performance.snapshots.last().map(|s| s.ticks_per_second).unwrap_or(0.0),
+        performance.snapshots.last().map(|s| s.turns_per_second).unwrap_or(0.0),
         emergence.detected_patterns.len()
     );
 

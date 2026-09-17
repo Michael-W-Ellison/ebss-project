@@ -90,7 +90,7 @@ fn a_reach_fished_out_fills_again() {
     world.resources.push(reach);
 
     for _ in 0..4_000 {
-        world.tick();
+        world.take_a_turn();
     }
 
     let after = world
@@ -103,7 +103,7 @@ fn a_reach_fished_out_fills_again() {
     assert!(
         after > 30,
         "an empty reach should be carrying fish again inside four thousand \
-         ticks, not stay empty for ever; it held {after}"
+         turns, not stay empty for ever; it held {after}"
     );
 }
 
@@ -333,7 +333,7 @@ fn standing_in_an_empty_river_teaches_something() {
 /// difference is the fishery rather than the weather: the same country, the
 /// same people, and in one of them the fish have been taken out of the water.
 #[test]
-#[ignore = "slow: two worlds to fifteen thousand ticks"]
+#[ignore = "slow: two worlds to fifteen thousand turns"]
 fn a_river_settlement_keeps_its_ground() {
     fn farmed_fertility(simulation: &Simulation) -> f32 {
         let mut total = 0.0;
@@ -377,7 +377,7 @@ fn a_river_settlement_keeps_its_ground() {
             }
             let mut simulation = Simulation::new(world, population);
             for _ in 0..15_000 {
-                simulation.tick();
+                simulation.take_a_turn();
             }
             *total += farmed_fertility(&simulation);
         }

@@ -377,7 +377,7 @@ impl ResourceType {
     /// country agrees - which is the part that matters, because a district
     /// where half the woods bore would be no gamble at all. A cheap integer
     /// hash rather than the dice: it must not depend on how many other things
-    /// have drawn a number this tick, which is ISSUES_FOUND.md #132's whole
+    /// have drawn a number this turn, which is ISSUES_FOUND.md #132's whole
     /// family of trouble.
     pub fn how_heavy_the_mast_is(year: u32) -> f32 {
         // A splitmix64 finaliser, which is what it takes to get a
@@ -574,7 +574,7 @@ impl ResourceType {
             // Nuts fell through to `_ => 0.0` when they were added, which
             // made every nut node non-renewable: it spawned empty out of
             // season, `remove_depleted_resources` deleted all twenty-five of
-            // them on the first tick, and no autumn ever came. That is the
+            // them on the first turn, and no autumn ever came. That is the
             // third time this exact match has swallowed a new food - see the
             // Greens and Roots note above - and the guard that note promised
             // had never been written. It is `every_food_grows_back` now.
@@ -875,7 +875,7 @@ pub struct ResourceNode {
     #[serde(default)]
     pub kind: u8,
 
-    /// What a spring puts out between one pass of the resource tick and the
+    /// What a spring puts out between one pass of the resource turn and the
     /// next, and the least that can be standing in it.
     ///
     /// Water is the one thing here that is a **flow and not a stock**. A
@@ -1160,9 +1160,9 @@ impl ResourceNode {
     /// standing water and lives on the rain. It used to regenerate at nothing
     /// at all and was not counted as renewable, so every drink took a unit out
     /// of the world for good and a lake drunk dry was deleted. A world lost
-    /// more than half its water in fifteen thousand ticks.
+    /// more than half its water in fifteen thousand turns.
     ///
-    /// Returns units per regeneration pass, which runs every ten world ticks.
+    /// Returns units per regeneration pass, which runs every ten world turns.
     /// What a reach of running water gives back in a pass: all of it.
     ///
     /// Not a number so much as a statement that a river is not a stock. It is
@@ -1180,12 +1180,12 @@ impl ResourceNode {
         // springs and ponds of the country they are in, and what feeds them
         // depends on which.
         //
-        // These are reckoned per pass of the resource tick, which comes round
-        // once every ten ticks, and they have to be read against what a
+        // These are reckoned per pass of the resource turn, which comes round
+        // once every ten turns, and they have to be read against what a
         // settlement draws: a drink is a unit or two, and forty people drink
         // something like thirty units in the time between two passes. The
         // first cut of this had a spring giving back **1.5**, which is a
-        // twentieth of that. Measured over six thousand ticks, eight of a
+        // twentieth of that. Measured over six thousand turns, eight of a
         // world's twenty-one sources were drawn down to 2 units out of four
         // hundred and stayed there, and "no water sources nearby" was the
         // single largest refusal in the model - a settlement standing in the
@@ -1225,7 +1225,7 @@ impl ResourceNode {
     }
 
     /// What the run brings into a reach of water, per pass of the resource
-    /// tick (one pass every ten ticks, as `water_inflow` is also reckoned).
+    /// turn (one pass every ten turns, as `water_inflow` is also reckoned).
     ///
     /// Fish do not grow back the way a berry patch grows back. A berry patch
     /// regrows out of what is left of itself, in the ground it stands in, so
@@ -1326,7 +1326,7 @@ impl ResourceNode {
         season_modifier: f32,
         cultivated: bool,
         soil: &mut Soil,
-        ticks_this_pass_stands_for: f32,
+        turns_this_pass_stands_for: f32,
     ) -> u32 {
         self.regenerate_in_ground(
             temperature,
@@ -1334,7 +1334,7 @@ impl ResourceNode {
             season_modifier,
             cultivated,
             soil,
-            ticks_this_pass_stands_for,
+            turns_this_pass_stands_for,
         )
     }
 
@@ -1346,7 +1346,7 @@ impl ResourceNode {
     /// any day it was not actively raining, which cut growth to a fifth
     /// wherever a marsh and a dune were treated alike.
     /// The cadence these rates were fitted against: one pass every ten world
-    /// ticks, when a turn was two hours and `World::tick` said `% 10`.
+    /// turns, when a turn was two hours and `World::take_a_turn` said `% 10`.
     ///
     /// The rates in `how_fast_it_comes_back` and `water_inflow` are
     /// hand-fitted numbers *per pass*, and how long a pass stood for lived as
@@ -1365,13 +1365,13 @@ impl ResourceNode {
         season_modifier: f32,
         cultivated: bool,
         soil: &mut Soil,
-        ticks_this_pass_stands_for: f32,
+        turns_this_pass_stands_for: f32,
     ) -> u32 {
         if self.amount >= self.how_heavy_a_crop_it_carries(soil.fertility(), cultivated) {
             return 0; // As heavy a crop as this ground will carry
         }
 
-        // Base regeneration rate per tick (0-1 units).
+        // Base regeneration rate per turn (0-1 units).
         //
         // Wild food comes back slowly: a hedge of berries feeds a few people
         // and no more, which is what a settlement of a dozen lives on and what
@@ -1503,7 +1503,7 @@ impl ResourceNode {
 
         // Calculate total regeneration
         let how_long_a_pass_is_now =
-            ticks_this_pass_stands_for / Self::WHAT_THESE_RATES_WERE_FITTED_TO;
+            turns_this_pass_stands_for / Self::WHAT_THESE_RATES_WERE_FITTED_TO;
         let regen_amount = how_long_a_pass_is_now
             * base_rate
             * temp_modifier
@@ -1687,9 +1687,9 @@ mod all_resources_tests {
     /// Three foods have now fallen through that match to `_ => 0.0`. A food
     /// with no regrowth rate is not renewable, and a resource that is not
     /// renewable is **deleted the moment it is empty** - so a hedgerow that
-    /// is bare out of its season is deleted on the first tick of the world
+    /// is bare out of its season is deleted on the first turn of the world
     /// and never comes back. Nuts spawned twenty-five stands to a map and had
-    /// none by tick one.
+    /// none by turn one.
     ///
     /// Nothing in the world says "this is food" in one place, so the only way
     /// to hold the two lists together is to walk `all()` and ask both.

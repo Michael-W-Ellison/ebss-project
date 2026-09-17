@@ -9,8 +9,8 @@
 //! been hit went on counting the man who hit him a close friend.
 //!
 //! And nothing could have shown through if it had. The proximity bonus added
-//! up to 0.10 a tick with no ceiling, so a bond saturated within a day of
-//! standing beside somebody. Measured at fifteen thousand ticks before any of
+//! up to 0.10 a turn with no ceiling, so a bond saturated within a day of
+//! standing beside somebody. Measured at fifteen thousand turns before any of
 //! this: 82 to 105 relationships apiece, nine in ten of them at 0.6 or
 //! better, mean bond 0.901, and `RelationshipType::Rival` and `Enemy`
 //! constructed nowhere outside a test file in the whole project's history.
@@ -250,7 +250,7 @@ fn enough_of_them_and_they_are_enemies_by_name() {
     );
 }
 
-/// A grudge reaches the bond through the whole tick, wherever the two of them
+/// A grudge reaches the bond through the whole turn, wherever the two of them
 /// are standing.
 #[test]
 fn a_grudge_reaches_the_bond_from_across_the_map() {
@@ -297,7 +297,7 @@ fn a_settlement_ends_up_with_enemies_in_it() {
     let mut simulation = Simulation::new(world, population);
 
     for _ in 0..4000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let (mut named, mut soured) = (0usize, 0usize);
@@ -322,7 +322,7 @@ fn a_settlement_ends_up_with_enemies_in_it() {
 
     assert!(
         soured > 0,
-        "in four thousand ticks somebody should have fallen out with somebody"
+        "in four thousand turns somebody should have fallen out with somebody"
     );
     assert!(
         named > 0,

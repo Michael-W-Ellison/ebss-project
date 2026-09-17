@@ -47,7 +47,7 @@ fn main() {
 
     // Record a threatening encounter
     current_time += 100;
-    memory.tick(current_time);
+    memory.take_a_turn(current_time);
 
     let combat_episode = memory.record_event(
         EpisodeType::Combat,
@@ -178,7 +178,7 @@ fn main() {
     println!("--- Part 5: Context-Based Memory Recall ---");
 
     current_time += 500;
-    memory.tick(current_time);
+    memory.take_a_turn(current_time);
 
     println!("Agent returns to social gathering location (10, 10, 0)...");
     println!("Recalling relevant memories based on context:\n");
@@ -203,7 +203,7 @@ fn main() {
 
     // Add an important life event
     current_time += 200;
-    memory.tick(current_time);
+    memory.take_a_turn(current_time);
 
     memory.record_event(
         EpisodeType::LifeEvent,
@@ -228,7 +228,7 @@ fn main() {
     println!("--- Part 7: Memory-Based Decision Making ---");
 
     current_time += 100;
-    memory.tick(current_time);
+    memory.take_a_turn(current_time);
 
     let context = memory.get_decision_context(Some((20, 15, 0)));
 
@@ -275,14 +275,14 @@ fn main() {
     // ===== Part 9: Memory Over Time =====
     println!("--- Part 9: Memory Decay and Persistence ---");
 
-    println!("Simulating passage of time (2000 ticks)...");
+    println!("Simulating passage of time (2000 turns)...");
     for _ in 0..2000 {
         current_time += 1;
-        memory.tick(current_time);
+        memory.take_a_turn(current_time);
     }
 
     let final_stats = memory.episodic.stats();
-    println!("\nAfter 2000 ticks:");
+    println!("\nAfter 2000 turns:");
     println!("  Episodes retained: {}", final_stats.total_episodes);
     println!("  Average strength: {:.2}", final_stats.average_strength);
     println!("  Consolidated memories: {}", final_stats.consolidated_episodes);

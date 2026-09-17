@@ -39,18 +39,18 @@ impl MemoryManager {
             episodic: EpisodicMemory::default(),
             working: WorkingMemory::default(),
             current_time: 0,
-            consolidation_interval: 1000, // Consolidate every 1000 ticks
+            consolidation_interval: 1000, // Consolidate every 1000 turns
             last_consolidation: 0,
         }
     }
 
-    /// Tick all memory systems
-    pub fn tick(&mut self, current_time: u64) {
+    /// Turn all memory systems
+    pub fn take_a_turn(&mut self, current_time: u64) {
         self.current_time = current_time;
 
-        self.long_term.tick();
-        self.episodic.tick(current_time);
-        self.working.tick(current_time);
+        self.long_term.take_a_turn();
+        self.episodic.take_a_turn(current_time);
+        self.working.take_a_turn(current_time);
 
         // Perform consolidation if needed
         if current_time.saturating_sub(self.last_consolidation) >= self.consolidation_interval {

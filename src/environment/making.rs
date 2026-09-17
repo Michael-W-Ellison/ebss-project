@@ -348,7 +348,7 @@ pub const WHEEL: Making = Making {
 /// What it does is carry, and `TransportSystem` has been able to model exactly
 /// that since it was written - capacity already summed into
 /// `Inventory::max_weight`, speed already multiplied into
-/// `movement_speed_at_tick`. Nothing had ever put a transport into it.
+/// `movement_speed_at_turn`. Nothing had ever put a transport into it.
 pub const HANDCART: Making = Making {
     makes: "handcart",
     how_many: 1,

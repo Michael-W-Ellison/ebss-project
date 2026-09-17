@@ -250,17 +250,17 @@ fn a_nut_is_the_best_thing_in_the_wood_and_it_keeps() {
     // else a settlement puts by has to be dried, salted, smoked or buried,
     // and the throughput of that is what caps the winter store - #241.
     assert!(
-        nuts.base_spoilage_ticks > meat.base_spoilage_ticks * 10,
+        nuts.base_spoilage_turns > meat.base_spoilage_turns * 10,
         "a nut outlasts fresh meat many times over: {} against {}",
-        nuts.base_spoilage_ticks,
-        meat.base_spoilage_ticks
+        nuts.base_spoilage_turns,
+        meat.base_spoilage_turns
     );
     assert!(
-        nuts.base_spoilage_ticks
+        nuts.base_spoilage_turns
             > (crate::environment::seasons::DAYS_PER_SEASON
-                * crate::environment::seasons::TICKS_PER_DAY) as u32,
+                * crate::environment::seasons::TURNS_PER_DAY) as u32,
         "gathered in October and still food in March: {}",
-        nuts.base_spoilage_ticks
+        nuts.base_spoilage_turns
     );
 }
 

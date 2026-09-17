@@ -12,7 +12,7 @@
 //! and `Uuid::new_v4()` all ask the operating system and none of them can be
 //! seeded. The last ten of those - every wander an animal takes, and whether
 //! it grazes, rests or hunts - moved the beasts differently in every run, and
-//! by the fiftieth tick it had reached the people through the Safety drive of
+//! by the fiftieth turn it had reached the people through the Safety drive of
 //! anybody who could see one.
 //!
 //! **Order taken from a `HashMap`.** Rust seeds hash iteration *per process*,
@@ -60,7 +60,7 @@ fn fingerprint(sim: &Simulation) -> u64 {
 }
 
 /// A world's fingerprint, and how many times it rolled to get there.
-fn a_world_from(seed: u64, ticks: usize) -> (u64, u64) {
+fn a_world_from(seed: u64, turns: usize) -> (u64, u64) {
     crate::core::dice::seed(seed);
     let world = World::new(WorldConfig::default());
     let mut population = Population::new();
@@ -68,8 +68,8 @@ fn a_world_from(seed: u64, ticks: usize) -> (u64, u64) {
         population.spawn_agent(AgentConfig::default());
     }
     let mut simulation = Simulation::new(world, population);
-    for _ in 0..ticks {
-        simulation.tick();
+    for _ in 0..turns {
+        simulation.take_a_turn();
     }
     (fingerprint(&simulation), crate::core::dice::draws_taken())
 }
@@ -119,13 +119,13 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // the candidate list stopped offering verbs whose action names a product
     // rather than a target - see `wanting::afforded::what_i_could_try_here`.
     // Both change which branch a turn takes, and so how many times it rolls.
-    const WHAT_SEED_4242_ROLLS_IN_120_TICKS: u64 = 8_717;
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 8_717;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
     assert_eq!(
-        rolled, WHAT_SEED_4242_ROLLS_IN_120_TICKS,
-        "seed 4242 rolled {rolled} times where it has always rolled {WHAT_SEED_4242_ROLLS_IN_120_TICKS}. \
+        rolled, WHAT_SEED_4242_ROLLS_IN_120_TURNS,
+        "seed 4242 rolled {rolled} times where it has always rolled {WHAT_SEED_4242_ROLLS_IN_120_TURNS}. \
          Either the model was changed on purpose - in which case put {rolled} in \
          the constant - or something is deciding a branch on an input the seed \
          does not fix, which is what this is here to catch."
@@ -141,14 +141,14 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
 /// says "not one settlement of thirty-two came out".
 #[test]
 fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
-    use crate::environment::seasons::{DAYS_PER_YEAR, TICKS_PER_DAY};
+    use crate::environment::seasons::{DAYS_PER_YEAR, TURNS_PER_DAY};
     // 732,915, then 793,014 for the curiosity and candidate-list changes, and
     // now this for the lifecycle work: a child under six takes no turn of its
     // own and is put where its keeper is, which moves both how many turns a
     // year contains and where the people in it are standing.
     const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 804_474;
 
-    let a_year = (DAYS_PER_YEAR * TICKS_PER_DAY) as usize;
+    let a_year = (DAYS_PER_YEAR * TURNS_PER_DAY) as usize;
     let (_, rolled) = a_world_from(0, a_year);
 
     assert_eq!(
@@ -172,7 +172,7 @@ fn a_different_seed_is_a_different_world() {
 /// A source-level guard rather than a behavioural one, because that is the
 /// only kind that works here: the world test above catches a stray
 /// `thread_rng` only if the code path happens to run in a hundred and twenty
-/// ticks, and a new one in a rarely-taken branch would sit undetected until it
+/// turns, and a new one in a rarely-taken branch would sit undetected until it
 /// spoiled somebody's measurement months later.
 #[test]
 fn every_roll_comes_from_the_one_stream() {

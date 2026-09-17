@@ -149,7 +149,7 @@ fn a_person_is_not_a_kind_of_thing() {
 // ---------------------------------------------------------------------------
 
 use crate::agents::practices::Lessons;
-use crate::environment::seasons::{DAYS_PER_SEASON, TICKS_PER_DAY};
+use crate::environment::seasons::{DAYS_PER_SEASON, TURNS_PER_DAY};
 
 /// Diminishing returns, and no second rule to say so.
 ///
@@ -220,8 +220,8 @@ fn a_thing_tried_once_and_left_is_new_again_within_the_year() {
     assert_eq!(lessons.how_new_is_this("stack:stone"), 0.5);
 
     // A season of not doing it. `fade` is charged by the day, so one call
-    // carrying a season's worth of ticks is the same as ninety daily ones.
-    lessons.fade(DAYS_PER_SEASON * TICKS_PER_DAY);
+    // carrying a season's worth of turns is the same as ninety daily ones.
+    lessons.fade(DAYS_PER_SEASON * TURNS_PER_DAY);
 
     assert_eq!(
         lessons.how_new_is_this("stack:stone"),
@@ -243,7 +243,7 @@ fn a_thing_done_often_survives_the_season() {
     }
     let before = lessons.tried_this("gather:roots");
 
-    lessons.fade(DAYS_PER_SEASON * TICKS_PER_DAY);
+    lessons.fade(DAYS_PER_SEASON * TURNS_PER_DAY);
     let after = lessons.tried_this("gather:roots");
 
     assert!(after < before, "a season took nothing off it at all: {before}");
@@ -271,7 +271,7 @@ fn forgetting_a_failure_leaves_it_worth_one_more_go() {
     // season, so they fall under `TOO_FAINT_TO_COUNT` at about fourteen
     // months - a thing done a dozen times is remembered for rather more than
     // a year, which is the shape wanted.
-    lessons.fade(5 * DAYS_PER_SEASON * TICKS_PER_DAY);
+    lessons.fade(5 * DAYS_PER_SEASON * TURNS_PER_DAY);
 
     assert!(
         lessons.how_likely_to_try_this("fold:hide") > soured,
@@ -294,10 +294,10 @@ fn fading_twice_in_a_day_takes_no_more_than_fading_once() {
         often.record_particular("gather:roots", true);
     }
 
-    let a_day = DAYS_PER_SEASON * TICKS_PER_DAY;
+    let a_day = DAYS_PER_SEASON * TURNS_PER_DAY;
     once.fade(a_day);
-    for tick in 0..=a_day {
-        often.fade(tick);
+    for turn in 0..=a_day {
+        often.fade(turn);
     }
 
     assert_eq!(

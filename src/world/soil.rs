@@ -71,7 +71,7 @@ impl Soil {
     ///
     /// Nutrients above this run off or blow away rather than banking up, which
     /// is what stops a settlement turning one field into an infinite larder by
-    /// piling refuse on it for ten thousand ticks.
+    /// piling refuse on it for ten thousand turns.
     pub const MAX_NUTRIENTS: f32 = 1.0;
 
     /// How much litter one tile can hold before more of it simply will not fit
@@ -116,7 +116,7 @@ impl Soil {
     /// Set so that about half of what the plant took up stays put, which is
     /// roughly where a cereal sits. Without it the model treated every plant
     /// as though the whole of it were carried off, and a settlement's fields
-    /// fell from 0.53 fertility to 0.04 inside thirty thousand ticks however
+    /// fell from 0.53 fertility to 0.04 inside thirty thousand turns however
     /// much its people put back at the other end.
     pub const RESIDUE_PER_UNIT_GROWN: f32 =
         Self::NUTRIENT_PER_UNIT_GROWN * 0.5 / Self::KEPT_FROM_ROT;
@@ -296,7 +296,7 @@ impl Soil {
     ///
     /// Two units of waste on the same ground, which is about what a camp
     /// leaves on one tile over a season. This was five times higher to begin
-    /// with, and measured over six thousand ticks it meant that of a thousand
+    /// with, and measured over six thousand turns it meant that of a thousand
     /// tiles carrying seed not one carried enough: people move about, and no
     /// single tile ever caught up.
     pub const ENOUGH_TO_COME_UP: f32 = 0.1;
@@ -345,8 +345,8 @@ impl Soil {
     ///
     /// Returns how much nutrient was released, which is mostly of interest to
     /// tests.
-    pub fn decay(&mut self, humidity: f32, ticks: f32) -> f32 {
-        /// Share of soft litter that goes per tick in ideal conditions
+    pub fn decay(&mut self, humidity: f32, turns: f32) -> f32 {
+        /// Share of soft litter that goes per turn in ideal conditions
         const LEAF_RATE: f32 = 0.0006;
 
         /// And of wood, which is dense enough to keep the wet out of its middle
@@ -366,10 +366,10 @@ impl Soil {
         // why the ground people walked away from a season ago is ground they
         // will sit on again.
         const FOULING_RATE: f32 = 0.006;
-        self.fouling = (self.fouling - self.fouling * FOULING_RATE * activity * ticks).max(0.0);
+        self.fouling = (self.fouling - self.fouling * FOULING_RATE * activity * turns).max(0.0);
 
-        let from_leaves = (self.leaf_litter * LEAF_RATE * activity * ticks).min(self.leaf_litter);
-        let from_wood = (self.woody_litter * WOOD_RATE * activity * ticks).min(self.woody_litter);
+        let from_leaves = (self.leaf_litter * LEAF_RATE * activity * turns).min(self.leaf_litter);
+        let from_wood = (self.woody_litter * WOOD_RATE * activity * turns).min(self.woody_litter);
 
         self.leaf_litter -= from_leaves;
         self.woody_litter -= from_wood;
@@ -394,7 +394,7 @@ impl Soil {
         /// because it is the opening rate applied to ground that would have
         /// been getting poorer all the way through. The straight-line answer
         /// runs ahead of the true one, and a growing pass that stands for
-        /// fourteen hundred and forty ticks strips ground that fine steps
+        /// fourteen hundred and forty turns strips ground that fine steps
         /// would only have thinned - see `PlantManager::grow_a_zone`.
         ///
         /// Half is the round number that keeps the error bounded without
@@ -420,7 +420,7 @@ impl Soil {
     ///
     /// Ground already at `MAX_NUTRIENTS` takes nothing, which is what stops a
     /// settlement turning one tile into an infinite larder by leaving beans on
-    /// it for ten thousand ticks.
+    /// it for ten thousand turns.
     pub fn feed(&mut self, amount: f32) -> f32 {
         let before = self.nutrients;
         self.nutrients = (self.nutrients + amount.max(0.0)).min(Self::MAX_NUTRIENTS);
@@ -432,10 +432,10 @@ impl Soil {
     /// Muck and the seed in it: the two things that are *put* on a tile by
     /// something happening there, as against the litter that every piece of
     /// ground in the world carries from the day it is made. Two phases of the
-    /// tick - what comes up out of a midden, and what a midden smells of -
+    /// turn - what comes up out of a midden, and what a midden smells of -
     /// used to look for these by walking every tile in the world, which made
-    /// a tick cost the area of the map rather than what was happening on it.
-    /// At a hundred square kilometres that was 47ms a tick and three and a
+    /// a turn cost the area of the map rather than what was happening on it.
+    /// At a hundred square kilometres that was 47ms a turn and three and a
     /// half minutes a simulated year.
     ///
     /// The first cut of this asked whether the ground had *anything* on it,
@@ -447,7 +447,7 @@ impl Soil {
     ///
     /// Litter is not in here on purpose: every tile has some, so rotting it is
     /// honest work over the whole map and stays a sweep. It runs once in ten
-    /// ticks and costs about half a millisecond over a million tiles, which is
+    /// turns and costs about half a millisecond over a million tiles, which is
     /// a twentieth of what these two were costing.
     ///
     /// See ISSUES_FOUND.md #128.
@@ -472,7 +472,7 @@ impl Soil {
     /// harvesting.
     pub const OVERRUN: f32 = 1.0;
 
-    /// How fast a field goes back to meadow, per tick of growing weather.
+    /// How fast a field goes back to meadow, per turn of growing weather.
     ///
     /// A season of neglect takes a field most of the way. Nothing comes in on
     /// ground that is not broken - a meadow cannot get any weedier than it
@@ -489,8 +489,8 @@ impl Soil {
     /// `growing` is how good the weather is for growing anything at all, which
     /// is the same weather the crop wants: weeds do best exactly when the
     /// wheat does.
-    pub fn nobody_weeded_this(&mut self, growing: f32, ticks: f32) {
-        let coming_on = growing.clamp(0.0, 1.0) * Self::WHAT_A_FIELD_LOSES_TO_NEGLECT * ticks;
+    pub fn nobody_weeded_this(&mut self, growing: f32, turns: f32) {
+        let coming_on = growing.clamp(0.0, 1.0) * Self::WHAT_A_FIELD_LOSES_TO_NEGLECT * turns;
 
         self.weeds = (self.weeds + coming_on).clamp(0.0, Self::OVERRUN);
         // Vermin follow the crop rather than the weather, and are slower to

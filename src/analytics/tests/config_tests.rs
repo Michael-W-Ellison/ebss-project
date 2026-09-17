@@ -10,7 +10,7 @@ fn test_simulation_config_default() {
     let config = SimulationConfig::default();
 
     // Should have reasonable defaults
-    assert!(config.max_ticks.is_none(), "Default should have no tick limit");
+    assert!(config.max_turns.is_none(), "Default should have no turn limit");
     assert_eq!(config.enable_logging, true);
     assert_eq!(config.enable_metrics, true);
 }
@@ -35,10 +35,10 @@ fn the_seed_that_fixes_a_run_is_the_one_in_dice() {
 }
 
 #[test]
-fn test_simulation_config_with_max_ticks() {
-    let config = SimulationConfig::default().with_max_ticks(1000);
+fn test_simulation_config_with_max_turns() {
+    let config = SimulationConfig::default().with_max_turns(1000);
 
-    assert_eq!(config.max_ticks, Some(1000));
+    assert_eq!(config.max_turns, Some(1000));
 }
 
 #[test]
@@ -58,11 +58,11 @@ fn test_simulation_config_disable_metrics() {
 #[test]
 fn test_simulation_config_builder_pattern() {
     let config = SimulationConfig::default()
-        .with_max_ticks(5000)
+        .with_max_turns(5000)
         .with_logging(true)
         .with_metrics(true);
 
-    assert_eq!(config.max_ticks, Some(5000));
+    assert_eq!(config.max_turns, Some(5000));
     assert_eq!(config.enable_logging, true);
     assert_eq!(config.enable_metrics, true);
 }
@@ -70,18 +70,18 @@ fn test_simulation_config_builder_pattern() {
 #[test]
 fn test_simulation_config_validate_valid() {
     let config = SimulationConfig::default()
-        .with_max_ticks(1000);
+        .with_max_turns(1000);
 
     assert!(config.validate().is_ok());
 }
 
 #[test]
-fn test_simulation_config_validate_zero_max_ticks() {
+fn test_simulation_config_validate_zero_max_turns() {
     let mut config = SimulationConfig::default();
-    config.max_ticks = Some(0);
+    config.max_turns = Some(0);
 
     let result = config.validate();
-    assert!(result.is_err(), "max_ticks of 0 should be invalid");
+    assert!(result.is_err(), "max_turns of 0 should be invalid");
 }
 
 #[test]
@@ -103,16 +103,16 @@ fn test_simulation_config_validate_metrics_interval() {
 
 #[test]
 fn test_simulation_config_clone() {
-    let config1 = SimulationConfig::default().with_max_ticks(2000);
+    let config1 = SimulationConfig::default().with_max_turns(2000);
 
     let config2 = config1.clone();
 
-    assert_eq!(config1.max_ticks, config2.max_ticks);
+    assert_eq!(config1.max_turns, config2.max_turns);
 }
 
 #[test]
 fn test_simulation_config_debug() {
-    let config = SimulationConfig::default().with_max_ticks(123);
+    let config = SimulationConfig::default().with_max_turns(123);
 
     let debug_str = format!("{:?}", config);
 

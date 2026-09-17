@@ -70,7 +70,7 @@ impl Simulation {
     /// that once had a meal on it would smell of cooking for the rest of the
     /// run.
     pub(in crate::analytics) fn clear_finished_cooking(&mut self) {
-        let cooking_time = Self::COOKING_SMELL_TICKS;
+        let cooking_time = Self::COOKING_SMELL_TURNS;
 
         for heat_source in self.world.heat_sources.all_mut() {
             heat_source.contents.retain(|content| {
@@ -99,7 +99,7 @@ impl Simulation {
 
             let agent_pos = agent.state.position;
 
-            // Scents are re-derived from the world every tick, so the previous
+            // Scents are re-derived from the world every turn, so the previous
             // set is dropped first. Appending instead would pile up thousands
             // of duplicates, and stale ones would keep rebuilding memories of
             // patches that no longer exist.

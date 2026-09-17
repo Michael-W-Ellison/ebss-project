@@ -53,16 +53,16 @@ mod gui_stubs {
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct SimulationEvent {
         pub id: Uuid,
-        pub tick: u32,
+        pub turn: u32,
         pub event_type: SimulationEventType,
         pub position: Option<(i32, i32)>,
     }
 
     impl SimulationEvent {
-        pub fn new(tick: u32, event_type: SimulationEventType, position: Option<(i32, i32)>) -> Self {
+        pub fn new(turn: u32, event_type: SimulationEventType, position: Option<(i32, i32)>) -> Self {
             Self {
                 id: crate::core::dice::name(),
-                tick,
+                turn,
                 event_type,
                 position,
             }
@@ -84,10 +84,10 @@ pub struct PopulationStats {
     pub adolescents: usize,
     pub adults: usize,
     pub elderly: usize,
-    // Per-tick tracking (reset at start of each tick)
-    pub births_this_tick: u32,
-    pub deaths_this_tick: u32,
-    pub abandonments_this_tick: u32,
+    // Per-turn tracking (reset at start of each turn)
+    pub births_this_turn: u32,
+    pub deaths_this_turn: u32,
+    pub abandonments_this_turn: u32,
     /// What killed people, by name, and where the breeding pass turned away.
     ///
     /// The same argument as `Simulation::actions_failed_because`, one level
@@ -105,9 +105,9 @@ pub struct PopulationStats {
 pub struct PopulationConfig {
     /// Happiness threshold below which agents consider leaving (-1.0 to 1.0)
     pub abandonment_happiness_threshold: f32,
-    /// How long an agent must be unhappy before they can leave (ticks)
+    /// How long an agent must be unhappy before they can leave (turns)
     pub abandonment_unhappy_duration: u32,
-    /// Probability per tick that an unhappy agent will leave
+    /// Probability per turn that an unhappy agent will leave
     pub abandonment_probability: f32,
     /// Whether anybody in this population ever dies of old age.
     ///
@@ -130,8 +130,8 @@ impl Default for PopulationConfig {
     fn default() -> Self {
         Self {
             abandonment_happiness_threshold: -0.3, // Leave if happiness below -0.3
-            abandonment_unhappy_duration: 1000,    // Must be unhappy for 1000 ticks
-            abandonment_probability: 0.01,         // 1% chance per tick when eligible
+            abandonment_unhappy_duration: 1000,    // Must be unhappy for 1000 turns
+            abandonment_probability: 0.01,         // 1% chance per turn when eligible
             nobody_dies_of_old_age: false,
         }
     }
@@ -144,10 +144,10 @@ pub struct Population {
     pub reproduction_cooldown: BTreeMap<Uuid, u32>,
     pub config: PopulationConfig,
     pub unhappiness_tracker: BTreeMap<Uuid, u32>, // Track how long agents have been unhappy
-    pub current_tick: u32, // Current simulation tick for survival mechanics
+    pub current_turn: u32, // Current simulation turn for survival mechanics
     pub shared_knowledge: SharedKnowledge, // Shared resource/world information between agents
     pub technology_registry: TechnologyRegistry, // Global technology discovery tracking
-    /// Events that occurred this tick (for GUI timeline)
+    /// Events that occurred this turn (for GUI timeline)
     pub pending_events: Vec<SimulationEvent>,
     /// Where bodies fell since the simulation last collected them, and what
     /// each is worth to the ground as soft matter and as bone. A population
@@ -170,7 +170,7 @@ impl Population {
             reproduction_cooldown: BTreeMap::new(),
             config: PopulationConfig::default(),
             unhappiness_tracker: BTreeMap::new(),
-            current_tick: 0,
+            current_turn: 0,
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
             pending_events: Vec::new(),
@@ -191,7 +191,7 @@ impl Population {
             reproduction_cooldown: BTreeMap::new(),
             config,
             unhappiness_tracker: BTreeMap::new(),
-            current_tick: 0,
+            current_turn: 0,
             shared_knowledge: SharedKnowledge::new(),
             technology_registry: registry,
             pending_events: Vec::new(),
@@ -256,8 +256,8 @@ impl Population {
         // Founders were spawned at age nought, and `LifeStage::from_age` calls
         // anything under five hundred an infant, so every world began with
         // twelve newborns and nobody to feed them. None of them reached
-        // `LifeStage::Adult` until tick 2,501, a quarter of the way through a
-        // ten-thousand-tick run, and until then each carried an infant's
+        // `LifeStage::Adult` until turn 2,501, a quarter of the way through a
+        // ten-thousand-turn run, and until then each carried an infant's
         // reserve - a quarter of a grown body's - while foraging for itself.
         //
         // Nothing showed it while nothing could starve. The moment the body
@@ -269,7 +269,7 @@ impl Population {
             let mut rng = crate::core::dice::roll();
             // Grown people, between twenty and forty
             let years = rng.gen_range(20..40);
-            agent.state.age = years * crate::environment::seasons::TICKS_PER_YEAR;
+            agent.state.age = years * crate::environment::seasons::TURNS_PER_YEAR;
             agent.state.life_stage = LifeStage::from_age(agent.state.age);
             agent
                 .state
@@ -312,7 +312,7 @@ impl Population {
         agent.technology_knowledge.add_initial_technology(
             "fire".to_string(),
             agent.id,
-            self.current_tick as u64
+            self.current_turn as u64
         );
 
         // And how to put a handle on a stone. Crafting checks a technology as
@@ -329,7 +329,7 @@ impl Population {
         // measurably bad for the land: a people who can put handles on stones
         // take a great deal more off it, and the nutrient-loop regression,
         // which asks that farmed ground not lose half its fertility in ten
-        // thousand ticks, went from passing three times in four to once in
+        // thousand turns, went from passing three times in four to once in
         // five.
         //
         // Which is the right behaviour and the wrong starting point. They are
@@ -364,27 +364,27 @@ impl Population {
     }
 
     /// Update all agents and handle lifecycle events
-    pub fn tick(&mut self) {
-        self.current_tick += 1;
+    pub fn take_a_turn(&mut self) {
+        self.current_turn += 1;
 
-        // Reset per-tick counters at the start of each tick
-        self.stats.births_this_tick = 0;
-        self.stats.deaths_this_tick = 0;
-        self.stats.abandonments_this_tick = 0;
+        // Reset per-turn counters at the start of each turn
+        self.stats.births_this_turn = 0;
+        self.stats.deaths_this_turn = 0;
+        self.stats.abandonments_this_turn = 0;
 
-        // Update shared knowledge tick counter
-        self.shared_knowledge.tick();
+        // Update shared knowledge turn counter
+        self.shared_knowledge.take_a_turn();
 
         // Update all agents
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
         for agent in &mut self.agents {
-            agent.tick_with_percepts(current_tick); // Process percepts with timestamp
+            agent.turn_with_percepts(current_turn); // Process percepts with timestamp
             // Aging, metabolism, food spoilage and fatigue (pregnancy modifier applied inside)
-            agent.process_survival_tick(current_tick);
+            agent.process_survival_turn(current_turn);
             // A hand cannot go on holding a spear that has been given away,
             // stolen, worn through or eaten. Everything leaves the pack
             // through the inventory, which knows nothing about hands, so the
-            // hands are reconciled against it once a tick.
+            // hands are reconciled against it once a turn.
             agent.let_go_of_what_i_no_longer_have();
         }
 
@@ -395,19 +395,19 @@ impl Population {
         // book and the bond in another
         self.let_grudges_tell_on_the_bond();
 
-        // Decay distant relationships (every 100 ticks to reduce overhead)
-        if current_tick % crate::environment::seasons::ONCE_A_WEEK == 0 {
+        // Decay distant relationships (every 100 turns to reduce overhead)
+        if current_turn % crate::environment::seasons::ONCE_A_WEEK == 0 {
             self.decay_relationships();
         }
 
-        // Process social interactions (every 10 ticks to reduce overhead)
-        if current_tick % crate::environment::seasons::ONCE_A_DAY == 0 {
+        // Process social interactions (every 10 turns to reduce overhead)
+        if current_turn % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.process_social_interactions();
         }
 
-        // Process trait-based proximity effects (every 10 ticks)
+        // Process trait-based proximity effects (every 10 turns)
         // Handles: Romantic partner happiness, Mediator calming, Intolerant stranger penalty
-        if current_tick % crate::environment::seasons::ONCE_A_DAY == 0 {
+        if current_turn % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.process_trait_proximity_effects();
         }
 
@@ -415,12 +415,12 @@ impl Population {
         //
         // Nothing populated `vision.visible_agents`, and observation is gated
         // on it, so no agent had ever recorded seeing another do anything:
-        // the whole observational learning system ran every twenty ticks over
+        // the whole observational learning system ran every twenty turns over
         // an empty list. It is also what `Percept::AgentDetected` is built on.
         self.update_who_can_see_whom();
 
-        // Process observational learning (every 20 ticks to reduce overhead)
-        if current_tick % crate::environment::seasons::ONCE_EVERY_OTHER_DAY == 0 {
+        // Process observational learning (every 20 turns to reduce overhead)
+        if current_turn % crate::environment::seasons::ONCE_EVERY_OTHER_DAY == 0 {
             self.process_observational_learning();
         }
 
@@ -431,7 +431,7 @@ impl Population {
         self.say_it_out_loud();
 
         // What nobody has any use for goes out of their heads again
-        let now = self.current_tick;
+        let now = self.current_turn;
         for agent in self.agents.iter_mut() {
             if agent.state.is_alive {
                 agent.forget_what_does_not_matter(now);
@@ -441,8 +441,8 @@ impl Population {
         // Share technologies between nearby agents
         self.share_technologies();
 
-        // Attempt technology discovery (every 50 ticks to reduce overhead)
-        if current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
+        // Attempt technology discovery (every 50 turns to reduce overhead)
+        if current_turn % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
             self.discover_technologies();
         }
 
@@ -683,7 +683,7 @@ impl Population {
                                     DiscoveryMethod::Instruction,
                                     teacher_confidence,
                                     trust_2_to_1,
-                                    self.current_tick as u64,
+                                    self.current_turn as u64,
                                 );
                             }
                         }
@@ -703,7 +703,7 @@ impl Population {
                                     DiscoveryMethod::Instruction,
                                     teacher_confidence,
                                     trust_1_to_2,
-                                    self.current_tick as u64,
+                                    self.current_turn as u64,
                                 );
                             }
                         }
@@ -722,7 +722,7 @@ impl Population {
         use rand::Rng;
         let mut rng = crate::core::dice::roll();
 
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // Collect discoveries to be made (to avoid borrowing issues)
         // (agent_idx, tech_id, agent_uuid, position)
@@ -770,7 +770,7 @@ impl Population {
                     // Record discovery for later
                     let pos = (agent.state.position.0, agent.state.position.1);
                     discoveries.push((agent_idx, tech.id.clone(), agent.id, pos));
-                    break; // Only one discovery per tick per agent
+                    break; // Only one discovery per turn per agent
                 }
             }
         }
@@ -780,12 +780,12 @@ impl Population {
             let is_world_first = self.technology_registry.record_first_discovery(
                 tech_id.clone(),
                 agent_id,
-                current_tick as u64,
+                current_turn as u64,
             );
 
             // Emit technology discovery event
             self.pending_events.push(SimulationEvent::new(
-                self.current_tick,
+                self.current_turn,
                 SimulationEventType::TechnologyDiscovered {
                     tech_id: tech_id.clone(),
                     discoverer_id: agent_id,
@@ -798,7 +798,7 @@ impl Population {
                 tech_id,
                 agent_id,
                 DiscoveryMethod::Experimentation,
-                current_tick as u64,
+                current_turn as u64,
                 is_world_first,
             );
         }
@@ -860,14 +860,14 @@ impl Population {
                     AgentState::A_BLOW => DeathCause::Combat {
                         // A killing is laid at the door of a man, and a wolf
                         // has no door.
-                        killer_id: agent.emotions.whoever_struck_me(self.current_tick),
+                        killer_id: agent.emotions.whoever_struck_me(self.current_turn),
                     },
                     _ => DeathCause::Unknown,
                 };
 
                 let (cause_str, cause_enum) = (named, cause_enum);
                 let pos = (agent.state.position.0, agent.state.position.1);
-                let killed_by = agent.emotions.recent_attacker(self.current_tick);
+                let killed_by = agent.emotions.recent_attacker(self.current_turn);
                 (agent.id, cause_str, pos, cause_enum, killed_by)
             })
             .collect();
@@ -896,7 +896,7 @@ impl Population {
         // Emit death events for timeline
         for (deceased_id, _cause_str, pos, cause_enum, _) in &dead_agents {
             self.pending_events.push(SimulationEvent::new(
-                self.current_tick,
+                self.current_turn,
                 SimulationEventType::Death {
                     agent_id: *deceased_id,
                     cause: cause_enum.clone(),
@@ -983,7 +983,7 @@ impl Population {
                             },
                             *deceased_id, // Source is the deceased
                             true, // Ground truth
-                            self.current_tick as u64,
+                            self.current_turn as u64,
                         );
                         agent.knowledge.known_information.insert(death_info.id, death_info);
                     }
@@ -1015,7 +1015,7 @@ impl Population {
         self.agents.retain(|agent| agent.state.is_alive);
         let deaths = before - self.agents.len();
         self.stats.total_deaths += deaths as u64;
-        self.stats.deaths_this_tick += deaths as u32;
+        self.stats.deaths_this_turn += deaths as u32;
 
         // Clean up tracking for dead agents
         for (deceased_id, _, _, _, _) in &dead_agents {
@@ -1067,7 +1067,7 @@ impl Population {
             // Emit abandonment events
             for (agent_id, pos) in &agents_to_remove {
                 self.pending_events.push(SimulationEvent::new(
-                    self.current_tick,
+                    self.current_turn,
                     SimulationEventType::Abandonment {
                         agent_id: *agent_id,
                     },
@@ -1094,7 +1094,7 @@ impl Population {
     pub fn process_reproduction(&mut self) {
         let mut new_offspring = Vec::new();
 
-        // Where this pass turns people away, counted once a tick per living
+        // Where this pass turns people away, counted once a turn per living
         // grown person. Two capability changes moved no survival column and
         // nothing could say why - see `PopulationStats::how_it_went`.
         {
@@ -1180,7 +1180,7 @@ impl Population {
                         let other = &self.agents[other_idx];
 
                         // Try to impregnate - this uses proper pregnancy system
-                        let got = attempt_impregnation(carrier, other, self.current_tick);
+                        let got = attempt_impregnation(carrier, other, self.current_turn);
                         *self
                             .stats
                             .how_it_went
@@ -1213,7 +1213,7 @@ impl Population {
 
             // Emit pregnancy event
             self.pending_events.push(SimulationEvent::new(
-                self.current_tick,
+                self.current_turn,
                 SimulationEventType::Pregnancy {
                     mother_id,
                     father_id,
@@ -1229,7 +1229,7 @@ impl Population {
     }
 
     /// Process active pregnancies and handle births
-    /// Should be called every tick to update nutrition and check for due deliveries
+    /// Should be called every turn to update nutrition and check for due deliveries
     pub fn process_pregnancies(&mut self) {
         use crate::core::DriveType;
 
@@ -1245,7 +1245,7 @@ impl Population {
                 pregnancy.update_nutrition(hunger_drive, agent.state.health);
 
                 // Check if due
-                if pregnancy.is_due(self.current_tick) {
+                if pregnancy.is_due(self.current_turn) {
                     births_to_process.push((idx, pregnancy.clone()));
                 }
             }
@@ -1266,11 +1266,11 @@ impl Population {
             let offspring = if let Some(f_idx) = father_idx {
                 let mother = &self.agents[mother_idx];
                 let father = &self.agents[f_idx];
-                give_birth(mother, father, &pregnancy, self.current_tick)
+                give_birth(mother, father, &pregnancy, self.current_turn)
             } else {
                 // Father not found (dead?), use legacy reproduce with just mother
                 let mother = &self.agents[mother_idx];
-                reproduce(mother, mother, self.current_tick)
+                reproduce(mother, mother, self.current_turn)
             };
 
             let mut offspring = offspring;
@@ -1283,7 +1283,7 @@ impl Population {
 
             // Emit birth event
             self.pending_events.push(SimulationEvent::new(
-                self.current_tick,
+                self.current_turn,
                 SimulationEventType::Birth {
                     mother_id,
                     child_id,
@@ -1324,7 +1324,7 @@ impl Population {
         let birth_count = new_offspring.len();
         self.agents.extend(new_offspring);
         self.stats.total_births += birth_count as u64;
-        self.stats.births_this_tick += birth_count as u32;
+        self.stats.births_this_turn += birth_count as u32;
     }
 
     /// Check if agent is on reproduction cooldown
@@ -1400,7 +1400,7 @@ impl Population {
         use rand::Rng;
 
         let mut rng = crate::core::dice::roll();
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // Collect interaction pairs (to avoid borrowing issues)
         let mut interactions = Vec::new();
@@ -1489,12 +1489,12 @@ impl Population {
             // Get relationship info (or create new relationship)
             let relationship_1_to_2 = self.agents[i]
                 .relationships
-                .get_or_create_relationship(agent2_id, current_tick)
+                .get_or_create_relationship(agent2_id, current_turn)
                 .clone();
 
             let relationship_2_to_1 = self.agents[j]
                 .relationships
-                .get_or_create_relationship(agent1_id, current_tick)
+                .get_or_create_relationship(agent1_id, current_turn)
                 .clone();
 
             // Get traits
@@ -1503,8 +1503,8 @@ impl Population {
 
             // Determine interaction type
             let interaction_type = if should_greet(
-                relationship_1_to_2.last_interaction_tick,
-                current_tick,
+                relationship_1_to_2.last_interaction_turn,
+                current_turn,
                 &relationship_1_to_2.relationship_level(),
             ) {
                 // Greet if haven't interacted recently
@@ -1549,7 +1549,7 @@ impl Population {
 
             // Apply changes to agent 1
             if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&agent2_id) {
-                rel.positive_interaction(rel_change_1, current_tick);
+                rel.positive_interaction(rel_change_1, current_turn);
             }
             if let Some(drive) = self.agents[i].drives.get_mut(DriveType::Social) {
                 drive.partial_satisfy(satisfaction_1);
@@ -1557,7 +1557,7 @@ impl Population {
 
             // Apply changes to agent 2
             if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&agent1_id) {
-                rel.positive_interaction(rel_change_2, current_tick);
+                rel.positive_interaction(rel_change_2, current_turn);
             }
             if let Some(drive) = self.agents[j].drives.get_mut(DriveType::Social) {
                 drive.partial_satisfy(satisfaction_2);
@@ -1579,7 +1579,7 @@ impl Population {
         const GOSSIP_RANGE_SQUARED: f32 = 36.0; // 6 tiles - slightly further than social range
 
         let mut rng = crate::core::dice::roll();
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // Collect gossip pairs and what info to share
         let mut gossip_events: Vec<(usize, usize, Information)> = Vec::new();
@@ -1650,8 +1650,8 @@ impl Population {
                 let info_ids: Vec<_> = self.agents[i].knowledge.known_information.keys().cloned().collect();
                 if let Some(info_id) = info_ids.choose(&mut rng) {
                     if let Some(info) = self.agents[i].knowledge.known_information.get(info_id) {
-                        // Don't share very old information (older than 10000 ticks)
-                        if current_tick as u64 - info.timestamp < 10000 {
+                        // Don't share very old information (older than 10000 turns)
+                        if current_turn as u64 - info.timestamp < 10000 {
                             // Filter: don't share information about the recipient
                             let is_about_recipient = match &info.info_type {
                                 InformationType::Death { agent, .. } => *agent == self.agents[j].id,
@@ -1678,7 +1678,7 @@ impl Population {
                         let info_ids_j: Vec<_> = self.agents[j].knowledge.known_information.keys().cloned().collect();
                         if let Some(info_id) = info_ids_j.choose(&mut rng) {
                             if let Some(info) = self.agents[j].knowledge.known_information.get(info_id) {
-                                if current_tick as u64 - info.timestamp < 10000 {
+                                if current_turn as u64 - info.timestamp < 10000 {
                                     let is_about_recipient = match &info.info_type {
                                         InformationType::Death { agent, .. } => *agent == self.agents[i].id,
                                         InformationType::Conflict { agent1, agent2 } => {
@@ -1732,7 +1732,7 @@ impl Population {
                     sharer_id,
                     receiver_id,
                     &receiver_traits,
-                    current_tick as u64,
+                    current_turn as u64,
                 );
 
                 // Gossip trait agents get happiness from sharing
@@ -1787,7 +1787,7 @@ impl Population {
         use crate::core::memory::SpatialMemoryType;
         use crate::core::DriveType;
 
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         for agent in &mut self.agents {
             if !agent.state.is_alive {
@@ -1813,7 +1813,7 @@ impl Population {
                 &mut agent.exploration_knowledge,
                 &agent_pos,
                 vision_range,
-                current_tick,
+                current_turn,
             );
 
             // Seeing for yourself.
@@ -1847,7 +1847,7 @@ impl Population {
 
             // Walking past a thing again is seeing it again.
             //
-            // The sighting tick was set once, on first discovery, and never
+            // The sighting turn was set once, on first discovery, and never
             // touched afterwards - so an agent who passed a berry patch every
             // morning still reported the day it first found it, and "a patch I
             // just passed" was a claim nobody in the model could make. It is
@@ -1876,7 +1876,7 @@ impl Population {
 
                     agent
                         .exploration_knowledge
-                        .saw_it_again(*where_it_is, how_much, current_tick);
+                        .saw_it_again(*where_it_is, how_much, current_turn);
                 }
             }
 
@@ -1913,10 +1913,10 @@ impl Population {
                     // this morning should cost him nothing at all.
                     let subject = format!("{:?}", what_they_said).to_lowercase();
                     if said.does_bare_ground_convict_him(
-                        current_tick,
+                        current_turn,
                         world.where_it_was_worked_out.contains(&where_it_is),
                     ) {
-                        agent.found_out_i_was_lied_to(said.who, &subject, current_tick);
+                        agent.found_out_i_was_lied_to(said.who, &subject, current_turn);
                     } else {
                         agent.found_out_they_were_out_of_date(said.who);
                     }
@@ -1937,7 +1937,7 @@ impl Population {
             for (where_it_is, said) in borne_out {
                 // He has walked to it and looked at it, so it stops being
                 // something he was told: he can pass it on as his own now, and
-                // whoever told him is credited once rather than every tick he
+                // whoever told him is credited once rather than every turn he
                 // stands there.
                 agent.exploration_knowledge.who_told_me.remove(&where_it_is);
 
@@ -1949,7 +1949,7 @@ impl Population {
                     .unwrap_or(0);
                 agent
                     .exploration_knowledge
-                    .saw_it_again(where_it_is, how_much, current_tick);
+                    .saw_it_again(where_it_is, how_much, current_turn);
 
                 if said.who != me {
                     agent.found_out_they_were_right(said.who);
@@ -1965,15 +1965,15 @@ impl Population {
                 }
 
                 // Award Navigation skill XP for exploration
-                agent.skills.practise(super::SkillType::Navigation, new_discoveries as u32 * 2, current_tick);
+                agent.skills.practise(super::SkillType::Navigation, new_discoveries as u32 * 2, current_turn);
             }
 
             // Learn what there is to learn from a thing on first seeing it,
             // which is not much.
             //
             // This used to pay for looking rather than for doing. The filter
-            // is on the tick a resource was discovered, and this runs every
-            // tick, so a thing seen once paid out on ten consecutive ticks -
+            // is on the turn a resource was discovered, and this runs every
+            // turn, so a thing seen once paid out on ten consecutive turns -
             // fifty Farming experience for walking past a grain field, half a
             // level, in a settled world holding ninety of them. Skill measured
             // how much of the map somebody had wandered over: Farming sat at
@@ -1989,9 +1989,9 @@ impl Population {
                 .filter(|(pos, _)| {
                     agent
                         .exploration_knowledge
-                        .resource_discovery_ticks
+                        .resource_discovery_turns
                         .get(pos)
-                        .map(|&tick| tick == current_tick)
+                        .map(|&turn| turn == current_turn)
                         .unwrap_or(false)
                 })
                 .map(|(pos, resource_type)| (*pos, *resource_type))
@@ -2008,7 +2008,7 @@ impl Population {
             // Exploration reports a tile only the first time it is looked at,
             // so an agent driven by that alone would stop noticing a berry
             // patch the moment it had walked past it once. Sight is not a
-            // one-off: whatever is in range is seen again every tick, which is
+            // one-off: whatever is in range is seen again every turn, which is
             // what keeps foraging memory current as patches are emptied and
             // regrow. Foraging reads spatial memory rather than the
             // exploration record, so without this an agent would have a patch
@@ -2224,11 +2224,11 @@ impl Population {
                 }
             }
 
-            // Learn skills from discovered buildings, on the tick of finding
+            // Learn skills from discovered buildings, on the turn of finding
             // them and not on the nine after it - see above
             for (pos, building_type) in &agent.exploration_knowledge.known_buildings {
-                if let Some(&discover_tick) = agent.exploration_knowledge.building_discovery_ticks.get(pos) {
-                    if discover_tick == current_tick {
+                if let Some(&discover_turn) = agent.exploration_knowledge.building_discovery_turns.get(pos) {
+                    if discover_turn == current_turn {
                         let skill_xp = Self::get_skill_for_building_discovery(building_type);
                         for (skill_type, xp) in skill_xp {
                             agent.skills.gain_experience(skill_type, xp);
@@ -2356,7 +2356,7 @@ impl Population {
     /// round. A settlement is not a series of private conversations.
     const EARSHOT: i32 = 6;
 
-    /// How likely an agent is to say anything at all on a given tick.
+    /// How likely an agent is to say anything at all on a given turn.
     ///
     /// Talking out loud reaches everybody near enough at once, where telling
     /// one person at a time reached one, so the same amount of news spreads
@@ -2375,7 +2375,7 @@ impl Population {
         use rand::Rng;
 
         let mut rng = crate::core::dice::roll();
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         let standing: Vec<(uuid::Uuid, (i32, i32, i32), bool)> = self
             .agents
@@ -2425,7 +2425,7 @@ impl Population {
             //
             // What lets a man contradict you is having been there lately.
             // Testing whether he had *ever* walked the tile abolished lying
-            // outright: over fifteen thousand ticks a settlement walks over
+            // outright: over fifteen thousand turns a settlement walks over
             // nearly everything, so nearly every place had a witness and four
             // lies were told in a whole world's life.
             let nobody_has_walked: Vec<_> = places
@@ -2436,7 +2436,7 @@ impl Population {
                             .exploration_knowledge
                             .when_i_saw_it(where_it_is)
                             .is_some_and(|then| {
-                                current_tick.saturating_sub(then) <= Self::WITHIN_LIVING_MEMORY
+                                current_turn.saturating_sub(then) <= Self::WITHIN_LIVING_MEMORY
                             })
                     })
                 })
@@ -2450,7 +2450,7 @@ impl Population {
                         .iter()
                         .map(|listener| standing[*listener].0)
                         .collect::<Vec<_>>(),
-                    current_tick,
+                    current_turn,
                 );
 
             let telling = if lying { &nobody_has_walked } else { &places };
@@ -2462,7 +2462,7 @@ impl Population {
                     continue;
                 }
 
-                if self.tell_them_where_it_is(speaker, listener, telling, lying, current_tick) > 0 {
+                if self.tell_them_where_it_is(speaker, listener, telling, lying, current_turn) > 0 {
                     anybody_listened = true;
                 }
             }
@@ -2507,7 +2507,7 @@ impl Population {
         listener: usize,
         places: &[(crate::world::Position, crate::world::ResourceType)],
         a_lie: bool,
-        current_tick: u32,
+        current_turn: u32,
     ) -> usize {
         use crate::agents::gossip::{Information, InformationType};
 
@@ -2538,7 +2538,7 @@ impl Population {
                         where_it_is.x + Self::A_LIE_PUTS_IT_WRONG_BY,
                         where_it_is.y + Self::A_LIE_PUTS_IT_WRONG_BY,
                     ),
-                    current_tick,
+                    current_turn,
                     // A liar claims a place worth walking to. That is what a
                     // lie is *for* here - it buys him a hearing - and it is
                     // also what keeps `he_did_say_it_was_nearly_gone` from
@@ -2576,7 +2576,7 @@ impl Population {
                     speaker_id,
                     when_he_saw_it,
                     how_much_he_said,
-                    current_tick,
+                    current_turn,
                 );
 
             // And it is remembered as a claim somebody made, so that going
@@ -2592,14 +2592,14 @@ impl Population {
                     },
                     speaker_id,
                     !a_lie,
-                    current_tick as u64,
+                    current_turn as u64,
                 );
                 listener_agent.knowledge.receive_information(
                     claim,
                     speaker_id,
                     listener_id,
                     &listener_traits,
-                    current_tick as u64,
+                    current_turn as u64,
                 );
             }
 
@@ -2610,7 +2610,7 @@ impl Population {
     }
 
     /// Process exploration without world (for standalone population updates)
-    /// This is called from tick() and handles exploration-related drive updates
+    /// This is called from turn() and handles exploration-related drive updates
     /// and knowledge sharing between nearby agents
     fn process_exploration(&mut self) {
         use crate::core::DriveType;
@@ -2634,7 +2634,7 @@ impl Population {
             // Slowly increase curiosity drive when not actively discovering
             // This makes agents want to explore over time
             if let Some(curiosity_drive) = agent.drives.get_mut(DriveType::Curiosity) {
-                // Curiosity increases by 0.002 per tick if below 0.7
+                // Curiosity increases by 0.002 per turn if below 0.7
                 if curiosity_drive.value < 0.7 {
                     curiosity_drive.value = (curiosity_drive.value + 0.002).min(0.7);
                 }
@@ -2665,7 +2665,7 @@ impl Population {
                 let dist_sq = dx * dx + dy * dy;
 
                 if dist_sq <= EXPLORATION_SHARE_RANGE_SQ {
-                    let current_tick = self.current_tick;
+                    let current_turn = self.current_turn;
 
                     // Get actual agent UUIDs for relationship lookups
                     let uuid_j = self.agents[j].id;
@@ -2691,7 +2691,7 @@ impl Population {
                             for (pos, building_type) in buildings_i.choose_multiple(&mut rng, 5) {
                                 if !self.agents[j].exploration_knowledge.known_buildings.contains_key(pos) {
                                     self.agents[j].exploration_knowledge
-                                        .discover_building(*pos, *building_type, current_tick);
+                                        .discover_building(*pos, *building_type, current_turn);
                                     shared += 1;
                                     if shared >= 3 { break; }
                                 }
@@ -2718,7 +2718,7 @@ impl Population {
                             for (pos, building_type) in buildings_j.choose_multiple(&mut rng, 5) {
                                 if !self.agents[i].exploration_knowledge.known_buildings.contains_key(pos) {
                                     self.agents[i].exploration_knowledge
-                                        .discover_building(*pos, *building_type, current_tick);
+                                        .discover_building(*pos, *building_type, current_turn);
                                     shared += 1;
                                     if shared >= 3 { break; }
                                 }
@@ -2943,7 +2943,7 @@ impl Population {
                         if current_anger > 0.1 {
                             // Reduce anger by small amount
                             for (_, amount) in self.agents[*j].emotions.anger_sources.iter_mut() {
-                                *amount = (*amount * 0.98).max(0.0); // 2% reduction per tick
+                                *amount = (*amount * 0.98).max(0.0); // 2% reduction per turn
                             }
                         }
                     }
@@ -3017,7 +3017,7 @@ impl Population {
                                         EmotionSource::Event("partner_jealousy".to_string()),
                                         0.02
                                     );
-                                    break; // Only trigger once per tick
+                                    break; // Only trigger once per turn
                                 }
                             }
                         }
@@ -3250,12 +3250,12 @@ mod tests {
     }
 
     #[test]
-    fn test_tick_ages_agents() {
+    fn test_turn_ages_agents() {
         let mut pop = Population::new();
         pop.spawn_agent(AgentConfig::default());
 
         let initial_age = pop.agents[0].state.age;
-        pop.tick();
+        pop.take_a_turn();
         assert_eq!(pop.agents[0].state.age, initial_age + 1);
     }
 
@@ -3267,7 +3267,7 @@ mod tests {
         // Kill the agent
         pop.agents[0].state.is_alive = false;
 
-        pop.tick();
+        pop.take_a_turn();
 
         assert_eq!(pop.size(), 0);
         assert_eq!(pop.stats.total_deaths, 1);

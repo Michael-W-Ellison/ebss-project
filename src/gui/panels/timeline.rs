@@ -149,9 +149,9 @@ fn render_event_row(ui: &mut Ui, state: &mut GuiState, event: &SimulationEvent) 
         .rounding(4.0)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                // Tick number
+                // Turn number
                 ui.label(
-                    RichText::new(format!("T{}", event.tick))
+                    RichText::new(format!("T{}", event.turn))
                         .monospace()
                         .color(Color32::GRAY)
                         .size(11.0)

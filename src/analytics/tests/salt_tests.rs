@@ -138,7 +138,7 @@ fn a_man_dying_of_thirst_drinks_it_anyway() {
     assert!(agent.would_i_drink_the_sea());
 }
 
-/// It slakes the thirst on the tick and costs more than it gave over the days
+/// It slakes the thirst on the turn and costs more than it gave over the days
 /// after — "even if it seems to temporarily satiate it".
 #[test]
 fn the_sea_costs_more_than_it_gives() {
@@ -146,7 +146,7 @@ fn the_sea_costs_more_than_it_gives() {
     ///
     /// **The body on its own, and two of them.** This test has been asked
     /// three wrong ways. It followed one man and held his thirst steady
-    /// between ticks with `gone_without_water_for(0)`, which fills the skin
+    /// between turns with `gone_without_water_for(0)`, which fills the skin
     /// back up - so the fixture's own way of holding everything else still
     /// erased the one thing it meant to measure, and it read 0.3 against 0.3.
     /// Asked as the worst thirst two men reach it reads backwards, because
@@ -174,11 +174,11 @@ fn the_sea_costs_more_than_it_gives() {
             agent.drank_salt_water(0);
         }
 
-        for tick in 1..=(crate::environment::seasons::TICKS_PER_DAY * 3) {
-            agent.state.last_ate_tick = tick;
+        for turn in 1..=(crate::environment::seasons::TURNS_PER_DAY * 3) {
+            agent.state.last_ate_turn = turn;
             agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
-            agent.tick_with_percepts(tick);
-            agent.process_survival_tick(tick);
+            agent.turn_with_percepts(turn);
+            agent.process_survival_turn(turn);
         }
 
         agent.state.physiology.hydration
@@ -203,8 +203,8 @@ fn the_salt_works_its_way_out() {
 
     assert!(simulation.population.agents[0].state.salt_in_me > 0.0);
 
-    for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 20) {
-        simulation.tick();
+    for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 20) {
+        simulation.take_a_turn();
         if !simulation.population.agents[0].state.is_alive {
             break;
         }
@@ -288,7 +288,7 @@ fn a_man_on_his_last_quarter_takes_what_there_is() {
 /// `WHAT_A_MOUTHFUL_OF_THE_SEA_COSTS`.
 #[test]
 fn the_sea_is_a_slow_poison() {
-    fn water_left(drinks_the_sea: bool, ticks: u32) -> f32 {
+    fn water_left(drinks_the_sea: bool, turns: u32) -> f32 {
         let mut agent = Agent::new(AgentConfig::default());
         agent.state.physiology.hydration = 1.0;
         agent.state.health = 100.0;
@@ -297,18 +297,18 @@ fn the_sea_is_a_slow_poison() {
             agent.drank_salt_water(0);
         }
 
-        for tick in 1..=ticks {
-            agent.state.last_ate_tick = tick;
+        for turn in 1..=turns {
+            agent.state.last_ate_turn = turn;
             agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
-            agent.tick_with_percepts(tick);
-            agent.process_survival_tick(tick);
+            agent.turn_with_percepts(turn);
+            agent.process_survival_turn(turn);
         }
 
         agent.state.physiology.hydration
     }
 
     // Long enough for one drink's worth of salt to be all the way out: it goes
-    // at `HOW_FAST_SALT_GOES` a tick from `WHAT_ONE_DRINK_OF_THE_SEA_LEAVES`.
+    // at `HOW_FAST_SALT_GOES` a turn from `WHAT_ONE_DRINK_OF_THE_SEA_LEAVES`.
     let long_enough = 40;
     let cost = water_left(false, long_enough) - water_left(true, long_enough);
 
@@ -356,10 +356,10 @@ fn the_sea_goes_down_like_water_and_the_thirst_goes_with_it() {
 
     // The swallow tells a little later, like every other drink in this model:
     // `MINUTES_FOR_A_DRINK_TO_TELL` after it went down.
-    for tick in 1..=2 {
-        simulation.population.agents[0].state.last_ate_tick = tick;
-        simulation.population.agents[0].tick_with_percepts(tick);
-        simulation.population.agents[0].process_survival_tick(tick);
+    for turn in 1..=2 {
+        simulation.population.agents[0].state.last_ate_turn = turn;
+        simulation.population.agents[0].turn_with_percepts(turn);
+        simulation.population.agents[0].process_survival_turn(turn);
     }
     let after = simulation.population.agents[0].state.physiology.hydration;
 
@@ -374,17 +374,17 @@ fn the_sea_goes_down_like_water_and_the_thirst_goes_with_it() {
 }
 
 /// The regression that this whole entry is: a frightened man a quarter dry,
-/// standing beside the sea, is not dead at the end of the tick.
+/// standing beside the sea, is not dead at the end of the turn.
 ///
 /// An agent in danger takes its turn again once a simulated minute until the
 /// half hour is out - see `everybody_takes_a_turn` - so whatever it decides to
-/// do, it can do up to thirty times in one tick, at a full turn's cost each
+/// do, it can do up to thirty times in one turn, at a full turn's cost each
 /// time. Measured over twelve worlds before this was mended: fifty-eight
-/// bodies lost a quarter or more of their water inside a single tick, every
+/// bodies lost a quarter or more of their water inside a single turn, every
 /// one of them in danger and every one of them carrying a full load of salt.
 /// They had drunk the sea five times in half an hour.
 #[test]
-fn a_frightened_man_beside_the_sea_lives_out_the_tick() {
+fn a_frightened_man_beside_the_sea_lives_out_the_turn() {
     let mut simulation = one_person();
     let where_he_stands = Position::new(25, 25);
     a_sea_at(&mut simulation, where_he_stands);
@@ -401,14 +401,14 @@ fn a_frightened_man_beside_the_sea_lives_out_the_tick() {
         agent.emotions.fear = 1.0;
     }
 
-    simulation.tick();
+    simulation.take_a_turn();
 
     let Some(agent) = simulation.population.agents.first() else {
-        panic!("a man a quarter down beside the sea was gone inside one tick");
+        panic!("a man a quarter down beside the sea was gone inside one turn");
     };
     assert!(
         agent.state.is_alive,
-        "a man a quarter down beside the sea died inside one tick"
+        "a man a quarter down beside the sea died inside one turn"
     );
     assert!(
         agent.state.physiology.hydration > 0.5,

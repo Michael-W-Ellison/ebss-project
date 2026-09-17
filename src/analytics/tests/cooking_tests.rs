@@ -163,7 +163,7 @@ fn an_agent_lights_a_fire_and_cooks_on_it() {
 
     let mut ever_lit = false;
     for _ in 0..400 {
-        simulation.tick();
+        simulation.take_a_turn();
         if simulation
             .world
             .heat_sources
@@ -179,7 +179,7 @@ fn an_agent_lights_a_fire_and_cooks_on_it() {
 
     // What it *did*, not what it is still holding. Asserting on leftovers
     // read as the same thing and is not: an agent that cooks and then eats
-    // its dinner has cooked, and whether any is left at tick four hundred
+    // its dinner has cooked, and whether any is left at turn four hundred
     // turns on how hungry it happened to be.
     let put_on_the_fire = simulation
         .actions_taken

@@ -180,7 +180,7 @@ impl Episode {
         self.strength < 0.1 && !self.consolidated
     }
 
-    /// Get age of memory in ticks
+    /// Get age of memory in turns
     pub fn age(&self, current_time: u64) -> u64 {
         current_time.saturating_sub(self.timestamp)
     }
@@ -229,7 +229,7 @@ pub struct EpisodicMemory {
     /// Maximum number of episodes to store
     max_episodes: usize,
 
-    /// Decay rate per tick
+    /// Decay rate per turn
     decay_rate: f32,
 
     /// Current time
@@ -241,7 +241,7 @@ impl EpisodicMemory {
         Self {
             episodes: VecDeque::new(),
             max_episodes,
-            decay_rate: 0.001, // 0.1% per tick
+            decay_rate: 0.001, // 0.1% per turn
             current_time: 0,
         }
     }
@@ -256,8 +256,8 @@ impl EpisodicMemory {
         self.episodes.push_back(episode);
     }
 
-    /// Tick the memory system
-    pub fn tick(&mut self, current_time: u64) {
+    /// Turn the memory system
+    pub fn take_a_turn(&mut self, current_time: u64) {
         self.current_time = current_time;
 
         // Decay all episodes
@@ -335,9 +335,9 @@ impl EpisodicMemory {
             .collect()
     }
 
-    /// Get recent episodes (last N ticks)
-    pub fn recent_episodes(&self, ticks: u64) -> Vec<&Episode> {
-        let cutoff = self.current_time.saturating_sub(ticks);
+    /// Get recent episodes (last N turns)
+    pub fn recent_episodes(&self, turns: u64) -> Vec<&Episode> {
+        let cutoff = self.current_time.saturating_sub(turns);
         self.episodes
             .iter()
             .filter(|e| e.timestamp >= cutoff)

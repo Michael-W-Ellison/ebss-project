@@ -59,7 +59,7 @@ pub struct WorldSnapshot {
     pub tiles: Vec<TileSnapshot>,
     pub resources: Vec<ResourceSnapshot>,
     pub buildings: Vec<BuildingSnapshot>,
-    pub tick: u32,
+    pub turn: u32,
 }
 
 /// Single tile data
@@ -133,13 +133,13 @@ pub struct PopulationSnapshot {
 /// Complete simulation snapshot sent to GUI each frame
 #[derive(Debug, Clone)]
 pub struct SimulationSnapshot {
-    pub tick: u32,
+    pub turn: u32,
     pub state: SimState,
     pub speed: f32,
     pub world: WorldSnapshot,
     pub population: PopulationSnapshot,
     pub selected: EntitySelection,
-    /// Events that occurred this tick (for timeline panel)
+    /// Events that occurred this turn (for timeline panel)
     pub events: Vec<super::events::SimulationEvent>,
 }
 
@@ -227,8 +227,8 @@ pub struct GoalData {
 pub struct SurvivalStatus {
     pub is_starving: bool,
     pub is_dehydrated: bool,
-    pub ticks_without_food: u32,
-    pub ticks_without_water: u32,
+    pub turns_without_food: u32,
+    pub turns_without_water: u32,
     pub is_critical: bool,
 }
 
@@ -263,7 +263,7 @@ pub struct SelectedResourceData {
 /// History data point for graphs
 #[derive(Debug, Clone, Default)]
 pub struct HistoryPoint {
-    pub tick: u32,
+    pub turn: u32,
     pub population: usize,
     pub infants: usize,
     pub children: usize,
@@ -286,7 +286,7 @@ pub struct StatisticsHistory {
     pub points: Vec<HistoryPoint>,
     pub max_points: usize,
     pub sample_interval: u32,
-    pub last_sample_tick: u32,
+    pub last_sample_turn: u32,
 }
 
 impl Default for StatisticsHistory {
@@ -294,28 +294,28 @@ impl Default for StatisticsHistory {
         Self {
             points: Vec::with_capacity(500),
             max_points: 500,
-            sample_interval: 10, // Sample every 10 ticks
-            last_sample_tick: 0,
+            sample_interval: 10, // Sample every 10 turns
+            last_sample_turn: 0,
         }
     }
 }
 
 impl StatisticsHistory {
-    pub fn should_sample(&self, current_tick: u32) -> bool {
-        current_tick >= self.last_sample_tick + self.sample_interval
+    pub fn should_sample(&self, current_turn: u32) -> bool {
+        current_turn >= self.last_sample_turn + self.sample_interval
     }
 
     pub fn add_point(&mut self, point: HistoryPoint) {
         if self.points.len() >= self.max_points {
             self.points.remove(0);
         }
-        self.last_sample_tick = point.tick;
+        self.last_sample_turn = point.turn;
         self.points.push(point);
     }
 
     pub fn population_data(&self) -> Vec<[f64; 2]> {
         self.points.iter()
-            .map(|p| [p.tick as f64, p.population as f64])
+            .map(|p| [p.turn as f64, p.population as f64])
             .collect()
     }
 
@@ -330,51 +330,51 @@ impl StatisticsHistory {
                     "elderly" => p.elderly,
                     _ => 0,
                 };
-                [p.tick as f64, value as f64]
+                [p.turn as f64, value as f64]
             })
             .collect()
     }
 
     pub fn health_data(&self) -> Vec<[f64; 2]> {
         self.points.iter()
-            .map(|p| [p.tick as f64, p.avg_health as f64])
+            .map(|p| [p.turn as f64, p.avg_health as f64])
             .collect()
     }
 
     pub fn energy_data(&self) -> Vec<[f64; 2]> {
         self.points.iter()
-            .map(|p| [p.tick as f64, p.avg_energy as f64])
+            .map(|p| [p.turn as f64, p.avg_energy as f64])
             .collect()
     }
 
     pub fn happiness_data(&self) -> Vec<[f64; 2]> {
         self.points.iter()
-            .map(|p| [p.tick as f64, p.avg_happiness as f64 * 100.0])
+            .map(|p| [p.turn as f64, p.avg_happiness as f64 * 100.0])
             .collect()
     }
 
     pub fn births_deaths_data(&self) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
         let births: Vec<[f64; 2]> = self.points.iter()
-            .map(|p| [p.tick as f64, p.births as f64])
+            .map(|p| [p.turn as f64, p.births as f64])
             .collect();
         let deaths: Vec<[f64; 2]> = self.points.iter()
-            .map(|p| [p.tick as f64, p.deaths as f64])
+            .map(|p| [p.turn as f64, p.deaths as f64])
             .collect();
         (births, deaths)
     }
 
     pub fn resources_data(&self) -> Vec<[f64; 2]> {
         self.points.iter()
-            .map(|p| [p.tick as f64, p.total_resources as f64])
+            .map(|p| [p.turn as f64, p.total_resources as f64])
             .collect()
     }
 
     pub fn buildings_data(&self) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
         let completed: Vec<[f64; 2]> = self.points.iter()
-            .map(|p| [p.tick as f64, p.buildings_completed as f64])
+            .map(|p| [p.turn as f64, p.buildings_completed as f64])
             .collect();
         let construction: Vec<[f64; 2]> = self.points.iter()
-            .map(|p| [p.tick as f64, p.buildings_construction as f64])
+            .map(|p| [p.turn as f64, p.buildings_construction as f64])
             .collect();
         (completed, construction)
     }
@@ -414,7 +414,7 @@ pub struct TechNodeData {
     pub prerequisites: Vec<String>,
     pub unlocks: Vec<String>,
     pub first_discoverer: Option<uuid::Uuid>,
-    pub discovery_tick: Option<u32>,
+    pub discovery_turn: Option<u32>,
 }
 
 /// Technology tree snapshot for GUI
@@ -424,7 +424,7 @@ pub struct TechTreeSnapshot {
     pub current_era: String,
     pub total_discovered: usize,
     pub total_technologies: usize,
-    pub discovery_history: Vec<(u32, String)>, // (tick, tech_id)
+    pub discovery_history: Vec<(u32, String)>, // (turn, tech_id)
 }
 
 /// Relationship graph node data for visualization
@@ -451,7 +451,7 @@ pub struct RelationshipEdge {
 #[derive(Debug, Clone, Default)]
 pub struct RelationshipGraphSnapshot {
     pub nodes: Vec<RelationshipGraphNode>,
-    pub tick: u32,
+    pub turn: u32,
 }
 
 /// Filter options for relationship graph
@@ -816,7 +816,7 @@ pub struct SaveLoadState {
 pub struct SaveFileInfo {
     pub filename: String,
     pub path: String,
-    pub tick: u32,
+    pub turn: u32,
     pub agent_count: usize,
     pub modified: String,
 }
@@ -907,7 +907,7 @@ impl GuiState {
         }
 
         // Record history point if interval elapsed
-        if self.statistics_history.should_sample(snapshot.tick) {
+        if self.statistics_history.should_sample(snapshot.turn) {
             let stats = &snapshot.population.stats;
             let world = &snapshot.world;
 
@@ -920,7 +920,7 @@ impl GuiState {
                 .count();
 
             let point = HistoryPoint {
-                tick: snapshot.tick,
+                turn: snapshot.turn,
                 population: stats.total_agents,
                 infants: stats.infants,
                 children: stats.children,

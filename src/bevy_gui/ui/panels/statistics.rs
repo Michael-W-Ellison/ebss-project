@@ -78,10 +78,10 @@ fn render_quick_stats(ui: &mut egui::Ui, snapshot: &crate::gui::state::Simulatio
 
         ui.separator();
 
-        // Tick/Time
+        // Turn/Time
         ui.vertical(|ui| {
             let (days, hours, minutes) =
-                crate::environment::seasons::what_the_clock_says(world.tick);
+                crate::environment::seasons::what_the_clock_says(world.turn);
             ui.label(egui::RichText::new(format!("Day {}", days + 1)).size(16.0));
             ui.label(egui::RichText::new(format!("{:02}:{:02}", hours, minutes)).small());
         });

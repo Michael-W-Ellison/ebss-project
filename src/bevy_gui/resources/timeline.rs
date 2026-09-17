@@ -94,9 +94,9 @@ impl TimelineData {
             .collect();
 
         if self.newest_first {
-            filtered.sort_by(|a, b| b.tick.cmp(&a.tick));
+            filtered.sort_by(|a, b| b.turn.cmp(&a.turn));
         } else {
-            filtered.sort_by(|a, b| a.tick.cmp(&b.tick));
+            filtered.sort_by(|a, b| a.turn.cmp(&b.turn));
         }
 
         filtered

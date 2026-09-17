@@ -5,17 +5,17 @@
 //! ground. The reason was not the store, the appetite, or the calorie tables:
 //! it was that **nobody could remember where the store was**.
 //!
-//! `SpatialMemory::decay` took a flat thousandth of confidence a tick with no
+//! `SpatialMemory::decay` took a flat thousandth of confidence a turn with no
 //! notion that some places matter more than others, and
 //! `batch_decay_and_prune` - the path that is actually live, since
 //! `batch_decay` defaults to true - had a second copy of that rule which
 //! multiplied by `prune_interval` on top of the elapsed time. That
 //! double-counts, and with the default interval of a hundred it came to a
-//! tenth of confidence per tick elapsed: **anywhere a person had not looked in
+//! tenth of confidence per turn elapsed: **anywhere a person had not looked in
 //! the last four hours was gone**.
 
 use crate::core::memory::{Memory, MemoryImportance, SpatialMemory, SpatialMemoryType};
-use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::seasons::TURNS_PER_DAY;
 
 /// A store is the one place a person does not forget.
 #[test]
@@ -23,7 +23,7 @@ fn the_store_outlasts_the_winter_it_was_laid_down_for() {
     let lean = crate::agents::provision::how_long_the_land_gives_nothing();
     let mut buried = SpatialMemory::new(SpatialMemoryType::Storage, (10, 10, 0), 0);
 
-    buried.forget_a_little(lean * TICKS_PER_DAY);
+    buried.forget_a_little(lean * TURNS_PER_DAY);
 
     assert!(
         buried.confidence > 0.3,
@@ -38,14 +38,14 @@ fn the_store_outlasts_the_winter_it_was_laid_down_for() {
 fn a_bush_somebody_walked_past_is_forgotten_in_a_fortnight() {
     let mut noticed = SpatialMemory::new(SpatialMemoryType::Food, (10, 10, 0), 0);
 
-    noticed.forget_a_little(10 * TICKS_PER_DAY);
+    noticed.forget_a_little(10 * TURNS_PER_DAY);
     assert!(
         noticed.confidence > 0.3,
         "ten days is not long enough to forget a berry patch: {:.2}",
         noticed.confidence
     );
 
-    noticed.forget_a_little(20 * TICKS_PER_DAY);
+    noticed.forget_a_little(20 * TURNS_PER_DAY);
     assert!(
         noticed.confidence <= 0.3,
         "and twenty days is: {:.2}",
@@ -55,25 +55,25 @@ fn a_bush_somebody_walked_past_is_forgotten_in_a_fortnight() {
 
 /// The two paths through forgetting agree.
 ///
-/// `Memory::tick` decays either every tick or in batches, and the batch path
+/// `Memory::take_a_turn` decays either every turn or in batches, and the batch path
 /// had its own arithmetic. Whichever way the clock is run, the same elapsed
 /// time has to leave the same memory.
 #[test]
 fn forgetting_in_batches_is_forgetting_at_the_same_rate() {
     use crate::core::memory::MemoryConfig;
 
-    let every_tick = MemoryConfig { batch_decay: false, ..Default::default() };
+    let every_turn = MemoryConfig { batch_decay: false, ..Default::default() };
     let in_batches = MemoryConfig { batch_decay: true, ..Default::default() };
 
-    let mut one = Memory::with_config(every_tick);
+    let mut one = Memory::with_config(every_turn);
     let mut other = Memory::with_config(in_batches);
 
     one.remember_location(SpatialMemoryType::Food, (5, 5, 0));
     other.remember_location(SpatialMemoryType::Food, (5, 5, 0));
 
-    for _ in 0..(5 * TICKS_PER_DAY) {
-        one.tick();
-        other.tick();
+    for _ in 0..(5 * TURNS_PER_DAY) {
+        one.take_a_turn();
+        other.take_a_turn();
     }
 
     let confidence = |memory: &Memory| {

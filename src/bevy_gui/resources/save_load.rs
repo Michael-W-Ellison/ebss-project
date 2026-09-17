@@ -8,7 +8,7 @@ use bevy::prelude::*;
 pub struct SaveFileInfo {
     pub filename: String,
     pub path: String,
-    pub tick: u32,
+    pub turn: u32,
     pub agent_count: usize,
     pub modified: String,
 }
@@ -109,7 +109,7 @@ impl SaveLoadState {
                         self.available_saves.push(SaveFileInfo {
                             filename: filename.to_string(),
                             path: path.to_string_lossy().to_string(),
-                            tick: 0,
+                            turn: 0,
                             agent_count: 0,
                             modified,
                         });

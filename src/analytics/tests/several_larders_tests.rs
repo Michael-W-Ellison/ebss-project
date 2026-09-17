@@ -56,7 +56,7 @@ fn a_pit_seen_with_food_in_it_is_remembered() {
         "the fixture starts with nothing remembered"
     );
 
-    simulation.tick();
+    simulation.take_a_turn();
 
     let remembered = simulation.population.agents[0]
         .memory
@@ -77,7 +77,7 @@ fn a_pit_seen_with_food_in_it_is_remembered() {
 #[test]
 fn the_store_branch_reads_the_memory() {
     let mut simulation = somebody_and_a_full_pit();
-    simulation.tick();
+    simulation.take_a_turn();
 
     let agent = simulation.population.agents[0].clone();
     let (where_it_is, paces) = simulation

@@ -103,7 +103,7 @@ pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria
 pub fn attempt_impregnation(
     carrier: &Agent,
     other: &Agent,
-    current_tick: u32,
+    current_turn: u32,
 ) -> Option<PregnancyState> {
     let mut rng = crate::core::dice::roll();
 
@@ -119,7 +119,7 @@ pub fn attempt_impregnation(
     let conception_chance = (carrier.fertility() * other.fertility()).clamp(0.0, 1.0);
 
     if rng.gen_bool(conception_chance as f64) {
-        Some(PregnancyState::new(current_tick, other.id))
+        Some(PregnancyState::new(current_turn, other.id))
     } else {
         None
     }
@@ -134,7 +134,7 @@ fn calculate_distance(pos1: (i32, i32, i32), pos2: (i32, i32, i32)) -> f32 {
 }
 
 /// Create offspring from two parent agents (used for immediate birth in legacy code)
-pub fn reproduce(parent1: &Agent, parent2: &Agent, current_tick: u32) -> Agent {
+pub fn reproduce(parent1: &Agent, parent2: &Agent, current_turn: u32) -> Agent {
     // Whichever of them is carrying it is the one whose nutrition it grew on.
     // Either may be - there is no gender in this model, so the carrier is
     // simply the one with a pregnancy on them.
@@ -145,7 +145,7 @@ pub fn reproduce(parent1: &Agent, parent2: &Agent, current_tick: u32) -> Agent {
         .map(|p| p.nutrition_quality)
         .unwrap_or(0.8);
 
-    give_birth_internal(parent1, parent2, current_tick, prenatal_nutrition)
+    give_birth_internal(parent1, parent2, current_turn, prenatal_nutrition)
 }
 
 /// Create offspring when pregnancy reaches term
@@ -154,16 +154,16 @@ pub fn give_birth(
     mother: &Agent,
     father: &Agent,
     pregnancy: &PregnancyState,
-    current_tick: u32,
+    current_turn: u32,
 ) -> Agent {
-    give_birth_internal(mother, father, current_tick, pregnancy.nutrition_quality)
+    give_birth_internal(mother, father, current_turn, pregnancy.nutrition_quality)
 }
 
 /// Internal function to create offspring with specified prenatal nutrition
 fn give_birth_internal(
     parent1: &Agent,
     parent2: &Agent,
-    current_tick: u32,
+    current_turn: u32,
     prenatal_nutrition: f32,
 ) -> Agent {
     let parent_ids = vec![parent1.id, parent2.id];
@@ -172,7 +172,7 @@ fn give_birth_internal(
     let mut offspring = Agent::with_parents_and_prenatal(
         AgentConfig { random_weights: false },
         parent_ids,
-        current_tick,
+        current_turn,
         prenatal_nutrition,
     );
 
@@ -537,7 +537,7 @@ mod tests {
     /// Their fertilities multiplied to roughly 4.0, and the sampler panics on
     /// anything outside 0.0 to 1.0 rather than saturating. Reproduction only
     /// started running once agents could keep themselves fed and watered, so
-    /// this surfaced as a rare crash a few thousand ticks into a run.
+    /// this surfaced as a rare crash a few thousand turns into a run.
     #[test]
     fn test_impregnation_survives_maximum_fertility() {
         let (mut other, mut carrier) = create_mating_pair();
@@ -803,7 +803,7 @@ mod tests {
         for _ in 0..100 {
             if let Some(pregnancy) = attempt_impregnation(&carrier, &other, 100) {
                 assert_eq!(pregnancy.father_id, other.id);
-                assert_eq!(pregnancy.conception_tick, 100);
+                assert_eq!(pregnancy.conception_turn, 100);
                 success = true;
                 break;
             }
@@ -816,7 +816,7 @@ mod tests {
         use crate::core::DriveType;
 
         let mut agent = Agent::new(AgentConfig::default());
-        // Years, not ticks - 3,000 ticks is most of one year, and a year is
+        // Years, not turns - 3,000 turns is most of one year, and a year is
         // 4,320. The life stage was then set by hand to paper over it.
         agent.state.now_this_many_years_old(30);
         with_a_full_larder(&mut agent);

@@ -6,7 +6,7 @@
 //!
 //! Before this there was no sickness at all. The only health consequence
 //! anywhere in the project was a flat ten damage for eating something already
-//! past `is_harmful`, taken in one tick and done with — so a settlement could
+//! past `is_harmful`, taken in one turn and done with — so a settlement could
 //! live on raw flesh and sleep in its own midden and never know the
 //! difference, and a fire was worth 2.7 times the nutrition and nothing else.
 //!
@@ -51,7 +51,7 @@ fn a_healthy_person_is_not_ailing() {
     assert!(simulation.population.agents[0].what_ails_me().is_none());
 }
 
-/// An ailment lasts days rather than a tick, which is the whole point of it.
+/// An ailment lasts days rather than a turn, which is the whole point of it.
 #[test]
 fn being_ill_lasts_days() {
     let mut simulation = one_person();
@@ -75,7 +75,7 @@ fn being_ill_costs_and_then_passes() {
     {
         let agent = &mut simulation.population.agents[0];
         agent.state.health = 100.0;
-        agent.taken_ill_with(Agent::OFF_RAW_FLESH, 1.0, simulation.current_tick);
+        agent.taken_ill_with(Agent::OFF_RAW_FLESH, 1.0, simulation.current_turn);
     }
 
     let started_at = simulation.population.agents[0].state.health;
@@ -85,8 +85,8 @@ fn being_ill_costs_and_then_passes() {
         .until;
 
     let mut worst = started_at;
-    while simulation.current_tick < runs_until + 2 {
-        simulation.tick();
+    while simulation.current_turn < runs_until + 2 {
+        simulation.take_a_turn();
 
         // Feed and water this person, so that what comes off their health
         // over the days is the illness and nothing else.
@@ -94,19 +94,19 @@ fn being_ill_costs_and_then_passes() {
         // `one_person` hands them an empty pack in an emptied world and an
         // ailment lasts days, so without this the test is a race between the
         // illness running its course and thirst killing them first. Thirst
-        // was winning: their health fell a quarter of a point a tick with
-        // `what_last_took_health` reading "thirst" from the first tick to the
-        // last, and they died of dehydration on tick 90. The claim below -
+        // was winning: their health fell a quarter of a point a turn with
+        // `what_last_took_health` reading "thirst" from the first turn to the
+        // last, and they died of dehydration on turn 90. The claim below -
         // that being ill takes something off - was being carried entirely by
         // that, and would have passed with the illness doing nothing at all.
         // It only showed when the mast changed how much the world spawns and
-        // the death moved a few ticks earlier, past the end of the loop.
-        let now = simulation.current_tick;
+        // the death moved a few turns earlier, past the end of the loop.
+        let now = simulation.current_turn;
         let agent = &mut simulation.population.agents[0];
-        agent.state.last_ate_tick = now;
-        agent.state.ticks_without_food = 0;
-        agent.state.last_drank_tick = now;
-        agent.state.ticks_without_water = 0;
+        agent.state.last_ate_turn = now;
+        agent.state.turns_without_food = 0;
+        agent.state.last_drank_turn = now;
+        agent.state.turns_without_water = 0;
         agent.state.physiology.hydration = 1.0;
 
         worst = worst.min(agent.state.health);
@@ -271,7 +271,7 @@ fn a_body_fouls_the_ground_it_falls_on() {
         .population
         .bodies_where_they_fell
         .push(((30, 30, 0), 4.0, 1.0));
-    simulation.tick();
+    simulation.take_a_turn();
 
     let after = simulation
         .world
@@ -302,12 +302,12 @@ fn living_on_a_midden_makes_people_ill() {
         // Pin them to the worst ground there is, and keep it that way: the
         // fouling breaks down, and an agent that wanders off is not living
         // on it any more.
-        for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 30) {
+        for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 30) {
             if let Some(tile) = simulation.world.grid.get_tile_mut(&here) {
                 tile.soil.fouling = Soil::AS_FOUL_AS_IT_GETS;
             }
             simulation.population.agents[0].state.position = (25, 25, 0);
-            simulation.tick();
+            simulation.take_a_turn();
 
             // A dead man is taken out of the population, so this has to ask
             // whether he is still there before asking how he is. It used to
@@ -338,12 +338,12 @@ fn clean_ground_does_not_make_anybody_ill() {
     let mut simulation = one_person();
     let here = Position::new(25, 25);
 
-    for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 20) {
+    for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 20) {
         if let Some(tile) = simulation.world.grid.get_tile_mut(&here) {
             tile.soil.fouling = 0.0;
         }
         simulation.population.agents[0].state.position = (25, 25, 0);
-        simulation.tick();
+        simulation.take_a_turn();
 
         if let Some(ailing) = simulation.population.agents[0].what_ails_me() {
             assert_ne!(
@@ -471,7 +471,7 @@ fn a_remedy_eases_and_does_not_cure() {
     );
     assert_eq!(
         after.until, until,
-        "and not one tick shorter: a remedy is not a cure"
+        "and not one turn shorter: a remedy is not a cure"
     );
 
     // Take it over and over and it stops helping. The cap is against the
@@ -592,8 +592,8 @@ fn a_wound_can_turn() {
         crate::core::dice::seed(5_200 + seed);
         let mut one = Agent::new(AgentConfig::default());
         one.state.take_damage(30.0);
-        for tick in 0..(14 * crate::environment::seasons::TICKS_PER_DAY) {
-            one.tick_with_time(tick);
+        for turn in 0..(14 * crate::environment::seasons::TURNS_PER_DAY) {
+            one.turn_with_time(turn);
             if one.is_ailing() {
                 break;
             }
@@ -618,8 +618,8 @@ fn a_soaking_in_the_cold_tells() {
         let mut agent = Agent::new(AgentConfig::default());
         // A hard day of it: what `update_exposure` would be handing over on a
         // January night in the open.
-        for tick in 0..crate::environment::seasons::TICKS_PER_DAY {
-            agent.a_soaking_may_tell(0.8, tick);
+        for turn in 0..crate::environment::seasons::TURNS_PER_DAY {
+            agent.a_soaking_may_tell(0.8, turn);
         }
         if agent.what_ails_me().map(|a| a.from == Agent::OFF_A_SOAKING).unwrap_or(false) {
             came_down += 1;

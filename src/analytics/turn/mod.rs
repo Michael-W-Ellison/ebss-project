@@ -1,12 +1,12 @@
 // src/analytics/turn/mod.rs
 //! A turn of the world, in the order it happens.
 //!
-//! `tick` was 852 lines, and its actual shape - a run of world phases, then
+//! `turn` was 852 lines, and its actual shape - a run of world phases, then
 //! everybody taking a turn, then a second run of world phases - was buried
 //! under six hundred and seventy lines of per-agent decision code sitting in
 //! the middle of it. The order of the phases is argued over in the comments
 //! below, and several of those arguments were bought with a measurement: the
-//! beasts look before they move rather than after, the world is ticked once
+//! beasts look before they move rather than after, the world is turned once
 //! rather than twice, what a body has to pass goes back on the ground before
 //! anybody smells it. None of that could be read while the middle of the
 //! function was longer than the whole of anything else in the file.
@@ -17,7 +17,7 @@
 //!   the order the model needs them.
 //!
 //! Nothing about what the model does changed in the move: three seeds run six
-//! hundred ticks give byte-identical worlds either side of it.
+//! hundred turns give byte-identical worlds either side of it.
 
 pub mod each_one;
 
@@ -25,23 +25,23 @@ use super::Simulation;
 use log::{debug, warn};
 
 impl Simulation {
-    /// Execute one simulation tick
-    pub fn tick(&mut self) {
+    /// Execute one simulation turn
+    pub fn take_a_turn(&mut self) {
         // Food does not sit on a fire forever: it is taken off, or it burns
         // away. Either way the smell of cooking is a passing thing, so old
         // contents are cleared before scents are worked out.
         self.clear_finished_cooking();
 
         // Let agents smell nearby food and water before they perceive and act,
-        // so world resources reach the percept/memory pipeline this tick.
+        // so world resources reach the percept/memory pipeline this turn.
         self.emit_scents();
 
         // Process population lifecycle (aging, starvation, deaths, reproduction)
-        // This also increments the tick counter and updates all agents
-        self.population.tick();
+        // This also increments the turn counter and updates all agents
+        self.population.take_a_turn();
 
-        // Sync simulation tick with population tick
-        self.current_tick = self.population.current_tick;
+        // Sync simulation turn with population turn
+        self.current_turn = self.population.current_turn;
 
         // Let agents look around them. Sight needs both the population and the
         // world, which only exist together here, so this is the one place it
@@ -52,7 +52,7 @@ impl Simulation {
         // nobody has a use for goes out of it again after the looking rather
         // than before
         {
-            let now = self.current_tick;
+            let now = self.current_turn;
             for agent in self.population.agents.iter_mut() {
                 if agent.state.is_alive {
                     agent.forget_what_does_not_matter(now);
@@ -60,10 +60,10 @@ impl Simulation {
             }
         }
 
-        // World systems - climate, fauna, flora - are ticked by World::tick
-        // further down this function. Ticking them here as well ran the whole
+        // World systems - climate, fauna, flora - are turned by World::take_a_turn
+        // further down this function. Turning them here as well ran the whole
         // living world at double speed: animals aged, starved, bred and grazed
-        // twice for every tick an agent lived through.
+        // twice for every turn an agent lived through.
 
         // A man sitting at a fire with a bright stone in his hand may notice
         // what the fire does to it
@@ -89,7 +89,7 @@ impl Simulation {
         self.update_agent_exposure();
 
         // Tell each agent what the world around it is doing, so that next
-        // tick its drives rise on the conditions the design document gives
+        // turn its drives rise on the conditions the design document gives
         // them rather than on a clock
         self.read_the_situation();
 
@@ -108,7 +108,7 @@ impl Simulation {
         // and who else is about.
         //
         // Before the beasts move, not after. The first cut ran this at the
-        // end of the tick and it saw almost nothing: a wolf pack that has
+        // end of the turn and it saw almost nothing: a wolf pack that has
         // just been frightened off by the man it walked up to is nine paces
         // away by the time anybody looks, so the man never learned there were
         // wolves there at all.
@@ -140,7 +140,7 @@ impl Simulation {
 
 
 
-        debug!("=== Tick {} ===", self.current_tick);
+        debug!("=== Turn {} ===", self.current_turn);
 
         // And everybody in it takes a turn - see `turn::each_one`.
         self.everybody_takes_a_turn();
@@ -151,22 +151,22 @@ impl Simulation {
         // Process environmental damage (exposure, falling, disease)
         self.process_environmental_damage();
 
-        // Process building production collection (every 50 ticks)
+        // Process building production collection (every 50 turns)
         // Agents near production buildings automatically collect resources
-        if self.current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
+        if self.current_turn % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
             self.process_building_production_collection();
         }
 
-        // Process building maintenance (every 100 ticks)
+        // Process building maintenance (every 100 turns)
         // Generate maintenance tasks for buildings in poor condition
-        if self.current_tick % crate::environment::seasons::ONCE_A_WEEK == 0 {
+        if self.current_turn % crate::environment::seasons::ONCE_A_WEEK == 0 {
             self.process_building_maintenance();
         }
 
         // Lies are found out by walking to the place - see the sight pass in
         // `Population::process_exploration_with_world`.
         //
-        // There used to be a second path here: a sweep every hundred ticks
+        // There used to be a second path here: a sweep every hundred turns
         // over remembered claims, checking each with `verify_resource_claim`.
         // That reads the agent's own map as though it were ground truth, and
         // an agent's map holds what it has been told as well as what it has
@@ -193,8 +193,8 @@ impl Simulation {
         self.feed_the_small_children();
         self.process_nursing();
 
-        // Tick world (building construction progress, etc.)
-        self.world.tick();
+        // Turn world (building construction progress, etc.)
+        self.world.take_a_turn();
 
         // And what the wild things do about the people in it. Nothing in the
         // fauna module knew agents existed except the predator pass, so a deer
@@ -216,8 +216,8 @@ impl Simulation {
         // Apply religious building effects to agent happiness
         self.apply_religious_effects();
 
-        // Log statistics every 10 ticks
-        if self.current_tick % crate::environment::seasons::ONCE_A_DAY == 0 {
+        // Log statistics every 10 turns
+        if self.current_turn % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.log_statistics();
         }
 

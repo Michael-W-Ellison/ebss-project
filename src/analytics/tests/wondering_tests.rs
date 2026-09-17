@@ -443,7 +443,7 @@ fn a_question_nobody_gets_back_to_is_given_up_on() {
         in_this: Vec::new(),
     });
 
-    simulation.current_tick = Wondering::HOW_LONG_ANYBODY_WONDERS + 2;
+    simulation.current_turn = Wondering::HOW_LONG_ANYBODY_WONDERS + 2;
     simulation.who_came_back_to_look();
 
     assert!(simulation.population.agents[0].wonderings.is_empty());
@@ -470,7 +470,7 @@ fn finding_it_exactly_as_you_left_it_is_also_a_lesson() {
         in_this: Vec::new(),
     });
 
-    simulation.current_tick = Wondering::HOW_LONG_ANYBODY_WONDERS + 2;
+    simulation.current_turn = Wondering::HOW_LONG_ANYBODY_WONDERS + 2;
     simulation.who_came_back_to_look();
 
     let agent = &simulation.population.agents[0];
@@ -562,8 +562,8 @@ fn a_settlement_asks_and_answers_questions_on_its_own() {
     }
     let mut simulation = Simulation::new(world, population);
 
-    for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 90) {
-        simulation.tick();
+    for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 90) {
+        simulation.take_a_turn();
         if !simulation.population.agents.iter().any(|a| a.state.is_alive) {
             break;
         }

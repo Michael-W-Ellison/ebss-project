@@ -258,7 +258,7 @@ fn sight_outranges_every_food_smell_but_a_fire() {
 /// this model can eat them, while **greens and roots** - most of what anybody
 /// eats in three seasons out of four - smelled of nothing at all. A starving
 /// agent smells the herbs, walks to them, gathers nothing, and does it again
-/// next tick. See ISSUES #229.
+/// next turn. See ISSUES #229.
 #[test]
 fn only_food_smells_of_food() {
     for resource in ResourceType::all() {
@@ -323,12 +323,12 @@ fn nothing_anybody_eats_is_odourless() {
     }
 }
 
-/// Scents do not pile up: they are re-derived from the world every tick.
+/// Scents do not pile up: they are re-derived from the world every turn.
 ///
 /// Appending instead left thousands of duplicates behind, and stale ones kept
 /// rebuilding memories of patches that had long since been eaten.
 #[test]
-fn scents_do_not_accumulate_across_ticks() {
+fn scents_do_not_accumulate_across_turns() {
     let world = World::new(WorldConfig::default());
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
@@ -336,7 +336,7 @@ fn scents_do_not_accumulate_across_ticks() {
     let mut simulation = Simulation::new(world, population);
 
     for _ in 0..50 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let scents = simulation.population.agents[0]
@@ -347,6 +347,6 @@ fn scents_do_not_accumulate_across_ticks() {
 
     assert!(
         scents < 200,
-        "scent list should be rebuilt each tick, not appended to; found {scents}"
+        "scent list should be rebuilt each turn, not appended to; found {scents}"
     );
 }

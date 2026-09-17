@@ -505,7 +505,7 @@ fn a_settlement_can_find_metal_out_for_itself() {
 
     let mut anybody_knows = false;
     for _ in 0..600 {
-        simulation.tick();
+        simulation.take_a_turn();
 
         // Keep the conditions in place: a fire that stays lit, iron in every
         // pack, and people who have not wandered off. What is under test is

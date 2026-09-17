@@ -4,7 +4,7 @@
 use serde::{Serialize, Deserialize};
 
 /// Hours of wakefulness before fatigue starts impacting performance
-pub const FATIGUE_ONSET_TICKS: u32 = 960; // ~16 hours at 60 ticks/hour
+pub const FATIGUE_ONSET_TURNS: u32 = 960; // ~16 hours at 60 turns/hour
 
 /// Maximum fatigue level (complete exhaustion)
 pub const MAX_FATIGUE: f32 = 1.0;
@@ -18,10 +18,10 @@ pub const MODERATE_FATIGUE_THRESHOLD: f32 = 0.5;
 /// Fatigue level at which mild penalties apply
 pub const MILD_FATIGUE_THRESHOLD: f32 = 0.3;
 
-/// Base fatigue increase per tick while awake
+/// Base fatigue increase per turn while awake
 pub const BASE_FATIGUE_RATE: f32 = 0.0005;
 
-/// Fatigue decrease per tick while sleeping (base, modified by sleep quality)
+/// Fatigue decrease per turn while sleeping (base, modified by sleep quality)
 pub const BASE_RECOVERY_RATE: f32 = 0.003;
 
 /// Tracks an agent's fatigue state and sleep patterns
@@ -33,13 +33,13 @@ pub struct FatigueState {
     /// Accumulated sleep debt (hours of missed sleep)
     pub sleep_debt: f32,
 
-    /// Tick when agent last woke up
-    pub last_woke_tick: u32,
+    /// Turn when agent last woke up
+    pub last_woke_turn: u32,
 
-    /// Tick when agent last slept
-    pub last_slept_tick: u32,
+    /// Turn when agent last slept
+    pub last_slept_turn: u32,
 
-    /// Total ticks slept in the last sleep session
+    /// Total turns slept in the last sleep session
     pub last_sleep_duration: u32,
 
     /// Whether agent is currently sleeping
@@ -48,8 +48,8 @@ pub struct FatigueState {
     /// Quality of last sleep (0.0 to 1.0)
     pub last_sleep_quality: f32,
 
-    /// Consecutive ticks without adequate sleep (for sleep debt calculation)
-    pub ticks_without_adequate_sleep: u32,
+    /// Consecutive turns without adequate sleep (for sleep debt calculation)
+    pub turns_without_adequate_sleep: u32,
 }
 
 impl Default for FatigueState {
@@ -57,12 +57,12 @@ impl Default for FatigueState {
         Self {
             level: 0.0,
             sleep_debt: 0.0,
-            last_woke_tick: 0,
-            last_slept_tick: 0,
+            last_woke_turn: 0,
+            last_slept_turn: 0,
             last_sleep_duration: 0,
             is_sleeping: false,
             last_sleep_quality: 1.0,
-            ticks_without_adequate_sleep: 0,
+            turns_without_adequate_sleep: 0,
         }
     }
 }
@@ -74,8 +74,8 @@ impl FatigueState {
     }
 
     /// Update fatigue while awake
-    /// Returns the fatigue increase this tick
-    pub fn tick_awake(&mut self, activity_level: f32, current_tick: u32) -> f32 {
+    /// Returns the fatigue increase this turn
+    pub fn turn_awake(&mut self, activity_level: f32, current_turn: u32) -> f32 {
         self.is_sleeping = false;
 
         // Base fatigue increase
@@ -93,30 +93,30 @@ impl FatigueState {
         self.level = (self.level + fatigue_increase).min(MAX_FATIGUE);
 
         // Track time without adequate sleep
-        let ticks_awake = current_tick.saturating_sub(self.last_slept_tick);
-        if ticks_awake > FATIGUE_ONSET_TICKS {
-            self.ticks_without_adequate_sleep = ticks_awake - FATIGUE_ONSET_TICKS;
+        let turns_awake = current_turn.saturating_sub(self.last_slept_turn);
+        if turns_awake > FATIGUE_ONSET_TURNS {
+            self.turns_without_adequate_sleep = turns_awake - FATIGUE_ONSET_TURNS;
             // Accumulate sleep debt (1 hour debt per 2 hours over threshold)
-            self.sleep_debt = (self.ticks_without_adequate_sleep as f32 / 120.0).min(24.0);
+            self.sleep_debt = (self.turns_without_adequate_sleep as f32 / 120.0).min(24.0);
         }
 
         fatigue_increase
     }
 
     /// Update fatigue while sleeping
-    /// Returns the fatigue decrease this tick
-    pub fn tick_sleeping(&mut self, sleep_quality: f32, current_tick: u32) -> f32 {
-        self.tick_sleeping_with_modifier(sleep_quality, current_tick, 1.0)
+    /// Returns the fatigue decrease this turn
+    pub fn turn_sleeping(&mut self, sleep_quality: f32, current_turn: u32) -> f32 {
+        self.turn_sleeping_with_modifier(sleep_quality, current_turn, 1.0)
     }
 
     /// Update fatigue while sleeping with a recovery modifier from traits
     /// recovery_modifier: 1.0 = normal, <1.0 = slower recovery (Narcoleptic), >1.0 = faster
-    /// Returns the fatigue decrease this tick
-    pub fn tick_sleeping_with_modifier(&mut self, sleep_quality: f32, current_tick: u32, recovery_modifier: f32) -> f32 {
+    /// Returns the fatigue decrease this turn
+    pub fn turn_sleeping_with_modifier(&mut self, sleep_quality: f32, current_turn: u32, recovery_modifier: f32) -> f32 {
         if !self.is_sleeping {
             // Just started sleeping
             self.is_sleeping = true;
-            self.last_slept_tick = current_tick;
+            self.last_slept_turn = current_turn;
             self.last_sleep_duration = 0;
         }
 
@@ -137,16 +137,16 @@ impl FatigueState {
 
         // Reset inadequate sleep counter if we've slept enough
         if self.last_sleep_duration > 300 { // ~5 hours minimum
-            self.ticks_without_adequate_sleep = 0;
+            self.turns_without_adequate_sleep = 0;
         }
 
         fatigue_decrease
     }
 
     /// Called when agent wakes up
-    pub fn wake_up(&mut self, current_tick: u32) {
+    pub fn wake_up(&mut self, current_turn: u32) {
         self.is_sleeping = false;
-        self.last_woke_tick = current_tick;
+        self.last_woke_turn = current_turn;
     }
 
     /// Get fatigue severity level
@@ -319,8 +319,8 @@ mod tests {
         assert_eq!(fatigue.level, 0.0);
 
         // Simulate being awake for a while
-        for tick in 0..1000 {
-            fatigue.tick_awake(0.5, tick);
+        for turn in 0..1000 {
+            fatigue.turn_awake(0.5, turn);
         }
 
         // Should have accumulated some fatigue
@@ -334,8 +334,8 @@ mod tests {
         fatigue.level = 0.8; // Start tired
 
         // Sleep with good quality
-        for tick in 0..500 {
-            fatigue.tick_sleeping(0.9, tick);
+        for turn in 0..500 {
+            fatigue.turn_sleeping(0.9, turn);
         }
 
         // Should have recovered significantly
@@ -396,14 +396,14 @@ mod tests {
     #[test]
     fn test_sleep_debt_accumulation() {
         let mut fatigue = FatigueState::new();
-        fatigue.last_slept_tick = 0;
+        fatigue.last_slept_turn = 0;
 
         // Stay awake way past fatigue onset
-        let late_tick = FATIGUE_ONSET_TICKS + 600; // 10 extra hours
-        fatigue.tick_awake(0.5, late_tick);
+        let late_turn = FATIGUE_ONSET_TURNS + 600; // 10 extra hours
+        fatigue.turn_awake(0.5, late_turn);
 
         // Should have accumulated sleep debt
         assert!(fatigue.sleep_debt > 0.0);
-        assert!(fatigue.ticks_without_adequate_sleep > 0);
+        assert!(fatigue.turns_without_adequate_sleep > 0);
     }
 }

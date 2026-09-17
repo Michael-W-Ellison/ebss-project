@@ -65,12 +65,12 @@ impl Simulation {
     /// Wood a campfire is built from, matching `HeatSourceType::Campfire`
     pub(in crate::analytics) const FIRE_BUILD_WOOD: u32 = 5;
 
-    /// Wood put on to burn, worth about fifty ticks at a campfire's rate
+    /// Wood put on to burn, worth about fifty turns at a campfire's rate
     pub(in crate::analytics) const FIRE_FUEL_WOOD: u32 = 5;
 
     /// How long food goes on smelling of cooking after it is taken off the
-    /// fire, in ticks
-    pub(in crate::analytics) const COOKING_SMELL_TICKS: u32 = 60;
+    /// fire, in turns
+    pub(in crate::analytics) const COOKING_SMELL_TURNS: u32 = 60;
 
     /// How much food fits over a campfire at once
     pub(in crate::analytics) const COOK_BATCH: u32 = 5;
@@ -105,7 +105,7 @@ impl Simulation {
     /// have much less of it than you do, which is a comparison and not a
     /// threshold. The first cut of this asked for six of a thing on one side
     /// and fewer than six on the other, and over eight worlds of ten thousand
-    /// ticks a settlement traded once.
+    /// turns a settlement traded once.
     pub(in crate::analytics) fn what_i_would_hand_over(&self, me: usize, them: usize) -> Option<(String, u32)> {
         // A coat for somebody going bare comes before anything else, and does
         // not have to be a surplus.
@@ -400,7 +400,7 @@ impl Simulation {
     /// what the first cut of this did not do. That one was a temperament roll
     /// - a base chance, nudged by Honest and Greedy and by whether the agent
     /// was starving - and it never looked at what was being taken or what it
-    /// was worth. It fired once in eight worlds of ten thousand ticks, and
+    /// was worth. It fired once in eight worlds of ten thousand turns, and
     /// when it did fire the agent had no idea whether the thing it had just
     /// robbed somebody for was any use to it.
     ///

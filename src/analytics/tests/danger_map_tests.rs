@@ -16,7 +16,7 @@
 use crate::agents::exploration::Danger;
 use crate::agents::{AgentConfig, Population};
 use crate::analytics::Simulation;
-use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::seasons::TURNS_PER_DAY;
 use crate::world::{Position, World, WorldConfig};
 
 fn one_person() -> Simulation {
@@ -86,7 +86,7 @@ fn a_fright_fades() {
     map.saw_danger(Position::new(30, 30), "wolves", 1.0, 0);
 
     let fresh = map.how_bad_is_it_there(Position::new(30, 30), 0);
-    let later = map.how_bad_is_it_there(Position::new(30, 30), TICKS_PER_DAY * 8);
+    let later = map.how_bad_is_it_there(Position::new(30, 30), TURNS_PER_DAY * 8);
 
     assert!(later < fresh, "{fresh} should fade to less than itself");
     assert_eq!(
@@ -147,14 +147,14 @@ fn something_that_could_kill_you_goes_on_the_map() {
     }
 
     // Hold both of them still. A pack that has just been walked up to is
-    // nine paces off by the end of the tick, which is a fact about wolves
+    // nine paces off by the end of the turn, which is a fact about wolves
     // rather than about the map.
     for _ in 0..20 {
         simulation.population.agents[0].state.position = here;
         for animal in simulation.world.animals.get_all_mut() {
             animal.position = (here.0 + 3, here.1);
         }
-        simulation.tick();
+        simulation.take_a_turn();
         if !simulation.population.agents[0].state.is_alive {
             break;
         }
@@ -190,7 +190,7 @@ fn something_harmless_does_not() {
         for animal in simulation.world.animals.get_all_mut() {
             animal.position = (here.0 + 2, here.1);
         }
-        simulation.tick();
+        simulation.take_a_turn();
         if !simulation.population.agents[0].state.is_alive {
             break;
         }
@@ -240,7 +240,7 @@ fn a_bad_place_is_further_away_than_it_measures() {
     // Now put wolves in the near one's memory.
     simulation.population.agents[0]
         .exploration_knowledge
-        .saw_danger(near, "wolves", 1.0, simulation.current_tick);
+        .saw_danger(near, "wolves", 1.0, simulation.current_turn);
 
     let chosen = simulation.nearest_edible_this_one_would_go_to(
         &simulation.population.agents[0],
@@ -272,7 +272,7 @@ fn the_only_patch_there_is_gets_walked_to_anyway() {
 
     simulation.population.agents[0]
         .exploration_knowledge
-        .saw_danger(only, "bear", 1.0, simulation.current_tick);
+        .saw_danger(only, "bear", 1.0, simulation.current_turn);
 
     assert_eq!(
         simulation.nearest_edible_this_one_would_go_to(
@@ -316,7 +316,7 @@ fn a_sighting_goes_stale() {
     map.saw_somebody(somebody, Position::new(40, 40), 100);
 
     assert!(
-        map.where_did_i_last_see(somebody, 100 + TICKS_PER_DAY * 3)
+        map.where_did_i_last_see(somebody, 100 + TURNS_PER_DAY * 3)
             .is_none(),
         "three days on, that is not where they are"
     );
@@ -337,10 +337,10 @@ fn people_standing_together_see_each_other() {
     for _ in 0..12 {
         simulation.population.agents[0].state.position = (25, 25, 0);
         simulation.population.agents[1].state.position = (26, 25, 0);
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
-    let now = simulation.current_tick;
+    let now = simulation.current_turn;
     assert!(
         simulation.population.agents[0]
             .exploration_knowledge

@@ -185,7 +185,7 @@ fn a_warm_agent_does_not_bother() {
 
 /// Two similar cloaks are not swapped back and forth forever.
 ///
-/// Whatever is worn wears down a little each tick, so without a margin the one
+/// Whatever is worn wears down a little each turn, so without a margin the one
 /// folded in the pack is always fractionally warmer, and an agent spends its
 /// whole life changing its coat.
 #[test]
@@ -209,9 +209,9 @@ fn a_near_identical_coat_is_not_worth_changing_into() {
         agent.inventory.add_item(spare);
     }
 
-    // Wear the worn one down a little, as a tick would
+    // Wear the worn one down a little, as a turn would
     for _ in 0..50 {
-        simulation.population.agents[0].body.tick_equipment_wear();
+        simulation.population.agents[0].body.turn_equipment_wear();
     }
 
     assert_eq!(
@@ -421,7 +421,7 @@ fn a_cold_man_dresses(seed: u64) -> bool {
         .add_item(InventoryItem::new_with_weight("flax".to_string(), 200, 1.0));
 
     // An agent that wants to be warmer than this weather will ever make it.
-    // Forcing the current temperature instead would not survive the tick,
+    // Forcing the current temperature instead would not survive the turn,
     // which recomputes it from the climate before anyone decides anything.
     simulation.population.agents[0].body_temperature.ideal = 45.0;
 
@@ -432,7 +432,7 @@ fn a_cold_man_dresses(seed: u64) -> bool {
     // it is about whether the clothing chain can be reached at all, and what
     // it actually measures is how many other errands a world gives a man.
     for _ in 0..600 {
-        simulation.tick();
+        simulation.take_a_turn();
 
         // Some of these worlds kill him. A man who died is a man who did not
         // dress, which is an answer and not a panic.
@@ -472,7 +472,7 @@ fn a_folded_coat_keeps_its_wear() {
     }
 
     for _ in 0..500 {
-        simulation.population.agents[0].body.tick_equipment_wear();
+        simulation.population.agents[0].body.turn_equipment_wear();
     }
 
     let worn_down = simulation.population.agents[0]

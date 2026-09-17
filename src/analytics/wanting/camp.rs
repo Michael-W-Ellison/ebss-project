@@ -14,7 +14,7 @@ use crate::environment::Action;
 impl Simulation {
     /// The need this agent keeps having and keeps not getting.
     ///
-    /// `denied_ticks` counts how long a drive has gone unanswered, and until
+    /// `denied_turns` counts how long a drive has gone unanswered, and until
     /// now only hunger was ever read for the purpose of moving house. Thirst
     /// was the largest single failure in the whole simulation - a hundred and
     /// thirty-one thousand refusals of `Gather: No water sources nearby` in
@@ -31,7 +31,7 @@ impl Simulation {
         // land on and work it out from under themselves. Measured, letting
         // hunger move a settlement took the nutrient-loop regression from
         // passing three times in three to twice in five: farmed ground losing
-        // more than half its fertility inside ten thousand ticks.
+        // more than half its fertility inside ten thousand turns.
         //
         // Ranging for food and settling by water is the division the land
         // itself makes.
@@ -41,14 +41,14 @@ impl Simulation {
                 agent
                     .drives
                     .get(*need)
-                    .map(|drive| drive.denied_ticks() >= Self::ASKED_FOR_IT_ONCE_TOO_OFTEN)
+                    .map(|drive| drive.denied_turns() >= Self::ASKED_FOR_IT_ONCE_TOO_OFTEN)
                     .unwrap_or(false)
             })
             .max_by_key(|need| {
                 agent
                     .drives
                     .get(*need)
-                    .map(|drive| drive.denied_ticks())
+                    .map(|drive| drive.denied_turns())
                     .unwrap_or(0)
             })
     }
@@ -76,7 +76,7 @@ impl Simulation {
         // Whether to move house is a question worth asking once a day, not
         // eight times: it walks the whole resource list at sixty tiles, and a
         // people do not reconsider where they live every two hours.
-        if self.current_tick % crate::environment::seasons::TICKS_PER_DAY != 0 {
+        if self.current_turn % crate::environment::seasons::TURNS_PER_DAY != 0 {
             return None;
         }
 
@@ -126,7 +126,7 @@ impl Simulation {
     /// The first cut of this was 25 a head, which is about what a person
     /// eats in a season and reads as the right number until you notice that
     /// no ground anywhere in the world carries that much for a grown
-    /// settlement. It fired every tick of every life. Over eight worlds
+    /// settlement. It fired every turn of every life. Over eight worlds
     /// foraging fell forty per cent, the food standing on the map went up
     /// four and a half times because nobody was eating it, the camp did not
     /// end up any further from where it started, and it cost about twelve
@@ -154,7 +154,7 @@ impl Simulation {
     /// reason to stay, and the whole of what settling down is.
     ///
     /// It is not the same thing as `migration_action`, which fires on an agent
-    /// that has already been going hungry for a hundred and twenty ticks. This
+    /// that has already been going hungry for a hundred and twenty turns. This
     /// fires while there is still food here, on the strength of there not
     /// being much of it, which is the difference between moving camp and
     /// fleeing.
@@ -286,7 +286,7 @@ impl Simulation {
                 agent
                     .drives
                     .get(*drive)
-                    .map(|it| it.denied_ticks())
+                    .map(|it| it.denied_turns())
                     .unwrap_or(0)
                     >= Self::HUNGRY_ENOUGH_TO_LEAVE
             });
@@ -338,7 +338,7 @@ impl Simulation {
         }
 
         // Nothing remembered worth the walk: pick a bearing and hold it. The
-        // bearing comes from the agent rather than the tick, so somebody who
+        // bearing comes from the agent rather than the turn, so somebody who
         // sets out keeps going the same way instead of milling about, and two
         // people leaving the same place do not necessarily leave together.
         let bearings = [
@@ -372,9 +372,9 @@ impl Simulation {
     pub(in crate::analytics) fn search_leg(
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
-        current_tick: u32,
+        current_turn: u32,
     ) -> Action {
-        const SEARCH_LEG_TICKS: u32 = 300;
+        const SEARCH_LEG_TURNS: u32 = 300;
         const SEARCH_LEG_DISTANCE: i32 = 12;
 
         let directions = [
@@ -388,7 +388,7 @@ impl Simulation {
             (-1, -1),
         ];
 
-        let leg = (current_tick / SEARCH_LEG_TICKS) as u64;
+        let leg = (current_turn / SEARCH_LEG_TURNS) as u64;
         let seed = (agent.id.as_u128() as u64) ^ leg.wrapping_mul(0x9E37_79B9_7F4A_7C15);
         let (dx, dy) = directions[(seed % directions.len() as u64) as usize];
 

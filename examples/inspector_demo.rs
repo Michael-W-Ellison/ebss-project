@@ -33,14 +33,14 @@ fn main() {
 
     println!("\nSimulation Controller created");
     println!("Initial state: {:?}", controller.state);
-    println!("Current tick: {}", controller.current_tick);
+    println!("Current turn: {}", controller.current_turn);
 
     // Display control interface
     println!("\n╔═══════════════════════════════════════════════════════════╗");
     println!("║         SIMULATION CONTROLS                               ║");
     println!("╠═══════════════════════════════════════════════════════════╣");
     println!("║  [SPACE]  - Pause/Resume                                  ║");
-    println!("║  [S]      - Step one tick                                 ║");
+    println!("║  [S]      - Step one turn                                 ║");
     println!("║  [+/-]    - Increase/Decrease speed                       ║");
     println!("║  [1-5]    - Select agent 1-5                             ║");
     println!("║  [C]      - Clear selection                              ║");
@@ -78,32 +78,32 @@ fn demo_simulation_control(controller: &mut SimulationController) {
 
     println!("1. Initial State:");
     println!("   State: {:?}", controller.state);
-    println!("   Tick: {}", controller.current_tick);
-    println!("   Tick Rate: {} ticks/sec", controller.tick_rate);
+    println!("   Turn: {}", controller.current_turn);
+    println!("   Turn Rate: {} turns/sec", controller.turn_rate);
 
     println!("\n2. Starting simulation...");
     controller.play();
     println!("   State: {:?}", controller.state);
 
-    println!("\n3. Running 10 ticks...");
+    println!("\n3. Running 10 turns...");
     for _ in 0..10 {
-        controller.tick_once();
+        controller.turn_once();
     }
-    println!("   Current tick: {}", controller.current_tick);
+    println!("   Current turn: {}", controller.current_turn);
 
     println!("\n4. Pausing simulation...");
     controller.pause();
     println!("   State: {:?}", controller.state);
 
-    println!("\n5. Single-stepping 3 ticks...");
+    println!("\n5. Single-stepping 3 turns...");
     for i in 1..=3 {
         controller.step();
-        println!("   Step {}: Tick {}", i, controller.current_tick);
+        println!("   Step {}: Turn {}", i, controller.current_turn);
     }
 
     println!("\n6. Adjusting simulation speed...");
-    controller.set_tick_rate(50.0);
-    println!("   New tick rate: {} ticks/sec", controller.tick_rate);
+    controller.set_turn_rate(50.0);
+    println!("   New turn rate: {} turns/sec", controller.turn_rate);
 }
 
 fn demo_agent_inspection(controller: &mut SimulationController, inspector: &mut Inspector) {

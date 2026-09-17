@@ -172,7 +172,7 @@ impl Piece {
     /// How many of these fit over the flames at once.
     ///
     /// This is what "smaller portions cook faster" comes to in a model where
-    /// an action is a tick: cut small, and more of your supper is ready at the
+    /// an action is a turn: cut small, and more of your supper is ready at the
     /// end of the same turn.
     ///
     /// A portion is deliberately the same five that everything was before
@@ -195,14 +195,14 @@ impl Piece {
     pub fn how_long_it_takes_to_dry(&self) -> u32 {
         /// Six days for a joint, two for a strip.
         ///
-        /// These were 72 and 24 as bare tick counts, which said six days and
+        /// These were 72 and 24 as bare turn counts, which said six days and
         /// two days at a two-hour turn and would have said a day and a half
         /// and half a day at a half-hour one. The spoilage tables beside them
         /// were already stated in days and converted - see `days` - and this
         /// was not. Drying is a thing that takes so many days in the sun; it
         /// is not a thing that takes so many decisions.
         const fn days(how_many: u32) -> u32 {
-            how_many * crate::environment::seasons::TICKS_PER_DAY
+            how_many * crate::environment::seasons::TURNS_PER_DAY
         }
 
         match self {
@@ -344,25 +344,25 @@ pub struct FoodData {
     pub preparation: PreparationState,
     /// Freshness (1.0 = fresh, 0.0 = spoiled)
     pub freshness: f32,
-    /// Tick when item was created/harvested
-    pub created_tick: u32,
-    /// Base spoilage rate (ticks to reach 0 freshness from 1.0 at Raw state)
-    pub base_spoilage_ticks: u32,
+    /// Turn when item was created/harvested
+    pub created_turn: u32,
+    /// Base spoilage rate (turns to reach 0 freshness from 1.0 at Raw state)
+    pub base_spoilage_turns: u32,
 }
 
 impl FoodData {
     pub fn new(
         base_nutrition: NutritionalContent,
         preparation: PreparationState,
-        base_spoilage_ticks: u32,
-        created_tick: u32,
+        base_spoilage_turns: u32,
+        created_turn: u32,
     ) -> Self {
         Self {
             base_nutrition,
             preparation,
             freshness: 1.0,
-            created_tick,
-            base_spoilage_ticks,
+            created_turn,
+            base_spoilage_turns,
         }
     }
 
@@ -464,30 +464,30 @@ impl FoodData {
         }
     }
 
-    /// Update freshness based on current tick
-    /// How many ticks this has before it stops being food.
+    /// Update freshness based on current turn
+    /// How many turns this has before it stops being food.
     ///
     /// What is left of its own clock: the whole of it at the pace its
     /// preparation lets it run, times how much of that is still to come.
-    /// Freshness is *derived* from `created_tick` by `update_freshness`, so
-    /// this needs no tick handed to it and cannot disagree with what the
+    /// Freshness is *derived* from `created_turn` by `update_freshness`, so
+    /// this needs no turn handed to it and cannot disagree with what the
     /// world last worked out.
     ///
     /// The one owner of the question. `Pit::how_long_this_would_keep` asks it
     /// and multiplies by what the hole is worth; `find_best_food_to_eat` asks
     /// it to decide what to eat first.
     pub fn how_long_this_has_left(&self) -> f32 {
-        let spoils_in = self.base_spoilage_ticks as f32 / self.preparation.spoilage_multiplier();
+        let spoils_in = self.base_spoilage_turns as f32 / self.preparation.spoilage_multiplier();
         (spoils_in * self.freshness.clamp(0.0, 1.0)).max(0.0)
     }
 
-    pub fn update_freshness(&mut self, current_tick: u32) {
-        let elapsed = current_tick.saturating_sub(self.created_tick);
+    pub fn update_freshness(&mut self, current_turn: u32) {
+        let elapsed = current_turn.saturating_sub(self.created_turn);
         let spoilage_rate = self.preparation.spoilage_multiplier();
-        let effective_spoilage_ticks = (self.base_spoilage_ticks as f32 / spoilage_rate) as u32;
+        let effective_spoilage_turns = (self.base_spoilage_turns as f32 / spoilage_rate) as u32;
 
-        if effective_spoilage_ticks > 0 {
-            self.freshness = (1.0 - (elapsed as f32 / effective_spoilage_ticks as f32)).max(0.0);
+        if effective_spoilage_turns > 0 {
+            self.freshness = (1.0 - (elapsed as f32 / effective_spoilage_turns as f32)).max(0.0);
         }
     }
 
@@ -499,12 +499,12 @@ impl FoodData {
     /// it is there. The new food comes down to meet the old.
     ///
     /// A stack ages as a mixture of what is in it, so that a basket topped up
-    /// a hundred times over a world is not pinned for ever at the tick its
+    /// a hundred times over a world is not pinned for ever at the turn its
     /// very first berry was picked. But once mould has actually manifested it
     /// takes the whole basket outright: nothing rescues a basket that has gone
     /// over by putting good fruit into it.
     ///
-    /// Freshness is *derived* from `created_tick` by `update_freshness`, so
+    /// Freshness is *derived* from `created_turn` by `update_freshness`, so
     /// the timer is the thing that has to move; the freshness is set as well
     /// only so that the stack reads right before the next pass.
     ///
@@ -522,10 +522,10 @@ impl FoodData {
 
         let gone_over = self.is_spoiled() || other.is_spoiled();
 
-        let created_tick = if gone_over {
-            self.created_tick.min(other.created_tick)
+        let created_turn = if gone_over {
+            self.created_turn.min(other.created_turn)
         } else {
-            Self::weighted(self.created_tick, mine, other.created_tick, theirs)
+            Self::weighted(self.created_turn, mine, other.created_turn, theirs)
         };
 
         let freshness = if gone_over {
@@ -540,12 +540,12 @@ impl FoodData {
             base_nutrition: self.base_nutrition,
             preparation,
             freshness,
-            created_tick,
-            base_spoilage_ticks: self.base_spoilage_ticks.min(other.base_spoilage_ticks),
+            created_turn,
+            base_spoilage_turns: self.base_spoilage_turns.min(other.base_spoilage_turns),
         }
     }
 
-    /// One tick blended into another by how much of each there is.
+    /// One turn blended into another by how much of each there is.
     fn weighted(mine: u32, how_much_of_mine: u32, theirs: u32, how_much_of_theirs: u32) -> u32 {
         let how_much_of_mine = how_much_of_mine.max(1) as u64;
         let how_much_of_theirs = how_much_of_theirs.max(1) as u64;
@@ -558,10 +558,10 @@ impl FoodData {
     }
 
     /// Change preparation state (e.g., cooking raw meat)
-    /// Resets created_tick to current tick for spoilage calculations
-    pub fn set_preparation(&mut self, new_state: PreparationState, current_tick: u32) {
+    /// Resets created_turn to current turn for spoilage calculations
+    pub fn set_preparation(&mut self, new_state: PreparationState, current_turn: u32) {
         self.preparation = new_state;
-        self.created_tick = current_tick;
+        self.created_turn = current_turn;
         // Freshness resets when food is prepared
         self.freshness = 1.0;
     }
@@ -571,8 +571,8 @@ impl FoodData {
 #[derive(Debug, Clone)]
 pub struct FoodTemplate {
     pub base_nutrition: NutritionalContent,
-    /// Ticks to spoil at raw state
-    pub base_spoilage_ticks: u32,
+    /// Turns to spoil at raw state
+    pub base_spoilage_turns: u32,
     /// Default preparation state when created
     pub default_preparation: PreparationState,
 }
@@ -602,13 +602,13 @@ impl FoodDatabase {
     }
 
     /// Create FoodData for an item type
-    pub fn create_food_data(&self, item_type: &ItemType, current_tick: u32) -> Option<FoodData> {
+    pub fn create_food_data(&self, item_type: &ItemType, current_turn: u32) -> Option<FoodData> {
         self.entries.get(item_type).map(|template| {
             FoodData::new(
                 template.base_nutrition,
                 template.default_preparation,
-                template.base_spoilage_ticks,
-                current_tick,
+                template.base_spoilage_turns,
+                current_turn,
             )
         })
     }
@@ -618,13 +618,13 @@ impl FoodDatabase {
         self.entries.contains_key(item_type)
     }
 
-    /// How many ticks a given number of days is, on the calendar this world
+    /// How many turns a given number of days is, on the calendar this world
     /// actually keeps.
     ///
     /// Every one of these tables was written as a day-count and stored as a
-    /// number of ticks at 1440 ticks to the day. The calendar was later put on
-    /// a scale a life fits inside - `TICKS_PER_DAY` is 12, a season is
-    /// twenty-four days and a year is 1,152 ticks - and the food tables were
+    /// number of turns at 1440 turns to the day. The calendar was later put on
+    /// a scale a life fits inside - `TURNS_PER_DAY` is 12, a season is
+    /// twenty-four days and a year is 1,152 turns - and the food tables were
     /// not brought with it. So meat, written down as lasting a day, lasted a
     /// hundred and twenty of them; grain written down as ten days lasted
     /// twelve and a half years.
@@ -637,7 +637,7 @@ impl FoodDatabase {
     /// again.
     /// A first cut of this used the day-counts the tables were written with -
     /// meat a day, berries a day and a half - and that turned out to be a
-    /// different thing on this calendar than it was on the old one. A tick
+    /// different thing on this calendar than it was on the old one. A turn
     /// here is an *action*, not a minute: an agent gets twelve of them in a
     /// day, and walking out to a berry patch and back is thirty or forty. Food
     /// that lasts two days lasts less than the trip that fetches it, so
@@ -645,7 +645,7 @@ impl FoodDatabase {
     /// settlement lost a fifth of its people. These are on the scale of the
     /// season instead, which is the unit a store is actually against.
     const fn days(how_many: u32) -> u32 {
-        how_many * crate::environment::seasons::TICKS_PER_DAY
+        how_many * crate::environment::seasons::TURNS_PER_DAY
     }
 
     fn register_all_foods(&mut self) {
@@ -654,14 +654,14 @@ impl FoodDatabase {
         // Meat - high protein, moderate energy, low micronutrients
         self.entries.insert(ItemType::Meat, FoodTemplate {
             base_nutrition: NutritionalContent::new(30.0, 50.0, 10.0, 0.6),
-            base_spoilage_ticks: Self::days(10), // Under a season raw, and then it is carrion
+            base_spoilage_turns: Self::days(10), // Under a season raw, and then it is carrion
             default_preparation: PreparationState::Raw,
         });
 
         // Fish - high protein, moderate energy, good micronutrients (omega-3, etc.)
         self.entries.insert(ItemType::Fish, FoodTemplate {
             base_nutrition: NutritionalContent::new(25.0, 45.0, 20.0, 0.7),
-            base_spoilage_ticks: Self::days(6), // Fish spoils faster than anything else anybody catches
+            base_spoilage_turns: Self::days(6), // Fish spoils faster than anything else anybody catches
             default_preparation: PreparationState::Raw,
         });
 
@@ -674,7 +674,7 @@ impl FoodDatabase {
         // them.
         self.entries.insert(ItemType::Greens, FoodTemplate {
             base_nutrition: NutritionalContent::new(6.0, 3.0, 45.0, 0.9),
-            base_spoilage_ticks: Self::days(3),
+            base_spoilage_turns: Self::days(3),
             default_preparation: PreparationState::Raw,
         });
 
@@ -682,7 +682,7 @@ impl FoodDatabase {
         // like a harvest, and they keep about as well as a berry does.
         self.entries.insert(ItemType::Roots, FoodTemplate {
             base_nutrition: NutritionalContent::new(30.0, 8.0, 20.0, 0.7),
-            base_spoilage_ticks: Self::days(14),
+            base_spoilage_turns: Self::days(14),
             default_preparation: PreparationState::Raw,
         });
 
@@ -702,7 +702,7 @@ impl FoodDatabase {
         // an acorn kept dry and is longer than anything else in this table.
         self.entries.insert(ItemType::Nuts, FoodTemplate {
             base_nutrition: NutritionalContent::new(80.0, 20.0, 25.0, 0.05),
-            base_spoilage_ticks: Self::days(240),
+            base_spoilage_turns: Self::days(240),
             default_preparation: PreparationState::Raw,
         });
 
@@ -714,7 +714,7 @@ impl FoodDatabase {
         // energy and well above grain on protein, which is what a bean is.
         self.entries.insert(ItemType::Legumes, FoodTemplate {
             base_nutrition: NutritionalContent::new(45.0, 35.0, 20.0, 0.08),
-            base_spoilage_ticks: Self::days(120),
+            base_spoilage_turns: Self::days(120),
             default_preparation: PreparationState::Raw,
         });
 
@@ -723,7 +723,7 @@ impl FoodDatabase {
         // Grain - high energy, low protein, moderate micronutrients
         self.entries.insert(ItemType::Grain, FoodTemplate {
             base_nutrition: NutritionalContent::new(60.0, 15.0, 15.0, 0.1),
-            base_spoilage_ticks: Self::days(60), // Two seasons and a half, which is what a dry seed does
+            base_spoilage_turns: Self::days(60), // Two seasons and a half, which is what a dry seed does
             default_preparation: PreparationState::Raw,
         });
 
@@ -734,14 +734,14 @@ impl FoodDatabase {
         // bring it in.
         self.entries.insert(ItemType::Flour, FoodTemplate {
             base_nutrition: NutritionalContent::new(80.0, 16.0, 14.0, 0.1),
-            base_spoilage_ticks: Self::days(30), // Rather less than the whole seed, which is why you grind it when you mean to eat it
+            base_spoilage_turns: Self::days(30), // Rather less than the whole seed, which is why you grind it when you mean to eat it
             default_preparation: PreparationState::Raw,
         });
 
         // Bread - processed grain, already cooked
         self.entries.insert(ItemType::Bread, FoodTemplate {
             base_nutrition: NutritionalContent::new(55.0, 12.0, 10.0, 0.3),
-            base_spoilage_ticks: Self::days(20),
+            base_spoilage_turns: Self::days(20),
             default_preparation: PreparationState::Cooked,
         });
 
@@ -750,14 +750,14 @@ impl FoodDatabase {
         // Milk - balanced nutrition, high water
         self.entries.insert(ItemType::Milk, FoodTemplate {
             base_nutrition: NutritionalContent::new(25.0, 20.0, 25.0, 0.85),
-            base_spoilage_ticks: Self::days(4), // Sours faster than anything but fish
+            base_spoilage_turns: Self::days(4), // Sours faster than anything but fish
             default_preparation: PreparationState::Raw,
         });
 
         // Cheese - preserved milk, concentrated nutrients
         self.entries.insert(ItemType::Cheese, FoodTemplate {
             base_nutrition: NutritionalContent::new(40.0, 35.0, 20.0, 0.35),
-            base_spoilage_ticks: Self::days(50), // Which is most of the point of making it
+            base_spoilage_turns: Self::days(50), // Which is most of the point of making it
             default_preparation: PreparationState::Fermented,
         });
 
@@ -766,14 +766,14 @@ impl FoodDatabase {
         // Honey - pure energy, practically never spoils
         self.entries.insert(ItemType::Honey, FoodTemplate {
             base_nutrition: NutritionalContent::new(80.0, 0.0, 5.0, 0.2),
-            base_spoilage_ticks: Self::days(3000), // Effectively never, and true of honey
+            base_spoilage_turns: Self::days(3000), // Effectively never, and true of honey
             default_preparation: PreparationState::Raw, // Honey is special - raw but fully usable
         });
 
         // Ale - fermented grain beverage
         self.entries.insert(ItemType::Ale, FoodTemplate {
             base_nutrition: NutritionalContent::new(45.0, 5.0, 10.0, 0.9),
-            base_spoilage_ticks: Self::days(80),
+            base_spoilage_turns: Self::days(80),
             default_preparation: PreparationState::Fermented,
         });
 
@@ -783,7 +783,7 @@ impl FoodDatabase {
         // High in micronutrients (vitamins from fruits/vegetables)
         self.entries.insert(ItemType::Food, FoodTemplate {
             base_nutrition: NutritionalContent::new(20.0, 5.0, 35.0, 0.8),
-            base_spoilage_ticks: Self::days(12), // Berries off the bush. Half a season and they are jam on the inside of the pack
+            base_spoilage_turns: Self::days(12), // Berries off the bush. Half a season and they are jam on the inside of the pack
             default_preparation: PreparationState::Raw,
         });
     }
@@ -804,11 +804,11 @@ pub struct NutritionalState {
     /// Depletes very slowly, causes deficiency diseases when low
     pub micronutrient_level: f32,
 
-    /// Ticks spent with protein below critical threshold
-    pub ticks_protein_deficit: u32,
+    /// Turns spent with protein below critical threshold
+    pub turns_protein_deficit: u32,
 
-    /// Ticks spent with micronutrients below critical threshold
-    pub ticks_micronutrient_deficit: u32,
+    /// Turns spent with micronutrients below critical threshold
+    pub turns_micronutrient_deficit: u32,
 }
 
 impl Default for NutritionalState {
@@ -820,9 +820,9 @@ impl Default for NutritionalState {
 impl NutritionalState {
     /// Critical threshold below which deficiency effects begin
     pub const DEFICIT_THRESHOLD: f32 = 20.0;
-    /// Ticks of protein deficit before wasting begins (1 day)
+    /// Turns of protein deficit before wasting begins (1 day)
     pub const PROTEIN_DEFICIT_ONSET: u32 = 1440;
-    /// Ticks of micronutrient deficit before scurvy-like symptoms (3 days)
+    /// Turns of micronutrient deficit before scurvy-like symptoms (3 days)
     pub const MICRONUTRIENT_DEFICIT_ONSET: u32 = 4320;
 
     pub fn new() -> Self {
@@ -830,8 +830,8 @@ impl NutritionalState {
             energy_reserves: 80.0,
             protein_stores: 80.0,
             micronutrient_level: 80.0,
-            ticks_protein_deficit: 0,
-            ticks_micronutrient_deficit: 0,
+            turns_protein_deficit: 0,
+            turns_micronutrient_deficit: 0,
         }
     }
 
@@ -841,8 +841,8 @@ impl NutritionalState {
             energy_reserves: 100.0,
             protein_stores: 100.0,
             micronutrient_level: 100.0,
-            ticks_protein_deficit: 0,
-            ticks_micronutrient_deficit: 0,
+            turns_protein_deficit: 0,
+            turns_micronutrient_deficit: 0,
         }
     }
 
@@ -853,65 +853,65 @@ impl NutritionalState {
         self.micronutrient_level = (self.micronutrient_level + nutrition.micronutrients).min(100.0);
     }
 
-    /// Tick metabolism - depletes nutrients over time
+    /// Turn metabolism - depletes nutrients over time
     /// activity_level: 0.0 (resting) to 1.0 (intense activity)
-    pub fn tick_metabolism(&mut self, activity_level: f32) {
+    pub fn turn_metabolism(&mut self, activity_level: f32) {
         // Energy depletes faster with activity
-        // Base: 0.02/tick at rest, up to 0.05/tick at full activity
+        // Base: 0.02/turn at rest, up to 0.05/turn at full activity
         let energy_drain = 0.02 + (activity_level * 0.03);
         self.energy_reserves = (self.energy_reserves - energy_drain).max(0.0);
 
         // Protein depletes slowly (tissue maintenance)
-        // ~100 ticks to deplete 0.5 points
+        // ~100 turns to deplete 0.5 points
         self.protein_stores = (self.protein_stores - 0.005).max(0.0);
 
         // Micronutrients deplete very slowly
-        // ~100 ticks to deplete 0.2 points
+        // ~100 turns to deplete 0.2 points
         self.micronutrient_level = (self.micronutrient_level - 0.002).max(0.0);
 
         // Track deficiency duration
         if self.protein_stores < Self::DEFICIT_THRESHOLD {
-            self.ticks_protein_deficit += 1;
+            self.turns_protein_deficit += 1;
         } else {
-            self.ticks_protein_deficit = 0;
+            self.turns_protein_deficit = 0;
         }
 
         if self.micronutrient_level < Self::DEFICIT_THRESHOLD {
-            self.ticks_micronutrient_deficit += 1;
+            self.turns_micronutrient_deficit += 1;
         } else {
-            self.ticks_micronutrient_deficit = 0;
+            self.turns_micronutrient_deficit = 0;
         }
     }
 
     /// Check if experiencing protein deficiency (wasting)
     pub fn has_protein_deficiency(&self) -> bool {
         self.protein_stores < Self::DEFICIT_THRESHOLD &&
-        self.ticks_protein_deficit > Self::PROTEIN_DEFICIT_ONSET
+        self.turns_protein_deficit > Self::PROTEIN_DEFICIT_ONSET
     }
 
     /// Check if experiencing micronutrient deficiency (scurvy-like)
     pub fn has_micronutrient_deficiency(&self) -> bool {
         self.micronutrient_level < Self::DEFICIT_THRESHOLD &&
-        self.ticks_micronutrient_deficit > Self::MICRONUTRIENT_DEFICIT_ONSET
+        self.turns_micronutrient_deficit > Self::MICRONUTRIENT_DEFICIT_ONSET
     }
 
-    /// Get health penalty per tick from deficiencies
+    /// Get health penalty per turn from deficiencies
     pub fn deficiency_health_penalty(&self) -> f32 {
         let mut penalty = 0.0;
 
         // Protein deficiency causes wasting (progressive health loss)
         if self.has_protein_deficiency() {
-            let days_in_deficit = (self.ticks_protein_deficit - Self::PROTEIN_DEFICIT_ONSET) as f32
+            let days_in_deficit = (self.turns_protein_deficit - Self::PROTEIN_DEFICIT_ONSET) as f32
                 / 1440.0;
-            // Scales from 0.05 to 0.15 health/tick over 3 days
+            // Scales from 0.05 to 0.15 health/turn over 3 days
             penalty += 0.05 * (1.0 + days_in_deficit.min(2.0));
         }
 
         // Micronutrient deficiency causes disease symptoms
         if self.has_micronutrient_deficiency() {
-            let days_in_deficit = (self.ticks_micronutrient_deficit - Self::MICRONUTRIENT_DEFICIT_ONSET) as f32
+            let days_in_deficit = (self.turns_micronutrient_deficit - Self::MICRONUTRIENT_DEFICIT_ONSET) as f32
                 / 1440.0;
-            // Scales from 0.02 to 0.06 health/tick over 3 days
+            // Scales from 0.02 to 0.06 health/turn over 3 days
             penalty += 0.02 * (1.0 + days_in_deficit.min(2.0));
         }
 
@@ -1007,26 +1007,26 @@ mod tests {
         let mut food = FoodData::new(
             NutritionalContent::new(100.0, 50.0, 25.0, 0.5),
             PreparationState::Raw,
-            1000, // Spoils in 1000 ticks
+            1000, // Spoils in 1000 turns
             0,
         );
 
         assert_eq!(food.freshness_description(), "Fresh");
         assert!(!food.is_spoiled());
 
-        // Simulate 500 ticks passing (50% fresh)
+        // Simulate 500 turns passing (50% fresh)
         food.update_freshness(500);
         assert!((food.freshness - 0.5).abs() < 0.01);
         // At exactly 0.5, it's not > 0.5, so it's "Stale"
         assert_eq!(food.freshness_description(), "Stale");
 
-        // Simulate 800 ticks - should be spoiling (20% fresh)
+        // Simulate 800 turns - should be spoiling (20% fresh)
         food.update_freshness(800);
         assert!(food.freshness < 0.25);
         assert!(food.freshness > 0.1);
         assert_eq!(food.freshness_description(), "Spoiling");
 
-        // Simulate 1000+ ticks - should be spoiled
+        // Simulate 1000+ turns - should be spoiled
         food.update_freshness(1100);
         assert!(food.is_spoiled());
     }
@@ -1047,7 +1047,7 @@ mod tests {
             0,
         );
 
-        // After 1000 ticks, raw should be nearly spoiled
+        // After 1000 turns, raw should be nearly spoiled
         raw_food.update_freshness(1000);
         dried_food.update_freshness(1000);
 
@@ -1060,9 +1060,9 @@ mod tests {
     fn test_nutritional_state_metabolism() {
         let mut state = NutritionalState::full();
 
-        // Tick 100 times at moderate activity
+        // Turn 100 times at moderate activity
         for _ in 0..100 {
-            state.tick_metabolism(0.5);
+            state.turn_metabolism(0.5);
         }
 
         // Energy should have depleted most
@@ -1077,15 +1077,15 @@ mod tests {
             energy_reserves: 50.0,
             protein_stores: 10.0, // Below threshold
             micronutrient_level: 50.0,
-            ticks_protein_deficit: 0,
-            ticks_micronutrient_deficit: 0,
+            turns_protein_deficit: 0,
+            turns_micronutrient_deficit: 0,
         };
 
         // Not deficient yet - need time
         assert!(!state.has_protein_deficiency());
 
         // Simulate 1.5 days of deficit
-        state.ticks_protein_deficit = 2000;
+        state.turns_protein_deficit = 2000;
         assert!(state.has_protein_deficiency());
         assert!(state.deficiency_health_penalty() > 0.0);
     }
@@ -1123,8 +1123,8 @@ mod tests {
             energy_reserves: 30.0,
             protein_stores: 50.0,
             micronutrient_level: 80.0,
-            ticks_protein_deficit: 0,
-            ticks_micronutrient_deficit: 0,
+            turns_protein_deficit: 0,
+            turns_micronutrient_deficit: 0,
         };
 
         assert_eq!(state.most_needed_nutrient(), NutrientType::Energy);
@@ -1136,11 +1136,11 @@ mod tests {
         let honey = db.get(&ItemType::Honey).unwrap();
 
         // Honey outlasts the person carrying it, which is what "never spoils"
-        // means on a calendar where a life is about eight thousand ticks.
-        // This used to be written as a bare number of ticks against the old
-        // 1440-tick day - see `FoodDatabase::days`.
+        // means on a calendar where a life is about eight thousand turns.
+        // This used to be written as a bare number of turns against the old
+        // 1440-turn day - see `FoodDatabase::days`.
         let a_life = 8000;
-        assert!(honey.base_spoilage_ticks > a_life * 2);
+        assert!(honey.base_spoilage_turns > a_life * 2);
 
         let mut food = db.create_food_data(&ItemType::Honey, 0).unwrap();
         food.update_freshness(a_life / 4);

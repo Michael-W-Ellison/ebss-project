@@ -14,11 +14,11 @@ use std::path::Path;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-/// A snapshot of the simulation at a specific tick
+/// A snapshot of the simulation at a specific turn
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateSnapshot {
-    /// Tick number when this snapshot was taken
-    pub tick: u64,
+    /// Turn number when this snapshot was taken
+    pub turn: u64,
     /// Timestamp when snapshot was taken (milliseconds since epoch)
     pub timestamp: u64,
     /// Serialized population state
@@ -96,7 +96,7 @@ impl Default for WorldSnapshot {
 /// Recording configuration
 #[derive(Debug, Clone)]
 pub struct RecordingConfig {
-    /// Record a snapshot every N ticks
+    /// Record a snapshot every N turns
     pub snapshot_interval: u32,
     /// Maximum number of snapshots to keep (0 = unlimited)
     pub max_snapshots: usize,
@@ -144,10 +144,10 @@ pub struct SessionRecorder {
     config: RecordingConfig,
     snapshots: VecDeque<StateSnapshot>,
     recording: bool,
-    last_snapshot_tick: u64,
+    last_snapshot_turn: u64,
     session_id: Uuid,
     session_name: String,
-    start_tick: u64,
+    start_turn: u64,
 }
 
 impl SessionRecorder {
@@ -157,20 +157,20 @@ impl SessionRecorder {
             config,
             snapshots: VecDeque::new(),
             recording: false,
-            last_snapshot_tick: 0,
+            last_snapshot_turn: 0,
             session_id: crate::core::dice::name(),
             session_name: "Unnamed Session".to_string(),
-            start_tick: 0,
+            start_turn: 0,
         }
     }
 
-    /// Start recording from a specific tick
-    pub fn start_recording(&mut self, tick: u64, name: Option<String>) {
+    /// Start recording from a specific turn
+    pub fn start_recording(&mut self, turn: u64, name: Option<String>) {
         self.recording = true;
-        self.start_tick = tick;
-        self.last_snapshot_tick = tick;
+        self.start_turn = turn;
+        self.last_snapshot_turn = turn;
         self.session_id = crate::core::dice::name();
-        self.session_name = name.unwrap_or_else(|| format!("Session_{}", tick));
+        self.session_name = name.unwrap_or_else(|| format!("Session_{}", turn));
         self.snapshots.clear();
     }
 
@@ -184,9 +184,9 @@ impl SessionRecorder {
         self.recording
     }
 
-    /// Check if we should take a snapshot at this tick
-    pub fn should_snapshot(&self, tick: u64) -> bool {
-        self.recording && (tick - self.last_snapshot_tick) >= self.config.snapshot_interval as u64
+    /// Check if we should take a snapshot at this turn
+    pub fn should_snapshot(&self, turn: u64) -> bool {
+        self.recording && (turn - self.last_snapshot_turn) >= self.config.snapshot_interval as u64
     }
 
     /// Record a snapshot
@@ -195,7 +195,7 @@ impl SessionRecorder {
             return;
         }
 
-        self.last_snapshot_tick = snapshot.tick;
+        self.last_snapshot_turn = snapshot.turn;
 
         // Enforce max snapshots limit
         if self.config.max_snapshots > 0 && self.snapshots.len() >= self.config.max_snapshots {
@@ -218,8 +218,8 @@ impl SessionRecorder {
         SessionInfo {
             id: self.session_id,
             name: self.session_name.clone(),
-            start_tick: self.start_tick,
-            end_tick: self.snapshots.back().map(|s| s.tick).unwrap_or(self.start_tick),
+            start_turn: self.start_turn,
+            end_turn: self.snapshots.back().map(|s| s.turn).unwrap_or(self.start_turn),
             snapshot_count: self.snapshots.len(),
             recording: self.recording,
         }
@@ -243,23 +243,23 @@ impl SessionRecorder {
             }
         };
 
-        let last_snapshot_tick = session.snapshots.last().map(|s| s.tick).unwrap_or(0);
+        let last_snapshot_turn = session.snapshots.last().map(|s| s.turn).unwrap_or(0);
 
         Ok(Self {
             config: session.config,
             snapshots: session.snapshots.into(),
             recording: false,
-            last_snapshot_tick,
+            last_snapshot_turn,
             session_id: session.id,
             session_name: session.name,
-            start_tick: session.start_tick,
+            start_turn: session.start_turn,
         })
     }
 
     /// Clear all snapshots
     pub fn clear(&mut self) {
         self.snapshots.clear();
-        self.last_snapshot_tick = 0;
+        self.last_snapshot_turn = 0;
     }
 }
 
@@ -268,16 +268,16 @@ impl SessionRecorder {
 pub struct RecordedSession {
     pub id: Uuid,
     pub name: String,
-    pub start_tick: u64,
+    pub start_turn: u64,
     pub config: RecordingConfig,
     pub snapshots: Vec<StateSnapshot>,
 }
 
 impl RecordedSession {
-    /// Get the tick of the last snapshot (for internal use)
+    /// Get the turn of the last snapshot (for internal use)
     #[allow(dead_code)]
-    fn snapshots_end_tick(&self) -> u64 {
-        self.snapshots.last().map(|s| s.tick).unwrap_or(0)
+    fn snapshots_end_turn(&self) -> u64 {
+        self.snapshots.last().map(|s| s.turn).unwrap_or(0)
     }
 }
 
@@ -286,8 +286,8 @@ impl RecordedSession {
 pub struct SessionInfo {
     pub id: Uuid,
     pub name: String,
-    pub start_tick: u64,
-    pub end_tick: u64,
+    pub start_turn: u64,
+    pub end_turn: u64,
     pub snapshot_count: usize,
     pub recording: bool,
 }
@@ -326,7 +326,7 @@ impl SessionPlayer {
         self.session = Some(RecordedSession {
             id: recorder.session_id,
             name: recorder.session_name,
-            start_tick: recorder.start_tick,
+            start_turn: recorder.start_turn,
             config: recorder.config,
             snapshots: recorder.snapshots.into_iter().collect(),
         });
@@ -436,8 +436,8 @@ impl SessionPlayer {
         self.session.as_ref().map(|s| SessionInfo {
             id: s.id,
             name: s.name.clone(),
-            start_tick: s.start_tick,
-            end_tick: s.snapshots.last().map(|snap| snap.tick).unwrap_or(s.start_tick),
+            start_turn: s.start_turn,
+            end_turn: s.snapshots.last().map(|snap| snap.turn).unwrap_or(s.start_turn),
             snapshot_count: s.snapshots.len(),
             recording: false,
         })
@@ -489,9 +489,9 @@ impl AgentSnapshot {
 
 /// Helper to create state snapshot
 impl StateSnapshot {
-    pub fn new(tick: u64) -> Self {
+    pub fn new(turn: u64) -> Self {
         Self {
-            tick,
+            turn,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -581,7 +581,7 @@ mod tests {
         let snapshot = StateSnapshot::new(100)
             .with_metadata("test", "value");
 
-        assert_eq!(snapshot.tick, 100);
+        assert_eq!(snapshot.turn, 100);
         assert_eq!(snapshot.metadata.get("test"), Some(&"value".to_string()));
     }
 
@@ -611,9 +611,9 @@ mod tests {
         assert!(recorder.is_recording());
 
         // Record some snapshots
-        for tick in (0..100).step_by(10) {
-            if recorder.should_snapshot(tick) {
-                let snapshot = StateSnapshot::new(tick);
+        for turn in (0..100).step_by(10) {
+            if recorder.should_snapshot(turn) {
+                let snapshot = StateSnapshot::new(turn);
                 recorder.record_snapshot(snapshot);
             }
         }
@@ -632,15 +632,15 @@ mod tests {
         });
 
         recorder.start_recording(0, None);
-        for tick in 0..10 {
-            recorder.record_snapshot(StateSnapshot::new(tick));
+        for turn in 0..10 {
+            recorder.record_snapshot(StateSnapshot::new(turn));
         }
         recorder.stop_recording();
 
         let session = RecordedSession {
             id: recorder.session_id,
             name: recorder.session_name.clone(),
-            start_tick: recorder.start_tick,
+            start_turn: recorder.start_turn,
             config: recorder.config.clone(),
             snapshots: recorder.snapshots.into_iter().collect(),
         };
@@ -656,19 +656,19 @@ mod tests {
         assert!(player.is_playing());
 
         let first = player.current_snapshot().unwrap();
-        assert_eq!(first.tick, 0);
+        assert_eq!(first.turn, 0);
 
         player.next_frame();
         let second = player.current_snapshot().unwrap();
-        assert_eq!(second.tick, 1);
+        assert_eq!(second.turn, 1);
 
         player.goto_frame(5);
         let sixth = player.current_snapshot().unwrap();
-        assert_eq!(sixth.tick, 5);
+        assert_eq!(sixth.turn, 5);
 
         player.prev_frame();
         let fifth = player.current_snapshot().unwrap();
-        assert_eq!(fifth.tick, 4);
+        assert_eq!(fifth.turn, 4);
     }
 
     #[test]

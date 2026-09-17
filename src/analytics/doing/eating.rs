@@ -47,7 +47,7 @@ impl Simulation {
             .map(|template| template.base_nutrition)
             .unwrap_or_else(|| NutritionalContent::new(20.0, 5.0, 35.0, 0.8));
 
-        let now = self.current_tick;
+        let now = self.current_turn;
         let agent = &mut self.population.agents[agent_index];
 
         agent.nutrition.consume(&nutrition);
@@ -146,7 +146,7 @@ impl Simulation {
                 >= physiology::UNITS_IN_ONE_ITEM
                     * physiology::ENERGY_OF_ORDINARY_FOOD
             {
-                match agent.eat_food_item(&item_id, self.current_tick) {
+                match agent.eat_food_item(&item_id, self.current_turn) {
                     EatResult::Success(nutrition) => {
                         let worth = physiology::what_a_unit_of_this_is_worth(
                             nutrition.energy,
@@ -217,7 +217,7 @@ impl Simulation {
         // agent saw wolves last month is further away than it
         // measures; one it has no bad history with is nearer. See
         // `what_everybody_saw_that_frightened_them`.
-        let now = self.current_tick;
+        let now = self.current_turn;
         let remembers = &self.population.agents[agent_index].exploration_knowledge;
 
         // What pays best, rather than what is nearest.
@@ -319,7 +319,7 @@ impl Simulation {
                     .unwrap_or_else(|| NutritionalContent::new(20.0, 5.0, 35.0, 0.8));
 
                 agent.nutrition.consume(&nutrition);
-                agent.state.eat(self.current_tick, nutrition.energy);
+                agent.state.eat(self.current_turn, nutrition.energy);
 
                 // A sitting down to eat off the armful, and how much
                 // of it that is depends on what it is: four fish or
@@ -381,7 +381,7 @@ impl Simulation {
                     );
                     carried.food_data = self
                         .food_database
-                        .create_food_data(&foraged_item, self.current_tick);
+                        .create_food_data(&foraged_item, self.current_turn);
                     // What fits goes in and the rest goes back on the bush.
                     // This was `add_item`, which is all or nothing, so a man
                     // with room for ten and an armful of fourteen took none of
@@ -478,9 +478,9 @@ impl Simulation {
             return ActionResult::failure(format!("{} is not food", chosen));
         }
 
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
         let fresh_food_data = item_type
-            .and_then(|item_type| self.food_database.create_food_data(&item_type, current_tick));
+            .and_then(|item_type| self.food_database.create_food_data(&item_type, current_turn));
 
         let agent = &mut self.population.agents[agent_index];
 
@@ -614,7 +614,7 @@ impl Simulation {
             return ActionResult::failure("No lit fire to boil it over".to_string());
         }
 
-        let tick_now = self.current_tick;
+        let turn_now = self.current_turn;
         let agent = &mut self.population.agents[agent_index];
 
         // What a pot of sea water comes to when the water has gone,
@@ -626,7 +626,7 @@ impl Simulation {
             came_out,
             0.2,
         ));
-        agent.skills.practise(crate::agents::SkillType::Cooking, 8, tick_now);
+        agent.skills.practise(crate::agents::SkillType::Cooking, 8, turn_now);
         agent.lessons.record_particular("boil", true);
         agent.found_out_how_to("salt");
 
@@ -670,7 +670,7 @@ impl Simulation {
             return ActionResult::failure(format!("That {what} is past saving"));
         }
 
-        let now = self.current_tick;
+        let now = self.current_turn;
         food.set_preparation(PreparationState::Salted, now);
 
         // And what becomes of it afterwards, which is the only thing
@@ -721,7 +721,7 @@ impl Simulation {
     }
 
     /// `Action::Dry`.
-    pub(in crate::analytics) fn drying(&mut self, what: &String, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn drying(&mut self, what: &String, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::nutrition::PreparationState;
 
         let over_a_fire = self
@@ -787,12 +787,12 @@ impl Simulation {
             PreparationState::Dried
         };
 
-        food.set_preparation(how, tick_now);
+        food.set_preparation(how, turn_now);
 
         let how_many = item.quantity;
         agent
             .skills
-            .practise(crate::agents::SkillType::Cooking, 14, tick_now);
+            .practise(crate::agents::SkillType::Cooking, 14, turn_now);
 
         debug!("Agent {} {} {how_many} {what}", agent.id, how.name());
 
@@ -898,7 +898,7 @@ impl Simulation {
         &mut self,
         agent_index: usize,
         who: Option<uuid::Uuid>,
-        tick_now: u32,
+        turn_now: u32,
     ) -> ActionResult {
         // Who is being treated. Nobody is treated at a distance: a remedy has
         // to be handed over, which is why this checks the reach.
@@ -950,13 +950,13 @@ impl Simulation {
         }
 
         let eased = self.population.agents[patient]
-            .take_a_remedy(&remedy, tick_now)
+            .take_a_remedy(&remedy, turn_now)
             .unwrap_or(0.0);
 
         self.population.agents[agent_index].skills.practise(
             crate::agents::SkillType::Herbalism,
             Self::WHAT_DOSING_SOMEBODY_TEACHES,
-            tick_now,
+            turn_now,
         );
 
         // Being looked after is worth something in itself, whether or not the

@@ -257,7 +257,7 @@ impl BuildingType {
         }
     }
 
-    /// Get construction time (in ticks)
+    /// Get construction time (in turns)
     pub fn construction_time(&self) -> u32 {
         match self {
             // Housing
@@ -620,7 +620,7 @@ impl BuildingType {
         }
     }
 
-    /// Get the production interval in ticks (0 means no production)
+    /// Get the production interval in turns (0 means no production)
     pub fn production_interval(&self) -> u32 {
         match self {
             // Production buildings produce resources
@@ -676,7 +676,7 @@ impl BuildingType {
         }
     }
 
-    /// Get the decay rate per tick (condition lost per tick without maintenance)
+    /// Get the decay rate per turn (condition lost per turn without maintenance)
     pub fn decay_rate(&self) -> f32 {
         match self {
             // Wooden structures decay faster
@@ -736,7 +736,7 @@ impl BuildingType {
 
 
     /// Get the morale/happiness bonus for being near this building
-    /// Returns happiness amount added per tick when nearby
+    /// Returns happiness amount added per turn when nearby
     pub fn morale_bonus(&self) -> f32 {
         match self {
             // Religious buildings provide passive morale boost
@@ -776,7 +776,7 @@ impl BuildingType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BuildingState {
     UnderConstruction {
-        progress: u32, // Work progress in ticks
+        progress: u32, // Work progress in turns
         resources_delivered: Vec<Resource>, // Resources already delivered
         workers: Vec<uuid::Uuid>, // Agents currently working on this building
     },
@@ -799,7 +799,7 @@ pub struct Building {
     pub belongs: crate::world::belonging::Belongs,
     pub occupants: Vec<uuid::Uuid>, // Agents currently living here
     pub condition: f32, // Building condition 0.0-1.0, decays over time without maintenance
-    pub production_timer: u32, // Ticks until next production cycle
+    pub production_timer: u32, // Turns until next production cycle
     pub pending_production: Vec<Resource>, // Resources produced but not yet collected
 }
 
@@ -958,7 +958,7 @@ impl Building {
     /// Returns true if construction completed
     ///
     /// # Arguments
-    /// * `work_amount` - Amount of work done (in ticks), modified by worker skill
+    /// * `work_amount` - Amount of work done (in turns), modified by worker skill
     /// * `worker_skill` - Construction skill level (0-10+, affects speed)
     pub fn add_construction_progress(&mut self, work_amount: u32, worker_skill: i32) -> bool {
         // Can only work if resources are available
@@ -1032,8 +1032,8 @@ impl Building {
 
 
 
-    /// Process building tick: decay and production
-    pub fn tick(&mut self) {
+    /// Process building turn: decay and production
+    pub fn take_a_turn(&mut self) {
         // Only completed buildings decay and produce
         if !self.is_completed() {
             return;

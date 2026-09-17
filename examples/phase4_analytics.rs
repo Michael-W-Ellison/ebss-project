@@ -27,7 +27,7 @@ fn main() {
         ..PopulationConfig::default()
     };
 
-    let mut metrics = SimulationMetrics::new(10, 500); // Sample every 10 ticks, keep 500
+    let mut metrics = SimulationMetrics::new(10, 500); // Sample every 10 turns, keep 500
     let mut emergence = EmergenceDetector::new();
     let mut performance = PerformanceMonitor::new(1000);
 
@@ -37,16 +37,16 @@ fn main() {
         population.spawn_agent(config);
     }
 
-    println!("Running simulation for 1000 ticks...\n");
+    println!("Running simulation for 1000 turns...\n");
 
     // Main simulation loop
-    for tick in 0..1000 {
-        performance.start_tick();
+    for turn in 0..1000 {
+        performance.start_turn();
 
         // Process population
-        let start = performance.start_operation("population_tick");
-        population.tick();
-        performance.end_operation("population_tick", start);
+        let start = performance.start_operation("population_turn");
+        population.take_a_turn();
+        performance.end_operation("population_turn", start);
 
         // Process reproduction
         let start = performance.start_operation("reproduction");
@@ -59,23 +59,23 @@ fn main() {
         performance.end_operation("abandonments", start);
 
         // Record metrics
-        metrics.record_if_time(tick, &population);
+        metrics.record_if_time(turn, &population);
 
-        // Detect emergence patterns every 50 ticks
-        if tick % 50 == 0 && tick > 0 {
-            emergence.detect_patterns(&metrics, tick);
+        // Detect emergence patterns every 50 turns
+        if turn % 50 == 0 && turn > 0 {
+            emergence.detect_patterns(&metrics, turn);
         }
 
-        performance.end_tick(tick, population.agents.len());
+        performance.end_turn(turn, population.agents.len());
 
         // Progress indicator
-        if tick % 100 == 0 {
+        if turn % 100 == 0 {
             println!(
-                "Tick {:4}: Population {} | Avg Happiness {:.2} | TPS {:.1}",
-                tick,
+                "Turn {:4}: Population {} | Avg Happiness {:.2} | TPS {:.1}",
+                turn,
                 population.agents.len(),
                 population.stats.average_happiness,
-                performance.snapshots.last().map(|s| s.ticks_per_second).unwrap_or(0.0)
+                performance.snapshots.last().map(|s| s.turns_per_second).unwrap_or(0.0)
             );
         }
     }
@@ -85,7 +85,7 @@ fn main() {
     // Display summary
     let summary = metrics.summary();
     println!("Summary:");
-    println!("  Total Ticks: {}", summary.total_ticks);
+    println!("  Total Turns: {}", summary.total_turns);
     println!("  Initial Population: {}", summary.initial_population);
     println!("  Final Population: {}", summary.final_population);
     println!("  Population Change: {:+}", summary.population_change);
@@ -99,9 +99,9 @@ fn main() {
     // Display performance summary
     let perf_summary = performance.summary();
     println!("\nPerformance:");
-    println!("  Average TPS: {:.1}", perf_summary.average_ticks_per_second);
-    println!("  Peak TPS: {:.1}", perf_summary.peak_ticks_per_second);
-    println!("  Min TPS: {:.1}", perf_summary.min_ticks_per_second);
+    println!("  Average TPS: {:.1}", perf_summary.average_turns_per_second);
+    println!("  Peak TPS: {:.1}", perf_summary.peak_turns_per_second);
+    println!("  Min TPS: {:.1}", perf_summary.min_turns_per_second);
     println!("  Total Operations: {}", perf_summary.total_operations);
     println!("  Total Time: {:.2}s", perf_summary.total_time_seconds);
 
@@ -120,9 +120,9 @@ fn main() {
     println!("\nEmergent Patterns Detected: {}", emergence.detected_patterns.len());
     for (i, pattern) in emergence.most_severe_patterns(5).iter().enumerate() {
         println!(
-            "  {}. [Tick {}] [Severity {:.2}] {}",
+            "  {}. [Turn {}] [Severity {:.2}] {}",
             i + 1,
-            pattern.detected_at_tick,
+            pattern.detected_at_turn,
             pattern.severity,
             pattern.description
         );

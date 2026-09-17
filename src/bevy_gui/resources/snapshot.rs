@@ -14,12 +14,12 @@ use crate::gui::events::SimulationEvent;
 #[derive(Resource, Default)]
 pub struct CurrentSnapshot {
     pub snapshot: Option<SimulationSnapshot>,
-    pub tick: u32,
+    pub turn: u32,
 }
 
 impl CurrentSnapshot {
     pub fn update(&mut self, snapshot: SimulationSnapshot) {
-        self.tick = snapshot.tick;
+        self.turn = snapshot.turn;
         self.snapshot = Some(snapshot);
     }
 

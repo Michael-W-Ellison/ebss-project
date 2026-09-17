@@ -319,8 +319,8 @@ impl WorkingMemory {
         next
     }
 
-    /// Tick the working memory
-    pub fn tick(&mut self, current_time: u64) {
+    /// Turn the working memory
+    pub fn take_a_turn(&mut self, current_time: u64) {
         self.current_time = current_time;
         self.clear_expired();
 

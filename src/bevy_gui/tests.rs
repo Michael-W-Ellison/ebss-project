@@ -154,12 +154,12 @@ mod tests {
         let mut history = StatisticsHistory::default();
 
         assert!(history.points.is_empty());
-        // At tick 0, with last_sample_tick=0 and interval=10, should_sample returns false
-        // It should sample once we reach tick 10
+        // At turn 0, with last_sample_turn=0 and interval=10, should_sample returns false
+        // It should sample once we reach turn 10
         assert!(history.should_sample(10));
 
         let point = HistoryPoint {
-            tick: 10,
+            turn: 10,
             population: 15,
             infants: 2,
             children: 3,

@@ -20,8 +20,8 @@ pub struct SatisfactionRecord {
     pub total_satisfaction: f32,
     /// Number of times this source provided satisfaction
     pub satisfaction_count: u32,
-    /// Last tick when this source provided satisfaction
-    pub last_satisfaction_tick: u32,
+    /// Last turn when this source provided satisfaction
+    pub last_satisfaction_turn: u32,
 }
 
 impl SatisfactionRecord {
@@ -30,15 +30,15 @@ impl SatisfactionRecord {
             source_id,
             total_satisfaction: 0.0,
             satisfaction_count: 0,
-            last_satisfaction_tick: 0,
+            last_satisfaction_turn: 0,
         }
     }
 
     /// Record a satisfaction event
-    pub fn record(&mut self, amount: f32, tick: u32) {
+    pub fn record(&mut self, amount: f32, turn: u32) {
         self.total_satisfaction += amount;
         self.satisfaction_count += 1;
-        self.last_satisfaction_tick = tick;
+        self.last_satisfaction_turn = turn;
     }
 
     /// Get average satisfaction per interaction
@@ -77,11 +77,11 @@ impl DriveSatisfactionTracker {
     }
 
     /// Record satisfaction from a source
-    pub fn record_satisfaction(&mut self, source_id: Uuid, amount: f32, tick: u32) {
+    pub fn record_satisfaction(&mut self, source_id: Uuid, amount: f32, turn: u32) {
         let record = self.sources
             .entry(source_id)
             .or_insert_with(|| SatisfactionRecord::new(source_id));
-        record.record(amount, tick);
+        record.record(amount, turn);
     }
 
     /// Get all source IDs
@@ -128,11 +128,11 @@ impl SatisfactionTracker {
     }
 
     /// Record satisfaction from a source for a drive
-    pub fn record(&mut self, drive_type: DriveType, source_id: Uuid, amount: f32, tick: u32) {
+    pub fn record(&mut self, drive_type: DriveType, source_id: Uuid, amount: f32, turn: u32) {
         let tracker = self.trackers
             .entry(drive_type)
             .or_insert_with(|| DriveSatisfactionTracker::new(drive_type));
-        tracker.record_satisfaction(source_id, amount, tick);
+        tracker.record_satisfaction(source_id, amount, turn);
     }
 
     /// Get all sources for a drive

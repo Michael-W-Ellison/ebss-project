@@ -168,7 +168,7 @@ fn agents_do_not_stay_frozen_over_a_long_run() {
     let mut simulation = Simulation::new(world, population);
 
     for _ in 0..3000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let agents = &simulation.population.agents;

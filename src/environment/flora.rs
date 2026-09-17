@@ -33,7 +33,7 @@ pub struct PlantSpecies {
 
     /// Health/durability when harvesting
     pub health: f32,
-    /// How long it takes to grow to maturity (ticks)
+    /// How long it takes to grow to maturity (turns)
     pub growth_time: u32,
     /// Whether it regrows after harvest
     pub regrows: bool,
@@ -70,7 +70,7 @@ impl PlantSpecies {
     /// oak two or three hundred, and the very largest trees run into the
     /// better part of a thousand. The one this is plainly short on is the
     /// sequoia, which really does go two or three thousand years; eight
-    /// hundred of them is three and a half million ticks, and a run that long
+    /// hundred of them is three and a half million turns, and a run that long
     /// is a long way past anything anybody has measured here.
     pub fn lives_for_years(&self) -> f32 {
         if self.is_tree {
@@ -92,9 +92,9 @@ impl PlantSpecies {
         }
     }
 
-    /// The same, in ticks, which is what a plant actually counts in.
-    pub fn lives_for_ticks(&self) -> u32 {
-        (self.lives_for_years() * crate::environment::seasons::TICKS_PER_YEAR as f32) as u32
+    /// The same, in turns, which is what a plant actually counts in.
+    pub fn lives_for_turns(&self) -> u32 {
+        (self.lives_for_years() * crate::environment::seasons::TURNS_PER_YEAR as f32) as u32
     }
 
     /// How likely one of these is to put seed on the ground in a pass.
@@ -139,7 +139,7 @@ impl PlantSpecies {
         /// seedlings.
         const WHAT_A_PLANT_LEAVES_IN_ITS_LIFE: f32 = 40.0;
 
-        let passes = (self.lives_for_ticks() as f32 / 10.0).max(1.0);
+        let passes = (self.lives_for_turns() as f32 / 10.0).max(1.0);
         (WHAT_A_PLANT_LEAVES_IN_ITS_LIFE / passes).clamp(0.0, 1.0)
     }
 
@@ -151,8 +151,8 @@ impl PlantSpecies {
     /// grass seed will lie in the soil through a couple of seasons and come up
     /// when something disturbs it - so the split is the same one that decides
     /// everything else here.
-    pub fn seed_keeps_for_ticks(&self) -> u32 {
-        use crate::environment::seasons::{DAYS_PER_SEASON, TICKS_PER_DAY};
+    pub fn seed_keeps_for_turns(&self) -> u32 {
+        use crate::environment::seasons::{DAYS_PER_SEASON, TURNS_PER_DAY};
 
         // A season for an acorn, two for small dry seed. This is seed lying
         // on ground of a kind its species cannot live on at all - a beach, a
@@ -160,9 +160,9 @@ impl PlantSpecies {
         // the short end of what a seed keeps rather than the long one. It is
         // also what stops the bank being the biggest thing in the model: at a
         // year and two years there were three and a half seed lying for every
-        // tile on the map, and walking them was most of what a tick cost.
+        // tile on the map, and walking them was most of what a turn cost.
         let seasons = if self.is_tree { 1 } else { 2 };
-        seasons * DAYS_PER_SEASON * TICKS_PER_DAY
+        seasons * DAYS_PER_SEASON * TURNS_PER_DAY
     }
 
     /// Whether this is ground one of these could live on at all.
@@ -1459,23 +1459,23 @@ pub struct Plant {
     pub max_health: f32,
     pub growth_stage: GrowthStage,
     pub growth_progress: f32, // 0.0 to 1.0 for current stage
-    pub age_ticks: u32,
+    pub age_turns: u32,
     pub is_harvestable: bool,
     pub has_been_harvested: bool,
     pub regrow_timer: u32,
     pub planted_by: Option<Uuid>, // Agent who planted it (for farming)
     pub is_cultivated: bool, // Whether it's a farm plant vs wild
 
-    /// The tick this plant has been grown up to.
+    /// The turn this plant has been grown up to.
     ///
-    /// Vegetation is not worked out every tick any more - most of it waits
+    /// Vegetation is not worked out every turn any more - most of it waits
     /// for its zone's turn, and only the ground somebody is standing on is
     /// asked oftener than that (see `PlantManager::grow_a_zone` and
     /// `grow_where_somebody_is`). So there are two paths that can grow the
     /// same plant, and the one thing they must not do is disagree about how
-    /// long it has been growing. Neither of them is told how many ticks to
+    /// long it has been growing. Neither of them is told how many turns to
     /// stand for: each works it out from here and writes it back, so a plant
-    /// grows exactly once for each tick that has passed however it is
+    /// grows exactly once for each turn that has passed however it is
     /// reached.
     #[serde(default)]
     pub grown_up_to: u32,
@@ -1536,8 +1536,8 @@ impl GrowingConditions {
         water.min(light).min(nutrients)
     }
 
-    /// How much nutrient a plant growing here draws out of the ground per tick
-    pub fn draw_per_tick(&self) -> f32 {
+    /// How much nutrient a plant growing here draws out of the ground per turn
+    pub fn draw_per_turn(&self) -> f32 {
         const APPETITE: f32 = 0.00015;
 
         APPETITE * self.uptake.max(0.0) * self.growth_share()
@@ -1555,7 +1555,7 @@ impl Plant {
             max_health: 0.0,
             growth_stage: GrowthStage::Seedling,
             growth_progress: 0.0,
-            age_ticks: 0,
+            age_turns: 0,
             is_harvestable: false,
             has_been_harvested: false,
             regrow_timer: 0,
@@ -1580,14 +1580,14 @@ impl Plant {
         self
     }
 
-    /// Advance growth by one tick
+    /// Advance growth by one turn
     pub fn grow(&mut self, species: &PlantSpecies) -> bool {
         self.grow_in(species, GrowingConditions::ideal(), 1.0)
     }
 
     /// Grow, given what this plant actually has to work with.
     ///
-    /// `grow` used to advance a plant one step per tick regardless of water,
+    /// `grow` used to advance a plant one step per turn regardless of water,
     /// light or soil - the biome lists on every species were declared and never
     /// read - so a cactus grew as fast in a bog as an oak did, and neither ever
     /// took anything out of the ground.
@@ -1595,7 +1595,7 @@ impl Plant {
         &mut self,
         species: &PlantSpecies,
         conditions: GrowingConditions,
-        ticks: f32,
+        turns: f32,
     ) -> bool {
         // A plant gets older whether or not the ground lets it grow, and
         // whether or not it has been cut. This used to sit below the two
@@ -1603,10 +1603,10 @@ impl Plant {
         // ground too poor to grow on, or a coppiced stool waiting to come
         // back, did not age at all - which is most of why nothing in this
         // world had ever died of being old.
-        self.age_ticks = self.age_ticks.saturating_add(ticks.max(0.0) as u32);
+        self.age_turns = self.age_turns.saturating_add(turns.max(0.0) as u32);
 
         if self.has_been_harvested && self.regrow_timer > 0 {
-            self.regrow_timer = self.regrow_timer.saturating_sub(ticks.max(1.0) as u32);
+            self.regrow_timer = self.regrow_timer.saturating_sub(turns.max(1.0) as u32);
             if self.regrow_timer == 0 {
                 // Reset for regrowth
                 self.growth_stage = GrowthStage::Seedling;
@@ -1631,13 +1631,13 @@ impl Plant {
         }
 
         let stage_duration = self.stage_duration(species);
-        self.growth_progress += share * ticks / stage_duration as f32;
+        self.growth_progress += share * turns / stage_duration as f32;
 
         // As many stages as the time it stands for is worth, not one.
         //
-        // A pass used to be ten ticks and could never carry a plant through
+        // A pass used to be ten turns and could never carry a plant through
         // more than one stage, so advancing one and throwing the remainder
-        // away cost nothing. A pass is up to fourteen hundred and forty ticks
+        // away cost nothing. A pass is up to fourteen hundred and forty turns
         // now - see `PlantManager::grow_a_zone` - which is several stages for
         // anything quick, and discarding the rest would leave a grass stuck
         // one step short of bearing for ever.
@@ -1710,7 +1710,7 @@ impl Plant {
     pub fn status(&self) -> String {
         if self.has_been_harvested {
             if self.regrow_timer > 0 {
-                format!("Harvested (regrows in {} ticks)", self.regrow_timer)
+                format!("Harvested (regrows in {} turns)", self.regrow_timer)
             } else {
                 "Dead".to_string()
             }
@@ -1758,15 +1758,15 @@ impl PlantLedger {
 ///
 /// It is either waiting for the ground it is on to be free, or it is on
 /// ground its kind cannot live on and is quietly going off. Either way it is
-/// on a clock: see `PlantSpecies::seed_keeps_for_ticks`.
+/// on a clock: see `PlantSpecies::seed_keeps_for_turns`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Seed {
     pub species_id: String,
     pub position: (i32, i32),
 
-    /// The tick it fell on.
+    /// The turn it fell on.
     ///
-    /// How old it is, is `now` less this. It was an `age_ticks` that
+    /// How old it is, is `now` less this. It was an `age_turns` that
     /// something had to remember to wind on, which is a second clock to keep
     /// in step with the first, and seed is only looked at when its zone comes
     /// round - see `PlantManager::grow_a_zone`.
@@ -1845,15 +1845,15 @@ impl PlantManager {
     /// Spawn a plant at a position
     /// Put a plant on the ground, as of `now`.
     ///
-    /// `now` is not decoration. A plant carries the tick it has been grown up
+    /// `now` is not decoration. A plant carries the turn it has been grown up
     /// to, and its zone works out how long a pass stands for by subtracting
-    /// that from the tick it is asked about - so a plant that comes up in year
+    /// that from the turn it is asked about - so a plant that comes up in year
     /// twelve with a clock still reading nought is a plant that ages twelve
     /// years the first time its zone comes round, which for a grass is six
     /// times over its whole life. Every grass and herb on a hundred and twenty
     /// by a hundred and twenty was gone by year fifteen and every bush by year
     /// forty-five, with the trees left standing because a tree can afford it.
-    /// So the tick is a parameter and every caller has to say which one.
+    /// So the turn is a parameter and every caller has to say which one.
     pub fn spawn_plant(
         &mut self,
         species_id: String,
@@ -1982,8 +1982,8 @@ impl PlantManager {
         self.registry.as_ref()?.get(species_id)
     }
 
-    /// Tick all plants (growth, regrowth)
-    pub fn tick(&mut self) {
+    /// Turn all plants (growth, regrowth)
+    pub fn take_a_turn(&mut self) {
         let registry = match &self.registry {
             Some(r) => r,
             None => return,
@@ -2016,7 +2016,7 @@ impl PlantManager {
     /// Nothing had ever created a plant. `spawn_plant`, `plant_crop` and
     /// `spawn_patch` existed, were tested, and had no callers outside the
     /// world's own pass-through wrappers, so `world.plants` was empty in every
-    /// run that has ever been made and `tick` iterated nothing.
+    /// run that has ever been made and `turn` iterated nothing.
     pub fn spawn_naturalistic(&mut self, grid: &crate::world::Grid) {
         use rand::Rng;
 
@@ -2103,15 +2103,15 @@ impl PlantManager {
 
                         // And they have not all been standing the same while.
                         // A wood put down all at once is a wood that comes
-                        // down all at once: every tree in it born on tick
+                        // down all at once: every tree in it born on turn
                         // zero reaches two hundred and fifty years within a
                         // few passes of every other, and the country goes
                         // from full timber to bare ground inside a season.
                         // What makes a wood a wood is that there is an age
                         // of everything in it, so they start scattered
                         // across a lifetime.
-                        plant.age_ticks =
-                            (how_old * species.lives_for_ticks() as f32) as u32;
+                        plant.age_turns =
+                            (how_old * species.lives_for_turns() as f32) as u32;
                     }
                 }
             }
@@ -2159,7 +2159,7 @@ impl PlantManager {
         drawn * goes_back / Soil::KEPT_FROM_ROT
     }
 
-    /// How much leaf fall this plant puts on the ground each tick
+    /// How much leaf fall this plant puts on the ground each turn
     #[allow(dead_code)]
     fn leaf_fall_of(size: PlantSize) -> f32 {
         match size {
@@ -2177,16 +2177,16 @@ impl PlantManager {
     /// How often one zone's turn comes round.
     ///
     /// Five days, so the whole map is grown through every hundred and twenty.
-    /// It was a bare `60` in `World::tick` and a bare `60` again in two test
+    /// It was a bare `60` in `World::take_a_turn` and a bare `60` again in two test
     /// fixtures here that drive the same sweep - and *those two numbers have
     /// to agree*, because they each work out which zone it is by dividing the
-    /// tick by their own copy. Disagree and the wrong quarter of the country
+    /// turn by their own copy. Disagree and the wrong quarter of the country
     /// grows. Stated in days it stays five days at any turn length; stated in
-    /// ticks it would have been a day and a quarter the moment the turn got
+    /// turns it would have been a day and a quarter the moment the turn got
     /// shorter, and the whole map would have been grown four times over in a
     /// season. See ISSUES_FOUND #205.
     pub const HOW_OFTEN_A_ZONE_COMES_ROUND: u32 =
-        crate::environment::seasons::TICKS_PER_DAY * 5;
+        crate::environment::seasons::TURNS_PER_DAY * 5;
 
     /// Grow one zone of what is standing, on what the ground and sky give it.
     ///
@@ -2198,15 +2198,15 @@ impl PlantManager {
     /// does not.
     ///
     /// One zone in twenty-four, so a plant is worked out once in fourteen
-    /// hundred and forty ticks - four months - unless something is standing on
+    /// hundred and forty turns - four months - unless something is standing on
     /// it, in which case `catch_up_one` brings it up to date between mouthfuls.
     /// Nothing a plant does on its own happens faster than four months. What
     /// this buys is that a hundred square kilometres carries a quarter of a
     /// million plants and only about ten thousand of them are looked at in any
-    /// pass, one zone at a time so that no single tick carries the lot.
+    /// pass, one zone at a time so that no single turn carries the lot.
     ///
-    /// No caller says how many ticks the pass stands for. Each plant carries
-    /// the tick it has been grown up to and works out its own span, which is
+    /// No caller says how many turns the pass stands for. Each plant carries
+    /// the turn it has been grown up to and works out its own span, which is
     /// the only thing that makes it safe for the same plant to be reached by a
     /// zone pass and by something grazing it.
     pub fn grow_a_zone(
@@ -2256,7 +2256,7 @@ impl PlantManager {
         // position: a wooded hundred square kilometres carries eighty thousand
         // plants, each of which puts five entries into this, and four hundred
         // thousand tree-map inserts a pass was seven of the ten milliseconds a
-        // tick cost. Four megabytes of floats and a memset is cheaper than the
+        // turn cost. Four megabytes of floats and a memset is cheaper than the
         // tree by an order of magnitude, and the map was never sparse anyway.
         let width = grid.width;
         let height = grid.height;
@@ -2313,10 +2313,10 @@ impl PlantManager {
 
             // How long it is since this plant was last grown, which is what
             // this pass stands for. Nought means something has already brought
-            // it up to date this tick.
-            let ticks = now.saturating_sub(plant.grown_up_to) as f32;
+            // it up to date this turn.
+            let turns = now.saturating_sub(plant.grown_up_to) as f32;
             plant.grown_up_to = now;
-            if ticks <= 0.0 {
+            if turns <= 0.0 {
                 continue;
             }
 
@@ -2380,7 +2380,7 @@ impl PlantManager {
                 uptake,
             };
 
-            plant.grow_in(species, conditions, ticks);
+            plant.grow_in(species, conditions, turns);
 
             // And whether it can hold its own where it is standing.
             //
@@ -2393,7 +2393,7 @@ impl PlantManager {
             // depends on how far short the ground is falling.
             let living = conditions.growth_share();
             if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
-                plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, ticks);
+                plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, turns);
             } else {
                 // What it puts back on is what the ground and the sky give it,
                 // so a plant on poor ground comes back slowly and one in a
@@ -2402,12 +2402,12 @@ impl PlantManager {
                 // again out of the same water and light and nutrient
                 // everything else here runs on.
                 plant.current_health = (plant.current_health
-                    + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
+                    + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * turns)
                     .min(plant.max_health);
             }
 
             // What it grows with, it takes out of the ground
-            let wanted = conditions.draw_per_tick() * ticks;
+            let wanted = conditions.draw_per_turn() * turns;
             if wanted > 0.0 {
                 tile.soil.draw(wanted);
             }
@@ -2461,7 +2461,7 @@ impl PlantManager {
     /// Bring one plant up to now, because something is standing on it.
     ///
     /// A plant waits for its zone, which is four months. Something grazing it
-    /// takes a bite every ten ticks, so without this a grazed plant would lose
+    /// takes a bite every ten turns, so without this a grazed plant would lose
     /// condition a hundred and forty-four times for every time it gained any,
     /// and the first patch of ground a herd stood on would be the last.
     ///
@@ -2486,8 +2486,8 @@ impl PlantManager {
             return;
         };
 
-        let ticks = now.saturating_sub(plant.grown_up_to) as f32;
-        if ticks <= 0.0 {
+        let turns = now.saturating_sub(plant.grown_up_to) as f32;
+        if turns <= 0.0 {
             return;
         }
         plant.grown_up_to = now;
@@ -2525,18 +2525,18 @@ impl PlantManager {
             uptake,
         };
 
-        plant.grow_in(species, conditions, ticks);
+        plant.grow_in(species, conditions, turns);
 
         let living = conditions.growth_share();
         if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
-            plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, ticks);
+            plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, turns);
         } else {
             plant.current_health = (plant.current_health
-                + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
+                + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * turns)
                 .min(plant.max_health);
         }
 
-        let drawn = conditions.draw_per_tick() * ticks;
+        let drawn = conditions.draw_per_turn() * turns;
         if drawn > 0.0 {
             tile.soil.draw(drawn);
         }
@@ -2583,14 +2583,14 @@ impl PlantManager {
     /// closed canopy leaves, which is 0.05.
     const WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN: f32 = 0.12;
 
-    /// How much of itself a plant loses per tick when the ground falls right
-    /// away under it. Two thousand ticks, half a year, from full to gone.
+    /// How much of itself a plant loses per turn when the ground falls right
+    /// away under it. Two thousand turns, half a year, from full to gone.
     const HOW_FAST_A_PLANT_GOES_BACK: f32 = 0.0005;
 
     /// And the most it can lose in any one pass, however long the pass is.
     ///
     /// A pass reads the water, the light and the soil once and then applies
-    /// that reading for as long as the pass stands for. At ten or twenty ticks
+    /// that reading for as long as the pass stands for. At ten or twenty turns
     /// that is a fair account of the weather; at fourteen hundred and forty it
     /// is four months of drought inferred from one wet afternoon or one dry
     /// one, and without a limit a plant caught on a bad reading loses
@@ -2599,7 +2599,7 @@ impl PlantManager {
     /// of the wrong ground should do.
     const THE_MOST_A_PLANT_LOSES_IN_ONE_PASS: f32 = 1.0 / 3.0;
 
-    /// And how fast it puts condition back on, per tick, at its best pace.
+    /// And how fast it puts condition back on, per turn, at its best pace.
     ///
     /// A plant cropped to nothing is back to full in about a month given
     /// everything it wants, and longer than that on any real ground, because
@@ -2623,11 +2623,11 @@ impl PlantManager {
     /// Held to `THE_MOST_A_PLANT_LOSES_IN_ONE_PASS` however long the pass is,
     /// because the conditions it is working from are one reading and not an
     /// average of the span.
-    fn what_a_bad_pass_costs(max_health: f32, living: f32, ticks: f32) -> f32 {
+    fn what_a_bad_pass_costs(max_health: f32, living: f32, turns: f32) -> f32 {
         let short = (Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN - living)
             / Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN;
 
-        (max_health * Self::HOW_FAST_A_PLANT_GOES_BACK * short * ticks)
+        (max_health * Self::HOW_FAST_A_PLANT_GOES_BACK * short * turns)
             .min(max_health * Self::THE_MOST_A_PLANT_LOSES_IN_ONE_PASS)
     }
 
@@ -2651,7 +2651,7 @@ impl PlantManager {
                 return true;
             };
 
-            let of_old_age = plant.age_ticks >= species.lives_for_ticks();
+            let of_old_age = plant.age_turns >= species.lives_for_turns();
             let of_the_ground = plant.current_health <= 0.0;
 
             if !of_old_age && !of_the_ground {
@@ -2737,7 +2737,7 @@ impl PlantManager {
             };
 
             // How much seed this plant put out over the span, as a count
-            // rather than a coin. A pass used to be ten ticks and a chance
+            // rather than a coin. A pass used to be ten turns and a chance
             // under one; a pass now stands for up to fourteen hundred and
             // forty, and a chance clamped to one would have a grass drop a
             // single seed where it should have dropped eight.
@@ -2781,7 +2781,7 @@ impl PlantManager {
     /// A seed comes up when the ground under it will carry its kind and
     /// nothing is standing on that ground already. A seed on ground its kind
     /// cannot live on never comes up, and does not sit there for ever either:
-    /// it keeps for `PlantSpecies::seed_keeps_for_ticks` and then it has
+    /// it keeps for `PlantSpecies::seed_keeps_for_turns` and then it has
     /// rotted, which puts the little it was back into the litter.
     fn what_came_up_and_what_rotted(
         &mut self,
@@ -2895,7 +2895,7 @@ impl PlantManager {
             // On ground of a kind it cannot live on it never comes up at all,
             // and it does not sit there for ever either: it keeps for its
             // season or two and then it has rotted.
-            if now.saturating_sub(seed.dropped_at) >= species.seed_keeps_for_ticks() {
+            if now.saturating_sub(seed.dropped_at) >= species.seed_keeps_for_turns() {
                 rotted.push((seed.position, Self::WHAT_A_SEED_IS_WORTH));
                 tally.seed_rotted_on_wrong_ground[PlantLedger::which_class(species)] += 1;
                 return false;
@@ -2956,7 +2956,7 @@ impl PlantManager {
     /// Seed is cheap and a seedling is not, and nearly everything that falls
     /// fails. What decides it here is light, which is the one thing the model
     /// already knows about the ground over a tile - see the canopy in
-    /// `tick_in_world`. Under a closed wood almost nothing comes up, which is
+    /// `turn_in_world`. Under a closed wood almost nothing comes up, which is
     /// why a wood has a floor rather than a thicket and why open ground stays
     /// open. Cubed rather than straight, because a half-shaded tile is a good
     /// deal worse than half as good for something trying to get a root down.
@@ -3110,7 +3110,7 @@ mod tests {
 /// derivation puts the fifty-one species in the right order of magnitude.
 #[test]
 fn a_grass_and_an_oak_do_not_live_the_same_length_of_time() {
-    use crate::environment::seasons::TICKS_PER_YEAR;
+    use crate::environment::seasons::TURNS_PER_YEAR;
 
     let registry = FloraRegistry::new();
     let grass = registry.get("grass").expect("there is grass in this world");
@@ -3134,8 +3134,8 @@ fn a_grass_and_an_oak_do_not_live_the_same_length_of_time() {
     );
 
     assert_eq!(
-        oak.lives_for_ticks(),
-        (oak.lives_for_years() * TICKS_PER_YEAR as f32) as u32
+        oak.lives_for_turns(),
+        (oak.lives_for_years() * TURNS_PER_YEAR as f32) as u32
     );
 }
 
@@ -3159,7 +3159,7 @@ fn what_lives_briefly_seeds_the_harder_for_it() {
     );
 
     let over_a_life = |species: &PlantSpecies| {
-        species.seeds_per_pass() * species.lives_for_ticks() as f32 / 10.0
+        species.seeds_per_pass() * species.lives_for_turns() as f32 / 10.0
     };
 
     let (short, long) = (over_a_life(grass), over_a_life(oak));
@@ -3196,7 +3196,7 @@ fn a_plant_knows_what_country_it_belongs_in() {
 /// Something that has stood for its whole lifetime is not standing any more.
 #[test]
 fn a_plant_that_has_had_its_years_goes_over() {
-    use crate::environment::seasons::TICKS_PER_YEAR;
+    use crate::environment::seasons::TURNS_PER_YEAR;
     use crate::world::{Grid, Position};
 
     let mut grid = Grid::new(12, 12);
@@ -3213,12 +3213,12 @@ fn a_plant_that_has_had_its_years_goes_over() {
 
     // A grass lives two years. Three of them is well past it. Every zone in
     // its turn, because the plant is only looked at when its own comes round.
-    for tick in (0..(3 * TICKS_PER_YEAR))
+    for turn in (0..(3 * TURNS_PER_YEAR))
         .step_by(PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND as usize)
     {
-        let zone = (tick / PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
+        let zone = (turn / PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
             % PlantManager::HOW_MANY_ZONES;
-        plants.grow_a_zone(&mut grid, 40.0, tick, Season::Summer, zone);
+        plants.grow_a_zone(&mut grid, 40.0, turn, Season::Summer, zone);
     }
 
     assert!(
@@ -3264,11 +3264,11 @@ fn seed_on_the_wrong_ground_rots_instead_of_waiting_for_ever() {
     let cactus = registry.get("cactus").unwrap();
 
     // Long enough for seed to have fallen and for the first of it to be gone.
-    let ticks = cactus.seed_keeps_for_ticks() * 3;
-    for tick in (0..ticks).step_by(PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND as usize) {
-        let zone = (tick / PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
+    let turns = cactus.seed_keeps_for_turns() * 3;
+    for turn in (0..turns).step_by(PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND as usize) {
+        let zone = (turn / PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
             % PlantManager::HOW_MANY_ZONES;
-        plants.grow_a_zone(&mut grid, 40.0, tick, Season::Summer, zone);
+        plants.grow_a_zone(&mut grid, 40.0, turn, Season::Summer, zone);
     }
 
     let ledger = plants.what_has_been_happening();
@@ -3319,8 +3319,8 @@ fn every_row_of_the_map_is_in_exactly_one_zone() {
 
 /// A plant that comes up in year twelve is twelve years old, not nought.
 ///
-/// A plant works out how long a pass stands for by subtracting the tick it
-/// was last grown up to from the tick it is asked about. Something that comes
+/// A plant works out how long a pass stands for by subtracting the turn it
+/// was last grown up to from the turn it is asked about. Something that comes
 /// up mid-run with that clock still reading nought ages the whole run the
 /// first time its zone comes round - which for a grass is six times its own
 /// lifetime, so it is dead before it has grown. Every grass and herb on a
@@ -3329,13 +3329,13 @@ fn every_row_of_the_map_is_in_exactly_one_zone() {
 fn a_plant_that_comes_up_late_is_not_born_old() {
     let mut plants = PlantManager::new(16);
 
-    let a_long_way_in = 12 * crate::environment::seasons::TICKS_PER_YEAR;
+    let a_long_way_in = 12 * crate::environment::seasons::TURNS_PER_YEAR;
     plants.spawn_plant("grass".to_string(), (3, 3), a_long_way_in);
 
     let planted = plants.all_plants().last().expect("it was planted");
     assert_eq!(
         planted.grown_up_to, a_long_way_in,
-        "a plant put down at tick {a_long_way_in} thinks it was grown up to \
+        "a plant put down at turn {a_long_way_in} thinks it was grown up to \
          {}",
         planted.grown_up_to
     );
@@ -3344,7 +3344,7 @@ fn a_plant_that_comes_up_late_is_not_born_old() {
 /// Growing in one long stride ends up near where many short ones would.
 ///
 /// The whole of what the zones buy is that a plant is worked out once in
-/// fourteen hundred and forty ticks instead of once in ten. That is only
+/// fourteen hundred and forty turns instead of once in ten. That is only
 /// sound if the long stride and the short ones agree, and there are two
 /// places they might not: a stage the plant would have passed through and out
 /// the other side of, and seed it would have shed on the way.
@@ -3365,9 +3365,9 @@ fn one_long_stride_gets_to_much_the_same_place_as_many_short_ones() {
     }
 
     assert_eq!(
-        in_one_go.age_ticks, step_by_step.age_ticks,
+        in_one_go.age_turns, step_by_step.age_turns,
         "one stride aged it {} and a hundred and forty-four aged it {}",
-        in_one_go.age_ticks, step_by_step.age_ticks
+        in_one_go.age_turns, step_by_step.age_turns
     );
     assert_eq!(
         in_one_go.growth_stage, step_by_step.growth_stage,
@@ -3405,7 +3405,7 @@ fn ground_somebody_is_standing_on_is_brought_up_to_date() {
     assert!(
         after > cropped,
         "a cropped plant with something standing on it put nothing back in \
-         seven hundred ticks: {cropped:.3} then {after:.3}"
+         seven hundred turns: {cropped:.3} then {after:.3}"
     );
 
     assert_eq!(

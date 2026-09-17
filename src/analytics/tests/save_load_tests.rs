@@ -21,10 +21,10 @@ fn test_simulation_can_be_saved_to_file() {
 
     let mut sim = Simulation::new(world, population);
 
-    // Run for a few ticks to generate state
-    sim.tick();
-    sim.tick();
-    sim.tick();
+    // Run for a few turns to generate state
+    sim.take_a_turn();
+    sim.take_a_turn();
+    sim.take_a_turn();
 
     // Save the simulation
     sim.save(&save_path).expect("Failed to save simulation");
@@ -49,10 +49,10 @@ fn test_simulation_can_be_loaded_from_file() {
     population.spawn_agent(AgentConfig::default());
 
     let mut sim = Simulation::new(world, population);
-    sim.tick();
-    sim.tick();
+    sim.take_a_turn();
+    sim.take_a_turn();
 
-    let saved_tick = sim.current_tick;
+    let saved_turn = sim.current_turn;
     let saved_pop_count = sim.population.agents.len();
 
     sim.save(&save_path).unwrap();
@@ -61,7 +61,7 @@ fn test_simulation_can_be_loaded_from_file() {
     let loaded_sim = Simulation::load(&save_path).expect("Failed to load simulation");
 
     // Verify state was restored
-    assert_eq!(loaded_sim.current_tick, saved_tick);
+    assert_eq!(loaded_sim.current_turn, saved_turn);
     assert_eq!(loaded_sim.population.agents.len(), saved_pop_count);
 }
 
@@ -79,12 +79,12 @@ fn test_loaded_simulation_can_resume() {
 
     let mut sim = Simulation::new(world, population);
 
-    // Run for 10 ticks
+    // Run for 10 turns
     for _ in 0..10 {
-        sim.tick();
+        sim.take_a_turn();
     }
 
-    assert_eq!(sim.current_tick, 10);
+    assert_eq!(sim.current_turn, 10);
 
     sim.save(&save_path).unwrap();
 
@@ -92,15 +92,15 @@ fn test_loaded_simulation_can_resume() {
     let mut loaded_sim = Simulation::load(&save_path).unwrap();
 
     // Should start from where we left off
-    assert_eq!(loaded_sim.current_tick, 10);
+    assert_eq!(loaded_sim.current_turn, 10);
 
-    // Run for 5 more ticks
+    // Run for 5 more turns
     for _ in 0..5 {
-        loaded_sim.tick();
+        loaded_sim.take_a_turn();
     }
 
-    // Should now be at tick 15
-    assert_eq!(loaded_sim.current_tick, 15);
+    // Should now be at turn 15
+    assert_eq!(loaded_sim.current_turn, 15);
 }
 
 #[test]
@@ -150,17 +150,17 @@ fn test_world_state_preserved_across_save_load() {
     let mut sim = Simulation::new(world, population);
 
     // Run world for a bit to generate state
-    sim.world.climate.tick();
-    sim.world.climate.tick();
+    sim.world.climate.take_a_turn();
+    sim.world.climate.take_a_turn();
 
-    let saved_tick = sim.world.tick;
+    let saved_turn = sim.world.turn;
 
     sim.save(&save_path).unwrap();
 
     // Load and verify world state
     let loaded_sim = Simulation::load(&save_path).unwrap();
 
-    assert_eq!(loaded_sim.world.tick, saved_tick);
+    assert_eq!(loaded_sim.world.turn, saved_turn);
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn test_drive_values_preserved_across_save_load() {
 
     // Accumulate some drive values
     for _ in 0..50 {
-        sim.population.agents[0].drives.tick();
+        sim.population.agents[0].drives.take_a_turn();
     }
 
     let hunger_value = sim.population.agents[0].drives.get(crate::core::DriveType::Hunger)
@@ -241,28 +241,28 @@ fn test_multiple_save_load_cycles() {
 
     let mut sim = Simulation::new(world, population);
 
-    // Cycle 1: Run 5 ticks, save, load
+    // Cycle 1: Run 5 turns, save, load
     for _ in 0..5 {
-        sim.tick();
+        sim.take_a_turn();
     }
     sim.save(&save_path).unwrap();
     let mut sim = Simulation::load(&save_path).unwrap();
-    assert_eq!(sim.current_tick, 5);
+    assert_eq!(sim.current_turn, 5);
 
-    // Cycle 2: Run 5 more ticks, save, load
+    // Cycle 2: Run 5 more turns, save, load
     for _ in 0..5 {
-        sim.tick();
+        sim.take_a_turn();
     }
     sim.save(&save_path).unwrap();
     let mut sim = Simulation::load(&save_path).unwrap();
-    assert_eq!(sim.current_tick, 10);
+    assert_eq!(sim.current_turn, 10);
 
-    // Cycle 3: Run 10 more ticks
+    // Cycle 3: Run 10 more turns
     for _ in 0..10 {
-        sim.tick();
+        sim.take_a_turn();
     }
 
-    assert_eq!(sim.current_tick, 20);
+    assert_eq!(sim.current_turn, 20);
 }
 
 #[test]

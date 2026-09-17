@@ -180,9 +180,9 @@ fn test_plan_step_timeout() {
     a_run_this_one_worked_out(&mut agent);
     assert!(agent.should_execute_plan());
 
-    // Simulate many ticks on the same step (timeout)
+    // Simulate many turns on the same step (timeout)
     for _ in 0..1000 {
-        agent.tick_plan_step();
+        agent.turn_plan_step();
     }
 
     // Should no longer want to execute plan due to timeout
@@ -200,7 +200,7 @@ fn test_plan_completion() {
                 resource: "food".to_string(),
                 amount: 1,
             },
-            estimated_ticks: 10,
+            estimated_turns: 10,
             required_tool: None,
             required_resources: vec![],
             target_location: Some((50, 50, 0)),
@@ -277,7 +277,7 @@ fn test_plan_abandoned_when_storehouse_already_stocked() {
     let steps = vec![
         PlanStep {
             action: PlanActionType::MoveTo { location: (50, 50, 0) },
-            estimated_ticks: 10,
+            estimated_turns: 10,
             required_tool: None,
             required_resources: vec![],
             target_location: Some((50, 50, 0)),
@@ -288,7 +288,7 @@ fn test_plan_abandoned_when_storehouse_already_stocked() {
                 resource: "wood".to_string(),
                 amount: 50,
             },
-            estimated_ticks: 20,
+            estimated_turns: 20,
             required_tool: None,
             required_resources: vec![],
             target_location: Some((50, 50, 0)),
@@ -384,7 +384,7 @@ fn test_plan_continues_when_goal_not_satisfied() {
                 resource: "wood".to_string(),
                 amount: 50,
             },
-            estimated_ticks: 20,
+            estimated_turns: 20,
             required_tool: None,
             required_resources: vec![],
             target_location: Some((50, 50, 0)),

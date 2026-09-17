@@ -126,13 +126,13 @@ fn main() {
 /// Send an error to the GUI
 fn send_error(
     error_tx: &Sender<BridgeError>,
-    tick: u32,
+    turn: u32,
     severity: ErrorSeverity,
     message: impl Into<String>,
     context: Option<String>,
 ) {
     let _ = error_tx.send(BridgeError {
-        tick,
+        turn,
         message: message.into(),
         severity,
         context,
@@ -180,8 +180,8 @@ fn run_simulation_thread(
     let mut selected = GuiEntitySelection::None;
 
     // Timing
-    let base_tick_duration = Duration::from_millis(16);
-    let mut last_tick = Instant::now();
+    let base_turn_duration = Duration::from_millis(16);
+    let mut last_turn = Instant::now();
     let mut last_snapshot = Instant::now();
     let snapshot_interval = Duration::from_millis(50);
 
@@ -229,7 +229,7 @@ fn run_simulation_thread(
                             log::error!("Failed to save simulation: {}", e);
                             send_error(
                                 &error_tx,
-                                simulation.current_tick,
+                                simulation.current_turn,
                                 ErrorSeverity::Error,
                                 format!("Failed to save: {}", e),
                                 Some("Save operation".to_string()),
@@ -243,20 +243,20 @@ fn run_simulation_thread(
                         Ok(loaded_sim) => {
                             simulation = loaded_sim;
                             // Reset timing
-                            last_tick = Instant::now();
+                            last_turn = Instant::now();
                             last_snapshot = Instant::now();
                             // Reset to paused state after loading
                             state = GuiSimState::Paused;
                             log::info!(
-                                "Simulation loaded successfully from {}, tick: {}",
-                                path, simulation.current_tick
+                                "Simulation loaded successfully from {}, turn: {}",
+                                path, simulation.current_turn
                             );
                         }
                         Err(e) => {
                             log::error!("Failed to load simulation: {}", e);
                             send_error(
                                 &error_tx,
-                                simulation.current_tick,
+                                simulation.current_turn,
                                 ErrorSeverity::Error,
                                 format!("Failed to load: {}", e),
                                 Some("Load operation".to_string()),
@@ -324,7 +324,7 @@ fn run_simulation_thread(
                 *request = false;
                 let snapshot = relationship_graph_to_snapshot(
                     &simulation.population,
-                    simulation.current_tick,
+                    simulation.current_turn,
                 );
                 if let Ok(mut response) = relationship_graph_response.try_lock() {
                     *response = Some(snapshot);
@@ -332,21 +332,21 @@ fn run_simulation_thread(
             }
         }
 
-        // Run simulation tick if appropriate
-        let should_tick = match state {
+        // Run simulation turn if appropriate
+        let should_turn = match state {
             GuiSimState::Running => {
-                let tick_duration = Duration::from_secs_f32(
-                    base_tick_duration.as_secs_f32() / speed
+                let turn_duration = Duration::from_secs_f32(
+                    base_turn_duration.as_secs_f32() / speed
                 );
-                last_tick.elapsed() >= tick_duration
+                last_turn.elapsed() >= turn_duration
             }
             GuiSimState::Stepping => true,
             GuiSimState::Paused => false,
         };
 
-        if should_tick {
-            simulation.tick();
-            last_tick = Instant::now();
+        if should_turn {
+            simulation.take_a_turn();
+            last_turn = Instant::now();
 
             if state == GuiSimState::Stepping {
                 state = GuiSimState::Paused;

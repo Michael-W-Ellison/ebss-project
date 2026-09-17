@@ -263,7 +263,7 @@ fn salted_meat_still_sound_a_week_later_is_the_answer_yes() {
         0,
     );
 
-    simulation.current_tick = Wondering::HOW_LONG_ANYBODY_WONDERS + 2;
+    simulation.current_turn = Wondering::HOW_LONG_ANYBODY_WONDERS + 2;
     simulation.who_came_back_to_look();
 
     let agent = &simulation.population.agents[0];
@@ -302,7 +302,7 @@ fn clay_left_at_a_fire_comes_out_hard() {
         0,
     );
 
-    simulation.current_tick = crate::environment::seasons::TICKS_PER_DAY * 2;
+    simulation.current_turn = crate::environment::seasons::TURNS_PER_DAY * 2;
     simulation.what_the_fire_hardened();
 
     let lying = simulation.world.what_is_lying_at(&Position::new(25, 25));
@@ -330,7 +330,7 @@ fn clay_in_a_cold_field_stays_clay() {
         0,
     );
 
-    simulation.current_tick = crate::environment::seasons::TICKS_PER_DAY * 2;
+    simulation.current_turn = crate::environment::seasons::TURNS_PER_DAY * 2;
     simulation.what_the_fire_hardened();
 
     assert!(
@@ -580,14 +580,14 @@ fn what_rots_on_the_ground_is_counted() {
     let mut going = a_meal(ItemType::Meat, "meatportions", 5);
     if let Some(food) = going.food_data.as_mut() {
         food.freshness = 0.01;
-        food.base_spoilage_ticks = 1;
+        food.base_spoilage_turns = 1;
     }
     simulation
         .world
         .somebody_left_this(going, Position::new(40, 40), 0);
 
-    for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 3) {
-        simulation.world.tick();
+    for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 3) {
+        simulation.world.take_a_turn();
     }
 
     assert!(

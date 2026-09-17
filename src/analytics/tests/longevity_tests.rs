@@ -1,8 +1,8 @@
 // src/analytics/tests/longevity_tests.rs
 //! Tests for a settlement that has to last.
 //!
-//! Every population tested was gone by thirty thousand ticks. Two things were
-//! killing them, and neither showed up in the eight-thousand-tick runs
+//! Every population tested was gone by thirty thousand turns. Two things were
+//! killing them, and neither showed up in the eight-thousand-turn runs
 //! everything else is measured over:
 //!
 //! - Nearly half of everyone ever born died before growing up. Children have
@@ -10,7 +10,7 @@
 //!   degrees colder than the adults beside them and died of it.
 //! - Water was consumed and never came back. Every drink took a unit out of
 //!   the world for good, and a lake drunk dry was deleted, so a world lost
-//!   more than half its water in fifteen thousand ticks and the people
+//!   more than half its water in fifteen thousand turns and the people
 //!   drinking from it died of thirst and then of hunger.
 
 use crate::agents::{AgentConfig, LifeStage, Population};
@@ -41,7 +41,7 @@ fn water_is_not_used_up() {
     assert!(!sources(&simulation).is_empty(), "a world should have water in it");
 
     for _ in 0..6000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let after = sources(&simulation);
@@ -118,9 +118,9 @@ fn a_spring_gives_more_than_a_pond() {
     assert!(seep > pond, "a seep runs harder than standing water: {seep} vs {pond}");
 
     // And a spring has to be worth camping on, which means giving back more
-    // between two passes of the resource tick than a settlement drinks in
+    // between two passes of the resource turn than a settlement drinks in
     // that time. A drink is a unit or two and a pass comes round every ten
-    // ticks; the first cut of this gave back 1.5, which is a twentieth of
+    // turns; the first cut of this gave back 1.5, which is a twentieth of
     // what a camp takes.
     assert!(
         spring >= 12.0,
@@ -161,7 +161,7 @@ fn the_young_are_kept_warm_by_the_adults_around_them() {
             for agent in &mut simulation.population.agents {
                 agent.state.position = (25, 25, 0);
             }
-            simulation.tick();
+            simulation.take_a_turn();
         }
 
         simulation
@@ -186,24 +186,24 @@ fn the_young_are_kept_warm_by_the_adults_around_them() {
     );
 }
 
-/// A settlement is still there after thirty thousand ticks.
+/// A settlement is still there after thirty thousand turns.
 ///
-/// Ignored by default: it runs thirty thousand ticks, which takes most of a
+/// Ignored by default: it runs thirty thousand turns, which takes most of a
 /// minute on its own against a suite that otherwise finishes in seconds, and
 /// the answer is a probability rather than a fact. Run it with
 /// `cargo test --release -- --ignored a_settlement_lasts`.
 ///
 /// Measured over twelve independent worlds on the commit that added this,
-/// nine were still inhabited at thirty thousand ticks and thirteen of sixteen
+/// nine were still inhabited at thirty thousand turns and thirteen of sixteen
 /// at twenty thousand. Before the two fixes above, three of three were empty -
-/// at 15,994, 18,253 and 26,907 ticks. Once the calendar turned, eleven of
+/// at 15,994, 18,253 and 26,907 turns. Once the calendar turned, eleven of
 /// twelve were still inhabited at thirty thousand, with 77.7 people on average
 /// and a high-water mark of 141. A single world is therefore still worth
 /// running by hand and not asserting on: some of them die of their own accord,
 /// having first grown past what the land will carry.
 #[test]
 #[ignore]
-fn a_settlement_lasts_thirty_thousand_ticks() {
+fn a_settlement_lasts_thirty_thousand_turns() {
     let world = World::new(WorldConfig::default());
     let mut population = Population::new();
     for _ in 0..12 {
@@ -213,7 +213,7 @@ fn a_settlement_lasts_thirty_thousand_ticks() {
     let mut simulation = Simulation::new(world, population);
 
     for _ in 0..30000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let alive = simulation
@@ -225,7 +225,7 @@ fn a_settlement_lasts_thirty_thousand_ticks() {
 
     assert!(
         alive > 0,
-        "the settlement should still be there after thirty thousand ticks"
+        "the settlement should still be there after thirty thousand turns"
     );
 }
 
@@ -233,7 +233,7 @@ fn a_settlement_lasts_thirty_thousand_ticks() {
 /// used to stop.
 ///
 /// The collapse showed up first as births simply stopping: in one traced run
-/// the count froze at thirty-three around twelve thousand ticks and never
+/// the count froze at thirty-three around twelve thousand turns and never
 /// moved again while the last adults aged out. Nearly half of everyone born
 /// had died before growing up, so there was never a second generation to take
 /// over.
@@ -248,7 +248,7 @@ fn a_settlement_still_raises_children_late_on() {
     let mut simulation = Simulation::new(world, population);
 
     for _ in 0..9000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let grown_here = simulation
@@ -261,7 +261,7 @@ fn a_settlement_still_raises_children_late_on() {
 
     assert!(
         grown_here > 0,
-        "nine thousand ticks in, the settlement should hold people born into it"
+        "nine thousand turns in, the settlement should hold people born into it"
     );
 }
 
@@ -349,8 +349,8 @@ fn everything_that_is_a_stock_can_still_be_taken_to_nothing() {
 }
 
 /// And a spring knows its own rate before anybody has drunk from it. The
-/// regeneration pass sets this and does not run until the tenth tick, which
-/// is ten ticks in which the founders could drink one dry.
+/// regeneration pass sets this and does not run until the tenth turn, which
+/// is ten turns in which the founders could drink one dry.
 #[test]
 fn a_spring_knows_its_rate_from_the_moment_the_world_is_made() {
     let world = World::new(WorldConfig::default());
@@ -382,7 +382,7 @@ fn a_settlement_cannot_drink_a_world_dry() {
     let mut simulation = Simulation::new(world, population);
 
     for _ in 0..3000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let emptiest = simulation

@@ -7,7 +7,7 @@
 //! not mention traits at all. Once everybody had a personality it made no
 //! difference to anything: agents holding `Handy` spent 83% of their attempts
 //! foraging, `Builder` 81%, `Greedy` 84%. A Builder did not build. Eight
-//! worlds a side to fifteen thousand ticks came out 1.10 and 0.66 standard
+//! worlds a side to fifteen thousand turns came out 1.10 and 0.66 standard
 //! errors apart on population and on the fertility of the ground - which is
 //! to say sixty traits arrived and not one settlement noticed.
 //!

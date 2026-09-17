@@ -378,7 +378,7 @@ fn a_spear_can_be_made_out_of_what_was_made_before_it() {
     carrying(agent, "flax", 2);
 
     // Whatever he decides to do, he should end up holding a spear.
-    for tick in 1..=6u32 {
+    for turn in 1..=6u32 {
         let Some(what) = simulation.population.agents[0].what_i_would_make(true) else {
             break;
         };

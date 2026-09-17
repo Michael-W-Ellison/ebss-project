@@ -28,7 +28,7 @@ pub fn render_controls(ui: &mut Ui, state: &GuiState, command_tx: &Sender<Simula
 
         // Step button (only when paused)
         ui.add_enabled_ui(state.simulation_state != SimState::Running, |ui| {
-            if ui.button("\u{23ED}").on_hover_text("Step one tick").clicked() {  // ⏭
+            if ui.button("\u{23ED}").on_hover_text("Step one turn").clicked() {  // ⏭
                 let _ = command_tx.send(SimulationCommand::Step);
             }
         });
@@ -55,12 +55,12 @@ pub fn render_controls(ui: &mut Ui, state: &GuiState, command_tx: &Sender<Simula
 
         ui.separator();
 
-        // Tick counter
+        // Turn counter
         if let Some(snapshot) = &state.latest_snapshot {
-            ui.label(format!("Tick: {}", snapshot.tick));
+            ui.label(format!("Turn: {}", snapshot.turn));
 
             let (days, hours, minutes) =
-                crate::environment::seasons::what_the_clock_says(snapshot.tick);
+                crate::environment::seasons::what_the_clock_says(snapshot.turn);
             ui.label(format!("Day {}, {:02}:{:02}", days + 1, hours, minutes));
         }
 

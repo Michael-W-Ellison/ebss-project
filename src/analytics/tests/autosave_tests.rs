@@ -15,7 +15,7 @@ fn test_autosave_creates_checkpoint_directory() {
 
     let config = AutoSaveConfig {
         enabled: true,
-        interval_ticks: 10,
+        interval_turns: 10,
         max_checkpoints: 3,
         save_directory: save_dir.clone(),
     };
@@ -39,7 +39,7 @@ fn test_autosave_triggers_at_interval() {
 
     let config = AutoSaveConfig {
         enabled: true,
-        interval_ticks: 5,  // Save every 5 ticks
+        interval_turns: 5,  // Save every 5 turns
         max_checkpoints: 5,
         save_directory: save_dir.clone(),
     };
@@ -51,9 +51,9 @@ fn test_autosave_triggers_at_interval() {
     let mut sim = Simulation::new(world, population);
     sim.enable_autosave(config).unwrap();
 
-    // Run for 5 ticks - should trigger one autosave
+    // Run for 5 turns - should trigger one autosave
     for _ in 0..5 {
-        sim.tick();
+        sim.take_a_turn();
     }
 
     // Check that a checkpoint was created
@@ -68,7 +68,7 @@ fn test_autosave_respects_max_checkpoints() {
 
     let config = AutoSaveConfig {
         enabled: true,
-        interval_ticks: 2,  // Save every 2 ticks
+        interval_turns: 2,  // Save every 2 turns
         max_checkpoints: 3, // Keep only 3 checkpoints
         save_directory: save_dir.clone(),
     };
@@ -79,9 +79,9 @@ fn test_autosave_respects_max_checkpoints() {
     let mut sim = Simulation::new(world, population);
     sim.enable_autosave(config).unwrap();
 
-    // Run for 20 ticks - should create 10 checkpoints, but keep only 3
+    // Run for 20 turns - should create 10 checkpoints, but keep only 3
     for _ in 0..20 {
-        sim.tick();
+        sim.take_a_turn();
     }
 
     let checkpoints = std::fs::read_dir(&save_dir).unwrap().count();
@@ -95,7 +95,7 @@ fn test_autosave_can_be_disabled() {
 
     let config = AutoSaveConfig {
         enabled: false,  // Disabled
-        interval_ticks: 1,
+        interval_turns: 1,
         max_checkpoints: 5,
         save_directory: save_dir.clone(),
     };
@@ -106,9 +106,9 @@ fn test_autosave_can_be_disabled() {
     let mut sim = Simulation::new(world, population);
     sim.enable_autosave(config).unwrap();
 
-    // Run for 10 ticks
+    // Run for 10 turns
     for _ in 0..10 {
-        sim.tick();
+        sim.take_a_turn();
     }
 
     // No checkpoints should be created
@@ -122,7 +122,7 @@ fn test_autosave_checkpoint_can_be_loaded() {
 
     let config = AutoSaveConfig {
         enabled: true,
-        interval_ticks: 5,
+        interval_turns: 5,
         max_checkpoints: 3,
         save_directory: save_dir.clone(),
     };
@@ -138,7 +138,7 @@ fn test_autosave_checkpoint_can_be_loaded() {
 
     // Run to trigger autosave
     for _ in 0..5 {
-        sim.tick();
+        sim.take_a_turn();
     }
 
     // Find the checkpoint file
@@ -153,7 +153,7 @@ fn test_autosave_checkpoint_can_be_loaded() {
     // Load from checkpoint
     let loaded_sim = Simulation::load(&checkpoint_files[0]).expect("Failed to load checkpoint");
 
-    assert_eq!(loaded_sim.current_tick, 5);
+    assert_eq!(loaded_sim.current_turn, 5);
     assert_eq!(loaded_sim.population.agents.len(), 3);
 }
 
@@ -164,7 +164,7 @@ fn test_get_latest_checkpoint() {
 
     let config = AutoSaveConfig {
         enabled: true,
-        interval_ticks: 3,
+        interval_turns: 3,
         max_checkpoints: 5,
         save_directory: save_dir.clone(),
     };
@@ -177,7 +177,7 @@ fn test_get_latest_checkpoint() {
 
     // Create multiple checkpoints
     for _ in 0..12 {
-        sim.tick();
+        sim.take_a_turn();
     }
 
     // Get latest checkpoint
@@ -186,7 +186,7 @@ fn test_get_latest_checkpoint() {
 
     // Load it and verify it's the latest
     let loaded_sim = Simulation::load(&latest).unwrap();
-    assert_eq!(loaded_sim.current_tick, 12);
+    assert_eq!(loaded_sim.current_turn, 12);
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn test_autosave_preserves_full_state() {
 
     let config = AutoSaveConfig {
         enabled: true,
-        interval_ticks: 10,
+        interval_turns: 10,
         max_checkpoints: 3,
         save_directory: save_dir.clone(),
     };
@@ -215,14 +215,14 @@ fn test_autosave_preserves_full_state() {
 
     // Run to trigger autosave
     for _ in 0..10 {
-        sim.tick();
+        sim.take_a_turn();
     }
 
     // Load from checkpoint
     let latest = Simulation::get_latest_checkpoint(&save_dir).unwrap();
     let loaded_sim = Simulation::load(&latest).unwrap();
 
-    // Health should be preserved (may have changed from tick)
+    // Health should be preserved (may have changed from turn)
     // Just verify the agent exists
     assert_eq!(loaded_sim.population.agents.len(), 1);
 }
@@ -234,7 +234,7 @@ fn test_autosave_cleanup_old_checkpoints() {
 
     let config = AutoSaveConfig {
         enabled: true,
-        interval_ticks: 1,  // Save every tick
+        interval_turns: 1,  // Save every turn
         max_checkpoints: 2, // Keep only 2
         save_directory: save_dir.clone(),
     };
@@ -247,15 +247,15 @@ fn test_autosave_cleanup_old_checkpoints() {
 
     // Create 5 checkpoints
     for _ in 0..5 {
-        sim.tick();
+        sim.take_a_turn();
     }
 
     // Should have exactly 2 (most recent)
     let checkpoint_count = std::fs::read_dir(&save_dir).unwrap().count();
     assert_eq!(checkpoint_count, 2);
 
-    // Verify they are the most recent (ticks 4 and 5)
+    // Verify they are the most recent (turns 4 and 5)
     let latest = Simulation::get_latest_checkpoint(&save_dir).unwrap();
     let loaded = Simulation::load(&latest).unwrap();
-    assert_eq!(loaded.current_tick, 5);
+    assert_eq!(loaded.current_turn, 5);
 }

@@ -53,7 +53,7 @@ pub fn render_save_dialog(
             if let Some(snap) = &snapshot.snapshot {
                 ui.add_space(10.0);
                 ui.label(RichText::new("Current State:").strong());
-                ui.label(format!("Tick: {}", snap.tick));
+                ui.label(format!("Turn: {}", snap.turn));
                 ui.label(format!(
                     "Agents: {}",
                     snap.population.agents.iter().filter(|a| a.is_alive).count()

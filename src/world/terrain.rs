@@ -180,7 +180,7 @@ impl Default for Terrain {
 pub struct Tile {
     pub terrain: Terrain,
     pub explored: bool, // Global exploration state (any agent has seen this)
-    pub last_seen_tick: Option<u32>, // When was this tile last observed
+    pub last_seen_turn: Option<u32>, // When was this tile last observed
 
     /// The ground itself: what plants can draw on, and what is lying on it
     /// waiting to break down into more of the same
@@ -193,7 +193,7 @@ impl Tile {
         Self {
             terrain: Terrain::new(terrain_type),
             explored: false, // Tiles start unexplored (fog of war)
-            last_seen_tick: None,
+            last_seen_turn: None,
             soil: super::soil::Soil::for_terrain(terrain_type),
         }
     }

@@ -25,7 +25,7 @@
 //! change what eating does.
 //!
 //! The move was behaviour-neutral, and proved so: three seeds run six hundred
-//! ticks give byte-identical worlds either side of it.
+//! turns give byte-identical worlds either side of it.
 
 pub mod afforded;
 pub mod goal;
@@ -608,7 +608,7 @@ impl Simulation {
         // Every attempt has been recorded against the particular thing tried
         // since `Lessons` was written, and nothing but hunting ever read it
         // back. So a settlement that could not put a roof up went on trying
-        // to for fifteen thousand ticks, and one whose thirsty men were
+        // to for fifteen thousand turns, and one whose thirsty men were
         // nowhere near water asked for it a hundred and thirty thousand times.
         //
         // A drive that offers something this agent has learned does not work
@@ -661,7 +661,7 @@ impl Simulation {
     ///
     /// Two days of the world's calendar of asking and not being fed.
     pub(in crate::analytics) const LONG_ENOUGH_TO_TRY_SOMETHING_ELSE: f32 =
-        2.0 * crate::environment::seasons::TICKS_PER_DAY as f32;
+        2.0 * crate::environment::seasons::TURNS_PER_DAY as f32;
 
     /// And the most of his turns a man will ever spend on the other thing.
     ///
@@ -683,7 +683,7 @@ impl Simulation {
     /// rungs of the same list at all.
     ///
     /// What decides it is how long the need has been asking without being
-    /// met. `DriveState::denied_ticks` has counted exactly that since drives
+    /// met. `DriveState::denied_turns` has counted exactly that since drives
     /// were given pressure, and nothing had ever read it except to make the
     /// drive shout louder. Shouting louder does not help a man whose hedgerow
     /// is bare; walking past it to the river does.
@@ -711,7 +711,7 @@ impl Simulation {
             return 0;
         };
 
-        let denied = drive.denied_ticks() as f32;
+        let denied = drive.denied_turns() as f32;
         if denied < Self::LONG_ENOUGH_TO_TRY_SOMETHING_ELSE {
             return 0;
         }
@@ -919,7 +919,7 @@ impl Simulation {
             //
             // It used to offer `SeekShelter` and otherwise `None`, so a
             // frightened agent with no roof within reach did nothing about
-            // being frightened - the drive could win the tick and produce no
+            // being frightened - the drive could win the turn and produce no
             // behaviour at all, which is the specification's "drives must
             // result in actions" failing on the one drive that most obviously
             // has to. Running is first now, because running is what fear is
@@ -935,7 +935,7 @@ impl Simulation {
                 // now always offers *something*, so where it used to return
                 // `None` and let the ladder fall through to eating, it spends
                 // the turn. Measured over thirty-two settlements, that alone
-                // took the ones still standing at four thousand ticks from
+                // took the ones still standing at four thousand turns from
                 // nineteen to fourteen.
                 let worth_running_from = agent.surroundings.what_is_on_me
                     >= Self::A_FRIGHT_WORTH_THE_NAME

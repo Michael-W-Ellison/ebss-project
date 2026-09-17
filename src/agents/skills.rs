@@ -368,7 +368,7 @@ pub struct Skill {
     pub skill_type: SkillType,
     pub level: i32, // -10 to 10
     pub experience: u32,
-    /// The tick this was last actually practised
+    /// The turn this was last actually practised
     #[serde(default)]
     pub last_used: u32,
 }
@@ -679,14 +679,14 @@ impl Skills {
             .unwrap_or_else(|| Skill::new(skill_type).hand())
     }
 
-    /// Practise a skill at a given tick, so that it is known to be in use.
+    /// Practise a skill at a given turn, so that it is known to be in use.
     ///
     /// The same as gaining experience, and additionally the thing that keeps a
     /// trade from rusting - see [`Self::let_unused_skills_rust`].
-    pub fn practise(&mut self, skill_type: SkillType, amount: u32, current_tick: u32) {
+    pub fn practise(&mut self, skill_type: SkillType, amount: u32, current_turn: u32) {
         let skill = self.get_skill_mut(skill_type);
         skill.gain_experience(amount);
-        skill.last_used = current_tick;
+        skill.last_used = current_turn;
     }
 
     /// How long a hand keeps its trade before it starts to go.
@@ -713,13 +713,13 @@ impl Skills {
     /// the other half of making mastery expensive: the climb is long enough
     /// that only a specialist finishes it, and this is what stops somebody
     /// finishing all eight climbs one after another over a long life.
-    pub fn let_unused_skills_rust(&mut self, current_tick: u32) {
+    pub fn let_unused_skills_rust(&mut self, current_turn: u32) {
         for skill in self.skills.values_mut() {
             if skill.level <= Self::NEVER_QUITE_FORGOTTEN {
                 continue;
             }
 
-            let idle = current_tick.saturating_sub(skill.last_used);
+            let idle = current_turn.saturating_sub(skill.last_used);
             if idle < Self::KEEPS_FOR {
                 continue;
             }
@@ -736,7 +736,7 @@ impl Skills {
                 // Whatever was banked towards the next level goes with it, and
                 // the clock restarts so the next level takes as long again
                 skill.experience = 0;
-                skill.last_used = current_tick.saturating_sub(Self::KEEPS_FOR);
+                skill.last_used = current_turn.saturating_sub(Self::KEEPS_FOR);
             }
         }
     }

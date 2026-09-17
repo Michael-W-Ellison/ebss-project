@@ -34,8 +34,8 @@ fn main() {
 
     // Simulate one day
     println!("Simulating one day...");
-    for _ in 0..calendar.ticks_per_day() {
-        calendar.tick();
+    for _ in 0..calendar.turns_per_day() {
+        calendar.take_a_turn();
     }
 
     println!("After 24 hours:");
@@ -109,7 +109,7 @@ fn main() {
 
     for i in 1..=5 {
         let weather = weather_gen.generate_weather();
-        println!("  {}. {:?} - lasts {} ticks", i, weather.weather_type, weather.duration_remaining);
+        println!("  {}. {:?} - lasts {} turns", i, weather.weather_type, weather.duration_remaining);
     }
     println!();
 
@@ -118,7 +118,7 @@ fn main() {
 
     for i in 1..=5 {
         let weather = weather_gen.generate_weather();
-        println!("  {}. {:?} - lasts {} ticks", i, weather.weather_type, weather.duration_remaining);
+        println!("  {}. {:?} - lasts {} turns", i, weather.weather_type, weather.duration_remaining);
     }
     println!();
 
@@ -133,11 +133,11 @@ fn main() {
     body_temp.current = 34.0; // Hypothermia
     let cold_weather = Weather::new(WeatherType::Blizzard);
 
-    for tick in 0..10 {
+    for turn in 0..10 {
         let damage = exposure.update(&body_temp, -10.0, &cold_weather, false, true, 12.0);
-        if tick % 3 == 0 {
-            println!("  Tick {}: Damage {:.3}, Wetness {:.2}, Active exposures: {:?}",
-                tick, damage, exposure.wetness, exposure.active_exposures);
+        if turn % 3 == 0 {
+            println!("  Turn {}: Damage {:.3}, Wetness {:.2}, Active exposures: {:?}",
+                turn, damage, exposure.wetness, exposure.active_exposures);
         }
     }
 
@@ -161,11 +161,11 @@ fn main() {
     hot_body_temp.current = 40.0; // Hyperthermia
     let hot_weather = Weather::new(WeatherType::Clear);
 
-    for tick in 0..20 {
+    for turn in 0..20 {
         let damage = heat_exposure.update(&hot_body_temp, 45.0, &hot_weather, false, false, 14.0);
-        if tick % 5 == 0 {
-            println!("  Tick {}: Damage {:.3}, Sun exposure {:.2}, Active: {:?}",
-                tick, damage, heat_exposure.sun_exposure, heat_exposure.active_exposures);
+        if turn % 5 == 0 {
+            println!("  Turn {}: Damage {:.3}, Sun exposure {:.2}, Active: {:?}",
+                turn, damage, heat_exposure.sun_exposure, heat_exposure.active_exposures);
         }
     }
 
@@ -216,9 +216,9 @@ fn main() {
     println!();
 
     // Simulate time passage
-    println!("Simulating 10 hours (1000 ticks)...");
+    println!("Simulating 10 hours (1000 turns)...");
     for _ in 0..1000 {
-        climate_mgr.tick();
+        climate_mgr.take_a_turn();
     }
 
     println!("After 10 hours:");
@@ -244,8 +244,8 @@ fn main() {
     println!("Simulating one full year ({} days)...", DAYS_PER_YEAR);
 
     for day in 0..DAYS_PER_YEAR {
-        for _ in 0..year_calendar.ticks_per_day() {
-            year_calendar.tick();
+        for _ in 0..year_calendar.turns_per_day() {
+            year_calendar.take_a_turn();
         }
 
         let season_idx = match year_calendar.current_season() {
@@ -294,9 +294,9 @@ fn main() {
     println!("Hour-by-hour progression:");
 
     for hour in 0..12 {
-        // Tick one hour
+        // Turn one hour
         for _ in 0..100 {
-            scenario_climate.tick();
+            scenario_climate.take_a_turn();
         }
 
         let env_temp = scenario_climate.get_temperature(tundra_pos, TerrainType::Plains);

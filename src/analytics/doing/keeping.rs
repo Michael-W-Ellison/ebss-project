@@ -83,7 +83,7 @@ impl Simulation {
                 if removed >= 3 {
                     use crate::gui::events::{SimulationEvent, SimulationEventType};
                     let event = SimulationEvent::new(
-                        self.current_tick,
+                        self.current_turn,
                         SimulationEventType::StorehouseDeposit {
                             agent_id,
                             resource: item_type.clone(),
@@ -189,7 +189,7 @@ impl Simulation {
     }
 
     /// `Action::Cover`.
-    pub(in crate::analytics) fn covering(&mut self, what: &String, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn covering(&mut self, what: &String, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::Position;
 
         let here = {
@@ -263,7 +263,7 @@ impl Simulation {
                     did: crate::agents::wondering::Wondering::BURYING_IT.to_string(),
                     what: what.to_string(),
                     where_it_is: here,
-                    since: tick_now,
+                    since: turn_now,
                     as_it_was,
                     in_this,
                 },
@@ -275,7 +275,7 @@ impl Simulation {
             agent.inventory.remove_item(what, putting_by);
             agent
                 .skills
-                .practise(crate::agents::SkillType::Farming, 12, tick_now);
+                .practise(crate::agents::SkillType::Farming, 12, turn_now);
         }
 
         // A vessel goes in first, if there is one to spare. What
@@ -336,7 +336,7 @@ impl Simulation {
     }
 
     /// `Action::PickUp`.
-    pub(in crate::analytics) fn picking_up(&mut self, what: &String, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn picking_up(&mut self, what: &String, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::Position;
 
         let here = {
@@ -444,7 +444,7 @@ impl Simulation {
 
         // A full pack cannot take it, and it stays where it was
         if agent.inventory.weight_capacity_remaining() < item.total_weight() {
-            self.world.somebody_left_this(item, here, tick_now);
+            self.world.somebody_left_this(item, here, turn_now);
             return ActionResult::failure("No room for it".to_string());
         }
 
@@ -459,7 +459,7 @@ impl Simulation {
     }
 
     /// `Action::PutDown`.
-    pub(in crate::analytics) fn putting_down(&mut self, what: &String, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn putting_down(&mut self, what: &String, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::Position;
 
         let here = {
@@ -517,7 +517,7 @@ impl Simulation {
                     did: crate::agents::Agent::LEAVING_IT_OUT.to_string(),
                     what: what.to_string(),
                     where_it_is: here,
-                    since: tick_now,
+                    since: turn_now,
                     as_it_was,
                     in_this,
                 },
@@ -527,7 +527,7 @@ impl Simulation {
         self.population.agents[agent_index]
             .inventory
             .remove_item(what, how_many);
-        self.world.somebody_left_this(left, here, tick_now);
+        self.world.somebody_left_this(left, here, turn_now);
 
         debug!(
             "Agent {} put down {how_many} {what} at {here:?}",

@@ -7,7 +7,7 @@
 //! but making sat in the Utility branch, behind two others, and Utility is a
 //! drive that rarely wins.
 //!
-//! Measured over eight worlds of ten thousand ticks: `Work` attempted 18,756
+//! Measured over eight worlds of ten thousand turns: `Work` attempted 18,756
 //! times and refused **88.2%** for want of a tool, `Excavate` attempted 6,348
 //! times and refused **99.4%**, `Hunt` refused 2,227 times for want of a
 //! spear — while **every man alive knew how to make a handaxe and 2.8% of

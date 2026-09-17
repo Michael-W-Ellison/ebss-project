@@ -202,8 +202,8 @@ mod tests {
             Ok(ActionResult::success())
         }
 
-        fn tick(&mut self) {
-            self.world_state.tick += 1;
+        fn take_a_turn(&mut self) {
+            self.world_state.turn += 1;
         }
 
         fn get_material_at(&self, _position: Position) -> Option<&Material> {

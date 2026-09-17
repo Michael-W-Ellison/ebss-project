@@ -24,7 +24,7 @@
 
 use crate::agents::Population;
 use crate::analytics::Simulation;
-use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::seasons::TURNS_PER_DAY;
 use crate::world::{World, WorldConfig};
 use std::collections::BTreeSet;
 
@@ -35,8 +35,8 @@ fn an_empty_world() -> Simulation {
 }
 
 fn how_many_years(simulation: &mut Simulation, years: u32) {
-    for _ in 0..(years * 360 * TICKS_PER_DAY) {
-        simulation.tick();
+    for _ in 0..(years * 360 * TURNS_PER_DAY) {
+        simulation.take_a_turn();
     }
 }
 
@@ -87,7 +87,7 @@ fn a_corpse_is_not_counted_among_the_living() {
 
 /// And it is taken off the map, rather than sitting in the list for ever.
 ///
-/// Nothing reads a body after the tick it falls in - a predator feeds off it
+/// Nothing reads a body after the turn it falls in - a predator feeds off it
 /// there and then, a hunter butchers it there and then - so what is left is
 /// only a slot nobody can use.
 #[test]
@@ -98,7 +98,7 @@ fn the_dead_are_taken_off_the_map() {
         animal.current_health = 0.0;
     }
 
-    world.tick();
+    world.take_a_turn();
 
     assert_eq!(
         world.animals.get_all().len(),
@@ -272,14 +272,14 @@ fn the_hedgerows_are_no_thinner_a_few_years_on() {
 /// A species that has gone from this world finds its way back to it.
 ///
 /// Deliberately slow - one small group per depleted species every two
-/// thousand ticks or so, and only a one-in-four chance at each of those - so
+/// thousand turns or so, and only a one-in-four chance at each of those - so
 /// this gives it years rather than months.
 ///
 /// Two things had to be true for it to work at all, and neither was. The
 /// migration pass broke out of its loop the moment the map was at its cap,
 /// which it always was once the corpses had filled it; and a species was only
 /// remembered as having lived here if it happened to be alive at a migration
-/// moment, so anything that died inside its first two thousand ticks was
+/// moment, so anything that died inside its first two thousand turns was
 /// forgotten and could never come back. See ISSUES_FOUND.md #127.
 #[test]
 fn something_that_is_gone_finds_its_way_back() {
@@ -290,8 +290,8 @@ fn something_that_is_gone_finds_its_way_back() {
     // Long enough for the world to have seen what lives in it. Nothing comes
     // back that this country never held, and a country holds what it has
     // actually carried - see `process_immigration`.
-    for _ in 0..TICKS_PER_DAY {
-        world.tick();
+    for _ in 0..TURNS_PER_DAY {
+        world.take_a_turn();
     }
 
     let gone = world
@@ -308,15 +308,15 @@ fn something_that_is_gone_finds_its_way_back() {
             animal.current_health = 0.0;
         }
     }
-    world.tick();
+    world.take_a_turn();
 
     assert!(
         !what_lives_in(&world).contains(&gone),
         "{gone} is gone from this world"
     );
 
-    for _ in 0..(TICKS_PER_DAY * 360 * 10) {
-        world.tick();
+    for _ in 0..(TURNS_PER_DAY * 360 * 10) {
+        world.take_a_turn();
         if what_lives_in(&world).contains(&gone) {
             return;
         }
@@ -359,8 +359,8 @@ fn the_ground_register_and_the_map_agree() {
 
     // Long enough for people to have voided on the ground and for some of
     // them to have died on it.
-    for _ in 0..TICKS_PER_DAY * 30 {
-        simulation.tick();
+    for _ in 0..TURNS_PER_DAY * 30 {
+        simulation.take_a_turn();
     }
 
     let noted: BTreeSet<(i32, i32)> = simulation
@@ -402,7 +402,7 @@ fn the_ground_register_and_the_map_agree() {
 
 // --- what the grazers take, and what they give back --------------------------
 
-/// The sky, on the pass'th grazing pass. Ten ticks apart, which is the
+/// The sky, on the pass'th grazing pass. Ten turns apart, which is the
 /// cadence a live world grazes on.
 fn grazing_weather(pass: u32) -> crate::environment::GrazingWeather {
     crate::environment::GrazingWeather {
@@ -458,7 +458,7 @@ fn a_grazing_animal_takes_the_plant_down_with_it() {
     assert!(before > 0.0, "the fixture has no plant standing in it");
 
     for pass in 0..20u32 {
-        animals.tick_in_world(&mut grid, &mut plants, 10.0, grazing_weather(pass));
+        animals.turn_in_world(&mut grid, &mut plants, 10.0, grazing_weather(pass));
     }
 
     let after = plants
@@ -469,7 +469,7 @@ fn a_grazing_animal_takes_the_plant_down_with_it() {
 
     assert!(
         after < before,
-        "a deer stood on a patch of grass for two hundred ticks and the grass \
+        "a deer stood on a patch of grass for two hundred turns and the grass \
          is no smaller: {before:.2} to {after:.2}"
     );
 }
@@ -492,7 +492,7 @@ fn what_an_animal_passes_goes_back_into_the_ground() {
         .unwrap_or(0.0);
 
     for pass in 0..20u32 {
-        animals.tick_in_world(&mut grid, &mut plants, 10.0, grazing_weather(pass));
+        animals.turn_in_world(&mut grid, &mut plants, 10.0, grazing_weather(pass));
     }
 
     let after = grid
@@ -516,8 +516,8 @@ fn what_is_dug_up_does_not_come_back() {
     let (mut deer_ground, mut deer_plants, mut deer) = a_beast_on_a_plant("deer", "potato");
 
     for pass in 0..3u32 {
-        bears.tick_in_world(&mut grid, &mut plants, 10.0, grazing_weather(pass));
-        deer.tick_in_world(
+        bears.turn_in_world(&mut grid, &mut plants, 10.0, grazing_weather(pass));
+        deer.turn_in_world(
             &mut deer_ground,
             &mut deer_plants,
             10.0,
@@ -556,8 +556,8 @@ fn a_herd_settles_at_what_the_ground_will_feed() {
     let started_with = world.animals.how_many_are_alive();
 
     // Five years is well past where the old model was pinned to its ceiling.
-    for _ in 0..(5 * crate::environment::seasons::TICKS_PER_YEAR) {
-        world.tick();
+    for _ in 0..(5 * crate::environment::seasons::TURNS_PER_YEAR) {
+        world.take_a_turn();
     }
 
     let alive = world.animals.how_many_are_alive();
@@ -710,7 +710,7 @@ fn a_country_holds_more_small_things_than_large_ones() {
         // heap of records - see `SmallLife` - so this is where that claim
         // lives. It is the same claim: a country is mostly small things.
         // What changed is that counting them meant twenty-six thousand
-        // rabbit records and a tick that went to a tenth of a second.
+        // rabbit records and a turn that went to a tenth of a second.
         small += world.animals.small_life.how_many_grazers();
         small += world.animals.small_life.how_many_hunters();
 
@@ -840,8 +840,8 @@ fn a_trapped_out_ground_comes_back_and_a_full_one_holds() {
     // Left alone at full stock, it stays there
     let mut untouched = SmallLife::default();
     untouched.settle(ground, would_carry, 0.0);
-    for _ in 0..crate::environment::seasons::TICKS_PER_YEAR {
-        untouched.tick_a_ground(ground, would_carry, 0.0, 1.0);
+    for _ in 0..crate::environment::seasons::TURNS_PER_YEAR {
+        untouched.turn_a_ground(ground, would_carry, 0.0, 1.0);
     }
     let held = untouched.here(ground).grazers;
     assert!(
@@ -859,8 +859,8 @@ fn a_trapped_out_ground_comes_back_and_a_full_one_holds() {
     );
     assert_eq!(worked.here(ground).grazers, 0.0, "and it is empty now");
 
-    for _ in 0..(2 * crate::environment::seasons::TICKS_PER_YEAR) {
-        worked.tick_a_ground(ground, would_carry, 0.0, 1.0);
+    for _ in 0..(2 * crate::environment::seasons::TURNS_PER_YEAR) {
+        worked.turn_a_ground(ground, would_carry, 0.0, 1.0);
     }
     let back = worked.here(ground).grazers;
     assert!(
@@ -888,8 +888,8 @@ fn the_small_hunters_follow_the_game_they_live_on() {
 
     let mut country = SmallLife::default();
     country.settle(ground, would_carry, 0.0);
-    for _ in 0..crate::environment::seasons::TICKS_PER_YEAR {
-        country.tick_a_ground(ground, would_carry, 0.0, 1.0);
+    for _ in 0..crate::environment::seasons::TURNS_PER_YEAR {
+        country.turn_a_ground(ground, would_carry, 0.0, 1.0);
     }
     let with_game = country.here(ground).hunters;
     assert!(with_game > 0.0, "a full ground keeps hunters: {with_game:.1}");
@@ -904,8 +904,8 @@ fn the_small_hunters_follow_the_game_they_live_on() {
     // still a fed fox, and it stays. What empties a ground of foxes is the
     // whole of what is under them going, which is a hard winter or a bad
     // vole year rather than anything a person does with string.
-    for _ in 0..crate::environment::seasons::TICKS_PER_YEAR {
-        country.tick_a_ground(ground, would_carry, 0.0, 1.0);
+    for _ in 0..crate::environment::seasons::TURNS_PER_YEAR {
+        country.turn_a_ground(ground, would_carry, 0.0, 1.0);
         let there = country.here(ground);
         country.take(ground, there.grazers * 0.95);
         country.take_rodents(ground, there.rodents * 0.95);
@@ -917,7 +917,7 @@ fn the_small_hunters_follow_the_game_they_live_on() {
     );
 }
 
-/// A world ticks its lower tiers without anybody asking it to, and they
+/// A world turns its lower tiers without anybody asking it to, and they
 /// settle rather than running away or emptying.
 #[test]
 fn a_country_stocks_its_own_lower_tiers() {
@@ -926,8 +926,8 @@ fn a_country_stocks_its_own_lower_tiers() {
     crate::core::dice::seed(31);
     let mut world = World::new(WorldConfig::default().with_size(240, 240));
 
-    for _ in 0..(crate::environment::seasons::TICKS_PER_YEAR / 2) {
-        world.tick();
+    for _ in 0..(crate::environment::seasons::TURNS_PER_YEAR / 2) {
+        world.take_a_turn();
     }
 
     let small = &world.animals.small_life;
@@ -1069,8 +1069,8 @@ fn a_settlement_runs_a_trapline_and_lives() {
     }
     let mut simulation = Simulation::new(world, population);
 
-    for _ in 0..(crate::environment::seasons::TICKS_PER_YEAR / 2) {
-        simulation.tick();
+    for _ in 0..(crate::environment::seasons::TURNS_PER_YEAR / 2) {
+        simulation.take_a_turn();
     }
 
     assert!(
@@ -1196,15 +1196,15 @@ fn the_small_life_spreads_into_emptier_ground_without_inventing_any() {
 
     country.settle(worked, would_carry, 0.0);
     country.settle(untouched, would_carry, 0.0);
-    country.tick_a_ground(worked, would_carry, 0.0, 1.0);
-    country.tick_a_ground(untouched, would_carry, 0.0, 1.0);
+    country.turn_a_ground(worked, would_carry, 0.0, 1.0);
+    country.turn_a_ground(untouched, would_carry, 0.0, 1.0);
 
     // Trap one of them out and leave it.
     let there = country.here(worked).grazers;
     country.take(worked, there * 0.95);
 
     let before = country.how_many_grazers();
-    for _ in 0..(crate::environment::seasons::TICKS_PER_YEAR / 4) {
+    for _ in 0..(crate::environment::seasons::TURNS_PER_YEAR / 4) {
         country.let_them_spread(1.0);
     }
     let after = country.how_many_grazers();
@@ -1227,7 +1227,7 @@ fn the_small_life_spreads_into_emptier_ground_without_inventing_any() {
     // Nothing crosses onto ground that will carry nothing. A wood beside a
     // salt flat does not empty into it.
     let salt_flat = (0, 1);
-    country.tick_a_ground(salt_flat, 0.0, 0.0, 1.0);
+    country.turn_a_ground(salt_flat, 0.0, 0.0, 1.0);
     let flat_before = country.here(salt_flat).grazers;
     country.let_them_spread(1.0);
     assert!(
@@ -1516,8 +1516,8 @@ fn the_predator_tiers_are_still_there_two_years_on() {
     };
 
     let at_the_start = of_each_tier(&world);
-    for _ in 0..(2 * crate::environment::seasons::TICKS_PER_YEAR) {
-        world.tick();
+    for _ in 0..(2 * crate::environment::seasons::TURNS_PER_YEAR) {
+        world.take_a_turn();
     }
     let after_two_years = of_each_tier(&world);
 
@@ -1740,17 +1740,17 @@ fn a_beast_slows_as_it_is_hurt_and_as_it_ages() {
 
 /// A wound is worth something because it takes a hundred days to mend.
 ///
-/// It was a flat tenth of a point a tick for everything alive, on health that
+/// It was a flat tenth of a point a turn for everything alive, on health that
 /// runs from five on a fish to three hundred on a mammoth - so a fish mended
 /// a quarter of itself in a day and a mammoth four thousandths, and neither
 /// figure was ever chosen. "Healing should be a gradual process, not an
 /// instant process. Perhaps along the lines of 1% per day."
 #[test]
 fn everything_mends_at_the_same_rate_against_itself() {
-    use crate::environment::seasons::TICKS_PER_DAY;
+    use crate::environment::seasons::TURNS_PER_DAY;
     use crate::environment::AnimalManager;
 
-    let a_day = AnimalManager::HOW_MUCH_OF_ITSELF_IT_MENDS_A_TICK * TICKS_PER_DAY as f32;
+    let a_day = AnimalManager::HOW_MUCH_OF_ITSELF_IT_MENDS_A_TURN * TURNS_PER_DAY as f32;
     assert!(
         (a_day - 0.01).abs() < 1e-6,
         "a hundredth of itself in a day: {a_day}"
@@ -1766,7 +1766,7 @@ fn everything_mends_at_the_same_rate_against_itself() {
 /// inside a season.
 #[test]
 fn fourteen_wolves_take_two_sheep_inside_a_day() {
-    use crate::environment::seasons::TICKS_PER_DAY;
+    use crate::environment::seasons::TURNS_PER_DAY;
     use crate::environment::AnimalManager;
     use crate::world::{World, WorldConfig};
 
@@ -1806,8 +1806,8 @@ fn fourteen_wolves_take_two_sheep_inside_a_day() {
                 .count()
         };
 
-        for _ in 0..TICKS_PER_DAY {
-            world.tick();
+        for _ in 0..TURNS_PER_DAY {
+            world.take_a_turn();
             if sheep_left(&world) == 0 {
                 break;
             }
@@ -1910,7 +1910,7 @@ fn a_bear_spends_most_of_its_day_foraging() {
 
     let mut grazed = 0;
     for _ in 0..240 {
-        world.tick();
+        world.take_a_turn();
         grazed += world
             .animals
             .get_all()
@@ -2058,7 +2058,7 @@ fn the_fish_are_a_band_of_their_own_in_the_water() {
     let mut cold = SmallLife::default();
     cold.settle((0, 0), 0.0, watery);
     for _ in 0..120 {
-        cold.tick_a_ground((0, 0), 0.0, watery, 1.0);
+        cold.turn_a_ground((0, 0), 0.0, watery, 1.0);
     }
     let up_there = cold.here((0, 0));
     assert!(

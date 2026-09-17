@@ -14,8 +14,8 @@ pub struct TradeOffer {
     pub offering: Vec<(ItemType, u32)>,  // What they're selling
     pub requesting: Vec<(ItemType, u32)>, // What they want in return
     pub price: u32, // Price in abstract currency units
-    pub created_tick: u32,
-    pub expires_tick: u32,
+    pub created_turn: u32,
+    pub expires_turn: u32,
 }
 
 impl TradeOffer {
@@ -24,7 +24,7 @@ impl TradeOffer {
         offering: Vec<(ItemType, u32)>,
         requesting: Vec<(ItemType, u32)>,
         price: u32,
-        current_tick: u32,
+        current_turn: u32,
         duration: u32,
     ) -> Self {
         Self {
@@ -33,14 +33,14 @@ impl TradeOffer {
             offering,
             requesting,
             price,
-            created_tick: current_tick,
-            expires_tick: current_tick + duration,
+            created_turn: current_turn,
+            expires_turn: current_turn + duration,
         }
     }
 
     /// Check if this offer has expired
-    pub fn is_expired(&self, current_tick: u32) -> bool {
-        current_tick >= self.expires_tick
+    pub fn is_expired(&self, current_turn: u32) -> bool {
+        current_turn >= self.expires_turn
     }
 
 }
@@ -63,7 +63,7 @@ pub struct MarketData {
     /// Current market price (adjusted by supply/demand)
     pub current_price: u32,
 
-    /// Price history (last 10 ticks)
+    /// Price history (last 10 turns)
     pub price_history: Vec<u32>,
 
     /// Total volume traded (lifetime)
@@ -162,7 +162,7 @@ pub struct CompletedTrade {
     pub buyer_id: Uuid,
     pub items: Vec<(ItemType, u32)>,
     pub price: u32,
-    pub tick: u32,
+    pub turn: u32,
 }
 
 impl Marketplace {
@@ -312,7 +312,7 @@ impl Marketplace {
         &mut self,
         offer_id: Uuid,
         buyer_id: Uuid,
-        current_tick: u32,
+        current_turn: u32,
     ) -> Option<CompletedTrade> {
         if let Some(offer) = self.remove_offer(offer_id) {
             // Record completed trade
@@ -321,7 +321,7 @@ impl Marketplace {
                 buyer_id,
                 items: offer.offering.clone(),
                 price: offer.price,
-                tick: current_tick,
+                turn: current_turn,
             };
 
             // Update volume traded
@@ -339,12 +339,12 @@ impl Marketplace {
     }
 
     /// Clean up expired offers
-    pub fn remove_expired_offers(&mut self, current_tick: u32) -> usize {
+    pub fn remove_expired_offers(&mut self, current_turn: u32) -> usize {
         let initial_count = self.offers.len();
 
         let expired_ids: Vec<Uuid> = self.offers
             .iter()
-            .filter(|o| o.is_expired(current_tick))
+            .filter(|o| o.is_expired(current_turn))
             .map(|o| o.id)
             .collect();
 
@@ -570,7 +570,7 @@ mod tests {
 
         assert_eq!(market.offers.len(), 2);
 
-        // Clean at tick 100 - should remove first offer
+        // Clean at turn 100 - should remove first offer
         let removed = market.remove_expired_offers(100);
         assert_eq!(removed, 1);
         assert_eq!(market.offers.len(), 1);

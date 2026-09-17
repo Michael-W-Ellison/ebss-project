@@ -92,7 +92,7 @@ pub struct ActionEffects {
     pub energy_cost: f32,
     /// Experience gain in various skills
     pub experience_gain: BTreeMap<String, f32>,
-    /// Time required (in ticks)
+    /// Time required (in turns)
     pub time_cost: u32,
 }
 
@@ -121,8 +121,8 @@ impl ActionEffects {
         self
     }
 
-    pub fn with_time_cost(mut self, ticks: u32) -> Self {
-        self.time_cost = ticks;
+    pub fn with_time_cost(mut self, turns: u32) -> Self {
+        self.time_cost = turns;
         self
     }
 }

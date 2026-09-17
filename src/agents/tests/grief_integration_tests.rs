@@ -38,7 +38,7 @@ fn test_death_triggers_both_relationship_and_functional_grief() {
     pop.agents[1].state.is_alive = false;
 
     // Process deaths (this should trigger grief)
-    pop.tick();
+    pop.take_a_turn();
 
     // Verify grief was triggered
     let final_sadness = pop.agents[0].emotions.sadness;
@@ -75,7 +75,7 @@ fn test_death_without_dependency_causes_less_grief() {
 
     // Agent 2 dies
     pop.agents[1].state.is_alive = false;
-    pop.tick();
+    pop.take_a_turn();
 
     let final_sadness = pop.agents[0].emotions.sadness;
 
@@ -104,10 +104,10 @@ fn test_death_gossip_spreads_to_community() {
 
     // Agent 2 dies
     pop.agents[1].state.is_alive = false;
-    pop.tick();
+    pop.take_a_turn();
 
     // Both survivors should have death information in knowledge base
-    // After tick(), dead agent is removed, so we now have 2 agents
+    // After turn(), dead agent is removed, so we now have 2 agents
     assert_eq!(pop.agents.len(), 2, "Should have 2 surviving agents");
 
     for agent in &pop.agents {
@@ -156,7 +156,7 @@ fn test_multiple_dependencies_compound_grief() {
 
     // Agent 2 dies
     pop.agents[1].state.is_alive = false;
-    pop.tick();
+    pop.take_a_turn();
 
     let final_sadness = pop.agents[0].emotions.sadness;
 
@@ -194,7 +194,7 @@ fn test_lonely_agent_experiences_amplified_grief() {
 
     // Agent 2 dies (their only social source)
     pop.agents[1].state.is_alive = false;
-    pop.tick();
+    pop.take_a_turn();
 
     let final_sadness = pop.agents[0].emotions.sadness;
 
@@ -225,7 +225,7 @@ fn test_grief_explanation_mentions_functional_loss() {
 
     // Agent 2 dies
     pop.agents[1].state.is_alive = false;
-    pop.tick();
+    pop.take_a_turn();
 
     // Get grief explanation
     let explanation = pop.agents[0].get_grief_reason(agent2_id);
@@ -305,7 +305,7 @@ fn a_death_nobody_had_a_hand_in_leaves_nothing_to_run_from() {
     let before = pop.agents[0].emotions.sadness;
 
     pop.agents[1].state.is_alive = false;
-    pop.tick();
+    pop.take_a_turn();
 
     assert!(
         pop.agents[0].emotions.sadness > before,
@@ -334,7 +334,7 @@ fn a_death_somebody_had_a_hand_in_is_feared_as_that_person() {
         .emotions
         .record_attack(crate::agents::EmotionSource::Agent(killer), 0);
     pop.agents[1].state.is_alive = false;
-    pop.tick();
+    pop.take_a_turn();
 
     let (frightened_of, how_much) = pop.agents[0]
         .emotions
@@ -363,7 +363,7 @@ fn the_man_who_did_it_is_somebody_to_be_angry_at() {
         .emotions
         .record_attack(crate::agents::EmotionSource::Agent(killer), 0);
     pop.agents[1].state.is_alive = false;
-    pop.tick();
+    pop.take_a_turn();
 
     let held_against = pop.agents[0].emotions.anger_at_people();
     assert!(
@@ -393,7 +393,7 @@ fn a_man_taken_by_a_wolf_leaves_his_brother_afraid_of_wolves() {
         .emotions
         .record_attack(EmotionSource::Creature("wolf".to_string()), 0);
     pop.agents[1].state.is_alive = false;
-    pop.tick();
+    pop.take_a_turn();
 
     let (what, how_much) = pop.agents[0]
         .emotions

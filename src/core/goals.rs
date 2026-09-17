@@ -68,13 +68,13 @@ pub struct Goal {
     pub external: Option<ExternalGoal>,
     pub progress: f32, // 0.0 to 1.0
     pub priority: f32, // 0.0 to 1.0, how urgent/important
-    pub created_at: u32, // Tick when goal was created
+    pub created_at: u32, // Turn when goal was created
     pub completed: bool,
 }
 
 impl Goal {
     /// Create a new internal goal
-    pub fn new_internal(internal_goal: InternalGoal, priority: f32, tick: u32) -> Self {
+    pub fn new_internal(internal_goal: InternalGoal, priority: f32, turn: u32) -> Self {
         Self {
             id: crate::core::dice::name(),
             goal_type: GoalType::Internal,
@@ -82,13 +82,13 @@ impl Goal {
             external: None,
             progress: 0.0,
             priority,
-            created_at: tick,
+            created_at: turn,
             completed: false,
         }
     }
 
     /// Create a new external goal
-    pub fn new_external(external_goal: ExternalGoal, priority: f32, tick: u32) -> Self {
+    pub fn new_external(external_goal: ExternalGoal, priority: f32, turn: u32) -> Self {
         Self {
             id: crate::core::dice::name(),
             goal_type: GoalType::External,
@@ -96,7 +96,7 @@ impl Goal {
             external: Some(external_goal),
             progress: 0.0,
             priority,
-            created_at: tick,
+            created_at: turn,
             completed: false,
         }
     }
@@ -121,9 +121,9 @@ impl Goal {
         }
     }
 
-    /// Get age of goal in ticks
-    pub fn age(&self, current_tick: u32) -> u32 {
-        current_tick.saturating_sub(self.created_at)
+    /// Get age of goal in turns
+    pub fn age(&self, current_turn: u32) -> u32 {
+        current_turn.saturating_sub(self.created_at)
     }
 
     /// Check if this goal is already satisfied given current world state
@@ -323,7 +323,7 @@ impl GoalManager {
     pub fn generate_common_goals(
         drives: &[DriveType],
         emotions: &[(EmotionType, f32)],
-        tick: u32,
+        turn: u32,
     ) -> Vec<Goal> {
         let mut goals = Vec::new();
 
@@ -334,42 +334,42 @@ impl GoalManager {
                     goals.push(Goal::new_external(
                         ExternalGoal::StockHouseFood(20),
                         0.8,
-                        tick,
+                        turn,
                     ));
                 }
                 DriveType::Shelter => {
                     goals.push(Goal::new_external(
                         ExternalGoal::OwnHouse,
                         0.7,
-                        tick,
+                        turn,
                     ));
                 }
                 DriveType::Safety => {
                     goals.push(Goal::new_external(
                         ExternalGoal::ObtainProtection,
                         0.75,
-                        tick,
+                        turn,
                     ));
                 }
                 DriveType::Preparedness => {
                     goals.push(Goal::new_external(
                         ExternalGoal::ContributeMaterialsToStorehouse(50),
                         0.5,
-                        tick,
+                        turn,
                     ));
                 }
                 DriveType::Utility => {
                     goals.push(Goal::new_external(
                         ExternalGoal::EnsureToolsAvailable(10),
                         0.6,
-                        tick,
+                        turn,
                     ));
                 }
                 DriveType::Social => {
                     goals.push(Goal::new_external(
                         ExternalGoal::FormRelationship("friend".to_string()),
                         0.55,
-                        tick,
+                        turn,
                     ));
                 }
                 _ => {}
@@ -383,28 +383,28 @@ impl GoalManager {
                     goals.push(Goal::new_internal(
                         InternalGoal::IncreaseEmotion(EmotionType::Happiness, 0.6),
                         0.7,
-                        tick,
+                        turn,
                     ));
                 }
                 EmotionType::Fear if *value > 0.7 => {
                     goals.push(Goal::new_internal(
                         InternalGoal::DecreaseEmotion(EmotionType::Fear, 0.4),
                         0.8,
-                        tick,
+                        turn,
                     ));
                 }
                 EmotionType::Anger if *value > 0.7 => {
                     goals.push(Goal::new_internal(
                         InternalGoal::DecreaseEmotion(EmotionType::Anger, 0.4),
                         0.65,
-                        tick,
+                        turn,
                     ));
                 }
                 EmotionType::Sadness if *value > 0.7 => {
                     goals.push(Goal::new_internal(
                         InternalGoal::DecreaseEmotion(EmotionType::Sadness, 0.4),
                         0.7,
-                        tick,
+                        turn,
                     ));
                 }
                 _ => {}

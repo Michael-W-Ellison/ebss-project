@@ -28,7 +28,7 @@ pub struct SmeltingRecipe {
 
     /// Minimum temperature required (°C)
     pub melting_point: f32,
-    /// How long to smelt (ticks)
+    /// How long to smelt (turns)
     pub smelting_time: u32,
 
     /// Fuel cost multiplier (harder materials need more fuel)
@@ -53,7 +53,7 @@ impl SmeltingRecipe {
             output_material,
             output_quantity: 1,
             melting_point,
-            smelting_time: 100, // Default 100 ticks
+            smelting_time: 100, // Default 100 turns
             fuel_cost_multiplier: 1.0,
         }
     }
@@ -75,8 +75,8 @@ impl SmeltingRecipe {
         self
     }
 
-    pub fn with_time(mut self, ticks: u32) -> Self {
-        self.smelting_time = ticks;
+    pub fn with_time(mut self, turns: u32) -> Self {
+        self.smelting_time = turns;
         self
     }
 

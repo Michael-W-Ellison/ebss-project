@@ -17,7 +17,7 @@ use rand::Rng;
 
 impl Simulation {
     /// `Action::Examine`.
-    pub(in crate::analytics) fn examining(&mut self, what: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn examining(&mut self, what: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         use crate::environment::making;
 
         if self.population.agents[agent_index].how_many_i_have(what) == 0 {
@@ -53,7 +53,7 @@ impl Simulation {
             .collect();
 
         let agent = &mut self.population.agents[agent_index];
-        agent.skills.practise(crate::agents::SkillType::Crafting, 4, tick_now);
+        agent.skills.practise(crate::agents::SkillType::Crafting, 4, turn_now);
 
         let Some(worth_a_look) = could_be_for.first().copied() else {
             return ActionResult::failure(format!("Nothing new about a {what}"))
@@ -87,7 +87,7 @@ impl Simulation {
     }
 
     /// `Action::Work`.
-    pub(in crate::analytics) fn working(&mut self, verb: &String, to: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn working(&mut self, verb: &String, to: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         use crate::environment::making;
 
         let Some(working) = making::how_to_work(verb, to) else {
@@ -151,7 +151,7 @@ impl Simulation {
         };
 
         if let Some(as_food) = working.feeds {
-            made.food_data = self.food_database.create_food_data(&as_food, tick_now);
+            made.food_data = self.food_database.create_food_data(&as_food, turn_now);
         }
 
         {
@@ -163,7 +163,7 @@ impl Simulation {
             }
 
             agent.inventory.add_item(made);
-            agent.skills.practise(working.hands, 12, tick_now);
+            agent.skills.practise(working.hands, 12, turn_now);
 
             // Having done it once he can do it on purpose. For the
             // obvious ones this is a formality; for the rest it is the

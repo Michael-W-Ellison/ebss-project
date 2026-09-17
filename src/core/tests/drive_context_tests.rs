@@ -5,14 +5,14 @@
 //! Safety by "hostile entity proximity, recent injury, darkness", Construction
 //! by "buildable templates seen, others building, drive synergy", Sustenance by
 //! "low food stockpile, crop depletion". None of that existed:
-//! `base_accumulation_rate` returned one flat number per drive per tick and
+//! `base_accumulation_rate` returned one flat number per drive per turn and
 //! that was the whole of it, including for `Safety => 0.02, // Spikes with
 //! threats`, whose comment described the specification and whose code was a
 //! constant.
 //!
 //! Because those drives' satisfying actions are chosen rarely, they climbed to
 //! their ceiling and stayed: nine of fifteen drives measured at 1.00 and active
-//! every tick after eight thousand ticks, which left the per-agent weight as
+//! every turn after eight thousand turns, which left the per-agent weight as
 //! the only thing telling them apart.
 
 use crate::core::{Drive, DriveContext, DriveType, Surroundings};
@@ -21,7 +21,7 @@ use crate::core::{Drive, DriveContext, DriveType, Surroundings};
 fn settles_at(drive_type: DriveType, ctx: &DriveContext) -> f32 {
     let mut drive = Drive::new(drive_type);
     for _ in 0..4000 {
-        drive.tick_in(ctx, true);
+        drive.turn_in(ctx, true);
     }
     drive.value
 }
@@ -154,14 +154,14 @@ fn safety_answers_a_threat_and_not_a_clock() {
 
     // A long peaceful stretch leaves it flat
     for _ in 0..2000 {
-        drive.tick_in(&quiet, true);
+        drive.turn_in(&quiet, true);
     }
     let peaceful = drive.value;
     assert!(peaceful < 0.1, "nothing happened, yet safety reached {peaceful:.2}");
 
     // Something with teeth turns up, and within a day it is the agent's problem
     for _ in 0..12 {
-        drive.tick_in(&hunted, true);
+        drive.turn_in(&hunted, true);
     }
     assert!(
         drive.value > peaceful * 3.0 + 0.05,
@@ -318,7 +318,7 @@ fn the_needs_of_the_body_still_run_on_the_clock() {
 
         let mut drive = Drive::new(drive_type);
         for _ in 0..200 {
-            drive.tick_in(&ctx, true);
+            drive.turn_in(&ctx, true);
         }
         assert!(
             drive.value > 0.5,
@@ -337,7 +337,7 @@ fn the_needs_of_the_body_still_run_on_the_clock() {
 /// distance, the same everything else: `could_face_it` decides which of the
 /// two drives the demand lands in, and because they read one appraisal there
 /// is nothing in between for it to pass through. A perception that changes
-/// mid-tick moves the demand in that tick.
+/// mid-turn moves the demand in that turn.
 #[test]
 fn the_same_thing_is_fear_or_anger_by_whether_it_can_be_faced() {
     let wolf_at_the_door = |could_face_it: bool| DriveContext {
@@ -429,7 +429,7 @@ fn a_parent_stands_while_there_is_still_time_to_buy() {
 ///
 /// This is what makes the switch instant rather than something that drains:
 /// `Aggression` has no accumulation on the clock at all, so it is only ever
-/// worth what the situation is worth this tick.
+/// worth what the situation is worth this turn.
 #[test]
 fn anger_does_not_keep_anything_back() {
     assert_eq!(DriveType::Aggression.base_accumulation_rate(), 0.0);
@@ -446,7 +446,7 @@ fn anger_does_not_keep_anything_back() {
 /// fear drive under its own threshold, because if fear of running short
 /// outbids the need to eat then a settlement stands about being frightened
 /// with full bushes around it - which is exactly what an earlier cut at this
-/// did, and it starved eight people inside four thousand ticks.
+/// did, and it starved eight people inside four thousand turns.
 #[test]
 fn running_short_frightens_a_man_without_outbidding_his_hunger() {
     let bare_larder = |dread: f32| DriveContext {

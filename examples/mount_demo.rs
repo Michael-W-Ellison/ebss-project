@@ -34,8 +34,8 @@ fn main() {
         println!("  {}", mount_type.description());
         println!("  Speed multiplier: {:.1}x", mount_type.speed_modifier());
         println!("  Max stamina: {:.0}", mount_type.max_stamina());
-        println!("  Stamina consumption: {:.2}/tick", mount_type.stamina_consumption());
-        println!("  Stamina recovery: {:.2}/tick", mount_type.stamina_recovery());
+        println!("  Stamina consumption: {:.2}/turn", mount_type.stamina_consumption());
+        println!("  Stamina recovery: {:.2}/turn", mount_type.stamina_recovery());
         println!("  Combat bonus: {:.0}%", mount_type.combat_bonus() * 100.0);
         println!("  Carrying capacity: {:.0} kg", mount_type.weight_capacity());
         println!();
@@ -85,12 +85,12 @@ fn main() {
     // ===== Part 4: Stamina System =====
     println!("--- Part 4: Stamina Consumption and Recovery ---");
 
-    println!("Riding for 10 ticks...");
-    for tick in 1..=10 {
+    println!("Riding for 10 turns...");
+    for turn in 1..=10 {
         horse.consume_stamina(1.0);
-        if tick % 3 == 0 {
-            println!("  Tick {}: Stamina {:.1}/{:.0} ({:.0}%)",
-                tick,
+        if turn % 3 == 0 {
+            println!("  Turn {}: Stamina {:.1}/{:.0} ({:.0}%)",
+                turn,
                 horse.stamina.unwrap_or(0.0),
                 horse.transport_type.max_stamina(),
                 horse.stamina_percentage() * 100.0);
@@ -102,13 +102,13 @@ fn main() {
     }
     println!();
 
-    println!("Resting for 20 ticks...");
+    println!("Resting for 20 turns...");
     horse.dismount();
-    for tick in 1..=20 {
+    for turn in 1..=20 {
         horse.recover_stamina();
-        if tick % 5 == 0 {
-            println!("  Tick {}: Stamina {:.1}/{:.0} ({:.0}%)",
-                tick,
+        if turn % 5 == 0 {
+            println!("  Turn {}: Stamina {:.1}/{:.0} ({:.0}%)",
+                turn,
                 horse.stamina.unwrap_or(0.0),
                 horse.transport_type.max_stamina(),
                 horse.stamina_percentage() * 100.0);

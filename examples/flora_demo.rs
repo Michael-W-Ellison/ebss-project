@@ -39,7 +39,7 @@ fn main() {
     let crops = registry.get_crops();
     println!("Crops: {} species", crops.len());
     for crop in &crops {
-        println!("  {} - growth time: {} ticks", crop.name, crop.growth_time);
+        println!("  {} - growth time: {} turns", crop.name, crop.growth_time);
     }
     println!();
 
@@ -77,13 +77,13 @@ fn main() {
 
     println!("Fastest growing plants:");
     for plant in by_growth.iter().take(5) {
-        println!("  {}: {} ticks", plant.name, plant.growth_time);
+        println!("  {}: {} turns", plant.name, plant.growth_time);
     }
     println!();
 
     println!("Slowest growing plants:");
     for plant in by_growth.iter().rev().take(5) {
-        println!("  {}: {} ticks", plant.name, plant.growth_time);
+        println!("  {}: {} turns", plant.name, plant.growth_time);
     }
     println!();
 
@@ -91,7 +91,7 @@ fn main() {
     let renewable: Vec<_> = all_species.iter().filter(|s| s.regrows).collect();
     println!("Renewable resources (regrow after harvest): {}", renewable.len());
     for plant in renewable.iter().take(5) {
-        println!("  {} - regrows in {} ticks", plant.name, plant.regrow_time);
+        println!("  {} - regrows in {} turns", plant.name, plant.regrow_time);
     }
     println!();
 
@@ -102,7 +102,7 @@ fn main() {
     if let Some(oak) = registry.get("oak_tree") {
         println!("Oak Tree:");
         println!("  Health: {}", oak.health);
-        println!("  Growth time: {} ticks", oak.growth_time);
+        println!("  Growth time: {} turns", oak.growth_time);
         println!("  Size: {:?}", oak.size);
         println!("  Wood yield: {}-{}",
             oak.drops[0].min_quantity,
@@ -132,7 +132,7 @@ fn main() {
     if let Some(sequoia) = registry.get("sequoia_tree") {
         println!("Sequoia Tree (ancient):");
         println!("  Health: {}", sequoia.health);
-        println!("  Growth time: {} ticks ({} hours at 100 ticks/hour)",
+        println!("  Growth time: {} turns ({} hours at 100 turns/hour)",
             sequoia.growth_time,
             sequoia.growth_time / 100);
         println!("  Wood yield: {}-{}",
@@ -148,7 +148,7 @@ fn main() {
     for grain in ["wheat", "barley", "corn", "rice"] {
         if let Some(plant) = registry.get(grain) {
             println!("{}:", plant.name);
-            println!("  Growth time: {} ticks", plant.growth_time);
+            println!("  Growth time: {} turns", plant.growth_time);
             println!("  Yield: {}-{} {}",
                 plant.drops[0].min_quantity,
                 plant.drops[0].max_quantity,
@@ -162,7 +162,7 @@ fn main() {
     for veg in ["potato", "carrot", "onion", "cabbage", "tomato"] {
         if let Some(plant) = registry.get(veg) {
             let regrows = if plant.regrows { " (renewable)" } else { "" };
-            println!("  {}: {} ticks{}", plant.name, plant.growth_time, regrows);
+            println!("  {}: {} turns{}", plant.name, plant.growth_time, regrows);
         }
     }
     println!();
@@ -211,27 +211,27 @@ fn main() {
     println!();
 
     // Simulate growth
-    println!("Simulating growth (200 ticks)...");
-    for tick in 0..200 {
+    println!("Simulating growth (200 turns)...");
+    for turn in 0..200 {
         wheat_plant.grow(wheat_species);
-        if tick % 50 == 0 {
-            println!("  Tick {}: {}", tick, wheat_plant.status());
+        if turn % 50 == 0 {
+            println!("  Turn {}: {}", turn, wheat_plant.status());
         }
     }
 
-    println!("After 200 ticks:");
+    println!("After 200 turns:");
     println!("  Status: {}", wheat_plant.status());
     println!("  Harvestable: {}", wheat_plant.is_harvestable);
     println!();
 
     // Continue to maturity
     println!("Continuing growth to maturity...");
-    let mut ticks = 200;
+    let mut turns = 200;
     while !wheat_plant.is_harvestable {
         wheat_plant.grow(wheat_species);
-        ticks += 1;
+        turns += 1;
     }
-    println!("  Reached harvestable at tick {}", ticks);
+    println!("  Reached harvestable at turn {}", turns);
     println!("  Status: {}", wheat_plant.status());
     println!();
 
@@ -271,10 +271,10 @@ fn main() {
     println!();
 
     println!("Waiting for regrowth...");
-    for tick in 0..=berry_species.regrow_time {
+    for turn in 0..=berry_species.regrow_time {
         berry_bush.grow(berry_species);
-        if tick % 75 == 0 {
-            println!("  Tick {}: {}", tick, berry_bush.status());
+        if turn % 75 == 0 {
+            println!("  Turn {}: {}", turn, berry_bush.status());
         }
     }
 
@@ -345,12 +345,12 @@ fn main() {
     // ===== Part 12: Growth Simulation =====
     println!("--- Part 12: Growth Simulation ---");
 
-    println!("Simulating growth for 300 ticks...");
+    println!("Simulating growth for 300 turns...");
     for _ in 0..300 {
-        manager.tick();
+        manager.take_a_turn();
     }
 
-    println!("After 300 ticks:");
+    println!("After 300 turns:");
     println!("  Total plants: {}", manager.total_count());
     println!("  Wheat count: {}", manager.count_species("wheat"));
     println!("  Harvestable wheat: {}", manager.count_harvestable("wheat"));
@@ -398,7 +398,7 @@ fn main() {
         .with_species(orange_species);
 
     println!("Orange tree growth stages:");
-    println!("  Total growth time: {} ticks", orange_species.growth_time);
+    println!("  Total growth time: {} turns", orange_species.growth_time);
     println!();
 
     let stage_names = [
@@ -449,7 +449,7 @@ fn main() {
 
     for tree in timber_trees {
         let wood_drop = tree.drops.iter().find(|d| d.material_id == "wood").unwrap();
-        println!("  {}: {}-{} wood (growth: {} ticks)",
+        println!("  {}: {}-{} wood (growth: {} turns)",
             tree.name,
             wood_drop.min_quantity,
             wood_drop.max_quantity,
@@ -504,7 +504,7 @@ fn main() {
     println!("✓ Cultivated vs wild plant distinction");
     println!("✓ Spatial queries (by position, by radius)");
     println!("✓ Biome-specific distributions");
-    println!("✓ Growth times ranging from 50 to 10000 ticks");
+    println!("✓ Growth times ranging from 50 to 10000 turns");
 
     println!("\n=== Demonstration Complete ===");
 }

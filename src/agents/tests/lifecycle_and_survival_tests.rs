@@ -35,7 +35,7 @@ fn test_agent_ages_over_time() {
     let initial_age = agent.state.age;
 
     // Age the agent
-    agent.age_tick();
+    agent.age_turn();
 
     assert_eq!(agent.state.age, initial_age + 1);
 }
@@ -62,7 +62,7 @@ fn test_hunger_increases_without_food() {
 
     // Simulate time passing without eating
     for _ in 0..100 {
-        agent.drives.tick();
+        agent.drives.take_a_turn();
     }
 
     // Hunger should increase
@@ -97,7 +97,7 @@ fn test_eating_food_reduces_hunger() {
 fn test_starvation_counter_increases_without_food() {
     let mut agent = Agent::new(AgentConfig::default());
 
-    assert_eq!(agent.state.ticks_without_food, 0);
+    assert_eq!(agent.state.turns_without_food, 0);
 
     // Simulate time without eating
     for _ in 0..100 {
@@ -105,7 +105,7 @@ fn test_starvation_counter_increases_without_food() {
     }
 
     // Counter should increase
-    assert!(agent.state.ticks_without_food > 0);
+    assert!(agent.state.turns_without_food > 0);
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn test_eating_resets_starvation_counter() {
     agent.eat_food(1);
 
     // Counter should reset
-    assert_eq!(agent.state.ticks_without_food, 0);
+    assert_eq!(agent.state.turns_without_food, 0);
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn test_agent_is_starving_after_threshold() {
     // Not starving initially
     assert!(!agent.state.is_starving());
 
-    // Simulate extended starvation (3+ days = 4320+ ticks at 1440 ticks/day)
+    // Simulate extended starvation (3+ days = 4320+ turns at 1440 turns/day)
     agent.state.gone_without_food_for(4500);
 
     // Should be starving
@@ -234,7 +234,7 @@ fn test_thirst_increases_over_time() {
 
     // Simulate time passing
     for _ in 0..100 {
-        agent.drives.tick();
+        agent.drives.take_a_turn();
     }
 
     let current_thirst = agent.drives.get(DriveType::Thirst).unwrap().value;
@@ -300,17 +300,17 @@ fn test_agent_is_dead_when_health_zero() {
 
 #[test]
 fn test_life_stage_progression() {
-    use crate::environment::seasons::TICKS_PER_YEAR;
+    use crate::environment::seasons::TURNS_PER_YEAR;
 
     let mut agent = Agent::new(AgentConfig::default());
 
-    // **In years, through the calendar, rather than in hand-counted ticks.**
+    // **In years, through the calendar, rather than in hand-counted turns.**
     //
     // This read 250, 1000, 2000, 5000 and 9000 and called them infant, child,
-    // adolescent, adult and elderly. Those were ticks from a calendar where a
+    // adolescent, adult and elderly. Those were turns from a calendar where a
     // year was about eleven hundred of them. A year is 4,320 now - see
     // ISSUES_FOUND.md #42 - so every one of those numbers is a different stage
-    // of life than it was, and 1000 ticks is a baby of three months rather
+    // of life than it was, and 1000 turns is a baby of three months rather
     // than a child of eight. See #206.
     //
     // The thresholds themselves are `LifeStage`'s own, so this cannot drift
@@ -322,7 +322,7 @@ fn test_life_stage_progression() {
         (LifeStage::STRENGTH_STARTS_GOING_AT - 1, LifeStage::Adult),
         (LifeStage::STRENGTH_STARTS_GOING_AT + 1, LifeStage::Elderly),
     ] {
-        agent.state.age = years * TICKS_PER_YEAR;
+        agent.state.age = years * TURNS_PER_YEAR;
         agent.update_life_stage();
         assert_eq!(
             agent.state.life_stage, expected,
@@ -337,7 +337,7 @@ fn test_multiple_survival_needs_simultaneous() {
 
     // Simulate extended time without food or water
     for _ in 0..200 {
-        agent.drives.tick();
+        agent.drives.take_a_turn();
     }
 
     // Both hunger and thirst should be high
@@ -357,7 +357,7 @@ fn test_rest_drive_accumulates_from_activity() {
 
     // Update rest drive based on fatigue
     for _ in 0..100 {
-        agent.drives.tick();
+        agent.drives.take_a_turn();
     }
 
     let rest_drive = agent.drives.get(DriveType::Rest).unwrap().value;
@@ -377,7 +377,7 @@ fn test_agent_survival_requires_food_water_rest() {
     // Simulate survival loop
     for _ in 0..1000 {
         // Drives accumulate
-        agent.drives.tick();
+        agent.drives.take_a_turn();
 
         // Agent satisfies needs
         if agent.drives.get(DriveType::Hunger).unwrap().is_active() {

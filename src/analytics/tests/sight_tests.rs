@@ -66,7 +66,7 @@ fn sight_discovers_the_world_and_blindness_does_not() {
     }
 
     // Read both as it goes and stop when either is gone. Two founders alone
-    // in a world do not reliably last two hundred ticks, and the dead are
+    // in a world do not reliably last two hundred turns, and the dead are
     // swept out of the population - so indexing them at the end was a panic
     // waiting for the day something upstream made this pair a little less
     // lucky. What this test is about is what each of them saw while it was
@@ -80,7 +80,7 @@ fn sight_discovers_the_world_and_blindness_does_not() {
     let mut blind = 0usize;
 
     for _ in 0..200 {
-        simulation.tick();
+        simulation.take_a_turn();
 
         let look = |id: uuid::Uuid, sim: &Simulation| {
             sim.population
@@ -142,7 +142,7 @@ fn spotted_food_is_remembered() {
     }
 
     for _ in 0..20 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let remembered = simulation.population.agents[0]
@@ -180,7 +180,7 @@ fn blind_agents_do_not_remember_unseen_food() {
     }
 
     for _ in 0..20 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let remembered = simulation.population.agents[0]
@@ -224,7 +224,7 @@ fn sight_finds_resources_not_only_ground() {
     simulation.population.agents[0].state.position = (0, 0, 0);
 
     for _ in 0..20 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let known = &simulation.population.agents[0]
@@ -238,14 +238,14 @@ fn sight_finds_resources_not_only_ground() {
 }
 
 /// Sight is not a one-off. An agent keeps noticing the berry patch it is
-/// looking at, tick after tick.
+/// looking at, turn after turn.
 ///
 /// Exploration reports a tile only the first time it is looked at, so an agent
 /// that relied on that alone stopped seeing a patch the moment it had walked
 /// past it once - and once the memory faded, nothing brought it back. Smell no
 /// longer covers for that: a berry on the bush is all but odourless.
 #[test]
-fn what_is_in_view_is_seen_again_every_tick() {
+fn what_is_in_view_is_seen_again_every_turn() {
     let mut world = World::new(WorldConfig::default());
     world.resources.clear();
     world.resources.push(ResourceNode::new(
@@ -284,7 +284,7 @@ fn what_is_in_view_is_seen_again_every_tick() {
     // The patch has not moved and neither has the agent, so it is still there
     // to be seen. The tile was explored long ago, so only live sight can find
     // it now.
-    simulation.population.current_tick = 500;
+    simulation.population.current_turn = 500;
     simulation
         .population
         .process_exploration_with_world(&mut simulation.world);

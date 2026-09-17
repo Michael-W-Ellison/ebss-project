@@ -11,7 +11,7 @@
 use crate::agents::patterns::{how_long_a_worry_lasts, Element, Patterns};
 use crate::agents::{Agent, AgentConfig, Population};
 use crate::core::DriveType;
-use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::seasons::TURNS_PER_DAY;
 
 fn a_lone_agent() -> Population {
     let mut population = Population::new();
@@ -36,7 +36,7 @@ fn being_seen_taking_is_what_costs_the_thief_rather_than_the_taking() {
     assert_eq!(unbothered, 0.0, "nothing has happened to him yet");
 
     // Nobody saw. Nothing follows. He is no warier than he was
-    agent.patterns.fade(10 + TICKS_PER_DAY);
+    agent.patterns.fade(10 + TURNS_PER_DAY);
     assert_eq!(
         agent.patterns.what_i_dread(DriveType::Utility, &taking),
         0.0,
@@ -75,7 +75,7 @@ fn a_thief_who_is_never_caught_again_gets_bolder() {
     // Then a month of taking, and nobody ever says anything
     let mut now = 0;
     for _ in 0..30 {
-        now += TICKS_PER_DAY;
+        now += TURNS_PER_DAY;
         agent.patterns.it_worked(DriveType::Utility, &taking, 0.5, now);
         agent.patterns.fade(now);
     }
@@ -238,7 +238,7 @@ fn a_consequence_is_laid_at_a_recent_door_and_not_an_old_one() {
 
     patterns.it_worked(DriveType::Hunger, &long_ago, 0.5, 0);
 
-    let much_later = Patterns::AS_LONG_AS_ANYBODY_CONNECTS + TICKS_PER_DAY;
+    let much_later = Patterns::AS_LONG_AS_ANYBODY_CONNECTS + TURNS_PER_DAY;
     patterns.it_worked(DriveType::Utility, &lately, 0.5, much_later);
     patterns.it_cost_me(DriveType::Social, 0.3, much_later);
 

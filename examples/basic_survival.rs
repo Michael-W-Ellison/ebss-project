@@ -36,9 +36,9 @@ fn main() {
     }
     
     // Run simulation
-    println!("\n--- Running simulation for 100 ticks ---\n");
+    println!("\n--- Running simulation for 100 turns ---\n");
     let mut sim = Simulation::new(world, population);
-    sim.run_for_ticks(100);
+    sim.run_for_turns(100);
     
     println!("\nSimulation complete!");
 }

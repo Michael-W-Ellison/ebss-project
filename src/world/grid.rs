@@ -70,8 +70,8 @@ pub struct Grid {
 
     /// The ground somebody has left something on.
     ///
-    /// Muck, and the seed in it. Two phases of the tick used to look for
-    /// these by walking every tile in the world, which made a tick cost what
+    /// Muck, and the seed in it. Two phases of the turn used to look for
+    /// these by walking every tile in the world, which made a turn cost what
     /// the map *is* rather than what is happening on it. See
     /// `Soil::has_somebody_left_something_here` and ISSUES_FOUND.md #128.
     ///
@@ -382,7 +382,7 @@ impl Grid {
     /// fouling and dropped seed and nothing else. Litter is deliberately not
     /// in it: every tile in the world is born with leaf litter on it, so a
     /// register of tiles-with-litter is a register of every tile, which costs
-    /// a million set inserts a tick and saves nothing. What rots litter still
+    /// a million set inserts a turn and saves nothing. What rots litter still
     /// sweeps the whole grid.
     ///
     /// Cheap and deliberately generous: it costs a set insert, and a tile that
@@ -416,7 +416,7 @@ impl Grid {
     /// The ground somebody has left something on, in a fixed order.
     ///
     /// May carry a tile that has just gone bare - the pruning happens once a
-    /// tick rather than on every read - so anything walking this still asks
+    /// turn rather than on every read - so anything walking this still asks
     /// its own question of each tile.
     pub fn where_the_ground_is_doing_something(&self) -> Vec<Position> {
         self.ground_with_something_on_it
@@ -439,7 +439,7 @@ impl Grid {
             .collect();
     }
 
-    /// How much ground is worth visiting, which is what a tick costs.
+    /// How much ground is worth visiting, which is what a turn costs.
     pub fn how_much_ground_is_doing_something(&self) -> usize {
         self.ground_with_something_on_it.len()
     }

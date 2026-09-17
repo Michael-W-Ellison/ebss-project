@@ -384,7 +384,7 @@ fn a_basket_is_counted_once() {
 /// Nobody is over their own limit the moment they take up a carrier.
 ///
 /// The double count let an agent fill to a hundred and twenty-five per cent of
-/// its stated capacity, and `movement_speed_at_tick` reads
+/// its stated capacity, and `movement_speed_at_turn` reads
 /// `weight_percentage` straight off that - so a settlement that could never
 /// get under its own limit walked slowly for the whole of every run.
 #[test]

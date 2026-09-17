@@ -269,8 +269,8 @@ impl crate::analytics::Simulation {
 
     /// What a day's drink comes to in carried units.
     ///
-    /// Thirst rises 0.012 a tick and a drink takes half the drive off, so a
-    /// day of forty-eight ticks is about one drink - and `ConsumeCarriedWater`
+    /// Thirst rises 0.012 a turn and a drink takes half the drive off, so a
+    /// day of forty-eight turns is about one drink - and `ConsumeCarriedWater`
     /// deals in whole units. One unit is a day.
     pub const A_DAYS_DRINK: f32 = 1.0;
 

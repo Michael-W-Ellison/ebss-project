@@ -41,7 +41,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::core::DriveType;
-use crate::environment::seasons::{Season, DAYS_PER_SEASON, TICKS_PER_DAY};
+use crate::environment::seasons::{Season, DAYS_PER_SEASON, TURNS_PER_DAY};
 
 /// Which way a place lies from home.
 ///
@@ -362,7 +362,7 @@ pub struct Patterns {
     /// was. Nested rather than keyed by a pair so that it survives a round
     /// trip through a format whose map keys are strings.
     against: BTreeMap<DriveType, BTreeMap<Element, Trail>>,
-    /// The tick the trails were last faded on, so fading can be charged by
+    /// The turn the trails were last faded on, so fading can be charged by
     /// the day however often it is asked for.
     #[serde(default)]
     faded_at: u32,
@@ -421,7 +421,7 @@ impl Patterns {
     /// at twelve turns to the day - against a comment saying "a season", which
     /// was right on some earlier calendar and has been wrong since a season
     /// became ninety days. It is derived here so it cannot drift again.
-    pub const STILL_WORTH_THE_WALK: u32 = DAYS_PER_SEASON * TICKS_PER_DAY;
+    pub const STILL_WORTH_THE_WALK: u32 = DAYS_PER_SEASON * TURNS_PER_DAY;
 
     /// What a day takes off an unreinforced trail.
     ///
@@ -508,7 +508,7 @@ impl Patterns {
     /// Three days. Long enough that a grudge shown the morning after is still
     /// laid at the right door, short enough that an agent does not blame its
     /// hunting for the weather.
-    pub const AS_LONG_AS_ANYBODY_CONNECTS: u32 = TICKS_PER_DAY * 3;
+    pub const AS_LONG_AS_ANYBODY_CONNECTS: u32 = TURNS_PER_DAY * 3;
 
     /// The most any one consequence can add to a worry.
     ///
@@ -674,7 +674,7 @@ impl Patterns {
     /// what the calendar says has passed since it last ran. Worry fades here
     /// too, but on its own clock - see `how_fast_worry_fades`.
     pub fn fade(&mut self, now: u32) {
-        let days = now.saturating_sub(self.faded_at) / TICKS_PER_DAY;
+        let days = now.saturating_sub(self.faded_at) / TURNS_PER_DAY;
         if days == 0 {
             return;
         }

@@ -131,7 +131,7 @@ fn the_branch_will_not_carry_a_plan_built_against_nowhere() {
         "stock the storehouse".to_string(),
         vec![PlanStep {
             action: PlanActionType::MoveTo { location: (50, 50, 0) },
-            estimated_ticks: 10,
+            estimated_turns: 10,
             required_tool: None,
             required_resources: Vec::new(),
             target_location: None,
@@ -155,7 +155,7 @@ fn the_branch_will_not_carry_a_plan_built_against_nowhere() {
 
 /// A plan that has not been worked is waiting, not stuck.
 ///
-/// The step counter used to tick every turn whether or not the plan ran, and
+/// The step counter used to turn every turn whether or not the plan ran, and
 /// it is the only thing `should_execute_plan` measures staleness by - so a
 /// plan the ladder never reached aged out of its step's allowance and could
 /// then never be reached at all.
@@ -169,7 +169,7 @@ fn a_plan_nobody_has_worked_does_not_go_stale_on_its_own() {
 
     assert!(agent.should_execute_plan());
     assert_eq!(
-        agent.plan_step_ticks, 0,
+        agent.plan_step_turns, 0,
         "a plan just laid down has had no turns spent on it"
     );
     assert!(
@@ -188,7 +188,7 @@ fn a_plan_that_keeps_failing_is_dropped() {
     assert!(agent.plan_the_run_that_answers(DriveType::Hunger, 0));
 
     for _ in 0..20 {
-        agent.tick_plan_step();
+        agent.turn_plan_step();
     }
 
     assert!(

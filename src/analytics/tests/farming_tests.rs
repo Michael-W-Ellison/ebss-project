@@ -55,7 +55,7 @@ fn a_field_nobody_works_goes_over_to_weeds() {
 
     // A season's worth of growing weather with nobody in the field
     for _ in 0..(crate::environment::seasons::DAYS_PER_SEASON
-        * crate::environment::seasons::TICKS_PER_DAY)
+        * crate::environment::seasons::TURNS_PER_DAY)
     {
         soil.nobody_weeded_this(1.0, 1.0);
     }
@@ -137,13 +137,13 @@ fn a_worked_field_carries_a_crop_and_a_neglected_one_does_not() {
         let mut field = ResourceNode::new(ResourceType::Grain, Position::new(10, 10), 40000);
         field.amount = 0;
 
-        for tick in 0..1200 {
+        for turn in 0..1200 {
             soil.nutrients = 0.6;
             soil.nobody_weeded_this(1.0, 1.0);
 
             // A turn round the field every few days, which is what a farmer
             // with a field actually does with a season
-            if worked && tick % 30 == 0 {
+            if worked && turn % 30 == 0 {
                 soil.somebody_worked_this_field();
             }
 

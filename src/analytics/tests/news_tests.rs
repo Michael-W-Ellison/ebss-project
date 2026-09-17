@@ -32,7 +32,7 @@ fn a_week_old_sighting_found_empty_is_not_a_lie() {
         how_much_they_said: Some(20),
     };
 
-    // A week is eighty-four ticks
+    // A week is eighty-four turns
     assert!(
         !a_week_ago.was_he_answerable_for_it(100 + 84),
         "a man who says he saw a patch a week back cannot be held to what is \
@@ -177,7 +177,7 @@ fn a_thirsty_man_keeps_the_waterholes_and_lets_the_flax_go() {
     // Parched, and unbothered about anything else
     if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
         thirst.value = 0.95;
-        thirst.denied_ticks = 400;
+        thirst.denied_turns = 400;
     }
     agent.state.gone_without_water_for(3_000);
 
@@ -259,7 +259,7 @@ fn walking_past_a_thing_again_is_seeing_it_again() {
 
     let mut simulation = crate::analytics::Simulation::new(world, population);
     for _ in 0..60 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let seen_on = simulation.population.agents[0]
@@ -268,10 +268,10 @@ fn walking_past_a_thing_again_is_seeing_it_again() {
         .expect("he is standing next to it");
 
     assert!(
-        simulation.current_tick.saturating_sub(seen_on) <= Hearsay::STILL_ANSWERABLE_FOR,
-        "a man who has been beside a patch for sixty ticks can say he just \
-         passed it; his last sighting stood at {seen_on} on tick {}",
-        simulation.current_tick
+        simulation.current_turn.saturating_sub(seen_on) <= Hearsay::STILL_ANSWERABLE_FOR,
+        "a man who has been beside a patch for sixty turns can say he just \
+         passed it; his last sighting stood at {seen_on} on turn {}",
+        simulation.current_turn
     );
 }
 
@@ -324,7 +324,7 @@ fn news_reaches_everybody_within_earshot() {
 }
 
 /// The most people any one speaker was believed by, in a settlement of twelve
-/// left to itself for two thousand ticks.
+/// left to itself for two thousand turns.
 fn widest_a_teller_reached(seed: u64) -> usize {
     crate::core::dice::seed(seed);
 
@@ -341,7 +341,7 @@ fn widest_a_teller_reached(seed: u64) -> usize {
     }
 
     for _ in 0..2000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     // How many people each speaker has been believed by. Telling used to be
@@ -382,7 +382,7 @@ fn honest_agents_do_not_end_up_accused() {
 
     let mut simulation = crate::analytics::Simulation::new(world, population);
     for _ in 0..4000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     // Everybody who was ever accused of lying. Children born during the run
@@ -431,7 +431,7 @@ fn nobody_carries_the_whole_map_in_their_head() {
 
     let mut simulation = crate::analytics::Simulation::new(world, population);
     for _ in 0..4000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     for agent in simulation

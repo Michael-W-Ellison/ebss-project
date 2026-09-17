@@ -36,7 +36,7 @@ fn test_high_hunger_causes_fear() {
     // is not being prevented from anything.
     if let Some(hunger_drive) = agent.drives.get_mut(DriveType::Hunger) {
         hunger_drive.value = 0.95;
-        hunger_drive.denied_ticks = 400;
+        hunger_drive.denied_turns = 400;
     }
     agent.state.gone_without_food_for(21_600);
 
@@ -55,7 +55,7 @@ fn a_need_that_keeps_being_met_does_not_frighten_anybody() {
     // High, but answered every time it asks, and the body in no trouble
     if let Some(hunger_drive) = agent.drives.get_mut(DriveType::Hunger) {
         hunger_drive.value = 0.95;
-        hunger_drive.denied_ticks = 0;
+        hunger_drive.denied_turns = 0;
     }
     agent.state.gone_without_food_for(0);
 
@@ -252,11 +252,11 @@ fn test_survival_drives_cause_fear_not_sadness() {
     // anything.
     if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
-        hunger.denied_ticks = 400;
+        hunger.denied_turns = 400;
     }
     if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
         thirst.value = 0.9;
-        thirst.denied_ticks = 400;
+        thirst.denied_turns = 400;
     }
     agent.state.gone_without_food_for(21_600);
     agent.state.gone_without_water_for(3_000);
@@ -359,15 +359,15 @@ fn test_multiple_drive_frustration_compounds() {
     // Several needs going unanswered at once
     if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.85;
-        hunger.denied_ticks = 400;
+        hunger.denied_turns = 400;
     }
     if let Some(social) = agent.drives.get_mut(DriveType::Social) {
         social.value = 0.8;
-        social.denied_ticks = 400;
+        social.denied_turns = 400;
     }
     if let Some(rest) = agent.drives.get_mut(DriveType::Rest) {
         rest.value = 0.75;
-        rest.denied_ticks = 400;
+        rest.denied_turns = 400;
     }
     agent.state.gone_without_food_for(21_600);
     agent.state.energy = 10.0;
@@ -471,14 +471,14 @@ fn test_happiness_decays_over_time() {
     agent.record_drive_satisfaction(DriveType::Social, helper, 0.5, 0);
     let initial_happiness = agent.emotions.happiness;
     
-    // Tick multiple times
+    // Turn multiple times
     for _ in 0..50 {
-        agent.emotions.tick();
+        agent.emotions.take_a_turn();
     }
     
     // Happiness should decay
     assert!(agent.emotions.happiness < initial_happiness, 
-            "Happiness should decay over time: initial={}, after_ticks={}", 
+            "Happiness should decay over time: initial={}, after_turns={}", 
             initial_happiness, agent.emotions.happiness);
 }
 

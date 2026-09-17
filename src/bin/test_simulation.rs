@@ -6,7 +6,7 @@
 //!
 //! Usage:
 //!   cargo run --bin test_simulation
-//!   cargo run --bin test_simulation -- --agents 20 --ticks 5000
+//!   cargo run --bin test_simulation -- --agents 20 --turns 5000
 
 use ebss::prelude::*;
 use ebss::agents::PopulationConfig;
@@ -21,7 +21,7 @@ fn main() {
     // Parse command line arguments
     let args: Vec<String> = env::args().collect();
     let num_agents = parse_arg(&args, "--agents").unwrap_or(10) as u32;
-    let num_ticks = parse_arg(&args, "--ticks").unwrap_or(1000) as u32;
+    let num_turns = parse_arg(&args, "--turns").unwrap_or(1000) as u32;
     let report_interval = parse_arg(&args, "--report").unwrap_or(100) as u32;
 
     println!("╔════════════════════════════════════════════════════════════╗");
@@ -31,8 +31,8 @@ fn main() {
     println!();
     println!("Configuration:");
     println!("  • Agents: {}", num_agents);
-    println!("  • Ticks: {}", num_ticks);
-    println!("  • Report Interval: {} ticks", report_interval);
+    println!("  • Turns: {}", num_turns);
+    println!("  • Report Interval: {} turns", report_interval);
     println!();
 
     // Create world
@@ -60,27 +60,27 @@ fn main() {
     let mut sim = Simulation::new(world, population);
     println!("   ✓ Simulation ready");
     println!();
-    println!("▶️  Starting simulation for {} ticks...", num_ticks);
+    println!("▶️  Starting simulation for {} turns...", num_turns);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!();
 
     // Run simulation with periodic reporting
-    for tick in 0..num_ticks {
-        sim.tick();
+    for turn in 0..num_turns {
+        sim.take_a_turn();
 
         // Report at intervals
-        if (tick + 1) % report_interval == 0 {
-            print_world_status(&sim.world, tick + 1);
-            print_population_status(&sim.population, tick + 1);
-            print_death_watch(&sim.population, tick + 1);
+        if (turn + 1) % report_interval == 0 {
+            print_world_status(&sim.world, turn + 1);
+            print_population_status(&sim.population, turn + 1);
+            print_death_watch(&sim.population, turn + 1);
         }
 
         // Check if population died out
         if sim.population.agents.is_empty() {
             println!();
-            println!("⚠️  SIMULATION ENDED: Population extinct at tick {}", tick + 1);
+            println!("⚠️  SIMULATION ENDED: Population extinct at turn {}", turn + 1);
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            print_final_statistics(&sim.population, tick + 1);
+            print_final_statistics(&sim.population, turn + 1);
             return;
         }
     }
@@ -88,7 +88,7 @@ fn main() {
     println!();
     println!("✓ Simulation completed successfully!");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    print_final_statistics(&sim.population, num_ticks);
+    print_final_statistics(&sim.population, num_turns);
 }
 
 /// Parse command line argument
@@ -100,7 +100,7 @@ fn parse_arg(args: &[String], flag: &str) -> Option<usize> {
 }
 
 /// Print world resource status
-fn print_world_status(world: &World, tick: u32) {
+fn print_world_status(world: &World, turn: u32) {
     use ebss::world::ResourceType;
 
     // Count all resources
@@ -135,7 +135,7 @@ fn print_world_status(world: &World, tick: u32) {
         }
     }
 
-    println!("🌍 World Resources at Tick {}:", tick);
+    println!("🌍 World Resources at Turn {}:", turn);
     println!("   Wood:  {} nodes with {} total", wood_nodes, wood_amount);
     println!("   Stone: {} nodes with {} total", stone_nodes, stone_amount);
     println!("   Iron:  {} nodes with {} total", iron_nodes, iron_amount);
@@ -168,10 +168,10 @@ fn print_world_status(world: &World, tick: u32) {
 }
 
 /// Print current population status
-fn print_population_status(population: &Population, tick: u32) {
+fn print_population_status(population: &Population, turn: u32) {
     let stats = &population.stats;
 
-    println!("📊 Tick {}: Population Status", tick);
+    println!("📊 Turn {}: Population Status", turn);
     println!("   Population: {} agents", population.agents.len());
     println!("   Life Stages:");
     println!("     • Infants:     {}", stats.infants);
@@ -511,7 +511,7 @@ fn print_population_status(population: &Population, tick: u32) {
 }
 
 /// Print agents approaching death (for early warning)
-fn print_death_watch(population: &Population, _tick: u32) {
+fn print_death_watch(population: &Population, _turn: u32) {
     let mut critical_agents = Vec::new();
 
     for agent in &population.agents {
@@ -526,7 +526,7 @@ fn print_death_watch(population: &Population, _tick: u32) {
         }
 
         if state.is_starving() {
-            let days_without_food = state.ticks_without_food / 1440;
+            let days_without_food = state.turns_without_food / 1440;
             reasons.push(format!("Starving ({}d)", days_without_food));
         }
 
@@ -556,13 +556,13 @@ fn print_death_watch(population: &Population, _tick: u32) {
 }
 
 /// Print final statistics
-fn print_final_statistics(population: &Population, total_ticks: u32) {
+fn print_final_statistics(population: &Population, total_turns: u32) {
     println!();
     println!("📈 Final Statistics");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!();
-    println!("Simulation Duration: {} ticks ({:.1} sim-days)",
-             total_ticks, total_ticks as f32 / 1440.0);
+    println!("Simulation Duration: {} turns ({:.1} sim-days)",
+             total_turns, total_turns as f32 / 1440.0);
     println!();
     println!("Population Metrics:");
     println!("  Final Population:  {} agents", population.agents.len());
@@ -572,13 +572,13 @@ fn print_final_statistics(population: &Population, total_ticks: u32) {
     println!();
 
     if population.stats.total_deaths > 0 {
-        let death_rate = (population.stats.total_deaths as f32 / total_ticks as f32) * 1000.0;
-        println!("  Death Rate:        {:.2} deaths per 1000 ticks", death_rate);
+        let death_rate = (population.stats.total_deaths as f32 / total_turns as f32) * 1000.0;
+        println!("  Death Rate:        {:.2} deaths per 1000 turns", death_rate);
     }
 
     if population.stats.total_births > 0 {
-        let birth_rate = (population.stats.total_births as f32 / total_ticks as f32) * 1000.0;
-        println!("  Birth Rate:        {:.2} births per 1000 ticks", birth_rate);
+        let birth_rate = (population.stats.total_births as f32 / total_turns as f32) * 1000.0;
+        println!("  Birth Rate:        {:.2} births per 1000 turns", birth_rate);
     }
 
     println!();
@@ -593,12 +593,12 @@ fn print_final_statistics(population: &Population, total_ticks: u32) {
             let age_percent = (state.age as f32 / state.max_age as f32) * 100.0;
 
             println!("Agent #{} ({:?}):", i + 1, state.life_stage);
-            println!("  Age:     {} / {} ticks ({:.1}%)", state.age, state.max_age, age_percent);
+            println!("  Age:     {} / {} turns ({:.1}%)", state.age, state.max_age, age_percent);
             println!("  Health:  {:.1}/100.0", state.health);
             println!("  Energy:  {:.1}/100.0", state.energy);
 
-            if state.ticks_without_food > 0 {
-                let days = state.ticks_without_food / 1440;
+            if state.turns_without_food > 0 {
+                let days = state.turns_without_food / 1440;
                 println!("  Hunger:  {} days without food", days);
             } else {
                 println!("  Hunger:  Well fed");
