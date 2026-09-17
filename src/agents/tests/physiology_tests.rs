@@ -26,9 +26,12 @@ fn eat_a_sitting_of_ordinary_food(body: &mut Physiology) {
 #[test]
 fn a_turn_is_half_an_hour_of_living() {
     assert_eq!(MINUTES_PER_DAY, 1440);
+    // Against the turns in a day, not the ticks. This said `/ TICKS_PER_DAY`,
+    // which was the same question while a tick was a step and became
+    // 1440/1440 = 1 when a tick became a minute.
     assert_eq!(
         MINUTES_PER_TURN,
-        MINUTES_PER_DAY / crate::environment::seasons::TICKS_PER_DAY
+        MINUTES_PER_DAY / crate::environment::seasons::PLANNING_PERIODS_PER_DAY
     );
     // Forty-eight turns to the day, so half an hour to the turn. It was two
     // hours, and twelve decisions in a day is not enough to live one.

@@ -4879,7 +4879,8 @@ impl Agent {
     /// twenty, so a fully watered agent was permanently in mortal danger and
     /// went to the water on nine turns in ten. Derived from the calendar now,
     /// so it cannot fall behind it again. See ISSUES #74.
-    const A_LONG_WAY_OFF: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 / 2.0;
+    const A_LONG_WAY_OFF: f32 =
+        crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32 / 2.0;
 
     /// How much any one drive may press, before its band is applied.
     ///
@@ -8435,7 +8436,8 @@ impl Agent {
     /// meant to be: it is the specification's "I do not have enough food"
     /// raising fear, and fear is what sends somebody looking further afield
     /// than the ground they are standing on.
-    const WHAT_DREAD_LOOKS_AHEAD: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 * 3.0;
+    const WHAT_DREAD_LOOKS_AHEAD: f32 =
+        crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32 * 3.0;
 
     /// Fear from a need that something has been preventing this agent from
     /// answering.
@@ -10903,7 +10905,7 @@ impl Errand {
     /// which is the failure the old behaviour was avoiding by throwing the
     /// errand away.
     pub const HOW_LONG_AN_ERRAND_KEEPS: u32 =
-        2 * crate::environment::seasons::TICKS_PER_DAY;
+        2 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
 
     /// Whether this one has been waiting too long to still be worth resuming.
     pub fn stale(&self) -> bool {
