@@ -1,6 +1,7 @@
 // src/core/mod.rs
 //! Core AI systems including behavior trees, drives, and learning algorithms.
 
+pub mod clock;
 pub mod dice;
 pub mod behavior_tree;
 pub mod drives;
@@ -20,6 +21,7 @@ pub mod spatial;
 #[cfg(test)]
 mod tests;
 
+pub use clock::{Ticks, Turns, TICKS_IN_A_TURN};
 pub use behavior_tree::{BehaviorTree, BehaviorNode, NodeType, ExecutionResult, BehaviorContext, DefaultBehaviorContext};
 pub use drives::{Drive, DriveType, DriveState, DriveContext, DriveRank, Surroundings};
 pub use learning::{ObservableEvent, ObservableEventType, LearningResult, LearningExposure, observe_and_learn, process_population_learning};
