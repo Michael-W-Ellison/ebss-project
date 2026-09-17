@@ -1758,7 +1758,7 @@ fn everything_mends_at_the_same_rate_against_itself() {
     use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
     use crate::environment::AnimalManager;
 
-    let a_day = AnimalManager::HOW_MUCH_OF_ITSELF_IT_MENDS_A_TURN * TICKS_PER_DAY as f32;
+    let a_day = AnimalManager::HOW_MUCH_OF_ITSELF_IT_MENDS_A_TURN * PLANNING_PERIODS_PER_DAY as f32;
     assert!(
         (a_day - 0.01).abs() < 1e-6,
         "a hundredth of itself in a day: {a_day}"

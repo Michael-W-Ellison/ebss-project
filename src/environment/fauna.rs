@@ -5459,7 +5459,7 @@ impl AnimalManager {
 
     /// And a turn of it, off the calendar rather than written out again.
     pub const HOW_MUCH_OF_ITSELF_IT_MENDS_A_TURN: f32 = Self::HOW_MUCH_OF_ITSELF_IT_MENDS_A_DAY
-        / crate::environment::seasons::TICKS_PER_DAY as f32;
+        / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
 
     /// What a winter spent asleep costs, against one spent out in it.
     ///
@@ -5824,7 +5824,7 @@ impl AnimalManager {
         // two hunters on one ground each get half of it, and the second one
         // starves off it.
         let a_turn = Self::GRAZERS_A_DAY_ON_THE_BEST_GROUND * how_rich / sharing_it.max(1.0)
-            / crate::environment::seasons::TICKS_PER_DAY as f32;
+            / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
 
         // **Which larder it is taking out of, not only how much.** A heron
         // standing in a lake is not turning over voles, and until the fish

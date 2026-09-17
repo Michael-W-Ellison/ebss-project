@@ -119,7 +119,7 @@ impl ExposureStatus {
     /// day, so shortening the turn makes each step smaller rather than making
     /// the weather worse.
     fn in_one_turn(in_a_day: f32) -> f32 {
-        in_a_day / crate::environment::seasons::TICKS_PER_DAY as f32
+        in_a_day / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32
     }
 
     pub fn new() -> Self {

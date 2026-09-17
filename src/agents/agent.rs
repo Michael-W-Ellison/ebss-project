@@ -1290,10 +1290,11 @@ impl AgentState {
 
     /// How much of an open wound closes in a turn.
     ///
-    /// A fortnight to close the worst of them, on twelve turns to the day,
-    /// which is about right for something nobody stitched.
+    /// A fortnight to close the worst of them, which is about right for
+    /// something nobody stitched. Counted in planning periods, because that
+    /// is what a turn is and this is applied once a turn.
     pub const HOW_FAST_A_WOUND_CLOSES: f32 =
-        1.0 / (14.0 * crate::environment::seasons::TICKS_PER_DAY as f32);
+        1.0 / (14.0 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32);
 
     pub fn lose_health(&mut self, amount: f32, to: &str) {
         if amount <= 0.0 {

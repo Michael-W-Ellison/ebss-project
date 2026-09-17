@@ -390,7 +390,7 @@ impl SmallLife {
     /// calendar the world no longer keeps.
     pub const WHAT_A_SNARE_TAKES_ON_FULL_GROUND: f32 =
         Self::WHAT_A_SNARE_TAKES_ON_FULL_GROUND_IN_A_DAY
-            / crate::environment::seasons::TICKS_PER_DAY as f32;
+            / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
 
     /// What a whole hunting ground gives a trapline in a turn, at full stock,
     /// however many snares are on it.
@@ -429,7 +429,7 @@ impl SmallLife {
     /// one food source that does not stop when the hedgerows do, and it was
     /// delivering two rabbits a settlement a winter.
     pub const WHAT_A_QUIET_COUNTRY_TAKES: f32 = Self::WHAT_A_QUIET_COUNTRY_TAKES_IN_A_DAY
-        / crate::environment::seasons::TICKS_PER_DAY as f32;
+        / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
 
     /// And the most it can ever be, when the game is gone and the foxes are
     /// not.
