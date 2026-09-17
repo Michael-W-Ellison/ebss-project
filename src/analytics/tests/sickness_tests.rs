@@ -592,7 +592,8 @@ fn a_wound_can_turn() {
         crate::core::dice::seed(5_200 + seed);
         let mut one = Agent::new(AgentConfig::default());
         one.state.take_damage(30.0);
-        for turn in 0..(14 * crate::environment::seasons::TICKS_PER_DAY) {
+        for step in 0..(14 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY) {
+            let turn = step * crate::environment::seasons::TICKS_BETWEEN_PLANS;
             one.turn_with_time(turn);
             if one.is_ailing() {
                 break;

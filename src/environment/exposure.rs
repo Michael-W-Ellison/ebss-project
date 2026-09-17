@@ -501,7 +501,7 @@ mod tests {
         // which was eight days at the two-hour turn and two at the half-hour
         // one - the run length changed meaning when the turn did, which is
         // the whole of ISSUES #171. Said in days it stays five days.
-        for _ in 0..(5 * TICKS_PER_DAY) {
+        for _ in 0..(5 * PLANNING_PERIODS_PER_DAY) {
             status.update(&body_temp, 30.0, &weather, false, true, 12.0); // Noon
         }
 

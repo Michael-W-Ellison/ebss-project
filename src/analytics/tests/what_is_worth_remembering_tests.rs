@@ -15,7 +15,7 @@
 //! the last four hours was gone**.
 
 use crate::core::memory::{Memory, MemoryImportance, SpatialMemory, SpatialMemoryType};
-use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 
 /// A store is the one place a person does not forget.
 #[test]
@@ -71,7 +71,7 @@ fn forgetting_in_batches_is_forgetting_at_the_same_rate() {
     one.remember_location(SpatialMemoryType::Food, (5, 5, 0));
     other.remember_location(SpatialMemoryType::Food, (5, 5, 0));
 
-    for _ in 0..(5 * TICKS_PER_DAY) {
+    for _ in 0..(5 * PLANNING_PERIODS_PER_DAY) {
         one.take_a_turn();
         other.take_a_turn();
     }
