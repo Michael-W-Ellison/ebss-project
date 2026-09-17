@@ -305,18 +305,47 @@ impl PreparationState {
         }
     }
 
-    pub fn spoilage_multiplier(&self) -> f32 {
+    /// What this leaves the thing, as tags.
+    ///
+    /// A preparation is a *way of getting* a tag: drying is how a thing comes
+    /// to be dry, and it is being dry that makes it keep. That distinction is
+    /// the whole of why this exists. The rate used to hang off the
+    /// preparation, so the only way a thing's clock could change was for
+    /// somebody to do something to it - and a thing that had become dry by
+    /// lying in the sun, or wet by lying in the rain, or that was simply
+    /// *called* something that keeps, had no way of saying so.
+    ///
+    /// Tags compose and preparations do not. Anything with a tag on it - the
+    /// name it goes by, the condition it is in, one day the weather it has
+    /// been left out in - contributes to one product, and nothing has to be
+    /// told about anything else.
+    pub fn what_this_leaves_it(&self) -> &'static [crate::environment::tags::Tag] {
+        use crate::environment::tags::Tag;
+
         match self {
-            Self::Raw => 1.0,        // Baseline
-            Self::Cooked => 0.8,     // Slightly slower than raw
-            Self::Dried => 0.05,     // 20x longer - very slow
-            Self::Smoked => 0.1,     // 10x longer - very slow
-            Self::Salted => 0.15,    // ~7x longer
-            Self::Pickled => 0.1,    // 10x longer
-            Self::Ground => 1.2,     // Faster (more surface area)
-            Self::Fermented => 0.2,  // 5x longer
-            Self::Ruined => 1.5,     // Already broken down; goes off fast
+            // Nothing has been done to it, and that *is* a statement: it has
+            // its water still in it, which is what goes off
+            Self::Raw => &[Tag::Wet],
+            Self::Cooked => &[Tag::Cooked],
+            Self::Dried => &[Tag::Dry],
+            Self::Smoked => &[Tag::Smoked],
+            Self::Salted => &[Tag::Salted],
+            Self::Pickled => &[Tag::Soured],
+            Self::Ground => &[Tag::Ground],
+            Self::Fermented => &[Tag::Fermented],
+            Self::Ruined => &[Tag::Spoiled],
         }
+    }
+
+    /// Get spoilage rate multiplier (lower = longer lasting)
+    ///
+    /// Derived from the tags this preparation leaves, so that the number lives
+    /// in one place - see [`crate::environment::tags::Tag::what_it_does_to_keeping`].
+    /// This reads only the *condition*, not the name of the thing or where it
+    /// is being kept; for the whole of it ask
+    /// [`crate::environment::tags::how_fast_this_goes_off`].
+    pub fn spoilage_multiplier(&self) -> f32 {
+        crate::environment::tags::how_fast_these_go_off(self.what_this_leaves_it())
     }
 
     /// Human-readable name
@@ -348,6 +377,24 @@ pub struct FoodData {
     pub created_turn: u32,
     /// Base spoilage rate (turns to reach 0 freshness from 1.0 at Raw state)
     pub base_spoilage_turns: u32,
+    /// The turn its clock was last run forward to.
+    ///
+    /// Freshness used to be *derived* from `created_turn` - the whole of a
+    /// thing's history re-reckoned from scratch at whatever rate it happened
+    /// to be going off today. That is why a pit could only preserve anything
+    /// by winding `created_turn` forward, and why drying a thing that had sat
+    /// in a pack for a fortnight retroactively un-rotted the fortnight.
+    ///
+    /// It accumulates now: each pass spends what that pass cost, at the rate
+    /// the thing was going off *during* it. So a change of tag or a change of
+    /// container takes effect from the moment it happens and does not reach
+    /// backwards, which is what makes drying, burying and potting compose.
+    ///
+    /// Defaulted for a save written before it existed, where it reads as
+    /// nought and the first pass charges the whole backlog at today's rate -
+    /// which is exactly what the derived model did every pass.
+    #[serde(default)]
+    pub aged_up_to: u32,
 }
 
 impl FoodData {
@@ -363,6 +410,7 @@ impl FoodData {
             freshness: 1.0,
             created_turn,
             base_spoilage_turns,
+            aged_up_to: created_turn,
         }
     }
 
@@ -476,19 +524,52 @@ impl FoodData {
     /// The one owner of the question. `Pit::how_long_this_would_keep` asks it
     /// and multiplies by what the hole is worth; `find_best_food_to_eat` asks
     /// it to decide what to eat first.
-    pub fn how_long_this_has_left(&self) -> f32 {
-        let spoils_in = self.base_spoilage_turns as f32 / self.preparation.spoilage_multiplier();
+    pub fn how_long_this_has_left(&self, called: &str) -> f32 {
+        let spoils_in = self.base_spoilage_turns as f32 / self.how_fast_this_goes_off(called);
         (spoils_in * self.freshness.clamp(0.0, 1.0)).max(0.0)
     }
 
-    pub fn update_freshness(&mut self, current_turn: u32) {
-        let elapsed = current_turn.saturating_sub(self.created_turn);
-        let spoilage_rate = self.preparation.spoilage_multiplier();
-        let effective_spoilage_turns = (self.base_spoilage_turns as f32 / spoilage_rate) as u32;
+    /// How fast this goes off for what it is, before anywhere it is kept.
+    ///
+    /// Its name and its condition, taken together - see
+    /// [`crate::environment::tags::how_fast_this_goes_off`]. The name has to
+    /// be handed in because a `FoodData` does not carry one: it is the clock
+    /// on a stack, and the stack knows what it is called.
+    ///
+    /// Where it is kept is deliberately *not* in here. That is not a property
+    /// of the food, it is a property of the afternoon, and a thing taken out
+    /// of a pit is the same food it was in the pit.
+    pub fn how_fast_this_goes_off(&self, called: &str) -> f32 {
+        crate::environment::tags::how_fast_this_goes_off(
+            called,
+            self.preparation.what_this_leaves_it(),
+        )
+    }
 
-        if effective_spoilage_turns > 0 {
-            self.freshness = (1.0 - (elapsed as f32 / effective_spoilage_turns as f32)).max(0.0);
+    /// Let the world get at this until `now`, at the pace `how_fast` allows.
+    ///
+    /// `how_fast` is everything about the thing and everywhere it is:
+    /// what it is called, what has been done to it, and what it is being kept
+    /// in - the product of the lot, which is
+    /// [`crate::agents::InventoryItem::how_fast_this_goes_off`] for anything
+    /// that is a stack rather than a bare clock.
+    ///
+    /// **Not idempotent, unlike what it replaced.** It spends the time
+    /// between where the clock stood and `now`, so calling it twice in one
+    /// pass ages a thing twice. That is the price of being able to charge
+    /// different rates for different stretches, which is the entire point:
+    /// a season in the ground and a fortnight in a pack are not the same
+    /// fortnight reckoned twice.
+    pub fn goes_off(&mut self, now: u32, how_fast: f32) {
+        let over = now.saturating_sub(self.aged_up_to);
+        self.aged_up_to = self.aged_up_to.max(now);
+
+        if over == 0 || self.base_spoilage_turns == 0 || how_fast <= 0.0 {
+            return;
         }
+
+        let spent = over as f32 * how_fast / self.base_spoilage_turns as f32;
+        self.freshness = (self.freshness - spent).clamp(0.0, 1.0);
     }
 
     /// What a stack's clock becomes when fresh food is put on top of old.
@@ -542,6 +623,10 @@ impl FoodData {
             freshness,
             created_turn,
             base_spoilage_turns: self.base_spoilage_turns.min(other.base_spoilage_turns),
+            // The later of the two, because the blended freshness above is
+            // what the stack is worth *now* and charging it again for time
+            // one half has already been charged for would age it twice.
+            aged_up_to: self.aged_up_to.max(other.aged_up_to),
         }
     }
 
@@ -564,6 +649,9 @@ impl FoodData {
         self.created_turn = current_turn;
         // Freshness resets when food is prepared
         self.freshness = 1.0;
+        // And so does the clock, or the next pass would charge it for a
+        // stretch it has just been given back.
+        self.aged_up_to = current_turn;
     }
 }
 
@@ -955,6 +1043,18 @@ pub enum EatResult {
 mod tests {
     use super::*;
 
+    /// Let a bare clock run on to `until`, in a pack with nothing in it.
+    ///
+    /// The tests below are about the clock itself rather than about anywhere
+    /// in particular, so they take the rate the food's own condition sets and
+    /// nothing else. `""` is a thing nobody has tagged, which is what a bare
+    /// `FoodData` is: it has no name, because a name belongs to the stack and
+    /// not to the clock on it.
+    fn kept_in_nothing(food: &mut FoodData, until: u32) {
+        let how_fast = food.how_fast_this_goes_off("");
+        food.goes_off(until, how_fast);
+    }
+
     #[test]
     fn test_preparation_utilization() {
         assert!(PreparationState::Cooked.utilization_multiplier() >
@@ -1015,19 +1115,19 @@ mod tests {
         assert!(!food.is_spoiled());
 
         // Simulate 500 turns passing (50% fresh)
-        food.update_freshness(500);
+        kept_in_nothing(&mut food, 500);
         assert!((food.freshness - 0.5).abs() < 0.01);
         // At exactly 0.5, it's not > 0.5, so it's "Stale"
         assert_eq!(food.freshness_description(), "Stale");
 
         // Simulate 800 turns - should be spoiling (20% fresh)
-        food.update_freshness(800);
+        kept_in_nothing(&mut food, 800);
         assert!(food.freshness < 0.25);
         assert!(food.freshness > 0.1);
         assert_eq!(food.freshness_description(), "Spoiling");
 
         // Simulate 1000+ turns - should be spoiled
-        food.update_freshness(1100);
+        kept_in_nothing(&mut food, 1100);
         assert!(food.is_spoiled());
     }
 
@@ -1048,8 +1148,8 @@ mod tests {
         );
 
         // After 1000 turns, raw should be nearly spoiled
-        raw_food.update_freshness(1000);
-        dried_food.update_freshness(1000);
+        kept_in_nothing(&mut raw_food, 1000);
+        kept_in_nothing(&mut dried_food, 1000);
 
         // Dried food should still be mostly fresh (20x slower spoilage)
         assert!(dried_food.freshness > 0.9);
@@ -1143,7 +1243,7 @@ mod tests {
         assert!(honey.base_spoilage_turns > a_life * 2);
 
         let mut food = db.create_food_data(&ItemType::Honey, 0).unwrap();
-        food.update_freshness(a_life / 4);
+        kept_in_nothing(&mut food, a_life / 4);
 
         // Still fresh a couple of years on
         assert!(food.freshness > 0.9);

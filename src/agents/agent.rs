@@ -256,10 +256,36 @@ impl InventoryItem {
         self.food_data.as_ref().map(|f| f.is_spoiled()).unwrap_or(false)
     }
 
-    /// Update food freshness based on current turn
-    pub fn update_food_freshness(&mut self, current_turn: u32) {
+    /// How fast what is in this stack goes off, kept where it is being kept.
+    ///
+    /// Three things multiplied: what it is called, what has been done to it,
+    /// and where it is. The first two are the stack's own tags - see
+    /// [`crate::world::nutrition::FoodData::how_fast_this_goes_off`] - and the
+    /// third is handed in, because a stack does not know whether it is in a
+    /// pit, in a pot or lying in the rain.
+    ///
+    /// `where_it_is_kept` is a modifier on the same scale as everything else:
+    /// [`crate::environment::tags::WHAT_A_BARE_PACK_KEEPS`] changes nothing,
+    /// a lined pit is a quarter, and a thing lying out in weather is more
+    /// than one.
+    ///
+    /// One for anything with no clock on it, so a caller can ask of any stack.
+    pub fn how_fast_this_goes_off(&self, where_it_is_kept: f32) -> f32 {
+        match self.food_data {
+            Some(ref food) => food.how_fast_this_goes_off(&self.item_id) * where_it_is_kept,
+            None => where_it_is_kept,
+        }
+    }
+
+    /// Let the world get at this stack until `now`, kept where it is kept.
+    ///
+    /// Once per pass, and no more: see
+    /// [`crate::world::nutrition::FoodData::goes_off`].
+    pub fn goes_off(&mut self, now: u32, where_it_is_kept: f32) {
+        let how_fast = self.how_fast_this_goes_off(where_it_is_kept);
+
         if let Some(ref mut food) = self.food_data {
-            food.update_freshness(current_turn);
+            food.goes_off(now, how_fast);
         }
     }
 
@@ -5211,11 +5237,40 @@ impl Agent {
             (self.state.energy + reserve_delta * ENERGY_SYNC_RATE).clamp(0.0, 100.0);
     }
 
+    /// What this one's food is being kept in, and what that is worth.
+    ///
+    /// The best vessel they are carrying. A person keeps their dinner in the
+    /// best thing they have to keep it in, which is what anybody does: the pot
+    /// goes in the pack and the food goes in the pot.
+    ///
+    /// This is the reason a pot is worth firing for something other than
+    /// carrying water. Before it, a pack was the one place in the world where
+    /// nothing anybody made could make any difference to how long food kept -
+    /// so a settlement that had gone as far as stoneware carried its meat home
+    /// in exactly the state a settlement with nothing at all did.
+    ///
+    /// [`crate::environment::tags::WHAT_A_BARE_PACK_KEEPS`] for somebody
+    /// carrying no vessel, which is most people most of the time.
+    pub fn how_well_my_pack_keeps(&self) -> f32 {
+        crate::environment::tags::the_best_keeping_to_hand(&|called: &str| {
+            self.inventory
+                .get_item(called)
+                .map(|item| item.quantity)
+                .unwrap_or(0)
+        })
+    }
+
     /// Update food freshness in inventory and remove spoiled items
     pub fn turn_food_spoilage(&mut self, current_turn: u32) {
-        // Update freshness for all food items
+        // Food in a pack keeps as well as the best thing there is to keep it
+        // in. A bare pack is worth nothing and says so; a pot in the pack is
+        // worth half. The pot is not consumed by this and does not have to be
+        // - it is the thing the food is in, and it is still the thing the food
+        // is in tomorrow.
+        let kept_in = self.how_well_my_pack_keeps();
+
         for item in self.inventory.items.values_mut() {
-            item.update_food_freshness(current_turn);
+            item.goes_off(current_turn, kept_in);
         }
 
         // Remove completely spoiled food (freshness <= 0)
@@ -8081,7 +8136,7 @@ impl Agent {
                 // alone has somebody eat a crumb with an hour left in front of
                 // a good meal with a day, and a turn spent on a crumb is a
                 // turn.
-                let days_left = (food_data.how_long_this_has_left()
+                let days_left = (food_data.how_long_this_has_left(item_id)
                     / crate::environment::seasons::TICKS_PER_DAY as f32)
                     .floor() as u32;
 

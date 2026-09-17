@@ -386,9 +386,10 @@ fn what_is_left_out_goes_off_faster_than_what_is_carried() {
     for _ in 0..(2 * PLANNING_PERIODS_PER_DAY) {
         simulation.world.take_a_turn();
     }
-    if let Some(food) = in_the_pack.food_data.as_mut() {
-        food.update_freshness(simulation.world.turn);
-    }
+    in_the_pack.goes_off(
+        simulation.world.turn,
+        crate::environment::tags::WHAT_A_BARE_PACK_KEEPS,
+    );
 
     let out_in_the_rain = simulation
         .world

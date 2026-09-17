@@ -238,16 +238,7 @@ pub struct Dropped {
     pub where_it_is: Position,
     /// The turn it was left, which is what the weather counts from
     pub since: u32,
-    /// How much extra ageing the weather has done to it, over and above the
-    /// passing of time.
-    ///
-    /// Kept as its own count rather than by winding the food's `created_turn`
-    /// backwards, which was the first attempt and silently did nothing: a
-    /// thing dropped at turn zero has a `created_turn` of zero, and
-    /// `saturating_sub` on a `u32` at zero is a very quiet no-op.
-    #[serde(default)]
-    pub weathered: u32,
-    /// And how much sun it has had, which is the other thing the sky does to
+    /// How much sun it has had, which is the other thing the sky does to
     /// a thing lying in it.
     #[serde(default)]
     pub dried_in_the_sun: u32,
@@ -391,31 +382,73 @@ impl Pit {
         })
     }
 
-    /// One turn in this many is the only one that tells on what is buried
-    /// here.
+    /// What being kept in this hole does to how fast food in it goes off.
     ///
-    /// Bare earth is twice as long as a pack, which is what cool and dark are
-    /// worth on their own. Earth with a vessel between the food and the
-    /// ground is four times: what actually gets at buried food is the ground
-    /// itself, and a bowl or a basket in the way of it is the difference
-    /// between a store and a hole full of rot.
+    /// A modifier on the same scale as everything else that bears on keeping -
+    /// [`crate::environment::tags::WHAT_A_BARE_PACK_KEEPS`] changes nothing,
+    /// below that keeps, above it hastens.
     ///
-    /// The same number that ages what is in the pit and that answers how long
-    /// a thing would keep if it went in - see `how_long_this_would_keep`. Two
-    /// spellings of that would drift, and the second would be the one the
-    /// decision to bury was made on.
-    pub fn how_much_slower_things_age(&self) -> u32 {
-        if self.is_lined() {
-            Self::EARTH_WITH_SOMETHING_BETWEEN
-        } else {
-            Self::BARE_EARTH
+    /// Bare earth with the lid on is half, which is what cool and dark are
+    /// worth on their own. A vessel between the food and the ground is worth
+    /// what the vessel is worth, and multiplies: what actually gets at buried
+    /// food is the ground itself, and a bowl in the way of it is the
+    /// difference between a store and a hole full of rot. A bowl is a half,
+    /// so a lined pit is a quarter, which is what it has always been - and a
+    /// people who have got as far as firing pots now line their pits better
+    /// than a people who have got as far as carving bowls, which by a flat
+    /// number they could not.
+    ///
+    /// An **open** hole is a hole with food in it and keeps nothing: earth
+    /// back over the top is what does the work, and until it is there the
+    /// thing is out in the air like anything else.
+    ///
+    /// This is what is *happening* to what is in there. What a hole is worth
+    /// as somewhere to put something is `with_the_lid_on`, because covering
+    /// it is the next thing the person does and not a thing they might not
+    /// get round to.
+    pub fn how_fast_things_go_off_in_here(&self) -> f32 {
+        if !self.covered {
+            return crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
         }
+
+        self.with_the_lid_on()
     }
 
-    const BARE_EARTH: u32 = 2;
-    const EARTH_WITH_SOMETHING_BETWEEN: u32 = 4;
+    /// What this hole would be worth with the earth back over it.
+    ///
+    /// The one number, so that what ages the food and what the decision to
+    /// bury is made on cannot drift apart - two spellings of that, and the
+    /// second would be the one the decision was made on.
+    pub fn with_the_lid_on(&self) -> f32 {
+        Self::BARE_EARTH * self.what_it_is_lined_with()
+    }
+
+    /// What the best thing in here is worth as a lining.
+    ///
+    /// One - no better than bare earth - for a hole with no vessel in it.
+    /// Read off the one table of what keeps food, so a pit cannot come to a
+    /// different opinion of a basket than a pack does.
+    fn what_it_is_lined_with(&self) -> f32 {
+        crate::environment::tags::the_best_keeping_to_hand(&|called: &str| {
+            self.holds
+                .iter()
+                .filter(|item| item.item_id == called)
+                .map(|item| item.quantity)
+                .sum()
+        })
+    }
+
+    /// Cool, dark, and out of the weather: what a covered hole is worth before
+    /// anybody puts a vessel in it.
+    const BARE_EARTH: f32 = 0.5;
 
     /// How many days this would still be food for, if it went in here now.
+    ///
+    /// Reckoned **with the lid on**, because the question is what burying a
+    /// thing is worth and burying a thing means covering the hole afterwards.
+    /// Asked of the hole as it stands, a freshly dug pit is worth nothing and
+    /// nobody would ever fill one, which is a decision made on the state of
+    /// the world half a turn before the state it is being made about.
     ///
     /// What is left of its own clock, at the pace this hole lets it run. The
     /// question nobody was asking: **a settlement buried 512 units a year and
@@ -435,9 +468,14 @@ impl Pit {
 
         // What is left of its own clock - see `FoodData::how_long_this_has_left`
         // - at the pace this hole lets it run.
-        let left = food.how_long_this_has_left();
+        let left = food.how_long_this_has_left(&item.item_id);
+        let in_here = self.with_the_lid_on();
 
-        Some(left * self.how_much_slower_things_age() as f32 / TICKS_PER_DAY as f32)
+        if in_here <= 0.0 {
+            return None;
+        }
+
+        Some(left / in_here / TICKS_PER_DAY as f32)
     }
 
     /// Take some of a thing out.
@@ -721,7 +759,6 @@ impl World {
             item,
             where_it_is,
             since: turn,
-            weathered: 0,
             dried_in_the_sun: 0,
         });
     }
@@ -774,46 +811,36 @@ impl World {
     /// Everything else weathers away in its own time.
     /// Cold ground with the earth back over it keeps food.
     ///
-    /// `FoodData::update_freshness` works off elapsed time since the thing was
-    /// made, so the way to make a pit keep something is to hold that clock
-    /// back: on three turns in every four the buried food's `created_turn` is
-    /// pushed forward with the world, so a season underground costs it what a
-    /// fortnight in a pack would. An open pit is a hole with food in it and
-    /// keeps nothing at all.
+    /// What is in a hole goes off at the pace the hole allows, which is
+    /// `Pit::how_fast_things_go_off_in_here` and nothing else - bare earth is
+    /// a half, a lined pit a quarter, and an open hole is a hole with food in
+    /// it and keeps nothing.
     ///
-    /// **Both halves of that are counted in turns, not ticks.** The hold-back
-    /// pushed `created_turn` on by one and the ratio asked `now % 2`, which
-    /// were the same thing while a step was a tick. Once a step became thirty
-    /// ticks the pit gave back a thirtieth of the time it took away - so a
-    /// buried meal and a carried one came out of two days at the same 0.83 -
-    /// and `now % 2` was true at every step, so bare earth never held anything
-    /// back at all. A turn's worth of clock, once every turn that is not an
-    /// ageing one.
+    /// **This used to be done by winding the food's own clock backwards**,
+    /// because freshness was derived from the turn a thing was made and there
+    /// was no other way to slow it down: on three turns in four the buried
+    /// food's `created_turn` was pushed forward with the world. Two units met
+    /// in that sentence and neither was named. The hold-back pushed the clock
+    /// on by one tick and the cadence asked `now % 2`, which were the same
+    /// thing while a step was a tick; once a step became thirty, a pit gave
+    /// back a thirtieth of what it took - a buried meal and a carried one came
+    /// out of two days at the same 0.83 - and `now % 2` was true at every
+    /// step, so bare earth held nothing back at all.
+    ///
+    /// A rate cannot have that defect. There is no cadence to get out of step
+    /// with and no second clock to wind: the hole is a number, the food is a
+    /// number, and the time that passed is the time that passed.
     ///
     /// What has gone off in there rots away like anything else.
     fn what_is_buried_keeps(&mut self) {
         let now = self.turn;
-        let this_turn = now / crate::environment::seasons::TICKS_BETWEEN_PLANS;
         let mut buried_and_lost = 0u64;
 
         for pit in self.pits.iter_mut() {
-            // Bare earth is cool and dark and keeps a thing rather better
-            // than a pack does. Earth with a vessel in it keeps it better
-            // again: what actually gets at buried food is the ground itself -
-            // damp, and everything that lives in it - and a bowl or a basket
-            // between the two is the difference between a store and a hole
-            // full of rot.
-            let ageing = this_turn % pit.how_much_slower_things_age() as u32 == 0;
+            let in_here = pit.how_fast_things_go_off_in_here();
 
             for item in pit.holds.iter_mut() {
-                if let Some(food) = item.food_data.as_mut() {
-                    if pit.covered && !ageing {
-                        food.created_turn = food
-                            .created_turn
-                            .saturating_add(crate::environment::seasons::TICKS_BETWEEN_PLANS);
-                    }
-                    food.update_freshness(now);
-                }
+                item.goes_off(now, in_here);
             }
 
             pit.holds.retain(|item| {
@@ -998,6 +1025,12 @@ impl World {
             let thin_enough_to_dry = Self::will_this_dry(&left.item.item_id);
             let drying = sunny && thin_enough_to_dry && !sheltered;
 
+            // What the sky is worth as somewhere to keep a thing, on the same
+            // scale as a pack or a pit: one changes nothing, and lying out in
+            // weather is worse than one. A day spent drying is a day the sky
+            // is doing something else, and costs no more than a day in a pack.
+            let mut out_in_it = crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
+
             if drying {
                 left.dried_in_the_sun += Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
             } else {
@@ -1021,13 +1054,9 @@ impl World {
                 // range with a thunderstorm.
                 let shade = Self::WHAT_SHADE_ADDS as f32;
                 let worst = Self::WHAT_THE_WEATHER_ADDS as f32;
-                let adds = shade + (worst - shade) * in_the_open.clamp(0.0, 1.0);
 
-                left.weathered +=
-                    ((adds - 1.0) * Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT as f32) as u32;
+                out_in_it = shade + (worst - shade) * in_the_open.clamp(0.0, 1.0);
             }
-
-            let weathered = left.weathered;
 
             // How long it has to lie there is a question about how small it
             // was cut. This was one flat number for everything, so a joint
@@ -1037,6 +1066,12 @@ impl World {
                 >= crate::world::nutrition::Piece::of(&left.item.item_id)
                     .how_long_it_takes_to_dry();
 
+            // The sun's work is done before the weather's is charged, so that
+            // the day a thing dries through is the first day it keeps like a
+            // dried thing. `set_preparation` puts the clock at `now`, which
+            // leaves nothing for the pass below to spend - the change of tag
+            // takes effect from the moment it happens and does not reach
+            // backwards over the fortnight it spent turning in the rain.
             if let Some(food) = left.item.food_data.as_mut() {
                 if long_enough && food.preparation == crate::world::nutrition::PreparationState::Raw
                 {
@@ -1046,9 +1081,9 @@ impl World {
                     );
                     dried.push((left.where_it_is, left.item.item_id.clone()));
                 }
-
-                food.update_freshness(now + weathered);
             }
+
+            left.item.goes_off(now, out_in_it);
         }
 
         self.what_dried_in_the_sun.extend(dried);

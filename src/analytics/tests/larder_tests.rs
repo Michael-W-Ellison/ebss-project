@@ -273,9 +273,10 @@ fn what_is_buried_outlasts_what_is_carried() {
     for _ in 0..(2 * PLANNING_PERIODS_PER_DAY) {
         simulation.world.take_a_turn();
     }
-    if let Some(food) = in_the_pack.food_data.as_mut() {
-        food.update_freshness(simulation.world.turn);
-    }
+    in_the_pack.goes_off(
+        simulation.world.turn,
+        crate::environment::tags::WHAT_A_BARE_PACK_KEEPS,
+    );
 
     let buried = simulation
         .world
@@ -1716,5 +1717,239 @@ fn nobody_puts_anything_down_who_does_not_have_to() {
         simulation.population.agents[0].how_many_i_have("wood"),
         before,
         "there was room for it"
+    );
+}
+
+// --------------------------------------------------------------------------
+// Where a thing is kept, as a rate
+// --------------------------------------------------------------------------
+
+/// A hole is a number on the same scale as everything else that keeps food.
+///
+/// Bare earth with the lid on is a half; a vessel between the food and the
+/// ground multiplies by what the vessel is worth; an open hole is a hole with
+/// food in it and keeps nothing.
+#[test]
+fn a_covered_hole_is_a_half_and_a_lined_one_is_a_quarter() {
+    use crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
+
+    let hole = |covered: bool, lining: Option<&str>| {
+        let mut pit = Pit {
+            where_it_is: Position::new(0, 0),
+            holds: Vec::new(),
+            covered,
+            dug: 0,
+            belongs: crate::world::Belongs::ToNobody,
+        };
+        if let Some(what) = lining {
+            pit.put_in(InventoryItem::new_with_weight(what.to_string(), 1, 1.0));
+        }
+        pit.how_fast_things_go_off_in_here()
+    };
+
+    assert_eq!(hole(true, None), 0.5, "cool and dark is worth a half");
+    assert_eq!(hole(true, Some("bowl")), 0.25, "and a bowl halves it again");
+    assert_eq!(
+        hole(false, Some("bowl")),
+        WHAT_A_BARE_PACK_KEEPS,
+        "an open hole is a hole with food in it, lined or not"
+    );
+
+    // But what a hole is *worth* is what it is worth covered, because
+    // covering it is the next thing the person does. Asked of the hole as it
+    // stands, a freshly dug pit is worth nothing and nobody would fill one.
+    let mut freshly_dug = Pit {
+        where_it_is: Position::new(0, 0),
+        holds: Vec::new(),
+        covered: false,
+        dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
+    };
+    freshly_dug.put_in(InventoryItem::new_with_weight("bowl".to_string(), 1, 1.0));
+
+    assert_eq!(
+        freshly_dug.with_the_lid_on(),
+        0.25,
+        "the decision to bury is made on what the hole will be, not on what \
+         it is with the earth still beside it"
+    );
+}
+
+/// The ladder runs through the hole: a better vessel is a better larder.
+///
+/// This is what a declared modifier buys that a flat `is_it_lined` could not.
+/// A settlement that has got as far as firing pots lines its pits better than
+/// one that has got as far as carving bowls, and better again once it can
+/// seal them - so the pottery chain pays for itself in the store as well as
+/// at the water's edge.
+#[test]
+fn a_better_vessel_makes_a_better_larder() {
+    let lined_with = |what: &str| {
+        let mut pit = Pit {
+            where_it_is: Position::new(0, 0),
+            holds: Vec::new(),
+            covered: true,
+            dug: 0,
+            belongs: crate::world::Belongs::ToNobody,
+        };
+        pit.put_in(InventoryItem::new_with_weight(what.to_string(), 1, 1.0));
+        pit.how_fast_things_go_off_in_here()
+    };
+
+    assert!(
+        lined_with("stoneware") < lined_with("claypot"),
+        "sealed fired earth is the best of them"
+    );
+    assert!(
+        lined_with("claypot") < lined_with("basket"),
+        "and a lattice is the worst"
+    );
+}
+
+/// The clock is spent as it goes, not re-reckoned from the beginning.
+///
+/// **What the whole conversion is for.** A thing that spends a fortnight in
+/// the ground and then a fortnight in a pack has had a cheap fortnight and a
+/// dear one, and must come out worse than one that had two cheap fortnights
+/// and better than one that had two dear ones. Under the model this replaced
+/// freshness was derived from the turn a thing was made, so the *current*
+/// rate was applied to the whole of its history: taking a thing out of a pit
+/// retroactively un-buried it.
+#[test]
+fn moving_a_thing_out_of_the_ground_does_not_reach_backwards() {
+    use crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
+
+    // Berries keep twelve days in a pack, so the two stretches have to be
+    // short enough that there is anything left of the worst of the three to
+    // compare. Three all reading nought is not an ordering.
+    let a_stretch = 4 * TICKS_PER_DAY;
+    let in_the_ground = 0.5;
+
+    let mut all_buried = supper(10, 0);
+    let mut all_carried = supper(10, 0);
+    let mut buried_then_carried = supper(10, 0);
+
+    all_buried.goes_off(a_stretch, in_the_ground);
+    all_buried.goes_off(a_stretch * 2, in_the_ground);
+
+    all_carried.goes_off(a_stretch, WHAT_A_BARE_PACK_KEEPS);
+    all_carried.goes_off(a_stretch * 2, WHAT_A_BARE_PACK_KEEPS);
+
+    buried_then_carried.goes_off(a_stretch, in_the_ground);
+    buried_then_carried.goes_off(a_stretch * 2, WHAT_A_BARE_PACK_KEEPS);
+
+    let freshness = |item: &InventoryItem| item.food_data.as_ref().unwrap().freshness;
+
+    assert!(
+        freshness(&all_buried) > freshness(&buried_then_carried),
+        "eight days in the ground beats four of them: {} against {}",
+        freshness(&all_buried),
+        freshness(&buried_then_carried)
+    );
+    assert!(
+        freshness(&buried_then_carried) > freshness(&all_carried),
+        "and four days in the ground are worth having: {} against {}",
+        freshness(&buried_then_carried),
+        freshness(&all_carried)
+    );
+}
+
+/// The same, for a change of tag rather than a change of place.
+///
+/// Drying a thing takes effect from the moment the sun has finished with it.
+/// It does not pay back the fortnight the thing spent turning beforehand, and
+/// it does not have to be told about the pit it is then put in.
+#[test]
+fn drying_a_thing_changes_the_rate_from_then_on_and_no_further_back() {
+    use crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
+    use crate::world::nutrition::PreparationState;
+
+    let a_stretch = 4 * TICKS_PER_DAY;
+
+    let mut left_out = supper(10, 0);
+    let mut dried_late = supper(10, 0);
+
+    // Both spend four days going off in a pack.
+    left_out.goes_off(a_stretch, WHAT_A_BARE_PACK_KEEPS);
+    dried_late.goes_off(a_stretch, WHAT_A_BARE_PACK_KEEPS);
+
+    let after_a_stretch = dried_late.food_data.as_ref().unwrap().freshness;
+    assert!(after_a_stretch < 1.0, "four days tell on a berry");
+
+    // Then one of them is dried, and both spend another four days.
+    dried_late
+        .food_data
+        .as_mut()
+        .unwrap()
+        .set_preparation(PreparationState::Dried, a_stretch);
+
+    left_out.goes_off(a_stretch * 2, WHAT_A_BARE_PACK_KEEPS);
+    dried_late.goes_off(a_stretch * 2, WHAT_A_BARE_PACK_KEEPS);
+
+    let dried = dried_late.food_data.as_ref().unwrap();
+    let wet = left_out.food_data.as_ref().unwrap();
+
+    assert!(
+        dried.freshness > wet.freshness,
+        "drying it should have told: {} against {}",
+        dried.freshness,
+        wet.freshness
+    );
+
+    // Nothing had to be told the rate changed - it is read off the tags.
+    assert!(
+        dried_late.how_fast_this_goes_off(WHAT_A_BARE_PACK_KEEPS)
+            < left_out.how_fast_this_goes_off(WHAT_A_BARE_PACK_KEEPS),
+        "the rate follows the tag without anybody carrying the news"
+    );
+}
+
+/// A pot in the pack is a pot the food goes in.
+///
+/// Before this, a pack was the one place in the world where nothing anybody
+/// made could make any difference to how long food kept: a settlement that
+/// had got as far as stoneware carried its meat home in the same state as one
+/// with nothing at all.
+#[test]
+fn what_is_carried_in_a_pot_keeps_better_than_what_is_carried_loose() {
+    use crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
+
+    let mut simulation = a_digger();
+    let agent = &mut simulation.population.agents[0];
+
+    assert_eq!(
+        agent.how_well_my_pack_keeps(),
+        WHAT_A_BARE_PACK_KEEPS,
+        "a bare pack keeps nothing, and says so"
+    );
+
+    let _ = agent
+        .inventory
+        .add_item(InventoryItem::new_with_weight("claypot".to_string(), 1, 2.0));
+
+    assert!(
+        agent.how_well_my_pack_keeps() < WHAT_A_BARE_PACK_KEEPS,
+        "the pot goes in the pack and the food goes in the pot"
+    );
+
+    // And the pack's whole spoilage pass reads it, so a stack in there is
+    // actually kept better rather than merely being asked about.
+    let _ = agent.inventory.add_item(supper(10, 0));
+    agent.turn_food_spoilage(6 * TICKS_PER_DAY);
+
+    let in_a_pot = agent
+        .inventory
+        .get_item("food")
+        .and_then(|item| item.food_data.as_ref())
+        .map(|food| food.freshness)
+        .expect("the berries are still in the pack");
+
+    let mut loose = supper(10, 0);
+    loose.goes_off(6 * TICKS_PER_DAY, WHAT_A_BARE_PACK_KEEPS);
+    let carried_loose = loose.food_data.as_ref().unwrap().freshness;
+
+    assert!(
+        in_a_pot > carried_loose,
+        "six days in a pot should beat six days loose: {in_a_pot} against {carried_loose}"
     );
 }

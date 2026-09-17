@@ -143,12 +143,12 @@ fn what_is_nearest_to_going_is_what_gets_eaten() {
         .food_data
         .as_ref()
         .expect("berries have a clock")
-        .how_long_this_has_left();
+        .how_long_this_has_left(&going.item_id);
     let meat_has = keeps
         .food_data
         .as_ref()
         .expect("meat has a clock")
-        .how_long_this_has_left();
+        .how_long_this_has_left(&keeps.item_id);
 
     assert!(
         berries_have < meat_has,
