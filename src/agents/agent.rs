@@ -1554,6 +1554,43 @@ impl AgentState {
         self.turns_without_water = minutes;
     }
 
+    /// How long this undertaking holds somebody, in ticks.
+    ///
+    /// The verb matrix already prices every action - `Costs { time, effort }`
+    /// on each verb, added up over the verbs an action always performs by
+    /// `verbs::what_this_action_costs`. That function was written, documented
+    /// and tested, and had no caller outside its own test until this one. It
+    /// is what decides how many planning periods an agent walks past.
+    ///
+    /// `time` is counted in periods, because that is the grain the costs were
+    /// written at: `A_TURN_OF_WORK` is one turn of work. A period is
+    /// `TICKS_BETWEEN_PLANS` ticks, so the conversion is the multiplication
+    /// below and nothing more.
+    ///
+    /// Sleeping is the exception and says its own length. It is the case the
+    /// specification calls out - "these could be skipped when an agent is
+    /// resting" - and the only action in the model that already carried a
+    /// duration.
+    ///
+    /// Never less than one period. An action that finished inside a period
+    /// would let its agent think twice at the same gate, which is the thing
+    /// the gate exists to stop.
+    pub fn how_long_this_takes(action: &Action) -> u32 {
+        use crate::environment::seasons::TICKS_BETWEEN_PLANS;
+
+        if let Action::Sleep { duration } = action {
+            return (*duration).max(1) * TICKS_BETWEEN_PLANS;
+        }
+
+        let named = Agent::what_was_tried(action);
+        let named = named.split(':').next().unwrap_or(&named);
+        let periods = crate::environment::verbs::what_this_action_costs(named)
+            .time
+            .max(1.0);
+
+        (periods * TICKS_BETWEEN_PLANS as f32).round() as u32
+    }
+
     /// What share of itself this body can bring to anything.
     ///
     /// A quarter comes off at each of three-quarters, half and a quarter of a
@@ -1590,6 +1627,25 @@ pub struct Agent {
     /// alone, every turn, from four places.
     #[serde(default)]
     pub hands_full_of_child: bool,
+
+    /// The tick this one is free to think again.
+    ///
+    /// "Once an agent plans an action, it would not change its mind unless its
+    /// situation changed in some manner." A planning period is a *gate* on
+    /// deciding rather than a unit of doing: somebody who sets out on a hunt
+    /// reckoned at 145 ticks walks past the gates at 30, 60, 90 and 120
+    /// without looking up, and stops to think again at 150.
+    ///
+    /// The quantising is deliberate and costs something. A plan that finishes
+    /// at 105 leaves its agent idle from 105 to 120, because thinking happens
+    /// at the gate or not at all. That waste is what buys the saving: the
+    /// alternative is asking every agent what it wants every minute, which was
+    /// measured at thirty times the compute for the same simulated year.
+    ///
+    /// Zero means free, which is true of a newly made body at tick zero,
+    /// because the test is `busy_until > now` rather than `>=`.
+    #[serde(default)]
+    pub busy_until: u32,
 
     pub state: AgentState,
     pub drives: DriveState,
@@ -1762,6 +1818,7 @@ impl Agent {
         let mut agent = Self {
             id: crate::core::dice::name(),
             hands_full_of_child: false,
+            busy_until: 0,
             state: AgentState::new(),
             drives: if config.random_weights {
                 DriveState::with_random_weights()

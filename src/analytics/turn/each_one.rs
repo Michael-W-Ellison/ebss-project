@@ -132,6 +132,34 @@ impl Simulation {
                 return;
             }
 
+            // Somebody in the middle of something does not stop to think.
+            //
+            // "Once an agent plans an action, it would not change its mind
+            // unless its situation changed in some manner." A planning period
+            // is a gate on deciding, not a unit of doing: an agent who set out
+            // on something reckoned at 145 ticks walks past the gates at 30,
+            // 60, 90 and 120 and thinks again at 150. See `Agent::busy_until`
+            // for what that quantising costs and buys.
+            //
+            // Danger is the carve-out the specification makes, and it takes
+            // the plan with it: "This does not apply if an agent encounters a
+            // dangerous situation, as they must then make decisions minute by
+            // minute." A man who has just seen a wolf is no longer walking to
+            // the hedgerow, so the undertaking is abandoned rather than merely
+            // interrupted - otherwise he would go back to it the moment the
+            // wolf left, having learnt nothing from the last half hour. The
+            // minute-by-minute loop in `everybody_takes_a_turn` reaches this
+            // function again on the same tick, and has to find him free.
+            {
+                let now = self.current_turn;
+                let agent = &mut self.population.agents[agent_index];
+                if agent.emotions.in_danger() {
+                    agent.busy_until = 0;
+                } else if agent.busy_until > now {
+                    return;
+                }
+            }
+
             // What is pressing hardest, and where this one is standing.
             let (drive_type, drive_value, agent_position) = {
                 let agent = &self.population.agents[agent_index];
@@ -188,6 +216,19 @@ impl Simulation {
             );
 
             let action_result = self.execute_action(&action, agent_index);
+
+            // And now he is busy with it until it is done.
+            //
+            // Set from what the verb matrix says the action costs - see
+            // `AgentState::how_long_this_takes` - so that a longer undertaking
+            // holds him past more gates. Anything of a single period leaves
+            // him free at the next one, which is what everything cost before
+            // this existed and what most things still cost.
+            {
+                let takes = crate::agents::AgentState::how_long_this_takes(&action);
+                let now = self.current_turn;
+                self.population.agents[agent_index].busy_until = now + takes;
+            }
 
             self.what_came_of_it(
                 &action,
