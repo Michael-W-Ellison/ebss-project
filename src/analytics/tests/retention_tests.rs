@@ -21,7 +21,7 @@
 use crate::core::memory::{
     HowIKnow, HowSteady, Memory, SpatialMemory, SpatialMemoryType,
 };
-use crate::environment::seasons::{DAYS_PER_YEAR, TICKS_PER_DAY};
+use crate::environment::seasons::{DAYS_PER_YEAR, PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 
 /// A named place of the given standing, so the importance band is Normal and
 /// the footing is the only thing under test.
@@ -40,7 +40,7 @@ fn a_place_known(how_i_know: HowIKnow, how_steady: HowSteady) -> SpatialMemory {
 fn days_until_forgotten(mut place: SpatialMemory) -> u32 {
     let mut days = 0;
     while place.confidence > 0.3 {
-        place.forget_a_little(TICKS_PER_DAY);
+        place.forget_a_little(PLANNING_PERIODS_PER_DAY);
         days += 1;
         if days > DAYS_PER_YEAR * 12 {
             panic!("a place that is never forgotten at all");

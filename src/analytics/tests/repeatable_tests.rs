@@ -148,7 +148,7 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // year contains and where the people in it are standing.
     const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 804_474;
 
-    let a_year = (DAYS_PER_YEAR * TICKS_PER_DAY) as usize;
+    let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
 
     assert_eq!(

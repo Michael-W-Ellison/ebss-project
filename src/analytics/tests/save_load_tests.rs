@@ -84,7 +84,7 @@ fn test_loaded_simulation_can_resume() {
         sim.take_a_turn();
     }
 
-    assert_eq!(sim.current_turn, 10);
+    assert_eq!(sim.current_turn, 10 * crate::environment::seasons::TICKS_BETWEEN_PLANS);
 
     sim.save(&save_path).unwrap();
 
@@ -247,7 +247,7 @@ fn test_multiple_save_load_cycles() {
     }
     sim.save(&save_path).unwrap();
     let mut sim = Simulation::load(&save_path).unwrap();
-    assert_eq!(sim.current_turn, 5);
+    assert_eq!(sim.current_turn, 5 * crate::environment::seasons::TICKS_BETWEEN_PLANS);
 
     // Cycle 2: Run 5 more turns, save, load
     for _ in 0..5 {
@@ -255,14 +255,14 @@ fn test_multiple_save_load_cycles() {
     }
     sim.save(&save_path).unwrap();
     let mut sim = Simulation::load(&save_path).unwrap();
-    assert_eq!(sim.current_turn, 10);
+    assert_eq!(sim.current_turn, 10 * crate::environment::seasons::TICKS_BETWEEN_PLANS);
 
     // Cycle 3: Run 10 more turns
     for _ in 0..10 {
         sim.take_a_turn();
     }
 
-    assert_eq!(sim.current_turn, 20);
+    assert_eq!(sim.current_turn, 20 * crate::environment::seasons::TICKS_BETWEEN_PLANS);
 }
 
 #[test]

@@ -396,7 +396,7 @@ fn the_world_advances_once_per_turn() {
 
     assert_eq!(
         simulation.world.turn - before,
-        50,
+        50 * crate::environment::seasons::TICKS_BETWEEN_PLANS,
         "the world should advance one turn per simulation turn"
     );
 }

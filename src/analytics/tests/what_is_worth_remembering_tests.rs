@@ -23,7 +23,7 @@ fn the_store_outlasts_the_winter_it_was_laid_down_for() {
     let lean = crate::agents::provision::how_long_the_land_gives_nothing();
     let mut buried = SpatialMemory::new(SpatialMemoryType::Storage, (10, 10, 0), 0);
 
-    buried.forget_a_little(lean * TICKS_PER_DAY);
+    buried.forget_a_little(lean * PLANNING_PERIODS_PER_DAY);
 
     assert!(
         buried.confidence > 0.3,
@@ -38,7 +38,7 @@ fn the_store_outlasts_the_winter_it_was_laid_down_for() {
 fn a_bush_somebody_walked_past_is_forgotten_in_a_fortnight() {
     let mut noticed = SpatialMemory::new(SpatialMemoryType::Food, (10, 10, 0), 0);
 
-    noticed.forget_a_little(10 * TICKS_PER_DAY);
+    noticed.forget_a_little(10 * PLANNING_PERIODS_PER_DAY);
     assert!(
         noticed.confidence > 0.3,
         "ten days is not long enough to forget a berry patch: {:.2}",

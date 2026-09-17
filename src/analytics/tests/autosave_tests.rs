@@ -153,7 +153,7 @@ fn test_autosave_checkpoint_can_be_loaded() {
     // Load from checkpoint
     let loaded_sim = Simulation::load(&checkpoint_files[0]).expect("Failed to load checkpoint");
 
-    assert_eq!(loaded_sim.current_turn, 5);
+    assert_eq!(loaded_sim.current_turn, 5 * crate::environment::seasons::TICKS_BETWEEN_PLANS);
     assert_eq!(loaded_sim.population.agents.len(), 3);
 }
 
@@ -186,7 +186,7 @@ fn test_get_latest_checkpoint() {
 
     // Load it and verify it's the latest
     let loaded_sim = Simulation::load(&latest).unwrap();
-    assert_eq!(loaded_sim.current_turn, 12);
+    assert_eq!(loaded_sim.current_turn, 12 * crate::environment::seasons::TICKS_BETWEEN_PLANS);
 }
 
 #[test]
@@ -257,5 +257,5 @@ fn test_autosave_cleanup_old_checkpoints() {
     // Verify they are the most recent (turns 4 and 5)
     let latest = Simulation::get_latest_checkpoint(&save_dir).unwrap();
     let loaded = Simulation::load(&latest).unwrap();
-    assert_eq!(loaded.current_turn, 5);
+    assert_eq!(loaded.current_turn, 5 * crate::environment::seasons::TICKS_BETWEEN_PLANS);
 }

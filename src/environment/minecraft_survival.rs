@@ -778,7 +778,10 @@ mod tests {
 
         let initial_turn = plugin.world_state.turn;
         plugin.take_a_turn();
-        assert_eq!(plugin.world_state.turn, initial_turn + 1);
+        assert_eq!(
+            plugin.world_state.turn,
+            initial_turn + crate::environment::seasons::TICKS_BETWEEN_PLANS as u64
+        );
     }
 
     #[test]

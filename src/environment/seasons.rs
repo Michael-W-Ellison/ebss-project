@@ -887,11 +887,11 @@ mod calendar_tests {
         assert_eq!(TICKS_PER_YEAR, TICKS_PER_DAY * DAYS_PER_YEAR);
         assert_eq!(
             crate::agents::physiology::MINUTES_PER_TURN,
-            MINUTES_PER_DAY / TICKS_PER_DAY,
+            MINUTES_PER_DAY / PLANNING_PERIODS_PER_DAY,
             "a turn is however many minutes a day holds divided by the turns in it"
         );
         assert_eq!(
-            crate::agents::physiology::MINUTES_PER_TURN * TICKS_PER_DAY,
+            crate::agents::physiology::MINUTES_PER_TURN * PLANNING_PERIODS_PER_DAY,
             MINUTES_PER_DAY,
             "and the turns in a day cover the whole of it"
         );

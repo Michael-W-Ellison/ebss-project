@@ -275,7 +275,7 @@ mod tests {
         assert_eq!(state.time_of_day, 0.0);
 
         state.advance_turn(0.01);
-        assert_eq!(state.turn, 1);
+        assert_eq!(state.turn, crate::environment::seasons::TICKS_BETWEEN_PLANS as u64);
         assert_eq!(state.time_of_day, 0.01);
     }
 
