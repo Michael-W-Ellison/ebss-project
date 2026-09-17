@@ -1517,7 +1517,9 @@ mod tests {
         // A season of it. This function runs for every nearby pair every
         // turn, so it is a rate: ten turns is under a day, and a day of
         // disagreeing about God should not undo a friendship.
-        for _ in 0..288 {
+        for _ in 0..(crate::environment::seasons::DAYS_PER_SEASON
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY)
+        {
             rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
         }
 
@@ -1543,7 +1545,9 @@ mod tests {
         let initial_strength = rel.bond_strength;
 
         // A season of each other's company
-        for _ in 0..288 {
+        for _ in 0..(crate::environment::seasons::DAYS_PER_SEASON
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY)
+        {
             rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
         }
 
@@ -1753,8 +1757,16 @@ mod tests {
         let mut rel = Relationship::new(other_id, RelationshipType::Acquaintance);
 
         // A season of being thrown together with somebody who is wrong about
-        // God, wrong about the truth, and wrong about whether to hit people
-        for _ in 0..288 {
+        // God, wrong about the truth, and wrong about whether to hit people.
+        //
+        // Said as a season rather than as `288`. That was a season when this
+        // file kept its own `TICKS_PER_DAY = 12.0`, and six days once the
+        // model went to forty-eight turns in a day - so the run was a
+        // twelfth of what the comment beside it claimed, and the rate was
+        // tuned to make a fortnight's worth of it come out as a season's.
+        for _ in 0..(crate::environment::seasons::DAYS_PER_SEASON
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY)
+        {
             rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
         }
 
