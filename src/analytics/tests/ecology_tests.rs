@@ -867,7 +867,7 @@ fn a_trapped_out_ground_comes_back_and_a_full_one_holds() {
     );
     assert_eq!(worked.here(ground).grazers, 0.0, "and it is empty now");
 
-    for _ in 0..(2 * crate::environment::seasons::TICKS_PER_YEAR) {
+    for _ in 0..(2 * crate::environment::seasons::PLANNING_PERIODS_PER_YEAR) {
         worked.turn_a_ground(ground, would_carry, 0.0, 1.0);
     }
     let back = worked.here(ground).grazers;
