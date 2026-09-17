@@ -562,7 +562,7 @@ fn a_settlement_asks_and_answers_questions_on_its_own() {
     }
     let mut simulation = Simulation::new(world, population);
 
-    for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 90) {
+    for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_DAY * 90) {
         simulation.take_a_turn();
         if !simulation.population.agents.iter().any(|a| a.state.is_alive) {
             break;

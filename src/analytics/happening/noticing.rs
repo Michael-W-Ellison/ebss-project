@@ -549,7 +549,7 @@ impl Simulation {
     /// something that happened, short enough that somebody who left it there
     /// on purpose is still about to see it.
     pub(in crate::analytics) const HOW_LONG_THE_FIRE_TAKES_TO_HARDEN_IT: u32 =
-        crate::environment::seasons::TURNS_PER_DAY;
+        crate::environment::seasons::TICKS_PER_DAY;
 
     pub(in crate::analytics) fn what_the_embers_did(&mut self) {
         use rand::Rng;
@@ -616,7 +616,7 @@ impl Simulation {
     }
 
     /// How often anybody's fire is asked about.
-    pub(in crate::analytics) const HOW_OFTEN_THE_EMBERS_ARE_ASKED: u32 = crate::environment::seasons::TURNS_PER_DAY;
+    pub(in crate::analytics) const HOW_OFTEN_THE_EMBERS_ARE_ASKED: u32 = crate::environment::seasons::TICKS_PER_DAY;
 
     /// And how often a day at a fire with clay in the pack costs a lump of it.
     ///

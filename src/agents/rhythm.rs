@@ -42,7 +42,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::environment::seasons::TURNS_PER_DAY;
+use crate::environment::seasons::TICKS_PER_DAY;
 
 /// How often one agent does one thing, and the evidence it has for that.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,7 +71,7 @@ impl Rhythm {
     /// Past this a man has not got a rhythm, he has forgotten about it, and
     /// whether the thing is worth doing at all is a question `Lessons`
     /// answers rather than this.
-    pub const THE_LONGEST_ANYBODY_LEAVES_IT: u32 = 7 * TURNS_PER_DAY;
+    pub const THE_LONGEST_ANYBODY_LEAVES_IT: u32 = 7 * TICKS_PER_DAY;
 
     /// And the shortest: a round in the morning.
     ///
@@ -79,14 +79,14 @@ impl Rhythm {
     /// snares time to catch anything and spends a second turn finding that
     /// out, and the floor says so rather than making the agent discover it
     /// the expensive way.
-    pub const THE_SHORTEST_ANYBODY_LEAVES_IT: u32 = TURNS_PER_DAY;
+    pub const THE_SHORTEST_ANYBODY_LEAVES_IT: u32 = TICKS_PER_DAY;
 
     /// Where a rhythm starts before anything is known about it.
     ///
     /// Deliberately in the middle and deliberately wrong: an agent that
     /// started at the answer would not be discovering anything, and the
     /// measurement below would say nothing about whether the search works.
-    pub const WHAT_A_BODY_GUESSES_FIRST: u32 = 3 * TURNS_PER_DAY;
+    pub const WHAT_A_BODY_GUESSES_FIRST: u32 = 3 * TICKS_PER_DAY;
 
     /// How many doings it takes before a rhythm may be judged.
     ///

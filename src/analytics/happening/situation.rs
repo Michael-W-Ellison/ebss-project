@@ -405,7 +405,7 @@ impl Simulation {
 
         let season = self.world.climate.current_season();
         let day_of_year = (self.current_turn
-            / crate::environment::seasons::TURNS_PER_DAY)
+            / crate::environment::seasons::TICKS_PER_DAY)
             % crate::environment::seasons::DAYS_PER_YEAR;
 
         let in_the_ground: f32 = self

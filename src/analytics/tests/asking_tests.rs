@@ -302,7 +302,7 @@ fn clay_left_at_a_fire_comes_out_hard() {
         0,
     );
 
-    simulation.current_turn = crate::environment::seasons::TURNS_PER_DAY * 2;
+    simulation.current_turn = crate::environment::seasons::TICKS_PER_DAY * 2;
     simulation.what_the_fire_hardened();
 
     let lying = simulation.world.what_is_lying_at(&Position::new(25, 25));
@@ -330,7 +330,7 @@ fn clay_in_a_cold_field_stays_clay() {
         0,
     );
 
-    simulation.current_turn = crate::environment::seasons::TURNS_PER_DAY * 2;
+    simulation.current_turn = crate::environment::seasons::TICKS_PER_DAY * 2;
     simulation.what_the_fire_hardened();
 
     assert!(
@@ -586,7 +586,7 @@ fn what_rots_on_the_ground_is_counted() {
         .world
         .somebody_left_this(going, Position::new(40, 40), 0);
 
-    for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 3) {
+    for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_DAY * 3) {
         simulation.world.take_a_turn();
     }
 

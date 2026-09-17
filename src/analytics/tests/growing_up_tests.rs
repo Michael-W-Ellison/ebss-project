@@ -688,7 +688,7 @@ fn old_age_can_be_taken_off_the_board() {
     assert_eq!(
         takes_you,
         crate::environment::seasons::YEARS_BEFORE_OLD_AGE_TAKES_YOU
-            * crate::environment::TURNS_PER_YEAR,
+            * crate::environment::TICKS_PER_YEAR,
         "and it is the specification's seventy years"
     );
 
@@ -700,7 +700,7 @@ fn old_age_can_be_taken_off_the_board() {
     // And it holds: a body past seventy is still alive.
     let agent = &mut deathless.agents[0];
     agent.state.age = crate::environment::seasons::YEARS_BEFORE_OLD_AGE_TAKES_YOU
-        * crate::environment::TURNS_PER_YEAR
+        * crate::environment::TICKS_PER_YEAR
         + 1;
     agent.state.health = 100.0;
     agent.state.age_turn_with_modifier(agent.state.age, 1.0);

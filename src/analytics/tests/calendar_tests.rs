@@ -18,7 +18,7 @@ use crate::agents::{AgentConfig, Population};
 use crate::analytics::Simulation;
 use crate::environment::flora::GrowingConditions;
 use crate::environment::{
-    Season, SeasonalCalendar, DAYS_PER_SEASON, DAYS_PER_YEAR, TURNS_PER_DAY, TURNS_PER_YEAR,
+    Season, SeasonalCalendar, DAYS_PER_SEASON, DAYS_PER_YEAR, PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY, PLANNING_PERIODS_PER_YEAR, TICKS_PER_YEAR,
 };
 use crate::world::soil::Soil;
 use crate::world::{ClimateManager, Position, ResourceNode, ResourceType, TerrainType, World, WorldConfig};
@@ -27,11 +27,11 @@ use std::collections::BTreeSet;
 /// A year fits inside a run somebody would actually sit through.
 #[test]
 fn a_year_is_shorter_than_a_run() {
-    assert_eq!(TURNS_PER_YEAR, TURNS_PER_DAY * DAYS_PER_YEAR);
+    assert_eq!(TICKS_PER_YEAR, TICKS_PER_DAY * DAYS_PER_YEAR);
 
     // A year has to be inside a run this suite actually does.
     //
-    // This asserted `TURNS_PER_YEAR <= 2000`, which is the *old* calendar -
+    // This asserted `TICKS_PER_YEAR <= 2000`, which is the *old* calendar -
     // the one where a year was about eleven hundred turns and a life did not
     // fit inside a run. The calendar was deliberately changed to 4,320 so
     // that ninety-day seasons and a lifetime would both fit; see
@@ -44,8 +44,8 @@ fn a_year_is_shorter_than_a_run() {
     // cover more than one, or nothing in here ever sees a second spring.
     const THE_LONGEST_RUNS_IN_THIS_SUITE: u32 = 8_000;
     assert!(
-        TURNS_PER_YEAR < THE_LONGEST_RUNS_IN_THIS_SUITE,
-        "a year is {TURNS_PER_YEAR} turns and the longest run in this suite is \
+        TICKS_PER_YEAR < THE_LONGEST_RUNS_IN_THIS_SUITE,
+        "a year is {TICKS_PER_YEAR} turns and the longest run in this suite is \
          {THE_LONGEST_RUNS_IN_THIS_SUITE}, so nothing here would see a second \
          spring"
     );
@@ -53,8 +53,8 @@ fn a_year_is_shorter_than_a_run() {
     // And a day has to be more than one turn, or dawn, noon and midnight stop
     // being separate moments an agent can be cold or blind in.
     assert!(
-        TURNS_PER_DAY >= 8,
-        "a day of {TURNS_PER_DAY} turns is too coarse to have a night in it"
+        TICKS_PER_DAY >= 8,
+        "a day of {TICKS_PER_DAY} turns is too coarse to have a night in it"
     );
 }
 
@@ -64,7 +64,7 @@ fn every_season_comes_round() {
     let mut climate = ClimateManager::new(false, false);
     let mut seen: BTreeSet<Season> = BTreeSet::new();
 
-    for _ in 0..TURNS_PER_YEAR {
+    for _ in 0..PLANNING_PERIODS_PER_YEAR {
         climate.take_a_turn();
         seen.insert(climate.current_season());
     }
@@ -96,7 +96,7 @@ fn a_day_is_a_day_long() {
     let mut calendar = SeasonalCalendar::default();
     let started_at = calendar.time_of_day;
 
-    for _ in 0..TURNS_PER_DAY {
+    for _ in 0..PLANNING_PERIODS_PER_DAY {
         calendar.take_a_turn();
     }
 
@@ -147,7 +147,7 @@ fn an_agent_ages_by_the_calendar() {
 
     let mut simulation = Simulation::new(world, population);
 
-    for _ in 0..TURNS_PER_YEAR {
+    for _ in 0..PLANNING_PERIODS_PER_YEAR {
         simulation.take_a_turn();
     }
 
@@ -169,7 +169,7 @@ fn an_agent_ages_by_the_calendar() {
         .agents
         .last_mut()
         .expect("just spawned");
-    agent.state.age = TURNS_PER_YEAR;
+    agent.state.age = TICKS_PER_YEAR;
     assert!(
         (agent.age_in_years() - 1.0).abs() < 0.01,
         "and a year of life should read as one: {:.2}",
@@ -251,13 +251,13 @@ fn short_days_slow_a_plant_down() {
 #[test]
 fn weather_does_not_outlast_the_season_it_starts_in() {
     let mut climate = ClimateManager::new(false, false);
-    let season_length = TURNS_PER_DAY * DAYS_PER_SEASON;
+    let season_length = TICKS_PER_DAY * DAYS_PER_SEASON;
 
     let mut longest = 0;
     let mut spells = 0;
     let mut last = climate.weather.weather_type;
 
-    for _ in 0..TURNS_PER_YEAR * 4 {
+    for _ in 0..PLANNING_PERIODS_PER_YEAR * 4 {
         climate.take_a_turn();
         if climate.weather.weather_type != last {
             spells += 1;
@@ -285,7 +285,7 @@ fn it_snows_in_winter_and_not_in_summer() {
     let mut wintry = [0u32; 4];
     let mut turns = [0u32; 4];
 
-    for _ in 0..TURNS_PER_YEAR * 8 {
+    for _ in 0..PLANNING_PERIODS_PER_YEAR * 8 {
         climate.take_a_turn();
         let season = match climate.current_season() {
             Season::Spring => 0,
@@ -380,7 +380,7 @@ fn a_settlement_lives_through_a_winter() {
                 .count()
         };
 
-        let winter_opens = Season::Winter.first_day() * TURNS_PER_DAY;
+        let winter_opens = Season::Winter.first_day() * TICKS_PER_DAY;
         for _ in 0..winter_opens {
             simulation.take_a_turn();
         }
@@ -388,7 +388,7 @@ fn a_settlement_lives_through_a_winter() {
 
         // Far enough to be out the other side of the winter and into the
         // second spring.
-        for _ in winter_opens..(TURNS_PER_YEAR + TURNS_PER_DAY * 4) {
+        for _ in winter_opens..(TICKS_PER_YEAR + TICKS_PER_DAY * 4) {
             simulation.take_a_turn();
         }
 

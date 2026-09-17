@@ -119,7 +119,7 @@ impl ExposureStatus {
     /// day, so shortening the turn makes each step smaller rather than making
     /// the weather worse.
     fn in_one_turn(in_a_day: f32) -> f32 {
-        in_a_day / crate::environment::seasons::TURNS_PER_DAY as f32
+        in_a_day / crate::environment::seasons::TICKS_PER_DAY as f32
     }
 
     pub fn new() -> Self {
@@ -400,11 +400,11 @@ mod tests {
     /// four times as deadly without anybody changing a number - see
     /// `ExposureStatus::THE_TURN_THESE_WERE_WRITTEN_FOR`. Turning a body
     /// through a whole simulated day and adding up what it took has to come
-    /// to the per-day figure, and that stays true if `TURNS_PER_DAY` changes
+    /// to the per-day figure, and that stays true if `TICKS_PER_DAY` changes
     /// again.
     #[test]
     fn a_day_of_a_blizzard_costs_a_day_of_a_blizzard() {
-        use crate::environment::seasons::TURNS_PER_DAY;
+        use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 
         let mut status = ExposureStatus::new();
         let body_temp = BodyTemperature::new();
@@ -415,7 +415,7 @@ mod tests {
         // the weather itself rather than the cold on top of it. Midnight, so
         // no sun. In the open, or the weather does not reach him.
         let mut took = 0.0;
-        for _ in 0..TURNS_PER_DAY {
+        for _ in 0..PLANNING_PERIODS_PER_DAY {
             took += status.update(&body_temp, 5.0, &weather, false, true, 0.0);
         }
 
@@ -430,7 +430,7 @@ mod tests {
     /// And the wind that comes with it is on the same clock.
     #[test]
     fn a_day_of_wind_costs_a_day_of_wind() {
-        use crate::environment::seasons::TURNS_PER_DAY;
+        use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 
         let mut status = ExposureStatus::new();
         let body_temp = BodyTemperature::new();
@@ -438,7 +438,7 @@ mod tests {
         weather.base_wind_speed = 20.0;
 
         let mut took = 0.0;
-        for _ in 0..TURNS_PER_DAY {
+        for _ in 0..PLANNING_PERIODS_PER_DAY {
             took += status.update(&body_temp, 5.0, &weather, false, true, 0.0);
         }
 
@@ -491,7 +491,7 @@ mod tests {
 
     #[test]
     fn test_sunburn_accumulation() {
-        use crate::environment::seasons::TURNS_PER_DAY;
+        use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 
         let mut status = ExposureStatus::new();
         let body_temp = BodyTemperature::new();
@@ -501,7 +501,7 @@ mod tests {
         // which was eight days at the two-hour turn and two at the half-hour
         // one - the run length changed meaning when the turn did, which is
         // the whole of ISSUES #171. Said in days it stays five days.
-        for _ in 0..(5 * TURNS_PER_DAY) {
+        for _ in 0..(5 * TICKS_PER_DAY) {
             status.update(&body_temp, 30.0, &weather, false, true, 12.0); // Noon
         }
 

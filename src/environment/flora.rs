@@ -94,7 +94,7 @@ impl PlantSpecies {
 
     /// The same, in turns, which is what a plant actually counts in.
     pub fn lives_for_turns(&self) -> u32 {
-        (self.lives_for_years() * crate::environment::seasons::TURNS_PER_YEAR as f32) as u32
+        (self.lives_for_years() * crate::environment::seasons::TICKS_PER_YEAR as f32) as u32
     }
 
     /// How likely one of these is to put seed on the ground in a pass.
@@ -152,7 +152,7 @@ impl PlantSpecies {
     /// when something disturbs it - so the split is the same one that decides
     /// everything else here.
     pub fn seed_keeps_for_turns(&self) -> u32 {
-        use crate::environment::seasons::{DAYS_PER_SEASON, TURNS_PER_DAY};
+        use crate::environment::seasons::{DAYS_PER_SEASON, TICKS_PER_DAY};
 
         // A season for an acorn, two for small dry seed. This is seed lying
         // on ground of a kind its species cannot live on at all - a beach, a
@@ -162,7 +162,7 @@ impl PlantSpecies {
         // year and two years there were three and a half seed lying for every
         // tile on the map, and walking them was most of what a turn cost.
         let seasons = if self.is_tree { 1 } else { 2 };
-        seasons * DAYS_PER_SEASON * TURNS_PER_DAY
+        seasons * DAYS_PER_SEASON * TICKS_PER_DAY
     }
 
     /// Whether this is ground one of these could live on at all.
@@ -2186,7 +2186,7 @@ impl PlantManager {
     /// shorter, and the whole map would have been grown four times over in a
     /// season. See ISSUES_FOUND #205.
     pub const HOW_OFTEN_A_ZONE_COMES_ROUND: u32 =
-        crate::environment::seasons::TURNS_PER_DAY * 5;
+        crate::environment::seasons::TICKS_PER_DAY * 5;
 
     /// Grow one zone of what is standing, on what the ground and sky give it.
     ///
@@ -3110,7 +3110,7 @@ mod tests {
 /// derivation puts the fifty-one species in the right order of magnitude.
 #[test]
 fn a_grass_and_an_oak_do_not_live_the_same_length_of_time() {
-    use crate::environment::seasons::TURNS_PER_YEAR;
+    use crate::environment::seasons::TICKS_PER_YEAR;
 
     let registry = FloraRegistry::new();
     let grass = registry.get("grass").expect("there is grass in this world");
@@ -3135,7 +3135,7 @@ fn a_grass_and_an_oak_do_not_live_the_same_length_of_time() {
 
     assert_eq!(
         oak.lives_for_turns(),
-        (oak.lives_for_years() * TURNS_PER_YEAR as f32) as u32
+        (oak.lives_for_years() * TICKS_PER_YEAR as f32) as u32
     );
 }
 
@@ -3196,7 +3196,7 @@ fn a_plant_knows_what_country_it_belongs_in() {
 /// Something that has stood for its whole lifetime is not standing any more.
 #[test]
 fn a_plant_that_has_had_its_years_goes_over() {
-    use crate::environment::seasons::TURNS_PER_YEAR;
+    use crate::environment::seasons::TICKS_PER_YEAR;
     use crate::world::{Grid, Position};
 
     let mut grid = Grid::new(12, 12);
@@ -3213,7 +3213,7 @@ fn a_plant_that_has_had_its_years_goes_over() {
 
     // A grass lives two years. Three of them is well past it. Every zone in
     // its turn, because the plant is only looked at when its own comes round.
-    for turn in (0..(3 * TURNS_PER_YEAR))
+    for turn in (0..(3 * TICKS_PER_YEAR))
         .step_by(PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND as usize)
     {
         let zone = (turn / PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
@@ -3329,7 +3329,7 @@ fn every_row_of_the_map_is_in_exactly_one_zone() {
 fn a_plant_that_comes_up_late_is_not_born_old() {
     let mut plants = PlantManager::new(16);
 
-    let a_long_way_in = 12 * crate::environment::seasons::TURNS_PER_YEAR;
+    let a_long_way_in = 12 * crate::environment::seasons::TICKS_PER_YEAR;
     plants.spawn_plant("grass".to_string(), (3, 3), a_long_way_in);
 
     let planted = plants.all_plants().last().expect("it was planted");

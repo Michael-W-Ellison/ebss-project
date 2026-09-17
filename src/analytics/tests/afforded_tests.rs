@@ -474,7 +474,7 @@ fn curiosity_reaches_for_the_verb_it_has_tried_least() {
 fn the_novelty_terminal_is_reached_by_a_living_settlement() {
     use crate::agents::{AgentConfig, PopulationConfig};
     use crate::core::DriveType;
-    use crate::environment::seasons::TURNS_PER_DAY;
+    use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
     use std::collections::BTreeMap;
 
     crate::core::dice::seed(0);
@@ -490,7 +490,7 @@ fn the_novelty_terminal_is_reached_by_a_living_settlement() {
     let mut from_novelty = 0u64;
 
     for _ in 0..30 {
-        for _ in 0..TURNS_PER_DAY {
+        for _ in 0..PLANNING_PERIODS_PER_DAY {
             simulation.take_a_turn();
         }
 

@@ -147,7 +147,7 @@ impl ClimateManager {
         let weather = weather_gen.generate_weather();
 
         Self {
-            calendar: SeasonalCalendar::new(seasons::TURNS_PER_DAY),
+            calendar: SeasonalCalendar::new(seasons::PLANNING_PERIODS_PER_DAY),
             weather,
             weather_gen,
             base_climate: Climate::temperate(), // Default temperate
@@ -175,7 +175,7 @@ impl ClimateManager {
         let weather = weather_gen.generate_weather();
 
         Self {
-            calendar: SeasonalCalendar::new(seasons::TURNS_PER_DAY),
+            calendar: SeasonalCalendar::new(seasons::PLANNING_PERIODS_PER_DAY),
             weather,
             weather_gen,
             base_climate: Climate::temperate(),
@@ -195,7 +195,10 @@ impl ClimateManager {
 
     /// Turn the climate system
     pub fn take_a_turn(&mut self) {
-        self.current_turn += 1;
+        // A step is a planning period, which is that many ticks. Every counter
+        // in the model has to advance by the same amount or two of them
+        // disagree about what day it is.
+        self.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
 
         // Update calendar
         self.calendar.take_a_turn();

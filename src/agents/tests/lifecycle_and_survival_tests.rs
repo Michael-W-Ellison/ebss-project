@@ -300,7 +300,7 @@ fn test_agent_is_dead_when_health_zero() {
 
 #[test]
 fn test_life_stage_progression() {
-    use crate::environment::seasons::TURNS_PER_YEAR;
+    use crate::environment::seasons::TICKS_PER_YEAR;
 
     let mut agent = Agent::new(AgentConfig::default());
 
@@ -322,7 +322,7 @@ fn test_life_stage_progression() {
         (LifeStage::STRENGTH_STARTS_GOING_AT - 1, LifeStage::Adult),
         (LifeStage::STRENGTH_STARTS_GOING_AT + 1, LifeStage::Elderly),
     ] {
-        agent.state.age = years * TURNS_PER_YEAR;
+        agent.state.age = years * TICKS_PER_YEAR;
         agent.update_life_stage();
         assert_eq!(
             agent.state.life_stage, expected,

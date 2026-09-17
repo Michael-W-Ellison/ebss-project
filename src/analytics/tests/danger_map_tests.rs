@@ -16,7 +16,7 @@
 use crate::agents::exploration::Danger;
 use crate::agents::{AgentConfig, Population};
 use crate::analytics::Simulation;
-use crate::environment::seasons::TURNS_PER_DAY;
+use crate::environment::seasons::TICKS_PER_DAY;
 use crate::world::{Position, World, WorldConfig};
 
 fn one_person() -> Simulation {
@@ -86,7 +86,7 @@ fn a_fright_fades() {
     map.saw_danger(Position::new(30, 30), "wolves", 1.0, 0);
 
     let fresh = map.how_bad_is_it_there(Position::new(30, 30), 0);
-    let later = map.how_bad_is_it_there(Position::new(30, 30), TURNS_PER_DAY * 8);
+    let later = map.how_bad_is_it_there(Position::new(30, 30), TICKS_PER_DAY * 8);
 
     assert!(later < fresh, "{fresh} should fade to less than itself");
     assert_eq!(
@@ -316,7 +316,7 @@ fn a_sighting_goes_stale() {
     map.saw_somebody(somebody, Position::new(40, 40), 100);
 
     assert!(
-        map.where_did_i_last_see(somebody, 100 + TURNS_PER_DAY * 3)
+        map.where_did_i_last_see(somebody, 100 + TICKS_PER_DAY * 3)
             .is_none(),
         "three days on, that is not where they are"
     );

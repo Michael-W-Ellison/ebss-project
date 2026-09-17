@@ -141,14 +141,14 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
 /// says "not one settlement of thirty-two came out".
 #[test]
 fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
-    use crate::environment::seasons::{DAYS_PER_YEAR, TURNS_PER_DAY};
+    use crate::environment::seasons::{DAYS_PER_YEAR, TICKS_PER_DAY};
     // 732,915, then 793,014 for the curiosity and candidate-list changes, and
     // now this for the lifecycle work: a child under six takes no turn of its
     // own and is put where its keeper is, which moves both how many turns a
     // year contains and where the people in it are standing.
     const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 804_474;
 
-    let a_year = (DAYS_PER_YEAR * TURNS_PER_DAY) as usize;
+    let a_year = (DAYS_PER_YEAR * TICKS_PER_DAY) as usize;
     let (_, rolled) = a_world_from(0, a_year);
 
     assert_eq!(

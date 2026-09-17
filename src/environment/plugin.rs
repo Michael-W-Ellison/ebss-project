@@ -69,7 +69,10 @@ impl WorldState {
     }
 
     pub fn advance_turn(&mut self, time_rate: f32) {
-        self.turn += 1;
+        // A step is a planning period, which is that many ticks. Every counter
+        // in the model has to advance by the same amount or two of them
+        // disagree about what day it is.
+        self.turn += crate::environment::seasons::TICKS_BETWEEN_PLANS as u64;
         self.time_of_day = (self.time_of_day + time_rate).rem_euclid(1.0);
     }
 }

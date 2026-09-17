@@ -15,7 +15,7 @@
 use crate::agents::{AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
 use crate::environment::making;
-use crate::environment::seasons::TURNS_PER_DAY;
+use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 use crate::environment::{Action, WeatherType};
 use crate::world::nutrition::{FoodDatabase, PreparationState};
 use crate::world::{ItemType, Position, World, WorldConfig};
@@ -70,7 +70,7 @@ fn leave_it_out(
         .world
         .somebody_left_this(item, where_it_is, simulation.world.turn);
 
-    for _ in 0..(TURNS_PER_DAY * days) {
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * days) {
         set_the_sky(simulation, sky);
         simulation.world.take_a_turn();
     }
@@ -241,7 +241,7 @@ fn rain_stops_the_drying_without_undoing_it() {
         (WeatherType::Rain, 1),
         (WeatherType::Clear, 2),
     ] {
-        for _ in 0..(TURNS_PER_DAY * days) {
+        for _ in 0..(PLANNING_PERIODS_PER_DAY * days) {
             set_the_sky(&mut simulation, sky);
             simulation.world.take_a_turn();
         }
@@ -286,7 +286,7 @@ fn whoever_is_standing_near_learns_what_the_sun_did() {
         simulation.world.turn,
     );
 
-    for _ in 0..(TURNS_PER_DAY * 4) {
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * 4) {
         set_the_sky(&mut simulation, WeatherType::Clear);
         simulation.world.take_a_turn();
         simulation.who_saw_that_dry();
@@ -312,7 +312,7 @@ fn nobody_across_the_map_learns_anything() {
         simulation.world.turn,
     );
 
-    for _ in 0..(TURNS_PER_DAY * 4) {
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * 4) {
         set_the_sky(&mut simulation, WeatherType::Clear);
         simulation.world.take_a_turn();
         simulation.who_saw_that_dry();

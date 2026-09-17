@@ -4,7 +4,7 @@
 //!
 //! Every one of the spoilage tables was written as a day-count and stored as
 //! turns at 1440 to the day. The calendar was later put on a scale a life
-//! fits inside — `TURNS_PER_DAY` is 12 — and the food tables were not brought
+//! fits inside — `TICKS_PER_DAY` is 12 — and the food tables were not brought
 //! with it, so meat written down as lasting a day lasted a hundred and twenty
 //! of them and grain written down as ten days lasted twelve and a half years.
 //!
@@ -15,7 +15,7 @@
 
 use crate::agents::{AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
-use crate::environment::seasons::TURNS_PER_DAY;
+use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 use crate::environment::{verbs, Action};
 use crate::world::nutrition::{FoodDatabase, PreparationState};
 use crate::world::{ItemType, Position, World, WorldConfig};
@@ -71,15 +71,15 @@ fn how_long_it_lasts(of: ItemType) -> u32 {
 #[test]
 fn meat_does_not_see_a_season_out() {
     let lasts = how_long_it_lasts(ItemType::Meat);
-    let a_season = TURNS_PER_DAY * 24;
+    let a_season = TICKS_PER_DAY * 24;
 
     assert!(
         lasts < a_season,
         "meat should be carrion before the season turns, and this lasts {} days",
-        lasts / TURNS_PER_DAY
+        lasts / TICKS_PER_DAY
     );
     assert!(
-        lasts > TURNS_PER_DAY * 4,
+        lasts > TICKS_PER_DAY * 4,
         "and it should outlast the walk home"
     );
 }
@@ -96,9 +96,9 @@ fn berries_off_the_bush_do_not_keep() {
     let lasts = how_long_it_lasts(ItemType::Food);
 
     assert!(
-        lasts < TURNS_PER_DAY * 24,
+        lasts < TICKS_PER_DAY * 24,
         "half a season and they are jam on the inside of the pack, not {} days",
-        lasts / TURNS_PER_DAY
+        lasts / TICKS_PER_DAY
     );
 }
 
@@ -109,12 +109,12 @@ fn grain_keeps_a_season() {
     let lasts = how_long_it_lasts(ItemType::Grain);
 
     assert!(
-        lasts >= TURNS_PER_DAY * 24,
+        lasts >= TICKS_PER_DAY * 24,
         "a dry seed should see a settlement through to spring, and this lasts {} days",
-        lasts / TURNS_PER_DAY
+        lasts / TICKS_PER_DAY
     );
     assert!(
-        lasts <= TURNS_PER_DAY * 96,
+        lasts <= TICKS_PER_DAY * 96,
         "and not for years on end"
     );
     assert!(
@@ -157,7 +157,7 @@ fn what_is_carried_goes_off() {
         .inventory
         .add_item(a_meal(ItemType::Meat, "meatportions", 4, 0));
 
-    for _ in 0..(TURNS_PER_DAY * 12) {
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * 12) {
         simulation.population.agents[0].turn_food_spoilage(simulation.world.turn);
         simulation.world.take_a_turn();
     }
@@ -222,7 +222,7 @@ fn dried_meat_outlasts_raw_meat() {
         0,
     );
 
-    for _ in 0..(TURNS_PER_DAY * 14) {
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * 14) {
         simulation.population.agents[0].turn_food_spoilage(simulation.world.turn);
         simulation.world.take_a_turn();
     }

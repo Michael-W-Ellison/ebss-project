@@ -406,7 +406,7 @@ impl Simulation {
     ///
     /// Once a day rather than every turn: this is a question about living
     /// somewhere, not about walking across it.
-    pub(in crate::analytics) const HOW_OFTEN_THE_GROUND_IS_ASKED: u32 = crate::environment::seasons::TURNS_PER_DAY;
+    pub(in crate::analytics) const HOW_OFTEN_THE_GROUND_IS_ASKED: u32 = crate::environment::seasons::TICKS_PER_DAY;
 
     /// And how often a day spent on the worst ground there is makes somebody
     /// ill.

@@ -451,7 +451,7 @@ impl Lessons {
     /// where you started, worth one attempt and no more.
     pub fn fade(&mut self, now: u32) {
         let days = now.saturating_sub(self.faded_at)
-            / crate::environment::seasons::TURNS_PER_DAY;
+            / crate::environment::seasons::TICKS_PER_DAY;
         if days == 0 {
             return;
         }

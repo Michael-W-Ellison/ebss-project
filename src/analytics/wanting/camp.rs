@@ -76,7 +76,7 @@ impl Simulation {
         // Whether to move house is a question worth asking once a day, not
         // eight times: it walks the whole resource list at sixty tiles, and a
         // people do not reconsider where they live every two hours.
-        if self.current_turn % crate::environment::seasons::TURNS_PER_DAY != 0 {
+        if self.current_turn % crate::environment::seasons::TICKS_PER_DAY != 0 {
             return None;
         }
 

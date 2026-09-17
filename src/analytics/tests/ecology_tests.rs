@@ -24,7 +24,7 @@
 
 use crate::agents::Population;
 use crate::analytics::Simulation;
-use crate::environment::seasons::TURNS_PER_DAY;
+use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 use crate::world::{World, WorldConfig};
 use std::collections::BTreeSet;
 
@@ -35,7 +35,7 @@ fn an_empty_world() -> Simulation {
 }
 
 fn how_many_years(simulation: &mut Simulation, years: u32) {
-    for _ in 0..(years * 360 * TURNS_PER_DAY) {
+    for _ in 0..(years * 360 * TICKS_PER_DAY) {
         simulation.take_a_turn();
     }
 }
@@ -290,7 +290,7 @@ fn something_that_is_gone_finds_its_way_back() {
     // Long enough for the world to have seen what lives in it. Nothing comes
     // back that this country never held, and a country holds what it has
     // actually carried - see `process_immigration`.
-    for _ in 0..TURNS_PER_DAY {
+    for _ in 0..PLANNING_PERIODS_PER_DAY {
         world.take_a_turn();
     }
 
@@ -315,7 +315,7 @@ fn something_that_is_gone_finds_its_way_back() {
         "{gone} is gone from this world"
     );
 
-    for _ in 0..(TURNS_PER_DAY * 360 * 10) {
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * 360 * 10) {
         world.take_a_turn();
         if what_lives_in(&world).contains(&gone) {
             return;
@@ -359,7 +359,7 @@ fn the_ground_register_and_the_map_agree() {
 
     // Long enough for people to have voided on the ground and for some of
     // them to have died on it.
-    for _ in 0..TURNS_PER_DAY * 30 {
+    for _ in 0..PLANNING_PERIODS_PER_DAY * 30 {
         simulation.take_a_turn();
     }
 
@@ -556,7 +556,7 @@ fn a_herd_settles_at_what_the_ground_will_feed() {
     let started_with = world.animals.how_many_are_alive();
 
     // Five years is well past where the old model was pinned to its ceiling.
-    for _ in 0..(5 * crate::environment::seasons::TURNS_PER_YEAR) {
+    for _ in 0..(5 * crate::environment::seasons::TICKS_PER_YEAR) {
         world.take_a_turn();
     }
 
@@ -840,7 +840,7 @@ fn a_trapped_out_ground_comes_back_and_a_full_one_holds() {
     // Left alone at full stock, it stays there
     let mut untouched = SmallLife::default();
     untouched.settle(ground, would_carry, 0.0);
-    for _ in 0..crate::environment::seasons::TURNS_PER_YEAR {
+    for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_YEAR {
         untouched.turn_a_ground(ground, would_carry, 0.0, 1.0);
     }
     let held = untouched.here(ground).grazers;
@@ -859,7 +859,7 @@ fn a_trapped_out_ground_comes_back_and_a_full_one_holds() {
     );
     assert_eq!(worked.here(ground).grazers, 0.0, "and it is empty now");
 
-    for _ in 0..(2 * crate::environment::seasons::TURNS_PER_YEAR) {
+    for _ in 0..(2 * crate::environment::seasons::TICKS_PER_YEAR) {
         worked.turn_a_ground(ground, would_carry, 0.0, 1.0);
     }
     let back = worked.here(ground).grazers;
@@ -888,7 +888,7 @@ fn the_small_hunters_follow_the_game_they_live_on() {
 
     let mut country = SmallLife::default();
     country.settle(ground, would_carry, 0.0);
-    for _ in 0..crate::environment::seasons::TURNS_PER_YEAR {
+    for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_YEAR {
         country.turn_a_ground(ground, would_carry, 0.0, 1.0);
     }
     let with_game = country.here(ground).hunters;
@@ -904,7 +904,7 @@ fn the_small_hunters_follow_the_game_they_live_on() {
     // still a fed fox, and it stays. What empties a ground of foxes is the
     // whole of what is under them going, which is a hard winter or a bad
     // vole year rather than anything a person does with string.
-    for _ in 0..crate::environment::seasons::TURNS_PER_YEAR {
+    for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_YEAR {
         country.turn_a_ground(ground, would_carry, 0.0, 1.0);
         let there = country.here(ground);
         country.take(ground, there.grazers * 0.95);
@@ -926,7 +926,7 @@ fn a_country_stocks_its_own_lower_tiers() {
     crate::core::dice::seed(31);
     let mut world = World::new(WorldConfig::default().with_size(240, 240));
 
-    for _ in 0..(crate::environment::seasons::TURNS_PER_YEAR / 2) {
+    for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_YEAR / 2) {
         world.take_a_turn();
     }
 
@@ -1069,7 +1069,7 @@ fn a_settlement_runs_a_trapline_and_lives() {
     }
     let mut simulation = Simulation::new(world, population);
 
-    for _ in 0..(crate::environment::seasons::TURNS_PER_YEAR / 2) {
+    for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_YEAR / 2) {
         simulation.take_a_turn();
     }
 
@@ -1204,7 +1204,7 @@ fn the_small_life_spreads_into_emptier_ground_without_inventing_any() {
     country.take(worked, there * 0.95);
 
     let before = country.how_many_grazers();
-    for _ in 0..(crate::environment::seasons::TURNS_PER_YEAR / 4) {
+    for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_YEAR / 4) {
         country.let_them_spread(1.0);
     }
     let after = country.how_many_grazers();
@@ -1516,7 +1516,7 @@ fn the_predator_tiers_are_still_there_two_years_on() {
     };
 
     let at_the_start = of_each_tier(&world);
-    for _ in 0..(2 * crate::environment::seasons::TURNS_PER_YEAR) {
+    for _ in 0..(2 * crate::environment::seasons::TICKS_PER_YEAR) {
         world.take_a_turn();
     }
     let after_two_years = of_each_tier(&world);
@@ -1747,10 +1747,10 @@ fn a_beast_slows_as_it_is_hurt_and_as_it_ages() {
 /// instant process. Perhaps along the lines of 1% per day."
 #[test]
 fn everything_mends_at_the_same_rate_against_itself() {
-    use crate::environment::seasons::TURNS_PER_DAY;
+    use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
     use crate::environment::AnimalManager;
 
-    let a_day = AnimalManager::HOW_MUCH_OF_ITSELF_IT_MENDS_A_TURN * TURNS_PER_DAY as f32;
+    let a_day = AnimalManager::HOW_MUCH_OF_ITSELF_IT_MENDS_A_TURN * TICKS_PER_DAY as f32;
     assert!(
         (a_day - 0.01).abs() < 1e-6,
         "a hundredth of itself in a day: {a_day}"
@@ -1766,7 +1766,7 @@ fn everything_mends_at_the_same_rate_against_itself() {
 /// inside a season.
 #[test]
 fn fourteen_wolves_take_two_sheep_inside_a_day() {
-    use crate::environment::seasons::TURNS_PER_DAY;
+    use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
     use crate::environment::AnimalManager;
     use crate::world::{World, WorldConfig};
 
@@ -1806,7 +1806,7 @@ fn fourteen_wolves_take_two_sheep_inside_a_day() {
                 .count()
         };
 
-        for _ in 0..TURNS_PER_DAY {
+        for _ in 0..PLANNING_PERIODS_PER_DAY {
             world.take_a_turn();
             if sheep_left(&world) == 0 {
                 break;

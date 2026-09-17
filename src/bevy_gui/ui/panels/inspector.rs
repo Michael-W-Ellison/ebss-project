@@ -13,11 +13,11 @@ use crate::gui::state::{
     SelectedAgentData, SelectedBuildingData, SelectedResourceData,
     DriveData, SkillData, InventoryItemData, GoalData,
 };
-use crate::environment::TURNS_PER_YEAR;
+use crate::environment::TICKS_PER_YEAR;
 
 /// How many turns make a year, in the shape the age fields want.
 fn ebss_years() -> u32 {
-    TURNS_PER_YEAR.max(1)
+    TICKS_PER_YEAR.max(1)
 }
 
 pub fn render_inspector_panel(

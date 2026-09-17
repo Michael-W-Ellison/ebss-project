@@ -38,7 +38,10 @@ impl SharedKnowledge {
 
     /// Update current turn (called each simulation turn)
     pub fn take_a_turn(&mut self) {
-        self.current_turn += 1;
+        // A step is a planning period, which is that many ticks. Every counter
+        // in the model has to advance by the same amount or two of them
+        // disagree about what day it is.
+        self.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
     }
 
     /// Record a resource discovery or update existing knowledge

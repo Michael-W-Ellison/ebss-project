@@ -170,7 +170,7 @@ fn a_hungry_year_takes_the_children_first() {
         agent.state.energy = 100.0;
         agent.state.last_ate_turn = 0;
 
-        let a_long_time = 60 * crate::environment::seasons::TURNS_PER_DAY;
+        let a_long_time = 60 * crate::environment::seasons::TICKS_PER_DAY;
         for turn in 1..=a_long_time {
             // Watered, so that what kills this body is the famine.
             //
@@ -186,7 +186,7 @@ fn a_hungry_year_takes_the_children_first() {
 
             agent.state.age_turn_with_modifier(turn, 1.0);
             if agent.state.health <= 0.0 {
-                return turn as f32 / crate::environment::seasons::TURNS_PER_DAY as f32;
+                return turn as f32 / crate::environment::seasons::TICKS_PER_DAY as f32;
             }
         }
 

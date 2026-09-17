@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use crate::agents::temperature::Temperature;
 use crate::environment::BiomeType;
-use super::seasons::{Season, TURNS_PER_DAY};
+use super::seasons::{Season, TICKS_PER_DAY};
 
 /// How long a stretch of weather lasts, given in hours and answered in turns.
 ///
@@ -16,7 +16,7 @@ use super::seasons::{Season, TURNS_PER_DAY};
 /// blowing the following summer, which is what the runs showed. Snow turned up
 /// in all four seasons in equal measure.
 fn hours_in_turns(hours: u32) -> u32 {
-    (hours * TURNS_PER_DAY / 24).max(1)
+    (hours * TICKS_PER_DAY / 24).max(1)
 }
 
 /// A spell of weather somewhere between the two lengths, in hours.

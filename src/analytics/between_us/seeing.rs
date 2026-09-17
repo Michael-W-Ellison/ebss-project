@@ -171,10 +171,17 @@ impl Simulation {
 
     /// How often anybody stops and takes in what is round them.
     ///
-    /// Every few turns rather than every one. Nothing in a settlement changes
-    /// fast enough to want it more often, and it is a walk over everybody
-    /// against everything.
-    pub(in crate::analytics) const HOW_OFTEN_ANYBODY_LOOKS_ROUND: u32 = 5;
+    /// Every few planning periods rather than every one. Nothing in a
+    /// settlement changes fast enough to want it more often, and it is a walk
+    /// over everybody against everything.
+    ///
+    /// Two and a half hours, stated in ticks. It was a bare `5`, which was
+    /// five steps; once the counter began advancing thirty ticks at a time,
+    /// `% 5` was true at every step, so everybody looked round every time
+    /// instead of every fifth. The other bare count is
+    /// `Agent::HOW_OFTEN_A_HAND_IS_TESTED`, and the note there says why.
+    pub(in crate::analytics) const HOW_OFTEN_ANYBODY_LOOKS_ROUND: u32 =
+        5 * crate::environment::seasons::TICKS_BETWEEN_PLANS;
 
     /// How far off a beast is worth noticing.
     pub(in crate::analytics) const AS_FAR_AS_ANYBODY_SEES_A_BEAST: i32 = 8;

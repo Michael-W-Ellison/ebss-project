@@ -756,7 +756,7 @@ pub fn what_a_body_this_age_can_do(years: u32) -> f32 {
 /// These used to be counted in turns - infancy to five hundred of them,
 /// adulthood at two and a half thousand - on a calendar where a year was
 /// eleven hundred turns and a whole life eight of them. A year is
-/// `TURNS_PER_YEAR` turns now and a life is seventy years.
+/// `TICKS_PER_YEAR` turns now and a life is seventy years.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LifeStage {
     /// Under six: with a parent at all times
@@ -790,7 +790,7 @@ impl LifeStage {
 
     /// Get life stage based on age in turns.
     pub fn from_age(age: u32) -> Self {
-        Self::from_years(age / crate::environment::seasons::TURNS_PER_YEAR)
+        Self::from_years(age / crate::environment::seasons::TICKS_PER_YEAR)
     }
 
     /// The same, from years already counted.
@@ -940,8 +940,8 @@ impl Ailment {
     /// Two days to a week and a half, on a calendar of twelve turns to the
     /// day. Long enough to cost a settlement work, short enough that it is
     /// not simply a slower way of dying.
-    pub const THE_SHORTEST_IT_LASTS: u32 = 2 * crate::environment::seasons::TURNS_PER_DAY;
-    pub const THE_LONGEST_IT_LASTS: u32 = 10 * crate::environment::seasons::TURNS_PER_DAY;
+    pub const THE_SHORTEST_IT_LASTS: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
+    pub const THE_LONGEST_IT_LASTS: u32 = 10 * crate::environment::seasons::TICKS_PER_DAY;
 
     /// How bad it was before anybody did anything about it.
     ///
@@ -1087,7 +1087,7 @@ impl AgentState {
         // before it - the strength curve, the appetite curve - is written
         // against that one figure.
         let max_age = crate::environment::seasons::YEARS_BEFORE_OLD_AGE_TAKES_YOU
-            * crate::environment::seasons::TURNS_PER_YEAR;
+            * crate::environment::seasons::TICKS_PER_YEAR;
 
         Self {
             health: 100.0,
@@ -1293,7 +1293,7 @@ impl AgentState {
     /// A fortnight to close the worst of them, on twelve turns to the day,
     /// which is about right for something nobody stitched.
     pub const HOW_FAST_A_WOUND_CLOSES: f32 =
-        1.0 / (14.0 * crate::environment::seasons::TURNS_PER_DAY as f32);
+        1.0 / (14.0 * crate::environment::seasons::TICKS_PER_DAY as f32);
 
     pub fn lose_health(&mut self, amount: f32, to: &str) {
         if amount <= 0.0 {
@@ -1491,7 +1491,7 @@ impl AgentState {
 
     /// How old this body is, in years.
     pub fn years_old(&self) -> u32 {
-        self.age / crate::environment::seasons::TURNS_PER_YEAR
+        self.age / crate::environment::seasons::TICKS_PER_YEAR
     }
 
     /// What share of a grown appetite this body wants, for its age.
@@ -1520,7 +1520,7 @@ impl AgentState {
     /// body of a given age *is*: `what_a_body_this_age_eats` decides the
     /// reserve, the stomach and the burn.
     pub fn now_this_many_years_old(&mut self, years: u32) {
-        self.age = years * crate::environment::seasons::TURNS_PER_YEAR;
+        self.age = years * crate::environment::seasons::TICKS_PER_YEAR;
         self.life_stage = LifeStage::from_age(self.age);
         self.physiology.now_a_body_of(self.what_i_eat_for_my_age());
     }
@@ -4807,7 +4807,7 @@ impl Agent {
     /// twenty, so a fully watered agent was permanently in mortal danger and
     /// went to the water on nine turns in ten. Derived from the calendar now,
     /// so it cannot fall behind it again. See ISSUES #74.
-    const A_LONG_WAY_OFF: f32 = crate::environment::seasons::TURNS_PER_DAY as f32 / 2.0;
+    const A_LONG_WAY_OFF: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 / 2.0;
 
     /// How much any one drive may press, before its band is applied.
     ///
@@ -4993,9 +4993,16 @@ impl Agent {
 
     /// How often a hand is tested against what it has not been doing.
     ///
-    /// A season. Rust is reckoned in years, so checking more often buys
-    /// nothing and costs a walk over every skill of every agent.
-    const HOW_OFTEN_A_HAND_IS_TESTED: u32 = 288;
+    /// Rust is reckoned in years, so checking more often buys nothing and
+    /// costs a walk over every skill of every agent.
+    ///
+    /// Stated in days, not in a bare count. It was `288`, which was six days
+    /// while a step was a tick; once the counter began advancing half an hour
+    /// at a time, `% 288` could only fall due when the count was a multiple of
+    /// both, which is once a day rather than once in six. That is exactly the
+    /// failure `seasons::ONCE_A_DAY` and its neighbours exist to prevent, and
+    /// this was one of two bare counts left that had not been converted.
+    const HOW_OFTEN_A_HAND_IS_TESTED: u32 = 6 * crate::environment::seasons::TICKS_PER_DAY;
 
     pub fn process_survival_turn(&mut self, current_turn: u32) {
         // Calculate pregnancy energy multiplier (if pregnant)
@@ -6747,7 +6754,7 @@ impl Agent {
         now: u32,
     ) -> Vec<super::patterns::Element> {
         use super::patterns::{Bearing, Element};
-        use crate::environment::seasons::{Season, DAYS_PER_YEAR, TURNS_PER_DAY};
+        use crate::environment::seasons::{Season, DAYS_PER_YEAR, TICKS_PER_DAY};
 
         let tried = Self::what_was_tried(action);
         let mut elements = Vec::with_capacity(5);
@@ -6789,7 +6796,7 @@ impl Agent {
             }
         }
 
-        let day_of_year = (now / TURNS_PER_DAY) % DAYS_PER_YEAR;
+        let day_of_year = (now / TICKS_PER_DAY) % DAYS_PER_YEAR;
         elements.push(Element::When(Season::from_day_of_year(day_of_year)));
 
         elements
@@ -7009,7 +7016,7 @@ impl Agent {
     /// Everything about remembering the country is counted in days, because
     /// what a day is does not change and what a turn is might.
     pub fn what_day_it_is(turn: u32) -> u32 {
-        turn / crate::environment::seasons::TURNS_PER_DAY
+        turn / crate::environment::seasons::TICKS_PER_DAY
     }
 
     /// How many turns went into what was just finished.
@@ -8002,7 +8009,7 @@ impl Agent {
                 // a good meal with a day, and a turn spent on a crumb is a
                 // turn.
                 let days_left = (food_data.how_long_this_has_left()
-                    / crate::environment::seasons::TURNS_PER_DAY as f32)
+                    / crate::environment::seasons::TICKS_PER_DAY as f32)
                     .floor() as u32;
 
                 let better = match best_item.as_ref() {
@@ -8255,12 +8262,12 @@ impl Agent {
 
     /// How old this agent is in calendar years.
     pub fn age_in_years(&self) -> f32 {
-        self.state.age as f32 / crate::environment::TURNS_PER_YEAR as f32
+        self.state.age as f32 / crate::environment::TICKS_PER_YEAR as f32
     }
 
     /// How long this agent will live, in calendar years, if nothing kills it.
     pub fn lifespan_in_years(&self) -> f32 {
-        self.state.max_age as f32 / crate::environment::TURNS_PER_YEAR as f32
+        self.state.max_age as f32 / crate::environment::TICKS_PER_YEAR as f32
     }
 
     /// Update life stage based on age
@@ -8356,7 +8363,7 @@ impl Agent {
     /// meant to be: it is the specification's "I do not have enough food"
     /// raising fear, and fear is what sends somebody looking further afield
     /// than the ground they are standing on.
-    const WHAT_DREAD_LOOKS_AHEAD: f32 = crate::environment::seasons::TURNS_PER_DAY as f32 * 3.0;
+    const WHAT_DREAD_LOOKS_AHEAD: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 * 3.0;
 
     /// Fear from a need that something has been preventing this agent from
     /// answering.
@@ -9979,7 +9986,7 @@ impl Agent {
                     .unwrap_or(0);
                 let freshness = 1.0
                     - (current_turn.saturating_sub(learned_on) as f32
-                        / crate::environment::seasons::TURNS_PER_YEAR as f32)
+                        / crate::environment::seasons::TICKS_PER_YEAR as f32)
                         .clamp(0.0, 1.0);
 
                 let heard_not_seen = self
@@ -10824,7 +10831,7 @@ impl Errand {
     /// which is the failure the old behaviour was avoiding by throwing the
     /// errand away.
     pub const HOW_LONG_AN_ERRAND_KEEPS: u32 =
-        2 * crate::environment::seasons::TURNS_PER_DAY;
+        2 * crate::environment::seasons::TICKS_PER_DAY;
 
     /// Whether this one has been waiting too long to still be worth resuming.
     pub fn stale(&self) -> bool {

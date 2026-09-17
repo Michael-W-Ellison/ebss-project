@@ -661,7 +661,7 @@ impl Simulation {
     ///
     /// Two days of the world's calendar of asking and not being fed.
     pub(in crate::analytics) const LONG_ENOUGH_TO_TRY_SOMETHING_ELSE: f32 =
-        2.0 * crate::environment::seasons::TURNS_PER_DAY as f32;
+        2.0 * crate::environment::seasons::TICKS_PER_DAY as f32;
 
     /// And the most of his turns a man will ever spend on the other thing.
     ///

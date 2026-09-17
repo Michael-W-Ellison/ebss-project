@@ -173,7 +173,7 @@ impl Danger {
     /// the pack is working it, short enough that the country is not
     /// permanently marked by one bad afternoon.
     pub const HOW_LONG_A_FRIGHT_LASTS: u32 =
-        crate::environment::seasons::DAYS_PER_SEASON * crate::environment::seasons::TURNS_PER_DAY;
+        crate::environment::seasons::DAYS_PER_SEASON * crate::environment::seasons::TICKS_PER_DAY;
 }
 
 /// Something an agent was told rather than saw.
@@ -426,7 +426,7 @@ impl ExplorationKnowledge {
     /// ground it stripped last week, short enough that it finds the same
     /// hedgerow bearing again in the autumn.
     pub const HOW_LONG_A_PLACE_STAYS_PICKED_OUT: u32 =
-        crate::environment::seasons::DAYS_PER_SEASON * crate::environment::seasons::TURNS_PER_DAY
+        crate::environment::seasons::DAYS_PER_SEASON * crate::environment::seasons::TICKS_PER_DAY
             / 2;
 
     /// And how many bare places anybody carries about with them.
@@ -457,7 +457,7 @@ impl ExplorationKnowledge {
     /// How long a sighting of somebody is worth acting on.
     ///
     /// A day. People move.
-    const HOW_LONG_A_SIGHTING_IS_WORTH: u32 = crate::environment::seasons::TURNS_PER_DAY;
+    const HOW_LONG_A_SIGHTING_IS_WORTH: u32 = crate::environment::seasons::TICKS_PER_DAY;
 
     /// Mark a tile as explored and return true if it's a new discovery
     pub fn explore_tile(&mut self, position: Position, current_turn: u32) -> bool {

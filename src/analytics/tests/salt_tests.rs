@@ -174,7 +174,7 @@ fn the_sea_costs_more_than_it_gives() {
             agent.drank_salt_water(0);
         }
 
-        for turn in 1..=(crate::environment::seasons::TURNS_PER_DAY * 3) {
+        for turn in 1..=(crate::environment::seasons::TICKS_PER_DAY * 3) {
             agent.state.last_ate_turn = turn;
             agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
             agent.turn_with_percepts(turn);
@@ -203,7 +203,7 @@ fn the_salt_works_its_way_out() {
 
     assert!(simulation.population.agents[0].state.salt_in_me > 0.0);
 
-    for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 20) {
+    for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_DAY * 20) {
         simulation.take_a_turn();
         if !simulation.population.agents[0].state.is_alive {
             break;

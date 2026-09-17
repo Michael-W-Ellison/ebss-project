@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// Twelve two-hour turns to a day - see `crate::environment::seasons`
-const TURNS_PER_DAY: f32 = 12.0;
+const TICKS_PER_DAY: f32 = 12.0;
 use uuid::Uuid;
 use crate::core::traits::{Trait, TraitSet};
 
@@ -943,7 +943,7 @@ impl Relationship {
         // anything that had actually happened between them. A day's worth of
         // getting on with somebody now does what a turn's worth used to.
         let old_strength = self.bond_strength;
-        let a_day_of_it = total_change / TURNS_PER_DAY;
+        let a_day_of_it = total_change / TICKS_PER_DAY;
 
         if a_day_of_it > 0.0 {
             // Getting on with a man will make him a friend. Whether he is more

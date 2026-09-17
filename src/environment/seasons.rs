@@ -77,10 +77,31 @@ pub const MINUTES_IN_A_WHOLE_LIFE: u32 = MINUTES_PER_YEAR * YEARS_BEFORE_OLD_AGE
 /// before a single agent thinks about anything. Deciding less often cannot
 /// rescue that; charging `World::take_a_turn` by elapsed time might. Measured in
 /// ISSUES_FOUND #170.
-pub const TURNS_PER_DAY: u32 = 48;
+pub const TICKS_PER_DAY: u32 = MINUTES_PER_DAY;
+
+/// How long a body goes between one chance to think and the next.
+///
+/// Half an hour. A planning period is not a unit of time so much as a gate on
+/// one: it is when somebody *may* stop and decide, and an agent already in the
+/// middle of something does not - see `Agent::busy_until`. Somebody who sets
+/// out on a hunt reckoned at 145 ticks passes the gate at 30, 60, 90 and 120
+/// without looking up.
+pub const TICKS_BETWEEN_PLANS: u32 = 30;
+
+/// How many of those a day holds: forty-eight.
+///
+/// A loop that steps the simulation a day at a time wants this, because it is
+/// counting *decisions*. Arithmetic about how much time has passed wants
+/// `TICKS_PER_DAY`, which is 1,440. They were one constant while a step and a
+/// tick were the same thing, and they are not: a tick is a minute, as the
+/// lifecycle specification counts them, and a step is half an hour of living.
+pub const PLANNING_PERIODS_PER_DAY: u32 = TICKS_PER_DAY / TICKS_BETWEEN_PLANS;
+
+/// And how many a year holds, for a loop that runs a world for years.
+pub const PLANNING_PERIODS_PER_YEAR: u32 = PLANNING_PERIODS_PER_DAY * DAYS_PER_YEAR;
 
 /// How many turns a year lasts.
-pub const TURNS_PER_YEAR: u32 = TURNS_PER_DAY * DAYS_PER_YEAR;
+pub const TICKS_PER_YEAR: u32 = TICKS_PER_DAY * DAYS_PER_YEAR;
 
 /// How often the world's slower business is attended to.
 ///
@@ -96,10 +117,10 @@ pub const TURNS_PER_YEAR: u32 = TURNS_PER_DAY * DAYS_PER_YEAR;
 ///
 /// At the twelve-turn day these come to 12, 24, 48 and 84 against the 10, 20,
 /// 50 and 100 they replace, so nothing much moves by the renaming itself.
-pub const ONCE_A_DAY: u32 = TURNS_PER_DAY;
-pub const ONCE_EVERY_OTHER_DAY: u32 = TURNS_PER_DAY * 2;
-pub const ONCE_EVERY_FEW_DAYS: u32 = TURNS_PER_DAY * 4;
-pub const ONCE_A_WEEK: u32 = TURNS_PER_DAY * DAYS_IN_A_SHORT_WEEK;
+pub const ONCE_A_DAY: u32 = TICKS_PER_DAY;
+pub const ONCE_EVERY_OTHER_DAY: u32 = TICKS_PER_DAY * 2;
+pub const ONCE_EVERY_FEW_DAYS: u32 = TICKS_PER_DAY * 4;
+pub const ONCE_A_WEEK: u32 = TICKS_PER_DAY * DAYS_IN_A_SHORT_WEEK;
 
 /// What time of day it is, as a day number and a clock reading.
 ///
@@ -110,20 +131,28 @@ pub const ONCE_A_WEEK: u32 = TURNS_PER_DAY * DAYS_IN_A_SHORT_WEEK;
 /// fortnight old. Derived here so that it is right, and right at any turn
 /// length.
 pub fn what_the_clock_says(turn: u32) -> (u32, u32, u32) {
-    let minutes_into_the_day = (turn % TURNS_PER_DAY) * MINUTES_PER_TURN;
+    // The count is in ticks and a tick is a minute, so this is already
+    // minutes. It used to multiply, back when the count was in steps.
+    let minutes_into_the_day = turn % TICKS_PER_DAY;
     (
-        turn / TURNS_PER_DAY,
+        turn / TICKS_PER_DAY,
         minutes_into_the_day / MINUTES_PER_HOUR,
         minutes_into_the_day % MINUTES_PER_HOUR,
     )
 }
 
-/// How many minutes one turn of thinking covers.
+/// How many minutes one step covers.
 ///
 /// The one spelling. `agents::physiology::MINUTES_PER_TURN` derives from the
 /// same place; this is here because the clock in the window needs it too and
 /// should not be reaching into the physiology to get it.
-pub const MINUTES_PER_TURN: u32 = MINUTES_PER_DAY / TURNS_PER_DAY;
+///
+/// It is the gap between plans, because that is what a step *is*. It used to
+/// be `MINUTES_PER_DAY / TICKS_PER_DAY`, which was right while a tick was a
+/// step and became `1` the moment a tick became a minute - and a body advanced
+/// one minute per half hour lived, thirty times too slow, without anything
+/// failing to compile.
+pub const MINUTES_PER_TURN: u32 = TICKS_BETWEEN_PLANS;
 
 /// Minutes in an hour, so nobody writes 60 twice.
 pub const MINUTES_PER_HOUR: u32 = 60;
@@ -387,11 +416,16 @@ pub struct SeasonalCalendar {
 
 /// What a calendar saved before the day had a length in it runs at.
 fn default_turns_per_day() -> u32 {
-    TURNS_PER_DAY
+    TICKS_PER_DAY
 }
 
 impl SeasonalCalendar {
-    /// Create a new calendar running at the given number of turns per day.
+    /// Create a new calendar running at the given number of *steps* a day.
+    ///
+    /// Steps, not ticks. The calendar moves `24 / steps_per_day` hours each
+    /// time it is asked, so handing it `TICKS_PER_DAY` makes it advance a
+    /// minute per step when a step is half an hour, and the year takes thirty
+    /// of them to turn. It wants `PLANNING_PERIODS_PER_DAY`.
     pub fn new(turns_per_day: u32) -> Self {
         Self {
             day_of_year: 0,
@@ -568,7 +602,7 @@ impl SeasonalCalendar {
 
 impl Default for SeasonalCalendar {
     fn default() -> Self {
-        Self::new(TURNS_PER_DAY)
+        Self::new(PLANNING_PERIODS_PER_DAY)
     }
 }
 
@@ -850,14 +884,14 @@ mod calendar_tests {
     /// body runs on is stated in minutes rather than in turns.
     #[test]
     fn the_decision_turn_does_not_change_the_calendar() {
-        assert_eq!(TURNS_PER_YEAR, TURNS_PER_DAY * DAYS_PER_YEAR);
+        assert_eq!(TICKS_PER_YEAR, TICKS_PER_DAY * DAYS_PER_YEAR);
         assert_eq!(
             crate::agents::physiology::MINUTES_PER_TURN,
-            MINUTES_PER_DAY / TURNS_PER_DAY,
+            MINUTES_PER_DAY / TICKS_PER_DAY,
             "a turn is however many minutes a day holds divided by the turns in it"
         );
         assert_eq!(
-            crate::agents::physiology::MINUTES_PER_TURN * TURNS_PER_DAY,
+            crate::agents::physiology::MINUTES_PER_TURN * TICKS_PER_DAY,
             MINUTES_PER_DAY,
             "and the turns in a day cover the whole of it"
         );

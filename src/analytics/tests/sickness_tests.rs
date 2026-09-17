@@ -302,7 +302,7 @@ fn living_on_a_midden_makes_people_ill() {
         // Pin them to the worst ground there is, and keep it that way: the
         // fouling breaks down, and an agent that wanders off is not living
         // on it any more.
-        for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 30) {
+        for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_DAY * 30) {
             if let Some(tile) = simulation.world.grid.get_tile_mut(&here) {
                 tile.soil.fouling = Soil::AS_FOUL_AS_IT_GETS;
             }
@@ -338,7 +338,7 @@ fn clean_ground_does_not_make_anybody_ill() {
     let mut simulation = one_person();
     let here = Position::new(25, 25);
 
-    for _ in 0..(crate::environment::seasons::TURNS_PER_DAY * 20) {
+    for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_DAY * 20) {
         if let Some(tile) = simulation.world.grid.get_tile_mut(&here) {
             tile.soil.fouling = 0.0;
         }
@@ -592,7 +592,7 @@ fn a_wound_can_turn() {
         crate::core::dice::seed(5_200 + seed);
         let mut one = Agent::new(AgentConfig::default());
         one.state.take_damage(30.0);
-        for turn in 0..(14 * crate::environment::seasons::TURNS_PER_DAY) {
+        for turn in 0..(14 * crate::environment::seasons::TICKS_PER_DAY) {
             one.turn_with_time(turn);
             if one.is_ailing() {
                 break;
@@ -618,7 +618,7 @@ fn a_soaking_in_the_cold_tells() {
         let mut agent = Agent::new(AgentConfig::default());
         // A hard day of it: what `update_exposure` would be handing over on a
         // January night in the open.
-        for turn in 0..crate::environment::seasons::TURNS_PER_DAY {
+        for turn in 0..crate::environment::seasons::PLANNING_PERIODS_PER_DAY {
             agent.a_soaking_may_tell(0.8, turn);
         }
         if agent.what_ails_me().map(|a| a.from == Agent::OFF_A_SOAKING).unwrap_or(false) {

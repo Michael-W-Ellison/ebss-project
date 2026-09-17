@@ -5459,7 +5459,7 @@ impl AnimalManager {
 
     /// And a turn of it, off the calendar rather than written out again.
     pub const HOW_MUCH_OF_ITSELF_IT_MENDS_A_TURN: f32 = Self::HOW_MUCH_OF_ITSELF_IT_MENDS_A_DAY
-        / crate::environment::seasons::TURNS_PER_DAY as f32;
+        / crate::environment::seasons::TICKS_PER_DAY as f32;
 
     /// What a winter spent asleep costs, against one spent out in it.
     ///
@@ -5550,7 +5550,7 @@ impl AnimalManager {
     /// small life stood at six per cent of what it would carry.
     pub fn what_a_grazer_is_worth_to(hunter: &AnimalSpecies) -> f32 {
         Self::days_a_grazer_keeps(hunter.mass_kg)
-            * crate::environment::seasons::TURNS_PER_DAY as f32
+            * crate::environment::seasons::TICKS_PER_DAY as f32
             * hunter.hunger_rate
     }
 
@@ -5824,7 +5824,7 @@ impl AnimalManager {
         // two hunters on one ground each get half of it, and the second one
         // starves off it.
         let a_turn = Self::GRAZERS_A_DAY_ON_THE_BEST_GROUND * how_rich / sharing_it.max(1.0)
-            / crate::environment::seasons::TURNS_PER_DAY as f32;
+            / crate::environment::seasons::TICKS_PER_DAY as f32;
 
         // **Which larder it is taking out of, not only how much.** A heron
         // standing in a lake is not turning over voles, and until the fish
@@ -5907,7 +5907,7 @@ impl AnimalManager {
     pub fn what_a_fish_is_worth_to(hunter: &AnimalSpecies) -> f32 {
         Self::days_a_grazer_keeps(hunter.mass_kg)
             * (SmallLife::WHAT_A_FISH_WEIGHS / SmallLife::WHAT_A_GRAZER_WEIGHS)
-            * crate::environment::seasons::TURNS_PER_DAY as f32
+            * crate::environment::seasons::TICKS_PER_DAY as f32
             * hunter.hunger_rate
     }
 
@@ -5929,8 +5929,8 @@ impl AnimalManager {
         };
 
         let a_day = Self::what_the_small_life_gives(hunter, best_ground, 1.0)
-            * crate::environment::seasons::TURNS_PER_DAY as f32;
-        let it_burns = hunter.hunger_rate * crate::environment::seasons::TURNS_PER_DAY as f32;
+            * crate::environment::seasons::TICKS_PER_DAY as f32;
+        let it_burns = hunter.hunger_rate * crate::environment::seasons::TICKS_PER_DAY as f32;
         if it_burns <= 0.0 {
             return 0.0;
         }

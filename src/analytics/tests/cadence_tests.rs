@@ -8,7 +8,7 @@ use crate::agents::practices::Undertaking;
 use crate::agents::rhythm::Rhythm;
 use crate::agents::{AgentConfig, Population};
 use crate::analytics::Simulation;
-use crate::environment::seasons::TURNS_PER_DAY;
+use crate::environment::seasons::TICKS_PER_DAY;
 use crate::environment::Action;
 use crate::world::{World, WorldConfig};
 
@@ -37,7 +37,7 @@ fn where_it_settles(yield_at: impl Fn(u32) -> f32, doings: u32) -> f32 {
         rhythm.how_it_went(now, got);
     }
 
-    rhythm.every() as f32 / TURNS_PER_DAY as f32
+    rhythm.every() as f32 / TICKS_PER_DAY as f32
 }
 
 /// A rhythm starts somewhere deliberately wrong.
@@ -75,7 +75,7 @@ fn where_waiting_gains_nothing_he_stops_waiting() {
 fn where_waiting_keeps_paying_he_waits() {
     // Yield straight in proportion to the wait: leaving it twice as long
     // brings back twice as much, for ever.
-    let settled = where_it_settles(|every| every as f32 / TURNS_PER_DAY as f32, 200);
+    let settled = where_it_settles(|every| every as f32 / TICKS_PER_DAY as f32, 200);
 
     assert!(
         settled >= 5.0,
@@ -94,7 +94,7 @@ fn where_waiting_keeps_paying_he_waits() {
 #[test]
 fn he_settles_at_the_knee_of_the_curve() {
     // Saturating at about two days, which stands in for a robbing rate.
-    let two_days = 2.0 * TURNS_PER_DAY as f32;
+    let two_days = 2.0 * TICKS_PER_DAY as f32;
     let settled = where_it_settles(
         move |every| 1.0 - (-(every as f32) / two_days).exp(),
         300,
@@ -114,11 +114,11 @@ fn he_settles_at_the_knee_of_the_curve() {
 #[test]
 fn the_cadence_follows_the_world_and_not_a_constant() {
     let quick = where_it_settles(
-        move |every| 1.0 - (-(every as f32) / (1.0 * TURNS_PER_DAY as f32)).exp(),
+        move |every| 1.0 - (-(every as f32) / (1.0 * TICKS_PER_DAY as f32)).exp(),
         300,
     );
     let slow = where_it_settles(
-        move |every| 1.0 - (-(every as f32) / (5.0 * TURNS_PER_DAY as f32)).exp(),
+        move |every| 1.0 - (-(every as f32) / (5.0 * TICKS_PER_DAY as f32)).exp(),
         300,
     );
 
@@ -231,7 +231,7 @@ fn a_man_with_a_line_walks_it() {
         "and he does not walk it twice in the same half hour"
     );
     assert!(
-        agent.how_often_i(Undertaking::Trapping).every() >= TURNS_PER_DAY,
+        agent.how_often_i(Undertaking::Trapping).every() >= TICKS_PER_DAY,
         "nobody walks a line more than once a day"
     );
 }

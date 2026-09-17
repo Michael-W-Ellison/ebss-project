@@ -390,7 +390,7 @@ fn a_downpour_is_worse_than_a_drizzle() {
         // and compares nothing. What this test is for is whether a downpour
         // is worse than a drizzle, and that has to be asked while both are
         // still there to be compared. See ISSUES_FOUND #205.
-        for _ in 0..crate::environment::seasons::TURNS_PER_DAY {
+        for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_DAY {
             simulation.world.climate.weather.weather_type = sky;
             simulation.world.climate.weather.duration_remaining = u32::MAX;
             simulation.world.take_a_turn();
@@ -442,7 +442,7 @@ fn a_roof_keeps_the_rain_off() {
         // and compares nothing. What this test is for is whether a downpour
         // is worse than a drizzle, and that has to be asked while both are
         // still there to be compared. See ISSUES_FOUND #205.
-        for _ in 0..crate::environment::seasons::TURNS_PER_DAY {
+        for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_DAY {
             simulation.world.climate.weather.weather_type = WeatherType::HeavyRain;
             simulation.world.climate.weather.duration_remaining = u32::MAX;
             simulation.world.take_a_turn();

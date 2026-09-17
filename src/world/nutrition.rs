@@ -202,7 +202,7 @@ impl Piece {
         /// was not. Drying is a thing that takes so many days in the sun; it
         /// is not a thing that takes so many decisions.
         const fn days(how_many: u32) -> u32 {
-            how_many * crate::environment::seasons::TURNS_PER_DAY
+            how_many * crate::environment::seasons::TICKS_PER_DAY
         }
 
         match self {
@@ -623,7 +623,7 @@ impl FoodDatabase {
     ///
     /// Every one of these tables was written as a day-count and stored as a
     /// number of turns at 1440 turns to the day. The calendar was later put on
-    /// a scale a life fits inside - `TURNS_PER_DAY` is 12, a season is
+    /// a scale a life fits inside - `TICKS_PER_DAY` is 12, a season is
     /// twenty-four days and a year is 1,152 turns - and the food tables were
     /// not brought with it. So meat, written down as lasting a day, lasted a
     /// hundred and twenty of them; grain written down as ten days lasted
@@ -645,7 +645,7 @@ impl FoodDatabase {
     /// settlement lost a fifth of its people. These are on the scale of the
     /// season instead, which is the unit a store is actually against.
     const fn days(how_many: u32) -> u32 {
-        how_many * crate::environment::seasons::TURNS_PER_DAY
+        how_many * crate::environment::seasons::TICKS_PER_DAY
     }
 
     fn register_all_foods(&mut self) {

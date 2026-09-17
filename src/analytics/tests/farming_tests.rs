@@ -55,7 +55,7 @@ fn a_field_nobody_works_goes_over_to_weeds() {
 
     // A season's worth of growing weather with nobody in the field
     for _ in 0..(crate::environment::seasons::DAYS_PER_SEASON
-        * crate::environment::seasons::TURNS_PER_DAY)
+        * crate::environment::seasons::TICKS_PER_DAY)
     {
         soil.nobody_weeded_this(1.0, 1.0);
     }

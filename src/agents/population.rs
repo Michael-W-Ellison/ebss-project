@@ -269,7 +269,7 @@ impl Population {
             let mut rng = crate::core::dice::roll();
             // Grown people, between twenty and forty
             let years = rng.gen_range(20..40);
-            agent.state.age = years * crate::environment::seasons::TURNS_PER_YEAR;
+            agent.state.age = years * crate::environment::seasons::TICKS_PER_YEAR;
             agent.state.life_stage = LifeStage::from_age(agent.state.age);
             agent
                 .state
@@ -365,7 +365,12 @@ impl Population {
 
     /// Update all agents and handle lifecycle events
     pub fn take_a_turn(&mut self) {
-        self.current_turn += 1;
+        // A step is a planning period, and a planning period is half an hour
+        // of ticks. The counter counts ticks - minutes - because that is what
+        // the lifecycle specification counts and what every clock derived from
+        // `TICKS_PER_DAY` is denominated in. It used to advance by one, when a
+        // step and a tick were the same thing.
+        self.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
 
         // Reset per-turn counters at the start of each turn
         self.stats.births_this_turn = 0;

@@ -384,13 +384,13 @@ impl SmallLife {
     /// **Derived rather than written down, because the number that was
     /// written down was on a different calendar.** The docstring above this
     /// used to read "twelve turns to the day" and the constant was 0.02 - and
-    /// `TURNS_PER_DAY` is **48**, so a snare took four fifths of a chance a
+    /// `TICKS_PER_DAY` is **48**, so a snare took four fifths of a chance a
     /// day rather than a fifth, and the sentence beside it was wrong by four
     /// times. The same defect as #143 and #288: a rate calibrated on a
     /// calendar the world no longer keeps.
     pub const WHAT_A_SNARE_TAKES_ON_FULL_GROUND: f32 =
         Self::WHAT_A_SNARE_TAKES_ON_FULL_GROUND_IN_A_DAY
-            / crate::environment::seasons::TURNS_PER_DAY as f32;
+            / crate::environment::seasons::TICKS_PER_DAY as f32;
 
     /// What a whole hunting ground gives a trapline in a turn, at full stock,
     /// however many snares are on it.
@@ -429,7 +429,7 @@ impl SmallLife {
     /// one food source that does not stop when the hedgerows do, and it was
     /// delivering two rabbits a settlement a winter.
     pub const WHAT_A_QUIET_COUNTRY_TAKES: f32 = Self::WHAT_A_QUIET_COUNTRY_TAKES_IN_A_DAY
-        / crate::environment::seasons::TURNS_PER_DAY as f32;
+        / crate::environment::seasons::TICKS_PER_DAY as f32;
 
     /// And the most it can ever be, when the game is gone and the foxes are
     /// not.

@@ -16,12 +16,12 @@ use crate::agents::{Agent, AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
 use crate::environment::{verbs, Action};
 use crate::world::nutrition::FoodDatabase;
-use crate::environment::seasons::{Season, TURNS_PER_DAY};
+use crate::environment::seasons::{Season, PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 use crate::world::{ItemType, Pit, Position, Terrain, TerrainType, World, WorldConfig};
 
 /// Wind the world on until the year reaches the season wanted.
 fn turn_the_year_to(simulation: &mut Simulation, wanted: Season) {
-    for _ in 0..(TURNS_PER_DAY * 400) {
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * 400) {
         if simulation.world.climate.current_season() == wanted {
             return;
         }

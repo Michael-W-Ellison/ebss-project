@@ -324,7 +324,7 @@ impl Pit {
     /// by a season apart are not, and pretending otherwise throws the older
     /// one's clock over the newer.
     const CLOSE_ENOUGH_IN_AGE_TO_JOIN: u32 =
-        crate::environment::seasons::TURNS_PER_DAY * 4;
+        crate::environment::seasons::TICKS_PER_DAY * 4;
 
     /// And how many separate lots of one thing a hole keeps before it starts
     /// joining them up. A store is a hole in the ground, not a ledger.
@@ -428,7 +428,7 @@ impl Pit {
         item: &crate::agents::InventoryItem,
         now: u32,
     ) -> Option<f32> {
-        use crate::environment::seasons::TURNS_PER_DAY;
+        use crate::environment::seasons::TICKS_PER_DAY;
 
         let food = item.food_data.as_ref()?;
         let _ = now;
@@ -437,7 +437,7 @@ impl Pit {
         // - at the pace this hole lets it run.
         let left = food.how_long_this_has_left();
 
-        Some(left * self.how_much_slower_things_age() as f32 / TURNS_PER_DAY as f32)
+        Some(left * self.how_much_slower_things_age() as f32 / TICKS_PER_DAY as f32)
     }
 
     /// Take some of a thing out.
@@ -766,7 +766,7 @@ impl World {
     /// `patterns::STILL_WORTH_THE_WALK`, which read 288 against a comment
     /// saying "a season".
     pub const HOW_LONG_A_THING_LIES_THERE: u32 =
-        crate::environment::seasons::DAYS_PER_SEASON * 3 / 2 * crate::environment::seasons::TURNS_PER_DAY;
+        crate::environment::seasons::DAYS_PER_SEASON * 3 / 2 * crate::environment::seasons::TICKS_PER_DAY;
 
     /// What the weather does to what is lying about.
     ///
@@ -861,7 +861,7 @@ impl World {
     /// Superseded by `nutrition::Piece::how_long_it_takes_to_dry`, which asks
     /// the question this constant could not: how big is the piece.
     #[allow(dead_code)]
-    const HOW_LONG_DRYING_TAKES: u32 = 2 * crate::environment::seasons::TURNS_PER_DAY;
+    const HOW_LONG_DRYING_TAKES: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
 
     /// How often the weathering pass runs, which is what the extra ageing is
     /// reckoned against.
@@ -1305,7 +1305,7 @@ impl World {
 
     /// Leave the country to itself for a while.
     fn let_it_stand(&mut self, days: usize) {
-        for _ in 0..days * crate::environment::seasons::TURNS_PER_DAY as usize {
+        for _ in 0..days * crate::environment::seasons::TICKS_PER_DAY as usize {
             self.take_a_turn();
         }
     }
@@ -2272,7 +2272,10 @@ impl World {
 
 
     pub fn take_a_turn(&mut self) {
-        self.turn += 1;
+        // A step is a planning period, which is that many ticks. Every counter
+        // in the model has to advance by the same amount or two of them
+        // disagree about what day it is.
+        self.turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
 
         // Update climate (weather, seasons, time)
         self.climate.take_a_turn();

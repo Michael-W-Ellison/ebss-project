@@ -745,7 +745,10 @@ impl Memory {
 
     /// Update memory for a new turn (optimized for large populations)
     pub fn take_a_turn(&mut self) {
-        self.current_turn += 1;
+        // A step is a planning period, which is that many ticks. Every counter
+        // in the model has to advance by the same amount or two of them
+        // disagree about what day it is.
+        self.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
         self.turns_since_prune += 1;
 
         if self.config.batch_decay {
