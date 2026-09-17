@@ -781,9 +781,19 @@ impl World {
     /// fortnight in a pack would. An open pit is a hole with food in it and
     /// keeps nothing at all.
     ///
+    /// **Both halves of that are counted in turns, not ticks.** The hold-back
+    /// pushed `created_turn` on by one and the ratio asked `now % 2`, which
+    /// were the same thing while a step was a tick. Once a step became thirty
+    /// ticks the pit gave back a thirtieth of the time it took away - so a
+    /// buried meal and a carried one came out of two days at the same 0.83 -
+    /// and `now % 2` was true at every step, so bare earth never held anything
+    /// back at all. A turn's worth of clock, once every turn that is not an
+    /// ageing one.
+    ///
     /// What has gone off in there rots away like anything else.
     fn what_is_buried_keeps(&mut self) {
         let now = self.turn;
+        let this_turn = now / crate::environment::seasons::TICKS_BETWEEN_PLANS;
         let mut buried_and_lost = 0u64;
 
         for pit in self.pits.iter_mut() {
@@ -793,12 +803,14 @@ impl World {
             // damp, and everything that lives in it - and a bowl or a basket
             // between the two is the difference between a store and a hole
             // full of rot.
-            let ageing = now % pit.how_much_slower_things_age() == 0;
+            let ageing = this_turn % pit.how_much_slower_things_age() as u32 == 0;
 
             for item in pit.holds.iter_mut() {
                 if let Some(food) = item.food_data.as_mut() {
                     if pit.covered && !ageing {
-                        food.created_turn = food.created_turn.saturating_add(1);
+                        food.created_turn = food
+                            .created_turn
+                            .saturating_add(crate::environment::seasons::TICKS_BETWEEN_PLANS);
                     }
                     food.update_freshness(now);
                 }
