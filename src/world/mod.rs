@@ -2468,14 +2468,18 @@ impl World {
         // `World::take_a_turn` read ten separately, in another function - two
         // spellings of one cadence, and shortening the turn would have moved
         // one and not the other.
-        const TURNS_PER_PASS: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
+        //
+        // Ticks, and named so. It was right as a span all along; what was
+        // wrong was at the other end, where `Soil::decay`'s rates were per
+        // pass and were being paid out per tick of it. See ISSUES_FOUND #218.
+        const TICKS_THIS_PASS_STANDS_FOR: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
 
         // Every tile in the world, because every tile in the world has litter
         // on it - `Soil::for_terrain` gives a forest floor 1.5 and a desert
         // 0.02, and rot never quite takes the last of it. There is nothing to
-        // narrow here and the register would hold the whole map. One pass in
-        // ten turns over a million tiles is about half a millisecond, which is
-        // a twentieth of what the two sweeps that *could* be narrowed were
+        // narrow here and the register would hold the whole map. One pass a
+        // day over a million tiles is about half a millisecond, which is a
+        // twentieth of what the two sweeps that *could* be narrowed were
         // costing. See ISSUES_FOUND.md #128.
         for row in &mut self.grid.tiles {
             for tile in row.iter_mut() {
@@ -2484,7 +2488,7 @@ impl World {
                 }
 
                 let humidity = Soil::humidity(tile.terrain.terrain_type, precipitation);
-                tile.soil.decay(humidity, TURNS_PER_PASS);
+                tile.soil.decay(humidity, TICKS_THIS_PASS_STANDS_FOR);
             }
         }
     }

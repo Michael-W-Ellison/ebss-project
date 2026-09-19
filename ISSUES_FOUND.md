@@ -16986,3 +16986,222 @@ model being thin, or the ecology now being too kind, is a question for its own
 pass and not for this one. None of the three is re-baselined here, because
 moving a threshold to fit a measurement is the thing that hid the last defect
 for a month.
+
+### 218. Every mechanism in the model, audited against the clock: five more places a tick stood where a pass belonged
+
+#217 found two. The obvious next question is whether there is a third, and the
+answer turned out to be that there were five - so this is the sweep rather than
+another single find. Every mechanism in the model was checked against the two
+questions that matter: **what unit is this rate in**, and **what unit is the
+span it is multiplied by**.
+
+The defect has one shape. `World::take_a_turn` advances `self.turn` by thirty
+ticks a step, because a tick is a minute and a step is half an hour. Anything
+that was calibrated against "a step" and is now multiplied by a span in ticks
+runs thirty times fast; anything stated in ticks and counted down once a step
+runs thirty times slow. Neither fails to compile and neither looks wrong at the
+site.
+
+#### What the sweep covered
+
+Four patterns, each grepped across the crate and each hit read:
+
+1. A rate multiplied by an elapsed span (every function taking a
+   `turns`/`ticks`/`elapsed`/`_stands_for` parameter, and every call site).
+2. A cadence gate `x % N == 0` (every modulo in live code).
+3. A clock counter's own advance (every `+=` on a turn, tick or `now`).
+4. A duration set in one unit and counted down in another (every `-= 1` and
+   `saturating_sub(1)` on a timer).
+
+#### The five
+
+**C. The ground rots thirty times too fast.** `Soil::decay`'s rates - leaf,
+wood and fouling - were per pass, written in `0e3500d` against `TICKS_PER_PASS
+= 10.0` when the calendar had no day in it at all. `World::rot_what_is_lying_about`
+passes `ONCE_A_DAY`, which is 1,440 now and was 12 when the arithmetic last
+agreed. Measured against the file's own claims about itself:
+
+| | as committed (1,440) | corrected (a day's worth) |
+|---|---|---|
+| leaf, wet wood | half gone in **1 day** | 38 days |
+| leaf, ordinary ground | 3 days | 96 days |
+| wood, wet | 19 days | 1.6 years |
+| wood, ordinary | 48 days | **4.0 years** |
+| wood, dry | 193 days | **16 years** |
+| a midden | **1 day at every humidity there is** | 4-39 days |
+
+`Soil`'s module doc says "a fallen tree outlasts the leaves that fell with it
+by decades" and "a tree that falls in a swamp is gone in a few years. The same
+tree in a desert is still lying there." Every one of those claims holds at the
+corrected rate and fails at the committed one. A desert kept its dead for six
+months. And a midden that halves in a day at any humidity puts
+`FOUL_ENOUGH_TO_WALK_AWAY_FROM` out of reach of anything that ever walks past
+it.
+
+**D. Wild food comes back a hundred and twenty times too fast.**
+`ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO` was `10.0`, and its own doc says
+what that is: "one pass every ten world turns, when a turn was two hours" -
+twenty hours. `regenerate_in_ground` divides the span it is given by it, and
+the live caller passes `ONCE_A_DAY`. So the ratio was **1.2 at the twelve-turn
+day, which is exactly right** (a day against a twenty-hour reference), 4.8 at
+the half-hour turn, and **144** once a tick became a minute.
+
+This is the one the whole exercise is for. The constant was introduced *to stop
+this happening* - "shorten the turn and wild food quietly comes back at a
+fraction of the rate it was balanced at, with nothing to say so" - and it did
+not, because it recorded the reference pass in a unit that then changed twice
+underneath it. It is `20.0 * MINUTES_PER_HOUR` now: stated in hours, which
+cannot drift.
+
+**E. A carcase was worth thirty times the keep it holds.**
+`what_a_grazer_is_worth_to` is `days_a_grazer_keeps(mass) * TICKS_PER_DAY *
+hunger_rate`, and its doc says what it means: "days of keep times what it burns
+in a day". What it burns in a day is its rate times the *passes* in a day,
+because `Animal::turn_hunger_burning` is called once a pass with a share of
+one - which is what makes `hunger_rate` a per-pass number, and settles a
+question #296 left open. `what_a_fish_is_worth_to` is the same line.
+
+`how_much_it_leans_on_the_small_life` had the same wrong spelling twice, in a
+numerator and a denominator, where it cancels. Corrected anyway: a wrong
+spelling that survives only because another wrong spelling sits next to it is
+one edit away from being a defect.
+
+**F. A ten-hour front sat for twelve and a half days.** `weather::hours_in_turns`
+answers in `TICKS_PER_DAY` - minutes - while `Weather::take_a_turn` takes
+`duration_remaining` down by one a *step*. So every spell of weather lasted
+thirty times what it was given.
+
+The function's own doc is an account of this exact bug happening before:
+"a single blizzard outlasting the winter that started it and still blowing the
+following summer, which is what the runs showed. Snow turned up in all four
+seasons in equal measure." Stating it in hours fixed what the number *meant*
+and left open what it was *counted in*, and the second half came back.
+
+**G. A beast looked up twice as often as it was told to.** `fauna.rs` gates two
+things on `weather.now % 4` with a bare literal: whether an animal looks round
+for its own kind, and whether it looks up for danger. `now` is the world clock
+and advances by thirty, and 30 % 4 = 2, so both came due every *second* pass
+rather than every fourth - twice as often, by arithmetic that has nothing to do
+with the number 4. Both are `4 * TICKS_BETWEEN_PLANS` now. Found during #217
+and shown there not to be what moved the herd; fixed here because it is still
+wrong.
+
+#### What the sweep cleared, which is most of it
+
+Named so that the next person does not have to check them again.
+
+**Correct as cadences**, all in ticks against a clock that counts ticks:
+`ONCE_A_DAY`, `ONCE_EVERY_OTHER_DAY`, `ONCE_EVERY_FEW_DAYS`, `ONCE_A_WEEK`,
+`HOW_OFTEN_A_ZONE_COMES_ROUND`, `HOW_OFTEN_A_HAND_IS_TESTED`,
+`HOW_OFTEN_THE_GROUND_IS_ASKED`, `HOW_OFTEN_THE_EMBERS_ARE_ASKED`.
+
+**Correct as rates**, per day and divided by the passes in a day, applied once
+a pass: the exposure rates (`Exposure::in_one_turn`, #288), the small life
+(`WHAT_A_QUIET_COUNTRY_TAKES`, `WHAT_A_SNARE_TAKES_ON_FULL_GROUND_IN_A_DAY`),
+animal healing (`HOW_MUCH_OF_ITSELF_IT_MENDS_A_TURN`), and the hunting yield
+(`what_the_small_life_gives`).
+
+**Correct counters**: every clock in the model advances by `TICKS_BETWEEN_PLANS`
+- the world's, the population's, the climate's, shared knowledge, memory, and
+the plugin registry's two. The one exception is `SimulationController`, which
+advances by one and whose counter nothing reads.
+
+**Correct spans**: `SeasonalCalendar` is built with `PLANNING_PERIODS_PER_DAY`
+and advanced once a step; the danger loop counts `MINUTES_PER_TURN` minutes one
+at a time (#287); `nobody_weeded_this` and `let_them_spread` are per-pass rates
+called with 1.0 by a caller that runs at that cadence; the fishery divides
+ticks by ticks and cancels; `what_the_clock_says` and `MINUTES_PER_TURN` are
+right.
+
+#### Three things found that are not this defect, and are not fixed here
+
+- **Bare durations that were never on any calendar.** `reproduction_cooldown`
+  is `800` with the comment "full pregnancy duration", which is sixteen days;
+  animal `gestation_period` is `300` and `maturity_age` `500`; a body's illness
+  `duration` is `10`; `prune_interval` is `100`. These are wrong at every turn
+  length rather than wrong at this one, so they belong with the fifty-one plant
+  growth times rather than here.
+- **Dead code that would have been a defect if anything called it.**
+  `Relationship::verify_information` and `incorrect_information` compare an
+  information age against bare literals - 100, 500 - and have no callers outside
+  their own tests. `SharedKnowledge::cleanup_stale` has none at all.
+- **A stale comment on a live gate**: `rot_what_is_lying_about` still said
+  "every 10 turns" beside a daily cadence. Corrected.
+
+#### The measurement
+
+**The suite: 2,622 passed, 12 failed, 2 ignored, in 2,472 seconds** - against
+2,619 / 14 / 2,832 at #217. Six tests that were failing now pass, two fail that
+did not, and two are recorded counts that moved on purpose.
+
+**Six now pass**, three of them long-standing:
+
+    ecology_tests::a_hawk_can_make_a_living_in_a_wood_and_not_on_a_plain
+    nutrient_loop_tests::what_a_settlement_eats_reaches_the_ground_it_stands_on
+    rotation_tests::a_pod_row_leaves_the_ground_better_than_it_found_it
+    clothing_tests::a_cold_agent_ends_up_dressed
+    errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step
+    relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it
+
+The last three are the ones #217 moved and left red, and nothing was done to
+them: they came back on their own when the world they run in stopped being
+wrong. The pod row is the pointed one - it was failing because a field's
+fertility went **up** where the test wanted it to go down (0.6 -> 0.72), which
+is what litter converting to nutrient a hundred and twenty times too fast looks
+like from the crop's end.
+
+**Two fail that did not**, and both are the same story as #298:
+
+    ecology_tests::most_of_what_lived_here_still_lives_here
+        Species all survive - that half of the test passes. The head does not:
+        eight worlds open with 468 between them and hold 107 five years on,
+        against a threshold of a quarter. Ten head short.
+    situation_tests::a_settlement_works_things_out_that_nobody_wrote_down
+        In a year and a season nobody notices that anything goes better on one
+        sort of afternoon than another.
+
+**And the recorded counts moved**: seed 4242 over 120 turns, 7,908 -> 7,600,
+and seed 0 over a year, 623,236 -> 571,835. The short count moving *at all* is
+worth noting, because #217 moved only the year: a hundred and twenty turns is
+two and a half days, and that is now long enough for a spell of weather to
+turn over.
+
+#### What it costs the ecology, and the one thing that is now plainly wrong
+
+The herd probe from #217, seed 23, 120x120, carried out to five years:
+
+    month  3   279 head,  2 taken, 2,288 plants
+    month  6    88         2       2,007
+    month 12    62         2       1,862
+    month 24    32         2       1,472
+    month 36    34         2       1,323
+    month 48    21         2       1,293
+    month 60    36         2       1,226
+
+It settles - twenty to fifty head, oscillating, for three years, and the
+standing crop is flattening by month 45. It does not empty. But it settles at a
+tenth of where #217 left it, and **nothing is ever caught**: `taken` is 2 at
+month 6 and 2 at month 60.
+
+Ablating **E alone** - putting the carcase back to thirty times its keep and
+leaving the other four - says which fix that is:
+
+| | month 6 | month 12 | month 18 | month 24 |
+|---|---|---|---|---|
+| with E, head | 88 | 62 | 28 | 32 |
+| with E, taken | 2 | 2 | 2 | 2 |
+| E reverted, head | 289 | 313 | 289 | 257 |
+| E reverted, taken | 150 | 181 | 264 | 332 |
+
+So the predator layer was living on the thirtyfold subsidy, and at the true
+exchange rate it cannot make a living at all. **E is still right.**
+`days_a_grazer_keeps` is in real days and is derived, not picked - "a hawk at
+two days a rabbit and a wolf at two and a half rabbits a day" - and
+`hunger_rate` is charged once a pass, so days of keep times passes in a day is
+what a carcase is worth. At the old spelling one deer fed a wolf for four
+hundred and fifty days.
+
+That is the finding rather than the objection to it: **something in the
+predator layer is thirty times short of a living, and a wrong unit was paying
+the difference.** Filed rather than papered over, because paying it again with
+`TICKS_PER_DAY` is how it stayed hidden for a month.

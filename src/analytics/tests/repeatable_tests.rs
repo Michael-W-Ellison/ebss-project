@@ -133,7 +133,14 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // rather than by having its own clock wound forward - so what a person
     // finds worth eating, worth burying and worth carrying is a different
     // set, and a different set of branches gets taken.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_908;
+    // And down 3.9% for the clock audit - the five places a tick stood where a
+    // pass belonged, ISSUES_FOUND #218. The *short* count moving at all is the
+    // interesting part and is what tells this apart from #217, which moved
+    // only the year: a hundred and twenty turns is two and a half days, and
+    // two and a half days is long enough for a spell of weather to end now
+    // that a ten-hour front lasts ten hours instead of twelve days. A world
+    // whose weather turns over draws for its weather.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_600;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -194,7 +201,12 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // The short count and the long one moving separately is the useful part.
     // A change that moves both is in the decision loop; one that moves only
     // the year is in the world.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 623_236;
+    // And down 8.2% again for the clock audit (#218). Less than the ecology
+    // fix cost and in the same direction, which is the shape to expect: a
+    // world with a fifth of the animals on it and wild food coming back at
+    // the rate it was actually measured at has fewer things happening in it
+    // to draw for.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 571_835;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

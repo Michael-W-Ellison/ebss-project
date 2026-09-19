@@ -345,12 +345,31 @@ impl Soil {
     ///
     /// Returns how much nutrient was released, which is mostly of interest to
     /// tests.
-    pub fn decay(&mut self, humidity: f32, turns: f32) -> f32 {
-        /// Share of soft litter that goes per turn in ideal conditions
-        const LEAF_RATE: f32 = 0.0006;
+    pub fn decay(&mut self, humidity: f32, ticks: f32) -> f32 {
+        // Share of soft litter that goes in a day in ideal conditions, and of
+        // wood, which is dense enough to keep the wet out of its middle.
+        //
+        // Per day, and divided into the ticks the pass stands for, because
+        // `ticks` is a span on the world clock and these were per-pass numbers
+        // being paid out per minute. At 1,440 a day a fallen tree was half
+        // gone in five days in a wet wood, against the four years this file's
+        // own doc claims for it, and a midden stopped smelling overnight at
+        // every humidity there is - which put
+        // `FOUL_ENOUGH_TO_WALK_AWAY_FROM` out of reach of anything.
+        //
+        // The day these are anchored to is the twelve-tick day: the caller has
+        // always passed `ONCE_A_DAY`, and `ONCE_A_DAY` was twelve when the
+        // rates and the loop last agreed - the same calendar at which
+        // `ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO` gives its right
+        // answer. So the figures are the old per-pass rates times twelve, and
+        // the error was a hundred and twentyfold rather than thirty.
+        // See ISSUES_FOUND #218.
+        const LEAF_IN_A_DAY: f32 = 0.0072;
+        const WOOD_IN_A_DAY: f32 = 0.00048;
 
-        /// And of wood, which is dense enough to keep the wet out of its middle
-        const WOOD_RATE: f32 = 0.00004;
+        let a_day = crate::environment::seasons::TICKS_PER_DAY as f32;
+        let leaf_rate = LEAF_IN_A_DAY / a_day;
+        let wood_rate = WOOD_IN_A_DAY / a_day;
 
         // Rot needs water. Bone dry ground holds what falls on it more or less
         // indefinitely, which is why a desert keeps its dead.
@@ -365,11 +384,12 @@ impl Soil {
         // an order of magnitude faster than the rot underneath it, which is
         // why the ground people walked away from a season ago is ground they
         // will sit on again.
-        const FOULING_RATE: f32 = 0.006;
-        self.fouling = (self.fouling - self.fouling * FOULING_RATE * activity * turns).max(0.0);
+        const FOULING_IN_A_DAY: f32 = 0.072;
+        let fouling_rate = FOULING_IN_A_DAY / a_day;
+        self.fouling = (self.fouling - self.fouling * fouling_rate * activity * ticks).max(0.0);
 
-        let from_leaves = (self.leaf_litter * LEAF_RATE * activity * turns).min(self.leaf_litter);
-        let from_wood = (self.woody_litter * WOOD_RATE * activity * turns).min(self.woody_litter);
+        let from_leaves = (self.leaf_litter * leaf_rate * activity * ticks).min(self.leaf_litter);
+        let from_wood = (self.woody_litter * wood_rate * activity * ticks).min(self.woody_litter);
 
         self.leaf_litter -= from_leaves;
         self.woody_litter -= from_wood;

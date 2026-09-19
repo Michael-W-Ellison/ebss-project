@@ -3442,7 +3442,10 @@ impl AnimalManager {
         // cell or two in a turn, so a reading four turns old is a reading of
         // very nearly the same field; the readings persist between passes
         // rather than being cleared, so nothing goes blind in between.
-        const HOW_OFTEN_A_BEAST_LOOKS_UP: u32 = 4;
+        // Four passes, in ticks, because `weather.now` counts ticks - the
+        // same correction as `HOW_OFTEN_A_BEAST_LOOKS_FOR_ITS_OWN`.
+        const HOW_OFTEN_A_BEAST_LOOKS_UP: u32 =
+            4 * crate::environment::seasons::TICKS_BETWEEN_PLANS;
         if weather.now % HOW_OFTEN_A_BEAST_LOOKS_UP == 0 {
             self.what_each_animal_is_facing();
         }
@@ -3805,7 +3808,15 @@ impl AnimalManager {
     ///
     /// The same cadence as looking up for something with teeth: often enough
     /// to matter over a season, seldom enough to cost nothing.
-    const HOW_OFTEN_A_BEAST_LOOKS_FOR_ITS_OWN: u32 = 4;
+    /// How often a beast looks round for its own kind, in ticks.
+    ///
+    /// Four passes - two hours. It was a bare `4` gated on `weather.now`,
+    /// which is the world clock and advances by thirty a step, so `now % 4`
+    /// came due every *second* pass rather than every fourth: twice as often
+    /// as intended, and by arithmetic that had nothing to do with the number.
+    /// See ISSUES_FOUND #218.
+    const HOW_OFTEN_A_BEAST_LOOKS_FOR_ITS_OWN: u32 =
+        4 * crate::environment::seasons::TICKS_BETWEEN_PLANS;
 
     /// Keep the herds and the packs together.
     ///
@@ -5555,8 +5566,14 @@ impl AnimalManager {
     /// a hunter could hold rather than what a carcase holds, so the country's
     /// small life stood at six per cent of what it would carry.
     pub fn what_a_grazer_is_worth_to(hunter: &AnimalSpecies) -> f32 {
+        // Days of keep times what it burns in a day, and what it burns in a
+        // day is its rate times the *passes* in a day - because
+        // `Animal::turn_hunger_burning` is called once a pass with a share of
+        // one, which is what makes `hunger_rate` a per-pass number. It read
+        // `TICKS_PER_DAY` here, so a carcase was worth thirty times the keep
+        // it actually holds. See ISSUES_FOUND #218.
         Self::days_a_grazer_keeps(hunter.mass_kg)
-            * crate::environment::seasons::TICKS_PER_DAY as f32
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32
             * hunter.hunger_rate
     }
 
@@ -5913,7 +5930,7 @@ impl AnimalManager {
     pub fn what_a_fish_is_worth_to(hunter: &AnimalSpecies) -> f32 {
         Self::days_a_grazer_keeps(hunter.mass_kg)
             * (SmallLife::WHAT_A_FISH_WEIGHS / SmallLife::WHAT_A_GRAZER_WEIGHS)
-            * crate::environment::seasons::TICKS_PER_DAY as f32
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32
             * hunter.hunger_rate
     }
 
@@ -5934,9 +5951,17 @@ impl AnimalManager {
             somewhere_to_climb: false,
         };
 
+        // Both sides in passes a day, because both are per-pass numbers: what
+        // the ground gives is divided by `PLANNING_PERIODS_PER_DAY` where it
+        // is worked out, and `hunger_rate` is charged once a pass. They were
+        // both written `TICKS_PER_DAY`, which cancels in the ratio below and
+        // so was harmless - but a wrong spelling that only survives because
+        // another wrong spelling is next to it is one edit away from being a
+        // defect. See ISSUES_FOUND #218.
         let a_day = Self::what_the_small_life_gives(hunter, best_ground, 1.0)
-            * crate::environment::seasons::TICKS_PER_DAY as f32;
-        let it_burns = hunter.hunger_rate * crate::environment::seasons::TICKS_PER_DAY as f32;
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
+        let it_burns =
+            hunter.hunger_rate * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
         if it_burns <= 0.0 {
             return 0.0;
         }

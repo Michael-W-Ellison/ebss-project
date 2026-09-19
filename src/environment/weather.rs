@@ -4,9 +4,10 @@
 use serde::{Deserialize, Serialize};
 use crate::agents::temperature::Temperature;
 use crate::environment::BiomeType;
-use super::seasons::{Season, TICKS_PER_DAY};
+use super::seasons::{Season, PLANNING_PERIODS_PER_DAY};
 
-/// How long a stretch of weather lasts, given in hours and answered in turns.
+/// How long a stretch of weather lasts, given in hours and answered in the
+/// steps that `Weather::take_a_turn` counts down.
 ///
 /// Durations used to be written straight in turns, back when a turn was
 /// thirty-six seconds and five hundred to two thousand of them was five to
@@ -15,8 +16,16 @@ use super::seasons::{Season, TICKS_PER_DAY};
 /// days: a single blizzard outlasting the winter that started it and still
 /// blowing the following summer, which is what the runs showed. Snow turned up
 /// in all four seasons in equal measure.
+///
+/// **And it happened again, by the other half of the same question.** Stating
+/// it in hours fixed what the number meant and left open what it was counted
+/// in: this answered in `TICKS_PER_DAY`, which is minutes, while
+/// `duration_remaining` is taken down by one a *step*. A ten-hour front sat
+/// for six hundred steps - twelve and a half days - and the blizzard was back.
+/// It is in steps now, which is the thing that is actually counted.
+/// See ISSUES_FOUND #218.
 fn hours_in_turns(hours: u32) -> u32 {
-    (hours * TICKS_PER_DAY / 24).max(1)
+    (hours * PLANNING_PERIODS_PER_DAY / 24).max(1)
 }
 
 /// A spell of weather somewhere between the two lengths, in hours.

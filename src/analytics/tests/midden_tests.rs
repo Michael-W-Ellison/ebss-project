@@ -78,7 +78,7 @@ fn a_midden_stops_smelling_before_it_stops_being_there() {
 
     let litter_at_the_start = soil.litter();
     for _ in 0..200 {
-        soil.decay(1.0, 12.0);
+        soil.decay(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
     }
 
     assert!(
@@ -113,7 +113,7 @@ fn what_was_dropped_comes_up_once_the_ground_has_taken_it() {
     assert!(soil.seeds_dropped >= Soil::ENOUGH_TO_COME_UP);
 
     for _ in 0..400 {
-        soil.decay(1.0, 12.0);
+        soil.decay(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
     }
 
     assert!(
@@ -225,7 +225,7 @@ fn a_midden_left_alone_comes_up_in_food() {
     // And let it break down, which is what the seasons would do.
     if let Some(tile) = simulation.world.grid.get_tile_mut(&midden) {
         for _ in 0..400 {
-            tile.soil.decay(1.0, 12.0);
+            tile.soil.decay(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
         }
     }
 
@@ -261,7 +261,7 @@ fn nothing_comes_up_where_something_already_grows() {
     simulation.world.grid.somebody_voided_on(&midden, 20.0);
     if let Some(tile) = simulation.world.grid.get_tile_mut(&midden) {
         for _ in 0..400 {
-            tile.soil.decay(1.0, 12.0);
+            tile.soil.decay(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
         }
     }
 

@@ -1394,6 +1394,15 @@ impl ResourceNode {
     /// The cadence these rates were fitted against: one pass every ten world
     /// turns, when a turn was two hours and `World::take_a_turn` said `% 10`.
     ///
+    /// **Twenty hours, and it has to be stated as twenty hours.** The number
+    /// below was `10.0` - ten of a unit that was two hours when it was written
+    /// and is one minute now. The caller passes `ONCE_A_DAY`, so the ratio
+    /// this makes was 1.2 at the twelve-turn day, which is right (a day
+    /// against a twenty-hour reference), then 4.8 at the half-hour turn, and
+    /// 144 once a tick became a minute: wild food came back a hundred and
+    /// twenty times faster than the rate anybody measured. Written in hours,
+    /// it cannot drift again. See ISSUES_FOUND #218.
+    ///
     /// The rates in `how_fast_it_comes_back` and `water_inflow` are
     /// hand-fitted numbers *per pass*, and how long a pass stood for lived as
     /// a literal in another file. Three spellings of one cadence, in three
@@ -1402,7 +1411,8 @@ impl ResourceNode {
     /// balanced at, with nothing to say so. This is what lets the pass be
     /// scheduled on the calendar while the rates stay the ones that were
     /// measured. See ISSUES_FOUND #205.
-    pub const WHAT_THESE_RATES_WERE_FITTED_TO: f32 = 10.0;
+    pub const WHAT_THESE_RATES_WERE_FITTED_TO: f32 =
+        20.0 * crate::environment::seasons::MINUTES_PER_HOUR as f32;
 
     pub fn regenerate_in_ground(
         &mut self,

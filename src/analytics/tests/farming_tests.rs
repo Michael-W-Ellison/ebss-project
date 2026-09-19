@@ -565,7 +565,7 @@ fn a_volunteer_on_the_midden_teaches_whoever_sees_it() {
     }
     if let Some(tile) = world.grid.get_tile_mut(&where_it_is) {
         for _ in 0..2000 {
-            tile.soil.decay(1.0, 20.0);
+            tile.soil.decay(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
         }
     }
 
