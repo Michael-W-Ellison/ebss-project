@@ -182,10 +182,19 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // the run is past. It is not, now, and a people who cannot fish in July
     // do something else in July.
     //
+    // And down 23.8% from there when the grazing intake and the plant growth
+    // rates were put back onto the clock they are counted against - see
+    // ISSUES_FOUND #217. The short count above did not move at all, which is
+    // the expected shape: nothing about a person's half hour changed, and
+    // everything about what the country will feed did. A world with four
+    // hundred head of stock on it instead of seventeen hundred has fewer
+    // animals taking turns, fewer of them being born and dying, and a
+    // different amount of forage standing where the people are walking.
+    //
     // The short count and the long one moving separately is the useful part.
     // A change that moves both is in the decision loop; one that moves only
     // the year is in the world.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 817_463;
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 623_236;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

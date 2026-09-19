@@ -33,11 +33,16 @@ pub struct PlantSpecies {
 
     /// Health/durability when harvesting
     pub health: f32,
-    /// How long it takes to grow to maturity (turns)
+    /// How long it takes to grow to maturity, in planning periods.
+    ///
+    /// Half-hours, that is - see `Plant::stage_duration`, which is the one
+    /// place this is read and where it is put onto the plant's own clock. Not
+    /// a unit anybody chose: it is the unit the fifty-one numbers below were
+    /// last in agreement with the growing pass in.
     pub growth_time: u32,
     /// Whether it regrows after harvest
     pub regrows: bool,
-    /// Time to regrow if applicable
+    /// Time to regrow if applicable, in planning periods - as `growth_time`.
     pub regrow_time: u32,
 
     /// Primary biomes where this plant thrives
@@ -1536,11 +1541,24 @@ impl GrowingConditions {
         water.min(light).min(nutrients)
     }
 
-    /// How much nutrient a plant growing here draws out of the ground per turn
-    pub fn draw_per_turn(&self) -> f32 {
-        const APPETITE: f32 = 0.00015;
+    /// How much nutrient a plant growing here draws out of the ground, in one
+    /// tick.
+    ///
+    /// Per tick, because the growing pass multiplies this by the ticks since
+    /// that plant last grew. It was written as a rate per pass - 0.00015 - and
+    /// a pass and a tick were the same thing until a step began advancing the
+    /// clock by thirty of them, at which point every plant in the world began
+    /// drawing thirty times what it should. Stated per day here so that the
+    /// number means something a person can check. See ISSUES_FOUND #217.
+    pub fn draw_per_tick(&self) -> f32 {
+        // What a plant at its best pace takes out of the tile it stands on in
+        // a day: the old per-pass figure times the forty-eight passes that
+        // were in a day when it was measured.
+        const APPETITE_IN_A_DAY: f32 = 0.0072;
 
-        APPETITE * self.uptake.max(0.0) * self.growth_share()
+        let appetite = APPETITE_IN_A_DAY / crate::environment::seasons::TICKS_PER_DAY as f32;
+
+        appetite * self.uptake.max(0.0) * self.growth_share()
     }
 }
 
@@ -1595,7 +1613,7 @@ impl Plant {
         &mut self,
         species: &PlantSpecies,
         conditions: GrowingConditions,
-        turns: f32,
+        ticks: f32,
     ) -> bool {
         // A plant gets older whether or not the ground lets it grow, and
         // whether or not it has been cut. This used to sit below the two
@@ -1603,10 +1621,10 @@ impl Plant {
         // ground too poor to grow on, or a coppiced stool waiting to come
         // back, did not age at all - which is most of why nothing in this
         // world had ever died of being old.
-        self.age_turns = self.age_turns.saturating_add(turns.max(0.0) as u32);
+        self.age_turns = self.age_turns.saturating_add(ticks.max(0.0) as u32);
 
         if self.has_been_harvested && self.regrow_timer > 0 {
-            self.regrow_timer = self.regrow_timer.saturating_sub(turns.max(1.0) as u32);
+            self.regrow_timer = self.regrow_timer.saturating_sub(ticks.max(1.0) as u32);
             if self.regrow_timer == 0 {
                 // Reset for regrowth
                 self.growth_stage = GrowthStage::Seedling;
@@ -1631,7 +1649,7 @@ impl Plant {
         }
 
         let stage_duration = self.stage_duration(species);
-        self.growth_progress += share * turns / stage_duration as f32;
+        self.growth_progress += share * ticks / stage_duration as f32;
 
         // As many stages as the time it stands for is worth, not one.
         //
@@ -1672,9 +1690,19 @@ impl Plant {
         false
     }
 
+    /// How long one growth stage takes this plant, in ticks.
+    ///
+    /// `growth_time` is fifty-one hand-written numbers and nothing in the file
+    /// says what unit they are in. What can be said is the unit they last
+    /// agreed with the growing pass in: one step of the simulation, which is a
+    /// planning period. They are converted here rather than re-authored,
+    /// because re-authoring them is a question about how long an oak takes to
+    /// grow and this is a question about which clock the ones already written
+    /// are on. See ISSUES_FOUND #217.
     fn stage_duration(&self, species: &PlantSpecies) -> u32 {
-        // Divide total growth time among stages
-        species.growth_time / 5
+        // Divide total growth time among stages, then onto the plant's own
+        // clock, which is the one `grow_in` counts in.
+        species.growth_time / 5 * crate::environment::seasons::TICKS_BETWEEN_PLANS
     }
 
     /// Harvest the plant
@@ -1686,7 +1714,11 @@ impl Plant {
         self.has_been_harvested = true;
 
         if species.regrows {
-            self.regrow_timer = species.regrow_time;
+            // In ticks, because that is what the growing pass counts down in.
+            // `regrow_time` is written in planning periods - see
+            // `stage_duration`.
+            self.regrow_timer =
+                species.regrow_time * crate::environment::seasons::TICKS_BETWEEN_PLANS;
         }
 
         // Return drops that are available at current stage
@@ -1710,7 +1742,7 @@ impl Plant {
     pub fn status(&self) -> String {
         if self.has_been_harvested {
             if self.regrow_timer > 0 {
-                format!("Harvested (regrows in {} turns)", self.regrow_timer)
+                format!("Harvested (regrows in {} ticks)", self.regrow_timer)
             } else {
                 "Dead".to_string()
             }
@@ -2314,9 +2346,15 @@ impl PlantManager {
             // How long it is since this plant was last grown, which is what
             // this pass stands for. Nought means something has already brought
             // it up to date this turn.
-            let turns = now.saturating_sub(plant.grown_up_to) as f32;
+            //
+            // Ticks, and named so, because every rate it is about to be
+            // multiplied by is per tick. It was called `turns` while a tick
+            // was a step, and reading it as a step count is what let a plant
+            // put back twenty-one times its own health in one pass once a step
+            // was thirty ticks. See ISSUES_FOUND #217.
+            let ticks = now.saturating_sub(plant.grown_up_to) as f32;
             plant.grown_up_to = now;
-            if turns <= 0.0 {
+            if ticks <= 0.0 {
                 continue;
             }
 
@@ -2380,7 +2418,7 @@ impl PlantManager {
                 uptake,
             };
 
-            plant.grow_in(species, conditions, turns);
+            plant.grow_in(species, conditions, ticks);
 
             // And whether it can hold its own where it is standing.
             //
@@ -2393,7 +2431,7 @@ impl PlantManager {
             // depends on how far short the ground is falling.
             let living = conditions.growth_share();
             if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
-                plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, turns);
+                plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, ticks);
             } else {
                 // What it puts back on is what the ground and the sky give it,
                 // so a plant on poor ground comes back slowly and one in a
@@ -2402,12 +2440,12 @@ impl PlantManager {
                 // again out of the same water and light and nutrient
                 // everything else here runs on.
                 plant.current_health = (plant.current_health
-                    + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * turns)
+                    + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
                     .min(plant.max_health);
             }
 
             // What it grows with, it takes out of the ground
-            let wanted = conditions.draw_per_turn() * turns;
+            let wanted = conditions.draw_per_tick() * ticks;
             if wanted > 0.0 {
                 tile.soil.draw(wanted);
             }
@@ -2486,8 +2524,8 @@ impl PlantManager {
             return;
         };
 
-        let turns = now.saturating_sub(plant.grown_up_to) as f32;
-        if turns <= 0.0 {
+        let ticks = now.saturating_sub(plant.grown_up_to) as f32;
+        if ticks <= 0.0 {
             return;
         }
         plant.grown_up_to = now;
@@ -2525,18 +2563,18 @@ impl PlantManager {
             uptake,
         };
 
-        plant.grow_in(species, conditions, turns);
+        plant.grow_in(species, conditions, ticks);
 
         let living = conditions.growth_share();
         if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
-            plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, turns);
+            plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, ticks);
         } else {
             plant.current_health = (plant.current_health
-                + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * turns)
+                + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
                 .min(plant.max_health);
         }
 
-        let drawn = conditions.draw_per_turn() * turns;
+        let drawn = conditions.draw_per_tick() * ticks;
         if drawn > 0.0 {
             tile.soil.draw(drawn);
         }
@@ -2583,9 +2621,24 @@ impl PlantManager {
     /// closed canopy leaves, which is 0.05.
     const WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN: f32 = 0.12;
 
-    /// How much of itself a plant loses per turn when the ground falls right
-    /// away under it. Two thousand turns, half a year, from full to gone.
-    const HOW_FAST_A_PLANT_GOES_BACK: f32 = 0.0005;
+    /// How much of itself a plant loses in a day when the ground falls right
+    /// away under it. Six weeks or so, at this rate, from full to gone -
+    /// longer in practice, because `what_a_bad_pass_costs` scales it by how
+    /// far short the ground is falling.
+    ///
+    /// The note that stood here said "two thousand turns, half a year", which
+    /// was a reading of the twelve-turn day and had been wrong through two
+    /// calendars.
+    const HOW_FAST_A_PLANT_GOES_BACK_IN_A_DAY: f32 = 0.024;
+
+    /// And the same in one tick, which is the unit the growing pass counts in.
+    ///
+    /// `TICKS_PER_DAY` and not `PLANNING_PERIODS_PER_DAY`, unlike the exposure
+    /// rates in `environment::exposure`: those are applied once a pass, and
+    /// this is applied once per tick of however long the pass stood for. Which
+    /// of the two a rate wants is the whole of ISSUES_FOUND #217.
+    const HOW_FAST_A_PLANT_GOES_BACK: f32 = Self::HOW_FAST_A_PLANT_GOES_BACK_IN_A_DAY
+        / crate::environment::seasons::TICKS_PER_DAY as f32;
 
     /// And the most it can lose in any one pass, however long the pass is.
     ///
@@ -2616,18 +2669,25 @@ impl PlantManager {
     /// A month is what a sward takes to come back after it is grazed off,
     /// which is the case this number has to be right for. It is too fast for
     /// an oak, and nothing crops an oak.
-    const HOW_FAST_A_PLANT_COMES_BACK: f32 = 0.003;
+    /// Stated per day, and turned into a per-tick rate below. It was 0.003 a
+    /// pass, which is the same 0.144 a day while a pass is a tick and thirty
+    /// times that when it is not - see ISSUES_FOUND #217.
+    const HOW_FAST_A_PLANT_COMES_BACK_IN_A_DAY: f32 = 0.144;
+
+    /// And the same in one tick.
+    const HOW_FAST_A_PLANT_COMES_BACK: f32 = Self::HOW_FAST_A_PLANT_COMES_BACK_IN_A_DAY
+        / crate::environment::seasons::TICKS_PER_DAY as f32;
 
     /// What a pass on ground that will not keep a plant takes off it.
     ///
     /// Held to `THE_MOST_A_PLANT_LOSES_IN_ONE_PASS` however long the pass is,
     /// because the conditions it is working from are one reading and not an
     /// average of the span.
-    fn what_a_bad_pass_costs(max_health: f32, living: f32, turns: f32) -> f32 {
+    fn what_a_bad_pass_costs(max_health: f32, living: f32, ticks: f32) -> f32 {
         let short = (Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN - living)
             / Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN;
 
-        (max_health * Self::HOW_FAST_A_PLANT_GOES_BACK * short * turns)
+        (max_health * Self::HOW_FAST_A_PLANT_GOES_BACK * short * ticks)
             .min(max_health * Self::THE_MOST_A_PLANT_LOSES_IN_ONE_PASS)
     }
 
@@ -3412,6 +3472,57 @@ fn ground_somebody_is_standing_on_is_brought_up_to_date() {
         plants.all_plants()[0].grown_up_to,
         700,
         "and it did not write down when it was brought up to"
+    );
+}
+
+/// What a cropped plant puts back is a rate per day, not a rate per look.
+///
+/// This is the test that was missing when ISSUES_FOUND #217 happened. The
+/// growing pass multiplies `HOW_FAST_A_PLANT_COMES_BACK` by the ticks since
+/// the plant was last grown, and the rate was written per *step* of the
+/// simulation. Those were the same number until a step began advancing the
+/// clock by thirty ticks, at which point a sward put back twenty-one times its
+/// own maximum health between one look and the next, nothing that ate it could
+/// starve, and the herd ran to the length of the array.
+///
+/// Nothing caught it, and `one_long_stride_gets_to_much_the_same_place_as_many_short_ones`
+/// is why not: it asks whether the long stride and the short ones agree, and
+/// they agreed perfectly - on the wrong rate. Chopping the span up differently
+/// cannot find an error in what the span is worth. So this asks the other
+/// question, which is how much of itself a plant puts back in *a day* - a
+/// quantity somebody can hold an opinion about and check against a field.
+#[test]
+fn a_cropped_plant_takes_days_to_come_back_and_not_one_pass() {
+    use crate::environment::seasons::TICKS_PER_DAY;
+    use crate::world::{Grid, Terrain, TerrainType};
+
+    let mut grid = Grid::new(8, 8);
+    for row in grid.tiles.iter_mut() {
+        for tile in row.iter_mut() {
+            tile.terrain = Terrain::new(TerrainType::Meadow);
+        }
+    }
+    grid.settle_soil();
+
+    let mut plants = PlantManager::new(8);
+    plants.spawn_plant("grass".to_string(), (4, 4), 0);
+
+    let most = plants.all_plants()[0].max_health;
+    plants.all_plants_mut()[0].current_health = 0.0;
+
+    // One day of the best ground this world has, in one pass.
+    plants.catch_up_one(0, &mut grid, 60.0, TICKS_PER_DAY, Season::Summer);
+    let after_a_day = plants.all_plants()[0].current_health;
+
+    assert!(
+        after_a_day > 0.0,
+        "a day on a summer meadow put nothing at all back into a sward grazed          to the ground"
+    );
+
+    assert!(
+        after_a_day < most / 2.0,
+        "a grazed sward came back {:.1}% of the way in one day ({after_a_day:.3}          of {most:.3}). A month is what a sward takes - see          HOW_FAST_A_PLANT_COMES_BACK_IN_A_DAY - and anything that gets there in          a day is a rate denominated per pass being paid out per tick.",
+        after_a_day / most * 100.0
     );
 }
 

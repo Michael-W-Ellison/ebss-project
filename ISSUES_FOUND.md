@@ -16790,3 +16790,199 @@ the cap test took three drafts to make honest, because asserting on the health
 figure passed for the wrong reason (a starving body loses health to hunger
 anyway) and an emptied reserve kills inside one tick. It asserts the ledger
 entry now.
+
+### 217. A tick is not a pass: the herd ate thirty times its keep, the grass grew back thirty times too fast, and the two tests that would have said so had never once reported a result
+
+Two tests in `ecology_tests` have never reported a result in any run of this
+suite: `a_herd_settles_at_what_the_ground_will_feed` and
+`the_predator_tiers_are_still_there_two_years_on`. Not failed - *never
+finished*. A suite that does not terminate has no completion time, and the
+convention here is that every measurement in this file is made against one, so
+this was blocking rather than untidy.
+
+#### What the probe said
+
+The test's own body, seed 23, 120x120, run 8,640 steps - six simulated months,
+which every commit in the range covers at forty-eight steps a day, so the step
+count is comparable throughout. Print the population before the assertions
+fire:
+
+    3ddc361  31 Aug  test introduced                     339
+    bd8f374   2 Sep  last before the calendar change      269
+    f26dcec   5 Sep  the half-hour turn                    87
+    eaa335c  12 Sep  last before the clock work            87
+    71e8ba3  17 Sep  call a decision a turn                87   <- last good
+    974bc32  17 Sep  a tick is a minute                  1299   <- first bad
+    ae48458  17 Sep  per-turn rates back on the clock    1707
+    577c8cf  now                                         1707
+
+The herd reaches 5,760 - exactly the 120 x 120 x 0.4 array ceiling - by
+simulated month nine and sits there, which is the defect the test's own
+docstring was written to catch. And it cannot say so, because the animal update
+is O(n^2): `time / alive^2` is flat at 17-33 microseconds across a
+seventeen-fold population range, cost plateaus near a thousand seconds a
+simulated month, and fifty months remain. About fourteen hours to report one
+assertion.
+
+Note what the bisect clears: the whole 1-2 September ecology rework is
+innocent, and so is the half-hour turn, which *improved* matters, 269 to 87.
+
+#### Two tick counts standing where pass counts belong
+
+`974bc32` made `World::take_a_turn` advance `self.turn` by thirty ticks instead
+of one, because a tick is a minute and a step is half an hour. Two quantities
+went on reading that clock as a count of steps.
+
+**A. What a grazing pass stands for.** In `World::take_a_turn`, one number was
+doing two jobs:
+
+```rust
+let how_often_the_ground_is_grazed = ONCE_A_DAY;
+let grazing_turns = if self.turn % how_often_the_ground_is_grazed == 0 {
+    how_often_the_ground_is_grazed as f32
+```
+
+As a **cadence** it is right: `ONCE_A_DAY` is in ticks and grazing fires once a
+day either side of the commit. As an **amount** it is the number of feeding
+passes the grazing pass stands for, and there are forty-eight of those in a
+day, not one thousand four hundred and forty minutes.
+
+Follow it through: `wanted = what_it_reaches_for(species) * grazing_turns`, and
+`feed(taken * what_a_mouthful_is_worth_to(species))`, where the worth divides
+by `what_it_reaches_for`. An animal that finds all it reaches for therefore
+takes in `hunger_rate * MORE_THAN_IT_BURNS * grazing_turns` a day. Its burn did
+not move: `turn_hunger_burning` is called once a pass with a share of 1.0,
+forty-eight times a day, byte-identical either side of the commit. So the
+margin over keep that `what_it_reaches_for` promises in as many words became
+**that margin times thirty**.
+
+The comment above the block said the cadence and the amount were one number,
+and that reading them off two separate literals was how a herd ends up eating
+ten times what it should. It had the risk right and the remedy backwards: they
+are one number only while a tick is a pass.
+
+**B. What a plant grows in a pass.** `grow_a_zone` and `catch_up_one` both
+compute `now - plant.grown_up_to` and multiply every growth term by it -
+`grow_in`, `HOW_FAST_A_PLANT_COMES_BACK`, `what_a_bad_pass_costs`,
+`draw_per_turn`. Those rates were per pass. `HOW_OFTEN_A_ZONE_COMES_ROUND`
+scaled with the calendar, so a zone still comes round every five days, but the
+elapsed count between passes went from 240 to 7,200. A plant put back
+0.003 x 7,200 = **21.6 times its own maximum health** in one pass where it used
+to put back 0.72. It was full whatever had been taken off it. That is the
+"grass was infinite" half, and it is what let the herd actually collect the
+thirtyfold intake in A.
+
+#### Which of the two, measured
+
+Same probe, seed 23, 120x120, 8,640 steps; deaths from `what_carried_them_off`.
+
+| variant | alive | old age | starved | taken | plants |
+|---|---|---|---|---|---|
+| 71e8ba3, the last good commit | 87 | 53 | 231 | 2 | 2002 |
+| 974bc32 as committed | 1299 | 63 | 60 | 5 | 1114 |
+| 974bc32, plant growth divided by 30 | 369 | 63 | 201 | 5 | 838 |
+| 974bc32, grazing amount 48 not 1,440 | 316 | 57 | 184 | 4 | 2200 |
+| 974bc32, **both** | **87** | **53** | **231** | 4 | 2070 |
+
+**Neither alone is the answer** - each leaves the herd four times too big - and
+both together reproduce the parent's population, its old-age deaths *and* its
+starvation deaths to the number. Per-capita starvation is the signal
+throughout: 231 deaths at 87 head becomes 60 deaths at 1,299 head, and comes
+back the moment either scaling is undone. Predation is negligible either side,
+2 against 5, so the lever is forage and not predators.
+
+One hypothesis was tested and **disproved**, and is written down so it is not
+tried again: the five `TURNS_PER_DAY` -> `TICKS_PER_DAY` renames in `fauna.rs`
+in the same commit. Changing the four live ones to `PLANNING_PERIODS_PER_DAY`
+and re-probing gives 1,477 against 1,707 - a 13% move, not a twentyfold one.
+
+#### The fix
+
+A is two numbers now, in two units, with two names: how often the ground is
+grazed stays `ONCE_A_DAY` in ticks, and what the pass stands for is
+`PLANNING_PERIODS_PER_DAY` feeding passes. The parameter through `fauna.rs` is
+`grazing_passes`, so the unit is in the name at every site that reads it.
+
+B states each flora rate per day and divides by `TICKS_PER_DAY` at the point of
+use - the same move #288 made for the exposure rates and #143 for the food
+clock, with one difference worth noting in the file: the exposure rates divide
+by `PLANNING_PERIODS_PER_DAY` because they are applied once a pass, and these
+divide by `TICKS_PER_DAY` because they are applied once per tick of however
+long the pass stood for. The local in both growing paths is called `ticks`
+rather than `turns`, which is the whole of the mistake in one word.
+
+Two of the plant's numbers are literals rather than rates -
+`species.growth_time` and `species.regrow_time`, fifty-one of each - and
+nothing says what unit they are in. They are converted at the two places they
+are read rather than re-authored, on the grounds that re-authoring them is a
+question about how long an oak takes to grow and this was a question about
+which clock the ones already written are on. The first question is still open.
+
+#### What it comes to
+
+Same probe, at the current head, before and after:
+
+| | alive | old age | starved | taken | plants |
+|---|---|---|---|---|---|
+| before | 1707 | 81 | 619 | 81 | 1250 |
+| after | **366** | 65 | 746 | 160 | 1966 |
+
+The herd is a fifth of what it was, the forage standing is up 57%, and
+predation has doubled - a herd that is not starving to death is a herd
+something can catch.
+
+And thirty simulated months of the trajectory, which is the thing the test was
+written to see:
+
+    month  1   320 head, 3,018 plants
+    month  3   472            2,352     <- the peak
+    month  6   366            1,966
+    month 12   370            1,812
+    month 24   336            1,534
+    month 30   307            1,515
+
+**It settles.** Three hundred-odd head, oscillating, for two and a half years,
+on ground whose standing crop is still falling slowly at thirty months. No
+ceiling anywhere near it: the array would take 5,760.
+
+#### And the tests run
+
+The O(n^2) in the animal update is still there and still wants doing. It stops
+mattering here because the population no longer explodes into it: thirty
+simulated months took **85 seconds** where month nine alone used to take a
+thousand.
+
+```
+test a_herd_settles_at_what_the_ground_will_feed ... ok
+test the_predator_tiers_are_still_there_two_years_on ... ok
+test result: ok. 2 passed; 0 failed; finished in 1046.65s
+```
+
+Seventeen minutes for the pair, both green, on their own unmodified
+assertions - including the 500x500 predator test, which had never been
+instrumented at all and turns out to have had the same thing wrong with it.
+
+#### The suite, and three it moved
+
+**The suite completes.** 2,619 passed, 14 failed, 2 ignored, in 2,832 seconds -
+forty-seven minutes, where before there was no such figure at all.
+
+Eleven of the fourteen are the standing set, unchanged. Three are new, and all
+three are the same kind of thing: a threshold test over live settlements, in a
+world that now holds a fifth of the animals it did and more standing forage
+than it did.
+
+| | was | now |
+|---|---|---|
+| `a_cold_agent_ends_up_dressed` | 10 of 24 worlds when the threshold was set at 8 | **7 of 24** |
+| `a_walk_is_finished_rather_than_re_decided_at_every_step` | over half of errands kept to | **473 of 1,021, 46.3%** |
+| `a_settlement_ends_up_with_enemies_in_it` | somebody falls out with somebody | **nobody does** |
+
+Two of them are a world short and three points short respectively, which is
+what re-baselining a behavioural threshold looks like. The third is not a
+margin: in four thousand turns, in a world with this much food in it, twenty
+five people got along. Whether that is the ecology being right and the social
+model being thin, or the ecology now being too kind, is a question for its own
+pass and not for this one. None of the three is re-baselined here, because
+moving a threshold to fit a measurement is the thing that hid the last defect
+for a month.

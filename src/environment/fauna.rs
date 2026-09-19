@@ -3284,9 +3284,15 @@ impl AnimalManager {
     /// so what a mouthful was worth came down to a headcount per patch
     /// standing in for the food that should have been doing the work. What
     /// sets the size of a herd now is what is growing where it is standing.
-    /// `grazing_turns` is how many turns of feeding this pass stands for, and
-    /// nought means "not this turn". Grazing runs on the same ten-turn
-    /// cadence the vegetation does, because it has to look up what is growing
+    /// `grazing_passes` is how many *feeding passes* this grazing pass stands
+    /// for, and nought means "not this turn". Passes and not ticks: an animal
+    /// burns its hunger once a pass, in `Animal::turn_hunger_burning`, so what
+    /// it takes in has to be counted in the same unit or the two halves of its
+    /// keep are denominated on different clocks. It was a tick count once, and
+    /// that is exactly what went wrong - see ISSUES_FOUND #217.
+    ///
+    /// Grazing runs on the same cadence the vegetation does, because it has to
+    /// look up what is growing
     /// on each tile and building that lookup is a pass over every plant in the
     /// world - eighty thousand of them on a hundred square kilometres, which
     /// at every turn was three-quarters of what a turn cost. It also has to be
@@ -3296,7 +3302,7 @@ impl AnimalManager {
         &mut self,
         grid: &mut crate::world::Grid,
         plants: &mut crate::environment::PlantManager,
-        grazing_turns: f32,
+        grazing_passes: f32,
         weather: GrazingWeather,
     ) {
         if self.registry.is_none() {
@@ -3428,7 +3434,7 @@ impl AnimalManager {
 
         // Fifth pass: Herbivore feeding - what is taken off the ground, and
         // what goes back onto it
-        self.what_the_grazers_took(grid, plants, grazing_turns, weather);
+        self.what_the_grazers_took(grid, plants, grazing_passes, weather);
 
         // What each of them is facing, before any of them acts on it.
         //
@@ -4954,12 +4960,12 @@ impl AnimalManager {
         &mut self,
         grid: &mut crate::world::Grid,
         plants: &mut crate::environment::PlantManager,
-        grazing_turns: f32,
+        grazing_passes: f32,
         weather: GrazingWeather,
     ) {
         use crate::world::Position;
 
-        if grazing_turns <= 0.0 {
+        if grazing_passes <= 0.0 {
             return;
         }
 
@@ -5007,7 +5013,7 @@ impl AnimalManager {
                 continue;
             }
 
-            let mut wanted = Self::what_it_reaches_for(species) * grazing_turns;
+            let mut wanted = Self::what_it_reaches_for(species) * grazing_passes;
             let mut taken = 0.0;
 
             // Underfoot first, then a step in any direction. An animal that is
@@ -5078,7 +5084,7 @@ impl AnimalManager {
                     );
 
                 let there_to_take = if grown_tree {
-                    standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_turns - already)
+                    standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_passes - already)
                 } else {
                     standing
                 };

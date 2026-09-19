@@ -2344,16 +2344,30 @@ impl World {
         self.what_is_buried_keeps();
 
         // Update animals (AI, movement, aging), and what they take off the
-        // ground and put back onto it. Grazing runs on the vegetation's own
-        // ten-turn cadence - see `AnimalManager::turn_in_world` - so a
-        // grazing pass stands for ten turns of feeding.
-        // The cadence and the amount are one number. A pass stands for
-        // exactly as long as it is since the last pass, and reading that off
-        // two separate literals is how a herd ends up eating a tenth or ten
-        // times what it should the moment the turn length changes.
+        // ground and put back onto it.
+        //
+        // Two numbers here, in two different units, and they used to be one
+        // number. How often a grazing pass comes round is a span of time, so
+        // it is counted in ticks: once a day. How much feeding that pass
+        // stands for is a count of feeding passes, because an animal burns
+        // its hunger once a pass - see `Animal::turn_hunger_burning` - and
+        // what it takes in has to be counted against the same passes it
+        // burned it over. Forty-eight of those in a day, not fourteen hundred
+        // and forty minutes.
+        //
+        // The note that stood here said the cadence and the amount were one
+        // number, and that reading them off two separate literals was how a
+        // herd ends up eating ten times what it should. It had the risk right
+        // and the remedy backwards: they are one number only while a tick is
+        // a pass. The moment a step began advancing the clock by thirty ticks
+        // instead of one, an animal that found its forage came out thirty
+        // times ahead of what it burned rather than ahead by the margin
+        // `AnimalManager::what_it_reaches_for` promises - nothing starved,
+        // and the herd ran to the length of the array. See ISSUES_FOUND #217.
         let how_often_the_ground_is_grazed = crate::environment::seasons::ONCE_A_DAY;
-        let grazing_turns = if self.turn % how_often_the_ground_is_grazed == 0 {
-            how_often_the_ground_is_grazed as f32
+        let feeding_passes_it_stands_for = crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
+        let grazing_passes = if self.turn % how_often_the_ground_is_grazed == 0 {
+            feeding_passes_it_stands_for as f32
         } else {
             0.0
         };
@@ -2365,7 +2379,7 @@ impl World {
         self.animals.turn_in_world(
             &mut self.grid,
             &mut self.plants,
-            grazing_turns,
+            grazing_passes,
             weather,
         );
 
