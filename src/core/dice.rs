@@ -116,6 +116,29 @@ where
     roll().gen::<T>()
 }
 
+/// A step of up to `reach` cells either way, drawn from this stream.
+///
+/// **The idiom this replaces has a direction in it.** Five places wrote a
+/// wander as `any::<i32>() % 5 - 2`, and `any::<i32>()` is the whole of the
+/// signed range, so half the draws come back negative. A remainder in Rust
+/// takes the sign of what it divides, so `% 5` gives -4 to 4 rather than 0 to
+/// 4, and taking two off that gives **-6 to 2**: a mean of minus two, on both
+/// axes, every time anything wandered.
+///
+/// A herd put down in the middle of a fifty by fifty map was in the bottom
+/// corner by the thirtieth day and spent the rest of its life there, partly
+/// off the map, on ground where nothing grows - starving with forty thousand
+/// units of standing forage behind it. See ISSUES_FOUND #225.
+///
+/// Inclusive at both ends, so `a_step_of(2)` is one of the twenty-five cells
+/// within two of where the thing is standing, with the cell it is on among
+/// them.
+pub fn a_step_of(reach: i32) -> i32 {
+    use rand::Rng;
+    let reach = reach.abs();
+    roll().gen_range(-reach..=reach)
+}
+
 /// A name for a new thing, drawn from the same stream as everything else.
 ///
 /// `Uuid::new_v4` asks the operating system, not this stream, so every agent,
@@ -175,6 +198,50 @@ mod tests {
         let mut mine = roll();
         let theirs = roll().gen_range(0..10);
         let _ = mine.gen_range(0..10) + theirs;
+    }
+
+    /// A wander has no direction in it.
+    ///
+    /// The whole of ISSUES_FOUND #225 in one assertion. `any::<i32>() % 5 - 2`
+    /// runs from -6 to 2 and averages minus two, because a remainder in Rust
+    /// takes the sign of what it divides and half of a signed draw is
+    /// negative. A herd built out of that walks off the map.
+    ///
+    /// Both ends and the middle, because a step that is unbiased and cannot
+    /// reach its own edges is a different fault with the same average.
+    #[test]
+    fn a_step_goes_as_far_each_way_and_nowhere_on_average() {
+        seed(20_250_922);
+
+        let reach = 2;
+        let how_many = 20_000;
+        let mut total = 0i64;
+        let mut seen = std::collections::BTreeSet::new();
+
+        for _ in 0..how_many {
+            let step = a_step_of(reach);
+            assert!(
+                (-reach..=reach).contains(&step),
+                "a step of {reach} came back {step}"
+            );
+            total += step as i64;
+            seen.insert(step);
+        }
+
+        // Every cell within reach, including standing still.
+        assert_eq!(
+            seen.into_iter().collect::<Vec<_>>(),
+            (-reach..=reach).collect::<Vec<_>>(),
+            "a step of {reach} cannot reach all of the ground it is meant to"
+        );
+
+        // And no direction. The old idiom sat at -2.0; the sampling error on
+        // twenty thousand draws of this spread is about a hundredth.
+        let mean = total as f64 / how_many as f64;
+        assert!(
+            mean.abs() < 0.05,
+            "a wander of {how_many} steps drifted {mean:.3} cells a step"
+        );
     }
 
     /// A name is drawn from the stream too, so the same seed names the same

@@ -17776,3 +17776,115 @@ before anything that is down to its keep-back, and when there is nothing else
 left the keep-back goes too. A man who cannot lift his sticks puts the sticks
 down and goes cold; he does not stand there holding them until he starves.
 All four are green, and the fire is still lit.
+
+### 225. Every animal in the world walked two cells south-west a turn, because a wander was built out of a signed remainder
+
+`the_land_will_only_carry_so_many` put ten sheep on a fifty by fifty map and
+watched them all die. The register had it down as the predator layer's
+problem - three of the open failures pointed that way - and it is not. There
+are no predators in that fixture at all.
+
+#### What the measurement said
+
+The herd, probed every thirty days:
+
+| day | alive | mean hunger | plants | standing | grazers fed / tried |
+|---|---|---|---|---|---|
+| 0 | 10 | 0.0 | 614 | 40,867 | - |
+| 30 | 20 | 43 | 588 | 40,398 | 78 / 101 |
+| 80 | 23 | 116 | 575 | 40,186 | 173 / 808 |
+| 100 | 22 | 154 | 569 | 40,045 | 210 / 1,242 |
+| 130 | 0 | - | 557 | 39,706 | 245 / 1,519 |
+
+Two things in that table do not belong together. The standing growth on the
+map **barely moves** - 40,867 down to 39,706 over four months, three per cent
+- and the herd starves to death in front of it. And the ratio that says why:
+by the end **only one grazing animal in six finds anything within reach at
+all**, on a map with forty thousand units of forage on it.
+
+So the third column:
+
+| day | where the herd is |
+|---|---|
+| 0 | x 20-24, y 20-21 |
+| 10 | x 8-16, y 5-18 |
+| 20 | x 0-8, y 4-14 |
+| 30 | x -2-4, y -3-6, **five of twenty off the map** |
+| 100 | x 0-11, y -7-2 |
+
+They are put down in the middle of the map and they walk to the corner. Not
+wander - **walk**, in a straight line, in thirty days, and then spend the rest
+of their lives pressed against the edge and partly outside it, where nothing
+grows.
+
+#### What was wrong
+
+```rust
+let offset = (crate::core::dice::any::<i32>() % 5 - 2, ...);
+```
+
+`any::<i32>()` is a draw from the whole signed range, so half of them are
+negative. A remainder in Rust takes the sign of what it divides, so `% 5` is
+**-4 to 4** rather than 0 to 4, and taking two off that is **-6 to 2**. The
+mean is **minus two**, on both axes, every time anything wandered.
+
+Five places wrote it, and all five wrote it the same way:
+
+| | was | wanted |
+|---|---|---|
+| a hungry beast casting about | -6 to 2 | -2 to 2 |
+| a passive beast settling to graze | -3 to 1 | -1 to 1 |
+| an omnivore setting off | -6 to 2 | -2 to 2 |
+| `spawn_patch`, twice | -3r to r | -r to r |
+
+The last is not movement at all: a wood put down at a point stood mostly up
+and to the left of it.
+
+And there was no clamp. Every other way an animal moves holds it on the map -
+the migration pass clamps, the hunt clamps - and the one in the state machine
+did not, so an animal that drifted out stayed out. It could still be pulled
+back by `where_there_is_something_growing`, one cell a turn, against a drift
+of two cells a turn. It never was.
+
+#### What it does now
+
+`dice::a_step_of(reach)` is the one place a wander is drawn, inclusive at both
+ends, and `AnimalManager::let_it_wander` is the one place a beast takes one -
+and clamps to `world_bounds`, which the manager already knew and nothing in
+the state machine had ever asked for.
+
+`dice::tests::a_step_goes_as_far_each_way_and_nowhere_on_average` holds it:
+every cell within reach is reachable, nothing outside it is, and twenty
+thousand steps drift less than a twentieth of a cell.
+
+#### What it moved
+
+The same fixture, same seed:
+
+| | before | after |
+|---|---|---|
+| off the map at day 30 | 5 of 20 | **0** |
+| grazers that find something | 21% | **81%** |
+| what a mouth gets, day 100 | 4.4 of 8.6 wanted | **6.4** |
+| mean hunger at day 83 | 135 of 180 | **68** |
+| herd at day 130 | **dead** | 24 head and growing |
+
+Two of the five open failures came off with it, and neither is the one it was
+filed under:
+
+- `predator_prey_tests::the_land_will_only_carry_so_many` - 0 against 0.
+- `ecology_tests::most_of_what_lived_here_still_lives_here` - eight worlds
+  opened with 468 head and held 107.
+
+Both had been read as the predator layer running on the subsidy #218 took
+away. That reading was wrong, and the note in `STANDING_FAILURES.md` that
+recorded it is corrected: what was wrong with the country was that everything
+living on it was walking off the edge.
+
+#### And what this says about the rest
+
+`predator_prey_tests` and `ecology_tests` are now green end to end - 53 tests,
+including the hunting ones. The predator layer was starving because its prey
+was standing off the map, not because a wolf cannot make a living. #300's
+measurement - `taken` at 2 in month 6 and still 2 in month 60 - was taken in a
+world where the deer had all walked into the corner.

@@ -150,7 +150,13 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // half days a handful of turns go on lighting a fire and cooking at it
     // instead of on drying and pottering, while over a year the fires
     // themselves burn, consume and go out.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_944;
+    // And up 2.0% for the wander that had a direction in it (#225). The short
+    // count rises and the long one falls, which is the shape of a herd that
+    // stays on the map: more animals alive to take turns over two and a half
+    // days, and over a year the beasts that used to stand off the edge where
+    // nothing grows are standing on ground that feeds them, so fewer of them
+    // are drawing for a hungry beast's search.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_083;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -234,7 +240,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // draws for how the cooking comes out, and it goes out - a year of that
     // is a year of rolls that were never made before, on top of the turns the
     // people themselves spend lighting and cooking rather than drying.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 619_014;
+    // And down 3.6% for #225 - see the short count above, which moved the
+    // other way.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 597_032;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

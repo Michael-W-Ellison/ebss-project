@@ -6338,6 +6338,22 @@ impl AnimalManager {
     /// How much has to be on an animal before it stops grazing about it.
     const WORTH_AN_ANIMAL_LEAVING_OFF: f32 = 0.2;
 
+    /// A step of up to `reach` cells in any direction, and not off the map.
+    ///
+    /// Three places wrote this out and all three wrote it the same wrong way -
+    /// see `dice::a_step_of`, which is where the direction that was in it is
+    /// described. Written once here so that the next one cannot be wrong on
+    /// its own.
+    fn let_it_wander(animal: &mut Animal, reach: i32, edge: Option<(i32, i32)>) {
+        animal.position.0 += crate::core::dice::a_step_of(reach);
+        animal.position.1 += crate::core::dice::a_step_of(reach);
+
+        if let Some((east, south)) = edge {
+            animal.position.0 = animal.position.0.clamp(0, east);
+            animal.position.1 = animal.position.1.clamp(0, south);
+        }
+    }
+
     fn update_animal_behavior_with_hunger(&mut self, animal_idx: usize, behavior: AnimalBehavior, is_wild: bool, is_hungry: bool) {
         // Whether there is anything in a plant for this one.
         //
@@ -6358,6 +6374,17 @@ impl AnimalManager {
             .and_then(|registry| registry.get(&self.animals[animal_idx].species_id))
             .map(|species| self.animals[animal_idx].how_far_it_gets_in_a_turn(species))
             .unwrap_or(2);
+
+        // And where the edge of the country is, read before the animal is
+        // borrowed, so that a wander cannot walk it off the map. Every other
+        // way an animal moves clamps - the migration pass and the hunt both
+        // do - and this one did not, which is how a drifting herd got out and
+        // stayed out. `None` means nobody has told this manager how big the
+        // world is, and then a wander is left alone rather than clamped to a
+        // guess.
+        let edge = self
+            .world_bounds
+            .map(|(width, height)| (width - 1, height - 1));
 
         let animal = &mut self.animals[animal_idx];
 
@@ -6421,9 +6448,7 @@ impl AnimalManager {
             animal.state = AnimalState::Grazing; // Or hunting for carnivores
             animal.state_timer = 40;
             // Move while seeking food
-            let offset = (crate::core::dice::any::<i32>() % 5 - 2, crate::core::dice::any::<i32>() % 5 - 2);
-            animal.position.0 += offset.0;
-            animal.position.1 += offset.1;
+            Self::let_it_wander(animal, 2, edge);
             return;
         }
 
@@ -6436,9 +6461,7 @@ impl AnimalManager {
                 } else if is_hungry || crate::core::dice::any::<f32>() < 0.3 {
                     animal.state = AnimalState::Grazing;
                     animal.state_timer = 30;
-                    let offset = (crate::core::dice::any::<i32>() % 3 - 1, crate::core::dice::any::<i32>() % 3 - 1);
-                    animal.position.0 += offset.0;
-                    animal.position.1 += offset.1;
+                    Self::let_it_wander(animal, 1, edge);
                 } else {
                     animal.state = AnimalState::Idle;
                     animal.state_timer = 20;
@@ -6504,9 +6527,7 @@ impl AnimalManager {
                         AnimalState::Hunting { target_id: None }
                     };
                     animal.state_timer = 50;
-                    let offset = (crate::core::dice::any::<i32>() % 5 - 2, crate::core::dice::any::<i32>() % 5 - 2);
-                    animal.position.0 += offset.0;
-                    animal.position.1 += offset.1;
+                    Self::let_it_wander(animal, 2, edge);
                 } else {
                     animal.state = AnimalState::Idle;
                     animal.state_timer = 30;

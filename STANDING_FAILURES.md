@@ -11,9 +11,8 @@ honest and close nothing without a measurement.
 
 **Last full run**: `cargo test --lib` - 2,636 tests, 36 minutes, **12 failed**,
 2 ignored, of which four were collateral of a first cut at the firewood
-keep-back and are fixed. What remains is the five below plus the errand
-threshold, which now has eight seeds behind it and is noise (see the table at
-the end).
+keep-back and are fixed. What remains is the three below, plus two
+thresholds that are noise rather than news (see the end of this file).
 
 The count has come down from the ten this file opened with: salt water came
 off (the fixture, not the model), the production chain, the practised hand and
@@ -26,34 +25,39 @@ slowly, so nobody ever grew up and nobody ever died of old age.
 
 | test | reports | what is known |
 |---|---|---|
-| `ecology_tests::most_of_what_lived_here_still_lives_here` | 8 worlds open with 468 head and hold 107 | Species all survive; the head count is ten short of the quarter it wants. Probably downstream of the predator layer - re-run after that is settled rather than treating it as its own finding. |
 | `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **#167's question, measured again.** Nobody is ever born at all: 63,456 refusals in 6,000 steps and every one of them "could not feed a child". The gate wants 129,600 units and the best-placed agent holds 8,500 - a factor of fifteen, against the fifty-three #167 measured. Not a test problem and not a gate problem; the store has to fill first (#240, #241, #213). Leave red. |
-| `predator_prey_tests::the_land_will_only_carry_so_many` | 0 against 0 | Both fixture herds go extinct. At #217 it read 2 against 6. The predator layer below. |
-| `situation_tests::a_settlement_works_things_out_that_nobody_wrote_down` | nobody notices one afternoon goes better than another | Passed at ISSUES_FOUND #177 and is red again. Probably downstream of the predator layer - less happening in the world to notice. |
+| `situation_tests::a_settlement_works_things_out_that_nobody_wrote_down` | nobody notices one afternoon goes better than another | Passed at ISSUES_FOUND #177 and is red again. Was read as downstream of the predator layer; that reading is gone with #225 and it has not been looked at on its own terms yet. **Next.** |
 | `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same as the row above - #167's gate, now fifteen times out of reach rather than fifty-three. Its bound is sound: it counts by parentage, which is the right predicate. Leave red. |
 
-## The predator layer
+## The predator layer, and what it turned out to be
 
-Three of those above point at one thing, and it has its own finding rather
-than a row here. ISSUES_FOUND #218 corrected `what_a_grazer_is_worth_to`, which
-converted days of keep into hunger units with `TICKS_PER_DAY` where
-`hunger_rate` is charged once a *pass*: one deer fed a wolf for four hundred
-and fifty days. The conversion is not in doubt. What it revealed is that the
-predator layer was living on that thirtyfold subsidy and cannot make a living
-without it - `taken` is 2 at simulated month 6 and still 2 at month 60.
+Three of the failures pointed here and the reading was wrong. ISSUES_FOUND
+#218 corrected `what_a_grazer_is_worth_to`, which converted days of keep into
+hunger units with `TICKS_PER_DAY` where `hunger_rate` is charged once a
+*pass*: one deer fed a wolf for four hundred and fifty days. The conversion is
+not in doubt and must not be put back - that is the subsidy, and paying it
+again is how it stayed hidden for a month.
 
-Do not fix it by putting `TICKS_PER_DAY` back. That is the subsidy, and paying
-it again is how it stayed hidden for a month.
+What was read off it - that the predator layer had been living on the subsidy
+and could not make a living without it - does not survive measurement.
+**#300's `taken` at 2 in month 6 and still 2 in month 60 was taken in a world
+where the deer had all walked off the map.** Every animal in the model drifted
+two cells south-west a turn, because a wander was built out of a signed
+remainder; see ISSUES_FOUND #225. A herd put down in the middle of a fifty by
+fifty map was pressed into the corner by the thirtieth day, partly outside it,
+and starved there with forty thousand units of forage standing behind it.
+
+With the wander put right, `predator_prey_tests` and `ecology_tests` are green
+end to end - 53 tests, the hunting ones among them.
 
 ## Closed, with the measurement
 
-Five remain open, and none of them is nobody else's. Three -
-`most_of_what_lived_here_still_lives_here`, `the_land_will_only_carry_so_many`
-and `a_settlement_works_things_out_that_nobody_wrote_down` - point at the
-predator layer below rather than at anything of their own, and two -
+Three remain open. Two of them -
 `a_settlement_still_raises_children_late_on` and
 `the_children_of_a_settlement_live_past_infancy` - are ISSUES_FOUND #167's
-central open question and should stay red until the store fills.
+central open question and should stay red until the store fills. The third,
+the settlement that works nothing out, is the next one to look at and has no
+explanation of its own yet.
 
 **`salt_tests::the_sea_costs_more_than_it_gives`** - the fixture, not the
 model. `water_left_after_three_days` ran `TICKS_PER_DAY * 3` passes, which is
@@ -124,6 +128,23 @@ somebody else's fire and going out for wood stayed where they were - a branch
 that can send a hungry man across the valley must not stand in front of eating
 what he is carrying.
 
+
+**`predator_prey_tests::the_land_will_only_carry_so_many`** and
+**`ecology_tests::most_of_what_lived_here_still_lives_here`** - the model, and
+now fixed. Both had been read as the predator layer; neither was. The first
+fixture has no predators in it at all.
+
+Every animal in the world walked two cells south-west a turn, because five
+places built a wander out of `any::<i32>() % 5 - 2` and a signed remainder
+carries the sign of what it divides: -6 to 2, mean -2. Nothing clamped it
+back, though the migration pass and the hunt both clamp. So a herd put down in
+the middle of a map was in the corner by the thirtieth day and starved there.
+
+On the same fixture and seed: grazers that find anything within reach went
+from **21% to 81%**, a mouth's take at day 100 from 4.4 of the 8.6 it wanted
+to 6.4, mean hunger at day 83 from 135 of 180 to 68, and the herd from dead at
+day 130 to twenty-four head and growing. ISSUES_FOUND #225.
+
 ## Moved by #220-#222, and not re-baselined
 
 Two of the behavioural thresholds #298 was filed for went green with #218 and
@@ -134,9 +155,12 @@ what hid the last defect for a month.
 | test | now | threshold |
 |---|---|---|
 | `errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step` | 466 of 1,413 kept to, **33.0%** | 50% |
-| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | green again at #224 | somebody does |
+| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | nobody falls out | somebody does |
 
-The second went green again with #224 and is off the list.
+The second is **still red** - I reported it green off a filtered run in
+which it had not in fact been selected, and the full run says otherwise. It is
+binary and has the same shape it had at #298: in a world with enough food in
+it, twenty-five people get along.
 
 The first is **measured now, and it is noise.** It reads a single default-seed
 world, and the quantity it reads is chaotic. Run over eight seeds, before and
