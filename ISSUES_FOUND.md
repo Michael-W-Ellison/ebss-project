@@ -17741,3 +17741,38 @@ fire in its fixture once "cook" started checking for one. That fixture already
 provides "something to hold, something underfoot, and somebody to talk to, so
 that the target-hungry arms have targets to find"; a lit campfire is the same
 kind of provision, and cooking wants one the way trading wants somebody.
+
+#### A first cut of the keep-back that was a veto, and why it is an ordering
+
+Worth recording, because the fault it caused is one this project has paid for
+before. `what_stays_in_the_pack` was first written as a filter - firewood
+below the keep-back simply never appeared among the things a body would set
+down. That is what `is_this_part_of_the_kit` does for tools and carriers, and
+it looked like the same rule.
+
+It is not the same rule, because of #126. A pack over its limit **refuses
+everything put into it**, so a body that cannot get back under its limit can
+never pick anything up again for the rest of its life. `max_weight` is worked
+out fresh each turn from what the body can lift, and a body that goes hungry
+lifts less - so a man loaded up in his strong summer wakes in November over
+his limit through no act of his own. With firewood vetoed, a man whose whole
+load was eight sticks he could no longer lift stood there holding them.
+
+Four tests caught it, and between them they say the whole thing:
+
+| test | what it saw |
+|---|---|
+| `larder_tests::a_body_that_weakens_sets_down_what_it_can_no_longer_carry` | 8.5 over the limit where nought was wanted |
+| `larder_tests::what_is_set_down_is_still_there_to_be_picked_up` | nothing on the grass |
+| `swap_tests::a_man_still_does_not_shed_his_axe_or_his_basket_to_make_room` | six sticks that would not go down |
+| `clothing_tests::a_cold_agent_ends_up_dressed` | 7 of 24 dressed - men who could not pick the flax up |
+
+The last one is the interesting one: it is not about shedding at all. It went
+red because a frozen pack refuses flax like it refuses everything else, which
+is exactly the shape #126 describes and the reason that finding exists.
+
+It is an ordering now. Anything with something to spare goes on the grass
+before anything that is down to its keep-back, and when there is nothing else
+left the keep-back goes too. A man who cannot lift his sticks puts the sticks
+down and goes cold; he does not stand there holding them until he starves.
+All four are green, and the fire is still lit.

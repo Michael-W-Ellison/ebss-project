@@ -144,7 +144,13 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // The short count moves because what an agent keeps in its pack changed:
     // it holds ten wood now rather than six, so it banks less, carries more,
     // and decides differently about both.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_284;
+    // And down 4.7% for the fire chain of #224. Both counts move and the long
+    // one moves further, which is the shape to expect from a change that adds
+    // a thing to the world rather than only a branch to a turn: over two and a
+    // half days a handful of turns go on lighting a fire and cooking at it
+    // instead of on drying and pottering, while over a year the fires
+    // themselves burn, consume and go out.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_944;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -218,7 +224,17 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // expect. A hundred and twenty turns is two and a half days and nobody
     // lives on dried meat for two and a half days; a year is long enough for
     // what a winter store does to a body's water to tell.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 521_556;
+    //
+    // And **up 18.7%** for the fire chain of #224 - the first rise either of
+    // these counts has recorded, and the only one so far that is not a
+    // correction. Every previous move was a rate being put back on its proper
+    // clock, and every one of those took things *out* of the world. This puts
+    // something in: fires are lit now, and a fire is a thing that goes on
+    // happening. It burns through its fuel, it heats what is left at it, it
+    // draws for how the cooking comes out, and it goes out - a year of that
+    // is a year of rolls that were never made before, on top of the turns the
+    // people themselves spend lighting and cooking rather than drying.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 619_014;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

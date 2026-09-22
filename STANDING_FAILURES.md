@@ -9,13 +9,18 @@ A test that is red and tracked is a known cost. A test that is red and
 untracked makes every future full run read as normal. Keep the count here
 honest and close nothing without a measurement.
 
-**Last full run**: `cargo test --lib` - 2,636 tests, 53 minutes, **9 failed**,
-2 ignored. Down one from the ten this file opened with: salt water came off
-(the fixture, not the model), and a defect that was not on the list at all was
-found and fixed on the way to it - ISSUES_FOUND #219, a body aged thirty times
-too slowly, so nobody ever grew up and nobody ever died of old age. Two tests
-that pinned that defect rather than the behaviour were corrected with it. Every one of the ten predates the clock work of ISSUES_FOUND #217
-and #218; those two commits took six others green.
+**Last full run**: `cargo test --lib` - 2,636 tests, 36 minutes, **12 failed**,
+2 ignored, of which four were collateral of a first cut at the firewood
+keep-back and are fixed. What remains is the five below plus the errand
+threshold, which now has eight seeds behind it and is noise (see the table at
+the end).
+
+The count has come down from the ten this file opened with: salt water came
+off (the fixture, not the model), the production chain, the practised hand and
+the carried waterskin came off, and the fire came off after three separate
+faults in it were found - ISSUES_FOUND #220 to #224. A defect that was not on
+the list at all was found on the way - #219, a body aged thirty times too
+slowly, so nobody ever grew up and nobody ever died of old age.
 
 ## Open
 
@@ -128,16 +133,34 @@ what hid the last defect for a month.
 
 | test | now | threshold |
 |---|---|---|
-| `errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step` | 624 of 1,269 kept to, **49.2%** | 50% |
-| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | nobody falls out | somebody does |
+| `errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step` | 466 of 1,413 kept to, **33.0%** | 50% |
+| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | green again at #224 | somebody does |
 
-The first is eight tenths of a percentage point short and has now been on both
-sides of its line twice, which is the definition of a threshold that is
-measuring noise. The second is binary and has the same shape it had at #298:
-in a world with enough food in it, twenty-five people get along.
+The second went green again with #224 and is off the list.
 
-The mover is most likely the firewood keep-back of #221 - an agent holds ten
-wood now rather than six, so it banks less and carries more - which also shows
-in the recorded roll counts: the short count moved 4.2% and the year only
-0.1%, the shape of a change that alters what one pass does rather than what
-the world is.
+The first is **measured now, and it is noise.** It reads a single default-seed
+world, and the quantity it reads is chaotic. Run over eight seeds, before and
+after the fire chain of #224:
+
+| | mean ratio | range | seeds over the 0.5 line |
+|---|---|---|---|
+| before | 0.377 | 0.236 - 0.462 | **0 of 8** |
+| after | 0.365 | 0.226 - 0.502 | 1 of 8 |
+
+The threshold is outside the spread on both sides of the change, so the test
+does not pass on any seed in either arm and the 49.2% it once reported was
+luck rather than health. Whatever it is measuring, it is not what it claims to
+be measuring: 1,401 of 1,413 errands *arrive*, so `kept to it / set out` is
+really the average length of a walk less one, and a settlement that finds what
+it wants nearby scores badly for it.
+
+**Do not re-baseline it and do not delete it.** It wants a predicate that
+survives a change of seed - arrivals against abandonments would be one, and
+the counters for it are already kept. That is its own piece of work.
+
+For contrast, the same eight seeds on what #224 was actually for:
+
+| | fires standing | LightFire | Cook |
+|---|---|---|---|
+| before | 0 to 2 | 0 to 2, **two worlds with none** | 0 to 100, two with none |
+| after | 1 to 8 | 4 to 15, all eight | 35 to 195, all eight |
