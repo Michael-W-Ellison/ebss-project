@@ -17402,3 +17402,77 @@ passes the criteria to a `debug!` and nowhere else - because
 modules, and only one of them load-bearing. They agree today. This is the
 shape of #231 ("is this food" answered eight ways) and wants the same
 treatment: one table, one caller.
+
+### 221. No fire was ever lit in any world, because a person keeps six sticks and a fire costs ten
+
+`cooking_tests::an_agent_lights_a_fire_and_cooks_on_it` gives an agent forty
+wood, twenty fish and a practised hand, runs four hundred turns and watches for
+anything burning. Nothing ever burns. Chasing it turned up three separate
+things, of which one is a real deadlock, one is a fixture asking for something
+the model forbids, and one is the model doing exactly what it was told.
+
+#### The deadlock
+
+`Agent::ENOUGH_TO_HAND` is six - "how much of a thing an agent keeps on its
+person before the rest is spare" - and `what_i_can_spare` banks everything
+above it. A campfire is built from `FIRE_BUILD_WOOD` and fed with
+`FIRE_FUEL_WOOD`, five and five.
+
+**Six kept against ten needed.** Measured on the test's own fixture, the agent
+banks thirty-four of its forty wood on its *second* turn and is four short of
+a fire for the rest of its life.
+
+And it is a deadlock rather than a delay, which is what makes it worth an
+entry. Relighting a cold hearth costs only the fuel, five, which six would
+cover - but there is no hearth to relight, because building the first one
+costs ten and nobody ever has ten. So the world contains no heat sources at
+all, ever, and everything that eats raw gives up about two thirds of what is
+in it.
+
+The two numbers were chosen in different files by different hands and never
+compared. What you keep of a material has to be at least what the commonest
+thing you do with it costs, so `ENOUGH_WOOD_TO_HAND` is now
+`WHAT_BUILDING_A_FIRE_TAKES + WHAT_FEEDING_A_FIRE_TAKES`, stated on `Agent`
+where the keeping happens, and `Simulation::FIRE_BUILD_WOOD` and
+`FIRE_FUEL_WOOD` derive from it. One spelling.
+
+#### The fixture asked for something the model forbids
+
+A whole fish does not go over a fire. The test immediately below this one -
+`an_agent_with_nothing_worth_cooking_lights_no_fire` - asserts exactly that,
+and says why: it has to be cut into portions first (#153). Cutting wants an
+edge, and `what_flesh_i_should_cut_up` refuses without one on purpose, because
+choosing to cut bare-handed spends the turn and comes straight back refused
+(#190).
+
+The fixture gave wood, fish and cooking skill, and **no knife**. So it handed
+the agent twenty fish it could not cook and a fire it had no reason to light,
+and then asked why it had not lit one. It has a `stoneknife` now.
+
+With both of those put right, a fire is lit - measured, and the probe that
+found it went from `ever lit: false` to `ever lit: true`.
+
+#### And the third thing is not a defect
+
+It is still red, and the reason is that the model is doing what it was told.
+Over twenty-four seeded worlds of four hundred turns, with the blade and the
+firewood both sorted:
+
+| | |
+|---|---|
+| worlds where a fire was lit | **5 of 24** |
+| first lit on turn | min 131, median 176, max 387 |
+| Dry chosen | 486 |
+| Cook chosen | 119 |
+| LightFire chosen | 6 |
+
+**The agent dries the fish four times more often than it cooks them**, and it
+is supposed to. The cooking branch is gated on `!putting_by` under a comment
+that says so in as many words: "not on a harvest, because cooking a thing
+stops it being dried, and drying is worth twenty times what cooking is." An
+agent handed twenty fish and nothing else to do is the archetypal harvest.
+
+So the test's claim and the model's decision disagree, and that is a question
+about what the model should do rather than a bug to fix. It is left red and
+recorded in `STANDING_FAILURES.md` with the numbers, because seeding it to one
+of the five worlds where a fire happens to get lit would be picking the answer.

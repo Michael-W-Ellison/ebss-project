@@ -2167,6 +2167,44 @@ impl Agent {
     /// spare.
     pub const ENOUGH_TO_HAND: u32 = 6;
 
+    /// What a campfire is built from, and what is then put on it to burn.
+    ///
+    /// Stated here rather than in the decision layer because what a person
+    /// keeps to hand has to be able to see it - see `ENOUGH_WOOD_TO_HAND`
+    /// below. `Simulation::FIRE_BUILD_WOOD` and `FIRE_FUEL_WOOD` derive from
+    /// these, so there is one spelling.
+    pub const WHAT_BUILDING_A_FIRE_TAKES: u32 = 5;
+    pub const WHAT_FEEDING_A_FIRE_TAKES: u32 = 5;
+
+    /// And how much firewood a person keeps, which is a different question
+    /// again.
+    ///
+    /// **What you keep of a material has to be at least what the commonest
+    /// thing you do with it costs.** A fire is built from five and fed with
+    /// five more. `ENOUGH_TO_HAND` is six, so an agent banked everything
+    /// above six - measured, on its *second* turn, forty down to six - and
+    /// spent the rest of its life four short of a fire.
+    ///
+    /// Relighting a cold hearth costs only the fuel, five, which it could
+    /// have afforded. But no hearth could ever be built to relight, so the
+    /// shortfall was a deadlock rather than a delay: **no fire was ever lit
+    /// in any world**, and everything that eats raw gave up about two thirds
+    /// of what was in it. See ISSUES_FOUND #221.
+    pub const ENOUGH_WOOD_TO_HAND: u32 =
+        Self::WHAT_BUILDING_A_FIRE_TAKES + Self::WHAT_FEEDING_A_FIRE_TAKES;
+
+    /// How much of this particular thing is worth keeping back.
+    ///
+    /// A person does not keep the same amount of everything: six of a thing
+    /// is a sensible pocketful, and six sticks is not a fire.
+    fn how_much_of_this_to_keep(name: &str) -> u32 {
+        if name == "wood" {
+            Self::ENOUGH_WOOD_TO_HAND
+        } else {
+            Self::ENOUGH_TO_HAND
+        }
+    }
+
     /// And how much food, which is a different question.
     ///
     /// Food is not flint: six armfuls of berries is not a sensible thing to
@@ -2194,12 +2232,14 @@ impl Agent {
             .get_all_items()
             .iter()
             .filter(|(name, item)| {
-                item.quantity > Self::ENOUGH_TO_HAND
+                item.quantity > Self::how_much_of_this_to_keep(name)
                     && item.food_data.is_none()
                     && !name.contains("food")
             })
             .max_by_key(|(_, item)| item.quantity)
-            .map(|(name, item)| (name.clone(), item.quantity - Self::ENOUGH_TO_HAND))
+            .map(|(name, item)| {
+                (name.clone(), item.quantity - Self::how_much_of_this_to_keep(name))
+            })
     }
 
     /// How much more weight this pack is holding than its owner can carry.

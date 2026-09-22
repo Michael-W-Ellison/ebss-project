@@ -62,11 +62,17 @@ impl Simulation {
     /// ground yields many times what the hedgerow beside it does.
     pub(in crate::analytics) const FIELD_YIELD: u32 = 80;
 
-    /// Wood a campfire is built from, matching `HeatSourceType::Campfire`
-    pub(in crate::analytics) const FIRE_BUILD_WOOD: u32 = 5;
+    /// Wood a campfire is built from, matching `HeatSourceType::Campfire`.
+    ///
+    /// Off `Agent`, because what a person keeps to hand has to be at least
+    /// what a fire costs and the two were chosen apart - six kept against ten
+    /// needed. See ISSUES_FOUND #221.
+    pub(in crate::analytics) const FIRE_BUILD_WOOD: u32 =
+        crate::agents::Agent::WHAT_BUILDING_A_FIRE_TAKES;
 
     /// Wood put on to burn, worth about fifty turns at a campfire's rate
-    pub(in crate::analytics) const FIRE_FUEL_WOOD: u32 = 5;
+    pub(in crate::analytics) const FIRE_FUEL_WOOD: u32 =
+        crate::agents::Agent::WHAT_FEEDING_A_FIRE_TAKES;
 
     /// How long food goes on smelling of cooking after it is taken off the
     /// fire, in turns
