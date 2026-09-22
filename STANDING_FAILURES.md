@@ -43,7 +43,7 @@ it again is how it stayed hidden for a month.
 
 ## Closed, with the measurement
 
-Six remain open. Three of them - `most_of_what_lived_here_still_lives_here`,
+Eight remain open. Three of them - `most_of_what_lived_here_still_lives_here`,
 `the_land_will_only_carry_so_many` and
 `a_settlement_works_things_out_that_nobody_wrote_down` - point at the predator
 layer below rather than at anything of their own, and two -
@@ -90,3 +90,27 @@ better hand fills it sooner. Carrying the load home between trips gives
 against forty *steps* - asking for a drink in the last two minutes of a
 twenty-hour run. Its own failure message held the answer: 1,200 less 1,020 is
 180, so the agent drank at step six. ISSUES_FOUND #222.
+
+
+## Moved by #220-#222, and not re-baselined
+
+Two of the behavioural thresholds #298 was filed for went green with #218 and
+are red again after the placement and firewood work. Neither is re-baselined,
+for the reason that task records: moving a threshold to fit a measurement is
+what hid the last defect for a month.
+
+| test | now | threshold |
+|---|---|---|
+| `errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step` | 624 of 1,269 kept to, **49.2%** | 50% |
+| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | nobody falls out | somebody does |
+
+The first is eight tenths of a percentage point short and has now been on both
+sides of its line twice, which is the definition of a threshold that is
+measuring noise. The second is binary and has the same shape it had at #298:
+in a world with enough food in it, twenty-five people get along.
+
+The mover is most likely the firewood keep-back of #221 - an agent holds ten
+wood now rather than six, so it banks less and carries more - which also shows
+in the recorded roll counts: the short count moved 4.2% and the year only
+0.1%, the shape of a change that alters what one pass does rather than what
+the world is.

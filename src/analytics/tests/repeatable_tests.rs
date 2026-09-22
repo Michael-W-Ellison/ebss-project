@@ -140,7 +140,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // two and a half days is long enough for a spell of weather to end now
     // that a ten-hour front lasts ten hours instead of twelve days. A world
     // whose weather turns over draws for its weather.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_600;
+    // And down 4.2% again for the placement and firewood work of #220-#222.
+    // The short count moves because what an agent keeps in its pack changed:
+    // it holds ten wood now rather than six, so it banks less, carries more,
+    // and decides differently about both.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_284;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -206,7 +210,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // world with a fifth of the animals on it and wild food coming back at
     // the rate it was actually measured at has fewer things happening in it
     // to draw for.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 571_835;
+    // And a tenth of a per cent for #220-#222, which is the shape to expect
+    // from a change that alters what one pass does rather than what the world
+    // is: the short count moved thirty times further than the long one.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 571_258;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
