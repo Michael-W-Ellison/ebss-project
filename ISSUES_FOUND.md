@@ -17546,3 +17546,88 @@ step count. Both had been red long enough to be treated as known, and both
 were reporting their own diagnosis in the failure message the whole time -
 "0 against 25" and "1020 turns dry" are each one arithmetic step from the
 answer.
+
+### 223. A strip of dried meat was as good a drink as the wet meat it was cut from
+
+The fire and the drying rack are for different jobs. Cooking gives up more of
+what is in a thing; drying makes it keep. The model already had both halves,
+and they were already the right way round:
+
+| | eaten | kept |
+|---|---|---|
+| Cooked | **0.95** utilization | 0.8 spoilage rate |
+| Dried | 0.85 utilization | **0.05** spoilage rate |
+
+Cooking is twelve per cent better at the table and drying is sixteen times
+better on the shelf. Neither is simply better, which is as it should be.
+
+What was missing is the third side of it: **drying takes the water out, and
+eating it dry costs the eater that water back.**
+
+#### What it did before
+
+`FoodData::effective_nutrition` applied the preparation's utilization to
+energy, protein and micronutrients, and left `water_content` alone. So a strip
+of dried meat carried the same 0.6 water as the wet meat it was cut from, and
+the four sites that read it -
+
+```rust
+if nutrition.water_content > 0.3 {
+    thirst.decrease(nutrition.water_content * 0.1);
+}
+```
+
+- slaked thirst for it exactly as if it were fresh. `decrease` was the only
+verb any of them used, so there was no way for a food to cost water even in
+principle.
+
+#### What it does now
+
+Two changes, and the second follows from the first.
+
+`effective_nutrition` scales `water_content` by
+`PreparationState::what_it_does_to_the_weight`, which is the function that
+already says what drying does - 0.35 for dried, 0.8 for cooked, 1.0 for raw.
+That is not a new number, it is the existing one applied where it belonged:
+the water drying drove off is gone, and the weight already knew.
+
+And `FoodData::what_it_does_to_thirst` states the whole rule once, signed:
+
+- above `WET_ENOUGH_TO_BE_A_DRINK`, unchanged - what is in it slakes thirst,
+  so nothing that was already a drink stops being one.
+- below it, the cost is the water actually driven off rather than a shortfall
+  against the threshold, because that is the water the gut has to put back.
+
+For meat at 0.6 water:
+
+| | thirst |
+|---|---|
+| raw | **+0.060** (unchanged) |
+| cooked | **+0.048** - a fire drives some water off too |
+| dried | **−0.039** - a debt against the waterskin |
+
+Two of the four call sites are foraging - fruit eaten off the bush, straight
+off the template with no preparation - so they keep the old rule and are
+unaffected by any of this. The two that eat from a pack go through the new one.
+
+`nutrition::tests::a_fire_feeds_you_and_a_drying_rack_keeps_it` pins all three
+facts together, so that moving any one of them has to be deliberate.
+
+#### And a thing this did not explain
+
+`cooking_tests::an_agent_lights_a_fire_and_cooks_on_it` is still red, and the
+obvious reading of #221's finding turns out to be wrong. `cooking_action` is
+gated on `!putting_by`, and `is_this_lot_for_the_store` returns false unless
+the season is autumn - so a world set in midsummer should cook freely.
+Measured over twenty-four worlds either way:
+
+| | fire lit | Dry | Cook | LightFire |
+|---|---|---|---|---|
+| midsummer | **0 of 24** | 341 | 83 | 0 |
+| autumn | 1 of 24 | 395 | 46 | 1 |
+
+Summer is *worse*, and `Cook` is chosen eighty-three times while `LightFire`
+is chosen none - so something between deciding to cook and there being a fire
+to cook on is unaccounted for. That is not the season and it is not the
+fixture. It is recorded here rather than guessed at, and the test carries the
+numbers in its docstring.

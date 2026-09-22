@@ -423,8 +423,49 @@ impl FoodData {
             energy: self.base_nutrition.energy * utilization * freshness_factor,
             protein: self.base_nutrition.protein * utilization * freshness_factor,
             micronutrients: self.base_nutrition.micronutrients * utilization * freshness_factor,
-            water_content: self.base_nutrition.water_content * freshness_factor,
+            // Less whatever the preparing drove off. Drying takes the water
+            // out - that is the whole of what drying *is* - and until now a
+            // strip of dried meat carried the same water as the wet meat it
+            // was cut from, so it slaked thirst exactly as well. See
+            // ISSUES_FOUND #223.
+            water_content: self.base_nutrition.water_content
+                * freshness_factor
+                * self.preparation.what_it_does_to_the_weight(),
         }
+    }
+
+    /// How wet a food has to be before eating it counts as a drink.
+    const WET_ENOUGH_TO_BE_A_DRINK: f32 = 0.3;
+
+    /// What one unit of this does to thirst: positive slakes it, negative
+    /// costs.
+    ///
+    /// Juicy food is a drink of sorts, and the model has always had that half
+    /// - a handful of berries is water as well as food. The other half is that
+    /// **what drying took out, the gut has to put back**, and it takes it from
+    /// the body. A strip of dried meat is a debt against the waterskin, which
+    /// is why a diet of it without water to go with it is a known way to come
+    /// to grief.
+    ///
+    /// Written as one rule in one place because it was four copies of
+    /// `if water_content > 0.3` in three files, none of which could express a
+    /// cost because `decrease` was the only verb any of them used.
+    ///
+    /// The wet side is unchanged, so nothing that was already a drink stops
+    /// being one. The dry side is new and is the water actually driven off,
+    /// rather than a shortfall against the threshold: for meat at 0.6 water,
+    /// drying leaves 0.21 and charges the 0.39 it took.
+    pub fn what_it_does_to_thirst(&self) -> f32 {
+        const WHAT_A_UNIT_OF_WATER_IS_WORTH_TO_THIRST: f32 = 0.1;
+
+        let brought = self.effective_nutrition().water_content;
+        if brought > Self::WET_ENOUGH_TO_BE_A_DRINK {
+            return brought * WHAT_A_UNIT_OF_WATER_IS_WORTH_TO_THIRST;
+        }
+
+        let before_it_was_prepared = self.base_nutrition.water_content * self.freshness.max(0.0);
+        let driven_off = (before_it_was_prepared - brought).max(0.0);
+        -driven_off * WHAT_A_UNIT_OF_WATER_IS_WORTH_TO_THIRST
     }
 
     /// Check if food is spoiled (inedible without consequences)
@@ -1066,6 +1107,67 @@ mod tests {
                 PreparationState::Raw.utilization_multiplier());
         assert_eq!(PreparationState::Raw.utilization_multiplier(), 0.35);
         assert_eq!(PreparationState::Cooked.utilization_multiplier(), 0.95);
+    }
+
+    /// The fire and the drying rack are for different jobs, and each wins its own.
+    ///
+    /// Cooking unlocks what is in a thing - a fire turns about a third of raw
+    /// meat into nearly all of it - and drying makes it keep. Neither is
+    /// simply better, and a model that said otherwise would give an agent one
+    /// answer for two questions. The three numbers below are that trade-off,
+    /// stated so that moving any one of them has to be deliberate.
+    #[test]
+    fn a_fire_feeds_you_and_a_drying_rack_keeps_it() {
+        use crate::environment::tags::Tag;
+
+        // What you get out of it when you eat it: the fire wins.
+        assert!(
+            PreparationState::Cooked.utilization_multiplier()
+                > PreparationState::Dried.utilization_multiplier(),
+            "cooking should give up more of what is in a thing than drying:              {} against {}",
+            PreparationState::Cooked.utilization_multiplier(),
+            PreparationState::Dried.utilization_multiplier()
+        );
+
+        // How long it lasts: the rack wins, and by a lot. A lower number keeps
+        // longer - see `Tag::what_it_does_to_keeping`.
+        let dry = Tag::Dry.what_it_does_to_keeping().expect("dry has a rate");
+        let cooked = Tag::Cooked.what_it_does_to_keeping().expect("cooked has a rate");
+        assert!(
+            dry < cooked,
+            "drying should keep a thing far longer than cooking: {dry} against {cooked}"
+        );
+
+        // And eating it dry costs water, because what the rack took out the
+        // gut puts back - out of the body.
+        let meat = NutritionalContent::new(30.0, 50.0, 10.0, 0.6);
+        let dried = FoodData::new(meat, PreparationState::Dried, 100, 0);
+        let cooked_meat = FoodData::new(meat, PreparationState::Cooked, 100, 0);
+        let raw = FoodData::new(meat, PreparationState::Raw, 100, 0);
+
+        assert!(
+            dried.what_it_does_to_thirst() < 0.0,
+            "a strip of dried meat should cost water, not give it: {}",
+            dried.what_it_does_to_thirst()
+        );
+        assert!(
+            raw.what_it_does_to_thirst() > 0.0,
+            "and wet meat should still be a drink of sorts: {}",
+            raw.what_it_does_to_thirst()
+        );
+        assert!(
+            cooked_meat.what_it_does_to_thirst() < raw.what_it_does_to_thirst(),
+            "cooking drives off some water too, so it should slake less than raw:              {} against {}",
+            cooked_meat.what_it_does_to_thirst(),
+            raw.what_it_does_to_thirst()
+        );
+
+        println!(
+            "MEASURED raw {:.3} cooked {:.3} dried {:.3}",
+            raw.what_it_does_to_thirst(),
+            cooked_meat.what_it_does_to_thirst(),
+            dried.what_it_does_to_thirst()
+        );
     }
 
     #[test]

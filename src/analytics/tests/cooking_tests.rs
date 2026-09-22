@@ -152,6 +152,23 @@ fn an_agent_will_not_eat_what_it_has_ruined() {
 /// The other half of why it never did was real and is fixed: the agent banked
 /// its firewood down to `ENOUGH_TO_HAND`, six, while a fire costs ten. See
 /// ISSUES_FOUND #221.
+///
+/// **Still red, and what is left is not the fixture.** A fire and a drying
+/// rack are for different jobs and the model says so: cooking gives up more
+/// of what is in a thing (0.95 against 0.85) and drying makes it keep far
+/// longer (a twentieth the rate against four fifths) - see
+/// `nutrition::tests::a_fire_feeds_you_and_a_drying_rack_keeps_it`, which
+/// pins that trade-off. This agent dries its fish instead of cooking them,
+/// and over twenty-four worlds it chooses Dry 341 times against Cook 83.
+///
+/// The obvious explanation is wrong. `cooking_action` is gated on
+/// `!putting_by`, and `is_this_lot_for_the_store` is only ever true in
+/// autumn - so putting the world in midsummer should free it. Measured, it
+/// does the opposite: 0 of 24 worlds light a fire in summer against 1 of 24
+/// in autumn, and `Cook` is chosen eighty-three times while `LightFire` is
+/// chosen none. Something between choosing to cook and there being a fire to
+/// cook on is unaccounted for, and it is not the season. See
+/// ISSUES_FOUND #223.
 #[test]
 fn an_agent_lights_a_fire_and_cooks_on_it() {
     let mut world = World::new(WorldConfig::default());

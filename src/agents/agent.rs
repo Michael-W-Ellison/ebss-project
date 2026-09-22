@@ -7828,10 +7828,14 @@ impl Agent {
             let nutrition = food_data.effective_nutrition();
             self.nutrition.consume(&nutrition.scale(amount as f32));
 
-            // Also satisfy thirst from water content
-            if nutrition.water_content > 0.3 {
-                if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
-                    thirst.decrease(nutrition.water_content * 0.1 * amount as f32);
+            // What this does to thirst, which may be to make it worse -
+            // see `FoodData::what_it_does_to_thirst`.
+            if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+                let to_thirst = food_data.what_it_does_to_thirst() * amount as f32;
+                if to_thirst >= 0.0 {
+                    thirst.decrease(to_thirst);
+                } else {
+                    thirst.increase(-to_thirst);
                 }
             }
         } else {
@@ -7970,10 +7974,15 @@ impl Agent {
         // Apply nutrition to agent
         self.nutrition.consume(&nutrition);
 
-        // Satisfy thirst from water content
-        if nutrition.water_content > 0.3 {
-            if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
-                thirst.decrease(nutrition.water_content * 0.1);
+        // What this does to thirst, which may be to make it worse: what
+        // drying took out of a thing, the gut puts back out of the body.
+        // See `FoodData::what_it_does_to_thirst`.
+        if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+            let to_thirst = food_data.what_it_does_to_thirst();
+            if to_thirst >= 0.0 {
+                thirst.decrease(to_thirst);
+            } else {
+                thirst.increase(-to_thirst);
             }
         }
 
