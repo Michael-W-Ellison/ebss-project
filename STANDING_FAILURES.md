@@ -11,8 +11,9 @@ honest and close nothing without a measurement.
 
 **Last full run**: `cargo test --lib` - 2,636 tests, 36 minutes, **12 failed**,
 2 ignored, of which four were collateral of a first cut at the firewood
-keep-back and are fixed. What remains is the three below, plus two
-thresholds that are noise rather than news (see the end of this file).
+keep-back and are fixed. What remains is the two below, which are one
+question, plus two thresholds that are noise rather than news (see the end of
+this file).
 
 The count has come down from the ten this file opened with: salt water came
 off (the fixture, not the model), the production chain, the practised hand and
@@ -26,7 +27,6 @@ slowly, so nobody ever grew up and nobody ever died of old age.
 | test | reports | what is known |
 |---|---|---|
 | `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **#167's question, measured again.** Nobody is ever born at all: 63,456 refusals in 6,000 steps and every one of them "could not feed a child". The gate wants 129,600 units and the best-placed agent holds 8,500 - a factor of fifteen, against the fifty-three #167 measured. Not a test problem and not a gate problem; the store has to fill first (#240, #241, #213). Leave red. |
-| `situation_tests::a_settlement_works_things_out_that_nobody_wrote_down` | nobody notices one afternoon goes better than another | Passed at ISSUES_FOUND #177 and is red again. Was read as downstream of the predator layer; that reading is gone with #225 and it has not been looked at on its own terms yet. **Next.** |
 | `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same as the row above - #167's gate, now fifteen times out of reach rather than fifty-three. Its bound is sound: it counts by parentage, which is the right predicate. Leave red. |
 
 ## The predator layer, and what it turned out to be
@@ -52,12 +52,12 @@ end to end - 53 tests, the hunting ones among them.
 
 ## Closed, with the measurement
 
-Three remain open. Two of them -
+Two remain open, and they are one question:
 `a_settlement_still_raises_children_late_on` and
-`the_children_of_a_settlement_live_past_infancy` - are ISSUES_FOUND #167's
-central open question and should stay red until the store fills. The third,
-the settlement that works nothing out, is the next one to look at and has no
-explanation of its own yet.
+`the_children_of_a_settlement_live_past_infancy` are ISSUES_FOUND #167's
+central open problem - the store that never fills - and should stay red until
+it does. A settlement of twelve dies out on day 327, which is what both of
+them are really reporting.
 
 **`salt_tests::the_sea_costs_more_than_it_gives`** - the fixture, not the
 model. `water_left_after_three_days` ran `TICKS_PER_DAY * 3` passes, which is
@@ -144,6 +144,26 @@ On the same fixture and seed: grazers that find anything within reach went
 from **21% to 81%**, a mouth's take at day 100 from 4.4 of the 8.6 it wanted
 to 6.4, mean hunger at day 83 from 135 of 180 to 68, and the herd from dead at
 day 130 to twenty-four head and growing. ISSUES_FOUND #225.
+
+
+**`situation_tests::a_settlement_works_things_out_that_nobody_wrote_down`** -
+the fixture, not the model, and it was reading a number that could only ever
+have been nought. It ran the year out, broke when nobody was left alive, and
+then summed `how_much_i_have_worked_out` over `population.agents` - which
+`Population::turn` has already emptied, because it takes the dead off the
+roll.
+
+Probed turn by turn, the settlement works things out from the tenth day and
+peaks at **thirty-one** between twelve people on day 195. It then dies out on
+day 327 and the reading was taken from its graves. It takes the high-water
+mark while the settlement is alive now, and says how many turns it lasted when
+it fails, so a future failure distinguishes "learned nothing" from "nobody
+lived". ISSUES_FOUND #226.
+
+The die-off is real and is deliberately left to the two tests above. A
+measurement taken after a die-off reads the survivors, and a total die-off
+leaves none - worth remembering before reading any other run-it-out-and-sum
+test.
 
 ## Moved by #220-#222, and not re-baselined
 

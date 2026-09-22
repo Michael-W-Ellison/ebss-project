@@ -17888,3 +17888,72 @@ including the hunting ones. The predator layer was starving because its prey
 was standing off the map, not because a wolf cannot make a living. #300's
 measurement - `taken` at 2 in month 6 and still 2 in month 60 - was taken in a
 world where the deer had all walked into the corner.
+
+### 226. A settlement that worked thirty-one things out was asked what it knew after everybody in it was dead
+
+`situation_tests::a_settlement_works_things_out_that_nobody_wrote_down` had
+been on the register as "probably downstream of the predator layer - less
+happening in the world to notice". With the predator layer explained away by
+#225 it needed looking at on its own terms, and what it turns out to be is
+neither the model nor the ecology.
+
+#### What it did
+
+Run twelve people for a year and a season, then ask them what they had worked
+out:
+
+```rust
+for _ in 0..(PLANNING_PERIODS_PER_YEAR + 400) {
+    simulation.take_a_turn();
+    if !simulation.population.agents.iter().any(|a| a.state.is_alive) {
+        break;
+    }
+}
+
+let worked_out: usize = simulation.population.agents.iter()
+    .map(|agent| agent.lessons.how_much_i_have_worked_out())
+    .sum();
+```
+
+`Population::turn` takes the dead off the roll - `agents.retain(is_alive)` -
+so by the time the loop breaks there is nobody left to ask and the sum is over
+an empty vector. It does not return a small number. It returns nought, and it
+would return nought however much the settlement had learned.
+
+#### What it was actually doing
+
+Probed turn by turn:
+
+| day | alive | worked out between them |
+|---|---|---|
+| 0 | 12 | 0 |
+| 10 | 12 | 6 |
+| 50 | 12 | 7 |
+| 125 | 12 | 19 |
+| 195 | 12 | **31** |
+| 326 | 1 | 7 |
+| 327 | 0 | 0 |
+
+The settlement works things out from the tenth day and goes on doing it for
+two hundred days. The claim the test makes is true and has been true all
+along. What was wrong is that the reading was taken from its graves.
+
+It now takes the high-water mark while the settlement is alive, which is what
+"a settlement works things out" means, and reports how many turns it lasted
+when it fails - so a future failure says whether nothing was learned or
+nobody lived.
+
+#### And the thing this uncovered, which is not fixed
+
+**A settlement of twelve dies out on day 327.** That is the real finding here
+and it is left red on purpose, in the two tests that own it:
+`survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` and
+`longevity_tests::a_settlement_still_raises_children_late_on`. It is the store
+that never fills - #167, #240, #241, #213 - and it must not be made to go away
+by loosening anything in the learning test.
+
+The general shape is worth naming, because it will be here again: **a
+measurement taken after a die-off reads the survivors, and a total die-off
+leaves no survivors to read.** Any test that runs a settlement out and then
+sums something over `population.agents` is reporting on whoever happened to
+live, and reports nought rather than a failure when nobody did.

@@ -653,6 +653,14 @@ impl Lessons {
         worked_out
     }
 
+    /// Every particular thing this agent has the circumstances of. For the
+    /// instruments: `what_i_have_worked_out` reports only what cleared both
+    /// gates, and when it reports nothing the question is which gate.
+    #[doc(hidden)]
+    pub fn everything_i_have_tried_somewhere(&self) -> impl Iterator<Item = &str> + '_ {
+        self.under.keys().map(|what| what.as_str())
+    }
+
     /// How many such things this agent has worked out.
     pub fn how_much_i_have_worked_out(&self) -> usize {
         self.what_i_have_worked_out().len()
