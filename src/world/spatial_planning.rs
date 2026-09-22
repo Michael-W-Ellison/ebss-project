@@ -525,8 +525,9 @@ impl<'a> SpatialPlanner<'a> {
                     building_type,
                     criteria.clone(),
                 );
-                let agent_penalty = distance_to_agent * 2.0;
-                resource_score - agent_penalty + zone_bonus + road_bonus
+                resource_score - Self::what_the_walk_costs(distance_to_agent)
+                    + zone_bonus
+                    + road_bonus
             }
 
             PlacementStrategy::BalancedProximity => {
@@ -540,6 +541,41 @@ impl<'a> SpatialPlanner<'a> {
                 (resource_score * 0.6 + agent_score * 0.4) + zone_bonus + road_bonus
             }
         }
+    }
+
+    /// The most the walk to a site can ever count against it.
+    ///
+    /// A building is put up once and stands for years. What it is *next to* is
+    /// a permanent fact about it - a mill by its farm, a forge by its iron -
+    /// and how far the builder had to walk is a single afternoon. So the walk
+    /// is a real cost and a bounded one, and it cannot outweigh the site
+    /// without limit.
+    ///
+    /// It used to be `distance * 2.0`, growing without end across a search
+    /// radius of thirty while every criteria score is of the form
+    /// `weight / (1 + distance)`, which saturates. The two were in different
+    /// currencies and the linear one always won in the end. Measured on a
+    /// mill forty-two tiles from its farm, with the criteria paying
+    /// `200 / (1 + d)`:
+    ///
+    /// | site | criteria | old penalty | old total |
+    /// |---|---|---|---|
+    /// | beside the farm | 100.0 | 83.4 | 16.6 |
+    /// | diagonal from it | 82.8 | 82.0 | 0.8 |
+    /// | two tiles off | 66.7 | 84.8 | -18.1 |
+    /// | where the builder stood | 4.6 | 0.0 | 4.6 |
+    ///
+    /// Only the four tiles orthogonally touching the farm could beat standing
+    /// still, so a production chain clustered when a passable tile happened to
+    /// be adjacent to its prerequisite and not otherwise - which is why
+    /// `test_production_chain_buildings_cluster` passed or failed on the
+    /// terrain roll rather than on the placement. See ISSUES_FOUND #220.
+    const WHAT_A_WALK_TO_THE_SITE_IS_WORTH: f32 = 40.0;
+
+    /// Bounded, and the same shape as everything it is weighed against.
+    fn what_the_walk_costs(distance_to_agent: f32) -> f32 {
+        Self::WHAT_A_WALK_TO_THE_SITE_IS_WORTH
+            * (1.0 - 1.0 / (1.0 + distance_to_agent.max(0.0)))
     }
 
     /// Calculate bonus for being near roads (good accessibility)

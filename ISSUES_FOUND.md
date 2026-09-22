@@ -17314,3 +17314,91 @@ constraint is upstream, and the number to watch is the ratio: fifty-three at
 
 Both tests are correct and should stay red until the store fills. They are
 recorded in `STANDING_FAILURES.md` with that reason.
+
+### 220. A mill is built where the builder was standing, because the walk to the site was priced in a currency the site could not match
+
+`test_production_chain_buildings_cluster` asks that a mill be built near the
+farm it grinds for rather than next to whoever happened to be carrying the
+stone. It has been in the standing failures for as long as the register goes
+back.
+
+The placement machinery knows the answer. `infer_criteria_from_building` maps
+`Mill | Bakery => NearRelatedBuilding`, `BuildingType::prerequisites` maps
+`Mill => vec![Farm]`, and `score_location` pays `200 / (1 + distance)` for
+being near a prerequisite under a comment that says "strongly prefer being
+near prerequisites". None of that is wrong.
+
+What was wrong is what it was weighed against. Every criteria score in this
+file has the form `weight / (1 + distance)` and therefore **saturates** - it
+cannot exceed its weight however good the site. The walk to the site was
+`distance_to_agent * 2.0`, which **does not saturate**, across a search radius
+of thirty. Two terms in two different currencies, and past a tile or so the
+linear one always wins.
+
+Measured on the test's own fixture - a farm at (20,20), a builder at (50,50):
+
+| site | criteria | walk | total |
+|---|---|---|---|
+| beside the farm | 100.0 | 83.4 | **16.6** |
+| diagonal from it | 82.8 | 82.0 | **0.8** |
+| two tiles off | 66.7 | 84.8 | **-18.1** |
+| where the builder stood | 4.6 | 0.0 | **4.6** |
+
+**Only the four tiles orthogonally touching the farm could beat standing
+still**, and only just. So a production chain clustered if a passable tile
+happened to be adjacent to its prerequisite, and collapsed entirely if none
+was - which is not a placement rule, it is a terrain roll.
+
+That is also why the test looked so strange to chase: the same code put the
+mill at (21,20) in one binary and (49,49) in another, because the two rolled
+different terrain.
+
+#### The fix
+
+A building is put up once and stands for years. What it is next to is a
+permanent fact about it; how far the builder walked is a single afternoon. So
+the walk is a real cost and a **bounded** one, in the same shape as everything
+it is weighed against:
+
+```rust
+const WHAT_A_WALK_TO_THE_SITE_IS_WORTH: f32 = 40.0;
+
+fn what_the_walk_costs(distance_to_agent: f32) -> f32 {
+    Self::WHAT_A_WALK_TO_THE_SITE_IS_WORTH
+        * (1.0 - 1.0 / (1.0 + distance_to_agent.max(0.0)))
+}
+```
+
+Only `PlacementStrategy::NearResources` uses it - the strategy whose whole
+point is proximity to what a building needs.
+
+#### Measured over twenty-four worlds
+
+The mill's distance from its farm, same fixture, seeds 0 to 23:
+
+| | within 8 of the farm | nearer the farm than the builder | median | worst |
+|---|---|---|---|---|
+| before | 22 of 24 | 22 of 24 | 1.0 | **41.0** |
+| after | **24 of 24** | **24 of 24** | 1.0 | **2.0** |
+
+The old rule was right most of the time and catastrophically wrong the rest,
+which is the worst shape a rule can have: it looks correct until the world
+does not cooperate. The test is seeded now, and its docstring carries both
+rows, so the next person to read it knows what it is guarding rather than
+guessing.
+
+All seven tests in `agent_building_integration_tests` pass, including
+`test_agent_uses_spatial_planner_for_building`, which asks the opposite thing -
+that a workshop stay within twenty of its builder - and was the one at risk
+from making a distant site cheaper.
+
+#### Noted and not fixed: the criteria are worked out twice
+
+`analytics::determine_placement_approach` returns a `(PlacementCriteria,
+PlacementStrategy)` pair, and `execute_building_action` uses the strategy and
+passes the criteria to a `debug!` and nowhere else - because
+`find_optimal_location_for_agent` derives the criteria again for itself with
+`infer_criteria_from_building`. Two tables saying the same thing, in two
+modules, and only one of them load-bearing. They agree today. This is the
+shape of #231 ("is this food" answered eight ways) and wants the same
+treatment: one table, one caller.
