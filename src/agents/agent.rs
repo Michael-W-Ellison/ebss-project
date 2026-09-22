@@ -1155,7 +1155,22 @@ impl AgentState {
             return;
         }
 
-        self.age += 1;
+        // A step is half an hour, and `age` is counted in ticks - it is seeded
+        // as `years * TICKS_PER_YEAR`, compared against a `max_age` derived
+        // the same way, and divided by `TICKS_PER_YEAR` to get a life stage.
+        // So it advances by the ticks a step covers, not by one.
+        //
+        // It read `+= 1`, which is a minute per half hour lived: a day moved a
+        // body on by forty-eight ticks where a day is one thousand four
+        // hundred and forty, so **every body in this world aged thirty times
+        // too slowly**. Reaching sixteen took four hundred and eighty
+        // simulated years, which is to say nobody ever grew up and nobody ever
+        // died of old age. It is the same defect 974bc32 described fixing for
+        // `MINUTES_PER_TURN` - this counter was simply not one of the six it
+        // found - and the audit of ISSUES_FOUND #218 missed it too, because it
+        // swept counters named for turns and ticks and this one is named
+        // `age`. See ISSUES_FOUND #219.
+        self.age += crate::environment::seasons::TICKS_BETWEEN_PLANS;
         self.life_stage = LifeStage::from_age(self.age);
 
         // === SURVIVAL MECHANICS ===

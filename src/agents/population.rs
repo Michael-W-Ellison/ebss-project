@@ -3259,9 +3259,17 @@ mod tests {
         let mut pop = Population::new();
         pop.spawn_agent(AgentConfig::default());
 
+        // One step of the population's clock, which is half an hour, and `age`
+        // is counted in ticks - so it moves by `TICKS_BETWEEN_PLANS` and not
+        // by one. This asserted `+ 1` and pinned the defect; see
+        // ISSUES_FOUND #219.
         let initial_age = pop.agents[0].state.age;
         pop.take_a_turn();
-        assert_eq!(pop.agents[0].state.age, initial_age + 1);
+        assert_eq!(
+            pop.agents[0].state.age,
+            initial_age + crate::environment::seasons::TICKS_BETWEEN_PLANS,
+            "a body ages by the time that passed, not by the number of times it was asked"
+        );
     }
 
     #[test]

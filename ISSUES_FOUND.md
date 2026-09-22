@@ -17205,3 +17205,112 @@ That is the finding rather than the objection to it: **something in the
 predator layer is thirty times short of a living, and a wrong unit was paying
 the difference.** Filed rather than papered over, because paying it again with
 `TICKS_PER_DAY` is how it stayed hidden for a month.
+
+### 219. Nobody in this world ever grew up, and nobody ever died of old age: a body aged a minute per half hour lived
+
+Found while chasing two standing failures that claim a settlement holds people
+born into it. It is not what makes those fail - see the end of this entry -
+but it is a defect in its own right and a plain one.
+
+`AgentState::age` is counted in **ticks**. It is seeded that way
+(`agent.state.age = years * TICKS_PER_YEAR`), read that way
+(`LifeStage::from_age` divides by `TICKS_PER_YEAR`, `years_old` likewise), and
+compared against a `max_age` derived the same way
+(`YEARS_BEFORE_OLD_AGE_TAKES_YOU * TICKS_PER_YEAR`). Four places agree on the
+unit.
+
+The increment did not:
+
+```rust
+self.age += 1;
+self.life_stage = LifeStage::from_age(self.age);
+```
+
+`age_turn_with_modifier` is called once a step, and a step is thirty ticks. So
+a body aged one minute per half hour lived. Measured, by running one agent
+through a day of steps exactly as `Population::take_a_turn` does it:
+
+    a day of 48 passes moved `age` by 48
+    a day is 1,440 ticks  ->  thirty times too slow
+
+At that rate reaching sixteen takes **four hundred and eighty simulated
+years**. Nobody in this model has ever grown up, and since `is_too_old` reads
+the same counter against the same `max_age`, nobody has ever died of old age
+either - which is worth putting beside #201, "nothing caps it, and nine deaths
+in ten are illness". Old age was not failing to cap anything because the cap
+was wrong. It was never reached.
+
+It is `+= TICKS_BETWEEN_PLANS` now, and a day of steps moves a body by 1,440.
+
+#### Two things worth saying about how it was missed
+
+**It is the same defect 974bc32 described fixing, and that commit found six
+counters.** Its own message says: "`MINUTES_PER_TURN` was
+`MINUTES_PER_DAY / TICKS_PER_DAY`, which is right while a tick is a step and
+becomes 1 the moment a tick is a minute. Every body in the model would have
+advanced one minute per half hour lived - thirty times too slow, and nothing
+would have failed to compile." That was written about the physiology's clock,
+which was fixed. `AgentState::age` is a second body clock, four hundred lines
+away, and was not one of the six.
+
+**And the audit of #218 missed it too.** That sweep's third pattern was "every
+clock counter's own advance", and it was run as a grep for counters named for
+turns, ticks and `now`. This one is named `age`. The lesson is not to grep
+harder - it is that a counter's *name* is not what makes it a clock. What makes
+it a clock is that something divides it by `TICKS_PER_YEAR`, and that is what
+the next sweep should look for: not the increments, but the places that convert
+a stored number into a span of real time, and then what increments them.
+
+`lifecycle_and_survival_tests::test_agent_ages_over_time` asserted
+`initial_age + 1` and so pinned the defect rather than the behaviour. It now
+asserts the step *and* the day, because the step alone is the thing that was
+wrong and a day is the thing a person can check.
+
+#### And what it is not: the two tests that led here are still #167's question
+
+`longevity_tests::a_settlement_still_raises_children_late_on` and
+`survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` are
+still red with the ageing corrected, and the reason is not ageing. It is the
+one #167 named and measured, and the instrument it built says so directly.
+
+`Population::take_a_turn` already tallies where reproduction turns people away.
+Twelve founders, six thousand steps, seed 0:
+
+    step   500  alive 12  born-here 0  | could not feed a child  6,000
+    step  3000  alive 10  born-here 0  | could not feed a child 33,456
+    step  6000  alive 10  born-here 0  | could not feed a child 63,456
+
+**Sixty-three thousand refusals and not one for any other reason.** That is
+every living adult, every step, for four months of simulated time, while the
+settlement itself sits perfectly stable at ten to twelve alive. They are not
+starving. They simply never judge that they could feed a child.
+
+Weighing the gate against what the best-placed agent in the world actually
+holds:
+
+| | |
+|---|---|
+| the land gives nothing for | 75 days |
+| a grown body burns | 1,440 units a day |
+| so the gate wants | 129,600 units |
+| best-placed agent holds | 8,500 units |
+
+**A factor of fifteen.** #167 measured this same gate at fifty-three, so the
+store has improved three and a half times over since - which is #240, #241,
+#213 and the work after them doing their job - and it is still a long way from
+a gate that asks for a winter's food for two.
+
+The units were checked again and they are the same on both sides:
+`UNITS_BURNED_IN_AN_ORDINARY_DAY` is `MINUTES_PER_DAY` on purpose, one unit a
+minute, "which is why a day and a day's food are the same number". This is a
+real shortfall and not a scale mix-up, exactly as #167 found.
+
+So the conclusion stands unchanged and is worth restating rather than
+rediscovering a third time: **this is not a test problem and it is not a gate
+problem.** `expects_to_be_able_to_feed_a_child` was written deliberately at
+#48 and loosening it would undo a decision made on measurement. The binding
+constraint is upstream, and the number to watch is the ratio: fifty-three at
+#167, fifteen now.
+
+Both tests are correct and should stay red until the store fills. They are
+recorded in `STANDING_FAILURES.md` with that reason.
