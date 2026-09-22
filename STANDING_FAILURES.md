@@ -12,8 +12,8 @@ honest and close nothing without a measurement.
 **Last full run**: `cargo test --lib` - 2,636 tests, 36 minutes, **12 failed**,
 2 ignored, of which four were collateral of a first cut at the firewood
 keep-back and are fixed. What remains is the two below, which are one
-question, plus two thresholds that are noise rather than news (see the end of
-this file).
+question, plus the errand threshold, which is noise rather than news (see the
+end of this file).
 
 The count has come down from the ten this file opened with: salt water came
 off (the fixture, not the model), the production chain, the practised hand and
@@ -26,7 +26,7 @@ slowly, so nobody ever grew up and nobody ever died of old age.
 
 | test | reports | what is known |
 |---|---|---|
-| `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **#167's question, measured again.** Nobody is ever born at all: 63,456 refusals in 6,000 steps and every one of them "could not feed a child". The gate wants 129,600 units and the best-placed agent holds 8,500 - a factor of fifteen, against the fifty-three #167 measured. Not a test problem and not a gate problem; the store has to fill first (#240, #241, #213). Leave red. |
+| `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **#167's question, and it has moved for the first time.** It was 63,456 refusals of "could not feed a child" and no conception ever. After #227 the same fixture conceives once and bears one child, and its pits hold 8,178 at their fullest against 4,476. The gate is still far out of reach, but it is no longer unreachable in principle. Leave red; the next question is why a settlement starves with 6,700 units in the ground. |
 | `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same as the row above - #167's gate, now fifteen times out of reach rather than fifty-three. Its bound is sound: it counts by parentage, which is the right predicate. Leave red. |
 
 ## The predator layer, and what it turned out to be
@@ -165,6 +165,28 @@ measurement taken after a die-off reads the survivors, and a total die-off
 leaves none - worth remembering before reading any other run-it-out-and-sum
 test.
 
+
+**What is under the two that are left, so far.** Neither has come off, but
+both moved, and what moved them was not the store.
+
+A settlement of twelve was spending the last month of its life boxed in:
+**2,975 refusals of "No passable route toward destination (standing on Sea,
+which is walkable, with 0 ways out)"**. `Terrain::is_walkable` has said
+`Water | Sea => false` since the sea was split off from fresh water, and
+`Simulation::is_passable_tile` - a second answer to the same question - named
+`Water` alone. So the pathfinder walked people into salt water and left them
+there: three of twelve at once, one on the same tile from day 120 to day 190.
+
+Asked of the terrain now. Same fixture and seed: the pits hold **8,178** at
+their fullest against 4,476, nobody stands in the sea, and the settlement
+**conceives and bears a child** where the whole history of that fixture was
+178,913 refusals of "could not feed a child" and no conception at all.
+ISSUES_FOUND #227.
+
+It still dies out, around day 335 instead of 327, with 6,700 units in its
+pits. Getting people out of the sea doubled the store and did not get the
+store into them.
+
 ## Moved by #220-#222, and not re-baselined
 
 Two of the behavioural thresholds #298 was filed for went green with #218 and
@@ -175,12 +197,12 @@ what hid the last defect for a month.
 | test | now | threshold |
 |---|---|---|
 | `errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step` | 466 of 1,413 kept to, **33.0%** | 50% |
-| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | nobody falls out | somebody does |
 
-The second is **still red** - I reported it green off a filtered run in
-which it had not in fact been selected, and the full run says otherwise. It is
-binary and has the same shape it had at #298: in a world with enough food in
-it, twenty-five people get along.
+The second went green with #225 and is off the list, in the full run rather
+than a filtered one. (I reported it green once before off a filtered run in
+which it had not in fact been selected; that report was wrong and the run that
+followed said so.) A settlement whose animals stay on the map is a settlement
+where more happens.
 
 The first is **measured now, and it is noise.** It reads a single default-seed
 world, and the quantity it reads is chaotic. Run over eight seeds, before and

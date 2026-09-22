@@ -17957,3 +17957,86 @@ measurement taken after a die-off reads the survivors, and a total die-off
 leaves no survivors to read.** Any test that runs a settlement out and then
 sums something over `population.agents` is reporting on whoever happened to
 live, and reports nought rather than a failure when nobody did.
+
+### 227. Three people in twelve were standing in the sea, and the pathfinder had put them there
+
+#226 uncovered that a settlement of twelve dies out on day 327 and left it to
+the two tests that own it. This is the first of what is under that, and it is
+not the store.
+
+#### What the dying were doing
+
+Over the last month of the settlement's life, by refusal:
+
+| refusal | count |
+|---|---|
+| `Move: No passable route toward destination (standing on Sea, which is walkable, with 0 ways out)` | **2,975** |
+| `Move: ... (standing on Wetland, which is not walkable, with 0 ways out)` | 910 |
+
+The message says the fault out loud. A man on a sea tile, ringed by fresh
+water, is boxed in on every side: the direct step, a breadth-first search of
+four thousand tiles and all four neighbours have been tried by the time this
+fires. He cannot walk to food. He cannot walk to the store. He starves where
+he is standing, and the pits behind him hold three thousand units the whole
+time.
+
+And they were not passing through. Probed every ten days through the year,
+agents *live* there: three of twelve standing in salt water at once, and one
+of them on tile (15, 30) from day 120 to day 190 - **seventy days in the
+sea.**
+
+#### Two answers to one question, again
+
+```rust
+// Terrain::is_walkable
+TerrainType::Water | TerrainType::Sea => false, // Requires swimming
+```
+
+```rust
+// Simulation::is_passable_tile
+if tile.terrain.terrain_type == TerrainType::Water {
+    return false;
+}
+```
+
+`Terrain::is_walkable` has said what a body can stand on since the sea was
+split off from fresh water for #155. `is_passable_tile` is a second answer to
+the same question, written before that split and never told about it, and it
+is the one the pathfinder asks. So the sea is a place a person may be walked
+to, and `SaltMarsh`, `SaltFlat` and `Farmland` were all added later under the
+same silence.
+
+It asks the terrain now. Adding a terrain cannot make it wrong again, which
+is the whole of the fix: the alternative - naming `Sea` here as well - would
+have been a third answer.
+
+This only governs where a foot may be **put**. Somebody already standing
+somewhere they should not be can still step off, because it is the candidate
+that is asked about and not the ground underneath them.
+
+#### What it moved
+
+One settlement of twelve, same seed, over its whole life:
+
+| | before | after |
+|---|---|---|
+| in the pits at their fullest | 4,476 | **8,178** |
+| standing in salt water | 3 of 12 | 0 |
+| people alive at day 240 | 12, reserve falling | 8, reserve 29,620 |
+| conceptions | 0 | **1** |
+| births | **0** | **1** |
+
+The birth is the one worth pausing on. `how_it_went` had recorded
+`could not feed a child` 178,913 times and **no conception in the history of
+this fixture**; there is now one, and `not of an age to breed` appears for the
+first time, which is a thing only a settlement with children in it can say.
+
+`off_the_map_tests::what_a_body_can_stand_on_has_one_answer` holds it, asked
+of all fourteen terrains rather than of the sea.
+
+#### What it does not fix
+
+The settlement still dies out, around day 335 instead of day 327, with
+**6,700 units still in its pits**. Getting people out of the sea doubled the
+store and did not get the store into them. That is the next thing, and it is
+what `survival_pressure_tests` and `longevity_tests` are still red about.

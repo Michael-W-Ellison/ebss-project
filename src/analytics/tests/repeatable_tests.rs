@@ -156,7 +156,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // days, and over a year the beasts that used to stand off the edge where
     // nothing grows are standing on ground that feeds them, so fewer of them
     // are drawing for a hungry beast's search.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_083;
+    // And down 2.7% for the sea (#227), where the year is up 6.0%. A person
+    // who cannot be walked into the water takes a different step on the few
+    // turns of two and a half days that a coast comes into, and over a year
+    // lives long enough to take a great many more of them.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_895;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -242,7 +246,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // people themselves spend lighting and cooking rather than drying.
     // And down 3.6% for #225 - see the short count above, which moved the
     // other way.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 597_032;
+    // And **up 6.0%** for the sea (#227). A settlement that is not standing
+    // in salt water keeps three more people alive through the summer and
+    // twice as much in its pits, and a living settlement rolls.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 632_944;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

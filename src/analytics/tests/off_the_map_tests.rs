@@ -132,3 +132,71 @@ fn the_search_never_offers_a_step_off_the_map() {
         "the search offered {step:?}, which is off the map"
     );
 }
+
+/// And nobody is walked into the sea.
+///
+/// The same fault one terrain along, and it took a year of a settlement's
+/// life. `Terrain::is_walkable` has said `Water | Sea => false` since the sea
+/// was split off from fresh water; `Simulation::is_passable_tile` named
+/// `TerrainType::Water` and nothing else, so the pathfinder walked people
+/// into salt water and left them living there - three of twelve at once,
+/// one of them on the same sea tile from day 120 to day 190. A man who
+/// reaches a one-cell pocket of sea ringed by fresh water has no neighbour
+/// the pathfinder will accept in any direction, for ever. See #227.
+///
+/// Asked of every terrain rather than of the sea, because the fault is two
+/// answers to one question and naming the second one would be a third.
+#[test]
+fn what_a_body_can_stand_on_has_one_answer() {
+    use crate::world::{Position, TerrainType};
+
+    let mut simulation = somebody_in_the_corner();
+    let (wide, high) = (
+        simulation.world.grid.width as i32,
+        simulation.world.grid.height as i32,
+    );
+
+    // Somewhere to put each terrain in turn, well inside the map so that the
+    // edge is not what answers.
+    let bench = Position::new(wide / 2, high / 2);
+
+    for terrain in [
+        TerrainType::Plains,
+        TerrainType::Forest,
+        TerrainType::Mountain,
+        TerrainType::Water,
+        TerrainType::Desert,
+        TerrainType::Wetland,
+        TerrainType::Meadow,
+        TerrainType::Hills,
+        TerrainType::Beach,
+        TerrainType::Riverbank,
+        TerrainType::Sea,
+        TerrainType::SaltMarsh,
+        TerrainType::SaltFlat,
+        TerrainType::Farmland,
+    ] {
+        simulation
+            .world
+            .grid
+            .get_tile_mut(&bench)
+            .expect("the middle of the map is on the map")
+            .terrain
+            .terrain_type = terrain;
+
+        let walkable = simulation
+            .world
+            .grid
+            .get_tile(&bench)
+            .expect("still there")
+            .terrain
+            .is_walkable();
+
+        assert_eq!(
+            simulation.is_passable_tile(bench.x, bench.y),
+            walkable,
+            "{terrain:?} is walkable={walkable} to the terrain and the other \
+             way to the pathfinder"
+        );
+    }
+}
