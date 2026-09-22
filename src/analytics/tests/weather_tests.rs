@@ -15,7 +15,7 @@
 use crate::agents::{AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
 use crate::environment::making;
-use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 use crate::environment::{Action, WeatherType};
 use crate::world::nutrition::{FoodDatabase, PreparationState};
 use crate::world::{ItemType, Position, World, WorldConfig};
@@ -49,7 +49,7 @@ fn one_person() -> Simulation {
 fn set_the_sky(simulation: &mut Simulation, to: WeatherType) {
     simulation.world.climate.weather.weather_type = to;
 
-    // And hold it there. `World::tick` runs the climate before it runs the
+    // And hold it there. `World::take_a_turn` runs the climate before it runs the
     // weathering pass, so a sky set here and not pinned gets rolled again
     // before anything lying on the ground sees it - which had these tests
     // failing about one run in three on a sky that was never actually the one
@@ -68,11 +68,11 @@ fn leave_it_out(
 ) {
     simulation
         .world
-        .somebody_left_this(item, where_it_is, simulation.world.tick);
+        .somebody_left_this(item, where_it_is, simulation.world.turn);
 
-    for _ in 0..(TICKS_PER_DAY * days) {
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * days) {
         set_the_sky(simulation, sky);
-        simulation.world.tick();
+        simulation.world.take_a_turn();
     }
 }
 
@@ -232,7 +232,7 @@ fn rain_stops_the_drying_without_undoing_it() {
     simulation.world.somebody_left_this(
         a_meal(ItemType::Fish, "fishstrips", 6, 0),
         where_it_is,
-        simulation.world.tick,
+        simulation.world.turn,
     );
 
     // A day of sun, then a day of rain, then sun again
@@ -241,9 +241,9 @@ fn rain_stops_the_drying_without_undoing_it() {
         (WeatherType::Rain, 1),
         (WeatherType::Clear, 2),
     ] {
-        for _ in 0..(TICKS_PER_DAY * days) {
+        for _ in 0..(PLANNING_PERIODS_PER_DAY * days) {
             set_the_sky(&mut simulation, sky);
-            simulation.world.tick();
+            simulation.world.take_a_turn();
         }
     }
 
@@ -283,12 +283,12 @@ fn whoever_is_standing_near_learns_what_the_sun_did() {
     simulation.world.somebody_left_this(
         a_meal(ItemType::Fish, "fishstrips", 6, 0),
         where_it_is,
-        simulation.world.tick,
+        simulation.world.turn,
     );
 
-    for _ in 0..(TICKS_PER_DAY * 4) {
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * 4) {
         set_the_sky(&mut simulation, WeatherType::Clear);
-        simulation.world.tick();
+        simulation.world.take_a_turn();
         simulation.who_saw_that_dry();
     }
 
@@ -309,12 +309,12 @@ fn nobody_across_the_map_learns_anything() {
     simulation.world.somebody_left_this(
         a_meal(ItemType::Fish, "fishstrips", 6, 0),
         Position::new(10, 10),
-        simulation.world.tick,
+        simulation.world.turn,
     );
 
-    for _ in 0..(TICKS_PER_DAY * 4) {
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * 4) {
         set_the_sky(&mut simulation, WeatherType::Clear);
-        simulation.world.tick();
+        simulation.world.take_a_turn();
         simulation.who_saw_that_dry();
     }
 

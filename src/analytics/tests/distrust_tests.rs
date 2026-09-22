@@ -132,7 +132,7 @@ fn a_lie_about_what_a_man_needs_costs_more() {
     starving.state.gone_without_food_for(9_600);
     if let Some(hunger) = starving.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
-        hunger.denied_ticks = 400;
+        hunger.denied_turns = 400;
     }
 
     let liar = crate::core::dice::name();
@@ -156,7 +156,7 @@ fn the_same_lie_costs_less_to_a_man_who_is_not_hungry() {
     starving.state.gone_without_food_for(9_600);
     if let Some(hunger) = starving.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
-        hunger.denied_ticks = 400;
+        hunger.denied_turns = 400;
     }
 
     let mut fed = somebody();
@@ -321,7 +321,7 @@ fn nobody_passes_on_hearsay_as_though_they_had_seen_it() {
 ///
 /// Asked properly - a block of seeded worlds, summed, so that no one world's
 /// luck decides it - the claim does not hold at all: across three fresh
-/// settlements of twenty-five over four thousand ticks, **not one person ever
+/// settlements of twenty-five over four thousand turns, **not one person ever
 /// takes another's word for where anything is**. `who_told_me` is empty in
 /// every agent in every world. That is a real defect and it is left failing
 /// and written down rather than tuned until it goes green - see
@@ -350,7 +350,7 @@ fn lies_are_told_and_found_out_in_a_settlement() {
 
         let mut simulation = crate::analytics::Simulation::new(world, population);
         for _ in 0..4000 {
-            simulation.tick();
+            simulation.take_a_turn();
         }
 
         // Everybody who was in it, not only who came out of it. Twenty-five
@@ -386,7 +386,7 @@ fn lies_are_told_and_found_out_in_a_settlement() {
 ///
 /// Asked of one unseeded world this was a coin flip and not a test. Twenty-five
 /// founders on one map is a hard start, and measured across twenty-four seeded
-/// worlds somebody was alive at three thousand ticks in **sixteen or seventeen
+/// worlds somebody was alive at three thousand turns in **sixteen or seventeen
 /// of them depending on the build** - so whether it passed was the weather,
 /// and which way the weather fell depended on what the rest of the suite had
 /// left in the global dice. It is asked of several worlds now, and seeded, so
@@ -410,7 +410,7 @@ fn a_settlement_of_the_suspicious_still_feeds_itself() {
 
             let mut simulation = crate::analytics::Simulation::new(world, population);
             for _ in 0..FOR_HOW_LONG {
-                simulation.tick();
+                simulation.take_a_turn();
             }
 
             simulation

@@ -493,7 +493,7 @@ fn ground_grain_keeps_less_well_than_whole_grain() {
             .food_database
             .create_food_data(&what, 0)
             .expect("food")
-            .base_spoilage_ticks
+            .base_spoilage_turns
     };
 
     assert!(
@@ -526,7 +526,7 @@ fn a_basket_carries_what_the_arms_cannot() {
     );
 
     // And it goes on the back, which is a thing that happens rather than a
-    // property of having one. `tick_with_percepts` does this every turn, so in
+    // property of having one. `turn_with_percepts` does this every turn, so in
     // a running world the basket is carrying by the next one; here the turn
     // has to be asked for. Before ISSUES #116 the capacity rose the moment the
     // basket entered the pack *and* again when it was taken up, which is

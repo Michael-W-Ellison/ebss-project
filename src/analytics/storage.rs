@@ -93,15 +93,15 @@ impl std::error::Error for StorageError {}
 /// Time-series data point
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataPoint {
-    pub tick: u64,
+    pub turn: u64,
     pub timestamp: u64,
     pub values: BTreeMap<String, f64>,
 }
 
 impl DataPoint {
-    pub fn new(tick: u64) -> Self {
+    pub fn new(turn: u64) -> Self {
         Self {
-            tick,
+            turn,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -485,7 +485,7 @@ mod tests {
             .with_value("population", 50.0)
             .with_value("health", 75.5);
 
-        assert_eq!(point.tick, 100);
+        assert_eq!(point.turn, 100);
         assert_eq!(point.get("population"), Some(50.0));
         assert_eq!(point.get("health"), Some(75.5));
         assert_eq!(point.get("missing"), None);
@@ -512,7 +512,7 @@ mod tests {
         let points = store.read_all().unwrap();
 
         assert_eq!(points.len(), 3);
-        assert_eq!(points[0].tick, 1);
+        assert_eq!(points[0].turn, 1);
         assert_eq!(points[2].get("val"), Some(3.0));
     }
 

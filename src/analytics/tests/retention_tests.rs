@@ -21,7 +21,7 @@
 use crate::core::memory::{
     HowIKnow, HowSteady, Memory, SpatialMemory, SpatialMemoryType,
 };
-use crate::environment::seasons::{DAYS_PER_YEAR, TICKS_PER_DAY};
+use crate::environment::seasons::{DAYS_PER_YEAR, PLANNING_PERIODS_PER_DAY};
 
 /// A named place of the given standing, so the importance band is Normal and
 /// the footing is the only thing under test.
@@ -40,7 +40,7 @@ fn a_place_known(how_i_know: HowIKnow, how_steady: HowSteady) -> SpatialMemory {
 fn days_until_forgotten(mut place: SpatialMemory) -> u32 {
     let mut days = 0;
     while place.confidence > 0.3 {
-        place.forget_a_little(TICKS_PER_DAY);
+        place.forget_a_little(PLANNING_PERIODS_PER_DAY);
         days += 1;
         if days > DAYS_PER_YEAR * 12 {
             panic!("a place that is never forgotten at all");
@@ -133,11 +133,21 @@ fn a_turning_place_is_never_kept_longer_than_an_ordinary_one() {
 
     // Held at the ordinary rate instead: a fortnight, which is what every
     // remembered place in this model was worth before any of this.
+    //
+    // **Counted in planning periods, because that is what forgetting counts.**
+    // `forget_a_little` is handed a number of *decisions* - see
+    // `days_until_forgotten` just above, which passes
+    // `PLANNING_PERIODS_PER_DAY` - and this hand-rolled loop was multiplying
+    // the same per-step rate by `TICKS_PER_DAY`, which is thirty times larger.
+    // So it worked out that an ordinary place is forgotten in **one day** and
+    // asserted that against a model that forgets it in fifteen, while the
+    // comment beside it said "a fortnight" and the model agreed with the
+    // comment. The test was the thing that was wrong.
     let mut confidence = 1.0f32;
     let mut ordinary = 0;
     while confidence > 0.3 {
-        confidence -=
-            TICKS_PER_DAY as f32 * SpatialMemory::HOW_FAST_AN_ORDINARY_PLACE_IS_FORGOTTEN;
+        confidence -= PLANNING_PERIODS_PER_DAY as f32
+            * SpatialMemory::HOW_FAST_AN_ORDINARY_PLACE_IS_FORGOTTEN;
         ordinary += 1;
     }
     about(patch, ordinary);

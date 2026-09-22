@@ -9,7 +9,7 @@ pub fn render_keyboard_help(ui: &mut Ui) {
 
     render_section(ui, "Simulation Control", &[
         ("Space", "Play/Pause simulation"),
-        ("N", "Step one tick"),
+        ("N", "Step one turn"),
         ("1-5", "Set simulation speed (1x-5x)"),
         ("0", "Set speed to 10x"),
     ]);

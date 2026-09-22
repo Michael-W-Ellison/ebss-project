@@ -183,7 +183,7 @@ fn render_event_row(
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(format!("T{}", event.tick))
+                    RichText::new(format!("T{}", event.turn))
                         .monospace()
                         .color(Color32::GRAY)
                         .size(11.0)

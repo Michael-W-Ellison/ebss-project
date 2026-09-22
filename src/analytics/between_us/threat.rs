@@ -49,7 +49,7 @@ impl Simulation {
     /// anger at people ran at 0.806 for every agent that read as ready to
     /// fight and anger at creatures at 0.025 - so nearly all the anger in the
     /// model was a grudge against somebody, held against them for life,
-    /// decaying at one per cent a tick and with no way to be acted on at all.
+    /// decaying at one per cent a turn and with no way to be acted on at all.
     ///
     /// The grudge itself is not touched. Only which feeling it comes out as.
     pub(in crate::analytics) fn square_up_to_the_people_i_resent(&mut self) {
@@ -554,7 +554,7 @@ impl Simulation {
     ) -> f32 {
         let bad = remembers.how_bad_is_it_there(
             crate::world::Position::new(landed.0, landed.1),
-            self.current_tick,
+            self.current_turn,
         );
 
         let off = |where_it_is: (i32, i32)| {

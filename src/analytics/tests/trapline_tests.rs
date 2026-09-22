@@ -5,12 +5,12 @@
 //! the small life is thinned by winter - `what_a_hectare_of_this_is_worth`
 //! takes it to 0.45 - but it is still there, and a snare set in a wood in
 //! February catches. What it was not doing was delivering any of it, because
-//! the two rates that govern a trapline were written for a twelve-tick day
-//! and this world keeps a forty-eight-tick one.
+//! the two rates that govern a trapline were written for a twelve-turn day
+//! and this world keeps a forty-eight-turn one.
 
 use crate::agents::{AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
-use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
 use crate::environment::small_life::SmallLife;
 use crate::environment::Action;
 use crate::world::{Position, ResourceType, World, WorldConfig};
@@ -35,17 +35,17 @@ fn one_person() -> Simulation {
 /// A snare on full ground takes about a fifth of a chance a day, so there is
 /// something in it inside four or five days.
 ///
-/// The constant used to be written per tick, at a value whose own docstring
-/// said "twelve ticks to the day". `TICKS_PER_DAY` is 48, so the snare took
+/// The constant used to be written per turn, at a value whose own docstring
+/// said "twelve turns to the day". `PLANNING_PERIODS_PER_DAY` is 48, so the snare took
 /// four fifths of a chance a day and the sentence beside it was wrong by four
 /// times.
 #[test]
 fn a_snare_is_set_on_the_day_this_world_actually_keeps() {
-    let a_day = SmallLife::WHAT_A_SNARE_TAKES_ON_FULL_GROUND * TICKS_PER_DAY as f32;
+    let a_day = SmallLife::WHAT_A_SNARE_TAKES_ON_FULL_GROUND * PLANNING_PERIODS_PER_DAY as f32;
 
     assert!(
         (a_day - SmallLife::WHAT_A_SNARE_TAKES_ON_FULL_GROUND_IN_A_DAY).abs() < 1e-6,
-        "a snare's rate over a day of this world's ticks should be the rate \
+        "a snare's rate over a day of this world's turns should be the rate \
          its own docstring states: {a_day} against {}",
         SmallLife::WHAT_A_SNARE_TAKES_ON_FULL_GROUND_IN_A_DAY
     );
@@ -53,7 +53,7 @@ fn a_snare_is_set_on_the_day_this_world_actually_keeps() {
     // "Something in the snare inside four or five days": the chance of still
     // being empty after five days should have fallen below a half.
     let still_empty = (1.0 - SmallLife::WHAT_A_SNARE_TAKES_ON_FULL_GROUND)
-        .powi(5 * TICKS_PER_DAY as i32);
+        .powi(5 * PLANNING_PERIODS_PER_DAY as i32);
     assert!(
         still_empty < 0.5,
         "five days on, a snare on full ground should more likely than not \
@@ -65,7 +65,7 @@ fn a_snare_is_set_on_the_day_this_world_actually_keeps() {
 /// finds it, which is what makes a line worth keeping at all.
 #[test]
 fn a_catch_in_a_quiet_country_lasts_most_of_a_week() {
-    let a_day = SmallLife::WHAT_A_QUIET_COUNTRY_TAKES * TICKS_PER_DAY as f32;
+    let a_day = SmallLife::WHAT_A_QUIET_COUNTRY_TAKES * PLANNING_PERIODS_PER_DAY as f32;
     assert!(
         (a_day - SmallLife::WHAT_A_QUIET_COUNTRY_TAKES_IN_A_DAY).abs() < 1e-6,
         "the robbing rate over a day should be the rate its docstring states"
@@ -73,7 +73,7 @@ fn a_catch_in_a_quiet_country_lasts_most_of_a_week() {
 
     // Still there after a day, which is what a daily round needs.
     let after_a_day =
-        (1.0 - SmallLife::WHAT_A_QUIET_COUNTRY_TAKES).powi(TICKS_PER_DAY as i32);
+        (1.0 - SmallLife::WHAT_A_QUIET_COUNTRY_TAKES).powi(PLANNING_PERIODS_PER_DAY as i32);
     assert!(
         after_a_day > 0.8,
         "a man who walks his line once a day should find most of what he \
@@ -82,7 +82,7 @@ fn a_catch_in_a_quiet_country_lasts_most_of_a_week() {
 
     // And most of a week is where it goes, not a day and a half.
     let after_a_week =
-        (1.0 - SmallLife::WHAT_A_QUIET_COUNTRY_TAKES).powi(7 * TICKS_PER_DAY as i32);
+        (1.0 - SmallLife::WHAT_A_QUIET_COUNTRY_TAKES).powi(7 * PLANNING_PERIODS_PER_DAY as i32);
     assert!(
         after_a_week > 0.3 && after_a_week < 0.7,
         "a week is where a catch is about half gone in a country with plenty \
@@ -184,7 +184,7 @@ fn a_catch_he_can_carry_comes_home() {
 /// `known_resources` holds every patch anybody ever walked past, for ever,
 /// and nothing asked the calendar of it - so from the first frost a hungry
 /// man was still being sent to the bramble he found in September. Measured
-/// over twelve worlds: `Gather` is refused 14.6 times a thousand person-ticks
+/// over twelve worlds: `Gather` is refused 14.6 times a thousand person-turns
 /// in winter and 0.0 in every other season.
 #[test]
 fn a_bush_out_of_season_is_not_somewhere_to_go_for_supper() {

@@ -3,12 +3,15 @@
 //!
 //! Everything else in this model counts turns. A turn is a decision - the unit
 //! at which an agent looks around and picks something to do - and there are
-//! twelve of them in a day, so a turn is two hours of living.
+//! `PLANNING_PERIODS_PER_DAY` of them in a day, so a turn is half an hour of
+//! living. It was two hours and twelve to the day when this was written, and
+//! the paragraph said so in words; the words are now asked for rather than
+//! written down, because that is the whole argument this module makes.
 //!
 //! A body does not work at that resolution. Water leaves it steadily over
 //! three days; a meal sits in the stomach for half an hour before anything
 //! moves, and is gone from it in six; what leaves the stomach is worth nothing
-//! for a further day. None of that can be said in two-hour steps.
+//! for a further day. None of that can be said in decision-sized steps.
 //!
 //! So the body keeps its own clock, in minutes, and `MINUTES_PER_TURN` of it
 //! passes every turn. The physiology below is written in the units it was
@@ -16,8 +19,8 @@
 //! calendar is ever made finer, `MINUTES_PER_TURN` follows it down and nothing
 //! here changes.
 //!
-//! This replaces `ticks_without_food` and `ticks_without_water`, which counted
-//! turns against thresholds written for a one-minute tick and were therefore a
+//! This replaces `turns_without_food` and `turns_without_water`, which counted
+//! turns against thresholds written for a one-minute turn and were therefore a
 //! hundred and twenty times too slow to ever fire. See ISSUES #73.
 
 use serde::{Deserialize, Serialize};
@@ -749,7 +752,7 @@ impl Physiology {
     /// Put this body where it would be after this long without food.
     ///
     /// For tests and for setting a scene. The argument is minutes, which is
-    /// the scale the old `ticks_without_food` figures were written on.
+    /// the scale the old `turns_without_food` figures were written on.
     pub fn gone_without_food_for(&mut self, minutes: u32) {
         self.stomach.clear();
         self.gut.clear();

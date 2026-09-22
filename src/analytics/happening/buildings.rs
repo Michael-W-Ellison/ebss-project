@@ -59,7 +59,7 @@ impl Simulation {
                         );
                     }
 
-                    // Only collect from one building per tick per agent
+                    // Only collect from one building per turn per agent
                     break;
                 }
             }
@@ -123,7 +123,7 @@ impl Simulation {
                     let goal = Goal::new_external(
                         ExternalGoal::CompleteJob(maintenance_job),
                         priority,
-                        self.current_tick,
+                        self.current_turn,
                     );
                     agent.goals.add_goal(goal);
 

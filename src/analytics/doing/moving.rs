@@ -18,7 +18,7 @@ use rand::Rng;
 impl Simulation {
     /// `Action::Sleep`.
     pub(in crate::analytics) fn sleeping(&mut self, duration: &u32, agent_index: usize) -> ActionResult {
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
         let has_shelter = self.agent_has_shelter(agent_index);
         let agent = &mut self.population.agents[agent_index];
 
@@ -38,20 +38,20 @@ impl Simulation {
 
         // Actually recover fatigue rather than only topping up energy;
         // without this the agent's fatigue never falls, so an exhausted
-        // agent re-selects Sleep every tick and never does anything else.
+        // agent re-selects Sleep every turn and never does anything else.
         let energy_before = agent.state.energy;
         let mut fatigue_recovered = 0.0;
         for _ in 0..(*duration).max(1) {
-            fatigue_recovered += agent.sleep_tick(current_tick, &quality_factors);
+            fatigue_recovered += agent.sleep_turn(current_turn, &quality_factors);
         }
-        agent.wake_up(current_tick);
+        agent.wake_up(current_turn);
 
         let energy_restored = agent.state.energy - energy_before;
 
         ActionResult::success()
             .with_drive_change(DriveType::Rest, -0.5)
             .with_message(format!(
-                "Slept for {} ticks, recovered {:.2} fatigue and {:.1} energy",
+                "Slept for {} turns, recovered {:.2} fatigue and {:.1} energy",
                 duration, fatigue_recovered, energy_restored
             ))
     }
@@ -346,7 +346,7 @@ impl Simulation {
     }
 
     /// `Action::Explore`.
-    pub(in crate::analytics) fn exploring(&mut self, direction: &(i32, i32, i32), agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn exploring(&mut self, direction: &(i32, i32, i32), agent_index: usize, turn_now: u32) -> ActionResult {
         // Exploration action - move and discover new areas
         let current_pos = self.population.agents[agent_index].state.position;
 
@@ -402,7 +402,7 @@ impl Simulation {
                     target_y + dy,
                 );
 
-                if agent.exploration_knowledge.explore_tile(explore_pos, self.current_tick) {
+                if agent.exploration_knowledge.explore_tile(explore_pos, self.current_turn) {
                     newly_explored_count += 1;
                 }
             }
@@ -415,7 +415,7 @@ impl Simulation {
         // years and separately.
         agent.whereabouts.looked_at(
             crate::agents::whereabouts::Area::holding(target_pos),
-            crate::agents::Agent::what_day_it_is(self.current_tick),
+            crate::agents::Agent::what_day_it_is(self.current_turn),
         );
 
         // Seeing for yourself.
@@ -431,7 +431,7 @@ impl Simulation {
         // This is the moment a lie is found out, and the only moment
         // it can be: the agent is standing on the spot and there is
         // nothing there. Sweeping a buffer of remembered claims every
-        // hundred ticks caught almost none of them, because a claim
+        // hundred turns caught almost none of them, because a claim
         // had to survive the buffer *and* the agent had to happen to
         // walk to it inside the same window.
         let centre = crate::world::Position::new(target_x, target_y);
@@ -469,10 +469,10 @@ impl Simulation {
             // else stripping a seam between the telling and the walk
             // is not evidence against the man who told you about it.
             if said.does_bare_ground_convict_him(
-                self.current_tick,
+                self.current_turn,
                 worked_out.contains(&where_it_is),
             ) {
-                agent.found_out_i_was_lied_to(said.who, &subject, self.current_tick);
+                agent.found_out_i_was_lied_to(said.who, &subject, self.current_turn);
             } else {
                 agent.found_out_they_were_out_of_date(said.who);
             }
@@ -500,7 +500,7 @@ impl Simulation {
                 .unwrap_or(0);
             agent
                 .exploration_knowledge
-                .saw_it_again(where_it_is, how_much, self.current_tick);
+                .saw_it_again(where_it_is, how_much, self.current_turn);
 
             if said.who != agent_id {
                 agent.found_out_they_were_right(said.who);
@@ -521,7 +521,7 @@ impl Simulation {
                 if agent.exploration_knowledge.discover_resource(
                     resource_pos,
                     resource.resource_type,
-                    self.current_tick,
+                    self.current_turn,
                 ) {
                     discoveries.push(format!("{:?}", resource.resource_type));
                 }
@@ -547,7 +547,7 @@ impl Simulation {
         // Grant Navigation XP for exploration (more for new discoveries)
         let agent = &mut self.population.agents[agent_index];
         let nav_xp = if newly_explored_count > 0 { 2 } else { 1 };
-        agent.skills.practise(crate::agents::skills::SkillType::Navigation, nav_xp, tick_now);
+        agent.skills.practise(crate::agents::skills::SkillType::Navigation, nav_xp, turn_now);
 
         // Exploration is rewarding
         let curiosity_satisfaction = if newly_explored_count > 0 { 0.3 } else { 0.1 };

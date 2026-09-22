@@ -73,7 +73,7 @@ fn they_carry_tools_and_not_a_stockpile() {
         "a stone-age people have stone tools"
     );
 
-    // Twenty-five people who can all raise a tent on the first tick all try
+    // Twenty-five people who can all raise a tent on the first turn all try
     // to, crowd the same ground, and spend their lives looking for somewhere
     // to put one. Measured, it cost three quarters of the settlement.
     let tent = BuildingType::SkinTent.requirements();
@@ -276,7 +276,7 @@ fn a_settlement_stops_doing_what_does_not_work() {
     let mut simulation = Simulation::new(world, population);
 
     for _ in 0..6000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let taken: u64 = simulation.actions_taken.values().sum();

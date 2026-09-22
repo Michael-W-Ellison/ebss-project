@@ -1,24 +1,33 @@
 // src/analytics/tests/calendar_tests.rs
 //! Tests for a calendar that turns.
 //!
-//! The world used to run at a hundred ticks an hour, which put 876,000 ticks
+//! The world used to run at a hundred turns an hour, which put 876,000 turns
 //! in a year. An agent lives about ten thousand, so an entire life - infant to
 //! elderly - happened inside four calendar days, and no run anybody had ever
-//! made had seen a season turn. Twenty worlds taken to eight thousand ticks
+//! made had seen a season turn. Twenty worlds taken to eight thousand turns
 //! all ended on the same line: Year 0, Day 4, Winter. Everything the seasons
 //! touch - the growth modifier on regrowth, the temperature swing, snow in
 //! cold biomes, the length of a day - was in practice a constant, and the
 //! constant it was stuck on was winter's.
 //!
-//! A tick is now two hours, a day twelve ticks, a season twenty-four days and
-//! a year 1,152 ticks. A life covers eight or nine years and thirty-odd
-//! seasons, and a settlement has to get through a winter to see a spring.
+//! A tick is now a minute and a planning period thirty of them, so a day is
+//! 1,440 ticks and forty-eight chances to stop and think; a month is thirty
+//! days, a season ninety, and a year three hundred and sixty. A life covers
+//! seventy years and two hundred and eighty seasons, and a settlement has to
+//! get through a winter to see a spring.
+//!
+//! That paragraph has been wrong twice, which is the point of the last test
+//! in this file. Both times it was wrong in the same way: the calendar moved
+//! and the numbers written down beside it did not, so a span that read "a
+//! season" went on meaning twenty-four days in a world where a season was
+//! ninety. Nothing in here states a span of calendar time as a number any
+//! more - it states it in days, and asks the calendar how long a day is.
 
 use crate::agents::{AgentConfig, Population};
 use crate::analytics::Simulation;
 use crate::environment::flora::GrowingConditions;
 use crate::environment::{
-    Season, SeasonalCalendar, DAYS_PER_SEASON, DAYS_PER_YEAR, TICKS_PER_DAY, TICKS_PER_YEAR,
+    Season, SeasonalCalendar, DAYS_PER_SEASON, DAYS_PER_YEAR, PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY, PLANNING_PERIODS_PER_YEAR, TICKS_PER_YEAR,
 };
 use crate::world::soil::Soil;
 use crate::world::{ClimateManager, Position, ResourceNode, ResourceType, TerrainType, World, WorldConfig};
@@ -31,30 +40,92 @@ fn a_year_is_shorter_than_a_run() {
 
     // A year has to be inside a run this suite actually does.
     //
-    // This asserted `TICKS_PER_YEAR <= 2000`, which is the *old* calendar -
-    // the one where a year was about eleven hundred ticks and a life did not
-    // fit inside a run. The calendar was deliberately changed to 4,320 so
-    // that ninety-day seasons and a lifetime would both fit; see
-    // ISSUES_FOUND.md #42 and #209. This test was left asserting the figure
-    // that was replaced, so it did not measure a risk, it forbade the
-    // decision. See #206.
+    // **Counted in planning periods, because that is what a run counts.** A
+    // test winds the world on by calling `take_a_turn`, and a turn is thirty
+    // ticks; comparing a year of *ticks* against a bound on the number of
+    // *calls* is the tick-for-turn mistake that `core::clock` exists to stop,
+    // and this assertion was making it. It read `TICKS_PER_YEAR <= 2000`, then
+    // `< 8_000`, against a figure that is now 518,400 - so what it actually
+    // said was that the calendar must never have been changed.
     //
-    // What it is for is still worth keeping: a year has to be short enough
-    // that the long runs in this suite - eight and nine thousand ticks -
-    // cover more than one, or nothing in here ever sees a second spring.
-    const THE_LONGEST_RUNS_IN_THIS_SUITE: u32 = 8_000;
+    // What it is for is worth keeping and is a real risk: a year has to be
+    // short enough that the long runs in this suite cover more than one, or
+    // nothing in here ever sees a second spring. The longest of them is
+    // `turn_the_year_to` in the larder tests, which winds on until the season
+    // it wants arrives and gives up after four hundred days.
+    const THE_LONGEST_RUN_IN_THIS_SUITE: u32 = PLANNING_PERIODS_PER_DAY * 400;
     assert!(
-        TICKS_PER_YEAR < THE_LONGEST_RUNS_IN_THIS_SUITE,
-        "a year is {TICKS_PER_YEAR} ticks and the longest run in this suite is \
-         {THE_LONGEST_RUNS_IN_THIS_SUITE}, so nothing here would see a second \
-         spring"
+        PLANNING_PERIODS_PER_YEAR < THE_LONGEST_RUN_IN_THIS_SUITE,
+        "a year is {PLANNING_PERIODS_PER_YEAR} planning periods and the longest \
+         run in this suite is {THE_LONGEST_RUN_IN_THIS_SUITE}, so nothing here \
+         would see a second spring"
     );
 
-    // And a day has to be more than one tick, or dawn, noon and midnight stop
-    // being separate moments an agent can be cold or blind in.
+    // And a day has to have more than one decision in it, or dawn, noon and
+    // midnight stop being separate moments an agent can be cold or blind in.
     assert!(
-        TICKS_PER_DAY >= 8,
-        "a day of {TICKS_PER_DAY} ticks is too coarse to have a night in it"
+        PLANNING_PERIODS_PER_DAY >= 8,
+        "a day of {PLANNING_PERIODS_PER_DAY} decisions is too coarse to have a \
+         night in it"
+    );
+}
+
+/// Every span this model names in words is the span the calendar says it is.
+///
+/// **The guard against the defect this file's own header describes.** A week,
+/// a month, a season and a year are named in several modules, and each time
+/// one of them is written down as a number rather than asked for, it becomes
+/// a memory of whatever the calendar was on the day it was typed. The family
+/// has bitten at least five times: the food tables (#143), the exposure rates
+/// (#288), the snare (`small_life`), the pattern half-life (`patterns`), and
+/// the provisioning ladder, whose "month" was half a season - forty-five days
+/// - in a calendar whose months are thirty.
+///
+/// Nothing here is arithmetic anybody needs at run time. It is the assertion
+/// that the words and the numbers have not come apart.
+#[test]
+fn the_named_spans_are_the_calendar_and_not_a_memory_of_one() {
+    use crate::agents::provision;
+    use crate::environment::seasons::{
+        DAYS_IN_A_SHORT_WEEK, DAYS_PER_MONTH, MONTHS_PER_SEASON, MONTHS_PER_YEAR,
+        TICKS_BETWEEN_PLANS,
+    };
+
+    // The calendar agrees with itself.
+    assert_eq!(DAYS_PER_SEASON, DAYS_PER_MONTH * MONTHS_PER_SEASON);
+    assert_eq!(DAYS_PER_YEAR, DAYS_PER_MONTH * MONTHS_PER_YEAR);
+    assert_eq!(DAYS_PER_YEAR, DAYS_PER_SEASON * 4, "four seasons to a year");
+
+    // The two clocks agree about how long a year is. A year of ticks and a
+    // year of decisions are the same year, and the only thing between them is
+    // `TICKS_BETWEEN_PLANS`.
+    assert_eq!(TICKS_PER_YEAR, PLANNING_PERIODS_PER_YEAR * TICKS_BETWEEN_PLANS);
+    assert_eq!(TICKS_PER_YEAR, TICKS_PER_DAY * DAYS_PER_YEAR);
+    assert_eq!(PLANNING_PERIODS_PER_YEAR, PLANNING_PERIODS_PER_DAY * DAYS_PER_YEAR);
+
+    // And the horizons an agent is uneasy over are those same spans, not a
+    // second set of numbers that happen to have the same names.
+    assert_eq!(
+        provision::DAYS_IN_A_WEEK,
+        DAYS_IN_A_SHORT_WEEK,
+        "a week in the larder is a week in the calendar"
+    );
+    assert_eq!(
+        provision::DAYS_IN_A_MONTH,
+        DAYS_PER_MONTH,
+        "and a month is a month"
+    );
+
+    // The ladder the horizons exist to make: each rung further off than the
+    // one before, and the last of them inside a winter.
+    assert!(1 < provision::DAYS_IN_A_WEEK);
+    assert!(provision::DAYS_IN_A_WEEK < provision::DAYS_IN_A_MONTH);
+    assert!(
+        (provision::DAYS_IN_A_MONTH as f32) < provision::how_long_a_winter_is_supposed_to_be(),
+        "a month of {} days has to sit inside a winter of {}, or the winter \
+         rung can never be reached",
+        provision::DAYS_IN_A_MONTH,
+        provision::how_long_a_winter_is_supposed_to_be()
     );
 }
 
@@ -64,8 +135,8 @@ fn every_season_comes_round() {
     let mut climate = ClimateManager::new(false, false);
     let mut seen: BTreeSet<Season> = BTreeSet::new();
 
-    for _ in 0..TICKS_PER_YEAR {
-        climate.tick();
+    for _ in 0..PLANNING_PERIODS_PER_YEAR {
+        climate.take_a_turn();
         seen.insert(climate.current_season());
     }
 
@@ -96,8 +167,8 @@ fn a_day_is_a_day_long() {
     let mut calendar = SeasonalCalendar::default();
     let started_at = calendar.time_of_day;
 
-    for _ in 0..TICKS_PER_DAY {
-        calendar.tick();
+    for _ in 0..PLANNING_PERIODS_PER_DAY {
+        calendar.take_a_turn();
     }
 
     assert_eq!(calendar.day_of_year, 1, "one day should have passed");
@@ -147,13 +218,13 @@ fn an_agent_ages_by_the_calendar() {
 
     let mut simulation = Simulation::new(world, population);
 
-    for _ in 0..TICKS_PER_YEAR {
-        simulation.tick();
+    for _ in 0..PLANNING_PERIODS_PER_YEAR {
+        simulation.take_a_turn();
     }
 
     assert_eq!(
         simulation.world.climate.calendar.year, 1,
-        "a year of ticks should be a year on the calendar"
+        "a year of turns should be a year on the calendar"
     );
 
     // Read against the calendar rather than against whether this particular
@@ -243,8 +314,8 @@ fn short_days_slow_a_plant_down() {
 
 /// A spell of weather is shorter than the season it falls in.
 ///
-/// Durations were written in ticks when a tick was thirty-six seconds, so
-/// 500-2,000 of them meant five to twenty hours. Once a tick was two hours the
+/// Durations were written in turns when a turn was thirty-six seconds, so
+/// 500-2,000 of them meant five to twenty hours. Once a turn was two hours the
 /// same numbers meant forty to a hundred and sixty days, and a single blizzard
 /// outlasted the winter that started it: snow was turning up in all four
 /// seasons in equal measure.
@@ -257,8 +328,8 @@ fn weather_does_not_outlast_the_season_it_starts_in() {
     let mut spells = 0;
     let mut last = climate.weather.weather_type;
 
-    for _ in 0..TICKS_PER_YEAR * 4 {
-        climate.tick();
+    for _ in 0..PLANNING_PERIODS_PER_YEAR * 4 {
+        climate.take_a_turn();
         if climate.weather.weather_type != last {
             spells += 1;
             last = climate.weather.weather_type;
@@ -268,7 +339,7 @@ fn weather_does_not_outlast_the_season_it_starts_in() {
 
     assert!(
         longest < season_length,
-        "a spell of weather ran {longest} ticks against a season of {season_length}"
+        "a spell of weather ran {longest} turns against a season of {season_length}"
     );
     assert!(
         spells > 40,
@@ -283,17 +354,17 @@ fn it_snows_in_winter_and_not_in_summer() {
 
     let mut climate = ClimateManager::new(false, false);
     let mut wintry = [0u32; 4];
-    let mut ticks = [0u32; 4];
+    let mut turns = [0u32; 4];
 
-    for _ in 0..TICKS_PER_YEAR * 8 {
-        climate.tick();
+    for _ in 0..PLANNING_PERIODS_PER_YEAR * 8 {
+        climate.take_a_turn();
         let season = match climate.current_season() {
             Season::Spring => 0,
             Season::Summer => 1,
             Season::Fall => 2,
             Season::Winter => 3,
         };
-        ticks[season] += 1;
+        turns[season] += 1;
         if matches!(
             climate.weather.weather_type,
             WeatherType::LightSnow | WeatherType::Snow | WeatherType::Blizzard
@@ -302,7 +373,7 @@ fn it_snows_in_winter_and_not_in_summer() {
         }
     }
 
-    let share = |i: usize| wintry[i] as f32 / ticks[i].max(1) as f32;
+    let share = |i: usize| wintry[i] as f32 / turns[i].max(1) as f32;
 
     assert!(
         share(3) > share(1),
@@ -312,7 +383,7 @@ fn it_snows_in_winter_and_not_in_summer() {
     );
     assert_eq!(
         wintry[1], 0,
-        "it should never snow in summer, and it did for {} ticks",
+        "it should never snow in summer, and it did for {} turns",
         wintry[1]
     );
 }
@@ -380,16 +451,16 @@ fn a_settlement_lives_through_a_winter() {
                 .count()
         };
 
-        let winter_opens = Season::Winter.first_day() * TICKS_PER_DAY;
+        let winter_opens = Season::Winter.first_day() * PLANNING_PERIODS_PER_DAY;
         for _ in 0..winter_opens {
-            simulation.tick();
+            simulation.take_a_turn();
         }
         let at_the_gate = alive(&simulation);
 
         // Far enough to be out the other side of the winter and into the
         // second spring.
-        for _ in winter_opens..(TICKS_PER_YEAR + TICKS_PER_DAY * 4) {
-            simulation.tick();
+        for _ in winter_opens..(PLANNING_PERIODS_PER_YEAR + PLANNING_PERIODS_PER_DAY * 4) {
+            simulation.take_a_turn();
         }
 
         assert_eq!(
@@ -449,7 +520,7 @@ fn a_settlement_lives_through_a_winter() {
 /// and the taiga and the alpine the same way round.
 ///
 /// The same multiplication was in two other places - `SeasonalCalendar::
-/// apply_modifiers` and `ClimateManager::tick` - and both are gone. Nothing
+/// apply_modifiers` and `ClimateManager::take_a_turn` - and both are gone. Nothing
 /// in this model multiplies a temperature any more.
 #[test]
 fn every_biome_is_warmer_at_noon_than_before_dawn() {

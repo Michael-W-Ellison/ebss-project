@@ -107,7 +107,7 @@ fn two_people_do_not_get_the_same_answer() {
             .get_mut(DriveType::Hunger)
         {
             hunger.value = threshold * 0.5;
-            hunger.denied_ticks = 0;
+            hunger.denied_turns = 0;
         }
     }
 
@@ -116,7 +116,7 @@ fn two_people_do_not_get_the_same_answer() {
         .drives
         .get_mut(DriveType::Hunger)
     {
-        hunger.denied_ticks = 24;
+        hunger.denied_turns = 24;
     }
 
     let easy = simulation.population.agents[0]
@@ -147,7 +147,7 @@ fn a_job_the_body_will_not_last_out_is_one_to_think_again_about() {
 
     let clocks: Vec<f32> = [DriveType::Hunger, DriveType::Thirst, DriveType::Rest]
         .into_iter()
-        .filter_map(|drive| agent.state.ticks_before_this_kills_me(drive))
+        .filter_map(|drive| agent.state.turns_before_this_kills_me(drive))
         .filter(|left| left.is_finite())
         .collect();
 

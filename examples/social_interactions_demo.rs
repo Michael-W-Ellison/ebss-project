@@ -35,15 +35,15 @@ fn main() {
             idx, agent.state.position, social_drive, relationship_count);
     }
 
-    // Run simulation for several ticks
-    println!("\n=== Running simulation for 200 ticks ===\n");
+    // Run simulation for several turns
+    println!("\n=== Running simulation for 200 turns ===\n");
 
-    for tick in 0..200 {
-        population.tick();
+    for turn in 0..200 {
+        population.take_a_turn();
 
-        // Report every 50 ticks
-        if tick % 50 == 0 && tick > 0 {
-            println!("--- Tick {} ---", tick);
+        // Report every 50 turns
+        if turn % 50 == 0 && turn > 0 {
+            println!("--- Turn {} ---", turn);
             for (idx, agent) in population.agents.iter().enumerate() {
                 let social_drive = agent.drives.get(DriveType::Social)
                     .map(|d| d.value)

@@ -340,11 +340,11 @@ impl ObservationalLearning {
 
 
     /// Get count of recent observations of a specific action type
-    pub fn count_recent_observations_of_type(&self, action_type: ActionType, tick_window: u32, current_tick: u32) -> usize {
+    pub fn count_recent_observations_of_type(&self, action_type: ActionType, turn_window: u32, current_turn: u32) -> usize {
         self.recent_observations.iter()
             .filter(|obs| {
                 obs.action_type == action_type &&
-                current_tick.saturating_sub(obs.timestamp as u32) <= tick_window
+                current_turn.saturating_sub(obs.timestamp as u32) <= turn_window
             })
             .count()
     }

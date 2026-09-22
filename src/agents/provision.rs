@@ -20,22 +20,36 @@
 use serde::{Deserialize, Serialize};
 
 use super::physiology;
-use crate::environment::seasons::{Season, DAYS_PER_SEASON, DAYS_PER_YEAR};
+use crate::environment::seasons::{
+    Season, DAYS_IN_A_SHORT_WEEK, DAYS_PER_MONTH, DAYS_PER_SEASON, DAYS_PER_YEAR,
+};
 
-/// Days in a week.
-pub const DAYS_IN_A_WEEK: u32 = 7;
+/// Days in the second rung - "the week".
+///
+/// Read off the calendar rather than written down again. It was a bare `7`,
+/// which happened to agree with `DAYS_IN_A_SHORT_WEEK` and agreed with it by
+/// coincidence: this calendar alternates a seven-day week with an eight-day
+/// one, and a second spelling of the shorter of the two is a number that
+/// would go on saying seven the day somebody changed the week.
+pub const DAYS_IN_A_WEEK: u32 = DAYS_IN_A_SHORT_WEEK;
 
 /// Days in the third rung - "the month".
 ///
-/// This calendar has no months in it. A season is twenty-four days and a year
-/// is four of them, so four actual weeks would be *longer* than the winter it
-/// is supposed to sit inside, and the ladder would invert: an agent with more
-/// than a month put by would already have more than a winter, and the winter
-/// rung could never be reached at all.
+/// **This was half a season, and the reason it was is no longer true.** The
+/// note that stood here read: "this calendar has no months in it. A season is
+/// twenty-four days and a year is four of them, so four actual weeks would be
+/// *longer* than the winter it is supposed to sit inside, and the ladder would
+/// invert." Every clause of that was right when it was written and none of it
+/// is right now. The calendar has twelve months in it, a month is thirty days,
+/// and a season is ninety - so a month sits between a week and a winter of its
+/// own accord, which is what the rung wanted all along.
 ///
-/// What the rung is for is a horizon between a week and a winter, so that is
-/// what it is: half a season. One day, seven days, twelve days, a winter.
-pub const DAYS_IN_A_MONTH: u32 = DAYS_PER_SEASON / 2;
+/// What it had become was a second spelling of "a month" that said forty-five
+/// days while the calendar beside it said thirty: the horizon an agent is
+/// uneasy about was half again as far off as the month anybody else in the
+/// model means. One day, a week, a month, a winter - and each of them is now
+/// the thing it is named after.
+pub const DAYS_IN_A_MONTH: u32 = DAYS_PER_MONTH;
 
 /// What one item of ordinary food in a pack or a pit is worth to a body.
 ///
@@ -61,7 +75,7 @@ pub const UNITS_IN_ONE_STORED_ITEM: f32 =
 /// It is worth saying plainly what having to write this down cost. The store
 /// wanted **seven items put by per mouth for a whole winter** - a figure
 /// picked, with a doc comment reasoning carefully from "a person gets through
-/// about a hundred units in ten thousand ticks", which was true of the body
+/// about a hundred units in ten thousand turns", which was true of the body
 /// this model had before the starvation clock was corrected and is out by
 /// something over two orders of magnitude against the body it has now. Seven
 /// items is half a day. Measured, a person eats **15.4 items a day**, which is

@@ -16,7 +16,7 @@ use log::debug;
 
 impl Simulation {
     /// `Action::TillSoil`.
-    pub(in crate::analytics) fn tilling_soil(&mut self, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn tilling_soil(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::{Position, ResourceNode, TerrainType};
 
         let agent_position = self.population.agents[agent_index].state.position;
@@ -48,7 +48,7 @@ impl Simulation {
             // see `ploughing_a_crop_in`. Anything else standing here is
             // somebody's dinner and stays where it is.
             if crop.feeds_the_ground() && on_it > 0 {
-                return self.ploughing_a_crop_in(agent_index, standing, tick_now);
+                return self.ploughing_a_crop_in(agent_index, standing, turn_now);
             }
 
             return ActionResult::failure("Something already grows here".to_string());
@@ -110,7 +110,7 @@ impl Simulation {
         let agent = &mut self.population.agents[agent_index];
         agent
             .skills
-            .practise(crate::agents::SkillType::Farming, 25, tick_now);
+            .practise(crate::agents::SkillType::Farming, 25, turn_now);
 
         debug!(
             "Agent {} broke ground at {:?} and sowed {:?}",
@@ -142,7 +142,7 @@ impl Simulation {
         &mut self,
         agent_index: usize,
         standing: usize,
-        tick_now: u32,
+        turn_now: u32,
     ) -> ActionResult {
         use crate::world::{Soil, TerrainType};
 
@@ -173,7 +173,7 @@ impl Simulation {
         let agent = &mut self.population.agents[agent_index];
         agent
             .skills
-            .practise(crate::agents::SkillType::Farming, 15, tick_now);
+            .practise(crate::agents::SkillType::Farming, 15, turn_now);
 
         debug!(
             "Agent {} turned {turned_under} of {crop:?} under at {where_it_stands:?}",
@@ -186,7 +186,7 @@ impl Simulation {
     }
 
     /// `Action::TakeCutting`.
-    pub(in crate::analytics) fn taking_a_cutting(&mut self, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn taking_a_cutting(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::agents::InventoryItem;
         use crate::world::Position;
 
@@ -234,7 +234,7 @@ impl Simulation {
         ));
         agent
             .skills
-            .practise(crate::agents::SkillType::Farming, 8, tick_now);
+            .practise(crate::agents::SkillType::Farming, 8, turn_now);
 
         debug!("Agent {} lifted a slip of {called} at {here:?}", agent.id);
 
@@ -244,7 +244,7 @@ impl Simulation {
     }
 
     /// `Action::PlantCutting`.
-    pub(in crate::analytics) fn planting_a_cutting(&mut self, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn planting_a_cutting(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::{Position, ResourceNode};
 
         let agent_position = self.population.agents[agent_index].state.position;
@@ -286,7 +286,7 @@ impl Simulation {
             .remove_item(&Self::a_cutting_of(called), 1);
         agent
             .skills
-            .practise(crate::agents::SkillType::Farming, 15, tick_now);
+            .practise(crate::agents::SkillType::Farming, 15, turn_now);
 
         debug!("Agent {} put a slip of {called} in at {here:?}", agent.id);
 
@@ -297,7 +297,7 @@ impl Simulation {
     }
 
     /// `Action::TendField`.
-    pub(in crate::analytics) fn tending_a_field(&mut self, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn tending_a_field(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::Position;
 
         let agent_position = self.population.agents[agent_index].state.position;
@@ -369,7 +369,7 @@ impl Simulation {
         let agent = &mut self.population.agents[agent_index];
         agent
             .skills
-            .practise(crate::agents::SkillType::Farming, 12, tick_now);
+            .practise(crate::agents::SkillType::Farming, 12, turn_now);
 
         debug!(
             "Agent {} worked the field at {:?} (weeds and pests down {:.2})",
@@ -383,7 +383,7 @@ impl Simulation {
     }
 
     /// `Action::SpreadMuck`.
-    pub(in crate::analytics) fn spreading_muck(&mut self, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn spreading_muck(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::agents::practices::Practice;
         use crate::world::Position;
 
@@ -463,7 +463,7 @@ impl Simulation {
         agent.practices.record_outcome(Practice::SpreadingMuck, worked);
         agent
             .skills
-            .practise(crate::agents::SkillType::Farming, 10, tick_now);
+            .practise(crate::agents::SkillType::Farming, 10, turn_now);
 
         debug!(
             "Agent {} tipped {} spoiled units onto {:?} (ground {:.2} -> {:.2})",

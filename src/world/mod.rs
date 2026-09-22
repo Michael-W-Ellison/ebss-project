@@ -142,7 +142,7 @@ pub struct World {
     pub combat_manager: combat::CombatManager, // Combat system (not serialized)
     #[serde(skip)]
     pub crafting_manager: crafting::CraftingManager, // Crafting system (not serialized)
-    pub tick: u32,
+    pub turn: u32,
     pub config: WorldConfig, // Store configuration for spatial planning
     pub resource_nodes: std::collections::BTreeMap<String, Vec<(i32, i32, i32)>>, // Resource locations by type (as tuples)
     pub zone_manager: zoning::ZoneManager, // Spatial zoning for settlement planning
@@ -173,7 +173,7 @@ pub struct World {
     /// global bag of counts with no position, nothing in it ever spoils, and
     /// what an agent could put by explicitly excluded food - so nothing that
     /// anybody eats was ever stored anywhere by anybody. Measured at ten
-    /// thousand ticks, not one of sixty-five living agents was carrying so
+    /// thousand turns, not one of sixty-five living agents was carrying so
     /// much as a meal. A hole in the cold ground with the earth back over it
     /// is what a people this far along actually has, and it is the difference
     /// between a settlement that eats what it finds today and one that eats
@@ -201,7 +201,7 @@ pub struct World {
     ///
     /// The world does the drying; whoever is standing near enough to see it
     /// happen is what turns it into something a person knows. Drained every
-    /// tick by the simulation - see `Simulation::who_saw_that_dry`.
+    /// turn by the simulation - see `Simulation::who_saw_that_dry`.
     #[serde(default, skip)]
     pub what_dried_in_the_sun: Vec<(Position, String)>,
     /// Food that went off before anybody ate it, where it lay and in the
@@ -236,18 +236,9 @@ pub struct World {
 pub struct Dropped {
     pub item: crate::agents::InventoryItem,
     pub where_it_is: Position,
-    /// The tick it was left, which is what the weather counts from
+    /// The turn it was left, which is what the weather counts from
     pub since: u32,
-    /// How much extra ageing the weather has done to it, over and above the
-    /// passing of time.
-    ///
-    /// Kept as its own count rather than by winding the food's `created_tick`
-    /// backwards, which was the first attempt and silently did nothing: a
-    /// thing dropped at tick zero has a `created_tick` of zero, and
-    /// `saturating_sub` on a `u32` at zero is a very quiet no-op.
-    #[serde(default)]
-    pub weathered: u32,
-    /// And how much sun it has had, which is the other thing the sky does to
+    /// How much sun it has had, which is the other thing the sky does to
     /// a thing lying in it.
     #[serde(default)]
     pub dried_in_the_sun: u32,
@@ -264,7 +255,7 @@ pub struct Pit {
     pub where_it_is: Position,
     pub holds: Vec<crate::agents::InventoryItem>,
     pub covered: bool,
-    /// The tick it was dug, which is what the ground counts from
+    /// The turn it was dug, which is what the ground counts from
     pub dug: u32,
     /// Whose hole it is. The man with the shovel, ordinarily - see
     /// `world::belonging`. `ToNobody` for a pit nobody remembers digging,
@@ -304,7 +295,7 @@ impl Pit {
         self.holds.iter().any(|item| Self::is_it_a_meal(item))
     }
 
-    /// How many ticks apart two lots of the same thing were laid down.
+    /// How many turns apart two lots of the same thing were laid down.
     ///
     /// Anything without a clock counts as of an age with anything else, so
     /// materials still stack the way they always did.
@@ -313,7 +304,7 @@ impl Pit {
         other: &crate::agents::InventoryItem,
     ) -> u32 {
         match (&one.food_data, &other.food_data) {
-            (Some(mine), Some(theirs)) => mine.created_tick.abs_diff(theirs.created_tick),
+            (Some(mine), Some(theirs)) => mine.created_turn.abs_diff(theirs.created_turn),
             _ => 0,
         }
     }
@@ -391,31 +382,73 @@ impl Pit {
         })
     }
 
-    /// One tick in this many is the only one that tells on what is buried
-    /// here.
+    /// What being kept in this hole does to how fast food in it goes off.
     ///
-    /// Bare earth is twice as long as a pack, which is what cool and dark are
-    /// worth on their own. Earth with a vessel between the food and the
-    /// ground is four times: what actually gets at buried food is the ground
-    /// itself, and a bowl or a basket in the way of it is the difference
-    /// between a store and a hole full of rot.
+    /// A modifier on the same scale as everything else that bears on keeping -
+    /// [`crate::environment::tags::WHAT_A_BARE_PACK_KEEPS`] changes nothing,
+    /// below that keeps, above it hastens.
     ///
-    /// The same number that ages what is in the pit and that answers how long
-    /// a thing would keep if it went in - see `how_long_this_would_keep`. Two
-    /// spellings of that would drift, and the second would be the one the
-    /// decision to bury was made on.
-    pub fn how_much_slower_things_age(&self) -> u32 {
-        if self.is_lined() {
-            Self::EARTH_WITH_SOMETHING_BETWEEN
-        } else {
-            Self::BARE_EARTH
+    /// Bare earth with the lid on is half, which is what cool and dark are
+    /// worth on their own. A vessel between the food and the ground is worth
+    /// what the vessel is worth, and multiplies: what actually gets at buried
+    /// food is the ground itself, and a bowl in the way of it is the
+    /// difference between a store and a hole full of rot. A bowl is a half,
+    /// so a lined pit is a quarter, which is what it has always been - and a
+    /// people who have got as far as firing pots now line their pits better
+    /// than a people who have got as far as carving bowls, which by a flat
+    /// number they could not.
+    ///
+    /// An **open** hole is a hole with food in it and keeps nothing: earth
+    /// back over the top is what does the work, and until it is there the
+    /// thing is out in the air like anything else.
+    ///
+    /// This is what is *happening* to what is in there. What a hole is worth
+    /// as somewhere to put something is `with_the_lid_on`, because covering
+    /// it is the next thing the person does and not a thing they might not
+    /// get round to.
+    pub fn how_fast_things_go_off_in_here(&self) -> f32 {
+        if !self.covered {
+            return crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
         }
+
+        self.with_the_lid_on()
     }
 
-    const BARE_EARTH: u32 = 2;
-    const EARTH_WITH_SOMETHING_BETWEEN: u32 = 4;
+    /// What this hole would be worth with the earth back over it.
+    ///
+    /// The one number, so that what ages the food and what the decision to
+    /// bury is made on cannot drift apart - two spellings of that, and the
+    /// second would be the one the decision was made on.
+    pub fn with_the_lid_on(&self) -> f32 {
+        Self::BARE_EARTH * self.what_it_is_lined_with()
+    }
+
+    /// What the best thing in here is worth as a lining.
+    ///
+    /// One - no better than bare earth - for a hole with no vessel in it.
+    /// Read off the one table of what keeps food, so a pit cannot come to a
+    /// different opinion of a basket than a pack does.
+    fn what_it_is_lined_with(&self) -> f32 {
+        crate::environment::tags::the_best_keeping_to_hand(&|called: &str| {
+            self.holds
+                .iter()
+                .filter(|item| item.item_id == called)
+                .map(|item| item.quantity)
+                .sum()
+        })
+    }
+
+    /// Cool, dark, and out of the weather: what a covered hole is worth before
+    /// anybody puts a vessel in it.
+    const BARE_EARTH: f32 = 0.5;
 
     /// How many days this would still be food for, if it went in here now.
+    ///
+    /// Reckoned **with the lid on**, because the question is what burying a
+    /// thing is worth and burying a thing means covering the hole afterwards.
+    /// Asked of the hole as it stands, a freshly dug pit is worth nothing and
+    /// nobody would ever fill one, which is a decision made on the state of
+    /// the world half a turn before the state it is being made about.
     ///
     /// What is left of its own clock, at the pace this hole lets it run. The
     /// question nobody was asking: **a settlement buried 512 units a year and
@@ -435,9 +468,14 @@ impl Pit {
 
         // What is left of its own clock - see `FoodData::how_long_this_has_left`
         // - at the pace this hole lets it run.
-        let left = food.how_long_this_has_left();
+        let left = food.how_long_this_has_left(&item.item_id);
+        let in_here = self.with_the_lid_on();
 
-        Some(left * self.how_much_slower_things_age() as f32 / TICKS_PER_DAY as f32)
+        if in_here <= 0.0 {
+            return None;
+        }
+
+        Some(left / in_here / TICKS_PER_DAY as f32)
     }
 
     /// Take some of a thing out.
@@ -622,7 +660,7 @@ impl Default for WorldConfig {
     /// A corner of a country: a quarter of a square kilometre.
     ///
     /// Small on purpose. This is the map a test builds, and a test that has to
-    /// tick a hundred square kilometres to find out whether one man ate is a
+    /// turn a hundred square kilometres to find out whether one man ate is a
     /// test nobody runs. For the map an ecology actually needs, see
     /// [`WorldConfig::big_enough_for_an_ecology`].
     fn default() -> Self {
@@ -712,7 +750,7 @@ impl WorldConfig {
 
 impl World {
     /// Somebody put this down, or dropped it, or died holding it.
-    pub fn somebody_left_this(&mut self, item: crate::agents::InventoryItem, where_it_is: Position, tick: u32) {
+    pub fn somebody_left_this(&mut self, item: crate::agents::InventoryItem, where_it_is: Position, turn: u32) {
         if item.quantity == 0 {
             return;
         }
@@ -720,8 +758,7 @@ impl World {
         self.dropped.push(Dropped {
             item,
             where_it_is,
-            since: tick,
-            weathered: 0,
+            since: turn,
             dried_in_the_sun: 0,
         });
     }
@@ -774,34 +811,36 @@ impl World {
     /// Everything else weathers away in its own time.
     /// Cold ground with the earth back over it keeps food.
     ///
-    /// `FoodData::update_freshness` works off elapsed time since the thing was
-    /// made, so the way to make a pit keep something is to hold that clock
-    /// back: on three ticks in every four the buried food's `created_tick` is
-    /// pushed forward with the world, so a season underground costs it what a
-    /// fortnight in a pack would. An open pit is a hole with food in it and
-    /// keeps nothing at all.
+    /// What is in a hole goes off at the pace the hole allows, which is
+    /// `Pit::how_fast_things_go_off_in_here` and nothing else - bare earth is
+    /// a half, a lined pit a quarter, and an open hole is a hole with food in
+    /// it and keeps nothing.
+    ///
+    /// **This used to be done by winding the food's own clock backwards**,
+    /// because freshness was derived from the turn a thing was made and there
+    /// was no other way to slow it down: on three turns in four the buried
+    /// food's `created_turn` was pushed forward with the world. Two units met
+    /// in that sentence and neither was named. The hold-back pushed the clock
+    /// on by one tick and the cadence asked `now % 2`, which were the same
+    /// thing while a step was a tick; once a step became thirty, a pit gave
+    /// back a thirtieth of what it took - a buried meal and a carried one came
+    /// out of two days at the same 0.83 - and `now % 2` was true at every
+    /// step, so bare earth held nothing back at all.
+    ///
+    /// A rate cannot have that defect. There is no cadence to get out of step
+    /// with and no second clock to wind: the hole is a number, the food is a
+    /// number, and the time that passed is the time that passed.
     ///
     /// What has gone off in there rots away like anything else.
     fn what_is_buried_keeps(&mut self) {
-        let now = self.tick;
+        let now = self.turn;
         let mut buried_and_lost = 0u64;
 
         for pit in self.pits.iter_mut() {
-            // Bare earth is cool and dark and keeps a thing rather better
-            // than a pack does. Earth with a vessel in it keeps it better
-            // again: what actually gets at buried food is the ground itself -
-            // damp, and everything that lives in it - and a bowl or a basket
-            // between the two is the difference between a store and a hole
-            // full of rot.
-            let ageing = now % pit.how_much_slower_things_age() == 0;
+            let in_here = pit.how_fast_things_go_off_in_here();
 
             for item in pit.holds.iter_mut() {
-                if let Some(food) = item.food_data.as_mut() {
-                    if pit.covered && !ageing {
-                        food.created_tick = food.created_tick.saturating_add(1);
-                    }
-                    food.update_freshness(now);
-                }
+                item.goes_off(now, in_here);
             }
 
             pit.holds.retain(|item| {
@@ -875,14 +914,14 @@ impl World {
     /// What share of what a plant is carrying comes off it each pass, once
     /// the season it bears in has passed.
     ///
-    /// The plant pass runs every ten ticks, so at a quarter a hedgerow is
+    /// The plant pass runs every ten turns, so at a quarter a hedgerow is
     /// four fifths bare within five days of the season turning and all but
     /// empty inside a fortnight. That is what fruit does.
     ///
     /// A first cut used a twentieth and left 472 units of berries hanging on
     /// bushes in midwinter - most of a season's crop still on the branch in
     /// the snow, which is not a lean season, it is autumn with worse weather.
-    const WHAT_FALLS_OFF_A_TICK: f32 = 0.25;
+    const WHAT_FALLS_OFF_A_TURN: f32 = 0.25;
 
     /// The pit dug on this tile, if there is one.
     pub fn pit_at(&self, where_it_is: Position) -> Option<&Pit> {
@@ -937,7 +976,7 @@ impl World {
     }
 
     fn what_is_lying_about_weathers(&mut self) {
-        let now = self.tick;
+        let now = self.turn;
         let mut back_to_the_ground: Vec<(Position, f32)> = Vec::new();
         let mut dried: Vec<(Position, String)> = Vec::new();
 
@@ -986,6 +1025,12 @@ impl World {
             let thin_enough_to_dry = Self::will_this_dry(&left.item.item_id);
             let drying = sunny && thin_enough_to_dry && !sheltered;
 
+            // What the sky is worth as somewhere to keep a thing, on the same
+            // scale as a pack or a pit: one changes nothing, and lying out in
+            // weather is worse than one. A day spent drying is a day the sky
+            // is doing something else, and costs no more than a day in a pack.
+            let mut out_in_it = crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
+
             if drying {
                 left.dried_in_the_sun += Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
             } else {
@@ -1009,13 +1054,9 @@ impl World {
                 // range with a thunderstorm.
                 let shade = Self::WHAT_SHADE_ADDS as f32;
                 let worst = Self::WHAT_THE_WEATHER_ADDS as f32;
-                let adds = shade + (worst - shade) * in_the_open.clamp(0.0, 1.0);
 
-                left.weathered +=
-                    ((adds - 1.0) * Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT as f32) as u32;
+                out_in_it = shade + (worst - shade) * in_the_open.clamp(0.0, 1.0);
             }
-
-            let weathered = left.weathered;
 
             // How long it has to lie there is a question about how small it
             // was cut. This was one flat number for everything, so a joint
@@ -1025,6 +1066,12 @@ impl World {
                 >= crate::world::nutrition::Piece::of(&left.item.item_id)
                     .how_long_it_takes_to_dry();
 
+            // The sun's work is done before the weather's is charged, so that
+            // the day a thing dries through is the first day it keeps like a
+            // dried thing. `set_preparation` puts the clock at `now`, which
+            // leaves nothing for the pass below to spend - the change of tag
+            // takes effect from the moment it happens and does not reach
+            // backwards over the fortnight it spent turning in the rain.
             if let Some(food) = left.item.food_data.as_mut() {
                 if long_enough && food.preparation == crate::world::nutrition::PreparationState::Raw
                 {
@@ -1034,9 +1081,9 @@ impl World {
                     );
                     dried.push((left.where_it_is, left.item.item_id.clone()));
                 }
-
-                food.update_freshness(now + weathered);
             }
+
+            left.item.goes_off(now, out_in_it);
         }
 
         self.what_dried_in_the_sun.extend(dried);
@@ -1149,7 +1196,7 @@ impl World {
             )),
             combat_manager: combat::CombatManager::new(),
             crafting_manager: crafting::CraftingManager::new(),
-            tick: 0,
+            turn: 0,
             config: config.clone(),
             resource_nodes: std::collections::BTreeMap::new(),
             zone_manager: zoning::ZoneManager::new(),
@@ -1201,7 +1248,7 @@ impl World {
         // And stock the lower tiers, which are a population rather than
         // records - see `SmallLife`. A country is not empty of rabbits on the
         // morning it is made, and until this ran a world had none until its
-        // first tick: anything that asked what was living on a piece of
+        // first turn: anything that asked what was living on a piece of
         // ground before then was told nothing was.
         world
             .animals
@@ -1306,7 +1353,7 @@ impl World {
     /// Leave the country to itself for a while.
     fn let_it_stand(&mut self, days: usize) {
         for _ in 0..days * crate::environment::seasons::TICKS_PER_DAY as usize {
-            self.tick();
+            self.take_a_turn();
         }
     }
 
@@ -1643,9 +1690,9 @@ impl World {
     /// drinks from one.
     ///
     /// `regenerate_resources` sets this, and it does not run until the tenth
-    /// tick. A source with no flow on it yet has no floor under it, so the
+    /// turn. A source with no flow on it yet has no floor under it, so the
     /// founders could drink one dry in the first morning of the world - which
-    /// is the whole failure this is meant to prevent, arriving ten ticks early.
+    /// is the whole failure this is meant to prevent, arriving ten turns early.
     fn prime_the_springs(&mut self) {
         let precipitation = self.climate.weather.weather_type.precipitation_intensity();
 
@@ -1927,7 +1974,7 @@ impl World {
         let mut heat_source = crate::environment::HeatSource::new(
             heat_source_type,
             position,
-            self.tick as u64,
+            self.turn as u64,
         );
 
         if let Some(builder) = builder_id {
@@ -2146,7 +2193,7 @@ impl World {
             return Err("Position out of bounds".to_string());
         }
 
-        self.plants.plant_crop(species_id, position, planter_id, self.tick)
+        self.plants.plant_crop(species_id, position, planter_id, self.turn)
             .ok_or_else(|| "Failed to plant crop (max population reached or invalid species)".to_string())
     }
 
@@ -2162,7 +2209,7 @@ impl World {
             return Err("Position out of bounds".to_string());
         }
 
-        self.plants.spawn_plant(species_id, position, self.tick)
+        self.plants.spawn_plant(species_id, position, self.turn)
             .ok_or_else(|| "Failed to spawn plant (max population reached or invalid species)".to_string())
     }
 
@@ -2174,7 +2221,7 @@ impl World {
         radius: u32,
         density: f32,
     ) -> Vec<uuid::Uuid> {
-        self.plants.spawn_patch(species_id, center, radius, density, self.tick)
+        self.plants.spawn_patch(species_id, center, radius, density, self.turn)
     }
 
     /// Harvest a plant
@@ -2271,22 +2318,25 @@ impl World {
     }
 
 
-    pub fn tick(&mut self) {
-        self.tick += 1;
+    pub fn take_a_turn(&mut self) {
+        // A step is a planning period, which is that many ticks. Every counter
+        // in the model has to advance by the same amount or two of them
+        // disagree about what day it is.
+        self.turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
 
         // Update climate (weather, seasons, time)
-        self.climate.tick();
+        self.climate.take_a_turn();
 
         // Update buildings
         for building in &mut self.buildings {
-            building.tick();
+            building.take_a_turn();
         }
 
         // Update heat sources (fuel consumption, heating)
-        self.heat_sources.tick_all();
+        self.heat_sources.turn_all();
 
         // And the weather gets at whatever is lying about
-        if self.tick % crate::environment::seasons::ONCE_A_DAY == 0 {
+        if self.turn % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.what_is_lying_about_weathers();
         }
 
@@ -2294,28 +2344,42 @@ impl World {
         self.what_is_buried_keeps();
 
         // Update animals (AI, movement, aging), and what they take off the
-        // ground and put back onto it. Grazing runs on the vegetation's own
-        // ten-tick cadence - see `AnimalManager::tick_in_world` - so a
-        // grazing pass stands for ten ticks of feeding.
-        // The cadence and the amount are one number. A pass stands for
-        // exactly as long as it is since the last pass, and reading that off
-        // two separate literals is how a herd ends up eating a tenth or ten
-        // times what it should the moment the turn length changes.
+        // ground and put back onto it.
+        //
+        // Two numbers here, in two different units, and they used to be one
+        // number. How often a grazing pass comes round is a span of time, so
+        // it is counted in ticks: once a day. How much feeding that pass
+        // stands for is a count of feeding passes, because an animal burns
+        // its hunger once a pass - see `Animal::turn_hunger_burning` - and
+        // what it takes in has to be counted against the same passes it
+        // burned it over. Forty-eight of those in a day, not fourteen hundred
+        // and forty minutes.
+        //
+        // The note that stood here said the cadence and the amount were one
+        // number, and that reading them off two separate literals was how a
+        // herd ends up eating ten times what it should. It had the risk right
+        // and the remedy backwards: they are one number only while a tick is
+        // a pass. The moment a step began advancing the clock by thirty ticks
+        // instead of one, an animal that found its forage came out thirty
+        // times ahead of what it burned rather than ahead by the margin
+        // `AnimalManager::what_it_reaches_for` promises - nothing starved,
+        // and the herd ran to the length of the array. See ISSUES_FOUND #217.
         let how_often_the_ground_is_grazed = crate::environment::seasons::ONCE_A_DAY;
-        let grazing_ticks = if self.tick % how_often_the_ground_is_grazed == 0 {
-            how_often_the_ground_is_grazed as f32
+        let feeding_passes_it_stands_for = crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
+        let grazing_passes = if self.turn % how_often_the_ground_is_grazed == 0 {
+            feeding_passes_it_stands_for as f32
         } else {
             0.0
         };
         let weather = crate::environment::GrazingWeather {
             precipitation: self.climate.weather.weather_type.precipitation_intensity(),
-            now: self.tick,
+            now: self.turn,
             season: self.climate.current_season(),
         };
-        self.animals.tick_in_world(
+        self.animals.turn_in_world(
             &mut self.grid,
             &mut self.plants,
-            grazing_ticks,
+            grazing_passes,
             weather,
         );
 
@@ -2325,9 +2389,9 @@ impl World {
         if !self.snares.is_empty() {
             let mut snares = std::mem::take(&mut self.snares);
             let mut rng = crate::core::dice::roll();
-            self.animals.small_life.tick_the_snares(
+            self.animals.small_life.turn_the_snares(
                 &mut snares,
-                self.tick,
+                self.turn,
                 crate::environment::fauna::AnimalManager::whose_ground,
                 &mut rng,
             );
@@ -2337,10 +2401,10 @@ impl World {
         // Update plants: growth on what the ground and sky give them, and the
         // leaf fall that in time becomes more of it.
         //
-        // One zone of the map in twenty-four, one of them every sixty ticks,
+        // One zone of the map in twenty-four, one of them every sixty turns,
         // so any given plant is worked out once in fourteen hundred and forty
-        // ticks - four months - and no single tick carries more than a
-        // twenty-fourth of the map. This is the most expensive thing in a tick
+        // turns - four months - and no single turn carries more than a
+        // twenty-fourth of the map. This is the most expensive thing in a turn
         // and the one that least needs doing often: a hundred square
         // kilometres carries a quarter of a million plants and nothing a plant
         // does on its own happens inside four months.
@@ -2355,18 +2419,18 @@ impl World {
         use crate::environment::flora::PlantManager;
         const HOW_OFTEN_A_ZONE_COMES_ROUND: u32 = PlantManager::HOW_OFTEN_A_ZONE_COMES_ROUND;
 
-        if self.tick % HOW_OFTEN_A_ZONE_COMES_ROUND == 0 {
+        if self.turn % HOW_OFTEN_A_ZONE_COMES_ROUND == 0 {
             let precipitation = self.climate.weather.weather_type.precipitation_intensity();
             let season = self.climate.current_season();
-            let zone = (self.tick / HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
+            let zone = (self.turn / HOW_OFTEN_A_ZONE_COMES_ROUND) as usize
                 % crate::environment::PlantManager::HOW_MANY_ZONES;
 
             self.plants
-                .grow_a_zone(&mut self.grid, precipitation, self.tick, season, zone);
+                .grow_a_zone(&mut self.grid, precipitation, self.turn, season, zone);
         }
 
-        // Regenerate resources based on climate conditions (every 10 ticks to reduce overhead)
-        if self.tick % crate::environment::seasons::ONCE_A_DAY == 0 {
+        // Regenerate resources based on climate conditions (every 10 turns to reduce overhead)
+        if self.turn % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.rot_what_is_lying_about();
             self.regenerate_resources();
         }
@@ -2374,13 +2438,13 @@ impl World {
         // Update crafting jobs (progress crafting)
         // Completed crafts are tracked but not auto-distributed - agents poll for their completed jobs
         // via World::get_completed_crafts_for_agent() to add items to their inventories
-        self.crafting_manager.tick();
+        self.crafting_manager.take_a_turn();
 
         // Remove depleted resources
         self.remove_depleted_resources();
 
         // And drop the ground that has gone bare again off the visiting list.
-        // Once a tick rather than on every read, so a reader may see a tile
+        // Once a turn rather than on every read, so a reader may see a tile
         // that has just finished - which is why every reader asks its own
         // question of the tile as well.
         self.grid.forget_bare_ground();
@@ -2401,17 +2465,21 @@ impl World {
 
         // A pass stands for however long it has been since the last one, which
         // is one number and not two. This read ten while the trigger in
-        // `World::tick` read ten separately, in another function - two
+        // `World::take_a_turn` read ten separately, in another function - two
         // spellings of one cadence, and shortening the turn would have moved
         // one and not the other.
-        const TICKS_PER_PASS: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
+        //
+        // Ticks, and named so. It was right as a span all along; what was
+        // wrong was at the other end, where `Soil::decay`'s rates were per
+        // pass and were being paid out per tick of it. See ISSUES_FOUND #218.
+        const TICKS_THIS_PASS_STANDS_FOR: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
 
         // Every tile in the world, because every tile in the world has litter
         // on it - `Soil::for_terrain` gives a forest floor 1.5 and a desert
         // 0.02, and rot never quite takes the last of it. There is nothing to
-        // narrow here and the register would hold the whole map. One pass in
-        // ten ticks over a million tiles is about half a millisecond, which is
-        // a twentieth of what the two sweeps that *could* be narrowed were
+        // narrow here and the register would hold the whole map. One pass a
+        // day over a million tiles is about half a millisecond, which is a
+        // twentieth of what the two sweeps that *could* be narrowed were
         // costing. See ISSUES_FOUND.md #128.
         for row in &mut self.grid.tiles {
             for tile in row.iter_mut() {
@@ -2420,7 +2488,7 @@ impl World {
                 }
 
                 let humidity = Soil::humidity(tile.terrain.terrain_type, precipitation);
-                tile.soil.decay(humidity, TICKS_PER_PASS);
+                tile.soil.decay(humidity, TICKS_THIS_PASS_STANDS_FOR);
             }
         }
     }
@@ -2466,7 +2534,15 @@ impl World {
             // what last year's fishing left behind, so a reach that was taken
             // down to nothing fills again - see `fish_run`.
             if resource.resource_type.grows_in_water() {
-                let run = resource.fish_run(terrain_type, current_season, frozen_water);
+                // How long this pass stands for, so that what a *season's* run
+                // is worth stays the fixed thing and the cadence is free to
+                // change - see `ResourceNode::WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON`.
+                let run = resource.fish_run(
+                    terrain_type,
+                    current_season,
+                    frozen_water,
+                    crate::environment::seasons::ONCE_A_DAY,
+                );
                 resource.take_inflow(run);
                 continue;
             }
@@ -2503,13 +2579,13 @@ impl World {
             // and no use for a store. What is on the plant now falls off it
             // outside the weeks it bears, which is what fruit does.
             if !resource.resource_type.is_it_bearing(today) {
-                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TICK, soil);
+                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TURN, soil);
                 continue;
             }
 
             // A pass stands for exactly the ground it covers: however long it
             // has been since the last one. The rates inside are per-pass
-            // numbers fitted when a pass was ten ticks, and they are read
+            // numbers fitted when a pass was ten turns, and they are read
             // against that - see `ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO`.
             let _regen_amount = resource.regenerate_in_ground(
                 temperature,
@@ -2615,7 +2691,7 @@ impl World {
         agent_exploration: &mut crate::agents::ExplorationKnowledge,
         agent_position: &Position,
         vision_range: u32,
-        current_tick: u32,
+        current_turn: u32,
     ) -> usize {
         let mut new_discoveries = 0;
         let range = vision_range as i32;
@@ -2639,7 +2715,7 @@ impl World {
                 }
 
                 // Mark tile as explored if new
-                if agent_exploration.explore_tile(explore_pos, current_tick) {
+                if agent_exploration.explore_tile(explore_pos, current_turn) {
                     new_discoveries += 1;
 
                     // Mark tile as globally explored
@@ -2650,7 +2726,7 @@ impl World {
                         agent_exploration.encounter_terrain(
                             tile.terrain.terrain_type,
                             explore_pos,
-                            current_tick,
+                            current_turn,
                         );
                     }
 
@@ -2660,7 +2736,7 @@ impl World {
                             agent_exploration.discover_resource(
                                 explore_pos,
                                 resource.resource_type,
-                                current_tick,
+                                current_turn,
                             );
                         }
                     }
@@ -2671,7 +2747,7 @@ impl World {
                             agent_exploration.discover_building(
                                 explore_pos,
                                 building.building_type,
-                                current_tick,
+                                current_turn,
                             );
                         }
                     }
@@ -2685,7 +2761,7 @@ impl World {
                 discovery_type: crate::agents::DiscoveryType::AreaExplored {
                     tiles_count: new_discoveries,
                 },
-                tick: current_tick,
+                turn: current_turn,
                 position: *agent_position,
             });
         }

@@ -332,8 +332,8 @@ fn a_settlement_crafts_without_being_refused() {
     }
     let mut simulation = Simulation::new(world, population);
 
-    for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 120) {
-        simulation.tick();
+    for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_DAY * 120) {
+        simulation.take_a_turn();
         if !simulation.population.agents.iter().any(|a| a.state.is_alive) {
             break;
         }

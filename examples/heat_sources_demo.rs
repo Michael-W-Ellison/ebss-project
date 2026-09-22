@@ -35,7 +35,7 @@ fn main() {
         println!("{:?}:", hs_type);
         println!("  Temperature range: {:.0}°C - {:.0}°C", min, max);
         println!("  Average: {:.0}°C", hs_type.average_temperature());
-        println!("  Fuel consumption: {:.2} units/tick", hs_type.fuel_consumption_rate());
+        println!("  Fuel consumption: {:.2} units/turn", hs_type.fuel_consumption_rate());
 
         let materials = hs_type.construction_materials();
         if !materials.is_empty() {
@@ -168,14 +168,14 @@ fn main() {
 
     let campfire_id = world.get_heat_source_at(10, 10).unwrap().id;
 
-    println!("Simulating 20 ticks of heating...");
-    for tick in 1..=20 {
-        world.tick();
+    println!("Simulating 20 turns of heating...");
+    for turn in 1..=20 {
+        world.take_a_turn();
 
-        if tick % 5 == 0 {
+        if turn % 5 == 0 {
             if let Some(campfire) = world.heat_sources.get(&campfire_id) {
-                println!("  Tick {}: Temp = {:.1}°C, Lit = {}, Fuel = {:.1}",
-                    tick,
+                println!("  Turn {}: Temp = {:.1}°C, Lit = {}, Fuel = {:.1}",
+                    turn,
                     campfire.current_temperature,
                     campfire.is_lit,
                     campfire.fuel.first().map(|f| f.amount).unwrap_or(0.0));
@@ -204,17 +204,17 @@ fn main() {
     println!();
 
     // Heat for a while
-    println!("Heating for 30 ticks...");
-    for tick in 1..=30 {
-        world.tick();
+    println!("Heating for 30 turns...");
+    for turn in 1..=30 {
+        world.take_a_turn();
 
-        if tick % 10 == 0 {
-            println!("  Tick {}:", tick);
+        if turn % 10 == 0 {
+            println!("  Turn {}:", turn);
 
             if let Some(bloomery) = world.heat_sources.get(&bloomery_id) {
                 println!("    Bloomery: {:.0}°C", bloomery.current_temperature);
                 for content in &bloomery.contents {
-                    println!("      {} x{} - heated for {} ticks at {:.0}°C",
+                    println!("      {} x{} - heated for {} turns at {:.0}°C",
                         content.material_id,
                         content.quantity,
                         content.heating_time,
@@ -225,7 +225,7 @@ fn main() {
             if let Some(campfire) = world.heat_sources.get(&campfire_id) {
                 println!("    Campfire: {:.0}°C", campfire.current_temperature);
                 for content in &campfire.contents {
-                    println!("      {} x{} - heated for {} ticks at {:.0}°C",
+                    println!("      {} x{} - heated for {} turns at {:.0}°C",
                         content.material_id,
                         content.quantity,
                         content.heating_time,
@@ -267,17 +267,17 @@ fn main() {
     world.light_heat_source(&temp_fire_id).ok();
 
     println!("Created temporary campfire with 5 units of wood");
-    println!("Fuel consumption: {:.2} units/tick", HeatSourceType::Campfire.fuel_consumption_rate());
+    println!("Fuel consumption: {:.2} units/turn", HeatSourceType::Campfire.fuel_consumption_rate());
     println!("\nTracking until fuel runs out:");
 
-    for tick in 1..=60 {
-        world.tick();
+    for turn in 1..=60 {
+        world.take_a_turn();
 
-        if tick % 10 == 0 {
+        if turn % 10 == 0 {
             if let Some(fire) = world.heat_sources.get(&temp_fire_id) {
                 let fuel_amount = fire.fuel.first().map(|f| f.amount).unwrap_or(0.0);
-                println!("  Tick {}: Lit = {}, Temp = {:.1}°C, Fuel = {:.1}",
-                    tick,
+                println!("  Turn {}: Lit = {}, Temp = {:.1}°C, Fuel = {:.1}",
+                    turn,
                     fire.is_lit,
                     fire.current_temperature,
                     fuel_amount);
@@ -309,13 +309,13 @@ fn main() {
         println!("  Temperature: {:.1}°C", bloomery.current_temperature);
     }
 
-    println!("\nCooling over 20 ticks...");
-    for tick in 1..=20 {
-        world.tick();
+    println!("\nCooling over 20 turns...");
+    for turn in 1..=20 {
+        world.take_a_turn();
 
-        if tick % 5 == 0 {
+        if turn % 5 == 0 {
             if let Some(bloomery) = world.heat_sources.get(&bloomery_id) {
-                println!("  Tick {}: {:.1}°C", tick, bloomery.current_temperature);
+                println!("  Turn {}: {:.1}°C", turn, bloomery.current_temperature);
             }
         }
     }

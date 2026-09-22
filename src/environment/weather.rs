@@ -4,25 +4,34 @@
 use serde::{Deserialize, Serialize};
 use crate::agents::temperature::Temperature;
 use crate::environment::BiomeType;
-use super::seasons::{Season, TICKS_PER_DAY};
+use super::seasons::{Season, PLANNING_PERIODS_PER_DAY};
 
-/// How long a stretch of weather lasts, given in hours and answered in ticks.
+/// How long a stretch of weather lasts, given in hours and answered in the
+/// steps that `Weather::take_a_turn` counts down.
 ///
-/// Durations used to be written straight in ticks, back when a tick was
+/// Durations used to be written straight in turns, back when a turn was
 /// thirty-six seconds and five hundred to two thousand of them was five to
-/// twenty hours - about how long a front sits over one place. A tick is two
+/// twenty hours - about how long a front sits over one place. A turn is two
 /// hours now, so those same numbers had become forty to a hundred and sixty
 /// days: a single blizzard outlasting the winter that started it and still
 /// blowing the following summer, which is what the runs showed. Snow turned up
 /// in all four seasons in equal measure.
-fn hours_in_ticks(hours: u32) -> u32 {
-    (hours * TICKS_PER_DAY / 24).max(1)
+///
+/// **And it happened again, by the other half of the same question.** Stating
+/// it in hours fixed what the number meant and left open what it was counted
+/// in: this answered in `TICKS_PER_DAY`, which is minutes, while
+/// `duration_remaining` is taken down by one a *step*. A ten-hour front sat
+/// for six hundred steps - twelve and a half days - and the blizzard was back.
+/// It is in steps now, which is the thing that is actually counted.
+/// See ISSUES_FOUND #218.
+fn hours_in_turns(hours: u32) -> u32 {
+    (hours * PLANNING_PERIODS_PER_DAY / 24).max(1)
 }
 
 /// A spell of weather somewhere between the two lengths, in hours.
 fn spell_of_weather(rng: &mut impl rand::Rng, from_hours: u32, to_hours: u32) -> u32 {
-    let from = hours_in_ticks(from_hours);
-    let to = hours_in_ticks(to_hours).max(from + 1);
+    let from = hours_in_turns(from_hours);
+    let to = hours_in_turns(to_hours).max(from + 1);
     rng.gen_range(from..to)
 }
 
@@ -174,10 +183,10 @@ impl WeatherType {
         matches!(self, WeatherType::Thunderstorm)
     }
 
-    /// Get lightning strike chance per tick (0.0 to 1.0)
-    pub fn lightning_chance_per_tick(&self) -> f32 {
+    /// Get lightning strike chance per turn (0.0 to 1.0)
+    pub fn lightning_chance_per_turn(&self) -> f32 {
         match self {
-            WeatherType::Thunderstorm => 0.001, // ~0.1% chance per tick
+            WeatherType::Thunderstorm => 0.001, // ~0.1% chance per turn
             _ => 0.0,
         }
     }
@@ -187,7 +196,7 @@ impl WeatherType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Weather {
     pub weather_type: WeatherType,
-    pub duration_remaining: u32, // Ticks until weather changes
+    pub duration_remaining: u32, // Turns until weather changes
     pub base_temperature: Temperature,
     pub base_wind_speed: f32,
 }
@@ -196,7 +205,7 @@ impl Weather {
     pub fn new(weather_type: WeatherType) -> Self {
         Self {
             weather_type,
-            duration_remaining: hours_in_ticks(10),
+            duration_remaining: hours_in_turns(10),
             base_temperature: 20.0,
             base_wind_speed: 2.0,
         }
@@ -217,8 +226,8 @@ impl Weather {
         self.base_wind_speed * self.weather_type.wind_modifier()
     }
 
-    /// Tick the weather system
-    pub fn tick(&mut self) {
+    /// Turn the weather system
+    pub fn take_a_turn(&mut self) {
         if self.duration_remaining > 0 {
             self.duration_remaining -= 1;
         }
@@ -528,17 +537,17 @@ mod tests {
     }
 
     #[test]
-    fn test_weather_tick() {
+    fn test_weather_turn() {
         let mut weather = Weather::new(WeatherType::Rain);
         weather.duration_remaining = 10;
 
-        weather.tick();
+        weather.take_a_turn();
         assert_eq!(weather.duration_remaining, 9);
 
         assert!(!weather.should_change());
 
         for _ in 0..9 {
-            weather.tick();
+            weather.take_a_turn();
         }
 
         assert!(weather.should_change());
@@ -657,9 +666,9 @@ mod tests {
     #[test]
     fn test_lightning_chance() {
         assert!(WeatherType::Thunderstorm.can_cause_lightning());
-        assert!(WeatherType::Thunderstorm.lightning_chance_per_tick() > 0.0);
+        assert!(WeatherType::Thunderstorm.lightning_chance_per_turn() > 0.0);
         assert!(!WeatherType::Rain.can_cause_lightning());
-        assert_eq!(WeatherType::Rain.lightning_chance_per_tick(), 0.0);
+        assert_eq!(WeatherType::Rain.lightning_chance_per_turn(), 0.0);
     }
 
     #[test]

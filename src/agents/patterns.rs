@@ -362,7 +362,7 @@ pub struct Patterns {
     /// was. Nested rather than keyed by a pair so that it survives a round
     /// trip through a format whose map keys are strings.
     against: BTreeMap<DriveType, BTreeMap<Element, Trail>>,
-    /// The tick the trails were last faded on, so fading can be charged by
+    /// The turn the trails were last faded on, so fading can be charged by
     /// the day however often it is asked for.
     #[serde(default)]
     faded_at: u32,

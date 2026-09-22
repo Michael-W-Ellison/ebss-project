@@ -446,13 +446,13 @@ fn a_fight_needs_something_within_arms_reach() {
     );
 }
 
-// --- a drive that wins the tick has to come out as something ---------------
+// --- a drive that wins the turn has to come out as something ---------------
 
 /// Fear, with nowhere to hide, still does something about itself.
 ///
 /// `what_this_drive_offers(Safety)` offered `SeekShelter` when there was a
 /// roof within reach and `None` otherwise - so an agent frightened in open
-/// country could have fear as its strongest drive, win the tick with it, and
+/// country could have fear as its strongest drive, win the turn with it, and
 /// produce no behaviour at all. The specification is that drives result in
 /// actions, and this is the drive where that matters most.
 #[test]
@@ -563,13 +563,13 @@ fn fear_of_running_short_comes_out_as_answering_the_need() {
     agent.nutrition.energy_reserves = 0.0;
     agent.state.energy = 10.0;
     agent.state.health = 40.0;
-    // The reserve is the death clock `ticks_before_this_kills_me` reads, and
+    // The reserve is the death clock `turns_before_this_kills_me` reads, and
     // it is what "days from starving" actually means in this model.
     agent.state.physiology.reserve = 0.0;
     agent.state.physiology.stomach.clear();
     agent.state.physiology.gut.clear();
     if let Some(hunger) = agent.drives.get_mut(crate::core::DriveType::Hunger) {
-        hunger.denied_ticks = 200;
+        hunger.denied_turns = 200;
         hunger.value = 0.95;
     }
 

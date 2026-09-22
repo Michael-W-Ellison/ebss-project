@@ -25,7 +25,7 @@ pub fn render_save_dialog(ui: &mut Ui, state: &mut GuiState, current_time: f64) 
     if let Some(snapshot) = &state.latest_snapshot {
         ui.add_space(10.0);
         ui.label(RichText::new("Current State:").strong());
-        ui.label(format!("Tick: {}", snapshot.tick));
+        ui.label(format!("Turn: {}", snapshot.turn));
         ui.label(format!("Agents: {}", snapshot.population.agents.iter().filter(|a| a.is_alive).count()));
         ui.label(format!("Buildings: {}", snapshot.world.buildings.len()));
     }
@@ -110,8 +110,8 @@ pub fn render_load_dialog(ui: &mut Ui, state: &mut GuiState, current_time: f64) 
                     let is_selected = selected_idx == Some(idx);
 
                     let label_text = format!(
-                        "{} | Tick: {} | Agents: {} | {}",
-                        save.filename, save.tick, save.agent_count, save.modified
+                        "{} | Turn: {} | Agents: {} | {}",
+                        save.filename, save.turn, save.agent_count, save.modified
                     );
 
                     let response = ui.selectable_label(is_selected, &label_text);
@@ -204,7 +204,7 @@ fn refresh_save_list(state: &mut GuiState) {
                     state.save_load_state.available_saves.push(SaveFileInfo {
                         filename: filename.to_string(),
                         path: path.to_string_lossy().to_string(),
-                        tick: 0,
+                        turn: 0,
                         agent_count: 0,
                         modified,
                     });

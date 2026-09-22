@@ -1,12 +1,12 @@
 // src/analytics/tests/danger_cadence_tests.rs
 //! Tests that somebody with something on them decides minute by minute.
 //!
-//! "Every 30 ticks/minutes agents should have the option of making a decision.
+//! "Every 30 turns/minutes agents should have the option of making a decision.
 //! This does not apply if an agent encounters a dangerous situation, as they
 //! must then make decisions minute by minute to enhance their survival odds."
 //!
 //! Note on the fixtures: it is not enough to write a fright into somebody's
-//! emotions and tick. Fear and anger are re-appraised from what is actually
+//! emotions and turn. Fear and anger are re-appraised from what is actually
 //! there every turn - see ISSUES #260 - so a wolf that does not exist is
 //! forgotten before anybody acts on it, which is right. A test about being in
 //! danger has to put something in the world to be in danger of.
@@ -67,7 +67,7 @@ fn an_untroubled_turn_is_one_decision() {
     let mut simulation = one_person_alone();
 
     for _ in 0..6 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     assert_eq!(
@@ -82,7 +82,7 @@ fn a_man_with_a_wolf_on_him_is_asked_more_than_once() {
     let mut simulation = one_person_and_a_wolf();
 
     for _ in 0..8 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     assert!(
@@ -112,7 +112,7 @@ fn a_wolf_across_the_country_is_not_a_danger() {
     simulation.population.agents[0].state.health = HURT_ENOUGH_TO_BE_AFRAID;
 
     for _ in 0..8 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     assert_eq!(
@@ -128,7 +128,7 @@ fn nobody_gets_more_minutes_than_the_turn_holds() {
 
     let turns = 8;
     for _ in 0..turns {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let ceiling = turns * (MINUTES_PER_TURN as u64 - 1);
@@ -144,7 +144,7 @@ fn nobody_gets_more_minutes_than_the_turn_holds() {
 fn the_fast_clock_costs_nothing_where_there_is_no_danger() {
     let mut quiet = one_person_alone();
     for _ in 0..12 {
-        quiet.tick();
+        quiet.take_a_turn();
     }
 
     assert_eq!(

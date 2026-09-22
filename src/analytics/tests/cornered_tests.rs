@@ -254,7 +254,7 @@ fn it_does_not_run_into_the_wood_the_pack_lives_in() {
         Position::new(6, 25),
         "wolves",
         1.0,
-        simulation.current_tick,
+        simulation.current_turn,
     );
 
     let ran = simulation.execute_action(&Action::FleeFrom { away_from: (29, 25, 0) }, 0);

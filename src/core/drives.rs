@@ -44,7 +44,7 @@ pub enum DriveType {
     /// It rises on a threat the agent reckons it *can* face, and on threats to
     /// its own that still have room to get clear. Because both drives read one
     /// appraisal, a change in what the agent makes of the situation moves the
-    /// demand from one to the other in the same tick, with nothing in between
+    /// demand from one to the other in the same turn, with nothing in between
     /// to convert.
     Aggression,
     /// Need for resource stockpiles
@@ -120,7 +120,7 @@ impl DriveType {
         }
     }
 
-    /// Get the base accumulation rate per tick
+    /// Get the base accumulation rate per turn
     pub fn base_accumulation_rate(&self) -> f32 {
         match self {
             // Derived from the stomach rather than chosen.
@@ -164,7 +164,7 @@ impl DriveType {
             DriveType::Utility => 0.002,
             DriveType::Construction => 0.002,
             // Driven by where the children are rather than by the clock, so
-            // this only ticks over slowly on its own
+            // this only turns over slowly on its own
             DriveType::Protection => 0.001,
         }
     }
@@ -200,7 +200,7 @@ impl DriveType {
     /// The nine that do read the world used to build on a clock like the
     /// others, and because their satisfying actions are chosen rarely they sat
     /// pinned at their ceiling for whole runs - nine of fifteen drives at 1.00
-    /// and active every tick, which left the per-agent weight as the only thing
+    /// and active every turn, which left the per-agent weight as the only thing
     /// telling them apart. Reading the conditions the specification gives them
     /// is what unpins them: a drive with nothing asking for it now falls away
     /// instead of waiting at the top.
@@ -269,8 +269,8 @@ impl DriveType {
                 // worst comes to less than half of what carries this drive -
                 // because fear of running short must not outbid the need it
                 // is about. An earlier cut folded the whole of what an agent
-                // stood to lose in here, fear beat hunger every tick, and a
-                // settlement of eight starved inside four thousand ticks with
+                // stood to lose in here, fear beat hunger every turn, and a
+                // settlement of eight starved inside four thousand turns with
                 // full bushes around it.
                 let running_short = ctx.dread.clamp(0.0, 1.0) * Self::WHAT_DREAD_IS_WORTH;
 
@@ -540,12 +540,12 @@ impl DriveType {
 /// by "buildable templates seen, others building, drive synergy". Some of those
 /// conditions are things an agent knows about itself and some are things only
 /// the world knows. This is the second kind: the simulation fills it in once
-/// per agent per tick, and the agent folds in what it knows about itself when
-/// its drives are ticked.
+/// per agent per turn, and the agent folds in what it knows about itself when
+/// its drives are turned.
 ///
 /// A default one describes an agent standing in open country in daylight with
 /// nothing happening: no threat, no neighbours at work, no children, and no
-/// ground worth breaking. Agents ticked without a world - a bare `Population`
+/// ground worth breaking. Agents turned without a world - a bare `Population`
 /// in a test - get that, which is the right answer for a world that is not
 /// there.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -585,7 +585,7 @@ pub struct Surroundings {
     /// The whole of the switch. The same `what_is_on_me` becomes fear when
     /// this is false and anger when it is true, so a change in what the agent
     /// makes of the situation moves the demand from one drive to the other in
-    /// the tick it changes, with nothing in between to convert.
+    /// the turn it changes, with nothing in between to convert.
     pub could_face_it: bool,
 
     /// One of this agent's own is between the thing and open ground, and
@@ -655,10 +655,10 @@ pub struct Drive {
     pub weight: f32,
     /// How long this drive has been asking without being answered
     #[serde(default)]
-    pub denied_ticks: u32,
+    pub denied_turns: u32,
     /// And how long it has gone without needing to ask at all
     #[serde(default)]
-    pub answered_ticks: u32,
+    pub answered_turns: u32,
     /// How much this particular person cares about this particular drive,
     /// over and above what anybody would.
     ///
@@ -707,8 +707,8 @@ impl Drive {
             value: 0.0,
             threshold: drive_type.default_threshold(),
             weight: 1.0,
-            denied_ticks: 0,
-            answered_ticks: 0,
+            denied_turns: 0,
+            answered_turns: 0,
             lean: 1.0,
         }
     }
@@ -720,8 +720,8 @@ impl Drive {
             value: 0.0,
             threshold: drive_type.default_threshold(),
             weight,
-            denied_ticks: 0,
-            answered_ticks: 0,
+            denied_turns: 0,
+            answered_turns: 0,
             lean: 1.0,
         }
     }
@@ -734,12 +734,12 @@ impl Drive {
     /// attention, so a need that keeps being deferred does not sit politely at
     /// its threshold - it takes the agent over.
     pub fn pressure(&self) -> f32 {
-        1.0 + (self.denied_ticks as f32 / Self::PRESSURE_SPAN).min(Self::MAX_PRESSURE - 1.0)
+        1.0 + (self.denied_turns as f32 / Self::PRESSURE_SPAN).min(Self::MAX_PRESSURE - 1.0)
     }
 
     /// How long this drive has gone unanswered while asking
-    pub fn denied_ticks(&self) -> u32 {
-        self.denied_ticks
+    pub fn denied_turns(&self) -> u32 {
+        self.denied_turns
     }
 
     /// How long this drive has gone without having to ask at all.
@@ -749,8 +749,8 @@ impl Drive {
     /// evidence that it is not about to become one. This is what a settlement
     /// uses to decide it can afford a child, in place of "I had a meal this
     /// morning", which says nothing about next week.
-    pub fn answered_ticks(&self) -> u32 {
-        self.answered_ticks
+    pub fn answered_turns(&self) -> u32 {
+        self.answered_turns
     }
 
     /// Increase the drive value
@@ -767,7 +767,7 @@ impl Drive {
         self.value = (self.value - amount).max(0.0);
 
         if !self.is_active() {
-            self.denied_ticks /= 2;
+            self.denied_turns /= 2;
         }
     }
 
@@ -794,7 +794,7 @@ impl Drive {
     ///
     /// It has to be reckoned against the drive's own rate rather than set as
     /// one number for all of them. A flat rate is a different thing to each
-    /// drive: at 0.004 a tick it was four times what Reproduction, Luxury and
+    /// drive: at 0.004 a turn it was four times what Reproduction, Luxury and
     /// Protection build at and half what Safety builds at, so the slow drives
     /// were quietly halved. Reproduction is shut out about a tenth of the
     /// time, which under a flat fade left it climbing at 50.5% of its proper
@@ -819,19 +819,19 @@ impl Drive {
 
         // And it is not being denied while nobody could have answered it: the
         // pressure of going without is for needs an agent could have met
-        self.denied_ticks = self.denied_ticks.saturating_sub(1);
+        self.denied_turns = self.denied_turns.saturating_sub(1);
     }
 
-    /// Update the drive for one tick
-    pub fn tick(&mut self) {
-        self.tick_at(self.drive_type.base_accumulation_rate());
+    /// Update the drive for one turn
+    pub fn take_a_turn(&mut self) {
+        self.turn_at(self.drive_type.base_accumulation_rate());
     }
 
-    /// Tick, knowing whether the agent's immediate needs are answered.
+    /// Turn, knowing whether the agent's immediate needs are answered.
     ///
     /// Long-term drives run several times faster in an agent that is fed,
     /// watered, rested and warm, and nearly stop in one that is not.
-    pub fn tick_with_security(&mut self, secure: bool) {
+    pub fn turn_with_security(&mut self, secure: bool) {
         let rate = self.drive_type.base_accumulation_rate();
 
         let rate = if self.drive_type.is_long_term() {
@@ -844,17 +844,17 @@ impl Drive {
             rate
         };
 
-        self.tick_at(rate);
+        self.turn_at(rate);
     }
 
-    /// Tick, knowing both whether the agent's immediate needs are answered and
+    /// Turn, knowing both whether the agent's immediate needs are answered and
     /// what its situation is asking of it.
     ///
     /// A drive that reads the world moves towards what the situation calls for
     /// rather than climbing a clock, so it settles where the conditions put it
     /// and falls away when they stop. A drive that does not read the world
     /// builds as it always did.
-    pub fn tick_in(&mut self, ctx: &DriveContext, secure: bool) {
+    pub fn turn_in(&mut self, ctx: &DriveContext, secure: bool) {
         let rate = self.drive_type.base_accumulation_rate();
 
         let rate = if self.drive_type.is_long_term() {
@@ -869,14 +869,14 @@ impl Drive {
 
         match self.drive_type.demand(ctx) {
             Some(wanted) => self.approach(wanted, rate),
-            None => self.tick_at(rate),
+            None => self.turn_at(rate),
         }
     }
 
 
     /// Move towards what the situation calls for.
     ///
-    /// The gap closes by a share of itself each tick, so a drive whose base
+    /// The gap closes by a share of itself each turn, so a drive whose base
     /// rate is high answers a change in the situation quickly - Safety, at
     /// 0.02, is most of the way to a new level within a day of a predator
     /// appearing - and one whose rate is low takes seasons. Being denied still
@@ -893,27 +893,27 @@ impl Drive {
     /// has not had to.
     fn note_whether_it_had_to_ask(&mut self) {
         if self.is_active() {
-            self.denied_ticks = self.denied_ticks.saturating_add(1);
-            self.answered_ticks = 0;
+            self.denied_turns = self.denied_turns.saturating_add(1);
+            self.answered_turns = 0;
         } else {
-            self.answered_ticks = self.answered_ticks.saturating_add(1);
+            self.answered_turns = self.answered_turns.saturating_add(1);
 
-            if self.denied_ticks > 0 {
+            if self.denied_turns > 0 {
                 // Below the threshold the grievance fades, but not instantly:
                 // an agent that has been starving is wary for a while after
                 // its first meal.
-                self.denied_ticks -= 1;
+                self.denied_turns -= 1;
             }
         }
     }
 
-    /// One tick of a drive building at the given rate, keeping the tally of
+    /// One turn of a drive building at the given rate, keeping the tally of
     /// how long it has been asking.
     ///
     /// A drive that is over its threshold and still not answered builds faster
-    /// every tick it waits. That is what makes hunger escalate from a reason
+    /// every turn it waits. That is what makes hunger escalate from a reason
     /// to go and pick berries into a reason to walk off the map.
-    fn tick_at(&mut self, rate: f32) {
+    fn turn_at(&mut self, rate: f32) {
         self.note_whether_it_had_to_ask();
         self.increase(rate * self.pressure());
     }
@@ -921,7 +921,7 @@ impl Drive {
     /// Fully satisfy this drive
     pub fn satisfy(&mut self) {
         self.value = 0.0;
-        self.denied_ticks = 0;
+        self.denied_turns = 0;
     }
 
     /// Partially satisfy this drive
@@ -1099,7 +1099,7 @@ impl DriveState {
         }
 
         self.get(drive_type)
-            .map(|drive| drive.value < drive.threshold && drive.denied_ticks < Self::RELIABLY)
+            .map(|drive| drive.value < drive.threshold && drive.denied_turns < Self::RELIABLY)
             .unwrap_or(true)
     }
 
@@ -1150,27 +1150,27 @@ impl DriveState {
         self.most_urgent()
     }
 
-    /// Update all drives for one tick
-    pub fn tick(&mut self) {
+    /// Update all drives for one turn
+    pub fn take_a_turn(&mut self) {
         for drive in &mut self.drives {
-            drive.tick();
+            drive.take_a_turn();
         }
     }
 
-    /// Tick every drive, knowing whether the agent's immediate needs are met
-    pub fn tick_with_security(&mut self, secure: bool) {
+    /// Turn every drive, knowing whether the agent's immediate needs are met
+    pub fn turn_with_security(&mut self, secure: bool) {
         for drive in &mut self.drives {
-            drive.tick_with_security(secure);
+            drive.turn_with_security(secure);
         }
     }
 
-    /// Tick every drive against the agent's situation.
+    /// Turn every drive against the agent's situation.
     ///
-    /// The shelter drive is read before the rest are ticked and handed to them
+    /// The shelter drive is read before the rest are turned and handed to them
     /// in the context, because Construction is specified to rise partly on
     /// "drive synergy" and this is what that means: wanting to be out of the
     /// weather is a reason to build something.
-    pub fn tick_in(&mut self, ctx: &DriveContext, secure: bool) {
+    pub fn turn_in(&mut self, ctx: &DriveContext, secure: bool) {
         let mut ctx = ctx.clone();
         ctx.at_leisure = secure;
         ctx.shelter_pressing = self
@@ -1180,7 +1180,7 @@ impl DriveState {
 
         // Which chains are open has to be settled before anything moves, or
         // a drive would be judged against predecessors that had already
-        // shifted under it this same tick
+        // shifted under it this same turn
         let open: Vec<bool> = self
             .drives
             .iter()
@@ -1189,7 +1189,7 @@ impl DriveState {
 
         for (drive, open) in self.drives.iter_mut().zip(open) {
             if open {
-                drive.tick_in(&ctx, secure);
+                drive.turn_in(&ctx, secure);
             } else {
                 // Not merely held where it stands: a need that is out of reach
                 // stops being felt. Somebody who has gone hungry for a week is
@@ -1286,11 +1286,11 @@ mod tests {
     }
 
     #[test]
-    fn test_tick_accumulation() {
+    fn test_turn_accumulation() {
         let mut drive = Drive::new(DriveType::Hunger);
         let initial = drive.value;
         
-        drive.tick();
+        drive.take_a_turn();
         
         assert!(drive.value > initial);
     }

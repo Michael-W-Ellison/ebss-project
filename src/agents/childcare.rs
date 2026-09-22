@@ -4,16 +4,16 @@
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-/// Duration of nursing period in ticks (infant stage)
+/// Duration of nursing period in turns (infant stage)
 pub const NURSING_DURATION: u32 = 500;
 
 /// Maximum distance from caregiver before infant suffers
 pub const MAX_CAREGIVER_DISTANCE: f32 = 10.0;
 
-/// Health loss per tick when not nursed
+/// Health loss per turn when not nursed
 pub const UNNURSED_HEALTH_LOSS: f32 = 0.5;
 
-/// Energy restored per nursing tick
+/// Energy restored per nursing turn
 pub const NURSING_ENERGY_GAIN: f32 = 5.0;
 
 /// Developmental nutrition tracking for early life stages
@@ -21,9 +21,9 @@ pub const NURSING_ENERGY_GAIN: f32 = 5.0;
 pub struct DevelopmentalNutrition {
     /// Nutrition quality during pregnancy (inherited from mother)
     pub prenatal_quality: f32,
-    /// Nutrition quality during infant stage (0-500 ticks)
+    /// Nutrition quality during infant stage (0-500 turns)
     pub infant_quality: f32,
-    /// Nutrition quality during child stage (500-2500 ticks)
+    /// Nutrition quality during child stage (500-2500 turns)
     pub child_quality: f32,
     /// Number of samples for infant stage
     infant_samples: u32,
@@ -74,13 +74,13 @@ impl DevelopmentalNutrition {
     }
 
     /// Update infant nutrition quality
-    /// Called each tick during infant stage
+    /// Called each turn during infant stage
     pub fn update_infant_nutrition(&mut self, hunger_satisfaction: f32, was_nursed: bool) {
         if self.finalized {
             return;
         }
 
-        let quality_this_tick = if was_nursed {
+        let quality_this_turn = if was_nursed {
             // Nursing provides excellent nutrition
             0.9 + (hunger_satisfaction * 0.1)
         } else {
@@ -90,21 +90,21 @@ impl DevelopmentalNutrition {
 
         self.infant_samples += 1;
         let weight = 1.0 / self.infant_samples as f32;
-        self.infant_quality = self.infant_quality * (1.0 - weight) + quality_this_tick * weight;
+        self.infant_quality = self.infant_quality * (1.0 - weight) + quality_this_turn * weight;
     }
 
     /// Update child nutrition quality
-    /// Called each tick during child stage
+    /// Called each turn during child stage
     pub fn update_child_nutrition(&mut self, hunger_satisfaction: f32, health_percentage: f32) {
         if self.finalized {
             return;
         }
 
-        let quality_this_tick = hunger_satisfaction * (health_percentage / 100.0);
+        let quality_this_turn = hunger_satisfaction * (health_percentage / 100.0);
 
         self.child_samples += 1;
         let weight = 1.0 / self.child_samples as f32;
-        self.child_quality = self.child_quality * (1.0 - weight) + quality_this_tick * weight;
+        self.child_quality = self.child_quality * (1.0 - weight) + quality_this_turn * weight;
     }
 
     /// Finalize developmental stats when transitioning to adult
@@ -188,29 +188,29 @@ pub struct NursingState {
     pub primary_caregiver: Uuid,
     /// Secondary caregivers who can also nurse
     pub secondary_caregivers: Vec<Uuid>,
-    /// Tick when nursing period ends
-    pub nursing_end_tick: u32,
-    /// Ticks since last nursed
-    pub ticks_since_nursed: u32,
+    /// Turn when nursing period ends
+    pub nursing_end_turn: u32,
+    /// Turns since last nursed
+    pub turns_since_nursed: u32,
     /// Whether currently being nursed
     pub is_nursing: bool,
 }
 
 impl NursingState {
     /// Create new nursing state for a newborn
-    pub fn new(birth_tick: u32, mother_id: Uuid) -> Self {
+    pub fn new(birth_turn: u32, mother_id: Uuid) -> Self {
         Self {
             primary_caregiver: mother_id,
             secondary_caregivers: Vec::new(),
-            nursing_end_tick: birth_tick + NURSING_DURATION,
-            ticks_since_nursed: 0,
+            nursing_end_turn: birth_turn + NURSING_DURATION,
+            turns_since_nursed: 0,
             is_nursing: false,
         }
     }
 
     /// Check if nursing period is still active
-    pub fn needs_nursing(&self, current_tick: u32) -> bool {
-        current_tick < self.nursing_end_tick
+    pub fn needs_nursing(&self, current_turn: u32) -> bool {
+        current_turn < self.nursing_end_turn
     }
 
     /// Add a secondary caregiver
@@ -227,31 +227,31 @@ impl NursingState {
             || self.secondary_caregivers.contains(&agent_id)
     }
 
-    /// Record a nursing tick
+    /// Record a nursing turn
     pub fn nurse(&mut self) {
-        self.ticks_since_nursed = 0;
+        self.turns_since_nursed = 0;
         self.is_nursing = true;
     }
 
-    /// Record a tick without nursing
-    pub fn tick_without_nursing(&mut self) {
-        self.ticks_since_nursed += 1;
+    /// Record a turn without nursing
+    pub fn turn_without_nursing(&mut self) {
+        self.turns_since_nursed += 1;
         self.is_nursing = false;
     }
 
     /// Check if infant is suffering from lack of nursing
     pub fn is_suffering(&self) -> bool {
-        self.ticks_since_nursed > 10
+        self.turns_since_nursed > 10
     }
 
     /// Get health penalty for lack of nursing
     pub fn health_penalty(&self) -> f32 {
-        if self.ticks_since_nursed <= 10 {
+        if self.turns_since_nursed <= 10 {
             0.0
         } else {
             // Penalty increases with time without nursing
-            let excess_ticks = (self.ticks_since_nursed - 10) as f32;
-            (excess_ticks * UNNURSED_HEALTH_LOSS).min(5.0) // Cap at 5 per tick
+            let excess_turns = (self.turns_since_nursed - 10) as f32;
+            (excess_turns * UNNURSED_HEALTH_LOSS).min(5.0) // Cap at 5 per turn
         }
     }
 }
@@ -299,7 +299,7 @@ mod tests {
 
         // Simulate lack of nursing
         for _ in 0..20 {
-            nursing.tick_without_nursing();
+            nursing.turn_without_nursing();
         }
         assert!(nursing.is_suffering());
         assert!(nursing.health_penalty() > 0.0);

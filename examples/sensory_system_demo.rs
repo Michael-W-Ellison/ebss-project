@@ -116,14 +116,14 @@ fn main() {
     agent.senses.attention.focus_on(Focus::Agent(agent_1));
 
     println!("Current focus: {:?}", agent.senses.attention.focus);
-    println!("Attention span: {} ticks", agent.senses.attention.attention_span);
+    println!("Attention span: {} turns", agent.senses.attention.attention_span);
     println!("Distractibility: {:.2}", agent.senses.attention.distractibility);
 
-    // Simulate some ticks
+    // Simulate some turns
     for _ in 0..50 {
-        agent.senses.attention.tick();
+        agent.senses.attention.take_a_turn();
     }
-    println!("After 50 ticks - Still focused: {}", agent.senses.attention.focus.is_some());
+    println!("After 50 turns - Still focused: {}", agent.senses.attention.focus.is_some());
 
     // === Part 5: Percept Processing ===
     println!("\n--- Part 5: Percept Processing ---");

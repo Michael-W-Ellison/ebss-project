@@ -205,7 +205,7 @@ impl Simulation {
                 // them reported "standing off the map, with 0 ways out".
                 //
                 // One agent a world, from the day it wandered out to the day
-                // it died: 10,537 agent-ticks in the first world measured,
+                // it died: 10,537 agent-turns in the first world measured,
                 // which is two hundred and twenty days of a life spent
                 // standing still.
                 let on_the_map = next.0 >= 0

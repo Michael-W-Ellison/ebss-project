@@ -253,8 +253,8 @@ impl eframe::App for EbssApp {
                             SimState::Stepping => "Stepping",
                         };
                         ui.label(format!(
-                            "Tick: {} | Agents: {} | {}",
-                            snapshot.tick,
+                            "Turn: {} | Agents: {} | {}",
+                            snapshot.turn,
                             snapshot.population.agents.iter().filter(|a| a.is_alive).count(),
                             status
                         ));

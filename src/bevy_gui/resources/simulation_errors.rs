@@ -27,8 +27,8 @@ impl ErrorSeverity {
 /// A single error from the simulation thread
 #[derive(Debug, Clone)]
 pub struct SimulationError {
-    /// Simulation tick when the error occurred
-    pub tick: u32,
+    /// Simulation turn when the error occurred
+    pub turn: u32,
     /// Error message
     pub message: String,
     /// Severity level
@@ -40,9 +40,9 @@ pub struct SimulationError {
 }
 
 impl SimulationError {
-    pub fn warning(tick: u32, message: impl Into<String>) -> Self {
+    pub fn warning(turn: u32, message: impl Into<String>) -> Self {
         Self {
-            tick,
+            turn,
             message: message.into(),
             severity: ErrorSeverity::Warning,
             timestamp: 0.0,
@@ -50,9 +50,9 @@ impl SimulationError {
         }
     }
 
-    pub fn error(tick: u32, message: impl Into<String>) -> Self {
+    pub fn error(turn: u32, message: impl Into<String>) -> Self {
         Self {
-            tick,
+            turn,
             message: message.into(),
             severity: ErrorSeverity::Error,
             timestamp: 0.0,
@@ -60,9 +60,9 @@ impl SimulationError {
         }
     }
 
-    pub fn fatal(tick: u32, message: impl Into<String>) -> Self {
+    pub fn fatal(turn: u32, message: impl Into<String>) -> Self {
         Self {
-            tick,
+            turn,
             message: message.into(),
             severity: ErrorSeverity::Fatal,
             timestamp: 0.0,
@@ -158,7 +158,7 @@ mod tests {
     #[test]
     fn test_simulation_error_creation() {
         let err = SimulationError::warning(100, "Test warning");
-        assert_eq!(err.tick, 100);
+        assert_eq!(err.turn, 100);
         assert_eq!(err.message, "Test warning");
         assert_eq!(err.severity, ErrorSeverity::Warning);
         assert!(err.context.is_none());
@@ -185,7 +185,7 @@ mod tests {
         assert_eq!(errors.unacknowledged_count, 2);
 
         // Newest should be first
-        assert_eq!(errors.latest().unwrap().tick, 2);
+        assert_eq!(errors.latest().unwrap().turn, 2);
     }
 
     #[test]
@@ -225,7 +225,7 @@ mod tests {
         }
 
         assert_eq!(errors.len(), 5);
-        // Most recent should be tick 9
-        assert_eq!(errors.latest().unwrap().tick, 9);
+        // Most recent should be turn 9
+        assert_eq!(errors.latest().unwrap().turn, 9);
     }
 }

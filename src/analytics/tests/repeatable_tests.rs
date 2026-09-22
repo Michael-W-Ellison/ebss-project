@@ -12,7 +12,7 @@
 //! and `Uuid::new_v4()` all ask the operating system and none of them can be
 //! seeded. The last ten of those - every wander an animal takes, and whether
 //! it grazes, rests or hunts - moved the beasts differently in every run, and
-//! by the fiftieth tick it had reached the people through the Safety drive of
+//! by the fiftieth turn it had reached the people through the Safety drive of
 //! anybody who could see one.
 //!
 //! **Order taken from a `HashMap`.** Rust seeds hash iteration *per process*,
@@ -60,7 +60,7 @@ fn fingerprint(sim: &Simulation) -> u64 {
 }
 
 /// A world's fingerprint, and how many times it rolled to get there.
-fn a_world_from(seed: u64, ticks: usize) -> (u64, u64) {
+fn a_world_from(seed: u64, turns: usize) -> (u64, u64) {
     crate::core::dice::seed(seed);
     let world = World::new(WorldConfig::default());
     let mut population = Population::new();
@@ -68,8 +68,8 @@ fn a_world_from(seed: u64, ticks: usize) -> (u64, u64) {
         population.spawn_agent(AgentConfig::default());
     }
     let mut simulation = Simulation::new(world, population);
-    for _ in 0..ticks {
-        simulation.tick();
+    for _ in 0..turns {
+        simulation.take_a_turn();
     }
     (fingerprint(&simulation), crate::core::dice::draws_taken())
 }
@@ -119,13 +119,34 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // the candidate list stopped offering verbs whose action names a product
     // rather than a target - see `wanting::afforded::what_i_could_try_here`.
     // Both change which branch a turn takes, and so how many times it rolls.
-    const WHAT_SEED_4242_ROLLS_IN_120_TICKS: u64 = 8_717;
+    //
+    // Then 8,717 until the clock was split into ticks and turns, and the
+    // constants derived from `TICKS_PER_DAY` were put back on the one they
+    // are counted in. The dread horizon is the one that shows here: every
+    // agent read itself as half a day from dying, so every agent took the
+    // frightened branch, and the minute-by-minute danger cadence rolled for
+    // each of them. Fewer rolls now because fewer people are terrified.
+    //
+    // Then 7,894 until how fast a thing goes off became the product of its
+    // tags and what it is kept in. What a pack holds now keeps at a rate that
+    // depends on what is in the pack, and what is buried keeps at a rate
+    // rather than by having its own clock wound forward - so what a person
+    // finds worth eating, worth burying and worth carrying is a different
+    // set, and a different set of branches gets taken.
+    // And down 3.9% for the clock audit - the five places a tick stood where a
+    // pass belonged, ISSUES_FOUND #218. The *short* count moving at all is the
+    // interesting part and is what tells this apart from #217, which moved
+    // only the year: a hundred and twenty turns is two and a half days, and
+    // two and a half days is long enough for a spell of weather to end now
+    // that a ten-hour front lasts ten hours instead of twelve days. A world
+    // whose weather turns over draws for its weather.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_600;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
     assert_eq!(
-        rolled, WHAT_SEED_4242_ROLLS_IN_120_TICKS,
-        "seed 4242 rolled {rolled} times where it has always rolled {WHAT_SEED_4242_ROLLS_IN_120_TICKS}. \
+        rolled, WHAT_SEED_4242_ROLLS_IN_120_TURNS,
+        "seed 4242 rolled {rolled} times where it has always rolled {WHAT_SEED_4242_ROLLS_IN_120_TURNS}. \
          Either the model was changed on purpose - in which case put {rolled} in \
          the constant - or something is deciding a branch on an input the seed \
          does not fix, which is what this is here to catch."
@@ -142,12 +163,52 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
 #[test]
 fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     use crate::environment::seasons::{DAYS_PER_YEAR, TICKS_PER_DAY};
-    // 732,915 until the same two changes. This one had already drifted before
-    // them and was standing red, so the number here is the first recorded
-    // count since it was last true rather than a step from the one above it.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 793_014;
+    // 732,915, then 793,014 for the curiosity and candidate-list changes, and
+    // now this for the lifecycle work: a child under six takes no turn of its
+    // own and is put where its keeper is, which moves both how many turns a
+    // year contains and where the people in it are standing.
+    // And down again with the clock fixes - see the note on seed 4242. This
+    // figure also stopped meaning what it said: the run above it asked for a
+    // year and took `DAYS_PER_YEAR * TICKS_PER_DAY` steps, which is thirty
+    // years. Counted in planning periods, a year is a year again.
+    //
+    // Down eleven per cent again for the decay conversion. A year is where
+    // that one shows: food in a pack, food in a hole and food lying in the
+    // weather all go off at rates that are now read off the same three
+    // modifiers, and over a whole year the difference is a settlement holding
+    // a different amount of different things and deciding differently about
+    // all of it.
+    //
+    // And up a third from there when the fishery went back to holding a
+    // season's run rather than a rate per pass. That is the largest single
+    // move any of these has made, and it is the one to be least surprised by:
+    // a full spring used to bring ninety fish into a reach that holds sixty,
+    // so a river was never empty, and it is 28.8 now. A year is exactly where
+    // that tells - the short run above did not move at all - because what it
+    // changes is whether standing in the water goes on being the answer after
+    // the run is past. It is not, now, and a people who cannot fish in July
+    // do something else in July.
+    //
+    // And down 23.8% from there when the grazing intake and the plant growth
+    // rates were put back onto the clock they are counted against - see
+    // ISSUES_FOUND #217. The short count above did not move at all, which is
+    // the expected shape: nothing about a person's half hour changed, and
+    // everything about what the country will feed did. A world with four
+    // hundred head of stock on it instead of seventeen hundred has fewer
+    // animals taking turns, fewer of them being born and dying, and a
+    // different amount of forage standing where the people are walking.
+    //
+    // The short count and the long one moving separately is the useful part.
+    // A change that moves both is in the decision loop; one that moves only
+    // the year is in the world.
+    // And down 8.2% again for the clock audit (#218). Less than the ecology
+    // fix cost and in the same direction, which is the shape to expect: a
+    // world with a fifth of the animals on it and wild food coming back at
+    // the rate it was actually measured at has fewer things happening in it
+    // to draw for.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 571_835;
 
-    let a_year = (DAYS_PER_YEAR * TICKS_PER_DAY) as usize;
+    let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
 
     assert_eq!(
@@ -171,7 +232,7 @@ fn a_different_seed_is_a_different_world() {
 /// A source-level guard rather than a behavioural one, because that is the
 /// only kind that works here: the world test above catches a stray
 /// `thread_rng` only if the code path happens to run in a hundred and twenty
-/// ticks, and a new one in a rarely-taken branch would sit undetected until it
+/// turns, and a new one in a rarely-taken branch would sit undetected until it
 /// spoiled somebody's measurement months later.
 #[test]
 fn every_roll_comes_from_the_one_stream() {

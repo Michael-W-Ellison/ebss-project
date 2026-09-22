@@ -100,7 +100,7 @@ fn main() {
             if !species.living_products.is_empty() {
                 println!("  Living products:");
                 for product in &species.living_products {
-                    println!("    - {} x{} every {} ticks",
+                    println!("    - {} x{} every {} turns",
                         product.material_id,
                         product.quantity,
                         product.production_time);
@@ -193,14 +193,14 @@ fn main() {
     println!();
 
     // Simulate aging and stamina
-    println!("Simulating 50 ticks...");
+    println!("Simulating 50 turns...");
     for _ in 0..50 {
-        sheep1.tick_age();
-        sheep2.tick_age();
+        sheep1.turn_age();
+        sheep2.turn_age();
         sheep2.recover_stamina(1.0);
     }
 
-    println!("After 50 ticks:");
+    println!("After 50 turns:");
     println!("  Sheep 1: Age {}, Stamina {:.0}%",
         sheep1.age,
         sheep1.stamina_percentage() * 100.0);
@@ -321,7 +321,7 @@ fn main() {
 
     println!("Aging to maturity...");
     while !chicken.is_mature() {
-        chicken.tick_age();
+        chicken.turn_age();
     }
 
     println!("Mature chicken:");
@@ -338,7 +338,7 @@ fn main() {
         if !species.living_products.is_empty() {
             println!("\n{}:", species.name);
             for product in &species.living_products {
-                println!("  {} x{} every {} ticks",
+                println!("  {} x{} every {} turns",
                     product.material_id,
                     product.quantity,
                     product.production_time);
@@ -397,13 +397,13 @@ fn main() {
     }
     println!();
 
-    // ===== Part 19: Manager Tick Simulation =====
-    println!("--- Part 19: Population Simulation (100 ticks) ---");
+    // ===== Part 19: Manager Turn Simulation =====
+    println!("--- Part 19: Population Simulation (100 turns) ---");
 
     println!("Initial population: {}", manager.population_count());
 
-    // Simulate 100 ticks. Animals graze off the ground they are standing on,
-    // so the tick wants a world to stand in.
+    // Simulate 100 turns. Animals graze off the ground they are standing on,
+    // so the turn wants a world to stand in.
     let mut ground = ebss::world::Grid::new(64, 64);
     ground.generate_terrain();
     ground.settle_soil();
@@ -411,7 +411,7 @@ fn main() {
     growing.spawn_naturalistic(&ground);
 
     for pass in 0..100u32 {
-        manager.tick_in_world(
+        manager.turn_in_world(
             &mut ground,
             &mut growing,
             10.0,
@@ -423,7 +423,7 @@ fn main() {
         );
     }
 
-    println!("After 100 ticks:");
+    println!("After 100 turns:");
     println!("  Population: {}", manager.population_count());
 
     // Check oldest animal

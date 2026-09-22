@@ -433,12 +433,12 @@ fn render_tech_details(ui: &mut Ui, state: &mut GuiState, snapshot: &TechTreeSna
         // Show recent discoveries
         if !snapshot.discovery_history.is_empty() {
             ui.heading("Recent Discoveries");
-            for (tick, tech_id) in snapshot.discovery_history.iter().rev().take(5) {
+            for (turn, tech_id) in snapshot.discovery_history.iter().rev().take(5) {
                 if let Some(node) = snapshot.nodes.iter().find(|n| n.id == *tech_id) {
                     ui.horizontal(|ui| {
                         ui.colored_label(Color32::from_rgb(100, 200, 100), "✓");
                         ui.label(&node.name);
-                        ui.label(RichText::new(format!("(tick {})", tick)).small().color(Color32::GRAY));
+                        ui.label(RichText::new(format!("(turn {})", turn)).small().color(Color32::GRAY));
                     });
                 }
             }
@@ -514,8 +514,8 @@ fn render_tech_details(ui: &mut Ui, state: &mut GuiState, snapshot: &TechTreeSna
         ui.label(RichText::new("Knowledge Spread").strong());
         ui.label(format!("{} agents know this technology", node.agents_with_knowledge));
 
-        if let Some(tick) = node.discovery_tick {
-            ui.label(RichText::new(format!("First discovered at tick {}", tick)).small());
+        if let Some(turn) = node.discovery_turn {
+            ui.label(RichText::new(format!("First discovered at turn {}", turn)).small());
         }
     }
 }

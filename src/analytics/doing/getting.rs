@@ -55,7 +55,7 @@ impl Simulation {
             let at = self.population.agents[agent_index].state.position;
             Position::new(at.0, at.1)
         };
-        let now = self.current_tick;
+        let now = self.current_turn;
         let started_with = self.population.agents[agent_index]
             .inventory
             .weight_capacity_remaining();
@@ -142,7 +142,7 @@ impl Simulation {
     }
 
     /// `Action::Gather`.
-    pub(in crate::analytics) fn gathering(&mut self, resource_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn gathering(&mut self, resource_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         use crate::world::{ResourceType, Position};
         use crate::agents::InventoryItem;
 
@@ -379,7 +379,7 @@ impl Simulation {
             // that is what stops a settlement walking back to it every
             // morning for the rest of the season.
             let picked_out = self.world.resources[resource_index].amount == 0;
-            let now = self.current_tick;
+            let now = self.current_turn;
             if harvested > 0 {
                 self.population.agents[agent_index]
                     .exploration_knowledge
@@ -489,18 +489,18 @@ impl Simulation {
                     }
 
                     // Reset dehydration counter
-                    agent.state.last_drank_tick = self.current_tick;
-                    agent.state.ticks_without_water = 0;
+                    agent.state.last_drank_turn = self.current_turn;
+                    agent.state.turns_without_water = 0;
 
                     // Salt water goes down like any other drink, and the body
                     // finds out what it was over the days it takes to get the
-                    // salt back out - see `Agent::tick_salt` and
+                    // salt back out - see `Agent::turn_salt` and
                     // `WHAT_A_MOUTHFUL_OF_THE_SEA_COSTS`. That is the one
                     // place the cost of the sea is reckoned.
                     //
                     // **This took a sixth of a body off on the spot and gave
                     // nothing back**, which is a second answer to the question
-                    // `tick_salt` already answers, and a harsher one than
+                    // `turn_salt` already answers, and a harsher one than
                     // either docstring described: a man who drank the sea was
                     // not slowly poisoned, he was immediately a sixth drier
                     // for it. Sea water does put water into a body. What it
@@ -509,10 +509,10 @@ impl Simulation {
 
                     if salt {
                         // "Even if it seems to temporarily satiate
-                        // it." The thirst goes down on the tick and
+                        // it." The thirst goes down on the turn and
                         // comes back worse for days, which is the
                         // whole shape of the mistake.
-                        agent.drank_salt_water(self.current_tick);
+                        agent.drank_salt_water(self.current_turn);
 
                         return ActionResult::success()
                             .with_drive_change(DriveType::Thirst, -0.5)
@@ -557,7 +557,7 @@ impl Simulation {
                 if let Some(item_type) = Self::edible_item_for(resource_type_enum) {
                     item.food_data = self
                         .food_database
-                        .create_food_data(&item_type, self.current_tick);
+                        .create_food_data(&item_type, self.current_turn);
                 }
 
                 let it_is_food = item.food_data.is_some();
@@ -608,7 +608,7 @@ impl Simulation {
                     // A trip out is the commonest thing anybody does
                     // and the whole of some people's trade, so it is
                     // what the climb is sized against
-                    agent.skills.practise(skill_type, 8, tick_now);
+                    agent.skills.practise(skill_type, 8, turn_now);
 
                     debug!(
                         "Agent {} gathered {} {} (total weight: {:.1}/{:.1})",
@@ -681,7 +681,7 @@ impl Simulation {
             } else {
                 // Including a spring that has given what it has this
                 // hour. Exempting water from this - on the reasoning
-                // that a spring is running again in ten ticks and
+                // that a spring is running again in ten turns and
                 // should not be written off for half a season - was
                 // measured and was **worse**: the failure rate went up
                 // rather than down, because a man who does not
@@ -689,7 +689,7 @@ impl Simulation {
                 // refused again. Remembering where the water was not
                 // is what sends him to the next one.
                 {
-                    let now = self.current_tick;
+                    let now = self.current_turn;
                     self.population.agents[agent_index]
                         .exploration_knowledge
                         .found_none_at(where_it_grew, now);
@@ -702,14 +702,14 @@ impl Simulation {
             // an agent crossing dry ground should not go thirsty with
             // a full flask on its belt.
             if resource_type_enum == ResourceType::Water {
-                let current_tick = self.current_tick;
+                let current_turn = self.current_turn;
                 let agent = &mut self.population.agents[agent_index];
 
                 if agent.inventory.available_water() > 0.0 {
                     let drunk = agent.drink_water(1.0);
 
                     if drunk {
-                        agent.state.drink(current_tick);
+                        agent.state.drink(current_turn);
 
                         debug!("Agent {} drank from its own container", agent.id);
 
@@ -739,7 +739,7 @@ impl Simulation {
     }
 
     /// `Action::Hunt`.
-    pub(in crate::analytics) fn hunting(&mut self, animal_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn hunting(&mut self, animal_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         // Get species data first (clone to avoid borrow issues)
         let species = {
             if let Some(animal) = self.world.animals.get(animal_id) {
@@ -912,7 +912,7 @@ impl Simulation {
                     let agent = &mut self.population.agents[agent_index];
                     agent
                         .skills
-                        .practise(crate::agents::skills::SkillType::Hunting, 30, tick_now);
+                        .practise(crate::agents::skills::SkillType::Hunting, 30, turn_now);
 
                     let mut result = ActionResult::success()
                         .with_drive_change(DriveType::Hunger, -0.4)
@@ -934,7 +934,7 @@ impl Simulation {
                     }
                     agent
                         .skills
-                        .practise(crate::agents::skills::SkillType::Hunting, 10, tick_now);
+                        .practise(crate::agents::skills::SkillType::Hunting, 10, turn_now);
 
                     // A wounded animal is not a meal. It used to
                     // answer a tenth of a hunger for nothing at all,
@@ -948,7 +948,7 @@ impl Simulation {
                 // You learn something from the ones that get away
                 self.population.agents[agent_index]
                     .skills
-                    .practise(crate::agents::skills::SkillType::Hunting, 10, tick_now);
+                    .practise(crate::agents::skills::SkillType::Hunting, 10, turn_now);
 
                 // And a throw that misses is a spear on the ground
                 // somewhere out past where the animal was. Half the
@@ -976,7 +976,7 @@ impl Simulation {
                         self.population.agents[agent_index]
                             .inventory
                             .remove_item("spear", 1);
-                        self.world.somebody_left_this(thrown, fell, tick_now);
+                        self.world.somebody_left_this(thrown, fell, turn_now);
 
                         debug!(
                             "Agent {} threw and missed; the spear is at {fell:?}",
@@ -1013,7 +1013,7 @@ impl Simulation {
     }
 
     /// `Action::CollectAnimalProduct`.
-    pub(in crate::analytics) fn collecting_from_a_beast(&mut self, animal_id: &uuid::Uuid, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn collecting_from_a_beast(&mut self, animal_id: &uuid::Uuid, agent_index: usize, turn_now: u32) -> ActionResult {
         // Get species data first (clone to avoid borrow issues)
         let species = {
             if let Some(animal) = self.world.animals.get(animal_id) {
@@ -1067,7 +1067,7 @@ impl Simulation {
                 // defect as the trade path; see #232. Anything the food
                 // database knows gets its clock started here, exactly as a
                 // gathered armful does.
-                let now = self.current_tick;
+                let now = self.current_turn;
                 let clocks: Vec<_> = collected_products
                     .iter()
                     .map(|stack| {
@@ -1092,7 +1092,7 @@ impl Simulation {
 
                 // Practice animal husbandry (Farming skill)
                 let agent = &mut self.population.agents[agent_index];
-                agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, tick_now);
+                agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, turn_now);
 
                 let products_str = collected_products.iter()
                     .map(|p| format!("{} {}", p.quantity, p.material_id))
@@ -1118,7 +1118,7 @@ impl Simulation {
     }
 
     /// `Action::HarvestPlant`.
-    pub(in crate::analytics) fn harvesting_a_plant(&mut self, plant_id: &uuid::Uuid, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn harvesting_a_plant(&mut self, plant_id: &uuid::Uuid, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         // Get species data first (clone to avoid borrow issues)
         let species = {
             if let Some(plant) = self.world.plants.get(plant_id) {
@@ -1166,7 +1166,7 @@ impl Simulation {
                 // could never go off - and, worse, one such stack
                 // swallowed every honest one that was merged into it.
                 // See ISSUES_FOUND #61.
-                let now = self.current_tick;
+                let now = self.current_turn;
                 let clocks: Vec<Option<crate::world::nutrition::FoodData>> = items_gained
                     .iter()
                     .map(|stack| {
@@ -1192,9 +1192,9 @@ impl Simulation {
                 // Practice farming skill if cultivated, gathering otherwise
                 let agent = &mut self.population.agents[agent_index];
                 if plant.is_cultivated {
-                    agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, tick_now);
+                    agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, turn_now);
                 } else {
-                    agent.skills.practise(crate::agents::skills::SkillType::Mining, 2, tick_now);
+                    agent.skills.practise(crate::agents::skills::SkillType::Mining, 2, turn_now);
                 }
 
                 let items_str = items_gained.iter()
@@ -1222,7 +1222,7 @@ impl Simulation {
     }
 
     /// `Action::Excavate`.
-    pub(in crate::analytics) fn excavating(&mut self, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn excavating(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::{Pit, Position};
 
         let here = {
@@ -1259,7 +1259,7 @@ impl Simulation {
             where_it_is: here,
             holds: Vec::new(),
             covered: false,
-            dug: tick_now,
+            dug: turn_now,
             belongs: crate::world::Belongs::To(whose),
         });
 
@@ -1283,7 +1283,7 @@ impl Simulation {
         ));
         agent
             .skills
-            .practise(crate::agents::SkillType::Mining, 20, tick_now);
+            .practise(crate::agents::SkillType::Mining, 20, turn_now);
 
         debug!("Agent {} dug a pit at {here:?}", agent.id);
 
@@ -1306,7 +1306,7 @@ impl Simulation {
     }
 
     /// `Action::Fish`.
-    pub(in crate::analytics) fn fishing(&mut self, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn fishing(&mut self, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         // Whether it worked is recorded by `Agent::learn_from`, off
         // this arm's own success, along with every other undertaking.
         let agent_position = self.population.agents[agent_index].state.position;
@@ -1407,7 +1407,7 @@ impl Simulation {
         // sea rather than out of their own fields.
         let food_data = self
             .food_database
-            .create_food_data(&crate::world::inventory::ItemType::Fish, self.current_tick);
+            .create_food_data(&crate::world::inventory::ItemType::Fish, self.current_turn);
 
         let agent = &mut self.population.agents[agent_index];
         let mut catch =
@@ -1418,7 +1418,7 @@ impl Simulation {
             taken as f32 * crate::world::Soil::NUTRIENT_PER_FISH * Self::OFFAL_SHARE;
         agent
             .skills
-            .practise(crate::agents::SkillType::Fishing, 12, tick_now);
+            .practise(crate::agents::SkillType::Fishing, 12, turn_now);
 
         debug!("Agent {} took {} fish from {:?}", agent.id, taken, reach);
 
@@ -1468,7 +1468,7 @@ impl Simulation {
     pub(in crate::analytics) fn setting_a_snare(
         &mut self,
         agent_index: usize,
-        tick_now: u32,
+        turn_now: u32,
     ) -> ActionResult {
         let agent_id = self.population.agents[agent_index].id;
         let at = self.population.agents[agent_index].state.position;
@@ -1502,14 +1502,14 @@ impl Simulation {
         self.world.snares.push(crate::environment::small_life::Snare {
             at: here,
             set_by: agent_id,
-            set_at: tick_now,
+            set_at: turn_now,
             caught_at: None,
         });
 
         let agent = &mut self.population.agents[agent_index];
         agent
             .skills
-            .practise(crate::agents::SkillType::Hunting, 6, tick_now);
+            .practise(crate::agents::SkillType::Hunting, 6, turn_now);
 
         ActionResult::success()
             .with_drive_change(DriveType::Preparedness, -0.1)
@@ -1528,7 +1528,7 @@ impl Simulation {
     pub(in crate::analytics) fn going_round_the_line(
         &mut self,
         agent_index: usize,
-        tick_now: u32,
+        turn_now: u32,
     ) -> ActionResult {
         let agent_id = self.population.agents[agent_index].id;
         let at = self.population.agents[agent_index].state.position;
@@ -1563,12 +1563,12 @@ impl Simulation {
             let agent = &mut self.population.agents[agent_index];
             agent
                 .skills
-                .practise(crate::agents::SkillType::Hunting, 3, tick_now);
+                .practise(crate::agents::SkillType::Hunting, 3, turn_now);
             // An empty round is evidence about the rhythm too, and the
             // important half of it: a line walked too often comes back empty.
             agent.that_is_done(
                 crate::agents::practices::Undertaking::Trapping,
-                tick_now,
+                turn_now,
                 0.0,
             );
             return ActionResult::failure("Empty".to_string())
@@ -1577,7 +1577,7 @@ impl Simulation {
 
         let food_data = self
             .food_database
-            .create_food_data(&crate::world::inventory::ItemType::Meat, self.current_tick);
+            .create_food_data(&crate::world::inventory::ItemType::Meat, self.current_turn);
 
         // Room for it before the snares are emptied, and only as much as
         // there is room for. **`add_item` returns whether the thing went in
@@ -1603,7 +1603,7 @@ impl Simulation {
                 if snare.set_by == agent_id && snare.caught_at.is_none() {
                     let reach = (snare.at.0 - at.0).abs().max((snare.at.1 - at.1).abs());
                     if reach <= Self::CLOSE_ENOUGH_TO_A_SNARE {
-                        snare.caught_at = Some(tick_now);
+                        snare.caught_at = Some(turn_now);
                         left -= 1;
                     }
                 }
@@ -1639,7 +1639,7 @@ impl Simulation {
                 if snare.set_by == agent_id && snare.caught_at.is_none() {
                     let reach = (snare.at.0 - at.0).abs().max((snare.at.1 - at.1).abs());
                     if reach <= Self::CLOSE_ENOUGH_TO_A_SNARE {
-                        snare.caught_at = Some(tick_now);
+                        snare.caught_at = Some(turn_now);
                         left -= 1;
                     }
                 }
@@ -1652,13 +1652,13 @@ impl Simulation {
         let agent = &mut self.population.agents[agent_index];
         agent
             .skills
-            .practise(crate::agents::SkillType::Hunting, 12, tick_now);
+            .practise(crate::agents::SkillType::Hunting, 12, turn_now);
 
         // And what the round brought back, which is what the rhythm is
         // climbing. See `crate::agents::rhythm`.
         agent.that_is_done(
             crate::agents::practices::Undertaking::Trapping,
-            tick_now,
+            turn_now,
             carrying as f32,
         );
 

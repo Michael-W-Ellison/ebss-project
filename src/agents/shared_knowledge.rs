@@ -13,8 +13,8 @@ use crate::world::{Position, ResourceType};
 pub struct DiscoveredResource {
     pub position: Position,
     pub resource_type: ResourceType,
-    pub discovered_tick: u32,
-    pub last_verified_tick: u32,
+    pub discovered_turn: u32,
+    pub last_verified_turn: u32,
     pub estimated_amount: u32, // Last known amount
     pub discoverers: Vec<uuid::Uuid>, // Agents who know about this
 }
@@ -24,21 +24,24 @@ pub struct DiscoveredResource {
 pub struct SharedKnowledge {
     /// Discovered resource locations indexed by position
     discovered_resources: BTreeMap<Position, DiscoveredResource>,
-    /// Current tick (for aging information)
-    current_tick: u32,
+    /// Current turn (for aging information)
+    current_turn: u32,
 }
 
 impl SharedKnowledge {
     pub fn new() -> Self {
         Self {
             discovered_resources: BTreeMap::new(),
-            current_tick: 0,
+            current_turn: 0,
         }
     }
 
-    /// Update current tick (called each simulation tick)
-    pub fn tick(&mut self) {
-        self.current_tick += 1;
+    /// Update current turn (called each simulation turn)
+    pub fn take_a_turn(&mut self) {
+        // A step is a planning period, which is that many ticks. Every counter
+        // in the model has to advance by the same amount or two of them
+        // disagree about what day it is.
+        self.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
     }
 
     /// Record a resource discovery or update existing knowledge
@@ -51,7 +54,7 @@ impl SharedKnowledge {
     ) {
         if let Some(discovered) = self.discovered_resources.get_mut(&position) {
             // Update existing knowledge
-            discovered.last_verified_tick = self.current_tick;
+            discovered.last_verified_turn = self.current_turn;
             discovered.estimated_amount = amount;
             if !discovered.discoverers.contains(&discoverer_id) {
                 discovered.discoverers.push(discoverer_id);
@@ -63,8 +66,8 @@ impl SharedKnowledge {
                 DiscoveredResource {
                     position,
                     resource_type,
-                    discovered_tick: self.current_tick,
-                    last_verified_tick: self.current_tick,
+                    discovered_turn: self.current_turn,
+                    last_verified_turn: self.current_turn,
                     estimated_amount: amount,
                     discoverers: vec![discoverer_id],
                 },
@@ -128,9 +131,9 @@ impl SharedKnowledge {
 
     /// Clean up old/stale resource knowledge
     /// Removes resources that haven't been verified in a long time
-    pub fn cleanup_stale(&mut self, max_age_ticks: u32) {
+    pub fn cleanup_stale(&mut self, max_age_turns: u32) {
         self.discovered_resources
-            .retain(|_, r| self.current_tick - r.last_verified_tick <= max_age_ticks);
+            .retain(|_, r| self.current_turn - r.last_verified_turn <= max_age_turns);
     }
 }
 

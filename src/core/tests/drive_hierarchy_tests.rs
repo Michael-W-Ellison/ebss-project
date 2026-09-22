@@ -13,7 +13,7 @@
 //! interrupt. Within that, a need that kills presses in proportion to how soon
 //! it would, worked out from the clocks the body actually runs on - so nobody
 //! wrote down that thirst beats hunger, it falls out of dehydration taking
-//! health at 2,160 ticks where starvation takes it at 4,320 times whatever the
+//! health at 2,160 turns where starvation takes it at 4,320 times whatever the
 //! body has put by.
 
 use crate::agents::{Agent, AgentConfig, LifeStage};
@@ -133,7 +133,7 @@ fn a_child_and_an_adult_do_not_rank_the_same_needs_the_same_way() {
         agent.state.gone_without_food_for(empty_for);
         agent
             .state
-            .ticks_before_this_kills_me(DriveType::Hunger)
+            .turns_before_this_kills_me(DriveType::Hunger)
             .expect("hunger kills")
     }
 
@@ -197,7 +197,7 @@ fn nobody_lays_in_stores_on_an_empty_stomach() {
     {
         let hunger = drives.get_mut(DriveType::Hunger).unwrap();
         hunger.value = 0.9;
-        hunger.denied_ticks = 200;
+        hunger.denied_turns = 200;
     }
 
     assert!(
@@ -217,7 +217,7 @@ fn nobody_lays_in_stores_on_an_empty_stomach() {
     {
         let hunger = drives.get_mut(DriveType::Hunger).unwrap();
         hunger.value = 0.1;
-        hunger.denied_ticks = 0;
+        hunger.denied_turns = 0;
     }
 
     assert!(
@@ -234,7 +234,7 @@ fn a_need_has_to_be_answered_reliably_to_count() {
 
     // Full this moment, but has been going short for days
     hunger.value = 0.0;
-    hunger.denied_ticks = DriveState::RELIABLY * 4;
+    hunger.denied_turns = DriveState::RELIABLY * 4;
 
     assert!(
         !drives.is_unlocked(DriveType::Sustenance),
@@ -252,7 +252,7 @@ fn a_drive_that_is_only_quiet_because_it_is_shut_out_unlocks_nothing() {
     {
         let hunger = drives.get_mut(DriveType::Hunger).unwrap();
         hunger.value = 0.95;
-        hunger.denied_ticks = 300;
+        hunger.denied_turns = 300;
     }
 
     // Preparedness reads as low - it is shut out, so it has fallen quiet -
@@ -284,18 +284,18 @@ fn a_need_that_is_shut_out_fades_rather_than_waiting() {
     {
         let hunger = drives.get_mut(DriveType::Hunger).unwrap();
         hunger.value = 1.0;
-        hunger.denied_ticks = 500;
+        hunger.denied_turns = 500;
     }
 
     // Long enough for a drive of this pace to have gone. A shut-out need fades
     // at the rate it would have built, so how long that takes is the drive's
-    // own business: Luxury builds at a thousandth a tick, so nine hundred
-    // ticks is the whole of it.
+    // own business: Luxury builds at a thousandth a turn, so nine hundred
+    // turns is the whole of it.
     let ctx = crate::core::DriveContext::default();
     let span = (0.9 / DriveType::Luxury.base_accumulation_rate()).ceil() as usize;
 
     for _ in 0..span {
-        drives.tick_in(&ctx, false);
+        drives.turn_in(&ctx, false);
     }
 
     assert!(
@@ -310,7 +310,7 @@ fn a_need_that_is_shut_out_fades_rather_than_waiting() {
 /// But it fades at its own pace, not at one rate for everybody.
 ///
 /// A flat rate is a different thing to each drive. At the four thousandths a
-/// tick this used to use, Reproduction, Luxury and Protection - which build at
+/// turn this used to use, Reproduction, Luxury and Protection - which build at
 /// a thousandth - fell four times faster than they rose, so a drive shut out
 /// even a tenth of the time climbed at half its proper rate. Conception needs
 /// the Reproduction drive over its threshold in both parents, so that halved
@@ -327,7 +327,7 @@ fn a_slow_need_does_not_fade_faster_than_it_grows() {
 
         assert!(
             lost <= builds_at + f32::EPSILON,
-            "{drive_type:?} loses {lost:.4} a tick when shut out and builds at \
+            "{drive_type:?} loses {lost:.4} a turn when shut out and builds at \
              only {builds_at:.4}, so any time at all shut out leaves it going \
              backwards"
         );
@@ -348,7 +348,7 @@ fn children_wait_on_every_primary_need() {
         let mut drives = drives.clone();
         let drive = drives.get_mut(pressing).unwrap();
         drive.value = 1.0;
-        drive.denied_ticks = 100;
+        drive.denied_turns = 100;
 
         assert!(
             !drives.is_unlocked(DriveType::Reproduction),
@@ -366,7 +366,7 @@ fn children_wait_on_every_primary_need() {
     ] {
         let drive = drives.get_mut(answered).unwrap();
         drive.value = 0.0;
-        drive.denied_ticks = 0;
+        drive.denied_turns = 0;
     }
 
     assert!(drives.is_unlocked(DriveType::Reproduction));

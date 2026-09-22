@@ -104,8 +104,8 @@ impl EnvironmentPlugin for TestPlugin {
         Ok(result)
     }
 
-    fn tick(&mut self) {
-        self.world_state.advance_tick(0.001);
+    fn take_a_turn(&mut self) {
+        self.world_state.advance_turn(0.001);
     }
 
     fn get_material_at(&self, _position: Position) -> Option<&Material> {
@@ -219,14 +219,14 @@ fn test_action_execution() {
 }
 
 #[test]
-fn test_world_tick() {
+fn test_world_turn() {
     let mut plugin = TestPlugin::new();
     let config = PluginConfig::new(0);
     plugin.initialize(config).unwrap();
 
-    let initial_tick = plugin.world_state.tick;
-    plugin.tick();
-    assert_eq!(plugin.world_state.tick, initial_tick + 1);
+    let initial_turn = plugin.world_state.turn;
+    plugin.take_a_turn();
+    assert_eq!(plugin.world_state.turn, initial_turn + 1);
 }
 
 #[test]

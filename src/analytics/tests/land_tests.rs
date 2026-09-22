@@ -50,10 +50,11 @@ fn what_rots_depends_on_where_it_fell() {
     let wet = Soil::humidity(TerrainType::Wetland, 0.3);
     let dry = Soil::humidity(TerrainType::Desert, 0.0);
 
-    // A couple of agent lifetimes
+    // Five and a half years of it
+    const A_DAY: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
     for _ in 0..2000 {
-        swamp.decay(wet, 10.0);
-        desert.decay(dry, 10.0);
+        swamp.decay(wet, A_DAY);
+        desert.decay(dry, A_DAY);
     }
 
     assert!(
@@ -76,8 +77,9 @@ fn dense_matter_outlasts_soft() {
     ground.woody_litter = 1.0;
 
     let humidity = Soil::humidity(TerrainType::Forest, 0.2);
+    const A_DAY: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
     for _ in 0..500 {
-        ground.decay(humidity, 10.0);
+        ground.decay(humidity, A_DAY);
     }
 
     assert!(
@@ -98,8 +100,9 @@ fn what_rots_feeds_the_ground() {
     let before = ground.nutrients;
     let humidity = Soil::humidity(TerrainType::Plains, 0.5);
 
+    const A_DAY: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
     for _ in 0..300 {
-        ground.decay(humidity, 10.0);
+        ground.decay(humidity, A_DAY);
     }
 
     assert!(
@@ -195,7 +198,7 @@ fn a_field_helps_a_plant_feed_itself_but_cannot_hurry_it() {
 ///
 /// The yield floor used to be four tenths of the full crop whatever the ground
 /// was like, so a field mined down to a twentieth of its fertility still
-/// nominally carried nearly half a crop. Traced over thirty thousand ticks
+/// nominally carried nearly half a crop. Traced over thirty thousand turns
 /// that hid the whole cost of farming: fertility fell by ninety-five per cent
 /// and stated yield by four.
 #[test]
@@ -325,7 +328,7 @@ fn a_wood_feeds_itself() {
     }
 
     for _ in 0..3000 {
-        world.tick();
+        world.take_a_turn();
     }
 
     let under_plants: f32 = world

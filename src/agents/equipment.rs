@@ -487,7 +487,7 @@ pub struct Equipment {
     /// Base armor protection (0.0 to 1.0)
     pub base_armor: f32,
 
-    /// Wear rate per tick
+    /// Wear rate per turn
     pub wear_rate: f32,
 }
 
@@ -553,7 +553,7 @@ impl Equipment {
         self.durability = (self.durability - amount).max(0.0);
     }
 
-    pub fn tick_wear(&mut self) {
+    pub fn turn_wear(&mut self) {
         self.apply_wear(self.wear_rate);
     }
 
@@ -750,8 +750,8 @@ impl EquipmentItem {
         self.durability = (self.durability - amount).max(0.0);
     }
 
-    /// Tick wear (called each game tick while equipped/used)
-    pub fn tick_wear(&mut self) {
+    /// Turn wear (called each game turn while equipped/used)
+    pub fn turn_wear(&mut self) {
         self.apply_wear(self.wear_rate);
     }
 
@@ -1626,11 +1626,11 @@ mod tests {
     }
 
     #[test]
-    fn test_tick_wear() {
+    fn test_turn_wear() {
         let mut tunic = ClothingTemplate::leather_tunic(Quality::Common);
         let initial_durability = tunic.durability;
 
-        tunic.tick_wear();
+        tunic.turn_wear();
 
         assert!(tunic.durability < initial_durability);
         assert_eq!(tunic.durability, initial_durability - tunic.wear_rate);

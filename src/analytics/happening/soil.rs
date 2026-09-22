@@ -163,7 +163,7 @@ impl Simulation {
         }
     }
 
-    /// How readily a sprouted grain works its way out of a pack, per tick.
+    /// How readily a sprouted grain works its way out of a pack, per turn.
     pub(in crate::analytics) const WHAT_FALLS_OUT_OF_A_PACK: f64 = 0.02;
 
     /// And what a plant grown from one carries when it is full grown.
@@ -263,7 +263,7 @@ impl Simulation {
     /// and gone, spoiled and deleted, buried nowhere. The soil was a stock
     /// being mined with no return at all, and the only thing that ever put
     /// anything back was an agent who had learned to tip a spoiled basket onto
-    /// a field. Traced over thirty thousand ticks, farmed ground went from
+    /// a field. Traced over thirty thousand turns, farmed ground went from
     /// 0.53 fertility to 0.03 and stayed there.
     ///
     /// What a body takes in mostly comes out again, and what a body is comes
@@ -333,7 +333,7 @@ impl Simulation {
         use crate::world::Position;
 
         let left = std::mem::take(&mut self.population.what_the_dead_left);
-        let now = self.current_tick;
+        let now = self.current_turn;
 
         for (item, position) in left {
             self.world
@@ -362,15 +362,15 @@ impl Simulation {
     /// notice it; what was missing is any reason to, beyond distaste.
     ///
     /// Nothing here is certain and nothing is fast. Standing on fouled ground
-    /// for one tick is almost always nothing; living on it is what tells.
+    /// for one turn is almost always nothing; living on it is what tells.
     pub(in crate::analytics) fn what_the_ground_underfoot_does(&mut self) {
         use rand::Rng;
 
-        if self.current_tick % Self::HOW_OFTEN_THE_GROUND_IS_ASKED != 0 {
+        if self.current_turn % Self::HOW_OFTEN_THE_GROUND_IS_ASKED != 0 {
             return;
         }
 
-        let now = self.current_tick;
+        let now = self.current_turn;
         let mut rng = crate::core::dice::roll();
 
         for agent in self.population.agents.iter_mut() {
@@ -404,7 +404,7 @@ impl Simulation {
 
     /// How often the ground under everybody is asked about.
     ///
-    /// Once a day rather than every tick: this is a question about living
+    /// Once a day rather than every turn: this is a question about living
     /// somewhere, not about walking across it.
     pub(in crate::analytics) const HOW_OFTEN_THE_GROUND_IS_ASKED: u32 = crate::environment::seasons::TICKS_PER_DAY;
 

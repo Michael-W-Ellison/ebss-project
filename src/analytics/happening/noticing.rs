@@ -286,7 +286,7 @@ impl Simulation {
     /// autumn pack held **38.9 units against a capacity of 26.0**, and
     /// because a pack that is already over its limit refuses everything, the
     /// load was frozen there for the rest of the man's life. He could never
-    /// pick up food again: **97% of autumn agent-ticks had not room for a
+    /// pick up food again: **97% of autumn agent-turns had not room for a
     /// single handful**, and 27,968 units of food a year went back on the
     /// bush while six thousand stood ripe on the ground.
     ///
@@ -299,7 +299,7 @@ impl Simulation {
     pub(in crate::analytics) fn what_nobody_can_carry_any_more(&mut self) {
         use crate::world::Position;
 
-        let now = self.current_tick;
+        let now = self.current_turn;
 
         for index in 0..self.population.agents.len() {
             if !self.population.agents[index].state.is_alive {
@@ -367,7 +367,7 @@ impl Simulation {
     /// comes to nothing, and the agent stops doing it - which is the whole
     /// difference between an experiment and a habit.
     pub(in crate::analytics) fn who_came_back_to_look(&mut self) {
-        let now = self.current_tick;
+        let now = self.current_turn;
 
         for index in 0..self.population.agents.len() {
             if !self.population.agents[index].state.is_alive {
@@ -380,7 +380,7 @@ impl Simulation {
 
             let standing = self.population.agents[index].state.position;
 
-            // What is answerable this tick, worked out with the world borrowed
+            // What is answerable this turn, worked out with the world borrowed
             // and the agent not.
             let mut answers: Vec<(String, bool, Vec<Circumstance>, Option<&'static str>)> =
                 Vec::new();
@@ -488,7 +488,7 @@ impl Simulation {
     /// - the answer arrives a few days later at the place it was left, like
     /// every other question of that kind.
     pub(in crate::analytics) fn what_the_fire_hardened(&mut self) {
-        let now = self.current_tick;
+        let now = self.current_turn;
         let mut hardened: Vec<crate::world::Position> = Vec::new();
 
         for which in 0..self.world.dropped.len() {
@@ -554,7 +554,7 @@ impl Simulation {
     pub(in crate::analytics) fn what_the_embers_did(&mut self) {
         use rand::Rng;
 
-        if self.current_tick % Self::HOW_OFTEN_THE_EMBERS_ARE_ASKED != 0 {
+        if self.current_turn % Self::HOW_OFTEN_THE_EMBERS_ARE_ASKED != 0 {
             return;
         }
 

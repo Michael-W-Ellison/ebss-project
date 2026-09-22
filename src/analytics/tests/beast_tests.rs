@@ -277,7 +277,7 @@ fn a_deer_with_a_wolf_on_it_runs() {
     world.spawn_animal("wolf".to_string(), (33, 30)).expect("a wolf");
 
     let weather = GrazingWeather { precipitation: 1.0, now: 0, season: Season::Summer };
-    world.animals.tick_in_world(&mut world.grid, &mut world.plants, 1.0, weather);
+    world.animals.turn_in_world(&mut world.grid, &mut world.plants, 1.0, weather);
 
     let deer = world
         .animals
@@ -330,7 +330,7 @@ fn a_flock_standing_together_turns_on_what_one_of_them_runs_from() {
         world.spawn_animal("wolf".to_string(), (33, 30)).expect("a wolf");
 
         let weather = GrazingWeather { precipitation: 1.0, now: 0, season: Season::Summer };
-        world.animals.tick_in_world(&mut world.grid, &mut world.plants, 1.0, weather);
+        world.animals.turn_in_world(&mut world.grid, &mut world.plants, 1.0, weather);
 
         let goat = world
             .animals
@@ -393,7 +393,7 @@ fn a_rabbit_never_stands_its_ground() {
     world.spawn_animal("stoat".to_string(), (32, 30)).expect("a stoat");
 
     let weather = GrazingWeather { precipitation: 1.0, now: 0, season: Season::Summer };
-    world.animals.tick_in_world(&mut world.grid, &mut world.plants, 1.0, weather);
+    world.animals.turn_in_world(&mut world.grid, &mut world.plants, 1.0, weather);
 
     for rabbit in world.animals.get_all().iter().filter(|a| a.species_id == "rabbit") {
         assert!(

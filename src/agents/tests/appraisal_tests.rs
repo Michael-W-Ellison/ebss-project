@@ -85,7 +85,7 @@ fn a_standing_threat_does_not_build_up_for_ever() {
 
     assert!(
         (after_five_hundred - after_one_look).abs() < 0.01,
-        "one wolf is one wolf however many ticks it stands there: {after_one_look:.2} \
+        "one wolf is one wolf however many turns it stands there: {after_one_look:.2} \
          became {after_five_hundred:.2}"
     );
 }
@@ -186,7 +186,7 @@ fn a_need_with_nothing_to_round_on_produces_fear() {
     // nothing to round on.
     if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
-        hunger.denied_ticks = 400;
+        hunger.denied_turns = 400;
     }
     agent.state.gone_without_food_for(29_800);
 
@@ -204,7 +204,7 @@ fn a_need_with_nothing_to_round_on_produces_fear() {
     let mut earlier = somebody();
     if let Some(hunger) = earlier.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
-        hunger.denied_ticks = 400;
+        hunger.denied_turns = 400;
     }
     earlier.state.gone_without_food_for(6_000);
     earlier.update_emotions_from_drives();
@@ -226,7 +226,7 @@ fn a_need_that_is_being_met_frightens_nobody() {
 
     if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.95;
-        hunger.denied_ticks = 0;
+        hunger.denied_turns = 0;
     }
     agent.state.gone_without_food_for(0);
 

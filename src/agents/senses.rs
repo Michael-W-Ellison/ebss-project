@@ -85,7 +85,7 @@ pub struct Sound {
     pub source_position: (i32, i32, i32),
     pub loudness: f32,
     pub sound_type: SoundType,
-    pub age: u32, // Ticks since heard
+    pub age: u32, // Turns since heard
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,11 +143,11 @@ impl Hearing {
     }
 
     /// Age and remove old sounds
-    pub fn tick(&mut self) {
+    pub fn take_a_turn(&mut self) {
         for sound in &mut self.heard_sounds {
             sound.age += 1;
         }
-        // Remove sounds older than 100 ticks
+        // Remove sounds older than 100 turns
         self.heard_sounds.retain(|s| s.age < 100);
     }
 
@@ -201,7 +201,7 @@ pub struct Utterance {
     pub content: String,
     pub language: String,
     pub volume: f32,
-    pub age: u32, // Ticks since spoken
+    pub age: u32, // Turns since spoken
 }
 
 impl Speech {
@@ -249,11 +249,11 @@ impl Speech {
     }
 
     /// Age and remove old speech
-    pub fn tick(&mut self) {
+    pub fn take_a_turn(&mut self) {
         for utterance in &mut self.recent_speech {
             utterance.age += 1;
         }
-        // Remove utterances older than 50 ticks
+        // Remove utterances older than 50 turns
         self.recent_speech.retain(|u| u.age < 50);
     }
 
@@ -292,7 +292,7 @@ pub struct Scent {
     pub source_position: (i32, i32, i32),
     pub scent_type: ScentType,
     pub strength: f32, // 0.0 to 1.0
-    pub age: u32, // Ticks since detected
+    pub age: u32, // Turns since detected
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -354,11 +354,11 @@ impl Smell {
     }
 
     /// Age and remove old scents
-    pub fn tick(&mut self) {
+    pub fn take_a_turn(&mut self) {
         for scent in &mut self.detected_scents {
             scent.age += 1;
         }
-        // Remove scents older than 200 ticks (scents linger longer than sounds)
+        // Remove scents older than 200 turns (scents linger longer than sounds)
         self.detected_scents.retain(|s| s.age < 200);
     }
 
@@ -461,7 +461,7 @@ impl Attention {
     }
 
     /// Update attention state
-    pub fn tick(&mut self) {
+    pub fn take_a_turn(&mut self) {
         if self.focus.is_some() {
             self.current_duration += 1;
 
@@ -495,14 +495,14 @@ impl Attention {
 
 impl Default for Attention {
     fn default() -> Self {
-        Self::new(100, 0.3) // 100 ticks attention span, moderate distractibility
+        Self::new(100, 0.3) // 100 turns attention span, moderate distractibility
     }
 }
 
 /// Sensory memory - remembers what was sensed
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SensoryMemory {
-    /// Recently seen agents (agent_id, last_position, ticks_since_seen)
+    /// Recently seen agents (agent_id, last_position, turns_since_seen)
     pub seen_agents: Vec<(Uuid, (i32, i32, i32), u32)>,
     /// Recently seen positions of interest
     pub seen_positions: Vec<((i32, i32, i32), String, u32)>, // position, description, age
@@ -573,7 +573,7 @@ impl SensoryMemory {
     }
 
     /// Age memories
-    pub fn tick(&mut self) {
+    pub fn take_a_turn(&mut self) {
         for entry in &mut self.seen_agents {
             entry.2 += 1;
         }
@@ -581,7 +581,7 @@ impl SensoryMemory {
             entry.2 += 1;
         }
 
-        // Remove very old memories (>1000 ticks)
+        // Remove very old memories (>1000 turns)
         self.seen_agents.retain(|(_, _, age)| *age < 1000);
         self.seen_positions.retain(|(_, _, age)| *age < 1000);
     }
@@ -618,12 +618,12 @@ impl Senses {
     }
 
     /// Update all sensory systems
-    pub fn tick(&mut self) {
-        self.hearing.tick();
-        self.speech.tick();
-        self.smell.tick();
-        self.attention.tick();
-        self.memory.tick();
+    pub fn take_a_turn(&mut self) {
+        self.hearing.take_a_turn();
+        self.speech.take_a_turn();
+        self.smell.take_a_turn();
+        self.attention.take_a_turn();
+        self.memory.take_a_turn();
     }
 
     /// Get overall sensory health (0.0 to 1.0)
@@ -739,7 +739,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hearing_tick() {
+    fn test_hearing_turn() {
         let mut hearing = Hearing::default();
         hearing.hear_sound(Sound {
             source_position: (0, 0, 0),
@@ -750,7 +750,7 @@ mod tests {
 
         assert_eq!(hearing.heard_sounds.len(), 1);
 
-        hearing.tick();
+        hearing.take_a_turn();
         assert_eq!(hearing.heard_sounds[0].age, 1);
     }
 
@@ -844,12 +844,12 @@ mod tests {
 
     #[test]
     fn test_attention_span() {
-        let mut attention = Attention::new(10, 0.0); // 10 tick span, no distractibility
+        let mut attention = Attention::new(10, 0.0); // 10 turn span, no distractibility
 
         attention.focus_on(Focus::Activity("Building".to_string()));
 
         for _ in 0..5 {
-            attention.tick();
+            attention.take_a_turn();
         }
 
         assert!(attention.is_focused());
@@ -876,7 +876,7 @@ mod tests {
         memory.remember_position((5, 5, 0), "Resource node".to_string());
         assert_eq!(memory.seen_positions.len(), 1);
 
-        memory.tick();
+        memory.take_a_turn();
         assert_eq!(memory.seen_positions[0].2, 1); // Age should increase
     }
 
@@ -929,7 +929,7 @@ mod tests {
     }
 
     #[test]
-    fn test_senses_tick() {
+    fn test_senses_turn() {
         let mut senses = Senses::new();
 
         // Add various stimuli
@@ -947,7 +947,7 @@ mod tests {
             age: 0,
         });
 
-        senses.tick();
+        senses.take_a_turn();
 
         // Ages should have increased
         assert_eq!(senses.smell.detected_scents[0].age, 1);

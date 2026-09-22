@@ -968,8 +968,8 @@ impl EnvironmentPlugin for MinecraftSurvivalPlugin {
         Ok(result)
     }
 
-    fn tick(&mut self) {
-        self.world_state.advance_tick(0.001);
+    fn take_a_turn(&mut self) {
+        self.world_state.advance_turn(0.001);
     }
 
     fn get_material_at(&self, position: Position) -> Option<&Material> {

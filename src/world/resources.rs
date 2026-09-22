@@ -377,7 +377,7 @@ impl ResourceType {
     /// country agrees - which is the part that matters, because a district
     /// where half the woods bore would be no gamble at all. A cheap integer
     /// hash rather than the dice: it must not depend on how many other things
-    /// have drawn a number this tick, which is ISSUES_FOUND.md #132's whole
+    /// have drawn a number this turn, which is ISSUES_FOUND.md #132's whole
     /// family of trouble.
     pub fn how_heavy_the_mast_is(year: u32) -> f32 {
         // A splitmix64 finaliser, which is what it takes to get a
@@ -574,7 +574,7 @@ impl ResourceType {
             // Nuts fell through to `_ => 0.0` when they were added, which
             // made every nut node non-renewable: it spawned empty out of
             // season, `remove_depleted_resources` deleted all twenty-five of
-            // them on the first tick, and no autumn ever came. That is the
+            // them on the first turn, and no autumn ever came. That is the
             // third time this exact match has swallowed a new food - see the
             // Greens and Roots note above - and the guard that note promised
             // had never been written. It is `every_food_grows_back` now.
@@ -875,7 +875,7 @@ pub struct ResourceNode {
     #[serde(default)]
     pub kind: u8,
 
-    /// What a spring puts out between one pass of the resource tick and the
+    /// What a spring puts out between one pass of the resource turn and the
     /// next, and the least that can be standing in it.
     ///
     /// Water is the one thing here that is a **flow and not a stock**. A
@@ -1160,9 +1160,9 @@ impl ResourceNode {
     /// standing water and lives on the rain. It used to regenerate at nothing
     /// at all and was not counted as renewable, so every drink took a unit out
     /// of the world for good and a lake drunk dry was deleted. A world lost
-    /// more than half its water in fifteen thousand ticks.
+    /// more than half its water in fifteen thousand turns.
     ///
-    /// Returns units per regeneration pass, which runs every ten world ticks.
+    /// Returns units per regeneration pass, which runs every ten world turns.
     /// What a reach of running water gives back in a pass: all of it.
     ///
     /// Not a number so much as a statement that a river is not a stock. It is
@@ -1180,12 +1180,12 @@ impl ResourceNode {
         // springs and ponds of the country they are in, and what feeds them
         // depends on which.
         //
-        // These are reckoned per pass of the resource tick, which comes round
-        // once every ten ticks, and they have to be read against what a
+        // These are reckoned per pass of the resource turn, which comes round
+        // once every ten turns, and they have to be read against what a
         // settlement draws: a drink is a unit or two, and forty people drink
         // something like thirty units in the time between two passes. The
         // first cut of this had a spring giving back **1.5**, which is a
-        // twentieth of that. Measured over six thousand ticks, eight of a
+        // twentieth of that. Measured over six thousand turns, eight of a
         // world's twenty-one sources were drawn down to 2 units out of four
         // hundred and stayed there, and "no water sources nearby" was the
         // single largest refusal in the model - a settlement standing in the
@@ -1225,7 +1225,7 @@ impl ResourceNode {
     }
 
     /// What the run brings into a reach of water, per pass of the resource
-    /// tick (one pass every ten ticks, as `water_inflow` is also reckoned).
+    /// turn (one pass every ten turns, as `water_inflow` is also reckoned).
     ///
     /// Fish do not grow back the way a berry patch grows back. A berry patch
     /// regrows out of what is left of itself, in the ground it stands in, so
@@ -1244,7 +1244,13 @@ impl ResourceNode {
     /// Spring and autumn are heavy; high summer is thin because the run is
     /// past; winter is thinnest of all, and a frozen river gives up almost
     /// nothing.
-    pub fn fish_run(&self, terrain: TerrainType, season: Season, freezing: bool) -> f32 {
+    pub fn fish_run(
+        &self,
+        terrain: TerrainType,
+        season: Season,
+        freezing: bool,
+        how_long_this_pass_stands_for: u32,
+    ) -> f32 {
         if !self.resource_type.grows_in_water() {
             return 0.0;
         }
@@ -1267,7 +1273,7 @@ impl ResourceNode {
             Season::Winter => 0.15,
         };
 
-        let flow = Self::FISH_PER_PASS_AT_FULL_RUN * reach * run;
+        let flow = Self::what_a_pass_of_full_run_brings(how_long_this_pass_stands_for) * reach * run;
 
         if freezing {
             flow * 0.2
@@ -1276,16 +1282,56 @@ impl ResourceNode {
         }
     }
 
-    /// What a full spring run brings into one reach of river in one pass.
+    /// What a full run brings in one pass, given how long the pass stands for.
     ///
-    /// Set so that a reach fished down to nothing is full again inside a year,
-    /// most of it arriving in the two runs: a spring season of twenty-four days
-    /// is twenty-eight or nine passes, which at this rate is a good half of
-    /// what a reach holds. That is the shape of the thing - a river is empty
-    /// enough to be worth nobody's time for most of the year and thick with
-    /// fish twice in it, and a people who live on one arrange the rest of what
-    /// they do around those two stretches.
-    const FISH_PER_PASS_AT_FULL_RUN: f32 = 1.0;
+    /// The season is the thing that is fixed and the pass is whatever the
+    /// world happens to schedule, so the division goes this way round. See
+    /// [`Self::WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON`].
+    fn what_a_pass_of_full_run_brings(how_long_this_pass_stands_for: u32) -> f32 {
+        use crate::environment::seasons::{DAYS_PER_SEASON, TICKS_PER_DAY};
+
+        let a_season = (DAYS_PER_SEASON * TICKS_PER_DAY) as f32;
+        let passes_in_a_season = a_season / how_long_this_pass_stands_for.max(1) as f32;
+
+        if passes_in_a_season <= 0.0 {
+            return 0.0;
+        }
+
+        Self::WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON / passes_in_a_season
+    }
+
+    /// What a full spring run brings into one reach of river, across the
+    /// whole season.
+    ///
+    /// **A season, not a pass.** The run is a thing that happens to a river
+    /// once in the spring and once in the autumn; how many times the world
+    /// happens to look at the river while it is happening is an implementation
+    /// detail of the tick, and the fish do not know about it.
+    ///
+    /// This was `FISH_PER_PASS_AT_FULL_RUN = 1.0`, fitted when the pass came
+    /// round every ten turns on a twelve-turn day - so a spring of twenty-four
+    /// days was twenty-eight or nine passes, and a full run brought
+    /// twenty-eight or nine fish. The note under it reasoned from that to the
+    /// shape the fishery is for: "a reach fished down to nothing is full again
+    /// inside a year, most of it arriving in the two runs".
+    ///
+    /// Then a season became ninety days and a pass became a day, and the
+    /// per-pass number went on saying one. A full spring brought ninety into a
+    /// reach that holds sixty, high summer brought thirty-six on its own, and
+    /// the river was never empty enough to be worth leaving - which is the
+    /// opposite of the thing a fishing people arrange their year around. The
+    /// number had not changed and what it meant had.
+    ///
+    /// Stated as a season's worth, it survives both: what a year brings is
+    /// 28.8 in the spring, 24.5 in the autumn, 11.5 across high summer and 4.3
+    /// through the winter - sixty-nine into a reach of sixty, three quarters of
+    /// it in the two runs. That is the sentence the original note wrote down,
+    /// and now the arithmetic says it too.
+    ///
+    /// The fraction is not a tuning knob; it is the old fit carried over
+    /// exactly. Twenty-eight point eight is twenty-four days of twenty-hour
+    /// passes at one fish each, which is what this was.
+    pub const WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON: f32 = 28.8;
 
     /// Regenerate resources based on climate and weather conditions
     /// Returns the amount regenerated
@@ -1326,7 +1372,7 @@ impl ResourceNode {
         season_modifier: f32,
         cultivated: bool,
         soil: &mut Soil,
-        ticks_this_pass_stands_for: f32,
+        turns_this_pass_stands_for: f32,
     ) -> u32 {
         self.regenerate_in_ground(
             temperature,
@@ -1334,7 +1380,7 @@ impl ResourceNode {
             season_modifier,
             cultivated,
             soil,
-            ticks_this_pass_stands_for,
+            turns_this_pass_stands_for,
         )
     }
 
@@ -1346,7 +1392,16 @@ impl ResourceNode {
     /// any day it was not actively raining, which cut growth to a fifth
     /// wherever a marsh and a dune were treated alike.
     /// The cadence these rates were fitted against: one pass every ten world
-    /// ticks, when a turn was two hours and `World::tick` said `% 10`.
+    /// turns, when a turn was two hours and `World::take_a_turn` said `% 10`.
+    ///
+    /// **Twenty hours, and it has to be stated as twenty hours.** The number
+    /// below was `10.0` - ten of a unit that was two hours when it was written
+    /// and is one minute now. The caller passes `ONCE_A_DAY`, so the ratio
+    /// this makes was 1.2 at the twelve-turn day, which is right (a day
+    /// against a twenty-hour reference), then 4.8 at the half-hour turn, and
+    /// 144 once a tick became a minute: wild food came back a hundred and
+    /// twenty times faster than the rate anybody measured. Written in hours,
+    /// it cannot drift again. See ISSUES_FOUND #218.
     ///
     /// The rates in `how_fast_it_comes_back` and `water_inflow` are
     /// hand-fitted numbers *per pass*, and how long a pass stood for lived as
@@ -1356,7 +1411,8 @@ impl ResourceNode {
     /// balanced at, with nothing to say so. This is what lets the pass be
     /// scheduled on the calendar while the rates stay the ones that were
     /// measured. See ISSUES_FOUND #205.
-    pub const WHAT_THESE_RATES_WERE_FITTED_TO: f32 = 10.0;
+    pub const WHAT_THESE_RATES_WERE_FITTED_TO: f32 =
+        20.0 * crate::environment::seasons::MINUTES_PER_HOUR as f32;
 
     pub fn regenerate_in_ground(
         &mut self,
@@ -1365,13 +1421,13 @@ impl ResourceNode {
         season_modifier: f32,
         cultivated: bool,
         soil: &mut Soil,
-        ticks_this_pass_stands_for: f32,
+        turns_this_pass_stands_for: f32,
     ) -> u32 {
         if self.amount >= self.how_heavy_a_crop_it_carries(soil.fertility(), cultivated) {
             return 0; // As heavy a crop as this ground will carry
         }
 
-        // Base regeneration rate per tick (0-1 units).
+        // Base regeneration rate per turn (0-1 units).
         //
         // Wild food comes back slowly: a hedge of berries feeds a few people
         // and no more, which is what a settlement of a dozen lives on and what
@@ -1503,7 +1559,7 @@ impl ResourceNode {
 
         // Calculate total regeneration
         let how_long_a_pass_is_now =
-            ticks_this_pass_stands_for / Self::WHAT_THESE_RATES_WERE_FITTED_TO;
+            turns_this_pass_stands_for / Self::WHAT_THESE_RATES_WERE_FITTED_TO;
         let regen_amount = how_long_a_pass_is_now
             * base_rate
             * temp_modifier
@@ -1687,9 +1743,9 @@ mod all_resources_tests {
     /// Three foods have now fallen through that match to `_ => 0.0`. A food
     /// with no regrowth rate is not renewable, and a resource that is not
     /// renewable is **deleted the moment it is empty** - so a hedgerow that
-    /// is bare out of its season is deleted on the first tick of the world
+    /// is bare out of its season is deleted on the first turn of the world
     /// and never comes back. Nuts spawned twenty-five stands to a map and had
-    /// none by tick one.
+    /// none by turn one.
     ///
     /// Nothing in the world says "this is food" in one place, so the only way
     /// to hold the two lists together is to walk `all()` and ask both.

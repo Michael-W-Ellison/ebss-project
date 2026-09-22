@@ -228,12 +228,12 @@ pub fn calculate_social_satisfaction(
 
 /// Determine if two agents should greet each other
 pub fn should_greet(
-    last_interaction_tick: u32,
-    current_tick: u32,
+    last_interaction_turn: u32,
+    current_turn: u32,
     relationship: &RelationshipLevel,
 ) -> bool {
     // Greet if haven't interacted in a while
-    let ticks_since_interaction = current_tick.saturating_sub(last_interaction_tick);
+    let turns_since_interaction = current_turn.saturating_sub(last_interaction_turn);
 
     // Greet interval depends on relationship
     let greet_interval = match relationship {
@@ -244,7 +244,7 @@ pub fn should_greet(
         RelationshipLevel::Hates(_) => 10000,   // Almost never greet enemies
     };
 
-    ticks_since_interaction >= greet_interval
+    turns_since_interaction >= greet_interval
 }
 
 /// Check for incompatible beliefs

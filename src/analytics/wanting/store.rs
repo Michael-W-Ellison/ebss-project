@@ -111,7 +111,7 @@ impl Simulation {
     ///
     /// That entry is why this was a small number, and the small number was
     /// then sized off "a person gets through about a hundred units in ten
-    /// thousand ticks" - a figure from the body this model had before the
+    /// thousand turns" - a figure from the body this model had before the
     /// starvation clock was corrected, and out by something over two orders of
     /// magnitude against the body it has now. It came to **seven items a mouth
     /// for a winter**, which is half a day's food. Twelve people wanted
@@ -164,7 +164,7 @@ impl Simulation {
             return false;
         };
 
-        match pit.how_long_this_would_keep(item, self.current_tick) {
+        match pit.how_long_this_would_keep(item, self.current_turn) {
             // No clock on it: it keeps as long as anybody needs it to.
             None => true,
             Some(days) => days >= Self::how_long_the_hedgerows_give_nothing() as f32,

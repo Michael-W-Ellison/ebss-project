@@ -220,7 +220,7 @@ fn a_thing_tried_once_and_left_is_new_again_within_the_year() {
     assert_eq!(lessons.how_new_is_this("stack:stone"), 0.5);
 
     // A season of not doing it. `fade` is charged by the day, so one call
-    // carrying a season's worth of ticks is the same as ninety daily ones.
+    // carrying a season's worth of turns is the same as ninety daily ones.
     lessons.fade(DAYS_PER_SEASON * TICKS_PER_DAY);
 
     assert_eq!(
@@ -296,8 +296,8 @@ fn fading_twice_in_a_day_takes_no_more_than_fading_once() {
 
     let a_day = DAYS_PER_SEASON * TICKS_PER_DAY;
     once.fade(a_day);
-    for tick in 0..=a_day {
-        often.fade(tick);
+    for turn in 0..=a_day {
+        often.fade(turn);
     }
 
     assert_eq!(

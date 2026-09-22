@@ -25,7 +25,7 @@ pub fn terrain_to_biome(terrain: TerrainType) -> BiomeType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LightningStrike {
     pub position: Position,
-    pub tick: u32,
+    pub turn: u32,
     pub caused_fire: bool,
 }
 
@@ -80,8 +80,8 @@ pub struct ClimateManager {
     /// Recent lightning strikes
     pub lightning_strikes: Vec<LightningStrike>,
 
-    /// Current tick for lightning tracking
-    pub current_tick: u32,
+    /// Current turn for lightning tracking
+    pub current_turn: u32,
 
     /// What kind of country this whole map is.
     ///
@@ -147,14 +147,14 @@ impl ClimateManager {
         let weather = weather_gen.generate_weather();
 
         Self {
-            calendar: SeasonalCalendar::new(seasons::TICKS_PER_DAY),
+            calendar: SeasonalCalendar::new(seasons::PLANNING_PERIODS_PER_DAY),
             weather,
             weather_gen,
             base_climate: Climate::temperate(), // Default temperate
             biome_today: BTreeMap::new(),
             biome_as_of: None,
             lightning_strikes: Vec::new(),
-            current_tick: 0,
+            current_turn: 0,
             region: BiomeType::THE_ORDINARY_SORT_OF_COUNTRY,
             cold_climate,
             wet_climate,
@@ -175,14 +175,14 @@ impl ClimateManager {
         let weather = weather_gen.generate_weather();
 
         Self {
-            calendar: SeasonalCalendar::new(seasons::TICKS_PER_DAY),
+            calendar: SeasonalCalendar::new(seasons::PLANNING_PERIODS_PER_DAY),
             weather,
             weather_gen,
             base_climate: Climate::temperate(),
             biome_today: BTreeMap::new(),
             biome_as_of: None,
             lightning_strikes: Vec::new(),
-            current_tick: 0,
+            current_turn: 0,
             // The dominant biome is what the weather is drawn against, and
             // it is also what kind of country this is - one answer, not two.
             region: biome.as_a_country(),
@@ -193,12 +193,15 @@ impl ClimateManager {
     }
 
 
-    /// Tick the climate system
-    pub fn tick(&mut self) {
-        self.current_tick += 1;
+    /// Turn the climate system
+    pub fn take_a_turn(&mut self) {
+        // A step is a planning period, which is that many ticks. Every counter
+        // in the model has to advance by the same amount or two of them
+        // disagree about what day it is.
+        self.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
 
         // Update calendar
-        self.calendar.tick();
+        self.calendar.take_a_turn();
 
         // Update weather generator with current season and humidity
         self.weather_gen.season = self.calendar.current_season();
@@ -208,7 +211,7 @@ impl ClimateManager {
         }
 
         // Update weather
-        self.weather.tick();
+        self.weather.take_a_turn();
 
         // Generate new weather when current one expires
         if self.weather.duration_remaining == 0 {
@@ -240,9 +243,9 @@ impl ClimateManager {
         // Process lightning during thunderstorms
         self.process_lightning();
 
-        // Clean up old lightning strikes (older than 100 ticks)
+        // Clean up old lightning strikes (older than 100 turns)
         self.lightning_strikes.retain(|strike| {
-            self.current_tick.saturating_sub(strike.tick) < 100
+            self.current_turn.saturating_sub(strike.turn) < 100
         });
     }
 
@@ -255,7 +258,7 @@ impl ClimateManager {
         }
 
         let mut rng = crate::core::dice::roll();
-        let chance = self.weather.weather_type.lightning_chance_per_tick();
+        let chance = self.weather.weather_type.lightning_chance_per_turn();
 
         if rng.gen::<f32>() < chance {
             // Generate a lightning strike at a random position
@@ -269,7 +272,7 @@ impl ClimateManager {
 
             self.lightning_strikes.push(LightningStrike {
                 position: Position::new(x, y),
-                tick: self.current_tick,
+                turn: self.current_turn,
                 caused_fire,
             });
         }
@@ -446,13 +449,13 @@ mod tests {
     }
 
     #[test]
-    fn test_climate_manager_tick() {
+    fn test_climate_manager_turn() {
         let mut manager = ClimateManager::new(false, false);
         let initial_time = manager.calendar.time_of_day;
 
-        // Tick 100 times (one hour)
+        // Turn 100 times (one hour)
         for _ in 0..100 {
-            manager.tick();
+            manager.take_a_turn();
         }
 
         assert!(manager.calendar.time_of_day > initial_time);
@@ -540,7 +543,7 @@ mod tests {
     /// And it is not still the first morning of the world at midwinter.
     ///
     /// Nothing ever called `clear_biome_cache`, so what was worked out on the
-    /// first tick anything asked was the answer for ever after - a wood in a
+    /// first turn anything asked was the answer for ever after - a wood in a
     /// world a year old still had the temperature of the day it was made in.
     #[test]
     fn the_ground_gets_colder_as_the_year_turns() {
@@ -552,7 +555,7 @@ mod tests {
         // and ask again.
         let mut winter = spring.clone();
         while winter.calendar.current_season() != Season::Winter {
-            winter.tick();
+            winter.take_a_turn();
         }
         let in_winter = winter.get_temperature(here, TerrainType::Plains);
 

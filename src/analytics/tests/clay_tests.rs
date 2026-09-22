@@ -288,10 +288,10 @@ fn a_lump_left_at_the_fire_comes_out_hard() {
 
         a_lit_fire_at(&mut simulation, here);
 
-        for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 60) {
+        for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_DAY * 60) {
             simulation.population.agents[0].state.position = here;
             a_lit_fire_at(&mut simulation, here);
-            simulation.tick();
+            simulation.take_a_turn();
 
             if !simulation.population.agents[0].state.is_alive {
                 break;
@@ -340,11 +340,11 @@ fn nothing_comes_out_of_a_fire_nobody_put_clay_in() {
     let here = simulation.population.agents[0].state.position;
     a_lit_fire_at(&mut simulation, here);
 
-    for _ in 0..(crate::environment::seasons::TICKS_PER_DAY * 20) {
+    for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_DAY * 20) {
         simulation.population.agents[0].state.position = here;
         simulation.population.agents[0].inventory.remove_item("clay", 99);
         a_lit_fire_at(&mut simulation, here);
-        simulation.tick();
+        simulation.take_a_turn();
         if !simulation.population.agents[0].state.is_alive {
             break;
         }

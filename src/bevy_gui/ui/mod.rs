@@ -197,7 +197,7 @@ pub fn render_menu_bar(
                 }
 
                 if ui.add(egui::Button::new("⏭ Step Forward").shortcut_text("N"))
-                    .on_hover_text("Advance simulation by one tick")
+                    .on_hover_text("Advance simulation by one turn")
                     .clicked()
                 {
                     sim_commands.send(SimulationCommand::Step);
@@ -498,8 +498,8 @@ pub fn render_menu_bar(
                     ui.separator();
                     ui.label(egui::RichText::new("Session Info").small().color(egui::Color32::GRAY));
                     ui.label(format!("World: {}×{}", snap.world.width, snap.world.height));
-                    ui.label(format!("Total Ticks: {}", snap.tick));
-                    let days = snap.tick / 1440;
+                    ui.label(format!("Total Turns: {}", snap.turn));
+                    let days = snap.turn / 1440;
                     ui.label(format!("Simulated Days: {}", days));
                 }
             });
@@ -517,7 +517,7 @@ pub fn render_menu_bar(
                     let total_count = snap.population.agents.len();
 
                     let (days, hours, minutes) =
-                        crate::environment::seasons::what_the_clock_says(snap.tick);
+                        crate::environment::seasons::what_the_clock_says(snap.turn);
 
                     // Status with icon
                     ui.label(egui::RichText::new(status_text).color(status_color).strong())
@@ -528,8 +528,8 @@ pub fn render_menu_bar(
                     // Time display
                     ui.label(format!("Day {} {:02}:{:02}", days + 1, hours, minutes))
                         .on_hover_text(format!(
-                            "Simulation time\nTick: {}\n1 day = 1440 ticks",
-                            snap.tick
+                            "Simulation time\nTurn: {}\n1 day = 1440 turns",
+                            snap.turn
                         ));
 
                     ui.separator();
@@ -739,7 +739,7 @@ pub fn render_controls_panel(
             // Step button
             let step_button = egui::Button::new("⏭ Step");
             if ui.add(step_button)
-                .on_hover_text("Advance simulation by one tick (N)")
+                .on_hover_text("Advance simulation by one turn (N)")
                 .clicked()
             {
                 sim_commands.send(SimulationCommand::Step);
@@ -887,7 +887,7 @@ pub fn render_keyboard_help(
                 // Left column
                 render_shortcut_section(&mut columns[0], "Simulation", &[
                     ("Space", "Play/Pause"),
-                    ("N", "Step one tick"),
+                    ("N", "Step one turn"),
                     ("1-5", "Speed 1x-5x"),
                     ("0", "Speed 10x"),
                 ]);
@@ -989,13 +989,13 @@ fn export_statistics_csv(stats_history: &StatisticsHistory) -> Result<String, st
 
     let mut file = std::fs::File::create(&filename)?;
 
-    writeln!(file, "tick,population,infants,children,adolescents,adults,elderly,births,deaths,avg_health,avg_energy,avg_happiness,total_resources,buildings_completed,buildings_construction")?;
+    writeln!(file, "turn,population,infants,children,adolescents,adults,elderly,births,deaths,avg_health,avg_energy,avg_happiness,total_resources,buildings_completed,buildings_construction")?;
 
     for point in &stats_history.points {
         writeln!(
             file,
             "{},{},{},{},{},{},{},{},{},{:.2},{:.2},{:.2},{},{},{}",
-            point.tick,
+            point.turn,
             point.population,
             point.infants,
             point.children,
@@ -1027,7 +1027,7 @@ fn export_timeline_csv(timeline: &TimelineData) -> Result<String, std::io::Error
 
     let mut file = std::fs::File::create(&filename)?;
 
-    writeln!(file, "tick,event_type,description,position_x,position_y")?;
+    writeln!(file, "turn,event_type,description,position_x,position_y")?;
 
     for event in &timeline.event_log {
         let description = event.short_description();
@@ -1038,7 +1038,7 @@ fn export_timeline_csv(timeline: &TimelineData) -> Result<String, std::io::Error
         writeln!(
             file,
             "{},{:?},\"{}\",{},{}",
-            event.tick,
+            event.turn,
             event.filter_type(),
             escaped_description,
             pos_x,

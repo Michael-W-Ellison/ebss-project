@@ -21,12 +21,12 @@ fn an_answered_drive_presses_no_harder_than_it_looks() {
     let mut drive = Drive::new(DriveType::Hunger);
 
     for _ in 0..30 {
-        drive.tick();
+        drive.take_a_turn();
         // Answered before it ever gets over the threshold
         drive.partial_satisfy(0.05);
     }
 
-    assert_eq!(drive.denied_ticks(), 0, "it was never left asking");
+    assert_eq!(drive.denied_turns(), 0, "it was never left asking");
     assert_eq!(drive.pressure(), 1.0);
     assert!((drive.urgency() - drive.bare_urgency()).abs() < 1e-6);
 }
@@ -34,10 +34,10 @@ fn an_answered_drive_presses_no_harder_than_it_looks() {
 /// A drive left asking builds faster the longer it waits.
 #[test]
 fn a_denied_drive_builds_faster_the_longer_it_waits() {
-    fn value_after(ticks: u32, answered: bool) -> f32 {
+    fn value_after(turns: u32, answered: bool) -> f32 {
         let mut drive = Drive::new(DriveType::Rest);
-        for _ in 0..ticks {
-            drive.tick();
+        for _ in 0..turns {
+            drive.take_a_turn();
             if answered {
                 drive.satisfy();
             }
@@ -50,7 +50,7 @@ fn a_denied_drive_builds_faster_the_longer_it_waits() {
 
     assert!(
         ignored > flat,
-        "a drive ignored for 120 ticks should have outrun a flat rate: {ignored:.3} against {flat:.3}"
+        "a drive ignored for 120 turns should have outrun a flat rate: {ignored:.3} against {flat:.3}"
     );
     assert!(value_after(120, true) < 0.05, "an answered drive stays down");
 }
@@ -66,7 +66,7 @@ fn a_long_denied_need_takes_the_agent_over() {
 
     // One has been asking for three days of world time; the other just started
     for _ in 0..40 {
-        nagging.tick();
+        nagging.take_a_turn();
         nagging.value = 0.75; // hold it steady so only the waiting differs
     }
 
@@ -87,7 +87,7 @@ fn the_pressure_is_bounded() {
     drive.value = 1.0;
 
     for _ in 0..10_000 {
-        drive.tick();
+        drive.take_a_turn();
     }
 
     assert!(
@@ -104,26 +104,26 @@ fn a_meal_takes_the_edge_off_without_erasing_the_memory() {
     drive.value = 0.9;
 
     for _ in 0..60 {
-        drive.tick();
+        drive.take_a_turn();
         drive.value = 0.9;
     }
 
-    let starving = drive.denied_ticks();
+    let starving = drive.denied_turns();
     assert!(starving >= 60);
 
     // A meal that takes it below the threshold
     drive.partial_satisfy(0.5);
 
     assert!(
-        drive.denied_ticks() < starving,
+        drive.denied_turns() < starving,
         "a meal should relieve the pressure"
     );
     assert!(
-        drive.denied_ticks() > 0,
+        drive.denied_turns() > 0,
         "somebody who has been starving stays wary for a while"
     );
 
     // A full meal clears it
     drive.satisfy();
-    assert_eq!(drive.denied_ticks(), 0);
+    assert_eq!(drive.denied_turns(), 0);
 }

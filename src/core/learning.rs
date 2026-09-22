@@ -551,7 +551,7 @@ fn learn_behavior(
 //
 // ```text
 // 1. UPDATE DRIVES
-//    - agent.tick() → agent.drives.tick()
+//    - agent.take_a_turn() → agent.drives.take_a_turn()
 //    - Each drive accumulates based on its base rate
 //    - Drives approach their threshold values
 //
@@ -627,17 +627,17 @@ fn learn_behavior(
 //    * gather_food (weight: 1.0)
 //    * hunt (weight: 1.0)
 //
-// Tick 1: Tries eat_stored_food → Fails (no storage)
+// Turn 1: Tries eat_stored_food → Fails (no storage)
 //    * weight becomes 0.9
 //
-// Tick 5: Tries gather_food → Success!
+// Turn 5: Tries gather_food → Success!
 //    * weight becomes 1.1
 //    * Hunger reduced by 0.3
 //
-// Tick 10: Tries gather_food again → Success!
+// Turn 10: Tries gather_food again → Success!
 //    * weight becomes 1.21
 //
-// After 100 ticks:
+// After 100 turns:
 //    * eat_stored_food: weight = 0.3 (rarely used)
 //    * gather_food: weight = 4.5 (preferred strategy)
 //    * hunt: weight = 1.8 (moderate success)

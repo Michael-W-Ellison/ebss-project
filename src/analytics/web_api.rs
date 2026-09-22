@@ -276,8 +276,8 @@ pub trait SimulationDataProvider: Send + Sync {
 pub struct SimulationStatus {
     pub running: bool,
     pub paused: bool,
-    pub current_tick: u64,
-    pub ticks_per_second: f32,
+    pub current_turn: u64,
+    pub turns_per_second: f32,
     pub uptime_seconds: u64,
 }
 
@@ -321,7 +321,7 @@ pub struct AgentDetail {
 /// Metrics summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsSummary {
-    pub tick: u64,
+    pub turn: u64,
     pub population: usize,
     pub average_happiness: f32,
     pub average_health: f32,
@@ -332,7 +332,7 @@ pub struct MetricsSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventSummary {
     pub id: String,
-    pub tick: u64,
+    pub turn: u64,
     pub event_type: String,
     pub description: String,
     pub severity: f32,
@@ -595,8 +595,8 @@ impl SimulationDataProvider for MockDataProvider {
         SimulationStatus {
             running: true,
             paused: self.paused.load(Ordering::SeqCst),
-            current_tick: 1000,
-            ticks_per_second: 60.0,
+            current_turn: 1000,
+            turns_per_second: 60.0,
             uptime_seconds: 3600,
         }
     }
@@ -642,7 +642,7 @@ impl SimulationDataProvider for MockDataProvider {
 
     fn get_metrics(&self) -> MetricsSummary {
         MetricsSummary {
-            tick: 1000,
+            turn: 1000,
             population: 50,
             average_happiness: 0.6,
             average_health: 75.0,
@@ -654,7 +654,7 @@ impl SimulationDataProvider for MockDataProvider {
         vec![
             EventSummary {
                 id: crate::core::dice::name().to_string(),
-                tick: 999,
+                turn: 999,
                 event_type: "AgentBorn".to_string(),
                 description: "New agent born".to_string(),
                 severity: 0.5,

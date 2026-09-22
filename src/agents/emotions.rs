@@ -4,8 +4,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// Twelve two-hour ticks to a day - see `crate::environment::seasons`
-const TICKS_PER_DAY: f32 = 12.0;
+/// How many turns there are in a day, for the rates below.
+///
+/// This was a **local** `const TICKS_PER_DAY: f32 = 12.0` - a third spelling
+/// of the day, hardcoded to the twelve two-hour turns the model kept two
+/// calendars ago. Every rate denominated on it was four times too fast even
+/// before a tick became a minute. Derived from the one calendar now, so it
+/// cannot fall behind it again.
+use crate::environment::seasons::PLANNING_PERIODS_PER_DAY as PERIODS_PER_DAY;
 use uuid::Uuid;
 use crate::core::traits::{Trait, TraitSet};
 
@@ -36,7 +42,7 @@ pub struct EmotionState {
     /// `patterns::how_fast_worry_fades`, which is its clock.
     #[serde(default)]
     pub worry: f32,
-    /// Decay rate per tick for each emotion
+    /// Decay rate per turn for each emotion
     pub decay_rate: f32,
     /// Emotion sources: what/who triggered each emotion
     /// What is making this one angry, and how much of it each thing is.
@@ -70,8 +76,8 @@ pub struct EmotionState {
     /// ISSUES #212.
     #[serde(default)]
     pub what_last_struck_me: Option<EmotionSource>,
-    /// Tick when last attacked (for recency)
-    pub last_attack_tick: u32,
+    /// Turn when last attacked (for recency)
+    pub last_attack_turn: u32,
 }
 
 impl EmotionState {
@@ -83,14 +89,14 @@ impl EmotionState {
             happiness: 0.0,
             curiosity: 0.0,
             worry: 0.0,
-            decay_rate: 0.01, // 1% per tick
+            decay_rate: 0.01, // 1% per turn
             anger_sources: BTreeMap::new(),
             fear_sources: BTreeMap::new(),
             sadness_sources: BTreeMap::new(),
             happiness_sources: BTreeMap::new(),
             curiosity_sources: BTreeMap::new(),
             what_last_struck_me: None,
-            last_attack_tick: 0,
+            last_attack_turn: 0,
         }
     }
 
@@ -110,14 +116,14 @@ impl EmotionState {
     /// `EmotionSource` rather than a bare id, because the two callers are a
     /// person hitting a person and an animal biting a person, and the whole of
     /// #212 is that those were the same thing here.
-    pub fn record_attack(&mut self, who: EmotionSource, current_tick: u32) {
+    pub fn record_attack(&mut self, who: EmotionSource, current_turn: u32) {
         self.what_last_struck_me = Some(who);
-        self.last_attack_tick = current_tick;
+        self.last_attack_turn = current_turn;
     }
 
     /// What struck this one, if it was recent enough to still matter.
-    pub fn recent_attacker(&self, current_tick: u32) -> Option<EmotionSource> {
-        if current_tick.saturating_sub(self.last_attack_tick) < 100 {
+    pub fn recent_attacker(&self, current_turn: u32) -> Option<EmotionSource> {
+        if current_turn.saturating_sub(self.last_attack_turn) < 100 {
             return self.what_last_struck_me.clone();
         }
         None
@@ -127,8 +133,8 @@ impl EmotionState {
     ///
     /// For the one reader that can only mean somebody: a killing is laid at
     /// the door of a man, and a wolf has no door.
-    pub fn whoever_struck_me(&self, current_tick: u32) -> Option<Uuid> {
-        match self.recent_attacker(current_tick) {
+    pub fn whoever_struck_me(&self, current_turn: u32) -> Option<Uuid> {
+        match self.recent_attacker(current_turn) {
             Some(EmotionSource::Agent(who)) => Some(who),
             _ => None,
         }
@@ -316,7 +322,7 @@ impl EmotionState {
     }
 
     /// Decay emotions over time
-    pub fn tick(&mut self) {
+    pub fn take_a_turn(&mut self) {
         // Decay each source
         for amount in self.anger_sources.values_mut() {
             *amount = (*amount - self.decay_rate).max(0.0);
@@ -522,7 +528,7 @@ impl EmotionState {
     }
 
     /// Decay emotions with trait modifiers applied (traits affect decay rates)
-    pub fn tick_with_traits(&mut self, traits: &TraitSet) {
+    pub fn turn_with_traits(&mut self, traits: &TraitSet) {
         use crate::core::EmotionType;
 
         // Calculate trait-modified decay rates for each emotion
@@ -635,10 +641,10 @@ pub struct Relationship {
     pub relationship_type: RelationshipType,
     /// Strength of bond (-1.0 to 1.0)
     pub bond_strength: f32,
-    /// Time together (in ticks)
+    /// Time together (in turns)
     pub time_together: u64,
-    /// Last interaction tick (for determining if should greet)
-    pub last_interaction_tick: u32,
+    /// Last interaction turn (for determining if should greet)
+    pub last_interaction_turn: u32,
     /// Total number of interactions
     pub total_interactions: u32,
 }
@@ -660,19 +666,19 @@ impl Relationship {
             relationship_type,
             bond_strength,
             time_together: 0,
-            last_interaction_tick: 0,
+            last_interaction_turn: 0,
             total_interactions: 0,
         }
     }
 
     /// Create a new neutral relationship (for compatibility with social network system)
-    pub fn new_neutral(other_agent: Uuid, current_tick: u32) -> Self {
+    pub fn new_neutral(other_agent: Uuid, current_turn: u32) -> Self {
         Self {
             other_agent,
             relationship_type: RelationshipType::Acquaintance,
             bond_strength: 0.0,
             time_together: 0,
-            last_interaction_tick: current_tick,
+            last_interaction_turn: current_turn,
             total_interactions: 0,
         }
     }
@@ -710,11 +716,11 @@ impl Relationship {
     /// both like.
     pub const GETTING_ON_WITH_SOMEBODY: f32 = 0.5;
 
-    /// Being about the same place as somebody, one tick's worth.
+    /// Being about the same place as somebody, one turn's worth.
     ///
-    /// This used to add up to 0.10 a tick with no ceiling, so a bond
+    /// This used to add up to 0.10 a turn with no ceiling, so a bond
     /// saturated within a day of standing beside a man and nothing else about
-    /// him could be heard over it. Measured at fifteen thousand ticks: 82 to
+    /// him could be heard over it. Measured at fifteen thousand turns: 82 to
     /// 105 relationships apiece, of which nine in ten stood at 0.6 or better,
     /// and a mean bond of 0.901 across a whole settlement. Everybody loved
     /// everybody, and it was arithmetic rather than affection.
@@ -738,27 +744,27 @@ impl Relationship {
         self.bond_strength = (self.bond_strength - amount).max(-1.0);
     }
 
-    /// What a full-blown grudge is worth against this bond in one tick.
+    /// What a full-blown grudge is worth against this bond in one turn.
     ///
     /// Set so that resentment beats proximity several times over: keeping
-    /// company is worth about a thousandth of the scale a tick at best, and a
+    /// company is worth about a thousandth of the scale a turn at best, and a
     /// grudge at its height is worth eight times that. A man you cannot stand
     /// does not become a friend because you keep finding yourself standing
     /// next to him, which was exactly what happened before.
-    pub const RESENTMENT_A_TICK: f32 = 0.008;
+    pub const RESENTMENT_A_TURN: f32 = 0.008;
 
     /// Let what this agent holds against somebody tell on what it thinks of
     /// them.
     ///
     /// `EmotionState` and `Relationship` kept separate books: a grudge lived
-    /// in `anger_sources`, decayed at one per cent a tick, was read by nothing
+    /// in `anger_sources`, decayed at one per cent a turn, was read by nothing
     /// except action selection, and never touched the bond. A man who had just
     /// been hit still counted the man who hit him a close friend.
     pub fn let_it_tell(&mut self, held_against_them: f32) {
         if held_against_them <= 0.0 {
             return;
         }
-        self.weaken(held_against_them.clamp(0.0, 1.0) * Self::RESENTMENT_A_TICK);
+        self.weaken(held_against_them.clamp(0.0, 1.0) * Self::RESENTMENT_A_TURN);
         self.settle_what_we_are();
     }
 
@@ -801,20 +807,20 @@ impl Relationship {
 
     /// Record a positive interaction (for compatibility with social network system)
     /// Delta is converted to bond strength change (typically 0-10 -> 0.0-0.1)
-    pub fn positive_interaction(&mut self, delta: i8, current_tick: u32) {
+    pub fn positive_interaction(&mut self, delta: i8, current_turn: u32) {
         let bond_change = (delta as f32) * 0.01; // Convert delta to 0.0-1.0 scale
         self.strengthen(bond_change);
-        self.last_interaction_tick = current_tick;
+        self.last_interaction_turn = current_turn;
         self.total_interactions += 1;
         self.settle_what_we_are();
     }
 
     /// Record a negative interaction (for compatibility with social network system)
     /// Delta is converted to bond strength change (typically 0-10 -> 0.0-0.1)
-    pub fn negative_interaction(&mut self, delta: i8, current_tick: u32) {
+    pub fn negative_interaction(&mut self, delta: i8, current_turn: u32) {
         let bond_change = (delta as f32) * 0.01; // Convert delta to 0.0-1.0 scale
         self.weaken(bond_change);
-        self.last_interaction_tick = current_tick;
+        self.last_interaction_turn = current_turn;
         self.total_interactions += 1;
         self.settle_what_we_are();
     }
@@ -936,14 +942,14 @@ impl Relationship {
 
         // Apply the change.
         //
-        // This runs for every nearby pair every tick, so the numbers above are
+        // This runs for every nearby pair every turn, so the numbers above are
         // a rate and not an amount: two sociable, empathetic people were
-        // gaining 0.035 a tick and became inseparable inside three days, and
+        // gaining 0.035 a turn and became inseparable inside three days, and
         // two who clashed were sworn enemies inside a week, both regardless of
         // anything that had actually happened between them. A day's worth of
-        // getting on with somebody now does what a tick's worth used to.
+        // getting on with somebody now does what a turn's worth used to.
         let old_strength = self.bond_strength;
-        let a_day_of_it = total_change / TICKS_PER_DAY;
+        let a_day_of_it = total_change / PERIODS_PER_DAY as f32;
 
         if a_day_of_it > 0.0 {
             // Getting on with a man will make him a friend. Whether he is more
@@ -1133,11 +1139,11 @@ impl RelationshipMap {
     pub fn get_or_create_relationship(
         &mut self,
         other_agent_id: Uuid,
-        current_tick: u32,
+        current_turn: u32,
     ) -> &mut Relationship {
         self.relationships
             .entry(other_agent_id)
-            .or_insert_with(|| Relationship::new_neutral(other_agent_id, current_tick))
+            .or_insert_with(|| Relationship::new_neutral(other_agent_id, current_turn))
     }
 }
 
@@ -1284,7 +1290,7 @@ mod tests {
 
         assert_eq!(emotions.anger, 0.5);
 
-        emotions.tick();
+        emotions.take_a_turn();
         assert_eq!(emotions.anger, 0.49); // Decayed by 0.01
     }
 
@@ -1490,7 +1496,7 @@ mod tests {
 
         emotions.add_anger(EmotionSource::Creature("rabbit".to_string()), 0.4);
 
-        emotions.tick();
+        emotions.take_a_turn();
         assert!(emotions.anger_sources.is_empty()); // Should be removed at 0
     }
 
@@ -1509,9 +1515,11 @@ mod tests {
         let initial_strength = rel.bond_strength;
 
         // A season of it. This function runs for every nearby pair every
-        // tick, so it is a rate: ten ticks is under a day, and a day of
+        // turn, so it is a rate: ten turns is under a day, and a day of
         // disagreeing about God should not undo a friendship.
-        for _ in 0..288 {
+        for _ in 0..(crate::environment::seasons::DAYS_PER_SEASON
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY)
+        {
             rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
         }
 
@@ -1537,7 +1545,9 @@ mod tests {
         let initial_strength = rel.bond_strength;
 
         // A season of each other's company
-        for _ in 0..288 {
+        for _ in 0..(crate::environment::seasons::DAYS_PER_SEASON
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY)
+        {
             rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
         }
 
@@ -1747,8 +1757,16 @@ mod tests {
         let mut rel = Relationship::new(other_id, RelationshipType::Acquaintance);
 
         // A season of being thrown together with somebody who is wrong about
-        // God, wrong about the truth, and wrong about whether to hit people
-        for _ in 0..288 {
+        // God, wrong about the truth, and wrong about whether to hit people.
+        //
+        // Said as a season rather than as `288`. That was a season when this
+        // file kept its own `TICKS_PER_DAY = 12.0`, and six days once the
+        // model went to forty-eight turns in a day - so the run was a
+        // twelfth of what the comment beside it claimed, and the rate was
+        // tuned to make a fortnight's worth of it come out as a season's.
+        for _ in 0..(crate::environment::seasons::DAYS_PER_SEASON
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY)
+        {
             rel.update_from_trait_interaction(&agent1_traits, &agent2_traits);
         }
 

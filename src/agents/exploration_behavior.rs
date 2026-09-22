@@ -21,7 +21,7 @@ impl Agent {
     ///
     /// Exploration is suppressed when survival drives (hunger/thirst) are active.
     /// A starving agent should focus on finding food, not wandering into unknown territory.
-    pub fn decide_exploration(&self, current_tick: u32) -> ExplorationDecision {
+    pub fn decide_exploration(&self, current_turn: u32) -> ExplorationDecision {
         // Check if survival drives are active - survival takes priority over exploration
         let hunger_active = self.drives.get(DriveType::Hunger)
             .map(|d| d.is_active())
@@ -47,17 +47,17 @@ impl Agent {
         // Count unexplored neighbors
         let unexplored_nearby = self.exploration_knowledge.count_unexplored_neighbors(&current_pos);
 
-        // Calculate ticks since last exploration
-        let ticks_since_exploration = current_tick.saturating_sub(
-            self.exploration_knowledge.last_exploration_tick
+        // Calculate turns since last exploration
+        let turns_since_exploration = current_turn.saturating_sub(
+            self.exploration_knowledge.last_exploration_turn
         );
 
         // Determine if should explore
-        if !super::exploration::should_explore(curiosity, unexplored_nearby, ticks_since_exploration) {
+        if !super::exploration::should_explore(curiosity, unexplored_nearby, turns_since_exploration) {
             return ExplorationDecision::NoExploration {
                 reason: format!(
-                    "Low curiosity ({:.2}), few unexplored tiles ({}), recent exploration ({} ticks ago)",
-                    curiosity, unexplored_nearby, ticks_since_exploration
+                    "Low curiosity ({:.2}), few unexplored tiles ({}), recent exploration ({} turns ago)",
+                    curiosity, unexplored_nearby, turns_since_exploration
                 ),
             };
         }
@@ -119,8 +119,8 @@ impl Agent {
         }
 
         // Boost if haven't explored in a long time
-        let ticks_since_exploration = self.exploration_knowledge.last_exploration_tick;
-        if ticks_since_exploration > 1000 {
+        let turns_since_exploration = self.exploration_knowledge.last_exploration_turn;
+        if turns_since_exploration > 1000 {
             priority += 0.1;
         }
 

@@ -31,8 +31,8 @@ fn test_eating_raw_food_less_effective() {
         energy_reserves: 30.0,
         protein_stores: 30.0,
         micronutrient_level: 30.0,
-        ticks_protein_deficit: 0,
-        ticks_micronutrient_deficit: 0,
+        turns_protein_deficit: 0,
+        turns_micronutrient_deficit: 0,
     };
 
     // Create raw meat (high protein, low utilization when raw)
@@ -75,8 +75,8 @@ fn test_eating_cooked_food_more_effective() {
         energy_reserves: 30.0,
         protein_stores: 30.0,
         micronutrient_level: 30.0,
-        ticks_protein_deficit: 0,
-        ticks_micronutrient_deficit: 0,
+        turns_protein_deficit: 0,
+        turns_micronutrient_deficit: 0,
     };
 
     // Create cooked meat (high utilization)
@@ -159,8 +159,8 @@ fn test_protein_deficiency_causes_health_loss() {
         energy_reserves: 80.0,
         protein_stores: 5.0, // Very low
         micronutrient_level: 80.0,
-        ticks_protein_deficit: 3000, // Well past threshold
-        ticks_micronutrient_deficit: 0,
+        turns_protein_deficit: 3000, // Well past threshold
+        turns_micronutrient_deficit: 0,
     };
 
     assert!(agent.nutrition.has_protein_deficiency());
@@ -178,8 +178,8 @@ fn test_micronutrient_deficiency_scurvy() {
         energy_reserves: 80.0,
         protein_stores: 80.0,
         micronutrient_level: 5.0, // Very low
-        ticks_protein_deficit: 0,
-        ticks_micronutrient_deficit: 6000, // Well past threshold
+        turns_protein_deficit: 0,
+        turns_micronutrient_deficit: 6000, // Well past threshold
     };
 
     assert!(agent.nutrition.has_micronutrient_deficiency());
@@ -197,8 +197,8 @@ fn test_balanced_diet_maintains_health() {
         energy_reserves: 60.0,
         protein_stores: 60.0,
         micronutrient_level: 60.0,
-        ticks_protein_deficit: 0,
-        ticks_micronutrient_deficit: 0,
+        turns_protein_deficit: 0,
+        turns_micronutrient_deficit: 0,
     };
 
     // No deficiencies
@@ -233,14 +233,14 @@ fn test_food_spoilage_in_inventory() {
     assert!(item.food_data.as_ref().unwrap().freshness > 0.9);
 
     // Simulate time passing
-    agent.tick_food_spoilage(50);
+    agent.turn_food_spoilage(50);
 
     // Food should have degraded
     let item = agent.inventory.get_item("berries").unwrap();
     assert!(item.food_data.as_ref().unwrap().freshness < 0.6);
 
     // More time - should be spoiled and removed
-    agent.tick_food_spoilage(150);
+    agent.turn_food_spoilage(150);
 
     // Food should be removed from inventory
     assert!(agent.inventory.get_item("berries").is_none());
@@ -254,7 +254,7 @@ fn test_dried_food_lasts_longer_in_inventory() {
     let dried_food = FoodData::new(
         NutritionalContent::new(30.0, 50.0, 10.0, 0.1),
         PreparationState::Dried,
-        100, // Base 100 ticks, but dried = 2000 effective
+        100, // Base 100 turns, but dried = 2000 effective
         0,
     );
 
@@ -268,7 +268,7 @@ fn test_dried_food_lasts_longer_in_inventory() {
     agent.inventory.add_item(food_item);
 
     // Simulate significant time passing
-    agent.tick_food_spoilage(100);
+    agent.turn_food_spoilage(100);
 
     // Dried food should still be mostly fresh
     let item = agent.inventory.get_item("dried_meat").unwrap();
@@ -284,8 +284,8 @@ fn test_find_best_food_prioritizes_needs() {
         energy_reserves: 10.0, // Very low
         protein_stores: 80.0,
         micronutrient_level: 80.0,
-        ticks_protein_deficit: 0,
-        ticks_micronutrient_deficit: 0,
+        turns_protein_deficit: 0,
+        turns_micronutrient_deficit: 0,
     };
 
     // Add high-protein food
@@ -323,9 +323,9 @@ fn test_nutrition_metabolism_depletes_over_time() {
     let initial_energy = agent.nutrition.energy_reserves;
     let initial_protein = agent.nutrition.protein_stores;
 
-    // Simulate 100 ticks of metabolism
+    // Simulate 100 turns of metabolism
     for _ in 0..100 {
-        agent.tick_nutrition(0);
+        agent.turn_nutrition(0);
     }
 
     // Energy should have depleted

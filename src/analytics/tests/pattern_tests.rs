@@ -94,8 +94,8 @@ fn a_place_that_stops_working_stops_being_worth_the_walk() {
     let bank = (14, 9, 0);
     let drinking = Action::Gather { resource_type: "water".to_string() };
 
-    for tick in 0..4 {
-        agent.link_what_worked(&drinking, &a_drink(), DriveType::Thirst, bank, tick);
+    for turn in 0..4 {
+        agent.link_what_worked(&drinking, &a_drink(), DriveType::Thirst, bank, turn);
     }
     assert_eq!(
         agent.patterns.where_it_worked(DriveType::Thirst, 4),
@@ -129,13 +129,13 @@ fn one_lucky_drink_is_not_a_place_worth_walking_to() {
     let bank = (20, 20, 0);
     let drinking = Action::Gather { resource_type: "water".to_string() };
 
-    for tick in 0..(Patterns::A_HABIT_BY_NOW - 1) {
-        agent.link_what_worked(&drinking, &a_drink(), DriveType::Thirst, bank, tick);
+    for turn in 0..(Patterns::A_HABIT_BY_NOW - 1) {
+        agent.link_what_worked(&drinking, &a_drink(), DriveType::Thirst, bank, turn);
         assert_eq!(
-            agent.patterns.where_it_worked(DriveType::Thirst, tick),
+            agent.patterns.where_it_worked(DriveType::Thirst, turn),
             None,
             "still a coincidence after {} times",
-            tick + 1
+            turn + 1
         );
     }
 
@@ -155,13 +155,13 @@ fn a_place_goes_stale() {
     let agent = &mut population.agents[0];
     let patch = (30, 30, 0);
 
-    for tick in 0..6 {
+    for turn in 0..6 {
         agent.link_what_worked(
             &Action::Gather { resource_type: "food".to_string() },
             &ActionResult::success().with_drive_change(DriveType::Hunger, -0.4),
             DriveType::Hunger,
             patch,
-            tick,
+            turn,
         );
     }
 
@@ -207,13 +207,13 @@ fn the_place_you_are_standing_is_not_a_destination() {
     let agent = &mut population.agents[0];
     let here = (7, 7, 0);
 
-    for tick in 0..6 {
+    for turn in 0..6 {
         agent.link_what_worked(
             &Action::Gather { resource_type: "water".to_string() },
             &a_drink(),
             DriveType::Thirst,
             here,
-            tick,
+            turn,
         );
     }
 
@@ -275,13 +275,13 @@ fn a_thirsty_agent_knows_the_bank_it_drank_from_and_does_not_set_off_for_it() {
         if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
             thirst.value = 0.9;
         }
-        for tick in 0..6 {
+        for turn in 0..6 {
             agent.link_what_worked(
                 &Action::Gather { resource_type: "water".to_string() },
                 &a_drink(),
                 DriveType::Thirst,
                 bank,
-                tick,
+                turn,
             );
         }
     }
@@ -327,13 +327,13 @@ fn a_remembered_bank_does_not_beat_the_stream_at_your_feet() {
     {
         let agent = &mut simulation.population.agents[0];
         agent.inventory.drink_water(1000.0);
-        for tick in 0..6 {
+        for turn in 0..6 {
             agent.link_what_worked(
                 &Action::Gather { resource_type: "water".to_string() },
                 &a_drink(),
                 DriveType::Thirst,
                 far_off,
-                tick,
+                turn,
             );
         }
     }
@@ -380,10 +380,10 @@ fn a_settlement_works_out_what_answers_what() {
     ));
 
     for _ in 0..600 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
-    let now = simulation.current_tick;
+    let now = simulation.current_turn;
     let worked_out: usize = simulation
         .population
         .agents
@@ -520,13 +520,13 @@ fn a_trail_nobody_walks_grows_over() {
     let agent = &mut population.agents[0];
     let bank = (14, 9, 0);
 
-    for tick in 0..3 {
+    for turn in 0..3 {
         agent.link_what_worked(
             &Action::Gather { resource_type: "water".to_string() },
             &a_drink(),
             DriveType::Thirst,
             bank,
-            tick,
+            turn,
         );
     }
 
@@ -696,30 +696,30 @@ fn when_a_place_stops_working_the_next_one_is_one_like_it() {
     let berries = Element::On("Berries".to_string());
 
     // Drinking is done at two banks, often enough for both to be habits
-    for tick in 0..4 {
+    for turn in 0..4 {
         patterns.it_worked(
             DriveType::Thirst,
             &[drinking.clone(), water.clone(), one_bank.clone()],
             0.4,
-            tick,
+            turn,
         );
     }
-    for tick in 4..8 {
+    for turn in 4..8 {
         patterns.it_worked(
             DriveType::Thirst,
             &[drinking.clone(), water.clone(), another_bank.clone()],
             0.3,
-            tick,
+            turn,
         );
     }
     // And a berry patch has answered thirst too, better than either bank -
     // fruit is wet - but it has nothing else in common with them
-    for tick in 8..12 {
+    for turn in 8..12 {
         patterns.it_worked(
             DriveType::Thirst,
             &[picking.clone(), berries.clone(), a_berry_patch.clone()],
             0.9,
-            tick,
+            turn,
         );
     }
 

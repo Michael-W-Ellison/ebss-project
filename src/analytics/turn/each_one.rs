@@ -1,8 +1,8 @@
 // src/analytics/turn/each_one.rs
 //! One person's turn, in the order a person takes it.
 //!
-//! Everybody in the settlement goes through these stages every tick, and until
-//! this split they were six hundred and seventy lines in the middle of `tick`
+//! Everybody in the settlement goes through these stages every turn, and until
+//! this split they were six hundred and seventy lines in the middle of `turn`
 //! with no names on them:
 //!
 //! 1. [`Simulation::keep_the_goals_and_the_plan_current`] - the standing
@@ -50,7 +50,7 @@ impl Simulation {
             // And then, for anybody with something on them, the rest of the
             // half hour a minute at a time.
             //
-            // "Every 30 ticks/minutes agents should have the option of making
+            // "Every 30 turns/minutes agents should have the option of making
             // a decision. This does not apply if an agent encounters a
             // dangerous situation, as they must then make decisions minute by
             // minute to enhance their survival odds."
@@ -111,6 +111,55 @@ impl Simulation {
                 return;
             };
 
+            // The small ones do not take a turn at all.
+            //
+            // "Age 0-2: ... This age skips decision/planning periods which
+            // occur 48 times a day. Age 2-5: ... This age skips
+            // decision/planning periods."
+            //
+            // Which is what a body that small does: it is carried, it is fed
+            // out of whoever carries it - see `feed_the_small_children` - and
+            // it is put where that person is by
+            // `the_small_stay_with_their_people`. Everything a turn does from
+            // here down is choosing and doing, and a child under six does
+            // neither. Letting one through meant a two-year-old walking off
+            // after whatever its drives said, which is the other half of why
+            // only 41.9% of them had a parent in reach when it came to
+            // feeding them.
+            if self.population.agents[agent_index].state.years_old()
+                < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+            {
+                return;
+            }
+
+            // Somebody in the middle of something does not stop to think.
+            //
+            // "Once an agent plans an action, it would not change its mind
+            // unless its situation changed in some manner." A planning period
+            // is a gate on deciding, not a unit of doing: an agent who set out
+            // on something reckoned at 145 ticks walks past the gates at 30,
+            // 60, 90 and 120 and thinks again at 150. See `Agent::busy_until`
+            // for what that quantising costs and buys.
+            //
+            // Danger is the carve-out the specification makes, and it takes
+            // the plan with it: "This does not apply if an agent encounters a
+            // dangerous situation, as they must then make decisions minute by
+            // minute." A man who has just seen a wolf is no longer walking to
+            // the hedgerow, so the undertaking is abandoned rather than merely
+            // interrupted - otherwise he would go back to it the moment the
+            // wolf left, having learnt nothing from the last half hour. The
+            // minute-by-minute loop in `everybody_takes_a_turn` reaches this
+            // function again on the same tick, and has to find him free.
+            {
+                let now = self.current_turn;
+                let agent = &mut self.population.agents[agent_index];
+                if agent.emotions.in_danger() {
+                    agent.busy_until = 0;
+                } else if agent.busy_until > now {
+                    return;
+                }
+            }
+
             // What is pressing hardest, and where this one is standing.
             let (drive_type, drive_value, agent_position) = {
                 let agent = &self.population.agents[agent_index];
@@ -168,6 +217,19 @@ impl Simulation {
 
             let action_result = self.execute_action(&action, agent_index);
 
+            // And now he is busy with it until it is done.
+            //
+            // Set from what the verb matrix says the action costs - see
+            // `AgentState::how_long_this_takes` - so that a longer undertaking
+            // holds him past more gates. Anything of a single period leaves
+            // him free at the next one, which is what everything cost before
+            // this existed and what most things still cost.
+            {
+                let takes = crate::agents::AgentState::how_long_this_takes(&action);
+                let now = self.current_turn;
+                self.population.agents[agent_index].busy_until = now + takes;
+            }
+
             self.what_came_of_it(
                 &action,
                 &action_result,
@@ -187,7 +249,7 @@ impl Simulation {
         let agent_id = self.population.agents[agent_index].id;
 
         // Generate goals periodically based on drives and emotions
-        if self.current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
+        if self.current_turn % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
             let agent = &mut self.population.agents[agent_index];
 
             // Collect current drive types and emotion values
@@ -204,7 +266,7 @@ impl Simulation {
             let new_goals = crate::core::goals::GoalManager::generate_common_goals(
                 &drive_types,
                 &emotion_values,
-                self.current_tick,
+                self.current_turn,
             );
 
             // Add generated goals to agent's goals
@@ -434,7 +496,7 @@ impl Simulation {
                 // arm below and **fled in a random direction** rather than
                 // away from the wolf. Something present is handled above, by
                 // the threat tree, which reads creatures properly. See #212.
-                else if let Some(attacker_id) = agent.emotions.whoever_struck_me(self.current_tick) {
+                else if let Some(attacker_id) = agent.emotions.whoever_struck_me(self.current_turn) {
                     // Find attacker position and flee away from them
                     if let Some(attacker) = self.population.agents.iter().find(|a| a.id == attacker_id) {
                         let attacker_pos = attacker.state.position;
@@ -497,7 +559,7 @@ impl Simulation {
                 // swung at a person who does not exist - **2,185 refusals of
                 // "Attack: Target agent not found"**. Standing up to the
                 // animal itself is the branch above.
-                else if let Some(attacker_id) = agent.emotions.whoever_struck_me(self.current_tick) {
+                else if let Some(attacker_id) = agent.emotions.whoever_struck_me(self.current_turn) {
                     debug!(
                         "Agent {} RETALIATING against {} (anger={:.2}, fear={:.2})",
                         agent_id, attacker_id, agent.emotions.anger, agent.emotions.fear
@@ -585,7 +647,7 @@ impl Simulation {
         // And a job whose tool is still in the bag: spend the turn
         // getting it out. The first cut of this put equipping at the
         // bottom of the Utility chain, where it fired half a time in
-        // a world of ten thousand ticks - there is always some
+        // a world of ten thousand turns - there is always some
         // material wanting fetching, so nothing ever reached it.
         // Reaching for a tool is not what somebody does with a spare
         // moment, it is what they do just before using it.
@@ -675,7 +737,7 @@ impl Simulation {
                     broadcast_type,
                     true, // success
                     format!("{:?}", action),
-                    self.current_tick as u64,
+                    self.current_turn as u64,
                 );
             }
         }
@@ -707,7 +769,7 @@ impl Simulation {
         // it was answered on, which is what lets a thirsty man walk
         // back to the bank he drank from yesterday
         let where_it_was = agent.state.position;
-        let now = self.current_tick;
+        let now = self.current_turn;
         agent.link_what_worked(&action, &action_result, drive_type, where_it_was, now);
 
         // And this act joins the run, *after* the linking, so that a run is
@@ -724,15 +786,15 @@ impl Simulation {
         if is_plan_action {
             if action_result.success {
                 // Successful action - advance to next plan step
-                agent.advance_plan_step(true, agent.plan_step_ticks + 1);
+                agent.advance_plan_step(true, agent.plan_step_turns + 1);
                 debug!(
                     "Agent {} completed plan step, progress: {:?}",
                     agent_id,
                     agent.plan_progress()
                 );
             } else {
-                // Failed action - increment step ticks and potentially abandon plan
-                agent.tick_plan_step();
+                // Failed action - increment step turns and potentially abandon plan
+                agent.turn_plan_step();
                 if !agent.should_execute_plan() {
                     // Plan has timed out or is no longer viable
                     debug!("Agent {} abandoning plan due to failure/timeout", agent_id);
@@ -742,7 +804,7 @@ impl Simulation {
         }
 
         // **And a turn that was not spent on the plan does not count against
-        // it.** This used to tick the step counter anyway, on the reasoning
+        // it.** This used to turn the step counter anyway, on the reasoning
         // that a plan should time out if the agent keeps being interrupted -
         // and it locks the branch shut, because the counter is the only thing
         // `should_execute_plan` measures staleness by. A plan the ladder never
@@ -774,15 +836,15 @@ impl Simulation {
             if let Some(wanted) = agent.what_the_plan_wants_next() {
                 if wanted == verb {
                     if action_result.success {
-                        agent.advance_plan_step(true, agent.plan_step_ticks + 1);
+                        agent.advance_plan_step(true, agent.plan_step_turns + 1);
                     } else {
-                        agent.tick_plan_step();
+                        agent.turn_plan_step();
                     }
                 } else {
                     // A turn spent on something else is a turn the plan is
                     // waiting through, and enough of them mean it is not the
                     // plan any more.
-                    agent.tick_plan_step();
+                    agent.turn_plan_step();
                 }
                 if !agent.should_execute_plan() && agent.has_active_plan() {
                     agent.abandon_plan();
@@ -809,12 +871,12 @@ impl Simulation {
         // Try to create a plan for goals if agent doesn't have one
         // Only do this periodically to avoid constant replanning
         if !agent.has_active_plan()
-            && self.current_tick % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0
+            && self.current_turn % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0
         {
             // Use a default resource/return location (should be enhanced with real world data)
             let resource_loc = (50, 50, 0);
             let return_loc = (0, 0, 0);
-            if agent.create_plan_for_goal(resource_loc, return_loc, self.current_tick) {
+            if agent.create_plan_for_goal(resource_loc, return_loc, self.current_turn) {
                 debug!(
                     "Agent {} created new plan: {:?}",
                     agent_id,
@@ -866,7 +928,7 @@ impl Simulation {
         }
 
         // Cleanup completed goals periodically
-        if self.current_tick % crate::environment::seasons::ONCE_A_WEEK == 0 {
+        if self.current_turn % crate::environment::seasons::ONCE_A_WEEK == 0 {
             let agent = &mut self.population.agents[agent_index];
             agent.goals.cleanup_completed();
         }
@@ -879,9 +941,9 @@ impl Simulation {
     fn look_in_at_the_storehouse(&mut self, agent_index: usize) {
         let agent_id = self.population.agents[agent_index].id;
 
-        // Check if agent should interact with storehouse (every 20 ticks, or when Preparedness is high)
+        // Check if agent should interact with storehouse (every 20 turns, or when Preparedness is high)
         // This happens independently of drive-based actions to enable cooperative resource sharing
-        if self.current_tick % crate::environment::seasons::ONCE_EVERY_OTHER_DAY == 0 || {
+        if self.current_turn % crate::environment::seasons::ONCE_EVERY_OTHER_DAY == 0 || {
             let agent = &self.population.agents[agent_index];
             agent.drives.get(DriveType::Preparedness)
                 .map(|d| d.value > 0.6)

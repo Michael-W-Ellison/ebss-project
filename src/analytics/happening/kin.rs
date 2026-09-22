@@ -63,7 +63,7 @@ impl Simulation {
         use crate::agents::reproduction::give_birth;
         use crate::agents::gossip::{Information, InformationType};
 
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // Collect births to process (to avoid borrowing issues)
         let mut births_to_process: Vec<(usize, uuid::Uuid)> = Vec::new();
@@ -78,7 +78,7 @@ impl Simulation {
                 pregnancy.update_nutrition(hunger_drive, agent.state.health);
 
                 // Check if due
-                if pregnancy.is_due(current_tick) {
+                if pregnancy.is_due(current_turn) {
                     births_to_process.push((idx, pregnancy.father_id));
                 }
             }
@@ -98,11 +98,11 @@ impl Simulation {
                 let offspring = if let Some(f_idx) = father_idx {
                     let mother = &self.population.agents[mother_idx];
                     let father = &self.population.agents[f_idx];
-                    give_birth(mother, father, &preg, current_tick)
+                    give_birth(mother, father, &preg, current_turn)
                 } else {
                     // Father not found (dead?), use mother twice (not ideal but handles edge case)
                     let mother = &self.population.agents[mother_idx];
-                    give_birth(mother, mother, &preg, current_tick)
+                    give_birth(mother, mother, &preg, current_turn)
                 };
 
                 let offspring_id = offspring.id;
@@ -126,7 +126,7 @@ impl Simulation {
                     },
                     mother_id,
                     true,
-                    current_tick as u64,
+                    current_turn as u64,
                 );
 
                 // Share birth information with nearby agents
@@ -144,7 +144,7 @@ impl Simulation {
                                 mother_id,
                                 other_agent.id,
                                 &other_agent.traits,
-                                current_tick as u64,
+                                current_turn as u64,
                             );
                         }
                     }
@@ -240,6 +240,105 @@ impl Simulation {
     /// rule is not on demand: it is on what the parent has inside them, in
     /// five bands, and it covers water as well as food and runs to five years
     /// rather than to the end of a nursing period.
+    /// The small ones go where their people go.
+    ///
+    /// "Age 0-2: Must remain with a parent agent at all times. Age 2-5: Must
+    /// remain with a parent agent at all times."
+    ///
+    /// The specification states this as a fact about where a small child *is*,
+    /// and that is the whole difference. `feed_the_small_children` reads it as
+    /// a condition to test before feeding - a parent within a few paces - and
+    /// a child that had wandered, or whose parent had, simply went unfed.
+    /// Measured over four world-years before this existed: **67,706 child-turns
+    /// wanting feeding and 28,391 with a parent in reach, 41.9%.** The other
+    /// 58% could never be made up, because what a turn feeds is exactly what
+    /// that body burns in a turn - see `wants_food` - so there is no surplus
+    /// anywhere in the arithmetic to catch a child up with. It ran its reserve
+    /// down, crossed the half mark that `Physiology::is_wasting` reads, and
+    /// died at a median age of sixty-five days with hunger holding 100% of
+    /// what had taken it.
+    ///
+    /// So the child is put where the parent is, and the feeding pass finds it
+    /// there. A child with nobody living to belong to is left where it stands:
+    /// that is an orphan rather than a stray, and this is not the place to
+    /// decide what becomes of one.
+    /// Who is looking after this one: its own people, or failing that whoever
+    /// is nearest among the grown.
+    ///
+    /// The lifecycle specification says a child under six "must remain with a
+    /// parent agent at all times" and does not say what becomes of one whose
+    /// parents are dead. A settlement does not step over an orphan, so the
+    /// nearest grown body takes it, and that is a decision made here rather
+    /// than read off the specification.
+    ///
+    /// It is not a nicety. A small child takes no turn of its own - see
+    /// `one_persons_turn` - so it cannot drink, eat or walk, and everything it
+    /// gets comes through this function. With only a parent to look to, the
+    /// 2.9% of child-turns whose parent had died got nothing at all, and a
+    /// body carries three days of water against three weeks of food: fifteen
+    /// of nineteen under-sixes dead in one measured year died of thirst, not
+    /// hunger. Nearest is by the same walk `WITHIN_A_FEW_PACES` measures, and
+    /// ties break on the id so a seeded world picks the same keeper twice.
+    fn whoever_looks_after(
+        child: &crate::agents::Agent,
+        grown: &[(uuid::Uuid, (i32, i32, i32))],
+    ) -> Option<(uuid::Uuid, (i32, i32, i32))> {
+        if let Some(theirs) = child
+            .parent_ids
+            .iter()
+            .find_map(|id| grown.iter().find(|(who, _)| who == id))
+        {
+            return Some(*theirs);
+        }
+
+        grown
+            .iter()
+            .min_by(|(this_who, this), (that_who, that)| {
+                let far = |stood: &(i32, i32, i32)| {
+                    let across = (stood.0 - child.state.position.0) as i64;
+                    let down = (stood.1 - child.state.position.1) as i64;
+                    across * across + down * down
+                };
+                far(this)
+                    .cmp(&far(that))
+                    .then_with(|| this_who.cmp(that_who))
+            })
+            .copied()
+    }
+
+    pub(in crate::analytics) fn the_small_stay_with_their_people(&mut self) {
+        let where_their_people_are: Vec<(usize, (i32, i32, i32))> = {
+            let grown: Vec<(uuid::Uuid, (i32, i32, i32))> = self
+                .population
+                .agents
+                .iter()
+                .filter(|a| a.state.is_alive)
+                .filter(|a| {
+                    a.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+                })
+                .map(|a| (a.id, a.state.position))
+                .collect();
+
+            self.population
+                .agents
+                .iter()
+                .enumerate()
+                .filter(|(_, child)| child.state.is_alive)
+                .filter(|(_, child)| {
+                    child.state.years_old() < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+                })
+                .filter_map(|(at, child)| {
+                    let (_, stood) = Self::whoever_looks_after(child, &grown)?;
+                    Some((at, stood))
+                })
+                .collect()
+        };
+
+        for (at, stood) in where_their_people_are {
+            self.population.agents[at].state.position = stood;
+        }
+    }
+
     pub(in crate::analytics) fn feed_the_small_children(&mut self) {
         use crate::agents::physiology::{A_DRINK_IS_WORTH, MINUTES_PER_DAY, MINUTES_PER_TURN};
 
@@ -269,17 +368,15 @@ impl Simulation {
             .filter(|child| child.state.years_old() <= Self::FED_WITHOUT_ASKING_UNTIL)
             .filter_map(|child| {
                 // Somebody of its own, grown, and near enough to be holding it
-                let (parent, _) = child
-                    .parent_ids
-                    .iter()
-                    .find_map(|id| grown.iter().find(|(who, _)| who == id))
-                    .filter(|(_, where_they_are)| {
+                let (parent, _) = Self::whoever_looks_after(child, &grown).filter(
+                    |(_, where_they_are)| {
                         Self::within(
                             (child.state.position.0, child.state.position.1),
                             (where_they_are.0, where_they_are.1),
                             Self::WITHIN_A_FEW_PACES,
                         )
-                    })?;
+                    },
+                )?;
 
                 // What this body burns in a turn, which is what it wants fed
                 let a_turn = child.state.physiology.what_i_burn_in_a_day
@@ -288,7 +385,7 @@ impl Simulation {
 
                 Some(AMouthToFeed {
                     child: child.id,
-                    parent: *parent,
+                    parent,
                     in_arms: child.state.years_old() <= Self::CARRIED_IN_ARMS_UNTIL,
                     wants_food: a_turn,
                     wants_water: A_DRINK_IS_WORTH * MINUTES_PER_TURN as f32 / MINUTES_PER_DAY as f32,
@@ -313,20 +410,32 @@ impl Simulation {
                 continue;
             };
 
-            // Food and water are asked separately in the specification and
-            // banded the same way, so the leaner of the two decides: a parent
-            // with a full belly and no water has no water to give.
-            let store = (parent.state.physiology.reserve
-                / parent.state.physiology.reserve_capacity.max(f32::EPSILON))
-            .min(parent.state.physiology.hydration);
+            // Two stores, banded apart.
+            //
+            // The specification bands on "the parent agent's internal stored
+            // food energy and water", and these were read as one number - the
+            // leaner of the two deciding both - on the argument that a parent
+            // with a full belly and no water has no water to give. True of
+            // water, and the reverse is not true of food: a parent with a full
+            // skin and a half-empty belly has water to spare.
+            //
+            // Reading them as one killed children, because the two buffers are
+            // not the same depth. A body carries three weeks of food and
+            // **three days** of water, so a band that merely slows a child's
+            // food loss empties its water in days. Measured over four
+            // world-years with the bands joined: nought of the under-sixes
+            // died of hunger, which was the point, and nineteen of them died
+            // of thirst - a cause that had taken one person in the whole
+            // settlement before.
+            let belly = parent.state.physiology.reserve
+                / parent.state.physiology.reserve_capacity.max(f32::EPSILON);
+            let skin = parent.state.physiology.hydration;
 
-            let share = Self::what_share_a_small_child_gets(store);
-            if share <= 0.0 {
+            let food = mouth.wants_food * Self::what_share_a_small_child_gets(belly);
+            let water = mouth.wants_water * Self::what_share_a_small_child_gets(skin);
+            if food <= 0.0 && water <= 0.0 {
                 continue;
             }
-
-            let food = mouth.wants_food * share;
-            let water = mouth.wants_water * share;
 
             // Straight into the body: it did not come out of a pack and it is
             // not a meal anybody sat down to.
@@ -365,7 +474,7 @@ impl Simulation {
         use crate::agents::childcare::{MAX_CAREGIVER_DISTANCE, NURSING_ENERGY_GAIN};
         use crate::agents::LifeStage;
 
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // Collect caregiver positions for distance checks
         let caregiver_positions: std::collections::BTreeMap<uuid::Uuid, (i32, i32, i32)> =
@@ -385,7 +494,7 @@ impl Simulation {
 
             if let Some(ref mut nursing) = agent.nursing {
                 // Check if still in nursing period
-                if !nursing.needs_nursing(current_tick) {
+                if !nursing.needs_nursing(current_turn) {
                     // Nursing period ended
                     agent.nursing = None;
                     continue;
@@ -450,7 +559,7 @@ impl Simulation {
                         0.0
                     };
                     if taken > 0.0 {
-                        agent.state.took_a_meal(current_tick, 0.0);
+                        agent.state.took_a_meal(current_turn, 0.0);
                         what_the_milk_cost.push((
                             nursing.primary_caregiver,
                             taken * crate::agents::physiology::WHAT_MILK_IS_WORTH,
@@ -464,7 +573,7 @@ impl Simulation {
                     agent.developmental_nutrition.update_infant_nutrition(hunger_satisfaction, true);
                 } else {
                     // Not being nursed
-                    nursing.tick_without_nursing();
+                    nursing.turn_without_nursing();
 
                     // Apply health penalty if suffering
                     let penalty = nursing.health_penalty();

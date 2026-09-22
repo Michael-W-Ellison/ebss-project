@@ -226,7 +226,7 @@ impl World {
             } => self.execute_construction_work(building_position, *work_amount, *worker_skill),
 
             Action::Rest { duration } => ActionResult::Success {
-                message: format!("Rested for {} ticks", duration),
+                message: format!("Rested for {} turns", duration),
             },
 
             Action::CraftItem { item_type, quantity } => {
@@ -890,7 +890,7 @@ impl World {
             }
 
             // Check if offer is expired
-            if offer.is_expired(self.tick) {
+            if offer.is_expired(self.turn) {
                 self.marketplace.remove_offer(offer_id);
                 return ActionResult::Failure {
                     reason: "Trade offer has expired".to_string(),
@@ -922,7 +922,7 @@ impl World {
             }
 
             // 3. Complete the trade in marketplace
-            let completed = self.marketplace.complete_trade(offer_id, agent_id, self.tick);
+            let completed = self.marketplace.complete_trade(offer_id, agent_id, self.turn);
 
             if completed.is_some() {
                 ActionResult::TradeSuccess {
@@ -972,8 +972,8 @@ impl World {
                 offering.clone(),
                 requesting.clone(),
                 price,
-                self.tick,
-                500, // Offer valid for 500 ticks
+                self.turn,
+                500, // Offer valid for 500 turns
             );
             let new_offer_id = offer.id;
             self.marketplace.post_offer(offer);

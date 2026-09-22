@@ -27,7 +27,7 @@ impl EmotionType {
         ]
     }
 
-    /// Get default decay rate per tick (emotions naturally return to neutral)
+    /// Get default decay rate per turn (emotions naturally return to neutral)
     pub fn default_decay_rate(&self) -> f32 {
         match self {
             EmotionType::Fear => 0.01,      // Fear decays quickly
@@ -114,7 +114,7 @@ impl EmotionalState {
     }
 
     /// Update all emotions (apply decay)
-    pub fn tick(&mut self) {
+    pub fn take_a_turn(&mut self) {
         for emotion in &mut self.emotions {
             emotion.decay();
         }

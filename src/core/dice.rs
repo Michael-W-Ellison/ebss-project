@@ -105,7 +105,7 @@ pub fn roll() -> StdRng {
 /// another name, so ten sites in the fauna and flora - every wander an animal
 /// takes, and whether it grazes, rests or hunts - were rolling outside the
 /// seeded stream. Those ten were enough on their own: **the beasts moved
-/// differently in every run of the same seed**, and by the fiftieth tick that
+/// differently in every run of the same seed**, and by the fiftieth turn that
 /// had reached the people, through the Safety drive of anyone who could see
 /// one.
 pub fn any<T>() -> T

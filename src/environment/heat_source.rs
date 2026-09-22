@@ -82,7 +82,7 @@ impl HeatSourceType {
         }
     }
 
-    /// Fuel consumption rate (units per tick)
+    /// Fuel consumption rate (units per turn)
     pub fn fuel_consumption_rate(&self) -> f32 {
         match self {
             HeatSourceType::Campfire => 0.1,
@@ -104,7 +104,7 @@ pub struct FuelState {
     pub material_id: String,
     /// Amount remaining
     pub amount: f32,
-    /// Burn time remaining (ticks)
+    /// Burn time remaining (turns)
     pub burn_time: u32,
 }
 
@@ -115,7 +115,7 @@ pub struct HeatingContents {
     pub material_id: String,
     /// Quantity
     pub quantity: u32,
-    /// Time being heated (ticks)
+    /// Time being heated (turns)
     pub heating_time: u32,
     /// Current temperature reached
     pub current_temp: f32,
@@ -216,8 +216,8 @@ impl HeatSource {
         self.is_lit = false;
     }
 
-    /// Update heat source for one tick
-    pub fn tick(&mut self, smelting_registry: &SmeltingRegistry) -> Vec<SmeltingResult> {
+    /// Update heat source for one turn
+    pub fn take_a_turn(&mut self, smelting_registry: &SmeltingRegistry) -> Vec<SmeltingResult> {
         let mut results = Vec::new();
 
         if !self.is_lit {
@@ -441,12 +441,12 @@ impl HeatSourceRegistry {
             .collect()
     }
 
-    /// Tick all heat sources
-    pub fn tick_all(&mut self) -> Vec<SmeltingResult> {
+    /// Turn all heat sources
+    pub fn turn_all(&mut self) -> Vec<SmeltingResult> {
         let mut all_results = Vec::new();
 
         for heat_source in self.heat_sources.values_mut() {
-            let results = heat_source.tick(&self.smelting_registry);
+            let results = heat_source.take_a_turn(&self.smelting_registry);
             all_results.extend(results);
         }
 
@@ -525,9 +525,9 @@ mod tests {
 
         let initial_temp = heat_source.current_temperature;
 
-        // Tick to heat up
+        // Turn to heat up
         let smelting_registry = crate::environment::smelting::SmeltingRegistry::new();
-        heat_source.tick(&smelting_registry);
+        heat_source.take_a_turn(&smelting_registry);
 
         assert!(heat_source.current_temperature > initial_temp);
     }
@@ -580,14 +580,14 @@ mod tests {
         let consumption_rate = HeatSourceType::Campfire.fuel_consumption_rate();
         let smelting_registry = crate::environment::smelting::SmeltingRegistry::new();
 
-        // Tick several times
+        // Turn several times
         for _ in 0..5 {
-            heat_source.tick(&smelting_registry);
+            heat_source.take_a_turn(&smelting_registry);
         }
 
         // Fuel should be consumed
         let remaining = heat_source.fuel.first().map(|f| f.amount).unwrap_or(0.0);
         assert!(remaining < 1.0);
-        assert!(remaining > 1.0 - (consumption_rate * 6.0)); // ~5-6 ticks worth
+        assert!(remaining > 1.0 - (consumption_rate * 6.0)); // ~5-6 turns worth
     }
 }

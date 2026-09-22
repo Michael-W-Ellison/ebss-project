@@ -26,11 +26,11 @@ pub enum CripplingType {
 }
 
 impl InjuryType {
-    /// Get healing rate per tick
+    /// Get healing rate per turn
     pub fn healing_rate(&self) -> f32 {
         match self {
-            InjuryType::Minor => 0.5,                        // Heals 0.5 HP/tick
-            InjuryType::Major => 0.1,                        // Heals 0.1 HP/tick
+            InjuryType::Minor => 0.5,                        // Heals 0.5 HP/turn
+            InjuryType::Major => 0.1,                        // Heals 0.1 HP/turn
             InjuryType::Crippling(CripplingType::Partial) => 0.05, // Very slow
             InjuryType::Crippling(CripplingType::Full) => 0.0,     // Does not heal
         }
@@ -200,7 +200,7 @@ pub struct BodyPart {
 pub struct Condition {
     pub condition_type: ConditionType,
     pub severity: f32, // 0.0 to 1.0
-    pub duration: u32, // Ticks remaining
+    pub duration: u32, // Turns remaining
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -285,8 +285,8 @@ impl BodyPart {
         self.update_status();
     }
 
-    /// Natural healing tick (uses injury healing rates)
-    pub fn tick_natural_healing(&mut self) {
+    /// Natural healing turn (uses injury healing rates)
+    pub fn turn_natural_healing(&mut self) {
         for injury in &mut self.injuries {
             let heal_amount = injury.injury_type.healing_rate();
             if heal_amount > 0.0 {
@@ -370,8 +370,8 @@ impl BodyPart {
         self.conditions.push(condition);
     }
 
-    /// Process conditions (tick effects)
-    pub fn tick(&mut self) {
+    /// Process conditions (turn effects)
+    pub fn take_a_turn(&mut self) {
         // Collect damage to apply
         let mut total_damage = 0.0;
 
@@ -405,7 +405,7 @@ impl BodyPart {
         self.conditions.retain(|c| c.duration > 0);
 
         // Natural healing for injuries
-        self.tick_natural_healing();
+        self.turn_natural_healing();
     }
 }
 
@@ -608,10 +608,10 @@ impl Body {
         self.equipment.values().map(|e| e.heat_resistance()).sum()
     }
 
-    /// Tick wear on all equipped items
-    pub fn tick_equipment_wear(&mut self) {
+    /// Turn wear on all equipped items
+    pub fn turn_equipment_wear(&mut self) {
         for item in self.equipment.values_mut() {
-            item.tick_wear();
+            item.turn_wear();
         }
 
         // Remove broken items
@@ -627,12 +627,12 @@ impl Body {
         }
     }
 
-    /// Process all body parts (tick effects like bleeding)
-    pub fn tick(&mut self) {
+    /// Process all body parts (turn effects like bleeding)
+    pub fn take_a_turn(&mut self) {
         for part in self.parts.values_mut() {
-            part.tick();
+            part.take_a_turn();
         }
-        self.tick_equipment_wear();
+        self.turn_equipment_wear();
     }
 
     /// Get body summary for display
@@ -835,7 +835,7 @@ mod tests {
             duration: 10,
         });
 
-        part.tick();
+        part.take_a_turn();
 
         assert!(part.health < initial_health);
         assert_eq!(part.conditions[0].duration, 9);
@@ -852,13 +852,13 @@ mod tests {
         assert_eq!(part.health, initial_health - 10.0);
         assert_eq!(part.injuries.len(), 1);
 
-        // Minor injuries heal quickly (0.5 HP/tick)
-        part.tick_natural_healing();
+        // Minor injuries heal quickly (0.5 HP/turn)
+        part.turn_natural_healing();
         assert_eq!(part.health, initial_health - 9.5);
 
-        // After 20 ticks, should be fully healed
+        // After 20 turns, should be fully healed
         for _ in 0..19 {
-            part.tick_natural_healing();
+            part.turn_natural_healing();
         }
 
         assert_eq!(part.health, initial_health);
@@ -875,13 +875,13 @@ mod tests {
 
         assert_eq!(part.health, initial_health - 30.0);
 
-        // Major injuries heal slowly (0.1 HP/tick)
-        part.tick_natural_healing();
+        // Major injuries heal slowly (0.1 HP/turn)
+        part.turn_natural_healing();
         assert_eq!(part.health, initial_health - 29.9);
 
-        // After 300 ticks, should be fully healed
+        // After 300 turns, should be fully healed
         for _ in 0..299 {
-            part.tick_natural_healing();
+            part.turn_natural_healing();
         }
 
         assert!((part.health - initial_health).abs() < 0.01); // Use tolerance for floating point
@@ -905,9 +905,9 @@ mod tests {
         let expected_permanent_impairment = 12.0 / 70.0; // ~0.171
         assert!((part.permanent_impairment - expected_permanent_impairment).abs() < 0.01);
 
-        // Heal very slowly (0.05 HP/tick)
+        // Heal very slowly (0.05 HP/turn)
         for _ in 0..560 {
-            part.tick_natural_healing();
+            part.turn_natural_healing();
         }
 
         // Should recover to 70% of damage
@@ -937,7 +937,7 @@ mod tests {
 
         // Try to heal - should not heal at all
         for _ in 0..100 {
-            part.tick_natural_healing();
+            part.turn_natural_healing();
         }
 
         assert_eq!(part.health, initial_health - 50.0); // No healing
@@ -962,7 +962,7 @@ mod tests {
 
         // After healing to 70% recovery
         for _ in 0..500 {
-            part.tick_natural_healing();
+            part.turn_natural_healing();
         }
 
         // Health should be at ~59.5 (70% recovery of 35 damage = 24.5 healed)
@@ -1109,8 +1109,8 @@ mod tests {
         tunic.durability = 0.5;
         body.equip(tunic);
 
-        // Tick should apply wear
-        body.tick_equipment_wear();
+        // Turn should apply wear
+        body.turn_equipment_wear();
 
         // Still equipped but with less durability
         assert!(body.equipment.contains_key(&EquipmentSlot::Torso));
@@ -1120,8 +1120,8 @@ mod tests {
             item.durability = 0.0;
         }
 
-        // Tick should remove broken items
-        body.tick_equipment_wear();
+        // Turn should remove broken items
+        body.turn_equipment_wear();
         assert!(!body.equipment.contains_key(&EquipmentSlot::Torso));
     }
 }

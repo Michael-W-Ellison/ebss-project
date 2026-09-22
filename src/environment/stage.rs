@@ -101,7 +101,7 @@ pub enum Path {
 
 /// Whether this model actually stands where the stage says a people stands.
 ///
-/// The honest half. A stage is a claim about the world at tick zero, and the
+/// The honest half. A stage is a claim about the world at turn zero, and the
 /// claim is either carried by machinery or it is not; saying which, and
 /// naming what carries it, is the only thing that stops the table becoming a
 /// wish list. `Part` exists because most of these are neither - a people that

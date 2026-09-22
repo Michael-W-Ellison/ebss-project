@@ -15,8 +15,8 @@ pub struct ResourceKnowledge {
     pub position: Position,
     pub resource_type: ResourceType,
     pub estimated_amount: u32,
-    pub learned_tick: u32,        // When this information was acquired
-    pub last_verified_tick: u32,  // Last time agent personally verified this
+    pub learned_turn: u32,        // When this information was acquired
+    pub last_verified_turn: u32,  // Last time agent personally verified this
     pub source: KnowledgeSource,   // How agent learned this
 }
 
@@ -31,8 +31,8 @@ pub enum KnowledgeSource {
 impl ResourceKnowledge {
     /// Calculate reliability of this knowledge based on age
     /// Returns value from 0.0 (unreliable) to 1.0 (very reliable)
-    pub fn reliability(&self, current_tick: u32) -> f32 {
-        let age = current_tick.saturating_sub(self.last_verified_tick);
+    pub fn reliability(&self, current_turn: u32) -> f32 {
+        let age = current_turn.saturating_sub(self.last_verified_turn);
 
         // Base reliability depends on source
         let base_reliability = match self.source {
@@ -42,8 +42,8 @@ impl ResourceKnowledge {
         };
 
         // Reliability decays over time
-        // After 500 ticks, reliability drops by 50%
-        // After 1000 ticks, reliability drops by 75%
+        // After 500 turns, reliability drops by 50%
+        // After 1000 turns, reliability drops by 75%
         let age_factor = if age < 500 {
             1.0 - (age as f32 * 0.001) // Slow decay
         } else if age < 1000 {
@@ -56,8 +56,8 @@ impl ResourceKnowledge {
     }
 
     /// Check if this knowledge is still trustworthy
-    pub fn is_reliable(&self, current_tick: u32) -> bool {
-        self.reliability(current_tick) > 0.3
+    pub fn is_reliable(&self, current_turn: u32) -> bool {
+        self.reliability(current_turn) > 0.3
     }
 }
 
@@ -66,21 +66,21 @@ impl ResourceKnowledge {
 pub struct PersonalKnowledge {
     /// Known resource locations indexed by position
     resources: BTreeMap<Position, ResourceKnowledge>,
-    /// Current tick (for age calculations)
-    current_tick: u32,
+    /// Current turn (for age calculations)
+    current_turn: u32,
 }
 
 impl PersonalKnowledge {
     pub fn new() -> Self {
         Self {
             resources: BTreeMap::new(),
-            current_tick: 0,
+            current_turn: 0,
         }
     }
 
-    /// Update current tick
-    pub fn tick(&mut self, current_tick: u32) {
-        self.current_tick = current_tick;
+    /// Update current turn
+    pub fn take_a_turn(&mut self, current_turn: u32) {
+        self.current_turn = current_turn;
     }
 
     /// Learn about a resource through personal observation
@@ -96,8 +96,8 @@ impl PersonalKnowledge {
                 position,
                 resource_type,
                 estimated_amount: amount,
-                learned_tick: self.current_tick,
-                last_verified_tick: self.current_tick,
+                learned_turn: self.current_turn,
+                last_verified_turn: self.current_turn,
                 source: KnowledgeSource::PersonalObservation,
             },
         );
@@ -114,7 +114,7 @@ impl PersonalKnowledge {
         // Only learn if we don't already know, or if new info is more recent
         let should_learn = if let Some(existing) = self.resources.get(&position) {
             // Update if this is newer information
-            self.current_tick > existing.learned_tick
+            self.current_turn > existing.learned_turn
         } else {
             true
         };
@@ -126,8 +126,8 @@ impl PersonalKnowledge {
                     position,
                     resource_type,
                     estimated_amount: amount,
-                    learned_tick: self.current_tick,
-                    last_verified_tick: self.current_tick,
+                    learned_turn: self.current_turn,
+                    last_verified_turn: self.current_turn,
                     source: KnowledgeSource::DirectCommunication(source_agent),
                 },
             );
@@ -157,8 +157,8 @@ impl PersonalKnowledge {
                     position,
                     resource_type,
                     estimated_amount: amount,
-                    learned_tick: self.current_tick,
-                    last_verified_tick: self.current_tick,
+                    learned_turn: self.current_turn,
+                    last_verified_turn: self.current_turn,
                     source: KnowledgeSource::Overheard(source_agent),
                 },
             );
@@ -173,7 +173,7 @@ impl PersonalKnowledge {
             .filter(|k| {
                 k.resource_type == resource_type
                     && k.estimated_amount > 0
-                    && k.is_reliable(self.current_tick)
+                    && k.is_reliable(self.current_turn)
             })
             .collect()
     }
@@ -193,14 +193,14 @@ impl PersonalKnowledge {
     pub fn knows_about(&self, position: &Position, resource_type: ResourceType) -> bool {
         self.resources
             .get(position)
-            .map(|k| k.resource_type == resource_type && k.is_reliable(self.current_tick))
+            .map(|k| k.resource_type == resource_type && k.is_reliable(self.current_turn))
             .unwrap_or(false)
     }
 
 
     /// Clean up old unreliable knowledge
     pub fn cleanup_stale(&mut self) {
-        self.resources.retain(|_, k| k.is_reliable(self.current_tick));
+        self.resources.retain(|_, k| k.is_reliable(self.current_turn));
     }
 
 }
@@ -232,18 +232,18 @@ mod tests {
             position: Position::new(0, 0),
             resource_type: ResourceType::Food,
             estimated_amount: 50,
-            learned_tick: 0,
-            last_verified_tick: 0,
+            learned_turn: 0,
+            last_verified_turn: 0,
             source: KnowledgeSource::PersonalObservation,
         };
 
         // Fresh observation is highly reliable
         assert!(knowledge.reliability(0) > 0.9);
 
-        // After 500 ticks, still fairly reliable
+        // After 500 turns, still fairly reliable
         assert!(knowledge.reliability(500) > 0.4);
 
-        // After 1500 ticks, much less reliable
+        // After 1500 turns, much less reliable
         assert!(knowledge.reliability(1500) < 0.2);
     }
 

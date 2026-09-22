@@ -102,7 +102,7 @@ pub struct Material {
     pub required_tool: ToolType,
     /// Tool tier required
     pub required_tier: ToolTier,
-    /// Base time to harvest (in ticks)
+    /// Base time to harvest (in turns)
     pub harvest_time: u32,
     /// Drop quantity when harvested
     pub drop_quantity: (u32, u32), // (min, max)

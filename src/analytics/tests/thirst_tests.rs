@@ -6,7 +6,7 @@
 //! - thirst is acted on, not just tracked, so agents drink and keep drinking
 //! - a carried waterskin can be drunk from away from open water
 //! - dehydration and other survival harm actually reduce health, instead of
-//!   being wiped by the body-condition sync every tick
+//!   being wiped by the body-condition sync every turn
 //! - health recovers once the agent is fed, watered and unhurt
 
 use crate::agents::{Agent, AgentConfig, AgentState, InventoryItem, Population};
@@ -18,7 +18,7 @@ use crate::world::{World, WorldConfig};
 ///
 /// Thirst used to be reachable only through the drive-based fallback at the
 /// bottom of action selection, which hunger monopolised: agents went thousands
-/// of ticks without water with a river a dozen tiles away.
+/// of turns without water with a river a dozen tiles away.
 #[test]
 fn agents_keep_themselves_watered() {
     let world = World::new(WorldConfig::default());
@@ -30,7 +30,7 @@ fn agents_keep_themselves_watered() {
     let mut simulation = Simulation::new(world, population);
 
     for _ in 0..3000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let agents = &simulation.population.agents;
@@ -38,16 +38,16 @@ fn agents_keep_themselves_watered() {
 
     let parched = agents
         .iter()
-        .filter(|a| a.state.ticks_without_water > 1440)
+        .filter(|a| a.state.turns_without_water > 1440)
         .count();
 
     assert_eq!(
         parched,
         0,
-        "no agent should go a day without drinking; longest was {} ticks",
+        "no agent should go a day without drinking; longest was {} turns",
         agents
             .iter()
-            .map(|a| a.state.ticks_without_water)
+            .map(|a| a.state.turns_without_water)
             .max()
             .unwrap_or(0)
     );
@@ -77,7 +77,7 @@ fn agents_drink_from_a_carried_container() {
         if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
             thirst.value = 1.0;
         }
-        agent.state.last_drank_tick = 0;
+        agent.state.last_drank_turn = 0;
     }
 
     // Remove every water source so only the container can help
@@ -87,37 +87,37 @@ fn agents_drink_from_a_carried_container() {
         .retain(|r| r.resource_type != crate::world::ResourceType::Water);
 
     for _ in 0..40 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let agent = &simulation.population.agents[0];
 
     assert!(
-        agent.state.ticks_without_water < 40,
-        "an agent with a full waterskin should have drunk from it, {} ticks dry",
-        agent.state.ticks_without_water
+        agent.state.turns_without_water < 40,
+        "an agent with a full waterskin should have drunk from it, {} turns dry",
+        agent.state.turns_without_water
     );
 }
 
 /// Dehydration has to reach the agent's health, or the drive means nothing.
 ///
-/// Health was overwritten from body condition every tick, so starvation,
+/// Health was overwritten from body condition every turn, so starvation,
 /// dehydration and exposure damage were all silently discarded: an agent could
-/// go six thousand ticks without water and still read as near perfect health.
+/// go six thousand turns without water and still read as near perfect health.
 #[test]
 fn dehydration_damages_health() {
     let mut agent = Agent::new(AgentConfig::default());
-    agent.state.last_drank_tick = 0;
-    agent.state.last_ate_tick = 0;
+    agent.state.last_drank_turn = 0;
+    agent.state.last_ate_turn = 0;
 
     // Well past the point where thirst starts doing harm
-    let mut tick = 5000;
+    let mut turn = 5000;
     let starting_health = agent.state.health;
 
     for _ in 0..200 {
-        agent.tick_with_percepts(tick);
-        agent.process_survival_tick(tick);
-        tick += 1;
+        agent.turn_with_percepts(turn);
+        agent.process_survival_turn(turn);
+        turn += 1;
     }
 
     assert!(
@@ -134,11 +134,11 @@ fn health_recovers_when_fed_and_watered() {
     let mut agent = Agent::new(AgentConfig::default());
     agent.state.health = 50.0;
 
-    let mut tick = 100;
+    let mut turn = 100;
     for _ in 0..200 {
         // Keep the agent fed and watered so nothing is harming it.
         //
-        // Through the **body**, not the turn counters. `age_tick_with_modifier`
+        // Through the **body**, not the turn counters. `age_turn_with_modifier`
         // says in its own comment that those counters "are kept only for the
         // interface and for older tests to read, and are derived rather than
         // counted so they cannot disagree with the body" - so setting them was
@@ -147,12 +147,12 @@ fn health_recovers_when_fed_and_watered() {
         // asking whether health recovers while quietly dehydrating the man.
         agent.state.physiology.hydration = 1.0;
         agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
-        agent.state.last_ate_tick = tick;
-        agent.state.last_drank_tick = tick;
+        agent.state.last_ate_turn = turn;
+        agent.state.last_drank_turn = turn;
 
-        agent.tick_with_percepts(tick);
-        agent.process_survival_tick(tick);
-        tick += 1;
+        agent.turn_with_percepts(turn);
+        agent.process_survival_turn(turn);
+        turn += 1;
     }
 
     assert!(
@@ -163,7 +163,7 @@ fn health_recovers_when_fed_and_watered() {
 }
 
 /// Agents leave food alone once it has turned, rather than eating themselves
-/// to death one bite a tick.
+/// to death one bite a turn.
 #[test]
 fn agents_refuse_food_that_would_make_them_sick() {
     use crate::world::{FoodDatabase, ItemType};
@@ -245,7 +245,7 @@ fn a_starving_man_is_still_held_down_to_his_broken_body() {
 
     let mut agent = Agent::new(AgentConfig::default());
 
-    // Wreck the body, and badly: a tick of starvation takes health off by
+    // Wreck the body, and badly: a turn of starvation takes health off by
     // itself, so the gap between what he has and what his body can carry has
     // to be wider than that, or the cap has nothing left to do and the test
     // proves nothing either way.
@@ -267,7 +267,7 @@ fn a_starving_man_is_still_held_down_to_his_broken_body() {
 
     // And make him "suffering" in the sense the old gate meant, without
     // actually harming him - so that what the cap does is the only thing
-    // moving. A body with an empty reserve dies of hunger inside one tick and
+    // moving. A body with an empty reserve dies of hunger inside one turn and
     // takes the whole hundred with it, which tells you nothing about the cap.
     //
     // `is_starving()` is `physiology.is_starving() || energy < 20.0`, and that
@@ -287,14 +287,14 @@ fn a_starving_man_is_still_held_down_to_his_broken_body() {
         "and to not actually be starving"
     );
 
-    agent.process_survival_tick(100);
+    agent.process_survival_turn(100);
 
     // Asked of the **ledger**, not of the health figure. A starving body
-    // loses health to hunger every tick anyway, so "his health came down"
+    // loses health to hunger every turn anyway, so "his health came down"
     // cannot tell the cap from the starvation - the first draft of this test
     // passed against the old gate for exactly that reason. What only the cap
     // does is book the drop to `A_WOUND`, which is the whole point of #209.
-    // Nothing else here books it: `tick_the_wound` returns at once unless
+    // Nothing else here books it: `turn_the_wound` returns at once unless
     // there is an open wound, and this man has none.
     let booked_to_wounds: f32 = agent
         .state

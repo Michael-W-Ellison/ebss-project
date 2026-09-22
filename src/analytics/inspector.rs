@@ -43,7 +43,7 @@ pub struct AgentInspectorData {
     pub relationship_summary: RelationshipSummary,
 
     // Stats
-    pub age: u64, // Ticks alive
+    pub age: u64, // Turns alive
 }
 
 /// Skills summary for display

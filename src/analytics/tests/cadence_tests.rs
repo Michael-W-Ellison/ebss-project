@@ -26,7 +26,7 @@ fn one_person() -> Simulation {
 /// you leave it, and report where it settles.
 ///
 /// `yield_at` stands in for the world: what one doing brings back after this
-/// many ticks of waiting.
+/// many turns of waiting.
 fn where_it_settles(yield_at: impl Fn(u32) -> f32, doings: u32) -> f32 {
     let mut rhythm = Rhythm::unfound();
     let mut now = 0u32;
@@ -223,7 +223,7 @@ fn a_man_with_a_line_walks_it() {
 
     // And having walked it, he is not due again until the rhythm says so.
     let mut agent = simulation.population.agents[0].clone();
-    agent.that_is_done(Undertaking::Trapping, simulation.current_tick, 0.0);
+    agent.that_is_done(Undertaking::Trapping, simulation.current_turn, 0.0);
     assert!(
         simulation
             .going_round_is_due(&agent, agent.state.position)

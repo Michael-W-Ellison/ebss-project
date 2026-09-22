@@ -40,7 +40,7 @@ pub mod happening;
 /// How one agent stands towards another.
 pub mod between_us;
 
-pub use metrics::{SimulationMetrics, TickSnapshot, PopulationSnapshot, DriveSnapshot, EmotionSnapshot};
+pub use metrics::{SimulationMetrics, Turnsnapshot, PopulationSnapshot, DriveSnapshot, EmotionSnapshot};
 pub use emergence::{
     EmergenceDetector, EmergentPattern, PatternType,
     DetectionThresholds, TrainingSample, CalibrationResult,
@@ -69,7 +69,7 @@ use std::io::{Write, Read};
 #[derive(Debug, Clone)]
 pub struct AutoSaveConfig {
     pub enabled: bool,
-    pub interval_ticks: u32,
+    pub interval_turns: u32,
     pub max_checkpoints: usize,
     pub save_directory: PathBuf,
 }
@@ -78,7 +78,7 @@ impl Default for AutoSaveConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            interval_ticks: 100,
+            interval_turns: 100,
             max_checkpoints: 5,
             save_directory: PathBuf::from("./checkpoints"),
         }
@@ -88,10 +88,10 @@ impl Default for AutoSaveConfig {
 pub struct Simulation {
     pub world: World,
     pub population: Population,
-    pub current_tick: u32,
+    pub current_turn: u32,
     pub renderer: Option<AsciiRenderer>,
     autosave_config: Option<AutoSaveConfig>,
-    last_autosave_tick: u32,
+    last_autosave_turn: u32,
     /// Nutritional data for food items, used when agents forage and eat
     food_database: FoodDatabase,
     /// A tally of every action any agent has chosen, by name.
@@ -99,7 +99,7 @@ pub struct Simulation {
     /// "Seventy-nine per cent of everything a settlement does is foraging" is
     /// the kind of claim this project keeps needing and kept answering by
     /// patching a counter in by hand and throwing it away afterwards. Kept
-    /// here so the answer is reproducible and costs one hash lookup a tick.
+    /// here so the answer is reproducible and costs one hash lookup a turn.
     pub actions_taken: std::collections::BTreeMap<String, u64>,
     /// And how many of those came to nothing.
     ///
@@ -207,20 +207,20 @@ pub struct Simulation {
 /// Configuration for simulation behavior and limits
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
-    /// Maximum number of ticks before simulation auto-stops (None = unlimited)
-    pub max_ticks: Option<u32>,
+    /// Maximum number of turns before simulation auto-stops (None = unlimited)
+    pub max_turns: Option<u32>,
     /// Enable logging output
     pub enable_logging: bool,
     /// Enable metrics collection
     pub enable_metrics: bool,
-    /// How often to record metrics (every N ticks)
+    /// How often to record metrics (every N turns)
     pub metrics_interval: u32,
 }
 
 impl Default for SimulationConfig {
     fn default() -> Self {
         Self {
-            max_ticks: None,
+            max_turns: None,
             enable_logging: true,
             enable_metrics: true,
             metrics_interval: 1,
@@ -240,9 +240,9 @@ impl SimulationConfig {
     /// set it, and got a world it had no effect on. See
     /// `crate::core::dice::seed`, which is the one that works.
 
-    /// Set maximum number of ticks
-    pub fn with_max_ticks(mut self, max_ticks: u32) -> Self {
-        self.max_ticks = Some(max_ticks);
+    /// Set maximum number of turns
+    pub fn with_max_turns(mut self, max_turns: u32) -> Self {
+        self.max_turns = Some(max_turns);
         self
     }
 
@@ -266,9 +266,9 @@ impl SimulationConfig {
 
     /// Validate configuration values
     pub fn validate(&self) -> Result<(), String> {
-        if let Some(max_ticks) = self.max_ticks {
-            if max_ticks == 0 {
-                return Err("max_ticks must be greater than 0".to_string());
+        if let Some(max_turns) = self.max_turns {
+            if max_turns == 0 {
+                return Err("max_turns must be greater than 0".to_string());
             }
         }
 
@@ -288,7 +288,7 @@ pub struct BehaviorAnalysis;
 struct SerializableSimulationState {
     world: World,
     agents: Vec<crate::agents::Agent>,
-    current_tick: u32,
+    current_turn: u32,
     population_stats: PopulationStatsSnapshot,
 }
 
@@ -352,10 +352,10 @@ impl Simulation {
         Self {
             world,
             population,
-            current_tick: 0,
+            current_turn: 0,
             renderer: None,
             autosave_config: None,
-            last_autosave_tick: 0,
+            last_autosave_turn: 0,
             food_database: FoodDatabase::default(),
             actions_taken: std::collections::BTreeMap::new(),
             actions_failed: std::collections::BTreeMap::new(),
@@ -380,23 +380,23 @@ impl Simulation {
         self
     }
 
-    /// Run the simulation for a specified number of ticks
-    pub fn run_for_ticks(&mut self, ticks: u32) {
-        for _ in 0..ticks {
-            self.tick();
+    /// Run the simulation for a specified number of turns
+    pub fn run_for_turns(&mut self, turns: u32) {
+        for _ in 0..turns {
+            self.take_a_turn();
         }
-        info!("Simulation completed {} ticks", ticks);
+        info!("Simulation completed {} turns", turns);
     }
 
     /// Run the simulation with visualization
-    pub fn run_visual(&mut self, ticks: u32, update_interval: u32) {
-        for _ in 0..ticks {
-            self.tick();
+    pub fn run_visual(&mut self, turns: u32, update_interval: u32) {
+        for _ in 0..turns {
+            self.take_a_turn();
 
             // Render visualization at intervals
-            if self.current_tick % update_interval == 0 {
+            if self.current_turn % update_interval == 0 {
                 if let Some(renderer) = &self.renderer {
-                    renderer.render(&self.population, self.current_tick);
+                    renderer.render(&self.population, self.current_turn);
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
@@ -404,7 +404,7 @@ impl Simulation {
 
         // Final render
         if let Some(renderer) = &self.renderer {
-            renderer.render(&self.population, self.current_tick);
+            renderer.render(&self.population, self.current_turn);
         }
     }
 
@@ -498,7 +498,7 @@ impl Simulation {
         // as the clay.
         let here = crate::world::Position::new(agent_position.0, agent_position.1);
 
-        let now = self.current_tick;
+        let now = self.current_turn;
 
         self.world
             .resources
@@ -725,7 +725,7 @@ impl Simulation {
         items: Vec<crate::agents::InventoryItem>,
         where_it_fell: crate::world::Position,
     ) -> u32 {
-        let tick_now = self.current_tick;
+        let turn_now = self.current_turn;
         let mut left_behind = 0u32;
 
         for item in items {
@@ -737,7 +737,7 @@ impl Simulation {
             if over > 0 {
                 let mut leaving = item.clone();
                 leaving.quantity = over;
-                self.world.somebody_left_this(leaving, where_it_fell, tick_now);
+                self.world.somebody_left_this(leaving, where_it_fell, turn_now);
                 left_behind += over;
             }
         }
@@ -761,7 +761,7 @@ impl Simulation {
     ) -> Vec<crate::agents::InventoryItem> {
         use crate::agents::InventoryItem;
 
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // And how much there was on it to begin with, which is a question
         // about the time of year - see `Climate::how_fat_the_beasts_are`.
@@ -779,7 +779,7 @@ impl Simulation {
                 let food_data = crate::agents::storage_integration::id_to_item_type(&item_id)
                     .filter(|item_type| item_type.is_consumable())
                     .and_then(|item_type| {
-                        self.food_database.create_food_data(&item_type, current_tick)
+                        self.food_database.create_food_data(&item_type, current_turn)
                     });
 
                 // Two kilos is what an animal drop weighs unless something
@@ -984,7 +984,7 @@ impl Simulation {
         }
 
         let here = Position::new(agent_position.0, agent_position.1);
-        let now = self.current_tick;
+        let now = self.current_turn;
         let after_anything_edible = wanted == ResourceType::Food;
 
         self.world.resources.iter().any(|resource| {
@@ -1061,7 +1061,7 @@ impl Simulation {
         use crate::world::Position;
 
         let here = Position::new(agent_position.0, agent_position.1);
-        let now = self.current_tick;
+        let now = self.current_turn;
 
         self.world
             .resources
@@ -1164,7 +1164,7 @@ impl Simulation {
         //
         // The third was **herbs**, and it cost the whole of the treatment
         // machinery. `Action::Gather { resource_type: "herbs" }` is what an
-        // ill agent with an empty pack is sent to do, Rest wins the tick for
+        // ill agent with an empty pack is sent to do, Rest wins the turn for
         // 194 of 426 ill person-samples, and every one of those turns came
         // back "Unknown resource type: herbs". Measured across twelve worlds
         // and 5,327 person-samples: **not one person ever held a remedy**,
@@ -1227,13 +1227,13 @@ impl Simulation {
             }
 
             // Call the agent's lie detection processing
-            agent.process_information_verification(self.current_tick);
+            agent.process_information_verification(self.current_turn);
         }
     }
 
     /// Log simulation statistics
     fn log_statistics(&self) {
-        info!("--- Tick {} Statistics ---", self.current_tick);
+        info!("--- Turn {} Statistics ---", self.current_turn);
         info!("Population size: {}", self.population.agents.len());
 
         // Aggregate drive statistics
@@ -1271,7 +1271,7 @@ impl Simulation {
         let state = SerializableSimulationState {
             world: self.world.clone(),
             agents: self.population.agents.clone(),
-            current_tick: self.current_tick,
+            current_turn: self.current_turn,
             population_stats: PopulationStatsSnapshot {
                 total_births: self.population.stats.total_births,
                 total_deaths: self.population.stats.total_deaths,
@@ -1287,7 +1287,7 @@ impl Simulation {
         let mut file = File::create(path)?;
         file.write_all(&bytes)?;
 
-        info!("Simulation saved at tick {}", self.current_tick);
+        info!("Simulation saved at turn {}", self.current_turn);
         Ok(())
     }
 
@@ -1305,7 +1305,7 @@ impl Simulation {
         // Reconstruct Population
         let mut population = Population::new();
         population.agents = state.agents;
-        population.current_tick = state.current_tick;
+        population.current_turn = state.current_turn;
         population.stats.total_births = state.population_stats.total_births;
         population.stats.total_deaths = state.population_stats.total_deaths;
         population.stats.total_abandonments = state.population_stats.total_abandonments;
@@ -1314,10 +1314,10 @@ impl Simulation {
         let sim = Simulation {
             world: state.world,
             population,
-            current_tick: state.current_tick,
+            current_turn: state.current_turn,
             renderer: None,
             autosave_config: None,
-            last_autosave_tick: 0,
+            last_autosave_turn: 0,
             food_database: FoodDatabase::default(),
             // A tally of this run, not of the saved one
             actions_taken: std::collections::BTreeMap::new(),
@@ -1336,7 +1336,7 @@ impl Simulation {
             energy_that_went_down: 0.0,
         };
 
-        info!("Simulation loaded from tick {}", sim.current_tick);
+        info!("Simulation loaded from turn {}", sim.current_turn);
         Ok(sim)
     }
 
@@ -1348,10 +1348,10 @@ impl Simulation {
         }
 
         self.autosave_config = Some(config);
-        self.last_autosave_tick = self.current_tick;
+        self.last_autosave_turn = self.current_turn;
 
         info!("Auto-save enabled: interval={}, max_checkpoints={}, directory={:?}",
-              self.autosave_config.as_ref().unwrap().interval_ticks,
+              self.autosave_config.as_ref().unwrap().interval_turns,
               self.autosave_config.as_ref().unwrap().max_checkpoints,
               self.autosave_config.as_ref().unwrap().save_directory);
 
@@ -1367,10 +1367,10 @@ impl Simulation {
             }
 
             // Check if it's time to auto-save
-            let ticks_since_last_save = self.current_tick - self.last_autosave_tick;
-            if ticks_since_last_save >= config.interval_ticks {
+            let turns_since_last_save = self.current_turn - self.last_autosave_turn;
+            if turns_since_last_save >= config.interval_turns {
                 self.perform_autosave()?;
-                self.last_autosave_tick = self.current_tick;
+                self.last_autosave_turn = self.current_turn;
             }
         }
 
@@ -1381,7 +1381,7 @@ impl Simulation {
     fn perform_autosave(&self) -> std::io::Result<()> {
         if let Some(config) = &self.autosave_config {
             // Generate checkpoint filename with timestamp
-            let filename = format!("checkpoint_tick_{:08}.json", self.current_tick);
+            let filename = format!("checkpoint_turn_{:08}.json", self.current_turn);
             let checkpoint_path = config.save_directory.join(&filename);
 
             // Save the simulation

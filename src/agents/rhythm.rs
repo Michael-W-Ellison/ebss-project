@@ -47,7 +47,7 @@ use crate::environment::seasons::TICKS_PER_DAY;
 /// How often one agent does one thing, and the evidence it has for that.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rhythm {
-    /// Ticks between doings, as this agent currently has it.
+    /// Turns between doings, as this agent currently has it.
     every: u32,
     /// When it was last done. `None` until it has been done once.
     last: Option<u32>,

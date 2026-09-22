@@ -264,7 +264,7 @@ impl TransportType {
         }
     }
 
-    /// Get stamina consumption per tick when riding (lower = more efficient)
+    /// Get stamina consumption per turn when riding (lower = more efficient)
     pub fn stamina_consumption(&self) -> f32 {
         match self {
             TransportType::Horse => 0.5,
@@ -294,7 +294,7 @@ impl TransportType {
         }
     }
 
-    /// Get stamina recovery rate per tick when resting
+    /// Get stamina recovery rate per turn when resting
     pub fn stamina_recovery(&self) -> f32 {
         match self {
             TransportType::Horse => 1.0,

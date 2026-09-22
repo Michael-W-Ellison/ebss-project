@@ -26,7 +26,7 @@
 //!     }
 //!     
 //!     let mut sim = Simulation::new(world, population);
-//!     sim.run_for_ticks(1000);
+//!     sim.run_for_turns(1000);
 //! }
 //! ```
 

@@ -65,7 +65,7 @@ pub struct CraftingRecipe {
     pub output_item_id: String,
     pub output_quantity: u32,
 
-    /// Crafting time in ticks
+    /// Crafting time in turns
     pub crafting_time: u32,
 
     /// Category for organization
@@ -97,7 +97,7 @@ impl CraftingRecipe {
             skill_requirements: Vec::new(),
             output_item_id,
             output_quantity: 1,
-            crafting_time: 100, // Default 100 ticks
+            crafting_time: 100, // Default 100 turns
             category: CraftingCategory::Materials,
         }
     }
@@ -127,8 +127,8 @@ impl CraftingRecipe {
         self
     }
 
-    pub fn with_time(mut self, ticks: u32) -> Self {
-        self.crafting_time = ticks;
+    pub fn with_time(mut self, turns: u32) -> Self {
+        self.crafting_time = turns;
         self
     }
 
@@ -608,7 +608,7 @@ impl CraftingManager {
     }
 
     /// Update crafting jobs and store completed crafts for collection
-    pub fn tick(&mut self) {
+    pub fn take_a_turn(&mut self) {
         for job in &mut self.active_jobs {
             job.progress += 1;
 

@@ -17,7 +17,7 @@
 //! somebody feels has to be worked out before they can act on it. That is why
 //! it is its own directory and not folded into either.
 //!
-//! Behaviour-neutral, and proved so: three seeds run six hundred ticks give
+//! Behaviour-neutral, and proved so: three seeds run six hundred turns give
 //! byte-identical worlds either side of the move.
 
 pub mod asking;

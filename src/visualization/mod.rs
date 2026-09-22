@@ -70,7 +70,7 @@ pub enum RenderMode {
 /// Historical data point for tracking trends
 #[derive(Debug, Clone)]
 pub struct HistoryPoint {
-    pub tick: u32,
+    pub turn: u32,
     pub population_size: usize,
     pub average_health: f32,
     pub average_energy: f32,
@@ -242,7 +242,7 @@ impl AsciiRenderer {
     }
 
     /// Record a history point
-    pub fn record_history(&mut self, population: &Population, tick: u32) {
+    pub fn record_history(&mut self, population: &Population, turn: u32) {
         let stats = PopulationStats::from_population(population);
 
         let hunger_avg = stats.drive_averages.iter()
@@ -251,7 +251,7 @@ impl AsciiRenderer {
             .unwrap_or(0.0);
 
         let point = HistoryPoint {
-            tick,
+            turn,
             population_size: stats.alive_agents,
             average_health: stats.average_health,
             average_energy: stats.average_energy,
@@ -268,20 +268,20 @@ impl AsciiRenderer {
     }
 
     /// Render the complete simulation state
-    pub fn render(&self, population: &Population, tick: u32) {
+    pub fn render(&self, population: &Population, turn: u32) {
         match self.mode {
-            RenderMode::Full => self.render_full(population, tick),
-            RenderMode::Compact => { self.render_compact_line(population, tick); },
-            RenderMode::Dashboard => self.render_dashboard(population, tick),
-            RenderMode::WorldFocus => self.render_world_focus(population, tick),
-            RenderMode::AgentFocus => self.render_agent_focus(population, tick),
+            RenderMode::Full => self.render_full(population, turn),
+            RenderMode::Compact => { self.render_compact_line(population, turn); },
+            RenderMode::Dashboard => self.render_dashboard(population, turn),
+            RenderMode::WorldFocus => self.render_world_focus(population, turn),
+            RenderMode::AgentFocus => self.render_agent_focus(population, turn),
         }
     }
 
     /// Full detailed render
-    fn render_full(&self, population: &Population, tick: u32) {
+    fn render_full(&self, population: &Population, turn: u32) {
         self.clear_screen();
-        self.render_header(tick, population.agents.len());
+        self.render_header(turn, population.agents.len());
         self.render_world(population);
         self.render_agent_status(population);
         self.render_statistics(population);
@@ -289,9 +289,9 @@ impl AsciiRenderer {
     }
 
     /// Dashboard render with statistics focus
-    fn render_dashboard(&self, population: &Population, tick: u32) {
+    fn render_dashboard(&self, population: &Population, turn: u32) {
         self.clear_screen();
-        self.render_header(tick, population.agents.len());
+        self.render_header(turn, population.agents.len());
         self.render_statistics(population);
         self.render_trend_chart();
         self.render_drive_overview(population);
@@ -299,17 +299,17 @@ impl AsciiRenderer {
     }
 
     /// World-focused render with large map
-    fn render_world_focus(&self, population: &Population, tick: u32) {
+    fn render_world_focus(&self, population: &Population, turn: u32) {
         self.clear_screen();
-        self.render_header(tick, population.agents.len());
+        self.render_header(turn, population.agents.len());
         self.render_large_world(population);
         self.render_compact_stats(population);
     }
 
     /// Agent-focused render with detailed agent info
-    fn render_agent_focus(&self, population: &Population, tick: u32) {
+    fn render_agent_focus(&self, population: &Population, turn: u32) {
         self.clear_screen();
-        self.render_header(tick, population.agents.len());
+        self.render_header(turn, population.agents.len());
         self.render_detailed_agents(population);
     }
 
@@ -318,16 +318,16 @@ impl AsciiRenderer {
         print!("\x1B[2J\x1B[1;1H");
     }
 
-    /// Render the header with tick and population info
-    fn render_header(&self, tick: u32, population_size: usize) {
+    /// Render the header with turn and population info
+    fn render_header(&self, turn: u32, population_size: usize) {
         let color = if self.config.use_color { colors::BRIGHT_CYAN } else { "" };
         let reset = if self.config.use_color { colors::RESET } else { "" };
         let bold = if self.config.use_color { colors::BOLD } else { "" };
 
         println!("{}╔══════════════════════════════════════════════════════════════════════════╗{}", color, reset);
         println!("{}║{}  EBSS - Emergent Behavior Society Simulator                              {}║{}", color, bold, reset, reset);
-        println!("{}║  Tick: {:6}  │  Population: {:3}  │  Mode: {:12}              ║{}",
-            color, tick, population_size, format!("{:?}", self.mode), reset);
+        println!("{}║  Turn: {:6}  │  Population: {:3}  │  Mode: {:12}              ║{}",
+            color, turn, population_size, format!("{:?}", self.mode), reset);
         println!("{}╚══════════════════════════════════════════════════════════════════════════╝{}", color, reset);
         println!();
     }
@@ -441,10 +441,10 @@ impl AsciiRenderer {
                 &agent.id.to_string()[0..8]);
             println!("│   Position: ({}, {}, {})",
                 agent.state.position.0, agent.state.position.1, agent.state.position.2);
-            println!("│   Health: {:5.1}%  │  Energy: {:5.1}%  │  Age: {} ticks",
+            println!("│   Health: {:5.1}%  │  Energy: {:5.1}%  │  Age: {} turns",
                 agent.state.health, agent.state.energy, agent.state.age);
-            println!("│   Life Stage: {:?}  │  Ticks without food: {}",
-                agent.state.life_stage, agent.state.ticks_without_food);
+            println!("│   Life Stage: {:?}  │  Turns without food: {}",
+                agent.state.life_stage, agent.state.turns_without_food);
 
             // Show all drives
             println!("│   Drives:");
@@ -566,7 +566,7 @@ impl AsciiRenderer {
         let stats = PopulationStats::from_population(population);
 
         println!("┌─ Population Statistics ──────────────────────────────────────────────────┐");
-        println!("│  Total Agents: {:4}  │  Alive: {:4}  │  Avg Age: {:6.0} ticks",
+        println!("│  Total Agents: {:4}  │  Alive: {:4}  │  Avg Age: {:6.0} turns",
             stats.total_agents, stats.alive_agents, stats.average_age);
         println!("│  Avg Health: {:5.1}%  │  Avg Energy: {:5.1}%",
             stats.average_health, stats.average_energy);
@@ -639,7 +639,7 @@ impl AsciiRenderer {
             return;
         }
 
-        println!("┌─ Population Trend (last {} ticks) ─────────────────────────────────────┐",
+        println!("┌─ Population Trend (last {} turns) ─────────────────────────────────────┐",
             self.history.len());
 
         // Simple ASCII trend line
@@ -700,14 +700,14 @@ impl AsciiRenderer {
     }
 
     /// Render a compact single-line status (non-clearing) - internal
-    fn render_compact_line(&self, population: &Population, tick: u32) {
+    fn render_compact_line(&self, population: &Population, turn: u32) {
         let stats = PopulationStats::from_population(population);
 
         let color = if self.config.use_color { colors::CYAN } else { "" };
         let reset = if self.config.use_color { colors::RESET } else { "" };
 
-        print!("\r{}Tick {:5}{} │ Pop: {:3} │ Health: {:5.1}% │ Energy: {:5.1}% │ ",
-            color, tick, reset,
+        print!("\r{}Turn {:5}{} │ Pop: {:3} │ Health: {:5.1}% │ Energy: {:5.1}% │ ",
+            color, turn, reset,
             stats.alive_agents,
             stats.average_health,
             stats.average_energy);
@@ -777,8 +777,8 @@ mod tests {
         let mut renderer = AsciiRenderer::default();
         let population = Population::new();
 
-        for tick in 0..150 {
-            renderer.record_history(&population, tick);
+        for turn in 0..150 {
+            renderer.record_history(&population, turn);
         }
 
         // Should cap at history_length (default 100)

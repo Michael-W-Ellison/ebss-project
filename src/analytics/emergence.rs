@@ -131,7 +131,7 @@ pub enum TrendDirection {
 pub struct PatternPrediction {
     pub predicted_pattern: String,
     pub confidence: f32,
-    pub estimated_ticks_until: u32,
+    pub estimated_turns_until: u32,
     pub trend_direction: TrendDirection,
 }
 
@@ -139,7 +139,7 @@ pub struct PatternPrediction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmergentPattern {
     pub pattern_type: PatternType,
-    pub detected_at_tick: u32,
+    pub detected_at_turn: u32,
     pub severity: f32,      // 0.0 to 1.0
     pub description: String,
 }
@@ -181,23 +181,23 @@ impl EmergenceDetector {
     }
 
     /// Analyze metrics and detect emergent patterns
-    pub fn detect_patterns(&mut self, metrics: &SimulationMetrics, current_tick: u32) {
+    pub fn detect_patterns(&mut self, metrics: &SimulationMetrics, current_turn: u32) {
         if metrics.snapshots.len() < 2 {
             return; // Need at least 2 snapshots for trend analysis
         }
 
         // Original pattern detection
-        self.detect_trait_clustering(metrics, current_tick);
-        self.detect_population_changes(metrics, current_tick);
-        self.detect_social_patterns(metrics, current_tick);
-        self.detect_drive_crises(metrics, current_tick);
-        self.detect_emotional_epidemics(metrics, current_tick);
-        self.detect_stability(metrics, current_tick);
+        self.detect_trait_clustering(metrics, current_turn);
+        self.detect_population_changes(metrics, current_turn);
+        self.detect_social_patterns(metrics, current_turn);
+        self.detect_drive_crises(metrics, current_turn);
+        self.detect_emotional_epidemics(metrics, current_turn);
+        self.detect_stability(metrics, current_turn);
 
         // New pattern detection
-        self.detect_mass_migration(metrics, current_tick);
-        self.detect_curiosity_patterns(metrics, current_tick);
-        self.detect_compound_crises(metrics, current_tick);
+        self.detect_mass_migration(metrics, current_turn);
+        self.detect_curiosity_patterns(metrics, current_turn);
+        self.detect_compound_crises(metrics, current_turn);
     }
 
     /// Add a training sample for threshold calibration
@@ -340,14 +340,14 @@ impl EmergenceDetector {
             Some(PatternPrediction {
                 predicted_pattern: "PopulationBoom".to_string(),
                 confidence: (relative_slope * 2.0).min(1.0),
-                estimated_ticks_until: 50,
+                estimated_turns_until: 50,
                 trend_direction: TrendDirection::Increasing,
             })
         } else if relative_slope < -0.1 {
             Some(PatternPrediction {
                 predicted_pattern: "PopulationCollapse".to_string(),
                 confidence: (relative_slope.abs() * 2.0).min(1.0),
-                estimated_ticks_until: 50,
+                estimated_turns_until: 50,
                 trend_direction: TrendDirection::Decreasing,
             })
         } else {
@@ -380,7 +380,7 @@ impl EmergenceDetector {
                     return Some(PatternPrediction {
                         predicted_pattern: format!("{:?}Crisis", drive_type),
                         confidence: ((current / self.thresholds.drive_crisis) * 0.8).min(0.9),
-                        estimated_ticks_until: ((self.thresholds.drive_crisis - current) / trend * 50.0) as u32,
+                        estimated_turns_until: ((self.thresholds.drive_crisis - current) / trend * 50.0) as u32,
                         trend_direction: TrendDirection::Increasing,
                     });
                 }
@@ -409,7 +409,7 @@ impl EmergenceDetector {
                 return Some(PatternPrediction {
                     predicted_pattern: "KnowledgeSaturation".to_string(),
                     confidence: (trend.abs() * 2.0).min(0.8),
-                    estimated_ticks_until: (current / trend.abs() * 50.0) as u32,
+                    estimated_turns_until: (current / trend.abs() * 50.0) as u32,
                     trend_direction: TrendDirection::Decreasing,
                 });
             }
@@ -418,7 +418,7 @@ impl EmergenceDetector {
         None
     }
 
-    fn detect_trait_clustering(&mut self, metrics: &SimulationMetrics, current_tick: u32) {
+    fn detect_trait_clustering(&mut self, metrics: &SimulationMetrics, current_turn: u32) {
         if let Some(last_snapshot) = metrics.snapshots.last() {
             let total_pop = last_snapshot.population.total;
             if total_pop == 0 {
@@ -438,7 +438,7 @@ impl EmergenceDetector {
                                 trait_item: trait_item.clone(),
                                 prevalence: count,
                             },
-                            detected_at_tick: current_tick,
+                            detected_at_turn: current_turn,
                             severity,
                             description: format!(
                                 "Trait {:?} has clustered to {:.1}% of population ({} agents)",
@@ -451,7 +451,7 @@ impl EmergenceDetector {
         }
     }
 
-    fn detect_population_changes(&mut self, metrics: &SimulationMetrics, current_tick: u32) {
+    fn detect_population_changes(&mut self, metrics: &SimulationMetrics, current_turn: u32) {
         let len = metrics.snapshots.len();
         if len < 5 {
             return; // Need more history
@@ -476,7 +476,7 @@ impl EmergenceDetector {
                     pattern_type: PatternType::PopulationBoom {
                         growth_rate: change_rate,
                     },
-                    detected_at_tick: current_tick,
+                    detected_at_turn: current_turn,
                     severity,
                     description: format!(
                         "Population boom: {:.1}% growth (from {} to {} agents)",
@@ -496,7 +496,7 @@ impl EmergenceDetector {
                     pattern_type: PatternType::PopulationCollapse {
                         decline_rate: change_rate,
                     },
-                    detected_at_tick: current_tick,
+                    detected_at_turn: current_turn,
                     severity,
                     description: format!(
                         "Population collapse: {:.1}% decline (from {} to {} agents)",
@@ -509,7 +509,7 @@ impl EmergenceDetector {
         }
     }
 
-    fn detect_social_patterns(&mut self, metrics: &SimulationMetrics, current_tick: u32) {
+    fn detect_social_patterns(&mut self, metrics: &SimulationMetrics, current_turn: u32) {
         if let Some(last_snapshot) = metrics.snapshots.last() {
             let relationships = &last_snapshot.relationships;
             if relationships.total_relationships == 0 {
@@ -524,7 +524,7 @@ impl EmergenceDetector {
                 if severity >= self.detection_threshold {
                     self.report_pattern(EmergentPattern {
                         pattern_type: PatternType::SocialPolarization { conflict_rate },
-                        detected_at_tick: current_tick,
+                        detected_at_turn: current_turn,
                         severity,
                         description: format!(
                             "Social polarization: {:.1}% of relationships are negative",
@@ -543,7 +543,7 @@ impl EmergenceDetector {
                         pattern_type: PatternType::HarmonicSociety {
                             cooperation_rate: positive_rate,
                         },
-                        detected_at_tick: current_tick,
+                        detected_at_turn: current_turn,
                         severity,
                         description: format!(
                             "Harmonic society: {:.1}% positive relationships with avg trust {:.2}",
@@ -556,7 +556,7 @@ impl EmergenceDetector {
         }
     }
 
-    fn detect_drive_crises(&mut self, metrics: &SimulationMetrics, current_tick: u32) {
+    fn detect_drive_crises(&mut self, metrics: &SimulationMetrics, current_turn: u32) {
         if let Some(last_snapshot) = metrics.snapshots.last() {
             let total_pop = last_snapshot.population.total;
             if total_pop == 0 {
@@ -575,7 +575,7 @@ impl EmergenceDetector {
                                 drive: drive_type.clone(),
                                 critical_percentage,
                             },
-                            detected_at_tick: current_tick,
+                            detected_at_turn: current_turn,
                             severity,
                             description: format!(
                                 "{:?} crisis: {:.1}% of agents have critically low {:?} (avg: {:.2})",
@@ -591,7 +591,7 @@ impl EmergenceDetector {
         }
     }
 
-    fn detect_emotional_epidemics(&mut self, metrics: &SimulationMetrics, current_tick: u32) {
+    fn detect_emotional_epidemics(&mut self, metrics: &SimulationMetrics, current_turn: u32) {
         if let Some(last_snapshot) = metrics.snapshots.last() {
             for (emotion_type, emotion_snapshot) in &last_snapshot.emotions {
                 let intensity = emotion_snapshot.average_value.abs();
@@ -611,7 +611,7 @@ impl EmergenceDetector {
                                 emotion: emotion_type.clone(),
                                 intensity,
                             },
-                            detected_at_tick: current_tick,
+                            detected_at_turn: current_turn,
                             severity,
                             description: format!(
                                 "{:?} epidemic: {} {:?} spreading through population (avg: {:.2})",
@@ -624,7 +624,7 @@ impl EmergenceDetector {
         }
     }
 
-    fn detect_stability(&mut self, metrics: &SimulationMetrics, current_tick: u32) {
+    fn detect_stability(&mut self, metrics: &SimulationMetrics, current_turn: u32) {
         let len = metrics.snapshots.len();
         if len < 10 {
             return; // Need more history
@@ -659,7 +659,7 @@ impl EmergenceDetector {
             if stability_score >= self.detection_threshold {
                 self.report_pattern(EmergentPattern {
                     pattern_type: PatternType::StableEquilibrium { stability_score },
-                    detected_at_tick: current_tick,
+                    detected_at_turn: current_turn,
                     severity: stability_score,
                     description: format!(
                         "Stable equilibrium: Population variance only {:.2}% over last {} snapshots",
@@ -671,7 +671,7 @@ impl EmergenceDetector {
         }
     }
 
-    fn detect_mass_migration(&mut self, metrics: &SimulationMetrics, current_tick: u32) {
+    fn detect_mass_migration(&mut self, metrics: &SimulationMetrics, current_turn: u32) {
         let len = metrics.snapshots.len();
         if len < 3 {
             return;
@@ -679,7 +679,7 @@ impl EmergenceDetector {
 
         let recent = &metrics.snapshots[len - 3..];
         let total_abandonments: u32 = recent.iter()
-            .map(|s| s.population.abandonments_this_tick)
+            .map(|s| s.population.abandonments_this_turn)
             .sum();
 
         let avg_pop: f32 = recent.iter()
@@ -699,7 +699,7 @@ impl EmergenceDetector {
             if severity >= self.detection_threshold {
                 self.report_pattern(EmergentPattern {
                     pattern_type: PatternType::MassMigration { abandonment_rate },
-                    detected_at_tick: current_tick,
+                    detected_at_turn: current_turn,
                     severity,
                     description: format!(
                         "Mass migration: {:.1}% of agents abandoned society ({} agents left)",
@@ -711,7 +711,7 @@ impl EmergenceDetector {
         }
     }
 
-    fn detect_curiosity_patterns(&mut self, metrics: &SimulationMetrics, current_tick: u32) {
+    fn detect_curiosity_patterns(&mut self, metrics: &SimulationMetrics, current_turn: u32) {
         if let Some(last_snapshot) = metrics.snapshots.last() {
             let curiosity = &last_snapshot.curiosity;
             let total_pop = last_snapshot.population.total;
@@ -740,7 +740,7 @@ impl EmergenceDetector {
                                     discovery_rate,
                                     discovery_type: top_type.clone(),
                                 },
-                                detected_at_tick: current_tick,
+                                detected_at_turn: current_turn,
                                 severity,
                                 description: format!(
                                     "Discovery boom: {:.1}x increase in discoveries{}",
@@ -766,7 +766,7 @@ impl EmergenceDetector {
                         if severity >= self.detection_threshold {
                             self.report_pattern(EmergentPattern {
                                 pattern_type: PatternType::ExplorationSurge { exploration_rate },
-                                detected_at_tick: current_tick,
+                                detected_at_turn: current_turn,
                                 severity,
                                 description: format!(
                                     "Exploration surge: {:.1} new explorations per agent",
@@ -784,7 +784,7 @@ impl EmergenceDetector {
                         if severity >= self.detection_threshold {
                             self.report_pattern(EmergentPattern {
                                 pattern_type: PatternType::ExplorationDecline { decline_rate },
-                                detected_at_tick: current_tick,
+                                detected_at_turn: current_turn,
                                 severity,
                                 description: format!(
                                     "Exploration decline: {:.1}% drop in exploration activity",
@@ -805,7 +805,7 @@ impl EmergenceDetector {
                 if severity >= self.detection_threshold {
                     self.report_pattern(EmergentPattern {
                         pattern_type: PatternType::CuriosityAwakening { high_curiosity_rate },
-                        detected_at_tick: current_tick,
+                        detected_at_turn: current_turn,
                         severity,
                         description: format!(
                             "Curiosity awakening: {:.1}% of agents have high curiosity drive",
@@ -826,7 +826,7 @@ impl EmergenceDetector {
                     if severity >= self.detection_threshold {
                         self.report_pattern(EmergentPattern {
                             pattern_type: PatternType::KnowledgeSaturation { efficiency_drop },
-                            detected_at_tick: current_tick,
+                            detected_at_turn: current_turn,
                             severity,
                             description: format!(
                                 "Knowledge saturation: Exploration efficiency dropped by {:.1}% (now {:.1}%)",
@@ -841,7 +841,7 @@ impl EmergenceDetector {
         }
     }
 
-    fn detect_compound_crises(&mut self, metrics: &SimulationMetrics, current_tick: u32) {
+    fn detect_compound_crises(&mut self, metrics: &SimulationMetrics, current_turn: u32) {
         if let Some(last_snapshot) = metrics.snapshots.last() {
             let total_pop = last_snapshot.population.total;
             if total_pop == 0 {
@@ -875,7 +875,7 @@ impl EmergenceDetector {
                             crisis_types: crisis_drives.clone(),
                             severity,
                         },
-                        detected_at_tick: current_tick,
+                        detected_at_turn: current_turn,
                         severity,
                         description: format!(
                             "Compound crisis: {} drives in crisis ({}) - society destabilizing",
@@ -892,7 +892,7 @@ impl EmergenceDetector {
         // Avoid duplicate reports for same pattern type within short time
         let is_duplicate = self.detected_patterns.iter().rev().take(5).any(|p| {
             std::mem::discriminant(&p.pattern_type) == std::mem::discriminant(&pattern.pattern_type)
-                && pattern.detected_at_tick - p.detected_at_tick < 100
+                && pattern.detected_at_turn - p.detected_at_turn < 100
         });
 
         if !is_duplicate {
@@ -901,10 +901,10 @@ impl EmergenceDetector {
     }
 
     /// Get patterns detected in a specific time range
-    pub fn patterns_in_range(&self, start_tick: u32, end_tick: u32) -> Vec<&EmergentPattern> {
+    pub fn patterns_in_range(&self, start_turn: u32, end_turn: u32) -> Vec<&EmergentPattern> {
         self.detected_patterns
             .iter()
-            .filter(|p| p.detected_at_tick >= start_tick && p.detected_at_tick <= end_tick)
+            .filter(|p| p.detected_at_turn >= start_turn && p.detected_at_turn <= end_turn)
             .collect()
     }
 
@@ -966,7 +966,7 @@ mod tests {
             pattern_type: PatternType::StableEquilibrium {
                 stability_score: 0.9,
             },
-            detected_at_tick: 50,
+            detected_at_turn: 50,
             severity: 0.9,
             description: "Test".to_string(),
         });
@@ -975,14 +975,14 @@ mod tests {
             pattern_type: PatternType::StableEquilibrium {
                 stability_score: 0.8,
             },
-            detected_at_tick: 150,
+            detected_at_turn: 150,
             severity: 0.8,
             description: "Test".to_string(),
         });
 
         let patterns = detector.patterns_in_range(40, 100);
         assert_eq!(patterns.len(), 1);
-        assert_eq!(patterns[0].detected_at_tick, 50);
+        assert_eq!(patterns[0].detected_at_turn, 50);
     }
 
     #[test]
@@ -993,7 +993,7 @@ mod tests {
             pattern_type: PatternType::StableEquilibrium {
                 stability_score: 0.5,
             },
-            detected_at_tick: 0,
+            detected_at_turn: 0,
             severity: 0.5,
             description: "Low".to_string(),
         });
@@ -1002,7 +1002,7 @@ mod tests {
             pattern_type: PatternType::StableEquilibrium {
                 stability_score: 0.9,
             },
-            detected_at_tick: 0,
+            detected_at_turn: 0,
             severity: 0.9,
             description: "High".to_string(),
         });
@@ -1147,13 +1147,13 @@ mod tests {
         let prediction = PatternPrediction {
             predicted_pattern: "PopulationBoom".to_string(),
             confidence: 0.75,
-            estimated_ticks_until: 100,
+            estimated_turns_until: 100,
             trend_direction: TrendDirection::Increasing,
         };
 
         assert_eq!(prediction.predicted_pattern, "PopulationBoom");
         assert_eq!(prediction.confidence, 0.75);
-        assert_eq!(prediction.estimated_ticks_until, 100);
+        assert_eq!(prediction.estimated_turns_until, 100);
         assert_eq!(prediction.trend_direction, TrendDirection::Increasing);
     }
 

@@ -207,7 +207,7 @@ fn what_a_person_is_born_as_reaches_their_senses() {
     if let Some(born_blind) = born_blind {
         assert_eq!(
             born_blind.senses.vision.acuity, 0.0,
-            "somebody born blind should not see from their first tick"
+            "somebody born blind should not see from their first turn"
         );
     }
 }

@@ -3,7 +3,7 @@
 //! about the people living next to it.
 //!
 //! The fauna model had all the parts and none of the connections. Predation
-//! sat behind a single roll for the whole world each tick, predators were
+//! sat behind a single roll for the whole world each turn, predators were
 //! spawned that could not eat anything living in that world, and nothing let
 //! an animal touch an agent. Herds grew until they hit the hard population
 //! cap. These cover:
@@ -116,7 +116,7 @@ fn wolves_take_sheep_and_the_grass_holds_the_rest() {
 
         let mut simulation = Simulation::new(world, Population::new());
         for _ in 0..6000 {
-            simulation.tick();
+            simulation.take_a_turn();
         }
 
         let of = |what: &str| {
@@ -189,7 +189,7 @@ fn the_land_will_only_carry_so_many() {
                     animal.position = (25, 25);
                 }
             }
-            simulation.tick();
+            simulation.take_a_turn();
         }
 
         simulation
@@ -267,7 +267,7 @@ fn a_starving_predator_takes_what_it_can_get() {
                 animal.current_health = animal.max_health;
             }
         }
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let after = simulation
@@ -342,7 +342,7 @@ fn a_hungry_predator_turns_on_the_settlement() {
                 }
             }
 
-            simulation.tick();
+            simulation.take_a_turn();
 
             attacked += simulation
                 .population
@@ -356,7 +356,7 @@ fn a_hungry_predator_turns_on_the_settlement() {
                     // nobody read that animals were being filed as people.
                     // See #212.
                     matches!(
-                        agent.emotions.recent_attacker(simulation.current_tick),
+                        agent.emotions.recent_attacker(simulation.current_turn),
                         Some(crate::agents::EmotionSource::Creature(ref what)) if what == "wolf"
                     )
                 })
@@ -379,25 +379,25 @@ fn a_hungry_predator_turns_on_the_settlement() {
     );
 }
 
-/// The world is ticked once per tick.
+/// The world is turned once per turn.
 ///
-/// Simulation::tick used to advance climate, fauna and flora itself and then
-/// call World::tick, which does all three again, so the living world ran at
+/// Simulation::take_a_turn used to advance climate, fauna and flora itself and then
+/// call World::take_a_turn, which does all three again, so the living world ran at
 /// double speed against the agents living in it.
 #[test]
-fn the_world_advances_once_per_tick() {
+fn the_world_advances_once_per_turn() {
     let world = World::new(WorldConfig::default());
     let mut simulation = Simulation::new(world, Population::new());
 
-    let before = simulation.world.tick;
+    let before = simulation.world.turn;
     for _ in 0..50 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     assert_eq!(
-        simulation.world.tick - before,
-        50,
-        "the world should advance one tick per simulation tick"
+        simulation.world.turn - before,
+        50 * crate::environment::seasons::TICKS_BETWEEN_PLANS,
+        "the world should advance one turn per simulation turn"
     );
 }
 
@@ -419,7 +419,7 @@ fn a_wiped_out_species_finds_its_way_back() {
 
     // Let the world learn how many sheep it holds, then take them all
     for _ in 0..2100 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
     simulation.world.animals.get_all_mut().clear();
 
@@ -430,10 +430,10 @@ fn a_wiped_out_species_finds_its_way_back() {
     );
 
     let mut returned_at = None;
-    for tick in 0..30000 {
-        simulation.tick();
+    for turn in 0..30000 {
+        simulation.take_a_turn();
         if !simulation.world.animals.get_all().is_empty() {
-            returned_at = Some(tick);
+            returned_at = Some(turn);
             break;
         }
     }
@@ -442,7 +442,7 @@ fn a_wiped_out_species_finds_its_way_back() {
 
     assert!(
         returned_at > 1000,
-        "they should not walk straight back in: returned after {returned_at} ticks"
+        "they should not walk straight back in: returned after {returned_at} turns"
     );
 
     assert!(
@@ -472,21 +472,21 @@ fn what_migrates_in_is_a_trickle() {
 
     let mut simulation = Simulation::new(world, Population::new());
     for _ in 0..2100 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
-    // Clear them out every tick, so nothing that arrives can breed: what is
+    // Clear them out every turn, so nothing that arrives can breed: what is
     // left at the end is what walked in
     let mut arrivals = 0;
     for _ in 0..20000 {
-        simulation.tick();
+        simulation.take_a_turn();
         arrivals += simulation.world.animals.get_all().len();
         simulation.world.animals.get_all_mut().clear();
     }
 
-    assert!(arrivals > 0, "something should have wandered in over twenty thousand ticks");
+    assert!(arrivals > 0, "something should have wandered in over twenty thousand turns");
     assert!(
         arrivals < 60,
-        "arrivals should be a trickle, not a supply: {arrivals} in twenty thousand ticks"
+        "arrivals should be a trickle, not a supply: {arrivals} in twenty thousand turns"
     );
 }

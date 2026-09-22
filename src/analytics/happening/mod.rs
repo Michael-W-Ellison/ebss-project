@@ -18,11 +18,11 @@
 //! The three layers, together: [`crate::analytics::wanting`] decides,
 //! [`crate::analytics::doing`] acts, and this happens. The order they run in is
 //! [`crate::analytics::turn`], and the arguments about that order - the beasts
-//! look before they move, the world is ticked once and not twice, waste goes
+//! look before they move, the world is turned once and not twice, waste goes
 //! back on the ground before anybody smells it - are the reason the order is
 //! written down in one place rather than implied by where the code sits.
 //!
-//! Behaviour-neutral, and proved so: three seeds run six hundred ticks give
+//! Behaviour-neutral, and proved so: three seeds run six hundred turns give
 //! byte-identical worlds either side of the move.
 
 pub mod beasts;

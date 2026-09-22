@@ -63,6 +63,11 @@ fn a_thing_nobody_has_described_does_not_get_described_by_its_name() {
 ///
 /// A vocabulary with entries nothing uses is a vocabulary that reads as richer
 /// than the world it describes.
+///
+/// The keeping tags are exempt and are held to the harder version of the same
+/// rule below: they are not what a thing is *called*, they are what has been
+/// done to it, and what has been done to it comes from a preparation rather
+/// than from a name.
 #[test]
 fn every_tag_declared_is_a_tag_something_carries() {
     let every_tag = [
@@ -368,4 +373,274 @@ fn several_things_of_a_class_add_up() {
         .sum();
 
     assert_eq!(covering, 4);
+}
+
+// --------------------------------------------------------------------------
+// How fast a thing goes off, and what makes it faster or slower
+// --------------------------------------------------------------------------
+
+/// Every tag that carries a keeping number is one some preparation leaves.
+///
+/// The counterpart of `every_tag_declared_is_a_tag_something_carries` for the
+/// tags nothing is *called*. A priced tag nothing can arrive at is a number
+/// that will never be read, and the way a thing arrives at one of these is by
+/// having something done to it.
+#[test]
+fn every_priced_tag_is_one_something_can_actually_become() {
+    use crate::world::nutrition::PreparationState;
+
+    const EVERY_PREPARATION: &[PreparationState] = &[
+        PreparationState::Raw,
+        PreparationState::Cooked,
+        PreparationState::Dried,
+        PreparationState::Smoked,
+        PreparationState::Salted,
+        PreparationState::Pickled,
+        PreparationState::Ground,
+        PreparationState::Fermented,
+        PreparationState::Ruined,
+    ];
+
+    let reachable: Vec<Tag> = EVERY_PREPARATION
+        .iter()
+        .flat_map(|how| how.what_this_leaves_it().iter().copied())
+        .collect();
+
+    for tag in [
+        Tag::Wet,
+        Tag::Dry,
+        Tag::Cooked,
+        Tag::Smoked,
+        Tag::Salted,
+        Tag::Soured,
+        Tag::Fermented,
+        Tag::Ground,
+        Tag::Spoiled,
+    ] {
+        assert!(
+            tag.what_it_does_to_keeping().is_some(),
+            "{} is a keeping tag and should carry a number",
+            tag.called()
+        );
+        assert!(
+            reachable.contains(&tag) || everything_that_is(tag).next().is_some(),
+            "nothing in this world can come to be {}",
+            tag.called()
+        );
+    }
+}
+
+/// A tag with no opinion about keeping is not given one.
+///
+/// The difference between `None` and `Some(1.0)` is the whole of why this is
+/// an `Option`: the arithmetic is the same and the statement is not, and a
+/// default of one would quietly swallow a keeping tag somebody added and
+/// forgot to price.
+#[test]
+fn a_tag_that_says_nothing_about_keeping_says_nothing() {
+    assert_eq!(Tag::Pole.what_it_does_to_keeping(), None);
+    assert_eq!(Tag::Knappable.what_it_does_to_keeping(), None);
+    assert_eq!(Tag::FoodContainer.what_it_does_to_keeping(), None);
+
+    // And it changes nothing when it is in the list anyway.
+    assert_eq!(
+        how_fast_these_go_off(&[Tag::Pole, Tag::Timber]),
+        WHAT_NOTHING_SAYS
+    );
+}
+
+/// The coarse question and the numbers must never disagree.
+///
+/// `Preserved` and `Perishable` are what a verb asks for - is this the kind of
+/// thing meant to keep - and they are deliberately unpriced, because the
+/// number belongs to the *reason* a thing keeps and not to the claim that it
+/// does. That is only safe while the two say the same thing, which is what
+/// this asserts: two spellings of one question is the mistake this module's
+/// own docstring says the project has paid for three times.
+#[test]
+fn what_is_called_preserved_is_what_actually_keeps() {
+    use crate::world::nutrition::PreparationState;
+
+    // Nothing that keeps, keeps by being called something.
+    for called in everything_that_is(Tag::Preserved) {
+        assert_eq!(
+            how_fast_this_goes_off(called, &[]),
+            WHAT_NOTHING_SAYS,
+            "{called} is called preserved, and the way a thing comes to keep              is that something is done to it - the name must not do it too"
+        );
+    }
+
+    // And drying one is what makes it keep.
+    for called in everything_that_is(Tag::Preserved) {
+        let dried = how_fast_this_goes_off(called, PreparationState::Dried.what_this_leaves_it());
+        assert!(
+            dried < WHAT_NOTHING_SAYS,
+            "{called} dried should keep better than {called} raw"
+        );
+    }
+
+    for called in everything_that_is(Tag::Perishable) {
+        let raw = how_fast_this_goes_off(called, PreparationState::Raw.what_this_leaves_it());
+        assert!(
+            raw >= WHAT_NOTHING_SAYS,
+            "{called} is called perishable and should not keep: {raw}"
+        );
+    }
+}
+
+/// The tags compose, and a tag arriving twice counts once.
+///
+/// The doubling is not hypothetical: a dried strip of meat is `Dry` because of
+/// what was done to it and would be `Dry` again the day somebody says that is
+/// what a strip *is*. Twenty times squared is four hundred, and a four-hundred
+/// times multiplier on a winter store is a settlement that never goes hungry.
+#[test]
+fn what_arrives_twice_is_counted_once() {
+    let once = how_fast_these_go_off(&[Tag::Dry]);
+    let twice = how_fast_these_go_off(&[Tag::Dry, Tag::Dry]);
+
+    assert_eq!(once, twice, "one fact, counted once");
+
+    // Two different facts do compose: over a fire and then laid in the sun.
+    let both = how_fast_these_go_off(&[Tag::Cooked, Tag::Dry]);
+    assert!(
+        both < once,
+        "two things done to it should keep it better than one: {both} against {once}"
+    );
+}
+
+/// A change of tag is a change of rate, with nothing told about it.
+///
+/// **The thing the whole conversion is for.** Meat goes from wet to dry and
+/// goes off twenty times slower, and no part of the model was informed: the
+/// clock reads the tags, and the tags changed.
+#[test]
+fn meat_that_goes_from_wet_to_dry_keeps_twenty_times_longer() {
+    use crate::world::nutrition::PreparationState;
+
+    let wet = how_fast_this_goes_off(
+        "meatportions",
+        PreparationState::Raw.what_this_leaves_it(),
+    );
+    let dry = how_fast_this_goes_off(
+        "meatportions",
+        PreparationState::Dried.what_this_leaves_it(),
+    );
+
+    assert_eq!(wet, 1.0, "raw flesh is the baseline");
+    assert!(
+        (wet / dry - 20.0).abs() < 0.01,
+        "drying should be worth twenty times: {wet} against {dry}"
+    );
+}
+
+/// A preparation says nothing the tags do not.
+///
+/// `PreparationState::spoilage_multiplier` was the table these numbers came
+/// out of, and is now derived from them. The test is that it still answers,
+/// and answers the same thing - because the alternative is two tables, which
+/// is what this is all in aid of avoiding.
+#[test]
+fn a_preparation_is_only_a_way_of_getting_a_tag() {
+    use crate::world::nutrition::PreparationState;
+
+    for how in [
+        PreparationState::Raw,
+        PreparationState::Cooked,
+        PreparationState::Dried,
+        PreparationState::Smoked,
+        PreparationState::Salted,
+        PreparationState::Pickled,
+        PreparationState::Ground,
+        PreparationState::Fermented,
+        PreparationState::Ruined,
+    ] {
+        assert_eq!(
+            how.spoilage_multiplier(),
+            how_fast_these_go_off(how.what_this_leaves_it()),
+            "{} should say what its tags say and nothing else",
+            how.name()
+        );
+    }
+}
+
+// --------------------------------------------------------------------------
+// Where a thing is kept
+// --------------------------------------------------------------------------
+
+/// Everything priced as somewhere to keep food is somewhere food goes.
+#[test]
+fn nothing_is_a_larder_that_will_not_hold_food() {
+    for keeps in EVERYTHING_THAT_KEEPS {
+        assert!(
+            is_this_a(keeps.called, Tag::FoodContainer),
+            "{} is priced as somewhere to keep food and is not a food container",
+            keeps.called
+        );
+        assert!(
+            keeps.how_fast_food_in_it_goes_off > 0.0,
+            "{} would stop time",
+            keeps.called
+        );
+    }
+}
+
+/// A vessel slows a thing down; it does not preserve it.
+///
+/// The ladder has to stay under what drying and salting are worth, or there is
+/// no reason to spend three turns preserving anything when a basket is one.
+#[test]
+fn no_vessel_is_worth_as_much_as_preserving() {
+    use crate::world::nutrition::PreparationState;
+
+    let best_vessel = EVERYTHING_THAT_KEEPS
+        .iter()
+        .map(|keeps| keeps.how_fast_food_in_it_goes_off)
+        .fold(f32::INFINITY, f32::min);
+
+    let worst_preserving = [
+        PreparationState::Dried,
+        PreparationState::Smoked,
+        PreparationState::Salted,
+        PreparationState::Fermented,
+    ]
+    .iter()
+    .map(|how| how.spoilage_multiplier())
+    .fold(0.0_f32, f32::max);
+
+    assert!(
+        best_vessel > worst_preserving,
+        "the best pot in the world ({best_vessel}) should be worth less than          the feeblest way of preserving a thing ({worst_preserving})"
+    );
+}
+
+/// Nothing to keep it in is a number, not a special case.
+#[test]
+fn a_bare_pack_keeps_nothing_and_says_so() {
+    let nothing: [(&str, u32); 0] = [];
+    assert_eq!(
+        the_best_keeping_to_hand(&holding(&nothing)),
+        WHAT_A_BARE_PACK_KEEPS
+    );
+    assert_eq!(how_well_this_keeps("spear"), WHAT_A_BARE_PACK_KEEPS);
+    assert_eq!(how_well_this_keeps("gruntlebuck"), WHAT_A_BARE_PACK_KEEPS);
+}
+
+/// A person keeps their food in the best thing they are carrying.
+#[test]
+fn the_pot_goes_in_the_pack_and_the_food_goes_in_the_pot() {
+    let with_a_basket = the_best_keeping_to_hand(&holding(&[("basket", 1)]));
+    let with_a_pot = the_best_keeping_to_hand(&holding(&[("basket", 1), ("claypot", 1)]));
+
+    assert!(with_a_basket < WHAT_A_BARE_PACK_KEEPS, "a basket is worth something");
+    assert!(
+        with_a_pot < with_a_basket,
+        "the pot is the better of the two and is the one that gets used:          {with_a_pot} against {with_a_basket}"
+    );
+
+    // And the ladder is a ladder: firing pots is worth going on with.
+    assert!(
+        how_well_this_keeps("stoneware") < how_well_this_keeps("claypot"),
+        "sealed fired earth should be the best of them"
+    );
 }

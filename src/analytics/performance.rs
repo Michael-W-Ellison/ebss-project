@@ -37,13 +37,13 @@ impl OperationMetrics {
     }
 }
 
-/// Snapshot of performance at a specific tick
+/// Snapshot of performance at a specific turn
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceSnapshot {
-    pub tick: u32,
-    pub tick_duration_micros: u64,
-    pub ticks_per_second: f64,
-    pub agents_per_tick: usize,
+    pub turn: u32,
+    pub turn_duration_micros: u64,
+    pub turns_per_second: f64,
+    pub agents_per_turn: usize,
     pub memory_usage_estimate_kb: usize,
 }
 
@@ -55,7 +55,7 @@ pub struct PerformanceMonitor {
     pub max_snapshots: usize,
 
     #[serde(skip)]
-    pub last_tick_start: Option<Instant>,
+    pub last_turn_start: Option<Instant>,
 }
 
 impl PerformanceMonitor {
@@ -64,7 +64,7 @@ impl PerformanceMonitor {
             operations: BTreeMap::new(),
             snapshots: Vec::new(),
             max_snapshots,
-            last_tick_start: None,
+            last_turn_start: None,
         }
     }
 
@@ -82,18 +82,18 @@ impl PerformanceMonitor {
             .record(duration);
     }
 
-    /// Start timing a tick
-    pub fn start_tick(&mut self) {
-        self.last_tick_start = Some(Instant::now());
+    /// Start timing a turn
+    pub fn start_turn(&mut self) {
+        self.last_turn_start = Some(Instant::now());
     }
 
-    /// End timing a tick and record snapshot
-    pub fn end_tick(&mut self, tick: u32, agent_count: usize) {
-        if let Some(start) = self.last_tick_start {
+    /// End timing a turn and record snapshot
+    pub fn end_turn(&mut self, turn: u32, agent_count: usize) {
+        if let Some(start) = self.last_turn_start {
             let duration = start.elapsed();
             let micros = duration.as_micros() as u64;
 
-            let ticks_per_second = if micros > 0 {
+            let turns_per_second = if micros > 0 {
                 1_000_000.0 / micros as f64
             } else {
                 0.0
@@ -103,10 +103,10 @@ impl PerformanceMonitor {
             let memory_estimate = agent_count * 10; // ~10KB per agent estimate
 
             let snapshot = PerformanceSnapshot {
-                tick,
-                tick_duration_micros: micros,
-                ticks_per_second,
-                agents_per_tick: agent_count,
+                turn,
+                turn_duration_micros: micros,
+                turns_per_second,
+                agents_per_turn: agent_count,
                 memory_usage_estimate_kb: memory_estimate,
             };
 
@@ -118,16 +118,16 @@ impl PerformanceMonitor {
             }
         }
 
-        self.last_tick_start = None;
+        self.last_turn_start = None;
     }
 
-    /// Get average ticks per second over all snapshots
-    pub fn average_ticks_per_second(&self) -> f64 {
+    /// Get average turns per second over all snapshots
+    pub fn average_turns_per_second(&self) -> f64 {
         if self.snapshots.is_empty() {
             return 0.0;
         }
 
-        let sum: f64 = self.snapshots.iter().map(|s| s.ticks_per_second).sum();
+        let sum: f64 = self.snapshots.iter().map(|s| s.turns_per_second).sum();
         sum / self.snapshots.len() as f64
     }
 
@@ -159,27 +159,27 @@ impl PerformanceMonitor {
             .map(|m| m.total_duration_micros)
             .sum();
 
-        let avg_tps = self.average_ticks_per_second();
+        let avg_tps = self.average_turns_per_second();
 
         let peak_tps = self
             .snapshots
             .iter()
-            .map(|s| s.ticks_per_second)
+            .map(|s| s.turns_per_second)
             .fold(0.0_f64, f64::max);
 
         let min_tps = self
             .snapshots
             .iter()
-            .map(|s| s.ticks_per_second)
+            .map(|s| s.turns_per_second)
             .fold(f64::INFINITY, f64::min);
 
         PerformanceSummary {
             total_operations,
             total_time_seconds: total_time_micros as f64 / 1_000_000.0,
-            average_ticks_per_second: avg_tps,
-            peak_ticks_per_second: peak_tps,
-            min_ticks_per_second: if min_tps == f64::INFINITY { 0.0 } else { min_tps },
-            total_ticks_measured: self.snapshots.len(),
+            average_turns_per_second: avg_tps,
+            peak_turns_per_second: peak_tps,
+            min_turns_per_second: if min_tps == f64::INFINITY { 0.0 } else { min_tps },
+            total_turns_measured: self.snapshots.len(),
         }
     }
 
@@ -187,7 +187,7 @@ impl PerformanceMonitor {
     pub fn reset(&mut self) {
         self.operations.clear();
         self.snapshots.clear();
-        self.last_tick_start = None;
+        self.last_turn_start = None;
     }
 }
 
@@ -202,10 +202,10 @@ impl Default for PerformanceMonitor {
 pub struct PerformanceSummary {
     pub total_operations: u64,
     pub total_time_seconds: f64,
-    pub average_ticks_per_second: f64,
-    pub peak_ticks_per_second: f64,
-    pub min_ticks_per_second: f64,
-    pub total_ticks_measured: usize,
+    pub average_turns_per_second: f64,
+    pub peak_turns_per_second: f64,
+    pub min_turns_per_second: f64,
+    pub total_turns_measured: usize,
 }
 
 /// Macro for timing operations
@@ -247,17 +247,17 @@ mod tests {
     }
 
     #[test]
-    fn test_tick_timing() {
+    fn test_turn_timing() {
         let mut monitor = PerformanceMonitor::new(100);
 
-        monitor.start_tick();
+        monitor.start_turn();
         thread::sleep(Duration::from_millis(1));
-        monitor.end_tick(0, 10);
+        monitor.end_turn(0, 10);
 
         assert_eq!(monitor.snapshots.len(), 1);
-        assert_eq!(monitor.snapshots[0].tick, 0);
-        assert_eq!(monitor.snapshots[0].agents_per_tick, 10);
-        assert!(monitor.snapshots[0].tick_duration_micros > 0);
+        assert_eq!(monitor.snapshots[0].turn, 0);
+        assert_eq!(monitor.snapshots[0].agents_per_turn, 10);
+        assert!(monitor.snapshots[0].turn_duration_micros > 0);
     }
 
     #[test]
@@ -265,30 +265,30 @@ mod tests {
         let mut monitor = PerformanceMonitor::new(5);
 
         for i in 0..10 {
-            monitor.start_tick();
-            monitor.end_tick(i, 1);
+            monitor.start_turn();
+            monitor.end_turn(i, 1);
         }
 
         assert_eq!(monitor.snapshots.len(), 5); // Should keep only last 5
-        assert_eq!(monitor.snapshots.first().unwrap().tick, 5);
-        assert_eq!(monitor.snapshots.last().unwrap().tick, 9);
+        assert_eq!(monitor.snapshots.first().unwrap().turn, 5);
+        assert_eq!(monitor.snapshots.last().unwrap().turn, 9);
     }
 
     #[test]
-    fn test_average_ticks_per_second() {
+    fn test_average_turns_per_second() {
         let mut monitor = PerformanceMonitor::new(100);
 
-        monitor.start_tick();
+        monitor.start_turn();
         thread::sleep(Duration::from_millis(10));
-        monitor.end_tick(0, 1);
+        monitor.end_turn(0, 1);
 
-        monitor.start_tick();
+        monitor.start_turn();
         thread::sleep(Duration::from_millis(10));
-        monitor.end_tick(1, 1);
+        monitor.end_turn(1, 1);
 
-        let avg_tps = monitor.average_ticks_per_second();
+        let avg_tps = monitor.average_turns_per_second();
         assert!(avg_tps > 0.0);
-        assert!(avg_tps < 200.0); // Should be roughly 100 TPS with 10ms per tick
+        assert!(avg_tps < 200.0); // Should be roughly 100 TPS with 10ms per turn
     }
 
     #[test]
@@ -313,13 +313,13 @@ mod tests {
     fn test_summary() {
         let mut monitor = PerformanceMonitor::new(100);
 
-        monitor.start_tick();
+        monitor.start_turn();
         thread::sleep(Duration::from_millis(1));
-        monitor.end_tick(0, 10);
+        monitor.end_turn(0, 10);
 
         let summary = monitor.summary();
-        assert!(summary.average_ticks_per_second > 0.0);
-        assert_eq!(summary.total_ticks_measured, 1);
+        assert!(summary.average_turns_per_second > 0.0);
+        assert_eq!(summary.total_turns_measured, 1);
     }
 
     #[test]
@@ -329,8 +329,8 @@ mod tests {
         let start = monitor.start_operation("test");
         monitor.end_operation("test", start);
 
-        monitor.start_tick();
-        monitor.end_tick(0, 1);
+        monitor.start_turn();
+        monitor.end_turn(0, 1);
 
         assert_eq!(monitor.operations.len(), 1);
         assert_eq!(monitor.snapshots.len(), 1);

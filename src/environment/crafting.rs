@@ -104,7 +104,7 @@ pub struct CraftingTemplate {
     /// Required tool tier (if any)
     pub required_tier: Option<ToolTier>,
 
-    /// Crafting time in ticks
+    /// Crafting time in turns
     pub craft_time: u32,
     /// Energy cost to craft
     pub energy_cost: f32,

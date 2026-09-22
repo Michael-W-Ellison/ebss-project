@@ -58,7 +58,7 @@ pub fn world_to_snapshot(world: &World) -> WorldSnapshot {
         tiles,
         resources,
         buildings,
-        tick: world.tick,
+        turn: world.turn,
     }
 }
 
@@ -276,8 +276,8 @@ pub fn agent_to_detailed(agent: &Agent) -> SelectedAgentData {
     let survival_status = SurvivalStatus {
         is_starving: agent.state.is_starving(),
         is_dehydrated: agent.state.is_dehydrated(),
-        ticks_without_food: agent.state.ticks_without_food,
-        ticks_without_water: agent.state.ticks_without_water,
+        turns_without_food: agent.state.turns_without_food,
+        turns_without_water: agent.state.turns_without_water,
         is_critical: agent.state.is_survival_critical(),
     };
 
@@ -367,7 +367,7 @@ pub fn simulation_to_snapshot(
     let events = simulation.population.drain_events();
 
     SimulationSnapshot {
-        tick: simulation.world.tick,
+        turn: simulation.world.turn,
         state,
         speed,
         world: world_to_snapshot(&simulation.world),
@@ -602,14 +602,14 @@ pub fn tech_tree_to_snapshot(
             TechStatus::Unknown
         };
 
-        // Find first discoverer and tick from history
-        let (first_discoverer, discovery_tick) = discovery_history.iter()
+        // Find first discoverer and turn from history
+        let (first_discoverer, discovery_turn) = discovery_history.iter()
             .find(|(_, id)| id == tech.id)
-            .map(|(tick, _)| {
+            .map(|(turn, _)| {
                 let discoverer = population.agents.iter()
                     .find(|a| a.technology_knowledge.known_technologies.contains_key(tech.id))
                     .map(|a| a.id);
-                (discoverer, Some(*tick))
+                (discoverer, Some(*turn))
             })
             .unwrap_or((None, None));
 
@@ -630,7 +630,7 @@ pub fn tech_tree_to_snapshot(
             prerequisites: tech.prerequisites.iter().map(|s| s.to_string()).collect(),
             unlocks,
             first_discoverer,
-            discovery_tick,
+            discovery_turn,
         });
     }
 
@@ -644,7 +644,7 @@ pub fn tech_tree_to_snapshot(
 }
 
 /// Generate relationship graph snapshot for GUI
-pub fn relationship_graph_to_snapshot(population: &Population, tick: u32) -> RelationshipGraphSnapshot {
+pub fn relationship_graph_to_snapshot(population: &Population, turn: u32) -> RelationshipGraphSnapshot {
     let nodes: Vec<RelationshipGraphNode> = population.agents.iter()
         .filter(|a| a.state.is_alive)
         .map(|agent| {
@@ -669,5 +669,5 @@ pub fn relationship_graph_to_snapshot(population: &Population, tick: u32) -> Rel
         })
         .collect();
 
-    RelationshipGraphSnapshot { nodes, tick }
+    RelationshipGraphSnapshot { nodes, turn }
 }

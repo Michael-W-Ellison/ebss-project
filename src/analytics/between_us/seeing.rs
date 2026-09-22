@@ -2,7 +2,7 @@
 //! What everybody saw, and what they made of it.
 //!
 //! Sight is the only channel in this model that reaches a whole settlement in
-//! one tick, which is why a wolf on the ridge frightens more people than the
+//! one turn, which is why a wolf on the ridge frightens more people than the
 //! one man who met it.
 //!
 //! Part of how one agent stands towards another - see [`super`].
@@ -25,11 +25,11 @@ impl Simulation {
     /// what stops a man with a spear being as frightened of a wolf as a child
     /// with nothing.
     pub(in crate::analytics) fn what_everybody_saw_that_frightened_them(&mut self) {
-        if self.current_tick % Self::HOW_OFTEN_ANYBODY_LOOKS_ROUND != 0 {
+        if self.current_turn % Self::HOW_OFTEN_ANYBODY_LOOKS_ROUND != 0 {
             return;
         }
 
-        let now = self.current_tick;
+        let now = self.current_turn;
 
         // Everything alive that means anybody harm, with what it is worth in
         // a fight and what to call it
@@ -131,11 +131,11 @@ impl Simulation {
     /// every agent knows where every other agent is standing at all times.
     /// This is what somebody would actually know.
     pub(in crate::analytics) fn who_everybody_saw(&mut self) {
-        if self.current_tick % Self::HOW_OFTEN_ANYBODY_LOOKS_ROUND != 0 {
+        if self.current_turn % Self::HOW_OFTEN_ANYBODY_LOOKS_ROUND != 0 {
             return;
         }
 
-        let now = self.current_tick;
+        let now = self.current_turn;
         let standing: Vec<(uuid::Uuid, (i32, i32))> = self
             .population
             .agents
@@ -171,10 +171,17 @@ impl Simulation {
 
     /// How often anybody stops and takes in what is round them.
     ///
-    /// Every few ticks rather than every one. Nothing in a settlement changes
-    /// fast enough to want it more often, and it is a walk over everybody
-    /// against everything.
-    pub(in crate::analytics) const HOW_OFTEN_ANYBODY_LOOKS_ROUND: u32 = 5;
+    /// Every few planning periods rather than every one. Nothing in a
+    /// settlement changes fast enough to want it more often, and it is a walk
+    /// over everybody against everything.
+    ///
+    /// Two and a half hours, stated in ticks. It was a bare `5`, which was
+    /// five steps; once the counter began advancing thirty ticks at a time,
+    /// `% 5` was true at every step, so everybody looked round every time
+    /// instead of every fifth. The other bare count is
+    /// `Agent::HOW_OFTEN_A_HAND_IS_TESTED`, and the note there says why.
+    pub(in crate::analytics) const HOW_OFTEN_ANYBODY_LOOKS_ROUND: u32 =
+        5 * crate::environment::seasons::TICKS_BETWEEN_PLANS;
 
     /// How far off a beast is worth noticing.
     pub(in crate::analytics) const AS_FAR_AS_ANYBODY_SEES_A_BEAST: i32 = 8;

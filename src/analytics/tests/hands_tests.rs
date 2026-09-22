@@ -229,7 +229,7 @@ fn an_axe_in_the_hand_is_worth_more_than_the_same_axe_in_the_bag() {
 /// And the moment that matters is just before the work, not any idle turn.
 ///
 /// The first cut put reaching for a tool at the bottom of the Utility chain,
-/// where it fired half a time in a world of ten thousand ticks: there is
+/// where it fired half a time in a world of ten thousand turns: there is
 /// always some material wanting fetching, so nothing ever reached it.
 #[test]
 fn a_job_whose_tool_is_in_the_bag_becomes_getting_the_tool_out() {

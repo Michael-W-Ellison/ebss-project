@@ -474,7 +474,7 @@ fn curiosity_reaches_for_the_verb_it_has_tried_least() {
 fn the_novelty_terminal_is_reached_by_a_living_settlement() {
     use crate::agents::{AgentConfig, PopulationConfig};
     use crate::core::DriveType;
-    use crate::environment::seasons::TICKS_PER_DAY;
+    use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
     use std::collections::BTreeMap;
 
     crate::core::dice::seed(0);
@@ -490,8 +490,8 @@ fn the_novelty_terminal_is_reached_by_a_living_settlement() {
     let mut from_novelty = 0u64;
 
     for _ in 0..30 {
-        for _ in 0..TICKS_PER_DAY {
-            simulation.tick();
+        for _ in 0..PLANNING_PERIODS_PER_DAY {
+            simulation.take_a_turn();
         }
 
         let who: Vec<_> = simulation
@@ -506,7 +506,7 @@ fn the_novelty_terminal_is_reached_by_a_living_settlement() {
             let at = agent.state.position;
 
             // Zeroed before each ask, so what the counter holds afterwards is
-            // this one decision and not the thirty days of ticking that came
+            // this one decision and not the thirty days of turning that came
             // before it. The settlement's own turns go through the same
             // function, so a running total would be over a denominator this
             // test has not got.

@@ -11,7 +11,7 @@ pub enum SimulationState {
     Running,
     /// Simulation is paused
     Paused,
-    /// Simulation is stepping one tick at a time
+    /// Simulation is stepping one turn at a time
     Stepping,
 }
 
@@ -20,8 +20,8 @@ pub struct SimulationController {
     pub world: World,
     pub population: Population,
     pub state: SimulationState,
-    pub current_tick: u64,
-    pub tick_rate: f32, // Ticks per second when running
+    pub current_turn: u64,
+    pub turn_rate: f32, // Turns per second when running
 }
 
 impl SimulationController {
@@ -30,8 +30,8 @@ impl SimulationController {
             world,
             population,
             state: SimulationState::Paused,
-            current_tick: 0,
-            tick_rate: 10.0,
+            current_turn: 0,
+            turn_rate: 10.0,
         }
     }
 
@@ -53,37 +53,37 @@ impl SimulationController {
         };
     }
 
-    /// Step forward one tick
+    /// Step forward one turn
     pub fn step(&mut self) {
         self.state = SimulationState::Stepping;
-        self.tick_once();
+        self.turn_once();
         self.state = SimulationState::Paused;
     }
 
-    /// Execute one simulation tick
-    pub fn tick_once(&mut self) {
+    /// Execute one simulation turn
+    pub fn turn_once(&mut self) {
         // Update all agent drives
         for agent in &mut self.population.agents {
-            agent.drives.tick();
+            agent.drives.take_a_turn();
         }
 
-        self.current_tick += 1;
+        self.current_turn += 1;
     }
 
     /// Update simulation based on delta time
     pub fn update(&mut self, dt: f32) {
         if self.state == SimulationState::Running {
-            // Calculate how many ticks to run based on tick rate
-            let ticks_to_run = (dt * self.tick_rate) as u32;
-            for _ in 0..ticks_to_run.max(1) {
-                self.tick_once();
+            // Calculate how many turns to run based on turn rate
+            let turns_to_run = (dt * self.turn_rate) as u32;
+            for _ in 0..turns_to_run.max(1) {
+                self.turn_once();
             }
         }
     }
 
-    /// Set the simulation speed (ticks per second)
-    pub fn set_tick_rate(&mut self, rate: f32) {
-        self.tick_rate = rate.max(0.1).min(1000.0);
+    /// Set the simulation speed (turns per second)
+    pub fn set_turn_rate(&mut self, rate: f32) {
+        self.turn_rate = rate.max(0.1).min(1000.0);
     }
 
     /// Get reference to population
@@ -118,7 +118,7 @@ mod tests {
         let controller = SimulationController::new(world, population);
 
         assert_eq!(controller.state, SimulationState::Paused);
-        assert_eq!(controller.current_tick, 0);
+        assert_eq!(controller.current_turn, 0);
     }
 
     #[test]
@@ -156,27 +156,27 @@ mod tests {
         population.spawn_agent(AgentConfig::default());
 
         let mut controller = SimulationController::new(world, population);
-        assert_eq!(controller.current_tick, 0);
+        assert_eq!(controller.current_turn, 0);
 
         controller.step();
-        assert_eq!(controller.current_tick, 1);
+        assert_eq!(controller.current_turn, 1);
         assert_eq!(controller.state, SimulationState::Paused);
     }
 
     #[test]
-    fn test_tick_rate() {
+    fn test_turn_rate() {
         let world = World::new(WorldConfig::default());
         let population = Population::new();
         let mut controller = SimulationController::new(world, population);
 
-        controller.set_tick_rate(20.0);
-        assert_eq!(controller.tick_rate, 20.0);
+        controller.set_turn_rate(20.0);
+        assert_eq!(controller.turn_rate, 20.0);
 
         // Test clamping
-        controller.set_tick_rate(10000.0);
-        assert_eq!(controller.tick_rate, 1000.0);
+        controller.set_turn_rate(10000.0);
+        assert_eq!(controller.turn_rate, 1000.0);
 
-        controller.set_tick_rate(0.01);
-        assert_eq!(controller.tick_rate, 0.1);
+        controller.set_turn_rate(0.01);
+        assert_eq!(controller.turn_rate, 0.1);
     }
 }

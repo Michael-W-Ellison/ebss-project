@@ -3,7 +3,7 @@
 //! about it.
 //!
 //! Every one of the spoilage tables was written as a day-count and stored as
-//! ticks at 1440 to the day. The calendar was later put on a scale a life
+//! turns at 1440 to the day. The calendar was later put on a scale a life
 //! fits inside — `TICKS_PER_DAY` is 12 — and the food tables were not brought
 //! with it, so meat written down as lasting a day lasted a hundred and twenty
 //! of them and grain written down as ten days lasted twelve and a half years.
@@ -15,7 +15,7 @@
 
 use crate::agents::{AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
-use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::seasons::{DAYS_PER_YEAR, PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 use crate::environment::{verbs, Action};
 use crate::world::nutrition::{FoodDatabase, PreparationState};
 use crate::world::{ItemType, Position, World, WorldConfig};
@@ -53,7 +53,7 @@ fn how_long_it_lasts(of: ItemType) -> u32 {
     FoodDatabase::new()
         .create_food_data(&of, 0)
         .expect("in the database")
-        .base_spoilage_ticks
+        .base_spoilage_turns
 }
 
 // --------------------------------------------------------------------------
@@ -64,7 +64,7 @@ fn how_long_it_lasts(of: ItemType) -> u32 {
 ///
 /// A first cut of the rescale used the day-counts the tables were written
 /// with — meat a day — and that is a different thing on this calendar than it
-/// was on the old one: a tick here is an action, not a minute, and walking
+/// was on the old one: a turn here is an action, not a minute, and walking
 /// out to a kill and back is thirty or forty of them. Food that lasts less
 /// than the trip that fetches it is not scarcity, it is a broken model, and
 /// it cost a settlement a fifth of its people.
@@ -126,7 +126,18 @@ fn grain_keeps_a_season() {
 /// Nothing keeps for a lifetime except honey.
 #[test]
 fn nothing_but_honey_outlasts_a_person() {
-    let a_life = 8000;
+    // A year of the world's calendar.
+    //
+    // This was a bare `8000`, which sat between meat at ten days and honey at
+    // three thousand while a turn was a tick, and means five and a half days
+    // now that a tick is a minute. Said in days it stays put.
+    //
+    // A year rather than a life, and the name overstates what the model
+    // holds: honey keeps three thousand days, which is eight years and not
+    // seventy. What the test is really pinning is that nothing else keeps
+    // from one year to the next, and the longest of the others is grain at
+    // ninety-six days. Renaming it is a separate question from the clock.
+    let a_life = DAYS_PER_YEAR * TICKS_PER_DAY;
 
     for (what, of) in [
         ("meat", ItemType::Meat),
@@ -157,9 +168,9 @@ fn what_is_carried_goes_off() {
         .inventory
         .add_item(a_meal(ItemType::Meat, "meatportions", 4, 0));
 
-    for _ in 0..(TICKS_PER_DAY * 12) {
-        simulation.population.agents[0].tick_food_spoilage(simulation.world.tick);
-        simulation.world.tick();
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * 12) {
+        simulation.population.agents[0].turn_food_spoilage(simulation.world.turn);
+        simulation.world.take_a_turn();
     }
 
     assert_eq!(
@@ -222,9 +233,9 @@ fn dried_meat_outlasts_raw_meat() {
         0,
     );
 
-    for _ in 0..(TICKS_PER_DAY * 14) {
-        simulation.population.agents[0].tick_food_spoilage(simulation.world.tick);
-        simulation.world.tick();
+    for _ in 0..(PLANNING_PERIODS_PER_DAY * 14) {
+        simulation.population.agents[0].turn_food_spoilage(simulation.world.turn);
+        simulation.world.take_a_turn();
     }
 
     assert_eq!(
@@ -369,12 +380,16 @@ fn what_is_left_out_goes_off_faster_than_what_is_carried() {
 
     let mut in_the_pack = a_meal(ItemType::Fish, "fish", 10, 0);
 
-    for _ in 0..40 {
-        simulation.world.tick();
+    // Two days of weather. This was a bare `40`, which was most of a day
+    // while a turn was two hours and is under an hour's worth of spoiling
+    // now. Said in days it stays two days.
+    for _ in 0..(2 * PLANNING_PERIODS_PER_DAY) {
+        simulation.world.take_a_turn();
     }
-    if let Some(food) = in_the_pack.food_data.as_mut() {
-        food.update_freshness(simulation.world.tick);
-    }
+    in_the_pack.goes_off(
+        simulation.world.turn,
+        crate::environment::tags::WHAT_A_BARE_PACK_KEEPS,
+    );
 
     let out_in_the_rain = simulation
         .world
@@ -421,7 +436,7 @@ fn a_lined_pit_keeps_better_than_bare_earth() {
         });
 
         for _ in 0..40 {
-            simulation.world.tick();
+            simulation.world.take_a_turn();
         }
 
         simulation

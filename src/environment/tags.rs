@@ -40,6 +40,36 @@
 //! The other four - carrying, holding water, roofing, and making holes - have
 //! no trade behind them, so they are declared here and the tests assert that
 //! no capability is described in both places.
+//!
+//! ## How fast a thing goes off
+//!
+//! Some tags carry a number: [`Tag::what_it_does_to_keeping`]. How fast a
+//! thing goes off is the product of three things, and each of them is a
+//! modifier on one scale where `1.0` changes nothing:
+//!
+//! 1. **Its own clock** - `FoodData::base_spoilage_turns`, which is the one
+//!    thing a new food has to bring with it.
+//! 2. **What it is**, from its tags: what it is called, and what has been
+//!    done to it. A preparation is only a *way of getting* a tag - see
+//!    [`crate::world::nutrition::PreparationState::what_this_leaves_it`] -
+//!    so `spoilage_multiplier` is derived from these rather than restating
+//!    them.
+//! 3. **Where it is kept**: [`EVERYTHING_THAT_KEEPS`] for a vessel, and
+//!    `Pit::how_fast_things_go_off_in_here` for a hole in the ground, which
+//!    reads the same table for what it is lined with.
+//!
+//! What that buys is that nothing has to be *told*. Meat goes from wet to dry
+//! and keeps twenty times longer, because the clock reads the tags and the
+//! tags changed. A pot goes in the pack and everything in the pack keeps
+//! half as badly. Adding a new food is adding its own clock and nothing else:
+//! every way of preserving it and everywhere of putting it already applies.
+//!
+//! The rate used to live in two places - a preparation table for what had
+//! been done to a thing, and, for a pit, a trick of winding the food's own
+//! `created_turn` forward so that the derived freshness came out lower. The
+//! second of those could not compose with anything, was silently wrong for
+//! thirty times as long as anybody noticed, and is the reason every
+//! settlement that dug a pit had been getting nothing for it.
 
 use crate::agents::skills::SkillType;
 use super::making::{Tool, EVERY_TOOL};
@@ -107,6 +137,38 @@ pub enum Tag {
     Preserved,
     /// Will not keep
     Perishable,
+
+    // ---- how a thing keeps ----------------------------------------------
+    //
+    // The tags with a number on them. Everything above says what a thing is
+    // and is read by somebody looking for one; these say how fast what
+    // carries them goes off, and the number is read by the clock rather than
+    // by a person. See `what_it_does_to_keeping`.
+    //
+    // A thing carries these the same way it carries any other tag - several
+    // at once, from wherever they come from - so a joint of meat that has
+    // been over a fire and then laid in the sun is `Cooked` and `Dry` both,
+    // and keeps at the product of the two.
+    /// Has its water still in it, which is what most things that go off are
+    /// mostly made of. The baseline: this is what `1.0` means.
+    Wet,
+    /// Its water has been taken out of it
+    Dry,
+    /// Has been over a fire: what was living on it is dead, and it is still
+    /// as wet as it was
+    Cooked,
+    /// Has had smoke through it
+    Smoked,
+    /// Has had salt drawn through it
+    Salted,
+    /// Has been kept under acid or brine
+    Soured,
+    /// Has been let to go off in the way somebody wanted
+    Fermented,
+    /// Has been broken up between two stones, and so is all surface
+    Ground,
+    /// Has already gone, and goes on going
+    Spoiled,
 }
 
 impl Tag {
@@ -135,8 +197,132 @@ impl Tag {
             Tag::FiredEarth => "fired_earth",
             Tag::Preserved => "preserved",
             Tag::Perishable => "perishable",
+            Tag::Wet => "wet",
+            Tag::Dry => "dry",
+            Tag::Cooked => "cooked",
+            Tag::Smoked => "smoked",
+            Tag::Salted => "salted",
+            Tag::Soured => "soured",
+            Tag::Fermented => "fermented",
+            Tag::Ground => "ground",
+            Tag::Spoiled => "spoiled",
         }
     }
+
+    /// What carrying this tag does to how fast a thing goes off.
+    ///
+    /// `None` for the tags that say nothing about it, which is most of them:
+    /// being a pole or being knappable is not a claim about keeping, and a
+    /// tag that has no opinion must not be made to have one - a default of
+    /// `1.0` here and a default of `None` are the same arithmetic and a very
+    /// different statement, and the first would quietly swallow a tag somebody
+    /// forgot to price.
+    ///
+    /// Below one keeps; above one hastens. [`Tag::Wet`] is the baseline and
+    /// reads `1.0` on purpose rather than by omission: the point of naming it
+    /// is that a thing which has had nothing done to it has had something
+    /// *said* about it, and the day somebody wants raw flesh to go off faster
+    /// than raw grain there is a place to say so.
+    ///
+    /// These numbers were [`crate::world::nutrition::PreparationState::spoilage_multiplier`],
+    /// which is now derived from them - see
+    /// [`crate::world::nutrition::PreparationState::what_this_leaves_it`].
+    /// One number per fact: a preparation is a *way of getting* a tag, and
+    /// the tag is what the clock reads.
+    pub fn what_it_does_to_keeping(&self) -> Option<f32> {
+        match self {
+            Tag::Wet => Some(1.0),
+            // Twenty times longer, which is what taking the water out is worth
+            Tag::Dry => Some(0.05),
+            Tag::Cooked => Some(0.8),
+            Tag::Smoked => Some(0.1),
+            Tag::Salted => Some(0.15),
+            Tag::Soured => Some(0.1),
+            Tag::Fermented => Some(0.2),
+            // Faster: there is more of it exposed to the air
+            Tag::Ground => Some(1.2),
+            // Already broken down, and what is breaking it down is still there
+            Tag::Spoiled => Some(1.5),
+
+            // Everything else has no opinion about keeping.
+            Tag::FoodContainer
+            | Tag::WaterContainer
+            | Tag::FragileContainer
+            | Tag::CarryingContainer
+            | Tag::HuntingWeapon
+            | Tag::PiercingWeapon
+            | Tag::MediumRangeMelee
+            | Tag::ShortRangeMelee
+            | Tag::ThrownWeapon
+            | Tag::FiberSource
+            | Tag::LowStrengthCordageMaterial
+            | Tag::Cordage
+            | Tag::FlexibleCovering
+            | Tag::Pole
+            | Tag::RigidBuildingMaterial
+            | Tag::Knappable
+            | Tag::Metallic
+            | Tag::Hide
+            | Tag::Timber
+            | Tag::FiredEarth
+            // `Preserved` and `Perishable` are the coarse question - *is* this
+            // a thing meant to keep - and are what a verb asks for. They are
+            // deliberately unpriced: the number comes from the reason a thing
+            // keeps, not from the claim that it does, and pricing both would
+            // be the two spellings this module exists to avoid. The tests
+            // assert that the two never disagree.
+            | Tag::Preserved
+            | Tag::Perishable => None,
+        }
+    }
+}
+
+/// What a thing nobody has said anything about does to keeping.
+///
+/// One: it changes nothing. A modifier, not a rate, so that the absence of an
+/// opinion and an opinion of "no different" come to the same arithmetic.
+pub const WHAT_NOTHING_SAYS: f32 = 1.0;
+
+/// How fast a thing carrying these goes off, against one carrying none.
+///
+/// The product of what each of them does, counting each tag once however many
+/// ways it arrived. That last part is the whole reason this is a function
+/// rather than a fold at the call site: a dried strip of meat is `Dry` both
+/// because of what was done to it and, one day, because of what it is called,
+/// and squaring the twenty-fold would make a strip keep four hundred times.
+pub fn how_fast_these_go_off(tags: &[Tag]) -> f32 {
+    let mut counted: Vec<Tag> = Vec::new();
+    let mut how_fast = WHAT_NOTHING_SAYS;
+
+    for tag in tags {
+        if counted.contains(tag) {
+            continue;
+        }
+        counted.push(*tag);
+
+        if let Some(says) = tag.what_it_does_to_keeping() {
+            how_fast *= says;
+        }
+    }
+
+    how_fast
+}
+
+/// How fast a thing of this name, in this condition, goes off.
+///
+/// What it is called and what has been done to it, taken together. The second
+/// half is where a preparation enters: see
+/// [`crate::world::nutrition::PreparationState::what_this_leaves_it`].
+///
+/// **This is the conversion the whole of it is for.** Nothing has to be told
+/// that drying changed the rate: the tags changed, and the rate is read off
+/// the tags. A new food wants nothing but its own clock - its name, and how
+/// long it keeps with nothing done to it - and everything a settlement can do
+/// to it, and everywhere a settlement can put it, already applies.
+pub fn how_fast_this_goes_off(called: &str, and_also: &[Tag]) -> f32 {
+    let mut all: Vec<Tag> = what_this_is(called).to_vec();
+    all.extend_from_slice(and_also);
+    how_fast_these_go_off(&all)
 }
 
 /// Everything a job can ask for by capability rather than by name.
@@ -452,6 +638,82 @@ pub fn everything_that_is(tag: Tag) -> impl Iterator<Item = &'static str> {
         .iter()
         .filter(move |tagged| tagged.is.contains(&tag))
         .map(|tagged| tagged.called)
+}
+
+/// One thing that is somewhere to keep food, and what keeping it there is
+/// worth.
+#[derive(Debug, Clone, Copy)]
+pub struct Keeps {
+    /// What it is called, as it is carried
+    pub called: &'static str,
+    /// What food in it does against food in nothing at all: below one keeps,
+    /// above one hastens
+    pub how_fast_food_in_it_goes_off: f32,
+}
+
+/// What a bare pack is worth as somewhere to keep food.
+///
+/// Nothing, and that is the point of stating it. A pack is a *container* -
+/// it is the thing a person carries their dinner in - and it earns a modifier
+/// of one rather than being left out of the reckoning, so that "kept in
+/// nothing in particular" and "kept in a basket" are two answers to one
+/// question rather than one answer and a special case.
+pub const WHAT_A_BARE_PACK_KEEPS: f32 = WHAT_NOTHING_SAYS;
+
+/// What being kept in each thing is worth.
+///
+/// Everything here is a [`Tag::FoodContainer`], and the tests assert it: a
+/// thing that will not hold food is not somewhere food is kept, and the day
+/// somebody prices a spear as a larder the suite should say so.
+///
+/// The ladder is what a vessel actually does about the two things that get at
+/// food - the air, and whatever is already living on the outside of it.
+/// Fired earth with a lid on it is the top of what this world can reach and
+/// shuts both out; a basket is a lattice and shuts out neither; leather is in
+/// between and goes off itself. None of them is drying, salting or burying,
+/// which are worth ten and twenty times this - a vessel slows a thing down,
+/// it does not preserve it.
+pub const EVERYTHING_THAT_KEEPS: &[Keeps] = &[
+    // Sealed fired earth: the best a stone-age people get to
+    Keeps { called: "stoneware", how_fast_food_in_it_goes_off: 0.4 },
+    Keeps { called: "claypot", how_fast_food_in_it_goes_off: 0.5 },
+    // Close-fitting wood. The same as a pot, which is why a bowl in a pit is
+    // worth what it has always been worth - see `Pit::how_fast_things_go_off_in_here`
+    Keeps { called: "bowl", how_fast_food_in_it_goes_off: 0.5 },
+    // Leather keeps the air off and is itself a thing that turns
+    Keeps { called: "leatherbag", how_fast_food_in_it_goes_off: 0.7 },
+    // A lattice. Better than a bare arm and not by much
+    Keeps { called: "basket", how_fast_food_in_it_goes_off: 0.9 },
+];
+
+/// What keeping food in this thing is worth, if it is anywhere at all.
+///
+/// [`WHAT_A_BARE_PACK_KEEPS`] for anything nobody has priced, which is the
+/// honest answer for a spear and for a thing this world has not got round to
+/// describing yet.
+pub fn how_well_this_keeps(called: &str) -> f32 {
+    EVERYTHING_THAT_KEEPS
+        .iter()
+        .find(|keeps| keeps.called == called)
+        .map(|keeps| keeps.how_fast_food_in_it_goes_off)
+        .unwrap_or(WHAT_A_BARE_PACK_KEEPS)
+}
+
+/// The best somewhere-to-keep-food in these hands.
+///
+/// `holding` answers how many of a named thing they have. A person keeps
+/// their food in the best vessel they are carrying, which is what anybody
+/// does: the pot goes in the pack and the food goes in the pot.
+///
+/// Returns [`WHAT_A_BARE_PACK_KEEPS`] for somebody carrying no vessel at all,
+/// so the caller has a number either way and need not know whether there was
+/// one.
+pub fn the_best_keeping_to_hand(holding: &impl Fn(&str) -> u32) -> f32 {
+    EVERYTHING_THAT_KEEPS
+        .iter()
+        .filter(|keeps| holding(keeps.called) > 0)
+        .map(|keeps| keeps.how_fast_food_in_it_goes_off)
+        .fold(WHAT_A_BARE_PACK_KEEPS, f32::min)
 }
 
 /// One thing that answers a capability no trade stands behind, and how well.

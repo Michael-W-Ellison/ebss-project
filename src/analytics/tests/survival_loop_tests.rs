@@ -3,7 +3,7 @@
 //!
 //! These cover the failure that let agents run to zero energy and stay there
 //! while food sat in their inventory or a few tiles away:
-//! - metabolism, spoilage and fatigue must run under `Population::tick`
+//! - metabolism, spoilage and fatigue must run under `Population::take_a_turn`
 //! - eating must refill nutritional reserves, not just felt energy
 //! - hunger must outrank goals, plans and percepts in action selection
 //! - renewable resources must survive being harvested empty
@@ -13,13 +13,13 @@ use crate::analytics::Simulation;
 use crate::core::drives::DriveType;
 use crate::world::{ResourceType, World, WorldConfig};
 
-/// Agents driven through `Population::tick` must run their metabolism.
+/// Agents driven through `Population::take_a_turn` must run their metabolism.
 ///
-/// `Population::tick` used to call `age_tick` directly and skip
-/// `tick_with_time`, so nutrition, food spoilage and fatigue never ran in a
+/// `Population::take_a_turn` used to call `age_turn` directly and skip
+/// `turn_with_time`, so nutrition, food spoilage and fatigue never ran in a
 /// live simulation - they were only exercised by unit tests.
 #[test]
-fn population_tick_runs_nutrition_metabolism() {
+fn population_turn_runs_nutrition_metabolism() {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
 
@@ -27,19 +27,19 @@ fn population_tick_runs_nutrition_metabolism() {
 
     // Watered as it goes, so that the body lives long enough to be measured.
     //
-    // Two hundred ticks is seventeen days and a body that never drinks is
+    // Two hundred turns is seventeen days and a body that never drinks is
     // dead on the sixth, swept out of the population - so this indexed an
-    // empty list. Whether metabolism runs is a question about the tick, not
+    // empty list. Whether metabolism runs is a question about the turn, not
     // about how long a man lasts alone in an empty world.
     let mut reserves = starting_reserves;
-    for tick in 1..=200u32 {
+    for turn in 1..=200u32 {
         if let Some(agent) = population.agents.first_mut() {
             agent.state.physiology.hydration = 1.0;
-            agent.state.last_drank_tick = tick;
-            agent.state.ticks_without_water = 0;
+            agent.state.last_drank_turn = turn;
+            agent.state.turns_without_water = 0;
         }
 
-        population.tick();
+        population.take_a_turn();
 
         let Some(agent) = population.agents.first() else {
             break;
@@ -59,7 +59,7 @@ fn eating_restores_nutritional_reserves() {
     let mut agent = crate::agents::Agent::new(AgentConfig::default());
     agent.nutrition.energy_reserves = 10.0;
     agent.state.energy = 10.0;
-    agent.state.last_ate_tick = 0;
+    agent.state.last_ate_turn = 0;
 
     agent.inventory.add_item(crate::agents::InventoryItem::new_with_weight(
         "food".to_string(),
@@ -77,8 +77,8 @@ fn eating_restores_nutritional_reserves() {
         agent.nutrition.energy_reserves > 10.0,
         "eating should refill energy reserves"
     );
-    assert_eq!(agent.state.last_ate_tick, 500, "eating resets the starvation clock");
-    assert_eq!(agent.state.ticks_without_food, 0);
+    assert_eq!(agent.state.last_ate_turn, 500, "eating resets the starvation clock");
+    assert_eq!(agent.state.turns_without_food, 0);
 }
 
 /// An emptied stack must leave the inventory.
@@ -131,7 +131,7 @@ fn hungry_agent_eats_the_food_it_carries() {
     }
 
     for _ in 0..20 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let agent = &simulation.population.agents[0];
@@ -197,11 +197,11 @@ fn emptied_renewable_resources_are_not_deleted() {
 /// The population as a whole must be able to feed itself over a long run.
 ///
 /// This is the end-to-end check: previously every agent sat at zero energy
-/// within ~800 ticks, whatever food the world held.
+/// within ~800 turns, whatever food the world held.
 #[test]
 fn population_feeds_itself_over_a_long_run() {
     // A block of seeds rather than one, because whether any of eight people
-    // are still standing after four thousand ticks is a coin this model does
+    // are still standing after four thousand turns is a coin this model does
     // not weight heavily. Measured over thirty-two worlds at three different
     // seed blocks: 14, 24 and 20 of them still had somebody alive.
     //
@@ -232,7 +232,7 @@ fn population_feeds_itself_over_a_long_run() {
         let mut simulation = Simulation::new(world, population);
 
         for _ in 0..4000 {
-            simulation.tick();
+            simulation.take_a_turn();
         }
 
         let agents = &simulation.population.agents;
@@ -254,7 +254,7 @@ fn population_feeds_itself_over_a_long_run() {
     assert!(
         still_standing * 2 >= WORLDS,
         "only {still_standing} of {WORLDS} settlements still had anybody in \
-         them after four thousand ticks"
+         them after four thousand turns"
     );
     assert_eq!(
         worlds_where_most_were_fed, still_standing,

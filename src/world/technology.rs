@@ -443,7 +443,7 @@ impl Default for KnownTechnologies {
 pub struct DiscoveryEvent {
     pub tech_id: &'static str,
     pub discoverer_id: Uuid,
-    pub tick: u32,
+    pub turn: u32,
 }
 
 #[cfg(test)]

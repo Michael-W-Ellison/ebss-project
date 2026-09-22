@@ -72,21 +72,42 @@ pub const MINUTES_IN_A_WHOLE_LIFE: u32 = MINUTES_PER_YEAR * YEARS_BEFORE_OLD_AGE
 ///
 /// One a minute is the calendar as specified and is still out of reach, and
 /// the reason is the world rather than the people: an empty world costs about
-/// 1.6 milliseconds a tick, so at a minute turn the ground and the weather
+/// 1.6 milliseconds a turn, so at a minute turn the ground and the weather
 /// alone come to fourteen minutes of running per simulated year per world,
 /// before a single agent thinks about anything. Deciding less often cannot
-/// rescue that; charging `World::tick` by elapsed time might. Measured in
+/// rescue that; charging `World::take_a_turn` by elapsed time might. Measured in
 /// ISSUES_FOUND #170.
-pub const TICKS_PER_DAY: u32 = 48;
+pub const TICKS_PER_DAY: u32 = MINUTES_PER_DAY;
+
+/// How long a body goes between one chance to think and the next.
+///
+/// Half an hour. A planning period is not a unit of time so much as a gate on
+/// one: it is when somebody *may* stop and decide, and an agent already in the
+/// middle of something does not - see `Agent::busy_until`. Somebody who sets
+/// out on a hunt reckoned at 145 ticks passes the gate at 30, 60, 90 and 120
+/// without looking up.
+pub const TICKS_BETWEEN_PLANS: u32 = 30;
+
+/// How many of those a day holds: forty-eight.
+///
+/// A loop that steps the simulation a day at a time wants this, because it is
+/// counting *decisions*. Arithmetic about how much time has passed wants
+/// `TICKS_PER_DAY`, which is 1,440. They were one constant while a step and a
+/// tick were the same thing, and they are not: a tick is a minute, as the
+/// lifecycle specification counts them, and a step is half an hour of living.
+pub const PLANNING_PERIODS_PER_DAY: u32 = TICKS_PER_DAY / TICKS_BETWEEN_PLANS;
+
+/// And how many a year holds, for a loop that runs a world for years.
+pub const PLANNING_PERIODS_PER_YEAR: u32 = PLANNING_PERIODS_PER_DAY * DAYS_PER_YEAR;
 
 /// How many turns a year lasts.
 pub const TICKS_PER_YEAR: u32 = TICKS_PER_DAY * DAYS_PER_YEAR;
 
 /// How often the world's slower business is attended to.
 ///
-/// These were written as bare tick counts - 10, 20, 50 and 100 - chosen for
+/// These were written as bare turn counts - 10, 20, 50 and 100 - chosen for
 /// overhead at a time when a turn was two hours, so they meant "about a day",
-/// "about two days", "about four days" and "about a week". As tick counts they
+/// "about two days", "about four days" and "about a week". As turn counts they
 /// would have gone on meaning ten, twenty, fifty and a hundred *turns* the
 /// moment a turn got shorter, which at half an hour is twenty minutes, forty
 /// minutes, an hour and two hours: relationships decaying every couple of
@@ -103,27 +124,35 @@ pub const ONCE_A_WEEK: u32 = TICKS_PER_DAY * DAYS_IN_A_SHORT_WEEK;
 
 /// What time of day it is, as a day number and a clock reading.
 ///
-/// Four places worked this out for themselves as `tick / 1440` and
-/// `(tick % 1440) / 60`, which reads a turn as a minute. A turn has never been
+/// Four places worked this out for themselves as `turn / 1440` and
+/// `(turn % 1440) / 60`, which reads a turn as a minute. A turn has never been
 /// a minute in this model: it was two hours, and the clock in the window was
 /// therefore showing hour three on the third day of a world that was a
 /// fortnight old. Derived here so that it is right, and right at any turn
 /// length.
-pub fn what_the_clock_says(tick: u32) -> (u32, u32, u32) {
-    let minutes_into_the_day = (tick % TICKS_PER_DAY) * MINUTES_PER_TURN;
+pub fn what_the_clock_says(turn: u32) -> (u32, u32, u32) {
+    // The count is in ticks and a tick is a minute, so this is already
+    // minutes. It used to multiply, back when the count was in steps.
+    let minutes_into_the_day = turn % TICKS_PER_DAY;
     (
-        tick / TICKS_PER_DAY,
+        turn / TICKS_PER_DAY,
         minutes_into_the_day / MINUTES_PER_HOUR,
         minutes_into_the_day % MINUTES_PER_HOUR,
     )
 }
 
-/// How many minutes one turn of thinking covers.
+/// How many minutes one step covers.
 ///
 /// The one spelling. `agents::physiology::MINUTES_PER_TURN` derives from the
 /// same place; this is here because the clock in the window needs it too and
 /// should not be reaching into the physiology to get it.
-pub const MINUTES_PER_TURN: u32 = MINUTES_PER_DAY / TICKS_PER_DAY;
+///
+/// It is the gap between plans, because that is what a step *is*. It used to
+/// be `MINUTES_PER_DAY / TICKS_PER_DAY`, which was right while a tick was a
+/// step and became `1` the moment a tick became a minute - and a body advanced
+/// one minute per half hour lived, thirty times too slow, without anything
+/// failing to compile.
+pub const MINUTES_PER_TURN: u32 = TICKS_BETWEEN_PLANS;
 
 /// Minutes in an hour, so nobody writes 60 twice.
 pub const MINUTES_PER_HOUR: u32 = 60;
@@ -380,35 +409,40 @@ pub struct SeasonalCalendar {
     /// Years elapsed
     pub year: u32,
 
-    /// Ticks per day
-    #[serde(default = "default_ticks_per_day")]
-    ticks_per_day: u32,
+    /// Turns per day
+    #[serde(default = "default_turns_per_day")]
+    turns_per_day: u32,
 }
 
 /// What a calendar saved before the day had a length in it runs at.
-fn default_ticks_per_day() -> u32 {
+fn default_turns_per_day() -> u32 {
     TICKS_PER_DAY
 }
 
 impl SeasonalCalendar {
-    /// Create a new calendar running at the given number of ticks per day.
-    pub fn new(ticks_per_day: u32) -> Self {
+    /// Create a new calendar running at the given number of *steps* a day.
+    ///
+    /// Steps, not ticks. The calendar moves `24 / steps_per_day` hours each
+    /// time it is asked, so handing it `TICKS_PER_DAY` makes it advance a
+    /// minute per step when a step is half an hour, and the year takes thirty
+    /// of them to turn. It wants `PLANNING_PERIODS_PER_DAY`.
+    pub fn new(turns_per_day: u32) -> Self {
         Self {
             day_of_year: 0,
             time_of_day: 6.0, // Start at dawn
             year: 0,
-            ticks_per_day: ticks_per_day.max(1),
+            turns_per_day: turns_per_day.max(1),
         }
     }
 
-    /// How many hours of world time one tick covers.
-    pub fn hours_per_tick(&self) -> f32 {
-        24.0 / self.ticks_per_day as f32
+    /// How many hours of world time one turn covers.
+    pub fn hours_per_turn(&self) -> f32 {
+        24.0 / self.turns_per_day as f32
     }
 
-    /// How many ticks a day lasts on this calendar.
-    pub fn ticks_per_day(&self) -> u32 {
-        self.ticks_per_day
+    /// How many turns a day lasts on this calendar.
+    pub fn turns_per_day(&self) -> u32 {
+        self.turns_per_day
     }
 
 
@@ -422,9 +456,9 @@ impl SeasonalCalendar {
         Season::from_day_of_year(self.day_of_year)
     }
 
-    /// Advance time by one tick.
-    pub fn tick(&mut self) {
-        self.time_of_day += self.hours_per_tick();
+    /// Advance time by one turn.
+    pub fn take_a_turn(&mut self) {
+        self.time_of_day += self.hours_per_turn();
 
         while self.time_of_day >= 24.0 {
             self.time_of_day -= 24.0;
@@ -568,7 +602,7 @@ impl SeasonalCalendar {
 
 impl Default for SeasonalCalendar {
     fn default() -> Self {
-        Self::new(TICKS_PER_DAY)
+        Self::new(PLANNING_PERIODS_PER_DAY)
     }
 }
 
@@ -631,11 +665,11 @@ mod tests {
     }
 
     #[test]
-    fn test_calendar_tick() {
+    fn test_calendar_turn() {
         let mut calendar = SeasonalCalendar::new(12);
 
-        // One tick is two hours on a twelve-tick day
-        calendar.tick();
+        // One turn is two hours on a twelve-turn day
+        calendar.take_a_turn();
 
         assert_eq!(calendar.time_of_day, 8.0);
         assert_eq!(calendar.day_of_year, 0);
@@ -646,7 +680,7 @@ mod tests {
         let mut calendar = SeasonalCalendar::new(12);
 
         for _ in 0..12 {
-            calendar.tick();
+            calendar.take_a_turn();
         }
 
         assert_eq!(calendar.time_of_day, 6.0);
@@ -659,7 +693,7 @@ mod tests {
         calendar.day_of_year = DAYS_PER_YEAR - 1;
         calendar.time_of_day = 22.0;
 
-        calendar.tick();
+        calendar.take_a_turn();
 
         assert_eq!(calendar.day_of_year, 0);
         assert_eq!(calendar.year, 1);
@@ -756,7 +790,7 @@ mod calendar_tests {
     /// Every figure in the specification, asserted.
     #[test]
     fn the_calendar_is_the_one_that_was_asked_for() {
-        assert_eq!(MINUTES_PER_DAY, 1440, "one tick a minute, 1440 to the day");
+        assert_eq!(MINUTES_PER_DAY, 1440, "one turn a minute, 1440 to the day");
         assert_eq!(DAYS_PER_MONTH, 30);
         assert_eq!(MONTHS_PER_YEAR, 12);
         assert_eq!(DAYS_PER_YEAR, 360);
@@ -853,11 +887,11 @@ mod calendar_tests {
         assert_eq!(TICKS_PER_YEAR, TICKS_PER_DAY * DAYS_PER_YEAR);
         assert_eq!(
             crate::agents::physiology::MINUTES_PER_TURN,
-            MINUTES_PER_DAY / TICKS_PER_DAY,
+            MINUTES_PER_DAY / PLANNING_PERIODS_PER_DAY,
             "a turn is however many minutes a day holds divided by the turns in it"
         );
         assert_eq!(
-            crate::agents::physiology::MINUTES_PER_TURN * TICKS_PER_DAY,
+            crate::agents::physiology::MINUTES_PER_TURN * PLANNING_PERIODS_PER_DAY,
             MINUTES_PER_DAY,
             "and the turns in a day cover the whole of it"
         );

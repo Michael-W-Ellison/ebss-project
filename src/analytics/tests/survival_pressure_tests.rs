@@ -1,7 +1,7 @@
 // src/analytics/tests/survival_pressure_tests.rs
 //! Tests for a settlement that has to reckon with what it is doing to itself.
 //!
-//! Thirty thousand ticks of tracing showed a settlement that overshoots does
+//! Thirty thousand turns of tracing showed a settlement that overshoots does
 //! not correct - it slides. Four things were missing, and all four are here:
 //! ground that carries less as it is worked out, a need that presses harder
 //! the longer it is denied, breeding that waits for a surplus rather than for
@@ -18,7 +18,7 @@ use crate::world::{ItemType, Position, ResourceNode, ResourceType, World, WorldC
 
 fn fed_adult() -> Agent {
     let mut agent = Agent::new(AgentConfig::default());
-    // Years, not ticks. This said 4,000 - ticks, from the calendar where a
+    // Years, not turns. This said 4,000 - turns, from the calendar where a
     // year was about eleven hundred of them. A year is 4,320 now, so "a fed
     // adult" was a body in its first year, and anything here that asked
     // whether a grown person would do something was asking it of an infant.
@@ -67,7 +67,7 @@ fn hunger_that_is_ignored_takes_an_agent_over() {
     // One of them is left hungry for ten days of world time
     for _ in 0..120 {
         if let Some(hunger) = desperate.drives.get_mut(DriveType::Hunger) {
-            hunger.tick();
+            hunger.take_a_turn();
             hunger.value = 0.8;
         }
     }
@@ -135,7 +135,7 @@ fn a_child_waits_on_a_surplus_and_not_on_a_full_stomach() {
     if let Some(hunger) = just_eaten.drives.get_mut(DriveType::Hunger) {
         hunger.value = 0.9;
         for _ in 0..40 {
-            hunger.tick();
+            hunger.take_a_turn();
             hunger.value = 0.9;
         }
         hunger.value = 0.1;
@@ -154,24 +154,24 @@ fn a_hungry_year_takes_the_children_first() {
     ///
     /// **The time to death, not the health at a chosen moment.** This read
     /// health after a fixed span twice over and got nought both times, twice
-    /// for the same reason: at two thousand ticks and again at three weeks
+    /// for the same reason: at two thousand turns and again at three weeks
     /// both bodies are already dead, so the comparison could not come out
     /// either way whatever the model did. Picking a horizon at which the
     /// answer is visible is picking the answer; asking when each one goes is
     /// the question the test's own title asks.
     fn days_of_famine_survived(years: u32) -> f32 {
         let mut agent = Agent::new(AgentConfig::default());
-        // Years. This took *ticks*, and passed 900 and 4000 for "a child" and
+        // Years. This took *turns*, and passed 900 and 4000 for "a child" and
         // "an adult" - figures from the calendar where a year was about eleven
-        // hundred ticks. A year is 4,320 now, so both fixtures were nought
+        // hundred turns. A year is 4,320 now, so both fixtures were nought
         // years old and the test was comparing an infant with an infant.
         agent.state.now_this_many_years_old(years);
         agent.state.health = 100.0;
         agent.state.energy = 100.0;
-        agent.state.last_ate_tick = 0;
+        agent.state.last_ate_turn = 0;
 
         let a_long_time = 60 * crate::environment::seasons::TICKS_PER_DAY;
-        for tick in 1..=a_long_time {
+        for turn in 1..=a_long_time {
             // Watered, so that what kills this body is the famine.
             //
             // It was not, and both bodies died on day six of **thirst** -
@@ -181,12 +181,12 @@ fn a_hungry_year_takes_the_children_first() {
             // clocks off; this is the third place in the suite that has been
             // caught not doing it.
             agent.state.physiology.hydration = 1.0;
-            agent.state.last_drank_tick = tick;
-            agent.state.ticks_without_water = 0;
+            agent.state.last_drank_turn = turn;
+            agent.state.turns_without_water = 0;
 
-            agent.state.age_tick_with_modifier(tick, 1.0);
+            agent.state.age_turn_with_modifier(turn, 1.0);
             if agent.state.health <= 0.0 {
-                return tick as f32 / crate::environment::seasons::TICKS_PER_DAY as f32;
+                return turn as f32 / crate::environment::seasons::TICKS_PER_DAY as f32;
             }
         }
 
@@ -250,7 +250,7 @@ fn a_starving_agent_walks_out_of_country_that_will_not_feed_it() {
         .get_mut(DriveType::Hunger)
     {
         for _ in 0..130 {
-            hunger.tick();
+            hunger.take_a_turn();
             hunger.value = 0.9;
         }
     }
@@ -366,7 +366,7 @@ fn what_agents_do_in_a_run_becomes_something_they_know() {
     let mut simulation = Simulation::new(world, population);
 
     for _ in 0..2000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let anybody_learned_anything = simulation.population.agents.iter().any(|agent| {
@@ -386,17 +386,17 @@ fn what_agents_do_in_a_run_becomes_something_they_know() {
 
     assert!(
         anybody_learned_anything,
-        "two thousand ticks of doing things should leave a record of having done them"
+        "two thousand turns of doing things should leave a record of having done them"
     );
 }
 
 /// A newborn arrives having just been fed and watered.
 ///
-/// Both survival clocks are kept as a tick the agent last ate or drank on, and
+/// Both survival clocks are kept as a turn the agent last ate or drank on, and
 /// both start at zero. For the twelve people a world begins with that is
 /// right; for anybody born later it meant arriving having last drunk at the
-/// beginning of the world. An infant born after about four thousand ticks was
-/// two days past the point where dehydration takes health, lost 1.65 a tick
+/// beginning of the world. An infant born after about four thousand turns was
+/// two days past the point where dehydration takes health, lost 1.65 a turn
 /// from its first breath, and was dead at sixty-one - which is what a
 /// settlement's entire second generation was quietly doing, at full health,
 /// beside its mother, being nursed.
@@ -407,17 +407,17 @@ fn a_newborn_is_not_born_parched() {
 
     let mut baby = Agent::with_parents(AgentConfig::default(), vec![mother], born_at);
 
-    assert_eq!(baby.state.ticks_without_water, 0);
-    assert_eq!(baby.state.ticks_without_food, 0);
+    assert_eq!(baby.state.turns_without_water, 0);
+    assert_eq!(baby.state.turns_without_food, 0);
     assert!(!baby.state.is_dehydrated(), "a newborn has just been born, not marooned");
 
     // And the clocks run from birth rather than from the beginning of time
-    baby.state.age_tick_with_modifier(born_at + 50, 1.0);
+    baby.state.age_turn_with_modifier(born_at + 50, 1.0);
 
-    assert_eq!(baby.state.ticks_without_water, 50);
+    assert_eq!(baby.state.turns_without_water, 50);
     assert!(
         baby.state.health > 99.0,
-        "fifty ticks old and it should be in perfect health, not {:.1}",
+        "fifty turns old and it should be in perfect health, not {:.1}",
         baby.state.health
     );
 }
@@ -433,15 +433,15 @@ fn the_children_of_a_settlement_live_past_infancy() {
 
     let mut simulation = Simulation::new(world, population);
 
-    // Five years, not ten. This asked for twelve thousand ticks when a
+    // Five years, not ten. This asked for twelve thousand turns when a
     // settlement of that age held under a hundred people; it now holds getting
-    // on for twice that, and the cost of a tick rises with the square of who
+    // on for twice that, and the cost of a turn rises with the square of who
     // is standing about, so the same claim was taking the best part of an hour
-    // to check in a debug build. Six thousand ticks is four full years and is
+    // to check in a debug build. Six thousand turns is four full years and is
     // long enough over: a settlement that has not raised a child in four years
     // is not going to.
     for _ in 0..6_000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let born_here = simulation
@@ -454,6 +454,6 @@ fn the_children_of_a_settlement_live_past_infancy() {
 
     assert!(
         born_here >= 5,
-        "six thousand ticks in, a settlement should hold people born into it, not {born_here}"
+        "six thousand turns in, a settlement should hold people born into it, not {born_here}"
     );
 }

@@ -42,7 +42,7 @@ pub enum DiscoveryType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Discovery {
     pub discovery_type: DiscoveryType,
-    pub tick: u32,
+    pub turn: u32,
     pub position: Position,
 }
 
@@ -74,28 +74,28 @@ pub struct ExplorationKnowledge {
     pub discoveries: Vec<Discovery>,
     /// Total tiles explored
     pub total_tiles_explored: usize,
-    /// Last exploration tick
-    pub last_exploration_tick: u32,
+    /// Last exploration turn
+    pub last_exploration_turn: u32,
     /// Curiosity-driven exploration count
     pub curiosity_driven_explorations: u32,
     /// Total curiosity satisfaction gained from discoveries
     pub total_curiosity_satisfaction: f32,
-    /// Resource discovery tick tracking (position -> tick discovered)
+    /// Resource discovery turn tracking (position -> turn discovered)
     ///
-    /// The tick a thing was *first* found, and nothing else. Skill experience
-    /// is paid on this being the current tick, so it must never be touched
-    /// again afterwards - see `last_seen_ticks` for the other question.
-    pub resource_discovery_ticks: BTreeMap<Position, u32>,
+    /// The turn a thing was *first* found, and nothing else. Skill experience
+    /// is paid on this being the current turn, so it must never be touched
+    /// again afterwards - see `last_seen_turns` for the other question.
+    pub resource_discovery_turns: BTreeMap<Position, u32>,
     /// When this agent last laid eyes on each place it knows.
     ///
-    /// Distinct from the tick of discovery, because they answer different
+    /// Distinct from the turn of discovery, because they answer different
     /// questions: discovery is what an agent learns from, and last sighting is
     /// what an agent can vouch for. Folding the second into the first paid
-    /// somebody Farming experience every tick they stood near a field.
+    /// somebody Farming experience every turn they stood near a field.
     #[serde(default)]
-    pub last_seen_ticks: BTreeMap<Position, u32>,
-    /// Building discovery tick tracking (position -> tick discovered)
-    pub building_discovery_ticks: BTreeMap<Position, u32>,
+    pub last_seen_turns: BTreeMap<Position, u32>,
+    /// Building discovery turn tracking (position -> turn discovered)
+    pub building_discovery_turns: BTreeMap<Position, u32>,
     /// Where this one has seen something it would rather not meet again.
     ///
     /// The map held explored tiles, resources with an age and a source,
@@ -191,9 +191,9 @@ impl Danger {
 pub struct Hearsay {
     /// Who said it
     pub who: uuid::Uuid,
-    /// The tick they say they saw it on
+    /// The turn they say they saw it on
     pub they_saw_it_on: u32,
-    /// The tick they said so
+    /// The turn they said so
     pub told_me_on: u32,
     /// And how much they said was there.
     ///
@@ -282,12 +282,12 @@ impl ExplorationKnowledge {
             encountered_terrains: BTreeSet::new(),
             discoveries: Vec::new(),
             total_tiles_explored: 0,
-            last_exploration_tick: 0,
+            last_exploration_turn: 0,
             curiosity_driven_explorations: 0,
             total_curiosity_satisfaction: 0.0,
-            resource_discovery_ticks: BTreeMap::new(),
-            last_seen_ticks: BTreeMap::new(),
-            building_discovery_ticks: BTreeMap::new(),
+            resource_discovery_turns: BTreeMap::new(),
+            last_seen_turns: BTreeMap::new(),
+            building_discovery_turns: BTreeMap::new(),
             where_it_went_badly: BTreeMap::new(),
             where_i_last_saw: BTreeMap::new(),
         }
@@ -460,8 +460,8 @@ impl ExplorationKnowledge {
     const HOW_LONG_A_SIGHTING_IS_WORTH: u32 = crate::environment::seasons::TICKS_PER_DAY;
 
     /// Mark a tile as explored and return true if it's a new discovery
-    pub fn explore_tile(&mut self, position: Position, current_tick: u32) -> bool {
-        self.last_exploration_tick = current_tick;
+    pub fn explore_tile(&mut self, position: Position, current_turn: u32) -> bool {
+        self.last_exploration_turn = current_turn;
         if self.explored_tiles.insert(position) {
             self.total_tiles_explored += 1;
             true
@@ -481,15 +481,15 @@ impl ExplorationKnowledge {
         who_said_so: uuid::Uuid,
         they_saw_it_on: u32,
         how_much_they_said: Option<u32>,
-        current_tick: u32,
+        current_turn: u32,
     ) -> bool {
-        if self.discover_resource(position, resource_type, current_tick) {
+        if self.discover_resource(position, resource_type, current_turn) {
             self.who_told_me.insert(
                 position,
                 Hearsay {
                     who: who_said_so,
                     they_saw_it_on,
-                    told_me_on: current_tick,
+                    told_me_on: current_turn,
                     how_much_they_said,
                 },
             );
@@ -629,16 +629,16 @@ impl ExplorationKnowledge {
     /// What an honest man passes on: not "there is food there" but "there was
     /// food there when I went past".
     pub fn when_i_saw_it(&self, where_it_is: &Position) -> Option<u32> {
-        self.last_seen_ticks
+        self.last_seen_turns
             .get(where_it_is)
-            .or_else(|| self.resource_discovery_ticks.get(where_it_is))
+            .or_else(|| self.resource_discovery_turns.get(where_it_is))
             .copied()
     }
 
     /// Note that this agent has just laid eyes on a place again, and what was
     /// standing there when it did.
-    pub fn saw_it_again(&mut self, where_it_is: Position, how_much: u32, current_tick: u32) {
-        self.last_seen_ticks.insert(where_it_is, current_tick);
+    pub fn saw_it_again(&mut self, where_it_is: Position, how_much: u32, current_turn: u32) {
+        self.last_seen_turns.insert(where_it_is, current_turn);
         self.how_much_was_there.insert(where_it_is, how_much);
     }
 
@@ -655,11 +655,11 @@ impl ExplorationKnowledge {
         &mut self,
         position: Position,
         resource_type: ResourceType,
-        current_tick: u32,
+        current_turn: u32,
     ) -> bool {
         if !self.known_resources.contains_key(&position) {
             self.known_resources.insert(position, resource_type);
-            self.resource_discovery_ticks.insert(position, current_tick);
+            self.resource_discovery_turns.insert(position, current_turn);
 
             // Record discovery
             self.discoveries.push(Discovery {
@@ -667,7 +667,7 @@ impl ExplorationKnowledge {
                     resource_type,
                     position,
                 },
-                tick: current_tick,
+                turn: current_turn,
                 position,
             });
 
@@ -682,11 +682,11 @@ impl ExplorationKnowledge {
         &mut self,
         position: Position,
         building_type: BuildingType,
-        current_tick: u32,
+        current_turn: u32,
     ) -> bool {
         if !self.known_buildings.contains_key(&position) {
             self.known_buildings.insert(position, building_type);
-            self.building_discovery_ticks.insert(position, current_tick);
+            self.building_discovery_turns.insert(position, current_turn);
 
             // Record discovery
             self.discoveries.push(Discovery {
@@ -694,7 +694,7 @@ impl ExplorationKnowledge {
                     building_type,
                     position,
                 },
-                tick: current_tick,
+                turn: current_turn,
                 position,
             });
 
@@ -710,7 +710,7 @@ impl ExplorationKnowledge {
         position: Position,
         storage_type: String,
         capacity: f32,
-        current_tick: u32,
+        current_turn: u32,
     ) -> bool {
         if !self.known_storage.contains_key(&position) {
             self.known_storage.insert(position, (storage_type.clone(), capacity));
@@ -722,7 +722,7 @@ impl ExplorationKnowledge {
                     position,
                     capacity,
                 },
-                tick: current_tick,
+                turn: current_turn,
                 position,
             });
 
@@ -737,13 +737,13 @@ impl ExplorationKnowledge {
         &mut self,
         terrain_type: TerrainType,
         position: Position,
-        current_tick: u32,
+        current_turn: u32,
     ) -> bool {
         if self.encountered_terrains.insert(terrain_type) {
             // Record discovery
             self.discoveries.push(Discovery {
                 discovery_type: DiscoveryType::Terrain(terrain_type),
-                tick: current_tick,
+                turn: current_turn,
                 position,
             });
 
@@ -916,7 +916,7 @@ pub fn calculate_exploration_reward(discovery: &DiscoveryType) -> f32 {
 pub fn should_explore(
     curiosity_drive: f32,
     unexplored_nearby: usize,
-    last_exploration_ticks_ago: u32,
+    last_exploration_turns_ago: u32,
 ) -> bool {
     // High curiosity drive makes exploration more likely
     if curiosity_drive > 0.6 {
@@ -929,7 +929,7 @@ pub fn should_explore(
     }
 
     // Haven't explored in a while and some curiosity
-    if last_exploration_ticks_ago > 1000 && curiosity_drive > 0.2 {
+    if last_exploration_turns_ago > 1000 && curiosity_drive > 0.2 {
         return true;
     }
 

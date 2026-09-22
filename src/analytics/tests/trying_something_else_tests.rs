@@ -8,14 +8,14 @@
 //! book could not tell two rungs of the same list apart.
 //!
 //! What decides it now is how long the need has been asking without being
-//! met, which `DriveState::denied_ticks` has counted since drives were given
+//! met, which `DriveState::denied_turns` has counted since drives were given
 //! pressure and which nothing had ever read except to make the drive shout.
 
 use crate::agents::practices::Undertaking;
 use crate::agents::{Agent, AgentConfig, Population};
 use crate::analytics::Simulation;
 use crate::core::DriveType;
-use crate::environment::seasons::TICKS_PER_DAY;
+use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY};
 use crate::environment::{Action, ActionResult};
 use crate::world::{World, WorldConfig};
 
@@ -35,7 +35,7 @@ fn how_often_he_looks_past_it(denied: u32, turns: u32) -> u32 {
     let simulation = one_person();
     let mut agent = simulation.population.agents[0].clone();
     if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
-        hunger.denied_ticks = denied;
+        hunger.denied_turns = denied;
     }
 
     (0..turns)
@@ -56,7 +56,7 @@ fn a_man_who_missed_lunch_does_what_he_always_does() {
         assert_eq!(
             how_often_he_looks_past_it(denied, 400),
             0,
-            "denied for {denied} ticks is not long enough to start experimenting"
+            "denied for {denied} turns is not long enough to start experimenting"
         );
     }
 }
@@ -107,7 +107,7 @@ fn he_looks_one_rung_further_and_no_more() {
     let simulation = one_person();
     let mut agent = simulation.population.agents[0].clone();
     if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
-        hunger.denied_ticks = 60 * TICKS_PER_DAY;
+        hunger.denied_turns = 60 * TICKS_PER_DAY;
     }
 
     for _ in 0..500 {
@@ -196,8 +196,8 @@ fn a_settlement_that_is_not_being_fed_does_not_do_only_the_one_thing() {
     }
     let mut simulation = Simulation::new(world, population);
 
-    for _ in 0..(20 * TICKS_PER_DAY) {
-        simulation.tick();
+    for _ in 0..(20 * PLANNING_PERIODS_PER_DAY) {
+        simulation.take_a_turn();
         if simulation.population.agents.is_empty() {
             break;
         }

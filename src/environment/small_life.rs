@@ -51,8 +51,8 @@ pub struct TheSmallLifeHere {
     ///
     /// Kept here rather than recomputed by every reader, because the readers
     /// are in other modules and most of them have no season to hand.
-    /// `tick_a_ground` is the one thing that ever writes it, so it is the
-    /// tick's output rather than a second opinion about the ground.
+    /// `turn_a_ground` is the one thing that ever writes it, so it is the
+    /// turn's output rather than a second opinion about the ground.
     pub would_carry: f32,
 
     /// Mice, voles and shrews: the band under the rabbits.
@@ -273,7 +273,7 @@ impl SmallLife {
     ///
     /// **This is what was missing, and it is why the sky emptied.** With the
     /// rabbits alone a hunting ground grew a surplus of about two hundredths
-    /// of a head a tick, and one kestrel eats that much by itself - so
+    /// of a head a turn, and one kestrel eats that much by itself - so
     /// sixty-four hectares kept about one small predator, and every kestrel,
     /// heron, owl, eagle and otter on a hundred square kilometres was dead
     /// inside two years while its fields stood at half stock. The rodents
@@ -304,7 +304,7 @@ impl SmallLife {
     /// the number about food rather than about carcases.
     pub const HOW_MANY_RODENTS_MAKE_A_GRAZER: f32 = 8.0;
 
-    /// How fast the rodents come back, a tick at a time.
+    /// How fast the rodents come back, a turn at a time.
     ///
     /// Four times the grazers. A vole is breeding at three weeks old and a
     /// good year multiplies them severalfold; a field trapped bare in March
@@ -330,7 +330,7 @@ impl SmallLife {
     /// fifth water at some seven or eight hundred, which is a fishery.
     pub const FISH_A_GOOD_HECTARE_OF_WATER_CARRIES: f32 = 60.0;
 
-    /// How fast the fish come back, a tick at a time.
+    /// How fast the fish come back, a turn at a time.
     ///
     /// Between the grazers and the rodents, and faster than a closed
     /// population of anything that size would be - because it is not a
@@ -359,7 +359,7 @@ impl SmallLife {
     /// worrying about and not so many that nothing is ever in one.
     pub const WHAT_SHARE_ARE_HUNTERS: f32 = 0.008;
 
-    /// How fast the grazers come back, a tick at a time.
+    /// How fast the grazers come back, a turn at a time.
     ///
     /// A rabbit population trebles in a season when it is let alone. At this
     /// rate a ground trapped down to a tenth is most of the way back inside a
@@ -379,25 +379,30 @@ impl SmallLife {
     /// trapline is.
     pub const WHAT_A_SNARE_TAKES_ON_FULL_GROUND_IN_A_DAY: f32 = 0.2;
 
-    /// And the same, in a tick, which is what the pass asks for.
+    /// And the same, in a turn, which is what the pass asks for.
     ///
     /// **Derived rather than written down, because the number that was
     /// written down was on a different calendar.** The docstring above this
-    /// used to read "twelve ticks to the day" and the constant was 0.02 - and
-    /// `TICKS_PER_DAY` is **48**, so a snare took four fifths of a chance a
-    /// day rather than a fifth, and the sentence beside it was wrong by four
-    /// times. The same defect as #143 and #288: a rate calibrated on a
-    /// calendar the world no longer keeps.
+    /// used to read "twelve turns to the day" and the constant was 0.02 - and
+    /// there are **forty-eight** planning periods in a day, so a snare took
+    /// four fifths of a chance a day rather than a fifth, and the sentence
+    /// beside it was wrong by four times. The same defect as #143 and #288: a
+    /// rate calibrated on a calendar the world no longer keeps.
+    ///
+    /// The note here said `TICKS_PER_DAY` where it meant
+    /// `PLANNING_PERIODS_PER_DAY`, which are 1,440 and 48 and are the two
+    /// units this family of defects is made of. The code below always read the
+    /// right one; only the sentence was wrong.
     pub const WHAT_A_SNARE_TAKES_ON_FULL_GROUND: f32 =
         Self::WHAT_A_SNARE_TAKES_ON_FULL_GROUND_IN_A_DAY
-            / crate::environment::seasons::TICKS_PER_DAY as f32;
+            / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
 
-    /// What a whole hunting ground gives a trapline in a tick, at full stock,
+    /// What a whole hunting ground gives a trapline in a turn, at full stock,
     /// however many snares are on it.
     ///
     /// Set just under what the ground actually grows. A logistic population
     /// at capacity `K` with growth `r` has a surplus of `rK/4` - here 0.0015
-    /// times five hundred over four, near enough a fifth of a head a tick, or
+    /// times five hundred over four, near enough a fifth of a head a turn, or
     /// two and a quarter a day off sixty-four hectares. This is a shade under
     /// that, so a full line is *just* sustainable and two settlements working
     /// one wood are not. That is the specification's "agents could tip the
@@ -418,23 +423,23 @@ impl SmallLife {
     /// does that.
     pub const WHAT_A_QUIET_COUNTRY_TAKES_IN_A_DAY: f32 = 0.12;
 
-    /// And the same, in a tick.
+    /// And the same, in a turn.
     ///
-    /// **The other half of the calendar defect above.** This was 0.01 a tick
-    /// on a twelve-tick day - "most of a week" - and at 48 ticks to the day
-    /// it came to four times that, so a catch was gone in a day and a half
-    /// rather than most of a week. Measured over twelve worlds before this
+    /// **The other half of the calendar defect above.** This was 0.01 a turn
+    /// on a twelve-turn day - "most of a week" - and at forty-eight planning
+    /// periods to the day it came to four times that, so a catch was gone in a
+    /// day and a half rather than most of a week. Measured over twelve worlds before this
     /// was mended: a settlement's snares caught **816 head in a winter and
     /// carried home 21**, losing 96.7% of them to the fox. Trapping is the
     /// one food source that does not stop when the hedgerows do, and it was
     /// delivering two rabbits a settlement a winter.
     pub const WHAT_A_QUIET_COUNTRY_TAKES: f32 = Self::WHAT_A_QUIET_COUNTRY_TAKES_IN_A_DAY
-        / crate::environment::seasons::TICKS_PER_DAY as f32;
+        / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
 
     /// And the most it can ever be, when the game is gone and the foxes are
     /// not.
     ///
-    /// Half a chance a tick: a catch left one turn is likely gone. That is
+    /// Half a chance a turn: a catch left one turn is likely gone. That is
     /// the pinch the specification asks for - trapping a ground out does not
     /// only make the snares emptier, it makes the ones that do fill worth
     /// less, because you have to be standing there.
@@ -514,7 +519,7 @@ impl SmallLife {
     /// decide both and only the density differs - which means a ground's
     /// rodent stock follows from its grazer stock and the two can never come
     /// to disagree about which month is hard or which field is poor. It is
-    /// also why nothing that ticks a ground has to be told about the rodents
+    /// also why nothing that turns a ground has to be told about the rodents
     /// separately.
     pub const RODENTS_TO_A_GRAZER_ON_THE_GROUND: f32 =
         Self::RODENTS_A_GOOD_HECTARE_CARRIES / Self::HEAD_A_GOOD_HECTARE_CARRIES;
@@ -630,7 +635,7 @@ impl SmallLife {
         got
     }
 
-    /// Bring one ground on by a tick.
+    /// Bring one ground on by a turn.
     ///
     /// Grazers grow logistically towards what the land will carry. Hunters
     /// grow logistically towards a share of the grazers, which is the whole
@@ -640,12 +645,12 @@ impl SmallLife {
     /// empties a ground of foxes every few years by arithmetic rather than by
     /// anything that happened, and the point of taking the small life out of
     /// records was to stop exactly that.
-    pub fn tick_a_ground(
+    pub fn turn_a_ground(
         &mut self,
         ground: (i32, i32),
         would_carry: f32,
         would_carry_fish: f32,
-        ticks: f32,
+        turns: f32,
     ) {
         self.settle(ground, would_carry, would_carry_fish);
         let Some(here) = self.grounds.get_mut(&ground) else {
@@ -661,7 +666,7 @@ impl SmallLife {
         // returning on the land's account would have emptied that river.
         here.would_carry_fish = would_carry_fish;
         if would_carry_fish <= 0.0 {
-            here.fish = (here.fish - here.fish * 0.01 * ticks).max(0.0);
+            here.fish = (here.fish - here.fish * 0.01 * turns).max(0.0);
         } else {
             // The same floor the land bands have, and for the same reason:
             // a reach fished or hunted to nothing has to be able to fill
@@ -672,16 +677,16 @@ impl SmallLife {
             here.fish = here.fish.max(ALWAYS_A_FEW_IN_THE_WATER.min(would_carry_fish));
 
             let room = 1.0 - (here.fish / would_carry_fish).clamp(0.0, 1.0);
-            here.fish = (here.fish + here.fish * Self::HOW_FAST_THE_FISH_COME_BACK * room * ticks)
+            here.fish = (here.fish + here.fish * Self::HOW_FAST_THE_FISH_COME_BACK * room * turns)
                 .clamp(0.0, would_carry_fish);
         }
 
         // Ground that will carry nothing loses what is on it rather than
         // holding it for ever - a salt flat in February is not a larder.
         if would_carry <= 0.0 {
-            here.grazers = (here.grazers - here.grazers * 0.01 * ticks).max(0.0);
-            here.rodents = (here.rodents - here.rodents * 0.01 * ticks).max(0.0);
-            here.hunters = (here.hunters - here.hunters * 0.01 * ticks).max(0.0);
+            here.grazers = (here.grazers - here.grazers * 0.01 * turns).max(0.0);
+            here.rodents = (here.rodents - here.rodents * 0.01 * turns).max(0.0);
+            here.hunters = (here.hunters - here.hunters * 0.01 * turns).max(0.0);
             return;
         }
 
@@ -695,7 +700,7 @@ impl SmallLife {
 
         let room = 1.0 - (here.grazers / would_carry).clamp(0.0, 1.0);
         here.grazers =
-            (here.grazers + here.grazers * Self::HOW_FAST_THE_GRAZERS_COME_BACK * room * ticks)
+            (here.grazers + here.grazers * Self::HOW_FAST_THE_GRAZERS_COME_BACK * room * turns)
                 .clamp(0.0, would_carry);
 
         // And the rodents, on the same curve and four times as fast.
@@ -705,7 +710,7 @@ impl SmallLife {
                 .min(here.would_carry_rodents));
         let room_below = 1.0 - (here.rodents / here.would_carry_rodents).clamp(0.0, 1.0);
         here.rodents = (here.rodents
-            + here.rodents * Self::HOW_FAST_THE_RODENTS_COME_BACK * room_below * ticks)
+            + here.rodents * Self::HOW_FAST_THE_RODENTS_COME_BACK * room_below * turns)
             .clamp(0.0, here.would_carry_rodents);
 
         // What keeps the foxes up is everything under them, not the rabbits
@@ -722,12 +727,12 @@ impl SmallLife {
         // it has been trapped out, at the same rate.
         let short_by = (hunters_it_will_keep - here.hunters) / hunters_it_will_keep;
         here.hunters = (here.hunters
-            + hunters_it_will_keep * Self::HOW_FAST_THE_HUNTERS_FOLLOW * short_by * ticks)
+            + hunters_it_will_keep * Self::HOW_FAST_THE_HUNTERS_FOLLOW * short_by * turns)
             .max(0.0);
     }
 
     /// How much of the difference between two neighbouring grounds crosses
-    /// between them in a tick.
+    /// between them in a turn.
     ///
     /// Slow. This is animals working outwards into ground that is emptier
     /// than the ground they are on, not a herd migrating: at this rate a
@@ -756,8 +761,8 @@ impl SmallLife {
     /// one side and added to the other, so head is conserved exactly. That
     /// matters: an exchange written as "move towards the average of my
     /// neighbours" is not symmetric, and quietly invents or destroys animals
-    /// every tick.
-    pub fn let_them_spread(&mut self, ticks: f32) {
+    /// every turn.
+    pub fn let_them_spread(&mut self, turns: f32) {
         let grounds: Vec<(i32, i32)> = self.grounds.keys().copied().collect();
         let mut moves: Vec<((i32, i32), (i32, i32), f32, f32, f32)> = Vec::new();
 
@@ -777,7 +782,7 @@ impl SmallLife {
                 let across = if !on_land { 0.0 } else { Self::HOW_FAST_THEY_SPREAD
                     * (here.how_thick_it_is() - there.how_thick_it_is())
                     * here.would_carry.min(there.would_carry)
-                    * ticks };
+                    * turns };
 
                 // The rodents work outwards on the same rule and their own
                 // crowding. A field thick with voles beside one that has
@@ -788,7 +793,7 @@ impl SmallLife {
                 let below = if !on_land { 0.0 } else { Self::HOW_FAST_THEY_SPREAD
                     * (here.how_thick_the_rodents_are() - there.how_thick_the_rodents_are())
                     * here.would_carry_rodents.min(there.would_carry_rodents)
-                    * ticks };
+                    * turns };
 
                 // And the water works along itself on the same rule. Two
                 // grounds that both have water in them are joined by it,
@@ -802,7 +807,7 @@ impl SmallLife {
                     Self::HOW_FAST_THEY_SPREAD
                         * (here.how_thick_the_fish_are() - there.how_thick_the_fish_are())
                         * here.would_carry_fish.min(there.would_carry_fish)
-                        * ticks
+                        * turns
                 };
 
                 if across.abs() > f32::EPSILON
@@ -885,7 +890,7 @@ pub struct Snare {
     pub at: (i32, i32),
     pub set_by: uuid::Uuid,
     pub set_at: u32,
-    /// The tick something went into it, if anything has.
+    /// The turn something went into it, if anything has.
     pub caught_at: Option<u32>,
 }
 
@@ -897,7 +902,7 @@ impl Snare {
 }
 
 impl TheSmallLifeHere {
-    /// The chance, in one tick, that a snare on this ground takes something,
+    /// The chance, in one turn, that a snare on this ground takes something,
     /// with `sharing_it` snares set on the same ground.
     ///
     /// "The rate of success and speed of catch could be based on the total
@@ -929,7 +934,7 @@ impl TheSmallLifeHere {
         a_snares_own_rate.min(its_share_of_the_ground) * self.how_thick_it_is()
     }
 
-    /// And the chance, in one tick, that something else gets to the catch
+    /// And the chance, in one turn, that something else gets to the catch
     /// first.
     ///
     /// "A decrease in rabbit population could decrease the time an agent has
@@ -941,7 +946,7 @@ impl TheSmallLifeHere {
     /// `WHAT_SHARE_ARE_HUNTERS` - so this reads one against the other and a
     /// settled country comes out at the quiet rate by construction.
     pub fn how_likely_the_catch_is_taken(&self) -> f32 {
-        // Everything under the foxes, on the footing `tick_a_ground` keeps
+        // Everything under the foxes, on the footing `turn_a_ground` keeps
         // them on. Reading the rabbits alone here while the foxes are fed by
         // rabbits *and* voles is the same question answered in two places,
         // and it would have made a settled country look like a hungry one -
@@ -961,7 +966,7 @@ impl TheSmallLifeHere {
 }
 
 impl SmallLife {
-    /// Bring every snare in the country on by a tick: what goes into them,
+    /// Bring every snare in the country on by a turn: what goes into them,
     /// and what takes it out again before its owner gets back.
     ///
     /// The catch comes off the ground it was taken on, so a settlement that
@@ -970,8 +975,8 @@ impl SmallLife {
     ///
     /// A snare a person is standing beside is not robbed: the whole point of
     /// going round the line is being there, and a catch taken in the same
-    /// tick its owner reaches it is a catch he got.
-    pub fn tick_the_snares<F>(
+    /// turn its owner reaches it is a catch he got.
+    pub fn turn_the_snares<F>(
         &mut self,
         snares: &mut [Snare],
         now: u32,

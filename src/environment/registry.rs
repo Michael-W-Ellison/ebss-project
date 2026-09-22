@@ -202,8 +202,11 @@ mod tests {
             Ok(ActionResult::success())
         }
 
-        fn tick(&mut self) {
-            self.world_state.tick += 1;
+        fn take_a_turn(&mut self) {
+            // A step is a planning period, which is that many ticks. Every counter
+        // in the model has to advance by the same amount or two of them
+        // disagree about what day it is.
+        self.world_state.turn += crate::environment::seasons::TICKS_BETWEEN_PLANS as u64;
         }
 
         fn get_material_at(&self, _position: Position) -> Option<&Material> {

@@ -120,7 +120,7 @@ impl Simulation {
     /// actually raining. Dry ground under a clear sky never does.
     pub(in crate::analytics) const WET_ENOUGH_TO_START_IT: f32 = 0.7;
 
-    /// And how readily it goes, per tick, at that wetness.
+    /// And how readily it goes, per turn, at that wetness.
     ///
     /// Slow: a handful of grain that gets rained on does not come up the same
     /// afternoon. Over a wet season most of what a person is carrying will
@@ -169,7 +169,7 @@ impl Simulation {
 
         // What is already growing, gathered once: asking the resource list per
         // candidate tile turns this into tens of thousands of comparisons per
-        // agent per tick
+        // agent per turn
         let occupied: std::collections::BTreeSet<(i32, i32)> = self
             .world
             .resources
@@ -565,7 +565,7 @@ impl Simulation {
     /// This is the chance of setting out towards one, not of eating it: a man
     /// who has walked to the plant eats it. Rolling again on arrival, which is
     /// what the first cut did, compounded a small chance against itself once
-    /// per tick of the walk and meant nobody in eight worlds ever arrived.
+    /// per turn of the walk and meant nobody in eight worlds ever arrived.
     pub(in crate::analytics) const HOW_OFTEN_ANYBODY_RISKS_IT: f64 = 0.06;
 
     /// Trying an unknown plant.
@@ -598,7 +598,7 @@ impl Simulation {
 
         // The nearest one of a sort nobody here has an opinion about. The
         // first cut of this asked the agent to be standing exactly on the
-        // plant, and over eight worlds of ten thousand ticks not one person
+        // plant, and over eight worlds of ten thousand turns not one person
         // ever tried anything: sixteen tiles in ten thousand is not a thing
         // that happens by accident.
         let strange = self

@@ -24,7 +24,7 @@ use crate::bevy_gui::events::{SimulationCommand, ShutdownRequested, SelectionCha
 /// Error sent from simulation thread to GUI
 #[derive(Debug, Clone)]
 pub struct BridgeError {
-    pub tick: u32,
+    pub turn: u32,
     pub message: String,
     pub severity: crate::bevy_gui::resources::ErrorSeverity,
     pub context: Option<String>,
@@ -62,7 +62,7 @@ pub fn receive_errors_system(
 
         while let Ok(bridge_error) = rx.try_recv() {
             let error = SimulationError {
-                tick: bridge_error.tick,
+                turn: bridge_error.turn,
                 message: bridge_error.message.clone(),
                 severity: bridge_error.severity,
                 timestamp: current_time,
@@ -113,11 +113,11 @@ pub fn receive_snapshots_system(
             sim_control.speed = new_snapshot.speed;
 
             // Update statistics history
-            let tick = new_snapshot.tick;
-            if stats_history.should_sample(tick) {
+            let turn = new_snapshot.turn;
+            if stats_history.should_sample(turn) {
                 let stats = &new_snapshot.population.stats;
                 let point = HistoryPoint {
-                    tick,
+                    turn,
                     population: stats.total_agents,
                     infants: stats.infants,
                     children: stats.children,

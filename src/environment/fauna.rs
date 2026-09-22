@@ -218,7 +218,7 @@ impl AnimalSpecies {
     /// twelve against a wild ruminant's one or two, which is right for a pig
     /// and ruinous in a country with no farmer in it: the first world in
     /// which a pig could be placed at all came out with **3,749 of them out
-    /// of 5,607 head**, and the tick at 18.5 ms against 11.8 without them.
+    /// of 5,607 head**, and the turn at 18.5 ms against 11.8 without them.
     ///
     /// Nothing here says a pig cannot exist. `spawn_animal` will still put
     /// one down, which is what a settlement that tames one wants, and
@@ -281,7 +281,7 @@ impl AnimalSpecies {
     /// **Why these and not everything small.** Measured over two years on a
     /// hundred square kilometres with nobody in the world: 28,718 head, of
     /// which 26,276 rabbits and 1,515 geese, against three wolves and three
-    /// arctic foxes - and the tick going from 17.57 ms in the first quarter
+    /// arctic foxes - and the turn going from 17.57 ms in the first quarter
     /// to 108.90 in the eighth. A fast-breeding animal held as discrete
     /// records is a random walk with an absorbing barrier at nought, so it
     /// finds either the barrier or the array. The eagle, the hawk, the owl,
@@ -301,7 +301,7 @@ impl AnimalSpecies {
             // a rabbit a bad record. The moment the spawn pools were fixed
             // and it could be placed at all, a hundred square kilometres
             // went to **58,682 crows** inside a year, out of 61,558 head,
-            // with the tick at 249 ms. See ISSUES_FOUND.md #152.
+            // with the turn at 249 ms. See ISSUES_FOUND.md #152.
             | "crow"
             // And the fish, for the same three reasons and one more.
             //
@@ -328,7 +328,7 @@ impl AnimalSpecies {
             // a hundred square kilometres went from **85 at generation to
             // 745, with two thousand four hundred starved behind them**, the
             // heron fell from thirteen to two, the otter, the owl, the eagle
-            // and the seal went to nothing, and the tick went from 13.07 ms
+            // and the seal went to nothing, and the turn went from 13.07 ms
             // to 57.65. That is a boom-and-bust in records, which is the one
             // thing this abstraction exists to stop.
             //
@@ -407,7 +407,7 @@ impl AnimalSpecies {
     /// What share of a litter or a clutch comes through to be counted.
     ///
     /// Nothing in this model has ever killed a young animal. Everything born
-    /// or hatched was a full record from its first tick, subject only to
+    /// or hatched was a full record from its first turn, subject only to
     /// starvation, old age and being eaten - so a snake laying twenty eggs put
     /// twenty snakes on the map. That was survivable while breeding was one
     /// pair in the whole world per attempt (#139); with recruitment
@@ -437,7 +437,7 @@ impl AnimalSpecies {
     /// How much of a litter is small enough to be reared rather than gambled.
     ///
     /// A doe with three kits rears three; a snake laying twenty is not rearing
-    /// anything, it is buying tickets. So the thinning above is applied only
+    /// anything, it is buying turnets. So the thinning above is applied only
     /// to what is over this, which leaves every mammal in the registry as it
     /// was - their litters are ones and twos and fives - and bites on the
     /// egg-layers, which is where it is wanted. Applying it flat took the
@@ -457,7 +457,7 @@ impl AnimalSpecies {
     /// kilometre, and a real vole year is more than that - and a hundred
     /// square kilometres would want four hundred thousand records. The
     /// specification this work is written under asks that simulation speed not
-    /// fall away, and four hundred thousand rodents is the whole tick budget.
+    /// fall away, and four hundred thousand rodents is the whole turn budget.
     ///
     /// So a `mouse` here is a colony and a `songbird` is a flock. What follows
     /// from that is all of a piece: it eats what its number eats, it is worth
@@ -696,7 +696,7 @@ impl WhatItCanDo {
 /// Read off the terrain rather than off the plants actually standing there,
 /// and that is a compromise worth naming: asking the flora for what is on one
 /// tile is a walk over a quarter of a million plants, and a hunt happens every
-/// tick. Terrain is the map's own statement about its foliage - the flora
+/// turn. Terrain is the map's own statement about its foliage - the flora
 /// system puts its trees on `Forest` and its reeds on `Wetland` - so the two
 /// agree at the start and drift only if a wood is cleared without the ground
 /// under it changing. Filed as the cost of doing this in constant time.
@@ -779,7 +779,7 @@ pub struct WhatTheHuntingCameTo {
 /// were living off the ground from one whose hunters were starving on it.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub struct WhatPassiveHuntingCameTo {
-    /// Hunter-ticks spent working a piece of ground.
+    /// Hunter-turns spent working a piece of ground.
     pub went_out: u64,
     /// Head of the grazer layer - rabbits, squirrels - taken.
     pub caught_grazers: u64,
@@ -892,17 +892,17 @@ pub struct AnimalSpecies {
     pub living_products: Vec<AnimalProduct>,
 
     // === LIFECYCLE FIELDS ===
-    /// Lifespan in ticks (min, max) - animals die of old age
+    /// Lifespan in turns (min, max) - animals die of old age
     pub lifespan: (u32, u32),
     /// Age at which animal reaches maturity
     pub maturity_age: u32,
-    /// Breeding cooldown in ticks after reproduction
+    /// Breeding cooldown in turns after reproduction
     pub breeding_cooldown: u32,
-    /// Gestation period in ticks (0 for egg-layers)
+    /// Gestation period in turns (0 for egg-layers)
     pub gestation_period: u32,
     /// Number of offspring per birth (min, max)
     pub litter_size: (u32, u32),
-    /// Hunger rate - how fast hunger increases per tick
+    /// Hunger rate - how fast hunger increases per turn
     pub hunger_rate: f32,
     /// Max hunger before starvation damage begins
     pub max_hunger: f32,
@@ -945,7 +945,7 @@ impl AnimalDrop {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnimalProduct {
     pub material_id: String,
-    pub production_time: u32, // Ticks between production
+    pub production_time: u32, // Turns between production
     pub quantity: u32,
 }
 
@@ -2608,12 +2608,12 @@ pub struct Animal {
 
     /// AI state
     pub state: AnimalState,
-    pub state_timer: u32, // Ticks remaining in current state
+    pub state_timer: u32, // Turns remaining in current state
 
     /// Herd/pack affiliation
     pub group_id: Option<Uuid>,
 
-    /// Age (in ticks)
+    /// Age (in turns)
     pub age: u32,
     pub maturity_age: u32, // Age when fully grown
     pub max_lifespan: u32, // Maximum age before death
@@ -2627,17 +2627,17 @@ pub struct Animal {
     pub can_reproduce: bool,
     pub reproduction_cooldown: u32,
     pub is_pregnant: bool,
-    pub pregnancy_timer: u32, // Ticks until birth
+    pub pregnancy_timer: u32, // Turns until birth
     pub mate_id: Option<Uuid>, // For tracking lineage
 
     /// Hunger/feeding system
     pub hunger: f32,        // Current hunger level (0 = full, max = starving)
     pub max_hunger: f32,    // Max hunger before starvation damage
-    pub hunger_rate: f32,   // Hunger increase per tick
+    pub hunger_rate: f32,   // Hunger increase per turn
     pub is_starving: bool,  // Taking starvation damage
 
     /// Living product timers
-    pub product_timers: BTreeMap<String, u32>, // material_id -> ticks until production
+    pub product_timers: BTreeMap<String, u32>, // material_id -> turns until production
 
     /// How much is on this one, and whether it reckons it could face it.
     ///
@@ -2770,8 +2770,8 @@ impl Animal {
         }
     }
 
-    /// Tick product production timers and return ready products
-    pub fn tick_products(&mut self) -> Vec<(String, u32)> {
+    /// Turn product production timers and return ready products
+    pub fn turn_products(&mut self) -> Vec<(String, u32)> {
         let mut produced = Vec::new();
 
         if !self.is_alive() || !self.is_mature() {
@@ -2792,8 +2792,8 @@ impl Animal {
         produced
     }
 
-    /// Age the animal by one tick
-    pub fn tick_age(&mut self) {
+    /// Age the animal by one turn
+    pub fn turn_age(&mut self) {
         self.age += 1;
 
         // Update reproduction cooldown
@@ -2846,8 +2846,8 @@ impl Animal {
     }
 
     /// Increase hunger by the animal's hunger rate
-    pub fn tick_hunger(&mut self) {
-        self.tick_hunger_burning(1.0);
+    pub fn turn_hunger(&mut self) {
+        self.turn_hunger_burning(1.0);
     }
 
     /// The same, for a beast that is burning some share of its ordinary rate.
@@ -2856,7 +2856,7 @@ impl Animal {
     /// `what_a_winter_costs` - so that "this animal is lying up" is a fact
     /// about where it is standing and what sort it is, rather than a flag
     /// somebody has to remember to set and clear.
-    pub fn tick_hunger_burning(&mut self, share_of_its_rate: f32) {
+    pub fn turn_hunger_burning(&mut self, share_of_its_rate: f32) {
         if !self.is_alive() {
             return;
         }
@@ -2897,7 +2897,7 @@ impl Animal {
     ///
     /// Much lower than `is_hungry`, which is half of everything the animal can
     /// hold. A predator that only hunted when it was half starved killed about
-    /// one animal in a thousand ticks - far below what the herds breed - so it
+    /// one animal in a thousand turns - far below what the herds breed - so it
     /// stayed hungry, never bred, and the herbivores it was supposed to be
     /// holding down ran to the population cap. A predator that is not nearly
     /// full will take what is in front of it.
@@ -2938,11 +2938,11 @@ impl Animal {
         self.current_health / self.max_health
     }
 
-    /// How far this one covers in a tick, going flat out.
+    /// How far this one covers in a turn, going flat out.
     ///
     /// **Nothing in this model moved at its own speed.** `speed` was read by
     /// the rush and by nothing else, so every animal alive - a wolf at 1.7, a
-    /// sheep at 1.0, a crocodile at 0.9 - crossed exactly two cells a tick
+    /// sheep at 1.0, a crocodile at 0.9 - crossed exactly two cells a turn
     /// when it fled and exactly two when it stalked. A wolf could therefore
     /// never close on a fleeing sheep: measured on fourteen wolves standing
     /// over two sheep, the sheep ran and the gap went 1, 5, 9, 15, 21, 35
@@ -2952,9 +2952,9 @@ impl Animal {
     ///
     /// Off the same figure the rush reads, so an old or hurt animal is
     /// slower here too and there are not two answers to how fast it is.
-    pub fn how_far_it_gets_in_a_tick(&self, species: &AnimalSpecies) -> i32 {
+    pub fn how_far_it_gets_in_a_turn(&self, species: &AnimalSpecies) -> i32 {
         /// What a pace of one covers, which is what everything covered
-        /// before: twenty metres a tick, or a couple of kilometres a day.
+        /// before: twenty metres a turn, or a couple of kilometres a day.
         const WHAT_A_PACE_OF_ONE_COVERS: f32 = 2.0;
 
         let going = species.speed * self.how_fast_it_still_is() * WHAT_A_PACE_OF_ONE_COVERS;
@@ -3031,7 +3031,7 @@ pub struct AnimalManager {
     groups: BTreeMap<Uuid, Vec<Uuid>>, // Group ID -> Animal IDs
 
     /// Spawning parameters
-    spawn_rate: f32, // Chance per tick to spawn
+    spawn_rate: f32, // Chance per turn to spawn
     max_population: usize,
 
     /// The most of each species this world has ever held, which is what a
@@ -3044,9 +3044,9 @@ pub struct AnimalManager {
     #[serde(default)]
     world_bounds: Option<(i32, i32)>,
 
-    /// Ticks since the last time anything was allowed to wander in
+    /// Turns since the last time anything was allowed to wander in
     #[serde(default)]
-    ticks_since_migration: u32,
+    turns_since_migration: u32,
 
     /// Reference to fauna registry (not serialized)
     #[serde(skip)]
@@ -3091,11 +3091,11 @@ impl AnimalManager {
             passive: WhatPassiveHuntingCameTo::default(),
             how_rich_each_ground_is: BTreeMap::new(),
             groups: BTreeMap::new(),
-            spawn_rate: 0.001, // 0.1% chance per tick
+            spawn_rate: 0.001, // 0.1% chance per turn
             max_population,
             peak_population: BTreeMap::new(),
             world_bounds: None,
-            ticks_since_migration: 0,
+            turns_since_migration: 0,
             registry: Some(FaunaRegistry::new()),
         }
     }
@@ -3216,7 +3216,7 @@ impl AnimalManager {
 
     /// Take the dead off the map.
     ///
-    /// A body is read exactly once, in the tick it falls: whatever killed it
+    /// A body is read exactly once, in the turn it falls: whatever killed it
     /// looks at it there and then - a predator to feed, a hunter to butcher -
     /// and nothing wants it afterwards. Leaving them in the list made the
     /// world's animal population a tally of everything that had ever lived in
@@ -3276,34 +3276,40 @@ impl AnimalManager {
 
 
 
-    /// Tick all animals (age, products, natural healing, AI behaviors, lifecycle)
-    /// A tick of everything with legs, in the world it is standing in.
+    /// Turn all animals (age, products, natural healing, AI behaviors, lifecycle)
+    /// A turn of everything with legs, in the world it is standing in.
     ///
     /// It took nothing before, which is how grazing came to feed every animal
     /// out of thin air: there was no ground and no vegetation to take from,
     /// so what a mouthful was worth came down to a headcount per patch
     /// standing in for the food that should have been doing the work. What
     /// sets the size of a herd now is what is growing where it is standing.
-    /// `grazing_ticks` is how many ticks of feeding this pass stands for, and
-    /// nought means "not this tick". Grazing runs on the same ten-tick
-    /// cadence the vegetation does, because it has to look up what is growing
+    /// `grazing_passes` is how many *feeding passes* this grazing pass stands
+    /// for, and nought means "not this turn". Passes and not ticks: an animal
+    /// burns its hunger once a pass, in `Animal::turn_hunger_burning`, so what
+    /// it takes in has to be counted in the same unit or the two halves of its
+    /// keep are denominated on different clocks. It was a tick count once, and
+    /// that is exactly what went wrong - see ISSUES_FOUND #217.
+    ///
+    /// Grazing runs on the same cadence the vegetation does, because it has to
+    /// look up what is growing
     /// on each tile and building that lookup is a pass over every plant in the
     /// world - eighty thousand of them on a hundred square kilometres, which
-    /// at every tick was three-quarters of what a tick cost. It also has to be
+    /// at every turn was three-quarters of what a turn cost. It also has to be
     /// the *same* pass, because the lookup holds indices into the plant list
     /// and that list is rebuilt whenever anything dies.
-    pub fn tick_in_world(
+    pub fn turn_in_world(
         &mut self,
         grid: &mut crate::world::Grid,
         plants: &mut crate::environment::PlantManager,
-        grazing_ticks: f32,
+        grazing_passes: f32,
         weather: GrazingWeather,
     ) {
         if self.registry.is_none() {
             return;
         }
 
-        // What each beast is paying to get through this tick, which in
+        // What each beast is paying to get through this turn, which in
         // winter is not the same for all of them - see `what_a_winter_costs`.
         //
         // Worked out in a read-only pass and only in winter, because it wants
@@ -3343,7 +3349,7 @@ impl AnimalManager {
             }
 
             // Age
-            animal.tick_age();
+            animal.turn_age();
 
             // Check for death from old age
             if animal.is_too_old() {
@@ -3353,7 +3359,7 @@ impl AnimalManager {
 
             // Hunger system
             let stood_up_to_it = animal.is_alive();
-            animal.tick_hunger_burning(burning.get(idx).copied().unwrap_or(1.0));
+            animal.turn_hunger_burning(burning.get(idx).copied().unwrap_or(1.0));
             if stood_up_to_it && !animal.is_alive() {
                 starved.push(animal.species_id.clone());
             }
@@ -3369,7 +3375,7 @@ impl AnimalManager {
             // Mending, which is slow and is a share of the animal rather
             // than a fixed amount.
             //
-            // **It was a flat tenth of a point a tick for everything alive.**
+            // **It was a flat tenth of a point a turn for everything alive.**
             // Health runs from five on a fish to three hundred on a mammoth,
             // sixty-fold, so one absolute rate meant a fish mended a quarter
             // of itself in a day and a mammoth four thousandths - and neither
@@ -3377,11 +3383,11 @@ impl AnimalManager {
             // read against the animal, or the same blow is a scratch to one
             // sort and a season to another for no reason but the units.
             if animal.current_health < animal.max_health && !animal.is_starving {
-                animal.heal(animal.max_health * Self::HOW_MUCH_OF_ITSELF_IT_MENDS_A_TICK);
+                animal.heal(animal.max_health * Self::HOW_MUCH_OF_ITSELF_IT_MENDS_A_TURN);
             }
 
-            // Tick products
-            animal.tick_products();
+            // Turn products
+            animal.turn_products();
 
             // Decrement state timer
             if animal.state_timer > 0 {
@@ -3412,7 +3418,7 @@ impl AnimalManager {
 
         // Fourth pass: Predator hunting
         // Bring the lower tiers on before anything draws from them.
-        self.tick_the_small_life(grid, weather.season);
+        self.turn_the_small_life(grid, weather.season);
 
         // And let the herds and the packs close up, before anything asks who
         // is standing with whom.
@@ -3428,15 +3434,18 @@ impl AnimalManager {
 
         // Fifth pass: Herbivore feeding - what is taken off the ground, and
         // what goes back onto it
-        self.what_the_grazers_took(grid, plants, grazing_ticks, weather);
+        self.what_the_grazers_took(grid, plants, grazing_passes, weather);
 
         // What each of them is facing, before any of them acts on it.
         //
-        // Not every tick. A hunt reaches eight cells and a hunter covers a
-        // cell or two in a tick, so a reading four ticks old is a reading of
+        // Not every turn. A hunt reaches eight cells and a hunter covers a
+        // cell or two in a turn, so a reading four turns old is a reading of
         // very nearly the same field; the readings persist between passes
         // rather than being cleared, so nothing goes blind in between.
-        const HOW_OFTEN_A_BEAST_LOOKS_UP: u32 = 4;
+        // Four passes, in ticks, because `weather.now` counts ticks - the
+        // same correction as `HOW_OFTEN_A_BEAST_LOOKS_FOR_ITS_OWN`.
+        const HOW_OFTEN_A_BEAST_LOOKS_UP: u32 =
+            4 * crate::environment::seasons::TICKS_BETWEEN_PLANS;
         if weather.now % HOW_OFTEN_A_BEAST_LOOKS_UP == 0 {
             self.what_each_animal_is_facing();
         }
@@ -3655,7 +3664,7 @@ impl AnimalManager {
         // its own chance. What paces a species is its own cooldown and
         // gestation, which is where that belongs, and what stops it is the
         // grass.
-        const WHAT_A_PAIR_COMES_TO_IN_A_TICK: f32 = 0.05;
+        const WHAT_A_PAIR_COMES_TO_IN_A_TURN: f32 = 0.05;
 
         // Who is standing where, in blocks a mate could be found across, so
         // that this is not every animal against every other animal.
@@ -3679,7 +3688,7 @@ impl AnimalManager {
             if spoken_for.contains(&idx_a) {
                 continue;
             }
-            if rng.gen::<f32>() > WHAT_A_PAIR_COMES_TO_IN_A_TICK {
+            if rng.gen::<f32>() > WHAT_A_PAIR_COMES_TO_IN_A_TURN {
                 continue;
             }
 
@@ -3799,14 +3808,22 @@ impl AnimalManager {
     ///
     /// The same cadence as looking up for something with teeth: often enough
     /// to matter over a season, seldom enough to cost nothing.
-    const HOW_OFTEN_A_BEAST_LOOKS_FOR_ITS_OWN: u32 = 4;
+    /// How often a beast looks round for its own kind, in ticks.
+    ///
+    /// Four passes - two hours. It was a bare `4` gated on `weather.now`,
+    /// which is the world clock and advances by thirty a step, so `now % 4`
+    /// came due every *second* pass rather than every fourth: twice as often
+    /// as intended, and by arithmetic that had nothing to do with the number.
+    /// See ISSUES_FOUND #218.
+    const HOW_OFTEN_A_BEAST_LOOKS_FOR_ITS_OWN: u32 =
+        4 * crate::environment::seasons::TICKS_BETWEEN_PLANS;
 
     /// Keep the herds and the packs together.
     ///
     /// **Nothing did.** Animals are dealt out in herds of four to twelve and
-    /// packs of one to four, and from the first tick every one of them
+    /// packs of one to four, and from the first turn every one of them
     /// random-walks on its own account: two cells a move, four thousand three
-    /// hundred ticks to the year, so a group that started together is spread
+    /// hundred turns to the year, so a group that started together is spread
     /// over a hundred and thirty cells inside a year. A mate is looked for
     /// within ten. So a pack of fourteen wolves became fourteen lone wolves
     /// that never met again, and every predator tier aged out without
@@ -3968,11 +3985,11 @@ impl AnimalManager {
         }
     }
 
-    /// Bring every hunting ground's small life on by a tick.
+    /// Bring every hunting ground's small life on by a turn.
     ///
     /// A country of a hundred square kilometres is about a hundred and
     /// seventy hunting grounds, so this is a hundred and seventy float
-    /// updates and one terrain lookup each against a tick that already walks
+    /// updates and one terrain lookup each against a turn that already walks
     /// every animal and a share of a quarter of a million plants. It is the
     /// cheapest thing in the pass, and that is the argument for holding the
     /// lower tiers this way rather than as several thousand more records.
@@ -3984,7 +4001,7 @@ impl AnimalManager {
     /// Stock every hunting ground at what it will carry, for a country that
     /// has just been made.
     ///
-    /// The same pass as the tick, and `tick_a_ground` settles an unseen
+    /// The same pass as the turn, and `turn_a_ground` settles an unseen
     /// ground at full stock, so this is one call rather than a second way of
     /// working out what belongs where.
     pub fn stock_the_small_life(
@@ -3992,7 +4009,7 @@ impl AnimalManager {
         grid: &crate::world::Grid,
         season: crate::environment::Season,
     ) {
-        self.tick_the_small_life(grid, season);
+        self.turn_the_small_life(grid, season);
     }
 
     /// How far apart the survey samples a hunting ground.
@@ -4072,7 +4089,7 @@ impl AnimalManager {
         }
     }
 
-    fn tick_the_small_life(
+    fn turn_the_small_life(
         &mut self,
         grid: &crate::world::Grid,
         season: crate::environment::Season,
@@ -4121,7 +4138,7 @@ impl AnimalManager {
                     );
 
                 self.small_life
-                    .tick_a_ground((gx, gy), would_carry, would_carry_fish, 1.0);
+                    .turn_a_ground((gx, gy), would_carry, would_carry_fish, 1.0);
             }
         }
 
@@ -4145,7 +4162,7 @@ impl AnimalManager {
         // Every hungry predator hunts on its own account.
         //
         // This used to sit behind a single roll for the whole world - one
-        // chance in fifty per tick that any predation happened anywhere - so
+        // chance in fifty per turn that any predation happened anywhere - so
         // predators were barely a presence and herbivores grew until they hit
         // the population cap. A predator hunts when it is hungry and not
         // otherwise, which is what ties its numbers to the herds.
@@ -4155,7 +4172,7 @@ impl AnimalManager {
         /// How often a hunter that is not making a living gives up on the
         /// ground it is standing on and tries the next one.
         /// **Raised from a fiftieth.** At that rate a hunter that could not
-        /// keep itself where it stood took a step every fifty ticks - four
+        /// keep itself where it stood took a step every fifty turns - four
         /// days - and a bird of prey blown onto open plain, where the small
         /// life pays it half what it burns, was dead long before it reached a
         /// wood. The fiftieth was set to stop the first cut of this from
@@ -4212,7 +4229,7 @@ impl AnimalManager {
         // A predator used to look at every animal in the world to find one
         // within eight tiles of it, which is every predator against every
         // animal: on a hundred square kilometres carrying four thousand head
-        // that is millions of comparisons a tick, most of them string
+        // that is millions of comparisons a turn, most of them string
         // comparisons against a list of prey species, to find the handful of
         // animals actually in front of it. Blocks of `HOW_FAR_A_HUNT_REACHES`
         // mean a predator looks in the nine blocks around it and nowhere else.
@@ -4321,11 +4338,11 @@ impl AnimalManager {
             let hereabouts = Self::which_block(pred_pos);
             let this_ground = Self::whose_ground(pred_pos);
 
-            // What the ground itself yields, every tick.
+            // What the ground itself yields, every turn.
             //
             // Not behind the hunt roll. Turning over the ground for small game
             // is what a small predator does all day, not a thing it tries once
-            // in twenty; gated at one tick in twenty it fed a stoat about a
+            // in twenty; gated at one turn in twenty it fed a stoat about a
             // third of what a stoat burns, and thirty-six stoats on four
             // square kilometres were down to three inside three years with
             // twelve animals taken in the whole world over that time. See
@@ -4367,7 +4384,7 @@ impl AnimalManager {
                 // capable of hunting animals like how agents trap animals -
                 // the predator goes into passive hunting mode and catches a
                 // random assumed creature after a period of time". What was
-                // here was a stipend: a smooth trickle of energy every tick,
+                // here was a stipend: a smooth trickle of energy every turn,
                 // in proportion to the ground, which no animal could ever go
                 // without and no animal could ever have a good day at.
                 //
@@ -4391,7 +4408,7 @@ impl AnimalManager {
 
                 // What the ground pays on an average day, which is what
                 // decides whether it is worth standing on. Not what this
-                // tick's roll happened to produce: a hunter that walked off
+                // turn's roll happened to produce: a hunter that walked off
                 // good ground because it drew a blank one morning would
                 // spend its life walking, and turning the stipend into
                 // catches would have made every hunter in the country do
@@ -4541,7 +4558,7 @@ impl AnimalManager {
                     //
                     // A hunt asked "is there something I would try for within
                     // eighty metres of me, right now", and if there was not,
-                    // the tick was over. Nothing ever moved a hungry hunter
+                    // the turn was over. Nothing ever moved a hungry hunter
                     // towards prey it could see. Measured over a year on a
                     // hundred square kilometres: 176,125 hunts went looking,
                     // 4,379 of them had something in the nine blocks around
@@ -4593,7 +4610,7 @@ impl AnimalManager {
                 } else if odds.what_it_costs > 0.0 {
                     hurts.push((pred_idx, odds.what_it_costs));
                 }
-                break; // One rush per predator per tick, come off or not.
+                break; // One rush per predator per turn, come off or not.
             }
 
             // Nothing within a rush, but something worth walking to. A
@@ -4612,7 +4629,7 @@ impl AnimalManager {
             // *ground* paid less than the animal burnt - which is a question
             // about the country and not about the animal, and it is the
             // wrong one in both directions. A fed wolf on ground whose voles
-            // will not keep it walked anyway, every fourth tick, for ever: a
+            // will not keep it walked anyway, every fourth turn, for ever: a
             // wolf never lives on voles and is not supposed to, so the test
             // was permanently true for every large hunter on the map and
             // they spent their lives crossing it instead of hunting. And a
@@ -4622,7 +4639,7 @@ impl AnimalManager {
             // Hunger is the reason to move, and it moves when there is
             // nothing here: nothing it could rush, nothing worth walking
             // towards, and a ground that will not feed it while it waits.
-            // A few of them each tick rather than all of them - moved in
+            // A few of them each turn rather than all of them - moved in
             // step, every hunter on one ground picks the same neighbour and
             // they travel as a clump for ever, which lands the lot of them
             // in a corner and is worse than not moving at all.
@@ -4709,7 +4726,7 @@ impl AnimalManager {
         // succeeded - and then `attack_damage` was applied to the quarry as
         // though the answer had been "they had a scuffle". A wolf's blow is
         // some fifteen of a sheep's eighty, and the sheep heals a tenth a
-        // tick, so a wolf had to catch *the same sheep* six times to eat
+        // turn, so a wolf had to catch *the same sheep* six times to eat
         // once. Measured over two years on a hundred square kilometres, with
         // fourteen wolves, ten lions, four bears and better than a thousand
         // sheep on the map: **not one animal was taken by a predator, ever.**
@@ -4726,7 +4743,7 @@ impl AnimalManager {
             let Some(prey) = self.animals.get_mut(prey_idx) else {
                 continue;
             };
-            // Something else may have had it already this tick.
+            // Something else may have had it already this turn.
             if !prey.is_alive() {
                 continue;
             }
@@ -4765,7 +4782,7 @@ impl AnimalManager {
                 .and_then(|animal| {
                     registry
                         .get(&animal.species_id)
-                        .map(|species| animal.how_far_it_gets_in_a_tick(species))
+                        .map(|species| animal.how_far_it_gets_in_a_turn(species))
                 })
                 .unwrap_or(2)
         };
@@ -4790,14 +4807,14 @@ impl AnimalManager {
         // And who went looking for better ground. A step at a time, so that
         // crossing a hunting ground takes a hunter the best part of a season
         // and a country does not slosh from one corner to the other.
-        const HOW_FAR_A_HUNTER_RANGES_IN_A_TICK: i32 = 1;
+        const HOW_FAR_A_HUNTER_RANGES_IN_A_TURN: i32 = 1;
         for (pred_idx, (dx, dy)) in moved_on {
             if already_moving.contains(&pred_idx) {
                 continue;
             }
             if let Some(hunter) = self.animals.get_mut(pred_idx) {
-                hunter.position.0 += dx * HOW_FAR_A_HUNTER_RANGES_IN_A_TICK;
-                hunter.position.1 += dy * HOW_FAR_A_HUNTER_RANGES_IN_A_TICK;
+                hunter.position.0 += dx * HOW_FAR_A_HUNTER_RANGES_IN_A_TURN;
+                hunter.position.1 += dy * HOW_FAR_A_HUNTER_RANGES_IN_A_TURN;
                 hunter.position.0 = hunter.position.0.clamp(0, edge.0);
                 hunter.position.1 = hunter.position.1.clamp(0, edge.1);
             }
@@ -4820,7 +4837,7 @@ impl AnimalManager {
     /// invent lions for a valley that never had any.
     ///
     /// Deliberately rare. One small group per depleted species every eight
-    /// thousand ticks or so, which is a lifetime for most of them. It is meant
+    /// thousand turns or so, which is a lifetime for most of them. It is meant
     /// to keep a world from emptying out for good, not to be a larder that
     /// refills itself faster than it can be emptied - a settlement that clears
     /// the herds waits a long time for more.
@@ -4842,10 +4859,10 @@ impl AnimalManager {
 
         // What is here now, and the most there has ever been.
         //
-        // Counted every pass rather than every two thousand ticks. This used
+        // Counted every pass rather than every two thousand turns. This used
         // to sit below the interval gate, so a species had to be alive at a
         // migration moment to be remembered at all - anything that came into
-        // the world and died inside its first two thousand ticks was recorded
+        // the world and died inside its first two thousand turns was recorded
         // as never having lived here, and could never come back. That is what
         // happened to the owl, which was in one world of eight at the start
         // and in none of them ever again. See ISSUES_FOUND.md #127.
@@ -4861,11 +4878,11 @@ impl AnimalManager {
             *peak = (*peak).max(*count);
         }
 
-        self.ticks_since_migration += 1;
-        if self.ticks_since_migration < MIGRATION_INTERVAL {
+        self.turns_since_migration += 1;
+        if self.turns_since_migration < MIGRATION_INTERVAL {
             return;
         }
-        self.ticks_since_migration = 0;
+        self.turns_since_migration = 0;
 
         let bounds = match self.world_bounds {
             Some(bounds) => bounds,
@@ -4954,12 +4971,12 @@ impl AnimalManager {
         &mut self,
         grid: &mut crate::world::Grid,
         plants: &mut crate::environment::PlantManager,
-        grazing_ticks: f32,
+        grazing_passes: f32,
         weather: GrazingWeather,
     ) {
         use crate::world::Position;
 
-        if grazing_ticks <= 0.0 {
+        if grazing_passes <= 0.0 {
             return;
         }
 
@@ -4974,7 +4991,7 @@ impl AnimalManager {
         // flat rather than as a map keyed by position: asking each animal to
         // search the plant list would be every animal against every plant, and
         // a tree map of eighty thousand entries a pass is not much better -
-        // see the canopy in `PlantManager::tick_in_world`, which is the same
+        // see the canopy in `PlantManager::turn_in_world`, which is the same
         // shape for the same reason. `u32::MAX` means nothing is growing here.
         let (width, height) = (grid.width, grid.height);
         let mut where_it_grows = vec![u32::MAX; width * height];
@@ -5007,7 +5024,7 @@ impl AnimalManager {
                 continue;
             }
 
-            let mut wanted = Self::what_it_reaches_for(species) * grazing_ticks;
+            let mut wanted = Self::what_it_reaches_for(species) * grazing_passes;
             let mut taken = 0.0;
 
             // Underfoot first, then a step in any direction. An animal that is
@@ -5078,7 +5095,7 @@ impl AnimalManager {
                     );
 
                 let there_to_take = if grown_tree {
-                    standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_ticks - already)
+                    standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_passes - already)
                 } else {
                     standing
                 };
@@ -5112,8 +5129,8 @@ impl AnimalManager {
                 // shuffled a cell or two at random once its `state_timer` ran
                 // out, which will not carry a herd off ground it has eaten
                 // bare. Twelve sheep on a fifty by fifty map cropped their own
-                // few tiles to nothing by tick two thousand eight hundred and
-                // then took not one further mouthful in three thousand ticks,
+                // few tiles to nothing by turn two thousand eight hundred and
+                // then took not one further mouthful in three thousand turns,
                 // with six hundred plants and thirty-eight thousand of
                 // standing growth on the map around them.
                 if let Some(towards) =
@@ -5174,7 +5191,7 @@ impl AnimalManager {
         (-1, -1),
     ];
 
-    /// How much standing growth an animal reaches for in a tick.
+    /// How much standing growth an animal reaches for in a turn.
     ///
     /// Worked out from what it costs to be that animal - its own
     /// `hunger_rate` - rather than from a table of appetites by size. Size is
@@ -5315,12 +5332,12 @@ impl AnimalManager {
 
     /// How far an animal moves in a grazing pass, in cells.
     ///
-    /// Ten ticks is most of a day and a cell is ten metres, so this is a few
+    /// Ten turns is most of a day and a cell is ten metres, so this is a few
     /// hundred metres of walking - which is what a grazing animal does in a
     /// day when the ground it is on has been eaten off.
     const HOW_FAR_AN_ANIMAL_WALKS: i32 = 3;
 
-    /// How much a grown tree gives a browsing animal, per tick.
+    /// How much a grown tree gives a browsing animal, per turn.
     ///
     /// A flat amount rather than a share of the tree: what is within reach of
     /// something on four legs is the same handful of shoots whether the tree
@@ -5457,9 +5474,9 @@ impl AnimalManager {
     /// has to be worth something to the pack that made it.
     pub const HOW_MUCH_OF_ITSELF_IT_MENDS_A_DAY: f32 = 0.01;
 
-    /// And a tick of it, off the calendar rather than written out again.
-    pub const HOW_MUCH_OF_ITSELF_IT_MENDS_A_TICK: f32 = Self::HOW_MUCH_OF_ITSELF_IT_MENDS_A_DAY
-        / crate::environment::seasons::TICKS_PER_DAY as f32;
+    /// And a turn of it, off the calendar rather than written out again.
+    pub const HOW_MUCH_OF_ITSELF_IT_MENDS_A_TURN: f32 = Self::HOW_MUCH_OF_ITSELF_IT_MENDS_A_DAY
+        / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
 
     /// What a winter spent asleep costs, against one spent out in it.
     ///
@@ -5475,7 +5492,7 @@ impl AnimalManager {
     /// wrong.** Giving every burrower the sleeping rate - three tenths, for a
     /// quarter of the year, while it goes on feeding normally - took a
     /// hundred and twenty by a hundred and twenty from 682 head at the end of
-    /// its first year to **2,533**, and the tick from 1.9 ms to 10.9 the
+    /// its first year to **2,533**, and the turn from 1.9 ms to 10.9 the
     /// following year as the country tried to carry them. That is not a
     /// burrow; that is a rabbit the winter cannot reach.
     ///
@@ -5549,8 +5566,14 @@ impl AnimalManager {
     /// a hunter could hold rather than what a carcase holds, so the country's
     /// small life stood at six per cent of what it would carry.
     pub fn what_a_grazer_is_worth_to(hunter: &AnimalSpecies) -> f32 {
+        // Days of keep times what it burns in a day, and what it burns in a
+        // day is its rate times the *passes* in a day - because
+        // `Animal::turn_hunger_burning` is called once a pass with a share of
+        // one, which is what makes `hunger_rate` a per-pass number. It read
+        // `TICKS_PER_DAY` here, so a carcase was worth thirty times the keep
+        // it actually holds. See ISSUES_FOUND #218.
         Self::days_a_grazer_keeps(hunter.mass_kg)
-            * crate::environment::seasons::TICKS_PER_DAY as f32
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32
             * hunter.hunger_rate
     }
 
@@ -5563,7 +5586,7 @@ impl AnimalManager {
     /// rate the ground pays.
     ///
     /// Whole animals. A rate under one is the chance of taking anything at
-    /// all this tick; a rate over one is that many for certain and a roll on
+    /// all this turn; a rate over one is that many for certain and a roll on
     /// what is left over. The expectation is exactly the rate, so turning
     /// the old stipend into catches did not quietly change what a piece of
     /// country feeds - it changed only whether a hunter's week has good days
@@ -5732,7 +5755,7 @@ impl AnimalManager {
     /// The grass on four square kilometres carries sixteen thousand of them,
     /// which is about four thousand to the square kilometre and less than a
     /// real vole year, and a hundred square kilometres would want four hundred
-    /// thousand records against a tick budget that is the constraint this
+    /// thousand records against a turn budget that is the constraint this
     /// whole piece of work is written under.
     ///
     /// So the ground has a small-game yield instead, and three things fall out
@@ -5759,7 +5782,7 @@ impl AnimalManager {
     }
 
     /// And the same in head, a band at a time: what a day of working this
-    /// ground turns up, divided by a tick.
+    /// ground turns up, divided by a turn.
     ///
     /// The head is the thing the ground actually loses, so this is what the
     /// forage reads and `what_the_small_life_gives` is a wrapper over it
@@ -5823,8 +5846,8 @@ impl AnimalManager {
         // what a territory is in a model that cannot draw a line on a map:
         // two hunters on one ground each get half of it, and the second one
         // starves off it.
-        let a_tick = Self::GRAZERS_A_DAY_ON_THE_BEST_GROUND * how_rich / sharing_it.max(1.0)
-            / crate::environment::seasons::TICKS_PER_DAY as f32;
+        let a_turn = Self::GRAZERS_A_DAY_ON_THE_BEST_GROUND * how_rich / sharing_it.max(1.0)
+            / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
 
         // **Which larder it is taking out of, not only how much.** A heron
         // standing in a lake is not turning over voles, and until the fish
@@ -5862,15 +5885,15 @@ impl AnimalManager {
             return (
                 0.0,
                 0.0,
-                a_tick
+                a_turn
                     * (Self::how_much_of_the_fish_it_can_take(hunter.mass_kg)
                         + FRY_TURNED_UP_FOR_A_GROWN_FISH / HOW_MANY_FRY_MAKE_A_FISH),
             );
         }
 
         (
-            a_tick * Self::how_much_of_the_grazers_it_can_take(hunter.mass_kg),
-            a_tick * SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER,
+            a_turn * Self::how_much_of_the_grazers_it_can_take(hunter.mass_kg),
+            a_turn * SmallLife::HOW_MANY_RODENTS_MAKE_A_GRAZER,
             0.0,
         )
     }
@@ -5907,7 +5930,7 @@ impl AnimalManager {
     pub fn what_a_fish_is_worth_to(hunter: &AnimalSpecies) -> f32 {
         Self::days_a_grazer_keeps(hunter.mass_kg)
             * (SmallLife::WHAT_A_FISH_WEIGHS / SmallLife::WHAT_A_GRAZER_WEIGHS)
-            * crate::environment::seasons::TICKS_PER_DAY as f32
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32
             * hunter.hunger_rate
     }
 
@@ -5919,7 +5942,7 @@ impl AnimalManager {
     /// log for grubs takes a third of a day's keep from ground that keeps a
     /// kestrel three times over. This is that, asked of a species rather than
     /// of an animal, so it costs nothing to ask it of every hunter on the map
-    /// every tick.
+    /// every turn.
     pub fn how_much_it_leans_on_the_small_life(hunter: &AnimalSpecies) -> f32 {
         let best_ground = WhatTheGroundOffers {
             cover: 1.0,
@@ -5928,9 +5951,17 @@ impl AnimalManager {
             somewhere_to_climb: false,
         };
 
+        // Both sides in passes a day, because both are per-pass numbers: what
+        // the ground gives is divided by `PLANNING_PERIODS_PER_DAY` where it
+        // is worked out, and `hunger_rate` is charged once a pass. They were
+        // both written `TICKS_PER_DAY`, which cancels in the ratio below and
+        // so was harmless - but a wrong spelling that only survives because
+        // another wrong spelling is next to it is one edit away from being a
+        // defect. See ISSUES_FOUND #218.
         let a_day = Self::what_the_small_life_gives(hunter, best_ground, 1.0)
-            * crate::environment::seasons::TICKS_PER_DAY as f32;
-        let it_burns = hunter.hunger_rate * crate::environment::seasons::TICKS_PER_DAY as f32;
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
+        let it_burns =
+            hunter.hunger_rate * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
         if it_burns <= 0.0 {
             return 0.0;
         }
@@ -6057,7 +6088,7 @@ impl AnimalManager {
         // herds of four to twelve and stay in blocks, so eight of their own
         // kind beside them is the ordinary case, not the exception; a flock
         // of eight sheep took a lone wolf's odds from 0.3456 to **0.0028**,
-        // one rush in three hundred and fifty, tried one tick in twenty when
+        // one rush in three hundred and fifty, tried one turn in twenty when
         // hungry. Measured over two years on a hundred square kilometres with
         // fourteen wolves and a thousand sheep: not one animal taken.
         //
@@ -6143,7 +6174,7 @@ impl AnimalManager {
         // Asking every animal what is near it is a nine-block gather per
         // animal, and a country has seven times more things being eaten than
         // things eating: at a hundred square kilometres that cost 28 per cent
-        // of the whole tick. Walking out from the hunters instead touches the
+        // of the whole turn. Walking out from the hunters instead touches the
         // same pairs and visits a ninth as many animals to find them.
         let mut coming_at: BTreeMap<usize, Vec<f32>> = BTreeMap::new();
         let mut worst_at: BTreeMap<usize, (f32, (i32, i32), Uuid)> = BTreeMap::new();
@@ -6320,12 +6351,12 @@ impl AnimalManager {
             .unwrap_or(false);
 
         // And how far it gets when it runs, which is its own pace and not
-        // everybody's - see [`Animal::how_far_it_gets_in_a_tick`].
+        // everybody's - see [`Animal::how_far_it_gets_in_a_turn`].
         let it_covers = self
             .registry
             .as_ref()
             .and_then(|registry| registry.get(&self.animals[animal_idx].species_id))
-            .map(|species| self.animals[animal_idx].how_far_it_gets_in_a_tick(species))
+            .map(|species| self.animals[animal_idx].how_far_it_gets_in_a_turn(species))
             .unwrap_or(2);
 
         let animal = &mut self.animals[animal_idx];
@@ -6338,7 +6369,7 @@ impl AnimalManager {
         // on what can. See `what_each_animal_is_facing`.
         if animal.what_is_on_me >= Self::WORTH_AN_ANIMAL_LEAVING_OFF {
             // Already doing the right thing about it, and partway through
-            // doing it. A beast in flight does not stop every tick to
+            // doing it. A beast in flight does not stop every turn to
             // reconsider whether it is in flight.
             let already = matches!(
                 animal.state,
@@ -6806,7 +6837,7 @@ impl AnimalManager {
         // Only predators that eat something living here. Drawing the two lists
         // independently put foxes, which eat rabbits and squirrels, into
         // worlds of sheep and cattle: they never found a meal in eight
-        // thousand ticks, their hunger climbed in a straight line from birth
+        // thousand turns, their hunger climbed in a straight line from birth
         // to death, and the herds they should have been holding down ran to
         // the population cap unopposed.
         // And the small life is prey. A hawk lives on rabbits, and the
@@ -7152,7 +7183,7 @@ mod tests {
         let mut animal = Animal::new("rabbit".to_string(), (0, 0), &species);
 
         let initial_age = animal.age;
-        animal.tick_age();
+        animal.turn_age();
         assert_eq!(animal.age, initial_age + 1);
     }
 
@@ -7190,7 +7221,7 @@ mod tests {
         let mut animal = Animal::new("rabbit".to_string(), (0, 0), &species);
 
         let initial_hunger = animal.hunger;
-        animal.tick_hunger();
+        animal.turn_hunger();
         assert!(animal.hunger > initial_hunger);
 
         // Feed the animal
@@ -7205,7 +7236,7 @@ mod tests {
         let mut animal = Animal::new("rabbit".to_string(), (0, 0), &species);
 
         animal.hunger = animal.max_hunger + 10.0;
-        animal.tick_hunger();
+        animal.turn_hunger();
 
         assert!(animal.is_starving);
         assert!(animal.current_health < species.health);
@@ -7223,7 +7254,7 @@ mod tests {
 
         // Advance pregnancy
         for _ in 0..100 {
-            animal.tick_age(); // This decrements pregnancy timer
+            animal.turn_age(); // This decrements pregnancy timer
         }
 
         assert!(animal.ready_to_give_birth());
@@ -7265,7 +7296,7 @@ mod tests {
     }
 
     #[test]
-    fn test_animal_manager_tick_aging() {
+    fn test_animal_manager_turn_aging() {
         let mut grid = crate::world::Grid::new(8, 8);
         grid.generate_terrain();
         grid.settle_soil();
@@ -7275,7 +7306,7 @@ mod tests {
         manager.spawn_animal("rabbit".to_string(), (0, 0));
 
         let initial_age = manager.animals[0].age;
-        manager.tick_in_world(
+        manager.turn_in_world(
             &mut grid,
             &mut plants,
             10.0,

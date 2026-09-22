@@ -554,9 +554,9 @@ pub struct AnimalResourceConfig {
     pub hide_drop_chance: f32,
     /// Chance that hunting produces meat
     pub meat_drop_chance: f32,
-    /// Base wool production per tick for sheep
+    /// Base wool production per turn for sheep
     pub wool_production_rate: f32,
-    /// Base milk production per tick for cattle
+    /// Base milk production per turn for cattle
     pub milk_production_rate: f32,
 }
 
@@ -617,7 +617,7 @@ impl AnimalResourceMapper {
     pub fn husbandry_products(species: &str) -> Vec<(ResourceType, f32)> {
         match species.to_lowercase().as_str() {
             "sheep" => vec![
-                (ResourceType::Wool, 0.1), // Per tick production rate
+                (ResourceType::Wool, 0.1), // Per turn production rate
             ],
             "cow" | "cattle" => vec![
                 (ResourceType::Milk, 0.15),

@@ -193,7 +193,7 @@ impl InventoryItem {
         // every second flake an agent ever made was merged into the first
         // one and its workmanship went nowhere. The tailoring branch worked
         // around it by putting a coat on the moment it was finished rather
-        // than folding it away - over eight thousand ticks one settlement
+        // than folding it away - over eight thousand turns one settlement
         // made two hundred and eighty garments and wore a hundred and sixty
         // - and the knapping branch worked around it by throwing a
         // worn-through tool out before adding a fresh one, because stacking
@@ -256,10 +256,36 @@ impl InventoryItem {
         self.food_data.as_ref().map(|f| f.is_spoiled()).unwrap_or(false)
     }
 
-    /// Update food freshness based on current tick
-    pub fn update_food_freshness(&mut self, current_tick: u32) {
+    /// How fast what is in this stack goes off, kept where it is being kept.
+    ///
+    /// Three things multiplied: what it is called, what has been done to it,
+    /// and where it is. The first two are the stack's own tags - see
+    /// [`crate::world::nutrition::FoodData::how_fast_this_goes_off`] - and the
+    /// third is handed in, because a stack does not know whether it is in a
+    /// pit, in a pot or lying in the rain.
+    ///
+    /// `where_it_is_kept` is a modifier on the same scale as everything else:
+    /// [`crate::environment::tags::WHAT_A_BARE_PACK_KEEPS`] changes nothing,
+    /// a lined pit is a quarter, and a thing lying out in weather is more
+    /// than one.
+    ///
+    /// One for anything with no clock on it, so a caller can ask of any stack.
+    pub fn how_fast_this_goes_off(&self, where_it_is_kept: f32) -> f32 {
+        match self.food_data {
+            Some(ref food) => food.how_fast_this_goes_off(&self.item_id) * where_it_is_kept,
+            None => where_it_is_kept,
+        }
+    }
+
+    /// Let the world get at this stack until `now`, kept where it is kept.
+    ///
+    /// Once per pass, and no more: see
+    /// [`crate::world::nutrition::FoodData::goes_off`].
+    pub fn goes_off(&mut self, now: u32, where_it_is_kept: f32) {
+        let how_fast = self.how_fast_this_goes_off(where_it_is_kept);
+
         if let Some(ref mut food) = self.food_data {
-            food.update_freshness(current_tick);
+            food.goes_off(now, how_fast);
         }
     }
 
@@ -773,7 +799,17 @@ pub enum LifeStage {
 
 impl LifeStage {
     /// The year of life each stage begins in.
-    pub const KEPT_IN_ARMS_UNTIL: u32 = 6;
+    ///
+    /// Not *in arms*, which is a different and shorter thing. The lifecycle
+    /// specification gives two bands under six and the same rule for both -
+    /// "must remain with a parent agent at all times" - and separates them
+    /// only by what it costs the parent: under two occupies one of the
+    /// parent's hands, two to five does not. So this is the age at which a
+    /// child stops having to be *with* somebody, and
+    /// `Simulation::CARRIED_IN_ARMS_UNTIL` is the age at which it stops being
+    /// *carried*. It was called `KEPT_IN_ARMS_UNTIL` and held 6, which is
+    /// neither of the two numbers the specification gives for being carried.
+    pub const KEPT_WITH_A_PARENT_UNTIL: u32 = 6;
     pub const KEPT_IN_SIGHT_UNTIL: u32 = 11;
     pub const KEPT_WITHIN_AN_HOUR_UNTIL: u32 = 16;
     pub const STRENGTH_STARTS_GOING_AT: u32 = 50;
@@ -785,7 +821,7 @@ impl LifeStage {
 
     /// The same, from years already counted.
     pub fn from_years(years: u32) -> Self {
-        if years < Self::KEPT_IN_ARMS_UNTIL {
+        if years < Self::KEPT_WITH_A_PARENT_UNTIL {
             LifeStage::Infant
         } else if years < Self::KEPT_IN_SIGHT_UNTIL {
             LifeStage::Child
@@ -887,7 +923,7 @@ impl LifeStage {
 ///
 /// There was no illness at all in this model before this. The only health
 /// consequence anywhere in it was a flat ten damage for eating something past
-/// `is_harmful`, taken in one tick and over with, so a settlement could live
+/// `is_harmful`, taken in one turn and over with, so a settlement could live
 /// on raw flesh and sleep in its own midden and never know the difference.
 ///
 /// An ailment is deliberately a thing that *lasts*. What makes sickness matter
@@ -927,9 +963,13 @@ impl Ailment {
 
     /// How long somebody is laid up for, at the mildest and the worst.
     ///
-    /// Two days to a week and a half, on a calendar of twelve ticks to the
-    /// day. Long enough to cost a settlement work, short enough that it is
-    /// not simply a slower way of dying.
+    /// Two days to a week and a half. Long enough to cost a settlement work,
+    /// short enough that it is not simply a slower way of dying.
+    ///
+    /// Said in days and converted, so it stays two days and ten. The clause
+    /// that used to end that first sentence - "on a calendar of twelve turns
+    /// to the day" - was the calendar before last, and a reader who believed
+    /// it would have read these as four hours and twenty.
     pub const THE_SHORTEST_IT_LASTS: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
     pub const THE_LONGEST_IT_LASTS: u32 = 10 * crate::environment::seasons::TICKS_PER_DAY;
 
@@ -980,9 +1020,9 @@ pub struct AgentState {
     pub life_stage: LifeStage,
     pub max_age: u32,
     pub is_alive: bool,
-    pub last_ate_tick: u32, // Track when agent last ate
-    pub ticks_without_food: u32, // Count starvation duration
-    pub last_drank_tick: u32, // Track when agent last drank water
+    pub last_ate_turn: u32, // Track when agent last ate
+    pub turns_without_food: u32, // Count starvation duration
+    pub last_drank_turn: u32, // Track when agent last drank water
 
     /// The body: water, stomach, gut and reserve, on a clock of minutes.
     ///
@@ -1009,7 +1049,7 @@ pub struct AgentState {
     /// the body reads it.
     #[serde(default)]
     pub effort_this_turn: f32,
-    pub ticks_without_water: u32, // Count dehydration duration
+    pub turns_without_water: u32, // Count dehydration duration
     /// What this body has to pass, waiting to be left on the ground.
     ///
     /// Everything eaten used to leave the world for good, so a settlement was
@@ -1071,7 +1111,7 @@ impl AgentState {
     pub fn new() -> Self {
         use rand::Rng;
         let mut rng = crate::core::dice::roll();
-        // Max age varies between 9000-11000 ticks
+        // Max age varies between 9000-11000 turns
         // Seventy years, and that is the end of it. There is no spread: the
         // specification says "Age 70: Death from old age", and everything
         // before it - the strength curve, the appetite curve - is written
@@ -1087,14 +1127,14 @@ impl AgentState {
             life_stage: LifeStage::Infant,
             max_age,
             is_alive: true,
-            last_ate_tick: 0,
-            ticks_without_food: 0,
-            last_drank_tick: 0,
+            last_ate_turn: 0,
+            turns_without_food: 0,
+            last_drank_turn: 0,
             physiology: physiology::Physiology::new(),
             winters_seen: provision::WintersSeen::default(),
             what_the_larder_says: None,
             effort_this_turn: 0.0,
-            ticks_without_water: 0,
+            turns_without_water: 0,
             waste_carried: 0.0,
             ailing: None,
             what_last_took_health: None,
@@ -1104,13 +1144,13 @@ impl AgentState {
         }
     }
 
-    /// Age the agent by one tick
-    pub fn age_tick(&mut self, current_tick: u32) {
-        self.age_tick_with_modifier(current_tick, 1.0);
+    /// Age the agent by one turn
+    pub fn age_turn(&mut self, current_turn: u32) {
+        self.age_turn_with_modifier(current_turn, 1.0);
     }
 
-    /// Age the agent by one tick with an energy multiplier (e.g., for pregnancy)
-    pub fn age_tick_with_modifier(&mut self, current_tick: u32, energy_multiplier: f32) {
+    /// Age the agent by one turn with an energy multiplier (e.g., for pregnancy)
+    pub fn age_turn_with_modifier(&mut self, current_turn: u32, energy_multiplier: f32) {
         if !self.is_alive {
             return;
         }
@@ -1120,10 +1160,10 @@ impl AgentState {
 
         // === SURVIVAL MECHANICS ===
         // Track starvation
-        self.ticks_without_food = current_tick.saturating_sub(self.last_ate_tick);
+        self.turns_without_food = current_turn.saturating_sub(self.last_ate_turn);
 
         // Track dehydration (faster than starvation - 3 days vs 7 days)
-        self.ticks_without_water = current_tick.saturating_sub(self.last_drank_tick);
+        self.turns_without_water = current_turn.saturating_sub(self.last_drank_turn);
 
         // What this body has stored to go on. A grown adult carries three weeks
         // of it; a small child carries days. A famine therefore takes the young
@@ -1158,9 +1198,25 @@ impl AgentState {
             self.lose_health(0.1 / reserve, Self::HUNGER);
         }
 
-        // Energy depletion (normal metabolism), made worse by working thirsty
-        let base_energy_loss = 0.05 * energy_multiplier;
-        let energy_loss = base_energy_loss / self.physiology.capability().max(0.25);
+        // Energy depletion (normal metabolism), made worse by working thirsty.
+        //
+        // Nobody under six pays it. This pool is what a turn of being awake
+        // and doing things takes out of a body, and it is filled by exactly
+        // one thing in the model - `AgentState::eat`, which hangs off
+        // `Action::Eat`. A child under six takes no turn, so it never reaches
+        // that, and everything it gets comes through
+        // `feed_the_small_children` straight into its physiology. Left paying
+        // this, such a child drained to nothing whatever its reserve said and
+        // died of exhaustion: ten of eighteen under-six deaths in a measured
+        // year, once its food and its water had both been seen to. The cost
+        // is not waived so much as moved - it is the carrier who is spending
+        // the turn, and who is short a hand for it.
+        let energy_loss = if self.years_old() < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL {
+            0.0
+        } else {
+            Self::WHAT_A_TURN_OF_LIVING_COSTS * energy_multiplier
+                / self.physiology.capability().max(0.25)
+        };
         self.energy = (self.energy - energy_loss).max(0.0);
 
         // When energy is depleted, health starts decreasing too
@@ -1217,6 +1273,17 @@ impl AgentState {
     ///
     /// They are constants now because a constant cannot drift from itself.
     pub const HUNGER: &'static str = "hunger";
+
+    /// What a turn takes out of a body's energy just by being lived.
+    ///
+    /// Named because a second place has to know it: a child under six takes no
+    /// turn of its own and so never reaches `AgentState::eat`, which is the
+    /// only thing in the model that puts energy back. It is fed straight into
+    /// its physiology by `feed_the_small_children`, which filled its reserve
+    /// and left this pool draining. Ten of eighteen under-six deaths in one
+    /// measured year came out as exhaustion once the food and the water had
+    /// been seen to - the third clock, found the same way as the other two.
+    pub const WHAT_A_TURN_OF_LIVING_COSTS: f32 = 0.05;
     pub const THIRST: &'static str = "thirst";
     pub const A_BLOW: &'static str = "a blow";
     pub const A_FALL: &'static str = "a fall";
@@ -1251,12 +1318,13 @@ impl AgentState {
     /// leaves a scratch.
     pub const WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND: f32 = 25.0;
 
-    /// How much of an open wound closes in a tick.
+    /// How much of an open wound closes in a turn.
     ///
-    /// A fortnight to close the worst of them, on twelve ticks to the day,
-    /// which is about right for something nobody stitched.
+    /// A fortnight to close the worst of them, which is about right for
+    /// something nobody stitched. Counted in planning periods, because that
+    /// is what a turn is and this is applied once a turn.
     pub const HOW_FAST_A_WOUND_CLOSES: f32 =
-        1.0 / (14.0 * crate::environment::seasons::TICKS_PER_DAY as f32);
+        1.0 / (14.0 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32);
 
     pub fn lose_health(&mut self, amount: f32, to: &str) {
         if amount <= 0.0 {
@@ -1353,9 +1421,9 @@ impl AgentState {
     }
 
     /// Eat food and restore energy
-    pub fn eat(&mut self, current_tick: u32, energy_restored: f32) {
+    pub fn eat(&mut self, current_turn: u32, energy_restored: f32) {
         self.energy = (self.energy + energy_restored).min(100.0);
-        self.took_a_meal(current_tick, crate::world::Soil::WASTE_PER_MEAL);
+        self.took_a_meal(current_turn, crate::world::Soil::WASTE_PER_MEAL);
     }
 
     /// Record a meal: the clocks reset, and the body has something to pass.
@@ -1365,9 +1433,9 @@ impl AgentState {
     /// turnips is at best a slow loss. A fish was grown at sea, so a meal of
     /// fish is the ground gaining something it never had - which is the whole
     /// reason a people beside a river can farm the same fields for ever.
-    pub fn took_a_meal(&mut self, current_tick: u32, waste: f32) {
-        self.last_ate_tick = current_tick;
-        self.ticks_without_food = 0;
+    pub fn took_a_meal(&mut self, current_turn: u32, waste: f32) {
+        self.last_ate_turn = current_turn;
+        self.turns_without_food = 0;
         self.waste_carried += waste;
     }
 
@@ -1377,9 +1445,9 @@ impl AgentState {
     }
 
     /// Drink water and reset dehydration
-    pub fn drink(&mut self, current_tick: u32) {
-        self.last_drank_tick = current_tick;
-        self.ticks_without_water = 0;
+    pub fn drink(&mut self, current_turn: u32) {
+        self.last_drank_turn = current_turn;
+        self.turns_without_water = 0;
     }
 
     /// How much of the life is left, if nothing answers this need.
@@ -1390,16 +1458,16 @@ impl AgentState {
     /// a child with a quarter of an adult's reserves orders its needs
     /// differently from its mother without anybody having decided that.
     ///
-    /// Reckoned in ticks, from what is true of this body now. `None` means
+    /// Reckoned in turns, from what is true of this body now. `None` means
     /// this need does not kill: it may make a life shorter or poorer, but not
     /// end it, and it takes its place by tier instead.
-    pub fn ticks_before_this_kills_me(&self, drive_type: DriveType) -> Option<f32> {
+    pub fn turns_before_this_kills_me(&self, drive_type: DriveType) -> Option<f32> {
         // What is left to lose, at the rate it is being lost
-        fn once_health_goes(health: f32, per_tick: f32) -> f32 {
-            if per_tick <= 0.0 {
+        fn once_health_goes(health: f32, per_turn: f32) -> f32 {
+            if per_turn <= 0.0 {
                 f32::INFINITY
             } else {
-                health / per_tick
+                health / per_turn
             }
         }
 
@@ -1424,7 +1492,7 @@ impl AgentState {
             // Exhaustion is only a death clock once the energy is nearly
             // gone. Reckoning it from a full tank the way thirst is reckoned
             // from a full skin says every agent alive is a couple of thousand
-            // ticks from dying of tiredness, which had Rest winning four turns
+            // turns from dying of tiredness, which had Rest winning four turns
             // in five and a settlement doing nothing but sleep and forage.
             // Energy is topped up by every meal; it is not a clock that only
             // runs down.
@@ -1501,20 +1569,71 @@ impl AgentState {
 
     /// Put this body where it would be after this long without food.
     ///
-    /// Minutes, which is the scale the old `ticks_without_food` figures were
+    /// Minutes, which is the scale the old `turns_without_food` figures were
     /// always written on. Sizes the body to its life stage first, so a child
     /// set to two days empty is two days into a *child's* reserve.
     pub fn gone_without_food_for(&mut self, minutes: u32) {
         self.physiology.now_a_body_of(self.what_i_eat_for_my_age());
         self.physiology.gone_without_food_for(minutes);
-        self.ticks_without_food = minutes;
+        self.turns_without_food = minutes;
     }
 
     /// Likewise, without water.
     pub fn gone_without_water_for(&mut self, minutes: u32) {
         self.physiology.now_a_body_of(self.what_i_eat_for_my_age());
         self.physiology.gone_without_water_for(minutes);
-        self.ticks_without_water = minutes;
+        self.turns_without_water = minutes;
+    }
+
+    /// How long this undertaking holds somebody, in ticks.
+    ///
+    /// The verb matrix prices every verb - `Costs { time, effort }` - and
+    /// `time` is counted in planning periods, because that is the grain the
+    /// costs were written at: `A_TURN_OF_WORK` is one turn of work. A period
+    /// is `TICKS_BETWEEN_PLANS` ticks, so the conversion is the
+    /// multiplication below and nothing more.
+    ///
+    /// The **longest** of the verbs an action can perform, not their sum.
+    ///
+    /// `done_by` is a map from many verbs to one action name, and the verbs
+    /// under a name are alternatives rather than steps: `HARVEST` and `DRINK`
+    /// are both `done_by: Some("gather")`, and a hunt asks both `HUNT` and
+    /// `THROW`. `verbs::what_this_action_costs` adds them up, which is the
+    /// right question for "what does this whole family come to" and the wrong
+    /// one for "how long does one of these hold somebody" - it made a gather
+    /// take two periods by charging it for a drink it never took, and a hunt
+    /// three. Reusing it here priced every gather, hunt and craft in the
+    /// model off a reading of `done_by` that `done_by` does not carry.
+    ///
+    /// The longest instead. Every verb is `A_MOMENT` today, so this is one
+    /// period for everything - which is the honest state of the verb table:
+    /// the gate machinery is in place and nothing has been priced through it
+    /// yet. When the hunt chain gets its 145 ticks, this is where they arrive.
+    ///
+    /// Sleeping is the exception and says its own length. It is the case the
+    /// specification calls out - "these could be skipped when an agent is
+    /// resting" - and the only action in the model that already carried a
+    /// duration.
+    ///
+    /// Never less than one period. An action that finished inside a period
+    /// would let its agent think twice at the same gate, which is the thing
+    /// the gate exists to stop.
+    pub fn how_long_this_takes(action: &Action) -> u32 {
+        use crate::environment::seasons::TICKS_BETWEEN_PLANS;
+
+        if let Action::Sleep { duration } = action {
+            return (*duration).max(1) * TICKS_BETWEEN_PLANS;
+        }
+
+        let named = Agent::what_was_tried(action);
+        let named = named.split(':').next().unwrap_or(&named);
+        let periods = crate::environment::verbs::EVERY_VERB
+            .iter()
+            .filter(|verb| verb.done_by == Some(named) && verb.always)
+            .map(|verb| verb.costs.time)
+            .fold(1.0_f32, f32::max);
+
+        (periods * TICKS_BETWEEN_PLANS as f32).round() as u32
     }
 
     /// What share of itself this body can bring to anything.
@@ -1526,7 +1645,7 @@ impl AgentState {
     }
 
     /// Check if agent is dehydrated (critical survival state)
-    /// Dehydration is more urgent than starvation (720 ticks = 12 hours)
+    /// Dehydration is more urgent than starvation (720 turns = 12 hours)
     pub fn is_dehydrated(&self) -> bool {
         self.physiology.is_parched()
     }
@@ -1554,14 +1673,33 @@ pub struct Agent {
     #[serde(default)]
     pub hands_full_of_child: bool,
 
+    /// The tick this one is free to think again.
+    ///
+    /// "Once an agent plans an action, it would not change its mind unless its
+    /// situation changed in some manner." A planning period is a *gate* on
+    /// deciding rather than a unit of doing: somebody who sets out on a hunt
+    /// reckoned at 145 ticks walks past the gates at 30, 60, 90 and 120
+    /// without looking up, and stops to think again at 150.
+    ///
+    /// The quantising is deliberate and costs something. A plan that finishes
+    /// at 105 leaves its agent idle from 105 to 120, because thinking happens
+    /// at the gate or not at all. That waste is what buys the saving: the
+    /// alternative is asking every agent what it wants every minute, which was
+    /// measured at thirty times the compute for the same simulated year.
+    ///
+    /// Zero means free, which is true of a newly made body at tick zero,
+    /// because the test is `busy_until > now` rather than `>=`.
+    #[serde(default)]
+    pub busy_until: u32,
+
     pub state: AgentState,
     pub drives: DriveState,
     pub behavior_trees: Vec<BehaviorTree>,
     pub memory: Memory,
     pub inventory: Inventory,
     pub senses: Senses,
-    /// Recent percepts processed from sensory input (last 20 ticks)
-    pub recent_percepts: Vec<(u32, super::sensory_processing::Percept)>, // (tick, percept)
+    /// Recent percepts processed from sensory input (last 20 turns)
+    pub recent_percepts: Vec<(u32, super::sensory_processing::Percept)>, // (turn, percept)
     pub body: Body,
     pub body_temperature: super::BodyTemperature,
     pub exposure_status: crate::environment::ExposureStatus,
@@ -1675,7 +1813,7 @@ pub struct Agent {
     #[serde(default)]
     pub hands: [Option<String>; 2],
     /// What the world around this agent is doing, as far as its drives care.
-    /// Filled in by the simulation once a tick; empty for an agent ticked
+    /// Filled in by the simulation once a turn; empty for an agent turned
     /// without a world, which is the right answer for a world that is not
     /// there.
     #[serde(default)]
@@ -1690,7 +1828,7 @@ pub struct Agent {
     /// "Once an agent plans an action, it would not change its mind unless its
     /// situation changed in some manner. For example, an agent wants to walk
     /// to get a drink of water and the trip takes an estimated 10 minutes
-    /// one-way. The agent begins walking and for the next ten ticks no new
+    /// one-way. The agent begins walking and for the next ten turns no new
     /// decisions need be made."
     ///
     /// See `Errand`.
@@ -1698,8 +1836,8 @@ pub struct Agent {
     pub current_plan: Option<ActionPlan>,
     /// Planning engine for generating and learning from plans
     pub planner: Planner,
-    /// Ticks spent on current plan step (for timeout detection)
-    pub plan_step_ticks: u32,
+    /// Turns spent on current plan step (for timeout detection)
+    pub plan_step_turns: u32,
     /// Accumulated learning exposure for various knowledge/skills
     pub learning_exposure: crate::core::learning::LearningExposure,
     /// Nutritional state (energy, protein, micronutrients)
@@ -1725,6 +1863,7 @@ impl Agent {
         let mut agent = Self {
             id: crate::core::dice::name(),
             hands_full_of_child: false,
+            busy_until: 0,
             state: AgentState::new(),
             drives: if config.random_weights {
                 DriveState::with_random_weights()
@@ -1771,7 +1910,7 @@ impl Agent {
             errand: None,
             current_plan: None,
             planner: Planner::new(),
-            plan_step_ticks: 0,
+            plan_step_turns: 0,
             learning_exposure: crate::core::learning::LearningExposure::new(),
             nutrition: NutritionalState::new(),
             pregnancy: None,
@@ -1847,12 +1986,12 @@ impl Agent {
     }
 
     /// Create an agent with specified parents
-    pub fn with_parents(config: AgentConfig, parent_ids: Vec<Uuid>, current_tick: u32) -> Self {
+    pub fn with_parents(config: AgentConfig, parent_ids: Vec<Uuid>, current_turn: u32) -> Self {
         use rand::Rng;
 
         let mut agent = Self::new(config);
         agent.parent_ids = parent_ids.clone();
-        agent.state.last_ate_tick = current_tick;
+        agent.state.last_ate_turn = current_turn;
 
         // Set up infant as newborn.
         //
@@ -1863,18 +2002,18 @@ impl Agent {
 
         // A newborn has just been fed and watered by being born.
         //
-        // Both clocks are kept as "ticks since", worked out from a tick the
+        // Both clocks are kept as "turns since", worked out from a turn the
         // agent last ate or drank on, and both start at zero. For the founding
         // generation that is correct; for anybody born later it means a
         // newborn arrives having last drunk at the beginning of the world. An
-        // infant born after about four thousand ticks was therefore two days
-        // past the point where dehydration takes health, lost 1.65 a tick from
+        // infant born after about four thousand turns was therefore two days
+        // past the point where dehydration takes health, lost 1.65 a turn from
         // its first breath, and was dead at sixty-one - which is what a
         // settlement's whole second generation was quietly doing.
-        agent.state.last_ate_tick = current_tick;
-        agent.state.last_drank_tick = current_tick;
-        agent.state.ticks_without_food = 0;
-        agent.state.ticks_without_water = 0;
+        agent.state.last_ate_turn = current_turn;
+        agent.state.last_drank_turn = current_turn;
+        agent.state.turns_without_food = 0;
+        agent.state.turns_without_water = 0;
 
         // Rare chance of congenital infertility (~1.5% chance)
         let mut rng = crate::core::dice::roll();
@@ -1884,7 +2023,7 @@ impl Agent {
 
         // Set up nursing - primary caregiver is first parent (usually mother)
         if let Some(&mother_id) = parent_ids.first() {
-            agent.nursing = Some(super::childcare::NursingState::new(current_tick, mother_id));
+            agent.nursing = Some(super::childcare::NursingState::new(current_turn, mother_id));
             // Add second parent as secondary caregiver
             if let Some(&father_id) = parent_ids.get(1) {
                 if let Some(ref mut nursing) = agent.nursing {
@@ -1900,10 +2039,10 @@ impl Agent {
     pub fn with_parents_and_prenatal(
         config: AgentConfig,
         parent_ids: Vec<Uuid>,
-        current_tick: u32,
+        current_turn: u32,
         prenatal_nutrition: f32,
     ) -> Self {
-        let mut agent = Self::with_parents(config, parent_ids, current_tick);
+        let mut agent = Self::with_parents(config, parent_ids, current_turn);
         agent.developmental_nutrition = super::childcare::DevelopmentalNutrition::with_prenatal(prenatal_nutrition);
         agent
     }
@@ -2029,7 +2168,7 @@ impl Agent {
     /// string the storehouse does not recognise - so putting something by
     /// could not work and never once did. Measured, `Store` was 4.7% of
     /// everything a settlement did and failed 100.0% of the time, thirteen
-    /// thousand times in four thousand ticks, every one of them
+    /// thousand times in four thousand turns, every one of them
     /// `Unknown item type: resource`.
     ///
     /// Food is left where it is: what is in the pack is what an agent eats
@@ -2074,7 +2213,7 @@ impl Agent {
     /// and carried all of it for the rest of its life - so measured across
     /// eight worlds an autumn pack held **38.9 units against a capacity of
     /// 26.0**, half as much again as it could take, and **97% of autumn
-    /// agent-ticks had not room in it for a single handful of food**. Twenty
+    /// agent-turns had not room in it for a single handful of food**. Twenty
     /// eight thousand units of food a year went back on the bush for want of
     /// anywhere to put them, against two and a half thousand carried home.
     ///
@@ -2270,7 +2409,7 @@ impl Agent {
 
     /// This one drank out of the sea.
     ///
-    /// It slakes the thirst on the tick - that is the trap, and it is why
+    /// It slakes the thirst on the turn - that is the trap, and it is why
     /// people do it - and then costs more than it gave, over the days it
     /// takes the body to get rid of it again.
     pub fn drank_salt_water(&mut self, now: u32) {
@@ -2304,12 +2443,12 @@ impl Agent {
     /// *down*, capability still whole, a state every working body passes
     /// through between one drink and the next. So the rule that everybody
     /// knows better than to drink the sea was suspended for everybody, daily,
-    /// and what it cost was not one mouthful but a tickful: an agent in danger
+    /// and what it cost was not one mouthful but a turnful: an agent in danger
     /// takes its turn again once a simulated minute (see
     /// `everybody_takes_a_turn`), so a frightened man a quarter dry drank the
-    /// sea five times inside one tick and was dead at the end of it, at full
+    /// sea five times inside one turn and was dead at the end of it, at full
     /// health, with a full load of salt. Measured over twelve worlds: **58
-    /// bodies lost a whole quarter of their water in a single tick**, every
+    /// bodies lost a whole quarter of their water in a single turn**, every
     /// one of them in danger, every one of them at `salt_in_me` 1.0.
     const SO_DRY_THE_SEA_LOOKS_LIKE_WATER: f32 = 0.25;
 
@@ -2323,9 +2462,9 @@ impl Agent {
         self.state.physiology.hydration <= Self::SO_DRY_THE_SEA_LOOKS_LIKE_WATER
     }
 
-    /// A tick of having drunk the sea: the thirst comes back worse, and the
+    /// A turn of having drunk the sea: the thirst comes back worse, and the
     /// salt slowly goes.
-    fn tick_salt(&mut self) {
+    fn turn_salt(&mut self) {
         if self.state.salt_in_me <= 0.0 {
             return;
         }
@@ -2337,7 +2476,7 @@ impl Agent {
         // This raised the Thirst drive directly, and the drive is *assigned*
         // from the body a few hundred lines up - `drive.value =
         // body_wants_water` - so every unit of thirst the salt added was wiped
-        // the same tick it was added. Measured: a man given a drink of the sea
+        // the same turn it was added. Measured: a man given a drink of the sea
         // and then followed for six days came out at exactly the thirst he
         // went in with, 0.3 against 0.3. The whole of ISSUES_FOUND.md #155 -
         // salt water "drinkable, tempting, and worse than nothing" - did
@@ -2370,17 +2509,17 @@ impl Agent {
     /// of "tempting, and worse than nothing".
     const WHAT_A_MOUTHFUL_OF_THE_SEA_COSTS: f32 = physiology::A_DRINK_IS_WORTH * 1.05;
 
-    /// How much water a full load of salt costs the body every tick.
+    /// How much water a full load of salt costs the body every turn.
     ///
     /// Derived, rather than guessed at, so that the sentence above is the one
     /// the arithmetic actually performs. A load of `s` goes at
-    /// `HOW_FAST_SALT_GOES` a tick and so is carried for `s /
-    /// HOW_FAST_SALT_GOES` ticks; the sum of what is carried over them is
+    /// `HOW_FAST_SALT_GOES` a turn and so is carried for `s /
+    /// HOW_FAST_SALT_GOES` turns; the sum of what is carried over them is
     /// `s^2 / (2 * HOW_FAST_SALT_GOES) + s / 2`. The rate is the cost divided
     /// by that sum.
     ///
     /// **It was 0.0007, which is a hundredth of what the docstring beside it
-    /// claimed.** The sentence "over those ticks the salt in it costs about
+    /// claimed.** The sentence "over those turns the salt in it costs about
     /// 0.35 of a skin" was right about the intent and wrong about the number:
     /// at 0.0007 a drink of the sea cost 0.0036 of a skin in salt, which is
     /// nothing at all. The whole cost was instead being taken up front in the
@@ -2454,7 +2593,7 @@ impl Agent {
         self.state.ailing.as_ref()
     }
 
-    /// How often an open wound turns, in a tick, at its worst.
+    /// How often an open wound turns, in a turn, at its worst.
     ///
     /// About one in three hundred, which over the fortnight a bad wound takes
     /// to close comes to rather better than an even chance of getting away
@@ -2469,7 +2608,7 @@ impl Agent {
     const HOW_OFTEN_A_SOAKING_TELLS: f64 = 0.02;
 
     /// A wound closes, or it turns.
-    fn tick_the_wound(&mut self, now: u32) {
+    fn turn_the_wound(&mut self, now: u32) {
         use rand::Rng;
 
         if self.state.an_open_wound <= 0.0 {
@@ -2492,7 +2631,7 @@ impl Agent {
 
     /// Cold and wet, for long enough, comes to something.
     ///
-    /// Called with what the weather is costing this tick, which is already
+    /// Called with what the weather is costing this turn, which is already
     /// the answer to "how cold, how wet, how sheltered" - see
     /// `update_exposure`. Nothing here needs to ask those three again.
     pub fn a_soaking_may_tell(&mut self, what_the_weather_costs: f32, now: u32) {
@@ -2509,8 +2648,8 @@ impl Agent {
         }
     }
 
-    /// A tick of being ill: it costs, and then it is over.
-    fn tick_ailment(&mut self, now: u32) {
+    /// A turn of being ill: it costs, and then it is over.
+    fn turn_ailment(&mut self, now: u32) {
         let Some(ailing) = self.state.ailing.as_ref() else {
             return;
         };
@@ -2524,7 +2663,7 @@ impl Agent {
 
         let severity = ailing.severity;
         self.state.health =
-            (self.state.health - severity * Self::WHAT_A_TICK_OF_ILLNESS_COSTS).max(0.0);
+            (self.state.health - severity * Self::WHAT_A_TURN_OF_ILLNESS_COSTS).max(0.0);
         self.state.energy =
             (self.state.energy - severity * Self::WHAT_ILLNESS_TAKES_OUT_OF_YOU).max(0.0);
     }
@@ -2533,7 +2672,7 @@ impl Agent {
     ///
     /// **This is the whole of the treatment in this model, and it is
     /// deliberately not very much.** A remedy takes something off how badly
-    /// somebody is laid up; it never shortens the illness by a single tick,
+    /// somebody is laid up; it never shortens the illness by a single turn,
     /// and no amount of it can take off more than
     /// `THE_MOST_A_HERBAL_CAN_DO`. That cap is the line between easing and
     /// curing, and every caveat in the specification is on the easing side of
@@ -2688,11 +2827,11 @@ impl Agent {
     /// spent two of them off the same thing does not need a third.
     pub const TWICE_IS_A_PATTERN: u32 = 2;
 
-    /// What a tick of being ill takes off the body.
+    /// What a turn of being ill takes off the body.
     ///
     /// Small on purpose. A week of it at full severity comes to about a
     /// quarter of a healthy body, which is a bad illness and not a sentence.
-    const WHAT_A_TICK_OF_ILLNESS_COSTS: f32 = 0.25;
+    const WHAT_A_TURN_OF_ILLNESS_COSTS: f32 = 0.25;
 
     /// And what it takes out of somebody's day.
     ///
@@ -2901,7 +3040,7 @@ impl Agent {
     ///
     /// Tools and nothing else. Giving founders the hides and poles for a tent
     /// as well seemed obviously right and was measurably ruinous: twenty-five
-    /// people who can all raise a tent on the first tick all try to, crowd the
+    /// people who can all raise a tent on the first turn all try to, crowd the
     /// same ground - `No suitable building location found (all positions
     /// occupied)` - and spend the rest of their lives walking about looking
     /// for somewhere to put one instead of feeding themselves. Measured
@@ -4447,7 +4586,7 @@ impl Agent {
     }
 
     /// Apply location-based trait effects
-    /// Called during tick to grant happiness based on agent's location
+    /// Called during turn to grant happiness based on agent's location
     pub fn apply_location_trait_effects(&mut self) {
         use crate::core::traits::Trait;
         use super::EmotionSource;
@@ -4526,7 +4665,7 @@ impl Agent {
     }
 
     /// Apply building proximity effects (morale, healing, defense awareness)
-    /// Called during tick to grant bonuses based on nearby buildings
+    /// Called during turn to grant bonuses based on nearby buildings
     pub fn apply_building_proximity_effects(&mut self) {
         use super::EmotionSource;
 
@@ -4569,7 +4708,7 @@ impl Agent {
             }
         }
 
-        // Apply morale bonus (capped at 0.05 per tick to avoid runaway happiness)
+        // Apply morale bonus (capped at 0.05 per turn to avoid runaway happiness)
         if total_morale_bonus > 0.0 {
             let capped_bonus = total_morale_bonus.min(0.05);
             self.emotions.add_happiness(
@@ -4588,60 +4727,60 @@ impl Agent {
 
 
 
-    /// Update agent state (tick senses, body, emotions, memory, and drives)
-    pub fn tick(&mut self) {
-        self.tick_with_percepts(0); // Default tick uses tick 0
+    /// Update agent state (turn senses, body, emotions, memory, and drives)
+    pub fn take_a_turn(&mut self) {
+        self.turn_with_percepts(0); // Default turn uses turn 0
     }
 
-    /// Tick with percept processing (requires current tick for timestamping)
-    pub fn tick_with_percepts(&mut self, current_tick: u32) {
+    /// Turn with percept processing (requires current turn for timestamping)
+    pub fn turn_with_percepts(&mut self, current_turn: u32) {
         // Update subsystems
-        self.senses.tick();
-        self.body.tick();
+        self.senses.take_a_turn();
+        self.body.take_a_turn();
         // Use trait-aware emotion decay (traits affect how quickly emotions fade)
-        self.emotions.tick_with_traits(&self.traits);
+        self.emotions.turn_with_traits(&self.traits);
         // Apply passive trait effects (e.g., Melancholic slowly gains sadness)
         self.emotions.apply_passive_trait_effects(&self.traits);
         // Apply location-based trait effects (e.g., Zealot near religious buildings)
         self.apply_location_trait_effects();
         // Apply building proximity effects (morale, healing bonus, defense bonus)
         self.apply_building_proximity_effects();
-        self.memory.tick();
+        self.memory.take_a_turn();
 
         // And the trails fade. Charged by the day inside `fade`, so calling
         // it every turn costs a subtraction and takes nothing until a day
         // has actually gone by. A path nobody walks grows over, which is what
         // keeps an agent holding the corner of the world that has paid it
         // rather than all of the world it has ever seen.
-        self.patterns.fade(current_tick);
+        self.patterns.fade(current_turn);
 
         // And so do the lessons, on their own season-long clock. A thing tried
         // once and never again is forgotten, and is new to this agent
         // afterwards - which is what makes curiosity come back round to it
         // rather than spending a life on the same forty experiments. See
         // `Lessons::fade` and `Lessons::how_new_is_this`.
-        self.lessons.fade(current_tick);
+        self.lessons.fade(current_turn);
 
         // And the country fades with it, on its own arithmetic: a month's
         // grace and then five points a month off any area nobody has been
         // back to. See `agents::whereabouts`.
         self.whereabouts
-            .forget_what_has_not_been_seen(Self::what_day_it_is(current_tick));
+            .forget_what_has_not_been_seen(Self::what_day_it_is(current_turn));
 
         // Check for stale storage knowledge and trigger curiosity
-        self.update_storage_curiosity(current_tick);
+        self.update_storage_curiosity(current_turn);
 
         // A cart in the pack is a cart in the hand. See `take_up_the_cart`.
         self.take_up_the_cart();
 
-        // Update emotions based on drive states (every tick)
+        // Update emotions based on drive states (every turn)
         self.update_emotions_from_drives();
         self.feel_what_the_habits_are_costing();
         // Drives rise differently depending on whether the agent has anything
         // more pressing on. See `DriveType::is_long_term`.
         let secure = self.immediate_needs_met();
         let situation = self.what_the_situation_asks();
-        self.drives.tick_in(&situation, secure);
+        self.drives.turn_in(&situation, secure);
 
         // And worry presses on whatever it is worried for. A man who expects
         // his standing to suffer for what he has been doing attends to his
@@ -4711,25 +4850,25 @@ impl Agent {
                     }
                     Percept::AgentDetected { agent_id, .. } => {
                         // Update social relationship (neutral interaction for just seeing them)
-                        let rel = self.relationships.get_or_create_relationship(*agent_id, current_tick);
+                        let rel = self.relationships.get_or_create_relationship(*agent_id, current_turn);
                         rel.strengthen(0.01);
                     }
                     _ => {}
                 }
             }
 
-            self.recent_percepts.push((current_tick, percept));
+            self.recent_percepts.push((current_turn, percept));
         }
 
-        // Trim old percepts (keep only last 20 ticks worth)
-        self.recent_percepts.retain(|(tick, _)| current_tick.saturating_sub(*tick) <= 20);
+        // Trim old percepts (keep only last 20 turns worth)
+        self.recent_percepts.retain(|(turn, _)| current_turn.saturating_sub(*turn) <= 20);
 
         // Body condition caps overall health rather than setting it.
         //
         // Starvation, dehydration and exposure damage the same field, and
-        // overwriting it from the body every tick threw all of that away: an
-        // agent could go six thousand ticks without water and still read as
-        // near perfect health, because the only harm that survived the tick
+        // overwriting it from the body every turn threw all of that away: an
+        // agent could go six thousand turns without water and still read as
+        // near perfect health, because the only harm that survived the turn
         // was a broken bone.
         let body_condition = self.body.overall_health() * 100.0;
         self.take_health_down_to(body_condition);
@@ -4739,38 +4878,39 @@ impl Agent {
     }
 
     /// Update agent with time progression (includes aging and survival mechanics)
-    pub fn tick_with_time(&mut self, current_tick: u32) {
-        // First do the regular tick
-        self.tick();
+    pub fn turn_with_time(&mut self, current_turn: u32) {
+        // First do the regular turn
+        self.take_a_turn();
 
-        self.process_survival_tick(current_tick);
+        self.process_survival_turn(current_turn);
     }
 
-    /// Run one tick of survival mechanics: aging, metabolism, food spoilage and fatigue.
+    /// Run one turn of survival mechanics: aging, metabolism, food spoilage and fatigue.
     ///
-    /// Split out of `tick_with_time` so that callers which drive agents through
-    /// `tick_with_percepts` instead (notably `Population::tick`) run the same
+    /// Split out of `turn_with_time` so that callers which drive agents through
+    /// `turn_with_percepts` instead (notably `Population::take_a_turn`) run the same
     /// survival mechanics rather than aging alone.
     /// How near a need has to be to killing somebody before it starts to
     /// shout over everything else.
     ///
     /// Half a day. It has to be well inside the shortest of the clocks or a
     /// need that is entirely answered still reads as urgent: thirst kills at
-    /// about 4,380 ticks from a full skin, so at a three-day horizon a
+    /// about 4,380 turns from a full skin, so at a three-day horizon a
     /// perfectly watered agent scored 0.99 and was one sip from outranking a
     /// settlement's whole want of a harvest. At half a day a satisfied need
     /// scores about a seventh, a need a day out scores a half, and one twelve
     /// hours off starts taking the agent over.
     ///
     /// Every figure in that paragraph is still exactly right; only the unit
-    /// was stale. It was written when a tick was a minute, so half a day was
-    /// seven hundred and twenty of them. `ticks_before_this_kills_me` now
+    /// was stale. It was written when a turn was a minute, so half a day was
+    /// seven hundred and twenty of them. `turns_before_this_kills_me` now
     /// answers in turns off a real body - thirst at thirty-six turns from a
     /// full skin rather than four thousand - and against 720 that read as
     /// twenty, so a fully watered agent was permanently in mortal danger and
     /// went to the water on nine turns in ten. Derived from the calendar now,
     /// so it cannot fall behind it again. See ISSUES #74.
-    const A_LONG_WAY_OFF: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 / 2.0;
+    const A_LONG_WAY_OFF: f32 =
+        crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32 / 2.0;
 
     /// How much any one drive may press, before its band is applied.
     ///
@@ -4788,7 +4928,7 @@ impl Agent {
     /// first.
     ///
     /// Nothing here is a written-down ladder. Thirst outranks hunger because
-    /// dehydration takes health at 2,160 ticks and starvation at 4,320 times
+    /// dehydration takes health at 2,160 turns and starvation at 4,320 times
     /// whatever the body has put by, and a child with a quarter of an adult's
     /// reserves reorders its own needs without anybody having decided that.
     pub fn how_hard_it_presses(&self, drive_type: crate::core::DriveType) -> f32 {
@@ -4815,7 +4955,7 @@ impl Agent {
 
         let deadly = self
             .state
-            .ticks_before_this_kills_me(drive_type)
+            .turns_before_this_kills_me(drive_type)
             .map(|left| Self::A_LONG_WAY_OFF / left.max(1.0))
             .unwrap_or(0.0);
 
@@ -4840,7 +4980,7 @@ impl Agent {
         // hunger drive": taking the larger of the two let a big appetite
         // outrank a nearer death, because how much somebody wants a thing and
         // how soon the want of it kills them are different questions.
-        let pressing = if self.state.ticks_before_this_kills_me(drive_type).is_some() {
+        let pressing = if self.state.turns_before_this_kills_me(drive_type).is_some() {
             1.0 + deadly * Self::SOONER_IS_WORSE
         } else {
             wanting
@@ -4913,7 +5053,7 @@ impl Agent {
     /// between four and fifteen per cent of every block. A need being about to
     /// *ask* is ordinary; a need that will have killed you before the job is
     /// done is the one worth turning round for, and
-    /// `ticks_before_this_kills_me` is what the model already reckons the
+    /// `turns_before_this_kills_me` is what the model already reckons the
     /// primaries by.
     pub fn what_will_not_wait_for(
         &self,
@@ -4928,7 +5068,7 @@ impl Agent {
             .filter(|other| other.rank().precedence() > mine)
             .filter(|other| {
                 self.state
-                    .ticks_before_this_kills_me(*other)
+                    .turns_before_this_kills_me(*other)
                     .is_some_and(|left| left < turns as f32)
             })
             // Of the needs the job would outlast, the one that starts asking
@@ -4956,39 +5096,46 @@ impl Agent {
 
     /// How often a hand is tested against what it has not been doing.
     ///
-    /// A season. Rust is reckoned in years, so checking more often buys
-    /// nothing and costs a walk over every skill of every agent.
-    const HOW_OFTEN_A_HAND_IS_TESTED: u32 = 288;
+    /// Rust is reckoned in years, so checking more often buys nothing and
+    /// costs a walk over every skill of every agent.
+    ///
+    /// Stated in days, not in a bare count. It was `288`, which was six days
+    /// while a step was a tick; once the counter began advancing half an hour
+    /// at a time, `% 288` could only fall due when the count was a multiple of
+    /// both, which is once a day rather than once in six. That is exactly the
+    /// failure `seasons::ONCE_A_DAY` and its neighbours exist to prevent, and
+    /// this was one of two bare counts left that had not been converted.
+    const HOW_OFTEN_A_HAND_IS_TESTED: u32 = 6 * crate::environment::seasons::TICKS_PER_DAY;
 
-    pub fn process_survival_tick(&mut self, current_tick: u32) {
+    pub fn process_survival_turn(&mut self, current_turn: u32) {
         // Calculate pregnancy energy multiplier (if pregnant)
         let energy_multiplier = self.pregnancy.as_ref()
-            .map(|p| p.energy_multiplier(current_tick))
+            .map(|p| p.energy_multiplier(current_turn))
             .unwrap_or(1.0);
 
         // Then handle aging and survival mechanics with pregnancy modifier
-        self.state.age_tick_with_modifier(current_tick, energy_multiplier);
+        self.state.age_turn_with_modifier(current_turn, energy_multiplier);
 
         // Process nutrition metabolism
-        self.tick_nutrition(current_tick);
+        self.turn_nutrition(current_turn);
 
         // Process food spoilage in inventory
-        self.tick_food_spoilage(current_tick);
+        self.turn_food_spoilage(current_turn);
 
         // And whatever this one has come down with, which costs a little
-        // every tick and then is over
-        self.tick_ailment(current_tick);
-        self.tick_the_wound(current_tick);
+        // every turn and then is over
+        self.turn_ailment(current_turn);
+        self.turn_the_wound(current_turn);
 
         // And the salt, if this one has been drinking out of the sea
-        self.tick_salt();
+        self.turn_salt();
 
         // And let go of trades that have not been practised in a long time.
         // Once a season is often enough for something measured in years, and a
         // settlement of two hundred is not worth walking every skill of every
-        // agent every tick for.
-        if current_tick % Self::HOW_OFTEN_A_HAND_IS_TESTED == 0 {
-            self.skills.let_unused_skills_rust(current_tick);
+        // agent every turn for.
+        if current_turn % Self::HOW_OFTEN_A_HAND_IS_TESTED == 0 {
+            self.skills.let_unused_skills_rust(current_turn);
         }
 
         // Recover condition. `regenerate_health` had no callers at all, so
@@ -5021,7 +5168,7 @@ impl Agent {
         if !self.fatigue.is_sleeping {
             // Activity level based on current drive urgency and recent actions
             let activity_level = self.calculate_activity_level();
-            self.fatigue.tick_awake(activity_level, current_tick);
+            self.fatigue.turn_awake(activity_level, current_turn);
 
             // Update rest drive based on fatigue
             if let Some(rest_drive) = self.drives.get_mut(DriveType::Rest) {
@@ -5061,8 +5208,8 @@ impl Agent {
         activity.min(1.0)
     }
 
-    /// Tick nutrition metabolism and apply deficiency effects
-    pub fn tick_nutrition(&mut self, _current_tick: u32) {
+    /// Turn nutrition metabolism and apply deficiency effects
+    pub fn turn_nutrition(&mut self, _current_turn: u32) {
         // Calculate activity level from energy expenditure
         let activity_level = if self.state.energy < 30.0 {
             0.2 // Low energy = low activity
@@ -5072,8 +5219,8 @@ impl Agent {
             0.5 // Moderate
         };
 
-        // Tick metabolism (depletes nutrients)
-        self.nutrition.tick_metabolism(activity_level);
+        // Turn metabolism (depletes nutrients)
+        self.nutrition.turn_metabolism(activity_level);
 
         // Apply deficiency health penalties
         let penalty = self.nutrition.deficiency_health_penalty();
@@ -5086,7 +5233,7 @@ impl Agent {
         // Reserves are the long-term store; `state.energy` is short-term felt
         // energy that eating and sleeping move directly. Drifting gradually
         // toward reserves keeps the two systems consistent without erasing the
-        // effect of a meal or a rest on the very next tick, which is what a
+        // effect of a meal or a rest on the very next turn, which is what a
         // straight average between the two used to do.
         const ENERGY_SYNC_RATE: f32 = 0.02;
         let reserve_delta = self.nutrition.energy_reserves - self.state.energy;
@@ -5094,11 +5241,40 @@ impl Agent {
             (self.state.energy + reserve_delta * ENERGY_SYNC_RATE).clamp(0.0, 100.0);
     }
 
+    /// What this one's food is being kept in, and what that is worth.
+    ///
+    /// The best vessel they are carrying. A person keeps their dinner in the
+    /// best thing they have to keep it in, which is what anybody does: the pot
+    /// goes in the pack and the food goes in the pot.
+    ///
+    /// This is the reason a pot is worth firing for something other than
+    /// carrying water. Before it, a pack was the one place in the world where
+    /// nothing anybody made could make any difference to how long food kept -
+    /// so a settlement that had gone as far as stoneware carried its meat home
+    /// in exactly the state a settlement with nothing at all did.
+    ///
+    /// [`crate::environment::tags::WHAT_A_BARE_PACK_KEEPS`] for somebody
+    /// carrying no vessel, which is most people most of the time.
+    pub fn how_well_my_pack_keeps(&self) -> f32 {
+        crate::environment::tags::the_best_keeping_to_hand(&|called: &str| {
+            self.inventory
+                .get_item(called)
+                .map(|item| item.quantity)
+                .unwrap_or(0)
+        })
+    }
+
     /// Update food freshness in inventory and remove spoiled items
-    pub fn tick_food_spoilage(&mut self, current_tick: u32) {
-        // Update freshness for all food items
+    pub fn turn_food_spoilage(&mut self, current_turn: u32) {
+        // Food in a pack keeps as well as the best thing there is to keep it
+        // in. A bare pack is worth nothing and says so; a pot in the pack is
+        // worth half. The pot is not consumed by this and does not have to be
+        // - it is the thing the food is in, and it is still the thing the food
+        // is in tomorrow.
+        let kept_in = self.how_well_my_pack_keeps();
+
         for item in self.inventory.items.values_mut() {
-            item.update_food_freshness(current_tick);
+            item.goes_off(current_turn, kept_in);
         }
 
         // Remove completely spoiled food (freshness <= 0)
@@ -5158,7 +5334,7 @@ impl Agent {
     /// * `has_water_access` - Whether the agent has access to water
     /// * `time_of_day` - Current time of day (0-24)
     ///
-    /// Returns the amount of exposure damage taken this tick
+    /// Returns the amount of exposure damage taken this turn
     pub fn update_exposure(
         &mut self,
         weather: &crate::environment::Weather,
@@ -5392,7 +5568,7 @@ impl Agent {
     /// The same appraisal as [`Self::respond_to_threat`] - can I fight this,
     /// and so is it anger or is it fear - but it *sets* the feeling rather than
     /// adding to it. A wolf standing ten paces off is one wolf however many
-    /// ticks it stands there; adding a fresh helping of anger every tick it
+    /// turns it stands there; adding a fresh helping of anger every turn it
     /// remained in sight ran every agent in the world up to the ceiling, and
     /// left three in five of them ready to attack something at any moment.
     pub fn appraise_what_is_there(
@@ -5511,7 +5687,7 @@ impl Agent {
         _resource_type: crate::world::ResourceType,
         _amount: u32,
     ) {
-        // Resource observation is handled by the simulation tick loop
+        // Resource observation is handled by the simulation turn loop
         // This method exists for API compatibility
     }
 
@@ -5870,7 +6046,7 @@ impl Agent {
     /// vehicle and pack animal - and **nothing has ever put a transport into
     /// it**, so the whole of it was tables with no caller.
     /// `total_additional_capacity` is already added into `max_weight` and
-    /// `speed_modifier` is already multiplied into `movement_speed_at_tick`;
+    /// `speed_modifier` is already multiplied into `movement_speed_at_turn`;
     /// the only missing link was somebody actually owning one.
     ///
     /// So: what is in the pack is what is on the back. Called each turn,
@@ -6010,11 +6186,11 @@ impl Agent {
 
     /// Get movement speed including transport, fatigue, and pregnancy penalties
     pub fn movement_speed(&self) -> f32 {
-        self.movement_speed_at_tick(0) // Default for backward compatibility
+        self.movement_speed_at_turn(0) // Default for backward compatibility
     }
 
-    /// Get movement speed at a specific tick (includes pregnancy modifier)
-    pub fn movement_speed_at_tick(&self, current_tick: u32) -> f32 {
+    /// Get movement speed at a specific turn (includes pregnancy modifier)
+    pub fn movement_speed_at_turn(&self, current_turn: u32) -> f32 {
         let body_speed = self.body.movement_speed_multiplier();
         let transport_speed = self.transport.speed_modifier();
         let weight_penalty = if self.inventory.is_overweight() {
@@ -6024,7 +6200,7 @@ impl Agent {
         };
         let fatigue_penalty = self.fatigue.movement_speed_modifier();
         let pregnancy_penalty = self.pregnancy.as_ref()
-            .map(|p| p.speed_modifier(current_tick))
+            .map(|p| p.speed_modifier(current_turn))
             .unwrap_or(1.0);
 
         // A short pair of legs covers less ground. The movement half of
@@ -6102,7 +6278,7 @@ impl Agent {
     pub fn has_not_been_going_short(&self) -> bool {
         self.drives
             .get(DriveType::Hunger)
-            .map(|drive| drive.denied_ticks() < Self::GOING_SHORT)
+            .map(|drive| drive.denied_turns() < Self::GOING_SHORT)
             .unwrap_or(true)
     }
 
@@ -6152,7 +6328,7 @@ impl Agent {
     /// Not "am I hungry this minute". That is answered by the last meal and
     /// says nothing about the next one, and a model that asks only that
     /// produces settlements which double in size while the crop halves - which
-    /// is what thirty thousand ticks of tracing showed. A person who ate today
+    /// is what thirty thousand turns of tracing showed. A person who ate today
     /// but has nothing put by, on ground that has stopped giving, is in no
     /// position to raise a child.
     ///
@@ -6888,7 +7064,7 @@ impl Agent {
                     verb: verb.clone(),
                     answering: answering.clone(),
                 },
-                estimated_ticks: 1,
+                estimated_turns: 1,
                 required_tool: None,
                 required_resources: Vec::new(),
                 target_location: None,
@@ -6902,7 +7078,7 @@ impl Agent {
             now,
             "worked out".to_string(),
         ));
-        self.plan_step_ticks = 0;
+        self.plan_step_turns = 0;
         true
     }
 
@@ -6967,12 +7143,12 @@ impl Agent {
     /// them alike would spend its life mending fences nobody had broken.
     pub const THE_MOST_WORRY_CAN_ADD: f32 = 0.25;
 
-    /// Which day of the world's life a tick falls on.
+    /// Which day of the world's life a turn falls on.
     ///
     /// Everything about remembering the country is counted in days, because
     /// what a day is does not change and what a turn is might.
-    pub fn what_day_it_is(tick: u32) -> u32 {
-        tick / crate::environment::seasons::TICKS_PER_DAY
+    pub fn what_day_it_is(turn: u32) -> u32 {
+        turn / crate::environment::seasons::TICKS_PER_DAY
     }
 
     /// How many turns went into what was just finished.
@@ -7230,13 +7406,13 @@ impl Agent {
         // Copycat trait: happiness from mimicking recently observed actions
         if self.traits.has(Trait::Copycat) {
             if let Some(action_type) = self.action_to_observable_type(action) {
-                // Check if we've seen this action type recently (within 50 ticks)
-                // Note: current tick tracking would be needed, but we use a simpler approach
+                // Check if we've seen this action type recently (within 50 turns)
+                // Note: current turn tracking would be needed, but we use a simpler approach
                 // by checking if any recent observations exist
                 let observation_count = self.observational_learning.count_recent_observations_of_type(
                     action_type,
-                    50, // Within last 50 ticks
-                    0   // Will use recent count which doesn't need exact tick
+                    50, // Within last 50 turns
+                    0   // Will use recent count which doesn't need exact turn
                 );
 
                 if observation_count > 0 {
@@ -7609,9 +7785,9 @@ impl Agent {
             self.state.energy = (self.state.energy + energy_restored).min(100.0);
         }
 
-        // Reset starvation (use current age as approximation of tick)
-        self.state.last_ate_tick = self.state.age;
-        self.state.ticks_without_food = 0;
+        // Reset starvation (use current age as approximation of turn)
+        self.state.last_ate_turn = self.state.age;
+        self.state.turns_without_food = 0;
 
         // Satisfy hunger drive
         let hunger_reduction = (amount as f32) * 0.2; // Each food reduces hunger by 0.2
@@ -7624,7 +7800,7 @@ impl Agent {
 
     /// Eat a specific food item from inventory with full nutrition tracking
     /// Returns the result of eating including nutrition gained or problems
-    pub fn eat_food_item(&mut self, item_id: &str, current_tick: u32) -> EatResult {
+    pub fn eat_food_item(&mut self, item_id: &str, current_turn: u32) -> EatResult {
         // Read what we need up front so the item can be consumed through
         // `remove_item`, which drops emptied stacks and keeps carried weight
         // correct. Decrementing the quantity in place leaves a zero-quantity
@@ -7655,7 +7831,7 @@ impl Agent {
         // You cannot eat a deer either. The decision layer knows this and cuts
         // one up first, but the executor is the place it has to be true: an
         // agent handed a carcass by any other route would otherwise swallow
-        // two kilos of raw beast in a tick.
+        // two kilos of raw beast in a turn.
         if !crate::world::nutrition::Piece::of(item_id).can_it_be_eaten() {
             return EatResult::NoFood;
         }
@@ -7670,7 +7846,7 @@ impl Agent {
                     crate::world::nutrition::what_an_untracked_mouthful_is_worth();
                 self.nutrition.consume(&flat_nutrition);
                 self.state.took_a_meal(
-                    current_tick,
+                    current_turn,
                     crate::world::Soil::waste_from_eating(item_id),
                 );
                 if let Some(hunger) = self.drives.get_mut(DriveType::Hunger) {
@@ -7714,7 +7890,7 @@ impl Agent {
                 && crate::world::nutrition::Piece::is_it_flesh(item_id);
 
             if raw_flesh && rng.gen_bool(Self::HOW_OFTEN_RAW_FLESH_TELLS) {
-                self.taken_ill_with(Self::OFF_RAW_FLESH, 0.5, current_tick);
+                self.taken_ill_with(Self::OFF_RAW_FLESH, 0.5, current_turn);
             } else if food_data.freshness < Self::ON_THE_TURN {
                 // The further gone it is, the likelier it is to tell. At the
                 // point where it counts as harmful it is a different and
@@ -7727,7 +7903,7 @@ impl Agent {
                     self.taken_ill_with(
                         Self::OFF_FOOD_ON_THE_TURN,
                         0.3 + 0.4 * how_far_gone,
-                        current_tick,
+                        current_turn,
                     );
                 }
             }
@@ -7748,7 +7924,7 @@ impl Agent {
 
         // Reset starvation timer, and note what the body will have to pass
         self.state.took_a_meal(
-            current_tick,
+            current_turn,
             crate::world::Soil::waste_from_eating(item_id),
         );
 
@@ -7910,7 +8086,7 @@ impl Agent {
                 // Skip anything that would make the agent sick. Raw food turns
                 // harmful before it counts as spoiled, so checking spoilage
                 // alone leaves agents eating rot: ten health a bite, one bite
-                // a tick, until the stack or the agent runs out.
+                // a turn, until the stack or the agent runs out.
                 if food_data.is_spoiled() || food_data.is_harmful() {
                     continue;
                 }
@@ -7958,13 +8134,13 @@ impl Agent {
                 // and a raw thing three days off turning goes to the front,
                 // ahead of the same thing picked this morning.
                 //
-                // Reckoned in whole days rather than ticks, so that what is
+                // Reckoned in whole days rather than turns, so that what is
                 // *worth* eating still decides between two things that will be
                 // lost at about the same time. A strict ordering on the clock
                 // alone has somebody eat a crumb with an hour left in front of
                 // a good meal with a day, and a turn spent on a crumb is a
                 // turn.
-                let days_left = (food_data.how_long_this_has_left()
+                let days_left = (food_data.how_long_this_has_left(item_id)
                     / crate::environment::seasons::TICKS_PER_DAY as f32)
                     .floor() as u32;
 
@@ -8014,14 +8190,14 @@ impl Agent {
         }
     }
 
-    /// Sleep for one tick with quality factors affecting recovery
-    /// Returns the fatigue decrease this tick
-    pub fn sleep_tick(&mut self, current_tick: u32, sleep_quality_factors: &super::fatigue::SleepQualityFactors) -> f32 {
+    /// Sleep for one turn with quality factors affecting recovery
+    /// Returns the fatigue decrease this turn
+    pub fn sleep_turn(&mut self, current_turn: u32, sleep_quality_factors: &super::fatigue::SleepQualityFactors) -> f32 {
         let sleep_quality = sleep_quality_factors.calculate_quality();
 
         // Apply trait modifiers to recovery rate
         let recovery_modifier = self.sleep_recovery_modifier();
-        let fatigue_decrease = self.fatigue.tick_sleeping_with_modifier(sleep_quality, current_tick, recovery_modifier);
+        let fatigue_decrease = self.fatigue.turn_sleeping_with_modifier(sleep_quality, current_turn, recovery_modifier);
 
         // Also restore energy based on fatigue recovery
         let energy_restored = fatigue_decrease * 30.0;
@@ -8058,8 +8234,8 @@ impl Agent {
     }
 
     /// Wake up from sleep
-    pub fn wake_up(&mut self, current_tick: u32) {
-        self.fatigue.wake_up(current_tick);
+    pub fn wake_up(&mut self, current_turn: u32) {
+        self.fatigue.wake_up(current_turn);
     }
 
     /// Check if agent needs sleep based on fatigue (trait-aware)
@@ -8126,7 +8302,7 @@ impl Agent {
 
     /// Regenerate health naturally over time
     /// Called during rest or when near medical facilities
-    /// Base regeneration rate is 0.1 health per tick when resting
+    /// Base regeneration rate is 0.1 health per turn when resting
     pub fn regenerate_health(&mut self, is_resting: bool) {
         if self.state.health >= 100.0 {
             return; // Already at full health
@@ -8183,19 +8359,19 @@ impl Agent {
         !self.state.is_alive || self.state.health <= 0.0
     }
 
-    /// Age the agent by one tick
-    pub fn age_tick(&mut self) {
-        // Use age as an approximation of tick for the basic test API
-        self.state.age_tick(self.state.age);
+    /// Age the agent by one turn
+    pub fn age_turn(&mut self) {
+        // Use age as an approximation of turn for the basic test API
+        self.state.age_turn(self.state.age);
     }
 
-    /// Update starvation counter (called each tick)
+    /// Update starvation counter (called each turn)
     /// Another turn goes by with nothing eaten.
     pub fn update_starvation(&mut self) {
         self.state
             .physiology
             .advance(physiology::MINUTES_PER_TURN, 5.0);
-        self.state.ticks_without_food += physiology::MINUTES_PER_TURN;
+        self.state.turns_without_food += physiology::MINUTES_PER_TURN;
     }
 
     /// Apply damage from starvation
@@ -8235,18 +8411,18 @@ impl Agent {
 
     /// Check for stale storage knowledge and trigger curiosity
     /// Agents become curious about storage containers they haven't checked recently
-    fn update_storage_curiosity(&mut self, current_tick: u32) {
+    fn update_storage_curiosity(&mut self, current_turn: u32) {
         use super::EmotionSource;
         use crate::core::memory::SpatialMemoryType;
 
-        // Threshold for "stale" knowledge (ticks since last seen)
+        // Threshold for "stale" knowledge (turns since last seen)
         const STALE_THRESHOLD: u32 = 1000;
 
         // Check all storage memories
         let storage_memories = self.memory.recall_locations(SpatialMemoryType::Storage);
 
         for storage_memory in storage_memories {
-            let time_since_seen = current_tick.saturating_sub(storage_memory.last_seen);
+            let time_since_seen = current_turn.saturating_sub(storage_memory.last_seen);
 
             // If knowledge is stale, generate curiosity
             if time_since_seen > STALE_THRESHOLD {
@@ -8319,7 +8495,8 @@ impl Agent {
     /// meant to be: it is the specification's "I do not have enough food"
     /// raising fear, and fear is what sends somebody looking further afield
     /// than the ground they are standing on.
-    const WHAT_DREAD_LOOKS_AHEAD: f32 = crate::environment::seasons::TICKS_PER_DAY as f32 * 3.0;
+    const WHAT_DREAD_LOOKS_AHEAD: f32 =
+        crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32 * 3.0;
 
     /// Fear from a need that something has been preventing this agent from
     /// answering.
@@ -8333,8 +8510,8 @@ impl Agent {
     /// It is keyed on how long the need has actually been denied rather than
     /// on how high it stands, because those are different things. A drive can
     /// sit near its threshold all day while being met every time it asks; that
-    /// is not being prevented from anything. `denied_ticks` counts only the
-    /// ticks it asked and got nothing.
+    /// is not being prevented from anything. `denied_turns` counts only the
+    /// turns it asked and got nothing.
     fn calculate_survival_drive_emotion(&self) -> f32 {
         self.what_i_dread().0
     }
@@ -8353,7 +8530,7 @@ impl Agent {
     /// about; it pushes in the same direction.
     ///
     /// Only the needs with a death clock can be dreaded, and
-    /// `ticks_before_this_kills_me` answers `None` for Safety itself, so the
+    /// `turns_before_this_kills_me` answers `None` for Safety itself, so the
     /// fear drive can never end up pointed at its own tail.
     pub fn what_i_dread(&self) -> (f32, Option<crate::core::DriveType>) {
         let mut worst: f32 = 0.0;
@@ -8364,19 +8541,19 @@ impl Agent {
                 continue;
             };
 
-            if drive.denied_ticks() == 0 {
+            if drive.denied_turns() == 0 {
                 continue;
             }
 
             // How badly this one going unanswered would end. A need that
             // cannot kill is a disappointment; one that can is a danger, and
             // the nearer it is the worse.
-            let stakes = match self.state.ticks_before_this_kills_me(drive_type) {
+            let stakes = match self.state.turns_before_this_kills_me(drive_type) {
                 Some(left) => (Self::WHAT_DREAD_LOOKS_AHEAD / left.max(1.0)).clamp(0.0, 1.0),
                 None => continue,
             };
 
-            let how_long = (drive.denied_ticks() as f32 / Self::LONG_ENOUGH_TO_FRIGHTEN)
+            let how_long = (drive.denied_turns() as f32 / Self::LONG_ENOUGH_TO_FRIGHTEN)
                 .clamp(0.0, 1.0);
 
             let this_one = stakes * how_long;
@@ -8453,8 +8630,8 @@ impl Agent {
 
     /// Record that a source satisfied a drive
     /// Also triggers gratitude (happiness and bond improvement) if source is an agent
-    pub fn record_drive_satisfaction(&mut self, drive_type: DriveType, source_id: Uuid, amount: f32, current_tick: u32) {
-        self.satisfaction_tracker.record(drive_type, source_id, amount, current_tick);
+    pub fn record_drive_satisfaction(&mut self, drive_type: DriveType, source_id: Uuid, amount: f32, current_turn: u32) {
+        self.satisfaction_tracker.record(drive_type, source_id, amount, current_turn);
 
         // Trigger gratitude response (happiness and bond improvement)
         self.process_gratitude(source_id, amount);
@@ -8514,7 +8691,7 @@ impl Agent {
     }
 
     /// Apply religious happiness effects from nearby religious buildings
-    /// Called by simulation tick with pre-calculated effects
+    /// Called by simulation turn with pre-calculated effects
     pub fn apply_religious_happiness(&mut self, happiness_modifier: f32, source_description: &str) {
         use super::EmotionSource;
 
@@ -8706,8 +8883,8 @@ impl Agent {
         if let Some(plan) = &self.current_plan {
             if let Some(step) = plan.current_step() {
                 // Allow 3x estimated time before considering it stuck
-                let timeout = step.estimated_ticks * 3;
-                if self.plan_step_ticks > timeout && timeout > 0 {
+                let timeout = step.estimated_turns * 3;
+                if self.plan_step_turns > timeout && timeout > 0 {
                     return false; // Plan is stuck, should abandon
                 }
             }
@@ -8885,18 +9062,18 @@ impl Agent {
     /// Advance the plan after a successful action
     ///
     /// Records the outcome for learning, advances to next step,
-    /// and clears step ticks counter.
-    pub fn advance_plan_step(&mut self, success: bool, actual_ticks: u32) {
+    /// and clears step turns counter.
+    pub fn advance_plan_step(&mut self, success: bool, actual_turns: u32) {
         if let Some(plan) = &self.current_plan {
             if let Some(step) = plan.current_step() {
                 // Record outcome for learning
                 let outcome = ActionOutcome {
                     action_type: step.action.clone(),
-                    estimated_ticks: step.estimated_ticks,
-                    actual_ticks,
+                    estimated_turns: step.estimated_turns,
+                    actual_turns,
                     success,
                     tool_used: step.required_tool.clone(),
-                    tick: self.state.age, // Use age as proxy for current tick
+                    turn: self.state.age, // Use age as proxy for current turn
                 };
                 self.planner.record_outcome(outcome);
             }
@@ -8905,7 +9082,7 @@ impl Agent {
         // Advance to next step
         if let Some(plan) = &mut self.current_plan {
             plan.advance_step();
-            self.plan_step_ticks = 0;
+            self.plan_step_turns = 0;
 
             // Clear plan if complete
             if plan.is_complete() {
@@ -8920,13 +9097,13 @@ impl Agent {
             log::debug!("Agent {} abandoning plan", self.id);
         }
         self.current_plan = None;
-        self.plan_step_ticks = 0;
+        self.plan_step_turns = 0;
     }
 
-    /// Increment the tick counter for current plan step
-    pub fn tick_plan_step(&mut self) {
+    /// Increment the turn counter for current plan step
+    pub fn turn_plan_step(&mut self) {
         if self.has_active_plan() {
-            self.plan_step_ticks += 1;
+            self.plan_step_turns += 1;
         }
     }
 
@@ -8937,7 +9114,7 @@ impl Agent {
         amount: u32,
         resource_location: (i32, i32, i32),
         return_location: (i32, i32, i32),
-        current_tick: u32,
+        current_turn: u32,
     ) {
         // Get available tools from inventory
         let available_tools: Vec<String> = self.inventory.items.values()
@@ -8962,14 +9139,14 @@ impl Agent {
         let traits: Vec<_> = self.traits.get_traits().iter().copied().collect();
         if !plan.exceeds_complexity_limit(&traits) {
             log::debug!(
-                "Agent {} created plan: {} ({} steps, est. {} ticks)",
-                self.id, plan.goal_description, plan.steps.len(), plan.total_estimated_ticks
+                "Agent {} created plan: {} ({} steps, est. {} turns)",
+                self.id, plan.goal_description, plan.steps.len(), plan.total_estimated_turns
             );
             self.current_plan = Some(ActionPlan {
-                created_at: current_tick,
+                created_at: current_turn,
                 ..plan
             });
-            self.plan_step_ticks = 0;
+            self.plan_step_turns = 0;
         }
     }
 
@@ -8980,7 +9157,7 @@ impl Agent {
         &mut self,
         resource_location: (i32, i32, i32),
         return_location: (i32, i32, i32),
-        current_tick: u32,
+        current_turn: u32,
     ) -> bool {
         use crate::core::{ExternalGoal, InternalGoal, EmotionType};
 
@@ -9005,7 +9182,7 @@ impl Agent {
                             vec![
                                 PlanStep {
                                     action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
-                                    estimated_ticks: 30,
+                                    estimated_turns: 30,
                                     required_tool: None,
                                     required_resources: vec![],
                                     target_location: None,
@@ -9018,7 +9195,7 @@ impl Agent {
                             vec![
                                 PlanStep {
                                     action: PlanActionType::MoveTo { location: resource_location },
-                                    estimated_ticks: 40,
+                                    estimated_turns: 40,
                                     required_tool: None,
                                     required_resources: vec![],
                                     target_location: Some(resource_location),
@@ -9031,7 +9208,7 @@ impl Agent {
                             vec![
                                 PlanStep {
                                     action: PlanActionType::Rest { duration: 20 },
-                                    estimated_ticks: 20,
+                                    estimated_turns: 20,
                                     required_tool: None,
                                     required_resources: vec![],
                                     target_location: None,
@@ -9049,7 +9226,7 @@ impl Agent {
                             vec![
                                 PlanStep {
                                     action: PlanActionType::MoveTo { location: shelter },
-                                    estimated_ticks: 30,
+                                    estimated_turns: 30,
                                     required_tool: None,
                                     required_resources: vec![],
                                     target_location: Some(shelter),
@@ -9057,7 +9234,7 @@ impl Agent {
                                 },
                                 PlanStep {
                                     action: PlanActionType::Rest { duration: 30 },
-                                    estimated_ticks: 30,
+                                    estimated_turns: 30,
                                     required_tool: None,
                                     required_resources: vec![],
                                     target_location: Some(shelter),
@@ -9070,7 +9247,7 @@ impl Agent {
                             vec![
                                 PlanStep {
                                     action: PlanActionType::Rest { duration: 40 },
-                                    estimated_ticks: 40,
+                                    estimated_turns: 40,
                                     required_tool: None,
                                     required_resources: vec![],
                                     target_location: None,
@@ -9083,7 +9260,7 @@ impl Agent {
                             vec![
                                 PlanStep {
                                     action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
-                                    estimated_ticks: 40,
+                                    estimated_turns: 40,
                                     required_tool: None,
                                     required_resources: vec![],
                                     target_location: None,
@@ -9095,7 +9272,7 @@ impl Agent {
                             vec![
                                 PlanStep {
                                     action: PlanActionType::Rest { duration: 20 },
-                                    estimated_ticks: 20,
+                                    estimated_turns: 20,
                                     required_tool: None,
                                     required_resources: vec![],
                                     target_location: None,
@@ -9110,7 +9287,7 @@ impl Agent {
                     vec![
                         PlanStep {
                             action: PlanActionType::Rest { duration: 20 },
-                            estimated_ticks: 20,
+                            estimated_turns: 20,
                             required_tool: None,
                             required_resources: vec![],
                             target_location: None,
@@ -9118,7 +9295,7 @@ impl Agent {
                         },
                         PlanStep {
                             action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
-                            estimated_ticks: 20,
+                            estimated_turns: 20,
                             required_tool: None,
                             required_resources: vec![],
                             target_location: None,
@@ -9132,7 +9309,7 @@ impl Agent {
                     vec![
                         PlanStep {
                             action: PlanActionType::MoveTo { location: shelter },
-                            estimated_ticks: 25,
+                            estimated_turns: 25,
                             required_tool: None,
                             required_resources: vec![],
                             target_location: Some(shelter),
@@ -9140,7 +9317,7 @@ impl Agent {
                         },
                         PlanStep {
                             action: PlanActionType::Rest { duration: 50 },
-                            estimated_ticks: 50,
+                            estimated_turns: 50,
                             required_tool: None,
                             required_resources: vec![],
                             target_location: Some(shelter),
@@ -9153,7 +9330,7 @@ impl Agent {
                     vec![
                         PlanStep {
                             action: PlanActionType::MoveTo { location: resource_location },
-                            estimated_ticks: 30,
+                            estimated_turns: 30,
                             required_tool: None,
                             required_resources: vec![],
                             target_location: Some(resource_location),
@@ -9161,7 +9338,7 @@ impl Agent {
                         },
                         PlanStep {
                             action: PlanActionType::Socialize { target_id: uuid::Uuid::nil() },
-                            estimated_ticks: 30,
+                            estimated_turns: 30,
                             required_tool: None,
                             required_resources: vec![],
                             target_location: None,
@@ -9174,13 +9351,13 @@ impl Agent {
             let plan = ActionPlan::new(
                 format!("{:?}", internal_goal),
                 steps,
-                current_tick,
+                current_turn,
                 "fulfilling emotional need".to_string(),
             );
 
             if !plan.exceeds_complexity_limit(&traits) {
                 self.current_plan = Some(plan);
-                self.plan_step_ticks = 0;
+                self.plan_step_turns = 0;
                 return true;
             }
             return false;
@@ -9200,7 +9377,7 @@ impl Agent {
                     *amount,
                     resource_location,
                     return_location,
-                    current_tick,
+                    current_turn,
                 );
                 self.has_active_plan()
             }
@@ -9211,7 +9388,7 @@ impl Agent {
                     *amount,
                     resource_location,
                     return_location,
-                    current_tick,
+                    current_turn,
                 );
                 self.has_active_plan()
             }
@@ -9226,7 +9403,7 @@ impl Agent {
                     let steps = vec![
                         PlanStep {
                             action: PlanActionType::MoveTo { location: return_location },
-                            estimated_ticks: 30,
+                            estimated_turns: 30,
                             required_tool: None,
                             required_resources: vec![],
                             target_location: Some(return_location),
@@ -9237,7 +9414,7 @@ impl Agent {
                                 resource: "food".to_string(),
                                 amount: *amount,
                             },
-                            estimated_ticks: 5,
+                            estimated_turns: 5,
                             required_tool: None,
                             required_resources: vec![("food".to_string(), *amount)],
                             target_location: Some(return_location),
@@ -9248,13 +9425,13 @@ impl Agent {
                     let plan = ActionPlan::new(
                         "Contribute food to storehouse".to_string(),
                         steps,
-                        current_tick,
+                        current_turn,
                         "carrying food".to_string(),
                     );
 
                     if !plan.exceeds_complexity_limit(&traits) {
                         self.current_plan = Some(plan);
-                        self.plan_step_ticks = 0;
+                        self.plan_step_turns = 0;
                         return true;
                     }
                 } else {
@@ -9264,7 +9441,7 @@ impl Agent {
                         *amount,
                         resource_location,
                         return_location,
-                        current_tick,
+                        current_turn,
                     );
                 }
                 self.has_active_plan()
@@ -9275,7 +9452,7 @@ impl Agent {
                     *amount,
                     resource_location,
                     return_location,
-                    current_tick,
+                    current_turn,
                 );
                 self.has_active_plan()
             }
@@ -9287,7 +9464,7 @@ impl Agent {
                             item: item.clone(),
                             count: 1,
                         },
-                        estimated_ticks: 30,
+                        estimated_turns: 30,
                         required_tool: None,
                         required_resources: vec![],
                         target_location: None,
@@ -9298,13 +9475,13 @@ impl Agent {
                 let plan = ActionPlan::new(
                     format!("Craft {}", item),
                     steps,
-                    current_tick,
+                    current_turn,
                     "crafting".to_string(),
                 );
 
                 if !plan.exceeds_complexity_limit(&traits) {
                     self.current_plan = Some(plan);
-                    self.plan_step_ticks = 0;
+                    self.plan_step_turns = 0;
                     return true;
                 }
                 false
@@ -9316,7 +9493,7 @@ impl Agent {
                         action: PlanActionType::BuildStructure {
                             structure: structure.clone(),
                         },
-                        estimated_ticks: 100,
+                        estimated_turns: 100,
                         required_tool: Some("hammer".to_string()),
                         required_resources: vec![("wood".to_string(), 10)],
                         target_location: Some(self.state.position),
@@ -9327,13 +9504,13 @@ impl Agent {
                 let plan = ActionPlan::new(
                     format!("Build {}", structure),
                     steps,
-                    current_tick,
+                    current_turn,
                     "constructing".to_string(),
                 );
 
                 if !plan.exceeds_complexity_limit(&traits) {
                     self.current_plan = Some(plan);
-                    self.plan_step_ticks = 0;
+                    self.plan_step_turns = 0;
                     return true;
                 }
                 false
@@ -9346,7 +9523,7 @@ impl Agent {
                             resource: "wood".to_string(),
                             amount: 20,
                         },
-                        estimated_ticks: 60,
+                        estimated_turns: 60,
                         required_tool: Some("axe".to_string()),
                         required_resources: vec![],
                         target_location: Some(resource_location),
@@ -9356,7 +9533,7 @@ impl Agent {
                         action: PlanActionType::BuildStructure {
                             structure: "small_house".to_string(),
                         },
-                        estimated_ticks: 150,
+                        estimated_turns: 150,
                         required_tool: Some("hammer".to_string()),
                         required_resources: vec![("wood".to_string(), 20)],
                         target_location: Some(self.state.position),
@@ -9367,13 +9544,13 @@ impl Agent {
                 let plan = ActionPlan::new(
                     "Build own house".to_string(),
                     steps,
-                    current_tick,
+                    current_turn,
                     "constructing home".to_string(),
                 );
 
                 if !plan.exceeds_complexity_limit(&traits) {
                     self.current_plan = Some(plan);
-                    self.plan_step_ticks = 0;
+                    self.plan_step_turns = 0;
                     return true;
                 }
                 false
@@ -9386,7 +9563,7 @@ impl Agent {
                             resource: "leather".to_string(),
                             amount: 5,
                         },
-                        estimated_ticks: 40,
+                        estimated_turns: 40,
                         required_tool: None,
                         required_resources: vec![],
                         target_location: Some(resource_location),
@@ -9397,7 +9574,7 @@ impl Agent {
                             item: "leather_armor".to_string(),
                             count: 1,
                         },
-                        estimated_ticks: 50,
+                        estimated_turns: 50,
                         required_tool: None,
                         required_resources: vec![("leather".to_string(), 5)],
                         target_location: None,
@@ -9407,7 +9584,7 @@ impl Agent {
                         action: PlanActionType::EquipItem {
                             item: "leather_armor".to_string(),
                         },
-                        estimated_ticks: 2,
+                        estimated_turns: 2,
                         required_tool: None,
                         required_resources: vec![],
                         target_location: None,
@@ -9418,13 +9595,13 @@ impl Agent {
                 let plan = ActionPlan::new(
                     "Obtain protection".to_string(),
                     steps,
-                    current_tick,
+                    current_turn,
                     "crafting armor".to_string(),
                 );
 
                 if !plan.exceeds_complexity_limit(&traits) {
                     self.current_plan = Some(plan);
-                    self.plan_step_ticks = 0;
+                    self.plan_step_turns = 0;
                     return true;
                 }
                 false
@@ -9437,7 +9614,7 @@ impl Agent {
                             resource: "wood".to_string(),
                             amount: 5,
                         },
-                        estimated_ticks: 30,
+                        estimated_turns: 30,
                         required_tool: None,
                         required_resources: vec![],
                         target_location: Some(resource_location),
@@ -9448,7 +9625,7 @@ impl Agent {
                             resource: "stone".to_string(),
                             amount: 3,
                         },
-                        estimated_ticks: 25,
+                        estimated_turns: 25,
                         required_tool: None,
                         required_resources: vec![],
                         target_location: Some(resource_location),
@@ -9459,7 +9636,7 @@ impl Agent {
                             item: "stone_axe".to_string(),
                             count: 1,
                         },
-                        estimated_ticks: 20,
+                        estimated_turns: 20,
                         required_tool: None,
                         required_resources: vec![
                             ("wood".to_string(), 2),
@@ -9470,7 +9647,7 @@ impl Agent {
                     },
                     PlanStep {
                         action: PlanActionType::MoveTo { location: return_location },
-                        estimated_ticks: 30,
+                        estimated_turns: 30,
                         required_tool: None,
                         required_resources: vec![],
                         target_location: Some(return_location),
@@ -9481,7 +9658,7 @@ impl Agent {
                             resource: "stone_axe".to_string(),
                             amount: *target_count,
                         },
-                        estimated_ticks: 5,
+                        estimated_turns: 5,
                         required_tool: None,
                         required_resources: vec![],
                         target_location: Some(return_location),
@@ -9492,13 +9669,13 @@ impl Agent {
                 let plan = ActionPlan::new(
                     "Ensure tools available".to_string(),
                     steps,
-                    current_tick,
+                    current_turn,
                     "crafting tools".to_string(),
                 );
 
                 if !plan.exceeds_complexity_limit(&traits) {
                     self.current_plan = Some(plan);
-                    self.plan_step_ticks = 0;
+                    self.plan_step_turns = 0;
                     return true;
                 }
                 false
@@ -9510,7 +9687,7 @@ impl Agent {
                         action: PlanActionType::LearnSkill {
                             skill: skill_name.clone(),
                         },
-                        estimated_ticks: 100,
+                        estimated_turns: 100,
                         required_tool: None,
                         required_resources: vec![],
                         target_location: None,
@@ -9521,13 +9698,13 @@ impl Agent {
                 let plan = ActionPlan::new(
                     format!("Learn {}", skill_name),
                     steps,
-                    current_tick,
+                    current_turn,
                     "practicing".to_string(),
                 );
 
                 if !plan.exceeds_complexity_limit(&traits) {
                     self.current_plan = Some(plan);
-                    self.plan_step_ticks = 0;
+                    self.plan_step_turns = 0;
                     return true;
                 }
                 false
@@ -9540,7 +9717,7 @@ impl Agent {
                 let steps = vec![
                     PlanStep {
                         action: PlanActionType::Socialize { target_id },
-                        estimated_ticks: 30,
+                        estimated_turns: 30,
                         required_tool: None,
                         required_resources: vec![],
                         target_location: None,
@@ -9551,13 +9728,13 @@ impl Agent {
                 let plan = ActionPlan::new(
                     format!("Form {} relationship", relationship_type),
                     steps,
-                    current_tick,
+                    current_turn,
                     "socializing".to_string(),
                 );
 
                 if !plan.exceeds_complexity_limit(&traits) {
                     self.current_plan = Some(plan);
-                    self.plan_step_ticks = 0;
+                    self.plan_step_turns = 0;
                     return true;
                 }
                 false
@@ -9572,7 +9749,7 @@ impl Agent {
                                 resource: "wood".to_string(),
                                 amount: 10,
                             },
-                            estimated_ticks: 60,
+                            estimated_turns: 60,
                             required_tool: Some("axe".to_string()),
                             required_resources: vec![],
                             target_location: Some(resource_location),
@@ -9585,7 +9762,7 @@ impl Agent {
                                 resource: "stone".to_string(),
                                 amount: 10,
                             },
-                            estimated_ticks: 80,
+                            estimated_turns: 80,
                             required_tool: Some("pickaxe".to_string()),
                             required_resources: vec![],
                             target_location: Some(resource_location),
@@ -9598,7 +9775,7 @@ impl Agent {
                                 resource: "meat".to_string(),
                                 amount: 5,
                             },
-                            estimated_ticks: 90,
+                            estimated_turns: 90,
                             required_tool: Some("bow".to_string()),
                             required_resources: vec![],
                             target_location: Some(resource_location),
@@ -9611,7 +9788,7 @@ impl Agent {
                                 item: "tool".to_string(),
                                 count: 1,
                             },
-                            estimated_ticks: 40,
+                            estimated_turns: 40,
                             required_tool: None,
                             required_resources: vec![],
                             target_location: None,
@@ -9622,7 +9799,7 @@ impl Agent {
                         // Generic work task - rest and observe
                         PlanStep {
                             action: PlanActionType::Rest { duration: 10 },
-                            estimated_ticks: 10,
+                            estimated_turns: 10,
                             required_tool: None,
                             required_resources: vec![],
                             target_location: None,
@@ -9634,13 +9811,13 @@ impl Agent {
                 let plan = ActionPlan::new(
                     format!("Complete {} job", job_name),
                     steps,
-                    current_tick,
+                    current_turn,
                     "working".to_string(),
                 );
 
                 if !plan.exceeds_complexity_limit(&traits) {
                     self.current_plan = Some(plan);
-                    self.plan_step_ticks = 0;
+                    self.plan_step_turns = 0;
                     return true;
                 }
                 false
@@ -9686,7 +9863,7 @@ impl Agent {
                         format!("Socializing with {}", target_id)
                     }
                     PlanActionType::Rest { duration } => {
-                        format!("Resting for {} ticks", duration)
+                        format!("Resting for {} turns", duration)
                     }
                     PlanActionType::LearnSkill { skill } => {
                         format!("Learning {}", skill)
@@ -9770,7 +9947,7 @@ impl Agent {
 
     /// Attempt to detect lies in received information based on personal knowledge
     /// Returns a list of (info_id, source_id, was_lie) for detected lies
-    pub fn detect_lies_in_knowledge(&self, _current_tick: u32) -> Vec<(uuid::Uuid, uuid::Uuid, bool)> {
+    pub fn detect_lies_in_knowledge(&self, _current_turn: u32) -> Vec<(uuid::Uuid, uuid::Uuid, bool)> {
         use super::gossip::InformationType;
 
         let mut detections = Vec::new();
@@ -9822,16 +9999,16 @@ impl Agent {
     }
 
     /// Process lie detection and update trust/relationships accordingly
-    /// Call this periodically (e.g., every 100 ticks) to verify information
-    pub fn process_information_verification(&mut self, current_tick: u32) {
+    /// Call this periodically (e.g., every 100 turns) to verify information
+    pub fn process_information_verification(&mut self, current_turn: u32) {
         use super::EmotionSource;
 
-        let detections = self.detect_lies_in_knowledge(current_tick);
+        let detections = self.detect_lies_in_knowledge(current_turn);
 
         for (info_id, source_id, was_lie) in detections {
             // Calculate info age for trust update (used by SocialNetwork methods)
             let _info_age = if let Some(info) = self.knowledge.known_information.get(&info_id) {
-                current_tick.saturating_sub(info.timestamp as u32)
+                current_turn.saturating_sub(info.timestamp as u32)
             } else {
                 1000 // Default to old if not found
             };
@@ -9857,12 +10034,12 @@ impl Agent {
                 self.found_out_i_was_lied_to(
                     source_id,
                     about.as_deref().unwrap_or(""),
-                    current_tick,
+                    current_turn,
                 );
             } else {
                 // Truth verified - strengthen trust and relationship
                 self.found_out_they_were_right(source_id);
-                let rel = self.relationships.get_or_create_relationship(source_id, current_tick);
+                let rel = self.relationships.get_or_create_relationship(source_id, current_turn);
                 rel.strengthen(0.05); // Small positive reinforcement
                 rel.settle_what_we_are();
 
@@ -9911,7 +10088,7 @@ impl Agent {
     /// be; the scale only has to separate a seam from the last of one.
     const A_PLACE_WORTH_REMEMBERING: u32 = 12;
 
-    pub fn forget_what_does_not_matter(&mut self, current_tick: u32) {
+    pub fn forget_what_does_not_matter(&mut self, current_turn: u32) {
         if self.exploration_knowledge.known_resources.len()
             <= Self::WHAT_A_MAN_CAN_HOLD_IN_MIND
         {
@@ -9941,7 +10118,7 @@ impl Agent {
                     .when_i_saw_it(where_it_is)
                     .unwrap_or(0);
                 let freshness = 1.0
-                    - (current_tick.saturating_sub(learned_on) as f32
+                    - (current_turn.saturating_sub(learned_on) as f32
                         / crate::environment::seasons::TICKS_PER_YEAR as f32)
                         .clamp(0.0, 1.0);
 
@@ -10021,10 +10198,10 @@ impl Agent {
             self.exploration_knowledge.known_resources.remove(&where_it_is);
             self.exploration_knowledge.who_told_me.remove(&where_it_is);
             self.exploration_knowledge
-                .resource_discovery_ticks
+                .resource_discovery_turns
                 .remove(&where_it_is);
             self.exploration_knowledge
-                .last_seen_ticks
+                .last_seen_turns
                 .remove(&where_it_is);
             self.exploration_knowledge
                 .how_much_was_there
@@ -10138,21 +10315,21 @@ impl Agent {
         &mut self,
         liar: uuid::Uuid,
         about: &str,
-        current_tick: u32,
+        current_turn: u32,
     ) {
         use super::EmotionSource;
 
         let cost = self.what_a_lie_about_this_costs(Some(about), liar);
 
         // Anger at whoever it was, weighted by what it was about. A grudge
-        // then weighs on the bond every tick it is held - see
+        // then weighs on the bond every turn it is held - see
         // `Relationship::let_it_tell` - but finding out is its own moment and
         // lands on the bond directly as well.
         self.emotions.add_anger(EmotionSource::Agent(liar), cost);
 
         let bond = self
             .relationships
-            .get_or_create_relationship(liar, current_tick);
+            .get_or_create_relationship(liar, current_turn);
         bond.weaken(cost);
         bond.settle_what_we_are();
 
@@ -10176,7 +10353,7 @@ impl Agent {
         thief: uuid::Uuid,
         what: &str,
         how_many: u32,
-        current_tick: u32,
+        current_turn: u32,
         how_strong_they_are: f32,
     ) {
         use super::EmotionSource;
@@ -10210,7 +10387,7 @@ impl Agent {
 
         let bond = self
             .relationships
-            .get_or_create_relationship(thief, current_tick);
+            .get_or_create_relationship(thief, current_turn);
         bond.weaken(cost);
         bond.settle_what_we_are();
 
@@ -10618,7 +10795,7 @@ impl Agent {
     /// friends - reads well and stops lying dead: bonds in a settlement are
     /// mostly warm, so the friendliest face in any room is nearly always a
     /// close one, and the discount for it cancelled the whole temptation.
-    pub fn would_lie_to_this_room(&self, room: &[uuid::Uuid], current_tick: u32) -> bool {
+    pub fn would_lie_to_this_room(&self, room: &[uuid::Uuid], current_turn: u32) -> bool {
         use rand::Rng;
 
         if room.is_empty() {
@@ -10640,7 +10817,7 @@ impl Agent {
             .copied()
             .unwrap_or(room[0]);
 
-        if !self.would_lie_to(worth_deceiving, current_tick) {
+        if !self.would_lie_to(worth_deceiving, current_turn) {
             return false;
         }
 
@@ -10656,7 +10833,7 @@ impl Agent {
 
     /// Check if this agent would lie when sharing information
     /// Based on traits and relationship with the target
-    pub fn would_lie_to(&self, target_id: uuid::Uuid, _current_tick: u32) -> bool {
+    pub fn would_lie_to(&self, target_id: uuid::Uuid, _current_turn: u32) -> bool {
         use crate::core::traits::Trait;
         use rand::Rng;
 
@@ -10703,7 +10880,7 @@ impl Agent {
 ///
 /// "Once an agent plans an action, it would not change its mind unless its
 /// situation changed in some manner. The agent begins walking and for the next
-/// ten ticks no new decisions need be made. If during the walk the agent ran
+/// ten turns no new decisions need be made. If during the walk the agent ran
 /// into a pack of wolves, it would need to recalculate."
 ///
 /// Before this, every tile of every walk was a fresh decision made from
@@ -10787,7 +10964,7 @@ impl Errand {
     /// which is the failure the old behaviour was avoiding by throwing the
     /// errand away.
     pub const HOW_LONG_AN_ERRAND_KEEPS: u32 =
-        2 * crate::environment::seasons::TICKS_PER_DAY;
+        2 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
 
     /// Whether this one has been waiting too long to still be worth resuming.
     pub fn stale(&self) -> bool {

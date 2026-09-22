@@ -389,7 +389,7 @@ fn the_food_table_is_the_specification_verbatim() {
     assert!((what_a_body_this_age_eats(15) - 0.90).abs() < 1e-6);
 }
 
-/// A whole life is 36,288,000 of the specification's ticks, and a year is
+/// A whole life is 36,288,000 of the specification's turns, and a year is
 /// 518,400 - which are this model's *minutes*, because a turn is a decision
 /// and not a minute.
 #[test]
@@ -703,7 +703,7 @@ fn old_age_can_be_taken_off_the_board() {
         * crate::environment::TICKS_PER_YEAR
         + 1;
     agent.state.health = 100.0;
-    agent.state.age_tick_with_modifier(agent.state.age, 1.0);
+    agent.state.age_turn_with_modifier(agent.state.age, 1.0);
     assert!(
         agent.state.is_alive,
         "nobody in this population dies of old age"

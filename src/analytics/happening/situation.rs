@@ -2,7 +2,7 @@
 //! Reading the world, so that a drive can rise on a condition rather than on
 //! a clock.
 //!
-//! What is around each agent this tick, what the afternoon was like, and what
+//! What is around each agent this turn, what the afternoon was like, and what
 //! everybody makes of their provisions against the winter coming.
 //!
 //! Part of what happens whether or not anybody decides anything - see
@@ -156,8 +156,8 @@ impl Simulation {
     /// The drives are specified by the conditions that raise them - "hostile
     /// entity proximity", "nightfall", "others building", "crop depletion" -
     /// and half of those are things only the world knows. This gathers them
-    /// once a tick per agent. The agent folds in what it knows about itself
-    /// when its own drives are ticked, one tick later, which is near enough:
+    /// once a turn per agent. The agent folds in what it knows about itself
+    /// when its own drives are turned, one turn later, which is near enough:
     /// nothing here changes faster than an agent can walk.
     pub(in crate::analytics) fn read_the_situation(&mut self) {
         use crate::world::{Position, TerrainType};
@@ -196,7 +196,7 @@ impl Simulation {
             .map(|building| (building.position.x, building.position.y))
             .collect();
 
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // Small children, by whose parent they are
         let young: Vec<(Vec<uuid::Uuid>, (i32, i32, i32))> = self
@@ -302,8 +302,8 @@ impl Simulation {
             // `what_i_stand_to_lose` belongs to the *feeling* - how much a man
             // minds - and multiplying the drive by it as well pushed the
             // reading to its ceiling whenever anything at all was about, so
-            // fear outranked hunger every tick of every day and a settlement
-            // of eight starved inside four thousand ticks.
+            // fear outranked hunger every turn of every day and a settlement
+            // of eight starved inside four thousand turns.
             let judged = crate::agents::ThreatAssessment::assess(
                 agent.own_strength(),
                 coming,
@@ -356,7 +356,7 @@ impl Simulation {
                     .buildings
                     .iter()
                     .any(|building| building.position == here && building.is_completed()),
-                recently_hurt: agent.emotions.recent_attacker(current_tick).is_some(),
+                recently_hurt: agent.emotions.recent_attacker(current_turn).is_some(),
                 crop_near: crop_at(position),
                 somewhere_to_build: crate::world::Terrain::new(ground).can_be_tilled(),
                 neighbours_building: building_sites.iter().any(|spot| near(spot, 12)),
@@ -404,7 +404,7 @@ impl Simulation {
         use crate::agents::provision::{WhatIsPutBy, UNITS_IN_ONE_STORED_ITEM};
 
         let season = self.world.climate.current_season();
-        let day_of_year = (self.current_tick
+        let day_of_year = (self.current_turn
             / crate::environment::seasons::TICKS_PER_DAY)
             % crate::environment::seasons::DAYS_PER_YEAR;
 

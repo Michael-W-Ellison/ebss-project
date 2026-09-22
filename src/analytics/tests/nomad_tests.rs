@@ -13,7 +13,7 @@
 //! moving.
 //!
 //! This is not the same mechanism as `migration_action`, which fires on an
-//! agent that has already been hungry for a hundred and twenty ticks. That is
+//! agent that has already been hungry for a hundred and twenty turns. That is
 //! fleeing. This fires while there is still something here to eat, on the
 //! strength of there not being much of it.
 
@@ -259,7 +259,7 @@ fn thirst_is_a_reason_to_leave_a_country() {
         .drives
         .get_mut(DriveType::Thirst)
     {
-        thirst.denied_ticks = Simulation::HUNGRY_ENOUGH_TO_LEAVE + 1;
+        thirst.denied_turns = Simulation::HUNGRY_ENOUGH_TO_LEAVE + 1;
     }
 
     assert!(
@@ -293,7 +293,7 @@ fn a_man_leaving_for_water_walks_towards_water() {
             .push(SpatialMemory::new(SpatialMemoryType::Food, hedgerow, 0));
 
         if let Some(thirst) = agent.drives.get_mut(DriveType::Thirst) {
-            thirst.denied_ticks = Simulation::HUNGRY_ENOUGH_TO_LEAVE + 1;
+            thirst.denied_turns = Simulation::HUNGRY_ENOUGH_TO_LEAVE + 1;
         }
     }
 
@@ -328,7 +328,7 @@ fn hunger_still_sends_a_man_to_food() {
             .push(SpatialMemory::new(SpatialMemoryType::Food, hedgerow, 0));
 
         if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
-            hunger.denied_ticks = Simulation::HUNGRY_ENOUGH_TO_LEAVE + 1;
+            hunger.denied_turns = Simulation::HUNGRY_ENOUGH_TO_LEAVE + 1;
         }
     }
 

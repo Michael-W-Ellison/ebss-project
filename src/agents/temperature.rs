@@ -72,14 +72,14 @@ impl BodyTemperature {
         (excess / 10.0).min(1.0)
     }
 
-    /// How fast the body exchanges heat with its surroundings, per tick,
+    /// How fast the body exchanges heat with its surroundings, per turn,
     /// per degree of difference
     const BASE_TRANSFER_RATE: f32 = 0.02;
 
-    /// Degrees per tick the body can generate by shivering and burning fuel
+    /// Degrees per turn the body can generate by shivering and burning fuel
     const WARMING_CAPACITY: f32 = 0.6;
 
-    /// Degrees per tick the body can shed by sweating. Lower than the warming
+    /// Degrees per turn the body can shed by sweating. Lower than the warming
     /// capacity: shedding heat is the harder direction for a body.
     const COOLING_CAPACITY: f32 = 0.1;
 

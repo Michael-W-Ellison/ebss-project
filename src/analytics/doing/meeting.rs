@@ -79,7 +79,7 @@ impl Simulation {
         going
     }
     /// `Action::Socialize`.
-    pub(in crate::analytics) fn socialising(&mut self, target_agent_id: &uuid::Uuid, agent_index: usize, rng: &mut rand::rngs::StdRng, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn socialising(&mut self, target_agent_id: &uuid::Uuid, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         use crate::agents::social_interactions::{
             SocialInteractionType, HelpType,
             calculate_relationship_change, calculate_social_satisfaction,
@@ -118,17 +118,17 @@ impl Simulation {
             .traits.get_traits().iter().copied().collect();
 
         // Get or create relationship
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
         let initiator_agent = &mut self.population.agents[agent_index];
         let relationship = initiator_agent.relationships
-            .get_or_create_relationship(*target_agent_id, current_tick);
+            .get_or_create_relationship(*target_agent_id, current_turn);
 
         let current_relationship = relationship.relationship_level();
         let current_trust = relationship.trust_level();
-        let last_interaction_tick = relationship.last_interaction_tick;
+        let last_interaction_turn = relationship.last_interaction_turn;
 
         // Determine interaction type based on relationship and context
-        let interaction_type = if should_greet(last_interaction_tick, current_tick, &current_relationship) {
+        let interaction_type = if should_greet(last_interaction_turn, current_turn, &current_relationship) {
             // Greet if haven't interacted in a while
             SocialInteractionType::Greet
         } else {
@@ -278,16 +278,16 @@ impl Simulation {
         // Update initiator's relationship
         let initiator = &mut self.population.agents[agent_index];
         let relationship = initiator.relationships
-            .get_or_create_relationship(*target_agent_id, current_tick);
+            .get_or_create_relationship(*target_agent_id, current_turn);
 
         if success && relationship_change != 0 {
             if relationship_change > 0 {
-                relationship.positive_interaction(relationship_change, current_tick);
+                relationship.positive_interaction(relationship_change, current_turn);
             } else {
-                relationship.negative_interaction(relationship_change.abs(), current_tick);
+                relationship.negative_interaction(relationship_change.abs(), current_turn);
             }
         }
-        relationship.last_interaction_tick = current_tick;
+        relationship.last_interaction_turn = current_turn;
         relationship.total_interactions += 1;
 
         // Also update target's relationship (reciprocal, but may differ based on their traits)
@@ -303,16 +303,16 @@ impl Simulation {
 
         let target = &mut self.population.agents[target_index];
         let target_relationship = target.relationships
-            .get_or_create_relationship(initiator_id, current_tick);
+            .get_or_create_relationship(initiator_id, current_turn);
 
         if success && target_relationship_change != 0 {
             if target_relationship_change > 0 {
-                target_relationship.positive_interaction(target_relationship_change, current_tick);
+                target_relationship.positive_interaction(target_relationship_change, current_turn);
             } else {
-                target_relationship.negative_interaction(target_relationship_change.abs(), current_tick);
+                target_relationship.negative_interaction(target_relationship_change.abs(), current_turn);
             }
         }
-        target_relationship.last_interaction_tick = current_tick;
+        target_relationship.last_interaction_turn = current_turn;
         target_relationship.total_interactions += 1;
 
         // Calculate target's social satisfaction too
@@ -331,12 +331,12 @@ impl Simulation {
         if success {
             // Grant Social skill XP
             let initiator = &mut self.population.agents[agent_index];
-            initiator.skills.practise(crate::agents::skills::SkillType::Social, 1, tick_now);
+            initiator.skills.practise(crate::agents::skills::SkillType::Social, 1, turn_now);
 
             // Record that this agent satisfied our social drive
-            let tick = self.current_tick;
+            let turn = self.current_turn;
             let initiator = &mut self.population.agents[agent_index];
-            initiator.record_drive_satisfaction(DriveType::Social, *target_agent_id, social_satisfaction, tick);
+            initiator.record_drive_satisfaction(DriveType::Social, *target_agent_id, social_satisfaction, turn);
 
             // Helper happiness for initiator (providing social satisfaction to target)
             let initiator = &mut self.population.agents[agent_index];
@@ -344,7 +344,7 @@ impl Simulation {
 
             // Also record for the target (reciprocal satisfaction)
             let target = &mut self.population.agents[target_index];
-            target.record_drive_satisfaction(DriveType::Social, initiator_id, target_satisfaction, tick);
+            target.record_drive_satisfaction(DriveType::Social, initiator_id, target_satisfaction, turn);
 
             // Helper happiness for target (providing social satisfaction to initiator)
             let target = &mut self.population.agents[target_index];
@@ -393,7 +393,7 @@ impl Simulation {
             return ActionResult::failure("Too far off to say anything".to_string());
         }
 
-        let current_tick = self.current_tick;
+        let current_turn = self.current_turn;
 
         // Capture initiator data before mutable borrows
         let (initiator_id, info_to_share) = {
@@ -427,7 +427,7 @@ impl Simulation {
                     },
                     initiator_id,
                     true, // Assume they know their current location
-                    current_tick as u64,
+                    current_turn as u64,
                 )
             };
 
@@ -445,7 +445,7 @@ impl Simulation {
             initiator_id,
             target_id,
             &recipient_traits,
-            current_tick as u64,
+            current_turn as u64,
         );
 
         // Determine message based on information type
@@ -572,9 +572,9 @@ impl Simulation {
             // Attempt impregnation
             let male = &self.population.agents[male_index];
             let female = &self.population.agents[female_index];
-            let current_tick = self.current_tick;
+            let current_turn = self.current_turn;
 
-            if let Some(pregnancy) = attempt_impregnation(female, male, current_tick) {
+            if let Some(pregnancy) = attempt_impregnation(female, male, current_turn) {
                 // Pregnancy started!
                 let female = &mut self.population.agents[female_index];
                 female.pregnancy = Some(pregnancy);
@@ -594,7 +594,7 @@ impl Simulation {
                     },
                     female_id,
                     true,
-                    current_tick as u64,
+                    current_turn as u64,
                 );
 
                 // Share pregnancy information with nearby agents
@@ -612,7 +612,7 @@ impl Simulation {
                                 female_id,
                                 other_agent.id,
                                 &other_agent.traits,
-                                current_tick as u64,
+                                current_turn as u64,
                             );
                         }
                     }
@@ -668,7 +668,7 @@ impl Simulation {
     }
 
     /// `Action::TakeFrom`.
-    pub(in crate::analytics) fn taking_from(&mut self, from: &uuid::Uuid, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn taking_from(&mut self, from: &uuid::Uuid, agent_index: usize, turn_now: u32) -> ActionResult {
         let Some(them) = self
             .population
             .agents
@@ -697,7 +697,7 @@ impl Simulation {
         let taken = {
             let other = &mut self.population.agents[them];
             let taken = other.inventory.remove_item(&theirs.0, took);
-            other.they_took_something_of_mine(me, &theirs.0, took, tick_now, how_strong_the_thief_is);
+            other.they_took_something_of_mine(me, &theirs.0, took, turn_now, how_strong_the_thief_is);
             taken
         };
 
@@ -729,7 +729,7 @@ impl Simulation {
                         me,
                         &theirs.0,
                         took,
-                        tick_now,
+                        turn_now,
                         how_strong_the_thief_is,
                     );
 
@@ -758,7 +758,7 @@ impl Simulation {
         if who_saw_it > 0 {
             let cost = (who_saw_it as f32 * Self::WHAT_ONE_PAIR_OF_EYES_COSTS)
                 .min(crate::agents::patterns::Patterns::WHAT_ONE_CONSEQUENCE_IS_WORTH);
-            self.population.agents[agent_index].this_cost_me(DriveType::Social, cost, tick_now);
+            self.population.agents[agent_index].this_cost_me(DriveType::Social, cost, turn_now);
         }
 
         debug!("Agent {me} helped himself to {took} {} of {robbed}'s", theirs.0);
@@ -828,7 +828,7 @@ impl Simulation {
     }
 
     /// `Action::Trade`.
-    pub(in crate::analytics) fn trading(&mut self, with: &uuid::Uuid, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn trading(&mut self, with: &uuid::Uuid, agent_index: usize, turn_now: u32) -> ActionResult {
         let Some(them) = self
             .population
             .agents
@@ -871,7 +871,7 @@ impl Simulation {
 
         {
             let agent = &mut self.population.agents[agent_index];
-            agent.skills.practise(crate::agents::SkillType::Social, 8, tick_now);
+            agent.skills.practise(crate::agents::SkillType::Social, 8, turn_now);
         }
 
         let me = self.population.agents[agent_index].id;
@@ -879,7 +879,7 @@ impl Simulation {
 
         {
             let other = &mut self.population.agents[them];
-            other.skills.practise(crate::agents::SkillType::Social, 8, tick_now);
+            other.skills.practise(crate::agents::SkillType::Social, 8, turn_now);
 
             // A good trade is a good turn on both sides, and both
             // remember who it was with
@@ -948,7 +948,7 @@ impl Simulation {
     }
 
     /// `Action::GiveTo`.
-    pub(in crate::analytics) fn giving_to(&mut self, to: &uuid::Uuid, agent_index: usize, tick_now: u32) -> ActionResult {
+    pub(in crate::analytics) fn giving_to(&mut self, to: &uuid::Uuid, agent_index: usize, turn_now: u32) -> ActionResult {
         let Some(them) = self
             .population
             .agents
@@ -976,7 +976,7 @@ impl Simulation {
 
         {
             let agent = &mut self.population.agents[agent_index];
-            agent.skills.practise(crate::agents::SkillType::Social, 10, tick_now);
+            agent.skills.practise(crate::agents::SkillType::Social, 10, turn_now);
         }
 
         {

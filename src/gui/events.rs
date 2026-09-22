@@ -107,8 +107,8 @@ impl DeathCause {
 pub struct SimulationEvent {
     /// Unique identifier for this event
     pub id: Uuid,
-    /// Tick when the event occurred
-    pub tick: u32,
+    /// Turn when the event occurred
+    pub turn: u32,
     /// Type of event with associated data
     pub event_type: SimulationEventType,
     /// Position where the event occurred (if applicable)
@@ -117,10 +117,10 @@ pub struct SimulationEvent {
 
 impl SimulationEvent {
     /// Create a new simulation event
-    pub fn new(tick: u32, event_type: SimulationEventType, position: Option<(i32, i32)>) -> Self {
+    pub fn new(turn: u32, event_type: SimulationEventType, position: Option<(i32, i32)>) -> Self {
         Self {
             id: crate::core::dice::name(),
-            tick,
+            turn,
             event_type,
             position,
         }
@@ -378,11 +378,11 @@ impl EventLog {
             })
             .collect();
 
-        // Sort by tick
+        // Sort by turn
         if newest_first {
-            filtered.sort_by(|a, b| b.tick.cmp(&a.tick));
+            filtered.sort_by(|a, b| b.turn.cmp(&a.turn));
         } else {
-            filtered.sort_by(|a, b| a.tick.cmp(&b.tick));
+            filtered.sort_by(|a, b| a.turn.cmp(&b.turn));
         }
 
         filtered
@@ -539,8 +539,8 @@ mod tests {
         }
 
         assert_eq!(log.len(), 5);
-        assert_eq!(log.events().front().unwrap().tick, 5);
-        assert_eq!(log.events().back().unwrap().tick, 9);
+        assert_eq!(log.events().front().unwrap().turn, 5);
+        assert_eq!(log.events().back().unwrap().turn, 9);
     }
 
     #[test]

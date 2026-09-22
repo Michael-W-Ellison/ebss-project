@@ -97,14 +97,14 @@ fn render_agent_header(ui: &mut Ui, agent: &SelectedAgentData) {
         ui.colored_label(Color32::RED, "⚠ CRITICAL CONDITION");
         if agent.survival_status.is_starving {
             ui.colored_label(Color32::YELLOW, format!(
-                "  Starving: {} ticks without food",
-                agent.survival_status.ticks_without_food
+                "  Starving: {} turns without food",
+                agent.survival_status.turns_without_food
             ));
         }
         if agent.survival_status.is_dehydrated {
             ui.colored_label(Color32::LIGHT_BLUE, format!(
-                "  Dehydrated: {} ticks without water",
-                agent.survival_status.ticks_without_water
+                "  Dehydrated: {} turns without water",
+                agent.survival_status.turns_without_water
             ));
         }
     }

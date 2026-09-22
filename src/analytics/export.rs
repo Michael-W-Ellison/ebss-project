@@ -65,7 +65,7 @@ impl DataExporter {
         // Write header
         writeln!(
             file,
-            "tick,population,average_happiness,average_age,births,deaths,abandonments,total_relationships,average_trust,average_affection,family_bonds,conflicts"
+            "turn,population,average_happiness,average_age,births,deaths,abandonments,total_relationships,average_trust,average_affection,family_bonds,conflicts"
         )?;
 
         // Write data rows
@@ -73,13 +73,13 @@ impl DataExporter {
             writeln!(
                 file,
                 "{},{},{:.3},{:.1},{},{},{},{},{:.3},{:.3},{},{}",
-                snapshot.tick,
+                snapshot.turn,
                 snapshot.population.total,
                 snapshot.population.average_happiness,
                 snapshot.population.average_age,
-                snapshot.population.births_this_tick,
-                snapshot.population.deaths_this_tick,
-                snapshot.population.abandonments_this_tick,
+                snapshot.population.births_this_turn,
+                snapshot.population.deaths_this_turn,
+                snapshot.population.abandonments_this_turn,
                 snapshot.relationships.total_relationships,
                 snapshot.relationships.average_trust,
                 snapshot.relationships.average_affection,
@@ -132,7 +132,7 @@ impl DataExporter {
         let mut file = File::create(path)?;
 
         // Write header
-        writeln!(file, "tick,pattern_type,severity,description")?;
+        writeln!(file, "turn,pattern_type,severity,description")?;
 
         // Write data rows
         for pattern in &detector.detected_patterns {
@@ -140,7 +140,7 @@ impl DataExporter {
             writeln!(
                 file,
                 "{},{},{:.3},\"{}\"",
-                pattern.detected_at_tick, pattern_type_str, pattern.severity, pattern.description
+                pattern.detected_at_turn, pattern_type_str, pattern.severity, pattern.description
             )?;
         }
 
@@ -154,10 +154,10 @@ impl DataExporter {
     ) -> std::io::Result<()> {
         let mut file = File::create(path)?;
 
-        writeln!(file, "tick,population")?;
+        writeln!(file, "turn,population")?;
 
-        for (tick, pop) in metrics.population_trend() {
-            writeln!(file, "{},{}", tick, pop)?;
+        for (turn, pop) in metrics.population_trend() {
+            writeln!(file, "{},{}", turn, pop)?;
         }
 
         Ok(())
@@ -170,10 +170,10 @@ impl DataExporter {
     ) -> std::io::Result<()> {
         let mut file = File::create(path)?;
 
-        writeln!(file, "tick,happiness")?;
+        writeln!(file, "turn,happiness")?;
 
-        for (tick, happiness) in metrics.happiness_trend() {
-            writeln!(file, "{},{:.3}", tick, happiness)?;
+        for (turn, happiness) in metrics.happiness_trend() {
+            writeln!(file, "{},{:.3}", turn, happiness)?;
         }
 
         Ok(())
@@ -198,7 +198,7 @@ impl DataExporter {
         trait_vec.sort_by_key(|t| format!("{:?}", t));
 
         // Write header
-        write!(file, "tick")?;
+        write!(file, "turn")?;
         for trait_item in &trait_vec {
             write!(file, ",{:?}", trait_item)?;
         }
@@ -206,7 +206,7 @@ impl DataExporter {
 
         // Write data rows
         for snapshot in &metrics.snapshots {
-            write!(file, "{}", snapshot.tick)?;
+            write!(file, "{}", snapshot.turn)?;
             for trait_item in &trait_vec {
                 let count = snapshot.traits.get(trait_item).copied().unwrap_or(0);
                 write!(file, ",{}", count)?;
@@ -286,7 +286,7 @@ mod tests {
         assert!(file_path.exists());
 
         let content = std::fs::read_to_string(&file_path).unwrap();
-        assert!(content.contains("tick,population"));
+        assert!(content.contains("turn,population"));
     }
 
     #[test]

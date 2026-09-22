@@ -81,7 +81,7 @@ pub struct Recipe {
     pub name: &'static str,
     pub inputs: Vec<ResourceRequirement>,
     pub outputs: Vec<ProductionOutput>,
-    pub base_time: u32, // Base time in ticks
+    pub base_time: u32, // Base time in turns
 }
 
 impl Recipe {

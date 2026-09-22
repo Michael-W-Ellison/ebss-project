@@ -6,7 +6,7 @@
 //! the one place in the world where matter could rot to nothing; and a body
 //! was buried nowhere. The soil was a stock being mined with no return at all,
 //! and the only thing that ever put anything back was an agent who had learned
-//! to tip a spoiled basket onto a field. Traced over thirty thousand ticks,
+//! to tip a spoiled basket onto a field. Traced over thirty thousand turns,
 //! farmed ground went from 0.53 fertility to 0.03 and stayed there.
 //!
 //! What a body takes in mostly comes out again, and what a body is comes back
@@ -70,7 +70,7 @@ fn what_spoils_in_a_pack_is_not_deleted() {
     agent.inventory.add_item(gone_off);
 
     // Long enough that it has genuinely gone off rather than being told it has
-    agent.tick_food_spoilage(100_000);
+    agent.turn_food_spoilage(100_000);
 
     assert!(
         agent.inventory.get_item("food").is_none(),
@@ -137,7 +137,7 @@ fn what_a_settlement_eats_reaches_the_ground_it_stands_on() {
         for agent in &mut simulation.population.agents {
             agent.state.position = (25, 25, 0);
         }
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let after = simulation
@@ -149,7 +149,7 @@ fn what_a_settlement_eats_reaches_the_ground_it_stands_on() {
 
     assert!(
         after > before,
-        "a tile ten people lived on for fifteen hundred ticks should have gained \
+        "a tile ten people lived on for fifteen hundred turns should have gained \
          litter, not lost it: {before:.3} -> {after:.3}"
     );
 }
@@ -191,17 +191,17 @@ fn the_farmed_ground_holds_up_longer() {
     let before = farmed_fertility(&simulation);
 
     for _ in 0..10_000 {
-        simulation.tick();
+        simulation.take_a_turn();
     }
 
     let after = farmed_fertility(&simulation);
 
-    // Ten thousand ticks of a settlement working the ground. Without anything
+    // Ten thousand turns of a settlement working the ground. Without anything
     // coming back this was already most of the way down; the loop should keep
     // it in the same country as where it started.
     assert!(
         after > before * 0.5,
         "farmed ground should not have lost half its fertility in ten thousand \
-         ticks: {before:.3} -> {after:.3}"
+         turns: {before:.3} -> {after:.3}"
     );
 }

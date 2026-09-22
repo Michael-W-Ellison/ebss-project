@@ -44,17 +44,17 @@ fn main() {
     }
     println!();
 
-    // Run simulation for 500 ticks with detailed logging
-    for tick in 0..500 {
-        if tick % 50 == 0 {
-            println!("\n=== TICK {} ===", tick);
+    // Run simulation for 500 turns with detailed logging
+    for turn in 0..500 {
+        if turn % 50 == 0 {
+            println!("\n=== TURN {} ===", turn);
 
             if let Some(agent) = population.agents.first() {
                 println!("Agent State:");
                 println!("  Position: ({}, {})", agent.state.position.0, agent.state.position.1);
                 println!("  Energy: {:.1}%", agent.state.energy);
                 println!("  Health: {:.1}%", agent.state.health);
-                println!("  Ticks without food: {}", agent.state.ticks_without_food);
+                println!("  Turns without food: {}", agent.state.turns_without_food);
                 println!("  Is starving: {}", agent.state.is_starving());
                 println!("  Is survival critical: {}", agent.state.is_survival_critical());
 
@@ -88,7 +88,7 @@ fn main() {
             // Try to eat if we have food in inventory
             if agent.inventory.count_item("food") > 0 {
                 let ate = agent.eat_food(1);
-                if ate && tick % 50 < 10 {
+                if ate && turn % 50 < 10 {
                     println!("  → Agent ate food! Energy restored.");
                 }
             }
@@ -108,13 +108,13 @@ fn main() {
                     let distance = agent_pos.distance_to(&food_pos);
 
                     if distance > 1 {
-                        if tick % 50 < 10 {
+                        if turn % 50 < 10 {
                             println!("  → Moving towards food at ({}, {}) - distance: {}",
                                 food_pos.x, food_pos.y, distance);
                         }
                         Some(Action::MoveTo { destination: food_pos })
                     } else {
-                        if tick % 50 < 10 {
+                        if turn % 50 < 10 {
                             println!("  → Harvesting food at ({}, {})", food_pos.x, food_pos.y);
                         }
                         Some(Action::HarvestResource {
@@ -124,7 +124,7 @@ fn main() {
                         })
                     }
                 } else {
-                    if tick % 50 < 10 {
+                    if turn % 50 < 10 {
                         println!("  → No food found!");
                     }
                     None
@@ -141,12 +141,12 @@ fn main() {
                             {
                                 let wood_pos = wood_node.position;
                                 if agent_pos.distance_to(&wood_pos) > 1 {
-                                    if tick % 50 < 10 {
+                                    if turn % 50 < 10 {
                                         println!("  → Moving towards wood (for {:?})", most_urgent.drive_type);
                                     }
                                     Some(Action::MoveTo { destination: wood_pos })
                                 } else {
-                                    if tick % 50 < 10 {
+                                    if turn % 50 < 10 {
                                         println!("  → Harvesting wood (for {:?})", most_urgent.drive_type);
                                     }
                                     Some(Action::HarvestResource {
@@ -160,7 +160,7 @@ fn main() {
                             }
                         }
                         _ => {
-                            if tick % 50 < 10 {
+                            if turn % 50 < 10 {
                                 println!("  → Resting (drive: {:?})", most_urgent.drive_type);
                             }
                             Some(Action::Rest { duration: 1 })
@@ -193,28 +193,28 @@ fn main() {
                             };
                             let item = InventoryItem::new(item_id.to_string(), quantity);
                             agent.inventory.add_item(item);
-                            if tick % 50 < 10 {
+                            if turn % 50 < 10 {
                                 println!("  ✓ Added {} {:?} to inventory", quantity, item_type);
                             }
                         }
                     }
 
-                    if !result.is_success() && tick % 50 < 10 {
+                    if !result.is_success() && turn % 50 < 10 {
                         println!("  ✗ Action failed");
                     }
                 }
             }
         }
 
-        // Update population (ticks drives and ages agents)
-        population.tick();
+        // Update population (turns drives and ages agents)
+        population.take_a_turn();
 
         // Update world
-        world.tick();
+        world.take_a_turn();
 
         // Check if agent died
         if population.agents.is_empty() {
-            println!("\n⚠️  Agent died at tick {}!", tick);
+            println!("\n⚠️  Agent died at turn {}!", turn);
             break;
         }
     }
