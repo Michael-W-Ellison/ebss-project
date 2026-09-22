@@ -293,8 +293,11 @@ fn what_is_reached_for_names_the_thing_it_would_be_tried_on() {
 fn what_is_built_performs_the_verb_it_was_built_from() {
     let mut simulation = one_person_on_bare_ground();
 
-    // Something to hold, something underfoot, and somebody to talk to, so
-    // that the target-hungry arms have targets to find.
+    // Something to hold, something underfoot, somebody to talk to, and a
+    // fire burning, so that the target-hungry arms have targets to find.
+    // The fire is the same kind of provision as the rest: cooking wants one
+    // the way trading wants somebody, and `an_action_for` will not build a
+    // `Cook` without it - see the note there.
     for what in ["stone", "wood", "meat"] {
         simulation.population.agents[0]
             .inventory
@@ -311,6 +314,15 @@ fn what_is_built_performs_the_verb_it_was_built_from() {
         .spawn_agent(crate::agents::AgentConfig::default());
     let mate = simulation.population.agents.len() - 1;
     simulation.population.agents[mate].state.position = at;
+
+    let mut hearth = crate::environment::HeatSource::new(
+        crate::environment::HeatSourceType::Campfire,
+        (at.0, at.1, 0),
+        0,
+    );
+    hearth.add_fuel("wood".to_string(), 1.0, 100);
+    assert!(hearth.light(), "a fire with fuel in it would not light");
+    simulation.world.heat_sources.add(hearth);
 
     let agent = simulation.population.agents[0].clone();
 

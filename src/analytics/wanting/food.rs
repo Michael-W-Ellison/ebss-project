@@ -257,13 +257,51 @@ impl Simulation {
             && !putting_by
             && agent.state.years_old() >= Self::OLD_ENOUGH_TO_COOK
             && Self::has_food_worth_cooking(agent)
-            && self
+        {
+            if self
                 .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
                 .is_some()
-        {
-            return Some(Action::Cook {
-                food_type: "generic".to_string(),
-            });
+            {
+                return Some(Action::Cook {
+                    food_type: "generic".to_string(),
+                });
+            }
+
+            // And when there is no fire: light one. A fire is the tool
+            // cooking wants, and lighting it is how the tool is got - the
+            // two are one intention, and an agent that can only cook where
+            // somebody else has already lit a fire never cooks at all.
+            //
+            // The whole chain already existed, in `cooking_action`, and was
+            // never reached. That arm answers Sustenance, which is the slow
+            // provisioning drive: measured over eighty turns it offered
+            // `LightFire` on twenty-two of them and was ranked below
+            // Preparedness on every one, because a secondary drive under its
+            // own threshold returns its bare urgency - hundredths - while an
+            // active one is multiplied by its band. So the settlement chose
+            // Cook eighty-three times across twenty-four worlds, lit no fires
+            // at all, and every one of those Cooks was refused. See
+            // ISSUES_FOUND #223.
+            //
+            // What is taken from that arm here is only the step that costs a
+            // turn and nothing else: the wood is already in the pack, and
+            // lighting it needs no walk and cannot come back empty. Walking
+            // to somebody else's fire and going out for wood stay where they
+            // are, because a branch that can send a hungry man across the
+            // valley must not stand in front of eating what he is carrying -
+            // which is the mistake the note above this function records.
+            let relightable = self
+                .nearest_fire_from(agent_position, Self::FIRE_REACH, false)
+                .is_some();
+            let wood_a_fire_wants = if relightable {
+                Self::FIRE_FUEL_WOOD
+            } else {
+                Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
+            };
+
+            if agent.inventory.has_item("wood", wood_a_fire_wants) {
+                return Some(Action::LightFire);
+            }
         }
 
         // Eat what we carry as soon as we are hungry; an agent that walks

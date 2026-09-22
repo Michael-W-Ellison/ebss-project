@@ -368,7 +368,31 @@ impl Simulation {
             "gather" => Action::Gather { resource_type: thing()? },
             "eat" => Action::Eat { food_type: thing()? },
             "craft" => Action::Craft { item_type: a_thing_that_can_be_made()? },
-            "cook" => Action::Cook { food_type: thing()? },
+            // Cooking wants a fire, and this offered it whatever was
+            // standing about.
+            //
+            // The rule this file states for itself is that a verb which
+            // cannot be done is not offered - "reaching for a verb that
+            // cannot be built spends the turn on nothing and teaches
+            // nothing". Cooking was the exception, and an expensive one:
+            // measured over twenty-four worlds of four hundred turns,
+            // `Cook` was chosen **eighty-three times in worlds where no
+            // fire was ever lit**, every one of them a turn spent on
+            // nothing and a lesson learned about the wrong thing.
+            //
+            // The fire is checked with the executor's own predicate, which
+            // is what the rest of this function does for every other verb.
+            // Getting a fire when there is none is `cooking_action`'s
+            // ladder - cook here, walk to one, light one, cut the wood for
+            // it - and it is not repeated here, because this function has
+            // to round-trip with `Agent::what_was_tried` and a `LightFire`
+            // returned for the verb "cook" would name one thing while the
+            // agent learned about another. See ISSUES_FOUND #224.
+            "cook" => {
+                let food = thing()?;
+                self.nearest_fire_from(at, Self::FIRE_REACH, true)?;
+                Action::Cook { food_type: food }
+            }
             "examine" => Action::Examine { what: thing()? },
             "equip" => Action::Equip { what: thing()? },
             "unequip" => Action::Unequip { what: thing()? },

@@ -2306,11 +2306,37 @@ impl Agent {
                 .any(|(carrier, _)| *carrier == called)
     }
 
+    /// What stays in the pack however heavy it is, because it is the means to
+    /// a job rather than a load.
+    ///
+    /// Tools and carriers are already held back by
+    /// `is_this_part_of_the_kit`. Firewood is the same kind of thing and was
+    /// not: a fire is built from ten sticks, and a person who tips the last of
+    /// his bundle on the grass has no fire tonight. Measured on the cooking
+    /// fixture, an agent given forty wood was down to **four by turn six** and
+    /// never had ten again, so `cooking_action` - which does chain correctly,
+    /// and returns `LightFire` the moment there is food worth cooking and wood
+    /// to burn - was never once asked with both in hand.
+    ///
+    /// Nought for everything else. Shedding is what a body does when it
+    /// physically cannot carry any more, and holding six of every kind of rock
+    /// back from it would leave agents permanently overloaded. This is the one
+    /// case where what is being carried is the means to something the carrier
+    /// is going to want tonight. See ISSUES_FOUND #224.
+    fn what_stays_in_the_pack(name: &str) -> u32 {
+        if name == "wood" {
+            Self::ENOUGH_WOOD_TO_HAND
+        } else {
+            0
+        }
+    }
+
     pub fn what_i_would_set_down(&self) -> Option<String> {
         self.inventory
             .get_all_items()
             .iter()
             .filter(|(_, item)| item.quantity > 0)
+            .filter(|(name, item)| item.quantity > Self::what_stays_in_the_pack(name))
             .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
             .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
             .max_by(|a, b| {
@@ -2368,8 +2394,15 @@ impl Agent {
             return item.quantity;
         }
 
+        // Never past what stays in the pack - see `what_stays_in_the_pack`.
+        // The last ten sticks are a fire, not a load.
+        let spare = item.quantity.saturating_sub(Self::what_stays_in_the_pack(what));
+        if spare == 0 {
+            return 0;
+        }
+
         let wanted = (self.how_much_too_much_i_am_carrying() / each).ceil() as u32;
-        wanted.clamp(1, item.quantity)
+        wanted.clamp(1, spare)
     }
 
     /// How much of this one goes on the grass to make room for something

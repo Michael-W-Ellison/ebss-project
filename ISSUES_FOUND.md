@@ -17631,3 +17631,113 @@ is chosen none - so something between deciding to cook and there being a fire
 to cook on is unaccounted for. That is not the season and it is not the
 fixture. It is recorded here rather than guessed at, and the test carries the
 numbers in its docstring.
+
+**Answered in #224**, and it was three things rather than one.
+
+### 224. Cooking wanted a fire, and the only thing that knew how to get one was answering a different need
+
+Picking up exactly where #223 left off. The measurement recorded there was
+that `Cook` was chosen eighty-three times across twenty-four worlds in which
+no fire was ever lit, and `LightFire` none, and that "something between
+deciding to cook and there being a fire to cook on is unaccounted for".
+
+It is accounted for now, and it is three separate things.
+
+#### One: nothing checked whether there was a fire
+
+`Simulation::an_action_for` is the inverse of `Agent::what_was_tried` - the
+function curiosity and the verb matrix go through to turn a verb into
+something an agent can actually do. Every other verb in it is guarded by
+whatever the executor will ask for: `craft` will not name a step the makings
+cannot carry, `build` will not name a roof that is not a roof, `equip` will
+not name a thing that is not in the pack. The file states the rule in its own
+header - reaching for a verb that cannot be built spends the turn on nothing
+and teaches nothing.
+
+Cooking was the exception:
+
+```rust
+"cook" => Action::Cook { food_type: thing()? },
+```
+
+Any food in the pack, any time, fire or no fire. That is where the
+eighty-three came from, and every one of them was refused by the executor and
+written into `Lessons` as a thing that does not work - so the settlement was
+also busy learning that cooking is useless.
+
+It now asks `nearest_fire_from` first, which is the executor's own predicate.
+Getting a fire when there is none is deliberately *not* done here: this
+function has to round-trip with `what_was_tried`, and returning `LightFire`
+for the verb "cook" would have the agent choose one thing and learn about
+another - which is the "two spellings of one question" fault of #215 and #243.
+
+#### Two: a person tipped the makings of a fire onto the grass
+
+`Agent::what_i_would_set_down` sheds whatever is heaviest when the pack is
+over its limit, holding back only what `is_this_part_of_the_kit` names -
+tools and carriers. Firewood is neither.
+
+Measured on the cooking fixture, an agent handed **forty wood** was down to
+**four by turn six** and never had ten again. A fire is ten sticks
+(`WHAT_BUILDING_A_FIRE_TAKES` five, `WHAT_FEEDING_A_FIRE_TAKES` five, both
+from #221), so from turn six on there was no world in which the question
+"would you like to light a fire" could be answered yes.
+
+`what_stays_in_the_pack` now holds the last `ENOUGH_WOOD_TO_HAND` back from
+shedding, in both the choosing of what to drop and the counting of how much.
+Nought for everything else: shedding is what a body does when it physically
+cannot carry more, and holding six of every kind of rock back would leave
+agents permanently overloaded. Wood is the one case where what is being
+carried is the means to something the carrier wants tonight.
+
+With the floor in, wood holds at ten instead of four.
+
+#### Three, and the one that actually decided it: the chain was under the wrong drive
+
+`cooking_action` chains correctly and always did. It is a ladder - cook where
+you stand, walk to a fire that is burning, light one from the wood in the
+pack, go and cut wood if there is none - and a turn-by-turn probe of the
+fixture shows it returning `Some(LightFire)` on twenty-two of eighty turns,
+with ten wood and cut fish in hand.
+
+It was never once taken, because `cooking_action` answers **Sustenance** and
+the hunger that wants the cooking is **Hunger**. Drives are ranked by
+`how_hard_it_presses`, and a drive under its own threshold returns its bare
+urgency while an active one is multiplied by its band's precedence. Over the
+same eighty turns:
+
+| drive | pressing |
+|---|---|
+| Preparedness | 11.3 rising to 27.0 |
+| Rest | 0.02 to 1.46 |
+| Sustenance | **0.01** |
+
+Sustenance was never within two orders of magnitude of the top, so the arm
+that knew how to get a fire lit was never asked. Meanwhile `food_action`, the
+Hunger arm, had a cooking branch of its own that required a fire to already
+be burning and offered nothing when one was not - so a hungry agent with food,
+wood and no fire had nowhere to go.
+
+Cooking wants a fire the way any work wants its tool, and getting the tool is
+part of the work. `food_action` now lights one where it stands, when the wood
+is already in the pack.
+
+Only that step is taken from the Sustenance ladder. Walking to somebody
+else's fire and going out for wood stay where they are, because a branch that
+can send a hungry man across the valley must not stand in front of eating what
+he is carrying - which is the mistake recorded in that function's own header,
+where putting a want of a bowl at the head of the provisioning branch cost a
+settlement half its winter store.
+
+#### What it moved
+
+`cooking_tests::an_agent_lights_a_fire_and_cooks_on_it`, red since it was
+written, passes. Over the four hundred turns of that fixture: **LightFire 2,
+Cook 17, no Cook refused** - against 0, 83-across-24-worlds, and all of them
+refused.
+
+`afforded_tests::what_is_built_performs_the_verb_it_was_built_from` needed a
+fire in its fixture once "cook" started checking for one. That fixture already
+provides "something to hold, something underfoot, and somebody to talk to, so
+that the target-hungry arms have targets to find"; a lit campfire is the same
+kind of provision, and cooking wants one the way trading wants somebody.

@@ -153,22 +153,22 @@ fn an_agent_will_not_eat_what_it_has_ruined() {
 /// its firewood down to `ENOUGH_TO_HAND`, six, while a fire costs ten. See
 /// ISSUES_FOUND #221.
 ///
-/// **Still red, and what is left is not the fixture.** A fire and a drying
-/// rack are for different jobs and the model says so: cooking gives up more
-/// of what is in a thing (0.95 against 0.85) and drying makes it keep far
-/// longer (a twentieth the rate against four fifths) - see
-/// `nutrition::tests::a_fire_feeds_you_and_a_drying_rack_keeps_it`, which
-/// pins that trade-off. This agent dries its fish instead of cooking them,
-/// and over twenty-four worlds it chooses Dry 341 times against Cook 83.
+/// **And the last of it: there was no fire because nobody could ask for one.**
+/// A fire and a drying rack are for different jobs and the model says so:
+/// cooking gives up more of what is in a thing (0.95 against 0.85) and drying
+/// makes it keep far longer (a twentieth the rate against four fifths) - see
+/// `nutrition::tests::a_fire_feeds_you_and_a_drying_rack_keeps_it`, which pins
+/// that trade-off. That was never the reason either. `Cook` was chosen
+/// eighty-three times across twenty-four worlds and `LightFire` none, because
+/// the arm that knows how to get a fire lit answers **Sustenance** while the
+/// hunger that wants the cooking answers **Hunger**, and Sustenance sat under
+/// its own threshold at hundredths while Preparedness ran at eleven and up.
+/// Over eighty turns it offered `LightFire` on twenty-two of them and was
+/// outranked on every one.
 ///
-/// The obvious explanation is wrong. `cooking_action` is gated on
-/// `!putting_by`, and `is_this_lot_for_the_store` is only ever true in
-/// autumn - so putting the world in midsummer should free it. Measured, it
-/// does the opposite: 0 of 24 worlds light a fire in summer against 1 of 24
-/// in autumn, and `Cook` is chosen eighty-three times while `LightFire` is
-/// chosen none. Something between choosing to cook and there being a fire to
-/// cook on is unaccounted for, and it is not the season. See
-/// ISSUES_FOUND #223.
+/// Cooking wants a fire the way any work wants its tool, and getting the tool
+/// is part of the work: `food_action` now lights one where it stands when the
+/// wood is already in the pack. See ISSUES_FOUND #224.
 #[test]
 fn an_agent_lights_a_fire_and_cooks_on_it() {
     let mut world = World::new(WorldConfig::default());

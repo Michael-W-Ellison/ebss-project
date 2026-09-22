@@ -21,7 +21,6 @@ and #218; those two commits took six others green.
 
 | test | reports | what is known |
 |---|---|---|
-| `cooking_tests::an_agent_lights_a_fire_and_cooks_on_it` | no fire is ever lit in 400 turns | **Two real faults found and fixed, and what is left is a design question.** The fixture gave no blade, and a whole fish cannot be cooked without one; and `ENOUGH_TO_HAND` was six against a fire costing ten, so no fire could be built in any world ever (ISSUES_FOUND #221). With both put right a fire is lit in **5 of 24** seeded worlds, because cooking is deliberately suppressed while an agent is putting food by - Dry 486 against Cook 119 across those worlds. The test's claim and the `!putting_by` gate disagree. **Needs a decision, not a fix**: either the test should assert what the model intends, or drying-beats-cooking wants revisiting. Do not seed it to one of the five. |
 | `ecology_tests::most_of_what_lived_here_still_lives_here` | 8 worlds open with 468 head and hold 107 | Species all survive; the head count is ten short of the quarter it wants. Probably downstream of the predator layer - re-run after that is settled rather than treating it as its own finding. |
 | `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **#167's question, measured again.** Nobody is ever born at all: 63,456 refusals in 6,000 steps and every one of them "could not feed a child". The gate wants 129,600 units and the best-placed agent holds 8,500 - a factor of fifteen, against the fifty-three #167 measured. Not a test problem and not a gate problem; the store has to fill first (#240, #241, #213). Leave red. |
 | `predator_prey_tests::the_land_will_only_carry_so_many` | 0 against 0 | Both fixture herds go extinct. At #217 it read 2 against 6. The predator layer below. |
@@ -30,7 +29,7 @@ and #218; those two commits took six others green.
 
 ## The predator layer
 
-Three of the ten above point at one thing, and it has its own finding rather
+Three of those above point at one thing, and it has its own finding rather
 than a row here. ISSUES_FOUND #218 corrected `what_a_grazer_is_worth_to`, which
 converted days of keep into hunger units with `TICKS_PER_DAY` where
 `hunger_rate` is charged once a *pass*: one deer fed a wolf for four hundred
@@ -43,16 +42,13 @@ it again is how it stayed hidden for a month.
 
 ## Closed, with the measurement
 
-Nine remain open, and one of them - the fire - is now a known unknown rather
-than a guess: see the note at the end. Three of them - `most_of_what_lived_here_still_lives_here`,
-`the_land_will_only_carry_so_many` and
-`a_settlement_works_things_out_that_nobody_wrote_down` - point at the predator
-layer below rather than at anything of their own, and two -
+Five remain open, and none of them is nobody else's. Three -
+`most_of_what_lived_here_still_lives_here`, `the_land_will_only_carry_so_many`
+and `a_settlement_works_things_out_that_nobody_wrote_down` - point at the
+predator layer below rather than at anything of their own, and two -
 `a_settlement_still_raises_children_late_on` and
 `the_children_of_a_settlement_live_past_infancy` - are ISSUES_FOUND #167's
-central open question and should stay red until the store fills. That leaves
-one that is nobody else's: the fire, and what is left of it is a question
-rather than a defect.
+central open question and should stay red until the store fills.
 
 **`salt_tests::the_sea_costs_more_than_it_gives`** - the fixture, not the
 model. `water_left_after_three_days` ran `TICKS_PER_DAY * 3` passes, which is
@@ -93,6 +89,36 @@ twenty-hour run. Its own failure message held the answer: 1,200 less 1,020 is
 180, so the agent drank at step six. ISSUES_FOUND #222.
 
 
+
+**`cooking_tests::an_agent_lights_a_fire_and_cooks_on_it`** - the model, in
+three separate places, and now fixed. Red since it was written.
+
+Two of the three were already known: the fixture gave no blade for a fish that
+has to be cut before it will go over a fire, and `ENOUGH_TO_HAND` was six
+against a fire costing ten (#221). Neither was enough, and the season was a
+red herring - midsummer lit *fewer* fires than autumn.
+
+What was left, from #224:
+
+- `an_action_for` built a `Cook` without asking whether there was a fire, so
+  eighty-three of them across twenty-four worlds were turns spent on nothing
+  and lessons learned about the wrong thing.
+- shedding tipped the makings of a fire onto the grass: forty wood down to
+  four by turn six, and never ten again.
+- and the one that decided it - `cooking_action` chains correctly and offered
+  `LightFire` on twenty-two of eighty turns, but it answers **Sustenance**,
+  which pressed at 0.01 against Preparedness at 11.3 and rising. It was never
+  asked. The Hunger arm had a cooking branch of its own that required a fire
+  to already be burning.
+
+`food_action` now lights one where it stands when the wood is in the pack.
+Over the fixture's four hundred turns: **LightFire 2, Cook 17, none refused.**
+
+Only that one step moved across from the Sustenance ladder. Walking to
+somebody else's fire and going out for wood stayed where they were - a branch
+that can send a hungry man across the valley must not stand in front of eating
+what he is carrying.
+
 ## Moved by #220-#222, and not re-baselined
 
 Two of the behavioural thresholds #298 was filed for went green with #218 and
@@ -115,27 +141,3 @@ wood now rather than six, so it banks less and carries more - which also shows
 in the recorded roll counts: the short count moved 4.2% and the year only
 0.1%, the shape of a change that alters what one pass does rather than what
 the world is.
-
-
-## The fire, after #223
-
-Two faults in it were real and are fixed (#221). What is left is not the
-fixture and not the season.
-
-Cooking and drying are for different jobs and the model says so - 0.95
-utilization against 0.85, and a twentieth the spoilage rate against four
-fifths - so an agent on a harvest should dry and an agent eating now should
-cook. `cooking_action` is gated on `!putting_by`, and
-`is_this_lot_for_the_store` returns false unless the season is autumn. So
-midsummer should free it.
-
-Measured over twenty-four worlds, it does the opposite:
-
-| | fire lit | Dry | Cook | LightFire |
-|---|---|---|---|---|
-| midsummer | **0 of 24** | 341 | 83 | 0 |
-| autumn | 1 of 24 | 395 | 46 | 1 |
-
-`Cook` is chosen eighty-three times and `LightFire` none, so something between
-deciding to cook and having a fire to cook on is unaccounted for. That is
-where to start, not the season.
