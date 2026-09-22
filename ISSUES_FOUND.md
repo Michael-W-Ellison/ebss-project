@@ -17476,3 +17476,73 @@ So the test's claim and the model's decision disagree, and that is a question
 about what the model should do rather than a bug to fix. It is left red and
 recorded in `STANDING_FAILURES.md` with the numbers, because seeding it to one
 of the five worlds where a fire happens to get lit would be picking the answer.
+
+### 222. Two tests that measured the wrong thing: a harvest weighed through a full pack, and a thirst counted in the wrong unit
+
+Both were in the standing failures, both looked like model defects, and in
+both the model was right.
+
+#### The practised hand brought back nothing, because the pack was already full
+
+`specialisation_tests::a_dedicated_farmer_brings_back_more_than_a_casual_one`
+stands two agents on the same patch - one at Herbalism -8, one at +8 - has
+each gather three hundred times, and compares what the patch lost. It reported
+**0 against 25**: the practised hand took nothing and the casual one took
+twenty five.
+
+Not smaller. Nothing. And backwards.
+
+The gathering code is fine - `harvest_amount` is `.max(1)`, so three hundred
+trips cannot take nought unless something upstream stops them. What stops them
+is the pack. Instrumented, both arms end identically:
+
+    level -8: ok 300 err 0 | node took 25 | pack food 77, weight 42.0/42.0
+    level  8: ok 300 err 0 | node took  0 | pack food 77, weight 42.0/42.0
+
+**A pack holds forty-two and a founder sets out with food already in it.**
+Within a handful of trips both hands are full, every remaining trip succeeds
+and takes nothing, and what the patch lost is no longer a measure of what
+either hand brought back. It is a measure of how quickly each filled a bag -
+and the better hand fills it sooner, which is why the answer came out
+backwards.
+
+The agent carries its load home between trips now. On the same fixture:
+
+| | a season's harvest |
+|---|---|
+| casual hand, Herbalism -8 | 367 |
+| practised hand, Herbalism +8 | **913** |
+| ratio | **2.49** |
+
+Which is what the code says it does - "a practised hand ... brings back up to
+twice what a beginner does". It always did. Nobody could see it through a full
+pack.
+
+#### The waterskin was being drunk from all along
+
+`thirst_tests::agents_drink_from_a_carried_container` gives an agent a full
+waterskin, removes every water source, runs forty steps and asserts
+`turns_without_water < 40`. It reported **1020 turns dry**.
+
+`turns_without_water` is `current_turn - last_drank_turn`, and the world clock
+counts **ticks** - thirty to a step. Forty steps is 1,200 ticks. So the
+assertion compared a tick count against a step count, and was asking for a
+drink in the last two minutes of a twenty-hour run.
+
+And the number it reported was the answer: 1,200 less 1,020 is 180, so the
+agent drank at tick 180 - step six - and was fine for the rest of it. The test
+was holding the evidence that it passed.
+
+The bound is `STEPS * TICKS_BETWEEN_PLANS` now, which is the honest statement
+of the claim: less than the whole run means it drank at some point. Same
+family as #218 and #219, in a test bound rather than in the model.
+
+#### What these two have in common
+
+Neither was a threshold that wanted loosening and neither was a model defect.
+In both, the quantity being measured was not the quantity the claim was about:
+a node's depletion standing in for a harvest, a tick count standing in for a
+step count. Both had been red long enough to be treated as known, and both
+were reporting their own diagnosis in the failure message the whole time -
+"0 against 25" and "1020 turns dry" are each one arithmetic step from the
+answer.

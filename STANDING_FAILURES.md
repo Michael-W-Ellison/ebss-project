@@ -21,15 +21,12 @@ and #218; those two commits took six others green.
 
 | test | reports | what is known |
 |---|---|---|
-| `agent_building_integration_tests::test_production_chain_buildings_cluster` | Mill not sited near the Farm it needs | Placement logic only - no ecology, no calendar. The narrowest of the ten. Start at `Simulation::execute_building_action` and `world::spatial_planning`; the open question is whether a prerequisite is an input to siting at all, or only a precondition that is checked. |
 | `cooking_tests::an_agent_lights_a_fire_and_cooks_on_it` | no fire is ever lit in 400 turns | **Two real faults found and fixed, and what is left is a design question.** The fixture gave no blade, and a whole fish cannot be cooked without one; and `ENOUGH_TO_HAND` was six against a fire costing ten, so no fire could be built in any world ever (ISSUES_FOUND #221). With both put right a fire is lit in **5 of 24** seeded worlds, because cooking is deliberately suppressed while an agent is putting food by - Dry 486 against Cook 119 across those worlds. The test's claim and the `!putting_by` gate disagree. **Needs a decision, not a fix**: either the test should assert what the model intends, or drying-beats-cooking wants revisiting. Do not seed it to one of the five. |
 | `ecology_tests::most_of_what_lived_here_still_lives_here` | 8 worlds open with 468 head and hold 107 | Species all survive; the head count is ten short of the quarter it wants. Probably downstream of the predator layer - re-run after that is settled rather than treating it as its own finding. |
 | `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **#167's question, measured again.** Nobody is ever born at all: 63,456 refusals in 6,000 steps and every one of them "could not feed a child". The gate wants 129,600 units and the best-placed agent holds 8,500 - a factor of fifteen, against the fifty-three #167 measured. Not a test problem and not a gate problem; the store has to fill first (#240, #241, #213). Leave red. |
 | `predator_prey_tests::the_land_will_only_carry_so_many` | 0 against 0 | Both fixture herds go extinct. At #217 it read 2 against 6. The predator layer below. |
-| `specialisation_tests::a_dedicated_farmer_brings_back_more_than_a_casual_one` | 0 against 25 | Not smaller - zero. Either the two arms share one world and the first exhausts `resources[0]`, or `execute_action` returns a refusal the loop binds to `_` and discards. Rule the fixture out before the model. |
 | `situation_tests::a_settlement_works_things_out_that_nobody_wrote_down` | nobody notices one afternoon goes better than another | Passed at ISSUES_FOUND #177 and is red again. Probably downstream of the predator layer - less happening in the world to notice. |
 | `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same as the row above - #167's gate, now fifteen times out of reach rather than fifty-three. Its bound is sound: it counts by parentage, which is the right predicate. Leave red. |
-| `thirst_tests::agents_drink_from_a_carried_container` | full waterskin, 1,020 turns dry | Not a question of *having* a vessel - the fixture hands the agent a full one. The drinking path never asks the inventory. #179 reworked where water comes from and is the likeliest place an inventory source was dropped. Bears on one world in thirty-two dying of thirst on a walk. |
 
 ## The predator layer
 
@@ -46,15 +43,15 @@ it again is how it stayed hidden for a month.
 
 ## Closed, with the measurement
 
-Nine remain open. Three of them - `most_of_what_lived_here_still_lives_here`,
+Six remain open. Three of them - `most_of_what_lived_here_still_lives_here`,
 `the_land_will_only_carry_so_many` and
 `a_settlement_works_things_out_that_nobody_wrote_down` - point at the predator
 layer below rather than at anything of their own, and two -
 `a_settlement_still_raises_children_late_on` and
 `the_children_of_a_settlement_live_past_infancy` - are ISSUES_FOUND #167's
 central open question and should stay red until the store fills. That leaves
-four that are nobody else's: the Mill, the fire, the practised hand, and the
-waterskin.
+one that is nobody else's: the fire, and what is left of it is a question
+rather than a defect.
 
 **`salt_tests::the_sea_costs_more_than_it_gives`** - the fixture, not the
 model. `water_left_after_three_days` ran `TICKS_PER_DAY * 3` passes, which is
@@ -69,3 +66,27 @@ left:
 
 Nothing in the model needed changing; #155 built it correctly. Same defect
 class as ISSUES_FOUND #218, in a fixture rather than in the model.
+
+
+**`agent_building_integration_tests::test_production_chain_buildings_cluster`**
+- the model, and now fixed. Every criteria score in the placement code is
+`weight / (1 + distance)` and saturates; the walk to the site was
+`distance * 2.0` and did not. Only the four tiles orthogonally touching a
+prerequisite could beat the builder standing still, so a production chain
+clustered on a terrain roll. The walk is bounded now. Over twenty-four seeded
+worlds the mill's distance from its farm went from 22 of 24 within eight with
+a worst case of 41, to **24 of 24 with a worst case of 2**. ISSUES_FOUND #220.
+
+**`specialisation_tests::a_dedicated_farmer_brings_back_more_than_a_casual_one`**
+- the fixture. A pack holds forty-two and a founder starts with food in it, so
+within a few trips both hands sat at 42.0/42.0 and every later trip took
+nothing; what the patch lost measured how fast each filled a bag, and the
+better hand fills it sooner. Carrying the load home between trips gives
+**367 for the casual hand against 913 for the practised one, a ratio of
+2.49** - which is what the code always claimed. ISSUES_FOUND #222.
+
+**`thirst_tests::agents_drink_from_a_carried_container`** - the bound.
+`turns_without_water` counts ticks, thirty to a step, and the test compared it
+against forty *steps* - asking for a drink in the last two minutes of a
+twenty-hour run. Its own failure message held the answer: 1,200 less 1,020 is
+180, so the agent drank at step six. ISSUES_FOUND #222.
