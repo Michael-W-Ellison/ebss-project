@@ -43,7 +43,8 @@ it again is how it stayed hidden for a month.
 
 ## Closed, with the measurement
 
-Eight remain open. Three of them - `most_of_what_lived_here_still_lives_here`,
+Nine remain open, and one of them - the fire - is now a known unknown rather
+than a guess: see the note at the end. Three of them - `most_of_what_lived_here_still_lives_here`,
 `the_land_will_only_carry_so_many` and
 `a_settlement_works_things_out_that_nobody_wrote_down` - point at the predator
 layer below rather than at anything of their own, and two -
@@ -114,3 +115,27 @@ wood now rather than six, so it banks less and carries more - which also shows
 in the recorded roll counts: the short count moved 4.2% and the year only
 0.1%, the shape of a change that alters what one pass does rather than what
 the world is.
+
+
+## The fire, after #223
+
+Two faults in it were real and are fixed (#221). What is left is not the
+fixture and not the season.
+
+Cooking and drying are for different jobs and the model says so - 0.95
+utilization against 0.85, and a twentieth the spoilage rate against four
+fifths - so an agent on a harvest should dry and an agent eating now should
+cook. `cooking_action` is gated on `!putting_by`, and
+`is_this_lot_for_the_store` returns false unless the season is autumn. So
+midsummer should free it.
+
+Measured over twenty-four worlds, it does the opposite:
+
+| | fire lit | Dry | Cook | LightFire |
+|---|---|---|---|---|
+| midsummer | **0 of 24** | 341 | 83 | 0 |
+| autumn | 1 of 24 | 395 | 46 | 1 |
+
+`Cook` is chosen eighty-three times and `LightFire` none, so something between
+deciding to cook and having a fire to cook on is unaccounted for. That is
+where to start, not the season.

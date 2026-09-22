@@ -213,7 +213,12 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // And a tenth of a per cent for #220-#222, which is the shape to expect
     // from a change that alters what one pass does rather than what the world
     // is: the short count moved thirty times further than the long one.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 571_258;
+    // And down 8.7% for the hydration cost of dried food (#223), with the
+    // short count above **not moving at all** - which is exactly the shape to
+    // expect. A hundred and twenty turns is two and a half days and nobody
+    // lives on dried meat for two and a half days; a year is long enough for
+    // what a winter store does to a body's water to tell.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 521_556;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
