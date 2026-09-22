@@ -9,18 +9,20 @@ A test that is red and tracked is a known cost. A test that is red and
 untracked makes every future full run read as normal. Keep the count here
 honest and close nothing without a measurement.
 
-**Last full run**: `cargo test --lib` - 2,636 tests, 36 minutes, **12 failed**,
-2 ignored, of which four were collateral of a first cut at the firewood
-keep-back and are fixed. What remains is the two below, which are one
-question, plus the errand threshold, which is noise rather than news (see the
-end of this file).
+**Last full run**: `cargo test --lib` - 2,637 tests, 37 minutes, **3 failed**,
+2 ignored. Two of the three are one question - the store that fills and is
+never eaten out of - and the third is a binary threshold that has now been on
+both sides of its line four times.
 
-The count has come down from the ten this file opened with: salt water came
-off (the fixture, not the model), the production chain, the practised hand and
-the carried waterskin came off, and the fire came off after three separate
-faults in it were found - ISSUES_FOUND #220 to #224. A defect that was not on
-the list at all was found on the way - #219, a body aged thirty times too
-slowly, so nobody ever grew up and nobody ever died of old age.
+Down from the ten this file opened with, by way of twelve: salt water came off
+(the fixture, not the model), then the production chain, the practised hand
+and the carried waterskin, then the fire after three separate faults in it,
+then the ecology and the predator layer together, then the settlement that was
+asked what it knew after everybody in it had died. ISSUES_FOUND #220 to #227.
+Three defects that were on nobody's list were found on the way: a body that
+aged thirty times too slowly (#219), every animal in the world drifting two
+cells south-west a turn (#225), and three people in twelve standing in the sea
+(#227).
 
 ## Open
 
@@ -187,22 +189,25 @@ It still dies out, around day 335 instead of 327, with 6,700 units in its
 pits. Getting people out of the sea doubled the store and did not get the
 store into them.
 
-## Moved by #220-#222, and not re-baselined
+## Two thresholds that flap, and are not re-baselined
 
-Two of the behavioural thresholds #298 was filed for went green with #218 and
-are red again after the placement and firewood work. Neither is re-baselined,
-for the reason that task records: moving a threshold to fit a measurement is
-what hid the last defect for a month.
+Two of the behavioural thresholds #298 was filed for. Each has crossed its
+line in both directions more than once since #218, and on the last two full
+runs they crossed in opposite directions. Neither is re-baselined, for the
+reason that task records: moving a threshold to fit a measurement is what hid
+the last defect for a month.
 
 | test | now | threshold |
 |---|---|---|
-| `errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step` | 466 of 1,413 kept to, **33.0%** | 50% |
+| `errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step` | green after #227, red after #224 | 50% |
+| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | red after #227, green after #225 | somebody falls out |
 
-The second went green with #225 and is off the list, in the full run rather
-than a filtered one. (I reported it green once before off a filtered run in
-which it had not in fact been selected; that report was wrong and the run that
-followed said so.) A settlement whose animals stay on the map is a settlement
-where more happens.
+**Both have now been on both sides of their lines, and the two swapped over.**
+The full run after #225 had the errand test red and the enemies test green;
+the full run after #227 has it the other way about. The first is a ratio with
+a spread of 0.23 to 0.50 across eight seeds; the second is a single yes-or-no
+read off one world. Neither is measuring what it claims to, and neither is
+re-baselined.
 
 The first is **measured now, and it is noise.** It reads a single default-seed
 world, and the quantity it reads is chaotic. Run over eight seeds, before and
