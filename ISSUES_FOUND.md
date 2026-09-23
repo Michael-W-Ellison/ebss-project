@@ -18700,11 +18700,19 @@ that much is not in doubt.
 
 The obvious guard - a drive whose answer is to stand where it is standing has
 not answered, so `how_this_agent_answers` returns `None` and the turn passes
-to the next drive - removes 86% of them, 15,296 to 2,070. It is **not kept**
-on this measurement: gap person-turns fell from 99,046 to 69,641, which is
-thirty per cent fewer people alive to take them, and `SeekShelter` halved
-while `Move` rose and `GoWithout` appeared from nowhere at 3,620. Something
-downstream is living on those turns.
+to the next drive - removes 86% of them, 15,296 to 2,070. It is **not kept**,
+and over six seeded settlement-years the cost is not marginal:
+
+| | after #232 | with the guard |
+|---|---|---|
+| settlements that emptied | **0 of 6** | **3 of 6** |
+| person-turns lived | 1,039,210 | **969,013** |
+| births | 8 | 7 |
+
+Three settlements and seven per cent of everybody's life, for removing what
+looks like pure waste. Inside the gap the same arms show what moved:
+`SeekShelter` halved, `Move` rose, and `GoWithout` appeared from nowhere at
+3,620. Something downstream is living on those turns.
 
 That is the next piece of work and it wants finding out rather than guessing
 at: which caller proposes the walk, and what the turn does instead when it is

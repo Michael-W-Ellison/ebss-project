@@ -353,11 +353,11 @@ against `Eat` at 3.6% and the store at 1.6%. The walking that does happen
 nets 1.9 paces a person-day out of ten covered.
 
 The counter is committed and stays. The obvious guard - a drive whose answer
-is to stand still has not answered - removes 86% of them and is **not kept**:
-gap person-turns fell 99,046 to 69,641, so thirty per cent fewer people were
-alive to take them. Something downstream is living on those turns, and which
-caller proposes the walk wants finding out rather than guessing at.
-ISSUES_FOUND #234.
+is to stand still has not answered - removes 86% of them and is **not kept**.
+Over six seeded settlement-years it costs three settlements: emptied 0 of 6 to
+**3 of 6**, person-turns 1,039,210 to **969,013**, births 8 to 7. Something
+downstream is living on those turns, and which caller proposes the walk wants
+finding out rather than guessing at. ISSUES_FOUND #234.
 
 ## Two thresholds that flap, and are not re-baselined
 
