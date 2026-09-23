@@ -361,9 +361,18 @@ Over six seeded settlement-years it costs three settlements: emptied 0 of 6 to
 no energy cost, where a real `Move` costs `2.0 * load / speed` and the body is
 charged exactly what the result says. A settlement in the gap is already about
 twenty per cent short of its keep, so one turn in six costing nothing is a
-subsidy on that scale: take it away and something real goes in the slot. The
-waste is load-bearing, and anything that removes it has to put the energy back
-or find the twenty per cent. ISSUES_FOUND #234.
+subsidy on that scale: take it away and something real goes in the slot.
+
+**The dose-response settles it.** Three arms, six seeded settlement-years
+each: remove none and 0 of 6 empty; remove 18% (two corrections in the percept
+path) and 1 of 6 empties at 1,025,463 person-turns; remove 86% (a guard on
+every drive) and 3 of 6 empty at 969,013. Monotone, and the cost scales with
+*how much* is removed rather than with *what* - which is the subsidy being
+withdrawn in two doses rather than two unrelated regressions.
+
+So the standstill is not the thing to fix. It is a symptom of the twenty per
+cent, and it is holding the model up. **The order of work is the shortfall
+first, the free turns after.** ISSUES_FOUND #234.
 
 ## Two thresholds that flap, and are not re-baselined
 

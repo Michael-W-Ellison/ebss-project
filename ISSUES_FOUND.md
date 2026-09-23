@@ -18764,8 +18764,34 @@ reached when no drive had an answer:
   nought, so the flee target comes out as the agent's own position: fleeing a
   thing you are standing on, by not moving.
 
-Both are fixed. They account for only **18%** of the standstills - 15,296 to
-12,597 - so the bulk is still unattributed across the thirty-odd places the
-decision layer builds a `Move`. That is the next piece of work, and the
-finding above is the constraint on it: the turns are free, and the model is
-living on them.
+Both are fixable and account for **18%** of the standstills - 15,296 to
+12,597. **Neither is kept, and the reason is the point of this entry.**
+
+#### The dose-response, which settles it
+
+Three arms, six seeded settlement-years each, against the state after #232:
+
+| standstills removed | settlements emptied | person-turns | births |
+|---|---|---|---|
+| none (baseline) | **0 of 6** | 1,039,210 | 8 |
+| 18% - the two percept fixes | **1 of 6** | 1,025,463 | 7 |
+| 86% - the blanket guard | **3 of 6** | 969,013 | 7 |
+
+Monotone. The more of the waste is taken away, the more settlements die, and
+the cost scales with how much is removed rather than with what was removed -
+one arm is a two-line correction in the percept path, the other a guard on
+every drive, and they sit on the same line.
+
+That is not a coincidence between two unrelated changes. It is the subsidy
+being withdrawn in two different doses.
+
+**So the standstill is not the thing to fix.** It is a symptom of an energy
+balance that is about twenty per cent short (#231), and it is holding the
+model up. Anything that removes it will cost until that twenty per cent is
+found. The order of work is: the shortfall first, the free turns after.
+
+What is kept from all of this is the counter. The thirty-odd `Move` sites and
+the two percept arms are written down above so that whoever comes back to them
+does not have to find them again - and the dose-response is written down so
+that nobody spends the afternoon removing the waste and wondering why the
+settlements died.
