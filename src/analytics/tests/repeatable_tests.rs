@@ -260,7 +260,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // rather than being refused changes what a settlement *is* over a year -
     // nine children born across six seeded years against two - and changes
     // almost nothing about a particular afternoon.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 689_403;
+    // And down a *hundredth* of a per cent - fifty draws in six hundred and
+    // eighty-nine thousand - for the larder rung of #231. A man who walks to
+    // the pit instead of casting about does not roll for where to cast.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 689_353;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

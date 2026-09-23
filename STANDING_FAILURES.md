@@ -266,6 +266,32 @@ The two red tests above are unchanged. Their fixtures are longer and larger
 than the six-seed probe, and a settlement that now has children in it still
 does not hold them at six and nine thousand turns.
 
+
+**And the fifth look, which is mostly a measurement.** With food moving
+between people (#230), the same question was asked of the ground. Over three
+seeded settlements across the hungry gap - 92,249 agent-turns - **27.0% went
+on SeekShelter and 2.0% on the store**, and what came out of the pits was
+**4.2 items a person-day against the 11.5 a grown body burns**.
+
+The store was reachable from the hunger drive only through
+`the_larder_or_this_walk`, which needs somewhere to walk to; in deep winter
+there is nowhere, so a body burned the first sixteen days of a seventy-five
+day gap on its own reserve with the store in the ground behind it. There is a
+rung for it now. It is small: person-turns 1,037,206 to 1,040,633, one
+settlement in six back off the floor, births and hunger deaths unchanged.
+ISSUES_FOUND #231.
+
+**The arithmetic that entry records is the useful part**, and it is what the
+next work belongs to. One `Eat` puts down one item; a grown body burns 11.5 a
+day; so a body must spend a quarter of every turn of its life eating to stand
+still, and does. A meal is the size of what is being carried, which through
+the gap is one or two items. `WHAT_A_PERSON_TAKES_OUT` is eight - two thirds
+of a day - so everybody must go to the pit more than once a day for
+seventy-five days, against a shelter override that takes a quarter of every
+turn. No one of those is obviously wrong; together they leave a settlement
+about twenty per cent short through the gap, which the three-week reserve
+hides until it is gone.
+
 ## Two thresholds that flap, and are not re-baselined
 
 Two of the behavioural thresholds #298 was filed for. Each has crossed its

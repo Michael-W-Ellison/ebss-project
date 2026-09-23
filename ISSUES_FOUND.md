@@ -18386,3 +18386,85 @@ nothing about a particular afternoon.
 468 wasted giving turns across six years, split between the two names, almost
 all of them on the generic barter path - `what_i_can_spare`, which is about
 materials rather than food and is a different question. Left alone.
+
+### 231. A store the hunger drive could not reach, and the arithmetic of why a settlement starves anyway
+
+#230 got food moving between people. This is the same question asked of the
+ground: with the settlement's whole winter store in the pits, what does a
+winter turn actually get spent on?
+
+Measured over three seeded settlements across the hungry gap - day 270
+onwards, **92,249 agent-turns**, by the verb the decision layer chose:
+
+| what a winter turn went on | share |
+|---|---|
+| **SeekShelter** | **27.0%** |
+| eat | 23.8% |
+| gather:water | 9.5% |
+| sleep | 12.3% |
+| move | 11.4% |
+| gather:food | 2.5% |
+| **the store** | **2.0%** |
+
+And what came out of the ground: **4.2 items a person-day**, against the
+**11.5** a grown body burns.
+
+#### The rung that was not there
+
+The larder was reachable from `food_action` only through
+`the_larder_or_this_walk`, which weighs the larder against a *walk* - and so
+needs somewhere to walk to. Both of its callers are inside branches that need
+a known food target. In deep winter there is none: nothing is standing
+anywhere, `the_best_food_anywhere` returns `None`, and both fall through.
+
+What was left was the starvation override at the head of
+`generate_non_emotional_action`, which fires only on
+`is_the_body_eating_itself` - **a quarter of the reserve**. A reserve is three
+weeks and the gap is seventy-five days, so a body spent the first sixteen days
+of the gap burning itself with the store in the ground behind it, and began
+eating out of it only once it was three-quarters gone.
+
+There is a rung for it now, above moving camp and above emigrating, because
+eating out of your own larder beats both. It is gated by
+`something_out_of_the_store`, which keeps its own discipline and stays shut
+while the hedgerows bear, so it cannot open the winter store in July.
+
+#### What it moved, which is small
+
+Six seeded settlement-years, twelve founders each:
+
+| | before | after |
+|---|---|---|
+| person-turns lived | 1,037,206 | 1,040,633 |
+| settlements that emptied | 4 of 6 | **3 of 6** |
+| births | 9 | 9 |
+| deaths of hunger | 42 | 42 |
+
+A third of a per cent on person-turns and one settlement back off the floor.
+The year roll count moves by **fifty draws in six hundred and eighty-nine
+thousand**. It is kept because a store the hunger drive cannot reach is not a
+store, not because it saves anybody.
+
+#### And the arithmetic, which is the useful part of this entry
+
+A settlement that has filled its pits still starves, and the numbers say
+plainly why. One `Eat` puts down `UNITS_IN_ONE_ITEM` - **one item** - per
+pass, and a grown body burns `UNITS_BURNED_IN_AN_ORDINARY_DAY`, which is
+**11.5 items a day**. So a body must spend **a quarter of every turn of its
+life eating** merely to stand still, and that is very nearly what it does:
+eat is 22.6% of a winter turn.
+
+`eat_from_hand` goes on eating while there is room in the stomach and
+something in the hand, so the size of a meal is the size of what is being
+carried. Through the gap that is one or two items, and `WHAT_A_PERSON_TAKES_OUT`
+is eight - about two thirds of a day - so a trip to the pit has to be made
+more than once a day by everybody, for seventy-five days, against a shelter
+override that takes a quarter of every turn.
+
+None of those numbers is obviously wrong on its own. Together they leave a
+settlement about twenty per cent short of its keep through the gap, which the
+three-week reserve hides until it is gone - which is exactly the shape the
+measurements show: full reserves until day 270, and everybody dead by day 345.
+
+That is the standing problem, stated as arithmetic rather than as a symptom,
+and it is where the next work on this belongs.

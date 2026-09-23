@@ -170,3 +170,48 @@ fn an_empty_hole_underfoot_does_not_hide_the_full_one_behind_it() {
         other => panic!("neither the full pit nor a walk to it: {other:?}"),
     }
 }
+
+/// And with nothing standing anywhere at all, the larder is still the answer.
+///
+/// The store was reachable from the hunger drive only through
+/// `the_larder_or_this_walk`, which weighs the larder against a **walk** and
+/// so needs somewhere to walk to. In deep winter there is nowhere: both
+/// callers of it fall through, and what was left was the starvation override
+/// at the head of the decision, which fires only below a quarter of the
+/// reserve.
+///
+/// So a body spent the first three weeks of a seventy-five day hungry gap
+/// burning itself with the settlement's whole winter store in the ground
+/// behind it. Measured over three seeded settlements across the gap, 92,249
+/// agent-turns: **27.0% on SeekShelter against 2.0% on the store**, and 4.2
+/// items a person-day out of the pits against the 11.5 a grown body burns.
+/// See ISSUES_FOUND #231.
+#[test]
+fn a_bare_country_still_leaves_the_larder() {
+    // Nothing growing anywhere, which is what the hungry gap is.
+    let mut simulation = one_bush_and_a_full_pit((30, 0));
+    simulation.world.resources.clear();
+
+    let agent = simulation.population.agents[0].clone();
+    let here = agent.state.position;
+
+    assert!(
+        simulation.the_best_food_anywhere(&agent, here).is_none(),
+        "the fixture is not testing anything: something is still standing"
+    );
+
+    // Merely hungry, not desperate - which is the case this had no rung for.
+    let what = simulation
+        .food_action(&agent, here, false)
+        .expect("a hungry man with a full pit five paces off should be doing something");
+
+    match what {
+        Action::Move { target } => assert_eq!(
+            (target.0, target.1),
+            (here.0 + PACES_TO_THE_PIT, here.1),
+            "he set off somewhere that is not the larder"
+        ),
+        Action::PickUp { .. } => {}
+        other => panic!("neither the pit nor a walk to it: {other:?}"),
+    }
+}
