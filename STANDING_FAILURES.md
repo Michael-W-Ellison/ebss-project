@@ -439,6 +439,30 @@ up by a sixth of its turns being free. ISSUES_FOUND #236.
 Next: the other candidate from #235 - the reserve cap discarding the surplus
 in the two months there is one.
 
+
+**And the eleventh, which is the largest loss in the model.** A body at a full
+reserve digests its dinner into nothing:
+`reserve = (reserve + won).min(reserve_capacity)`. Counted on that line over
+three seeded settlement-years: **706,465 / 1,065,049 / 852,712 energy - 17.3%,
+22.2% and 19.5% of everything the settlement ate** - with agents at a full
+reserve on 48% to 55% of all person-turns. Take it off and the year's ledger
+falls from 0.84 of burn to about 0.67. No tally could see it: what is eaten,
+digested and discarded is neither an intake failure nor a refusal.
+
+Two ways of making them stop eating both fail. The "this is a harvest, not
+supper" rule is gated on `Season::Fall` - a quarter of the year - where the
+honest condition is being full; opening it to any month doubled how often it
+fires and spilled not one unit less. Gating the forage-eat rung on it as well
+did cut the spill, and cost thirteen per cent of person-turns.
+
+The reason is the pipeline: `MINUTES_TO_DIGEST` is a whole day, so what is
+eaten today lands tomorrow, and a body that stops at the brim has nothing in
+the pipe when the brim drops. It has to keep eating and spilling to stay fed.
+Fourth load-bearing waste this session.
+
+The counter is committed; the fix that follows - what the reserve cannot take
+stays in the gut - is held back pending its measurement. ISSUES_FOUND #237.
+
 ## Two thresholds that flap, and are not re-baselined
 
 Two of the behavioural thresholds #298 was filed for. Each has crossed its

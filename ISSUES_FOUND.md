@@ -19005,3 +19005,74 @@ still be in November.
 
 The second candidate from #235 - the reserve cap discarding a surplus in the
 two months there is one - is untouched and is where this goes next.
+
+### 237. A fifth of everything a settlement eats is digested into nothing
+
+#235's second candidate, and it is the largest single loss in the model.
+
+```rust
+self.reserve = (self.reserve + won).min(self.reserve_capacity);
+```
+
+A body already at capacity digests its dinner into nothing. The food was
+picked, carried home and eaten, and a pit would have held it until November.
+
+#### How much
+
+Counted on that line over three seeded settlement-years:
+
+| seed | spilled | of what was eaten | of what was burned |
+|---|---|---|---|
+| 0 | 706,465 | **17.3%** | 13.2% |
+| 1 | 1,065,049 | **22.2%** | 19.9% |
+| 2 | 852,712 | **19.5%** | 16.8% |
+
+Agents sit at a full reserve on **48% to 55% of all person-turns**. Take the
+spill off the intake and the year's ledger falls from 0.84 of what a
+settlement burns to about **0.67**.
+
+No instrument could see it. `energy_that_went_down` counts what enters the
+stomach and `actions_failed` counts refusals; a meal that is eaten, digested
+and discarded is neither. `Physiology::spilled_at_the_brim` counts it now, on
+the same argument as the standstill counter of #234: this was the largest loss
+in the model and nothing could see it.
+
+#### Two ways of making them stop eating, and why neither works
+
+**The season, not the belly.** `is_this_lot_for_the_store` - the rule that
+decides a load is a harvest rather than supper - opens with
+`if !matches!(current_season(), Season::Fall) { return false }`. A quarter of
+the year. The honest condition is not the calendar, it is being full: "a full
+belly is not a surplus, a surplus is food that is still there tomorrow" is
+what `expects_to_be_able_to_feed_a_child` says about breeding, and a full
+*reserve* with food in hand is exactly that surplus.
+
+Letting a full body put by in any month doubled how often the rule fires -
+5.5%-9.8% of person-turns to 11%-21% - and spilled **not one unit less**
+(707k / 1,065k / 853k against 706k / 1,065k / 853k, one seed bit-identical).
+The Hunger drive does not reach the pack through that branch; see #235.
+
+**The hedge.** `food_action`'s next rung - "anything edible within foraging
+reach can simply be eaten" - had no such gate at all, so a body at a full
+reserve grazes a bush and the bush is gone for nothing. Gating it did cut the
+spill on two seeds of three, and cost **thirteen per cent of a settlement's
+person-turns**.
+
+#### Why: the pipeline is a day long
+
+`MINUTES_TO_DIGEST` is `MINUTES_PER_DAY`. What is eaten today lands tomorrow.
+A body that stops eating at the brim has nothing in the pipe when the brim
+drops, so it goes hungry a day later for having been sensible. **It has to
+keep eating and spilling to stay fed.**
+
+That is why both decision-layer answers cost lives, and it is the fourth time
+this session that an obvious waste has turned out to be load-bearing - see
+#233, #234, #235.
+
+#### What is committed here
+
+The counter. The fix that follows from the diagnosis - **what the reserve has
+no room for stays in the gut**, and is drawn on as the reserve burns down,
+which is what a gut is for - is written and held back pending its six-seed
+measurement. It changes no decision: the only difference is that the food
+still exists tomorrow.
