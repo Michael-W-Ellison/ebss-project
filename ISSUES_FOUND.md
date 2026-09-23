@@ -18040,3 +18040,143 @@ The settlement still dies out, around day 335 instead of day 327, with
 **6,700 units still in its pits**. Getting people out of the sea doubled the
 store and did not get the store into them. That is the next thing, and it is
 what `survival_pressure_tests` and `longevity_tests` are still red about.
+
+### 228. Every infant in the model was permanently starving, and a starving man gave up on his larder at the first empty hole
+
+#227 left a settlement dying out with 6,700 units in its pits and said that
+was next. This is what is in it. Three things, two of which moved and one of
+which did not, and an ablation that was tried and is not kept.
+
+#### One: a full infant read as living on itself
+
+```rust
+pub(in crate::analytics) fn is_the_body_eating_itself(agent: &Agent) -> bool {
+    agent.state.physiology.reserve
+        / crate::agents::physiology::RESERVE_OF_A_GROWN_BODY
+        < Self::WHAT_IS_LEFT_WHEN_A_BODY_IS_LIVING_ON_ITSELF   // 0.25
+}
+```
+
+An infant's reserve capacity is 6,048 against a grown body's 30,240 - a fifth.
+So an infant with its reserve **completely full**, nothing drawn on at all,
+comes out at 0.20 and reads as living on itself. Every infant, every turn of
+its infancy, for ever. Probed on a settlement's last winter:
+
+| stage | capacity | its own reserve | this gate |
+|---|---|---|---|
+| Infant | 6,048 | **1.00 full** | **living on itself** |
+| Adult | 30,240 | 0.60 | not living on itself |
+
+That matters because the branch it guards sits above every drive there is, and
+because "a quarter is the same line every measurement in ISSUES #173 through
+#178 is drawn at" - so those measurements counted every child in the world as
+starving.
+
+`what_this_body_has_spare` is the answer the physiology already gives, and its
+own note says why: *"a child with a full small reserve is as well-found as its
+father with a full large one"*. The same file asks `room_for_another_mouthful`
+of this body's stomach rather than a grown one's, and scales
+`how_fast_this_body_burns` by this body's capacity, for exactly this reason.
+This was the one that was not.
+
+#### Two: the nearest hole he remembers is not always the one with food in it
+
+`something_out_of_the_store` took the head of the remembered-pit list and
+stopped:
+
+```rust
+let (where_it_is, paces) = self.nearest_pit_i_remember(agent, agent_position)?;
+```
+
+A memory is a record of what *was* in a hole. A man standing on one that he or
+somebody else has since emptied got `None` from the whole branch - and the
+turn fell through to the shelter override above every drive - though he might
+remember three more with food in them.
+
+Measured across a settlement's winter, over the samples where a body under a
+quarter of **its own** reserve was carrying nothing:
+
+| | before | after |
+|---|---|---|
+| the branch answered | 38 | 23 of 23 |
+| came back empty | 13 | **0** |
+| ...of those, remembered a pit that had food | **13 of 13** | - |
+| person-samples under a quarter at all | 51 | **23** |
+
+Every single one of those thirteen was a starving man giving up on a full
+larder because the first hole in his list was empty. The order is unchanged -
+his own and his kin's before a stranger's, nearer before further - so the
+first pit that answers is still the one he would have walked to. He simply
+goes on to the next when it does not.
+
+#### Three: the hedgerow gate, which moved nothing
+
+The store shuts while the hedgerows bear, with an escape for anybody
+"genuinely in trouble". The escape asked `is_starving`, which is an **acute**
+reading - nothing in the stomach and nothing in the gut, about thirty hours
+since the last bite - for a **chronic** question. The two come apart exactly
+where it matters:
+
+| day | reserve left | days into it | gut | opens the store |
+|---|---|---|---|---|
+| 279 | 0.60 | 8.5 | 500 | no |
+| 281 | 0.55 | 9.4 | 525 | no |
+| 283 | 0.51 | 10.3 | 50 | no |
+| 284 | 0.48 | 10.9 | 600 | no |
+
+A man ten days into a three-week reserve, thirteen paces from a pit with eight
+thousand units in it, kept out of it because he had a berry that morning. And
+`is_the_body_eating_itself`'s own note is an argument against exactly this:
+*"`is_starving` is three days into it, which is far too late to be the line at
+which a man goes to the larder rather than to the roof"*.
+
+That line is added to the two acute readings rather than put in their place -
+a gate that lets somebody in should not be narrowed while widening it, and
+`state::is_starving` has an `energy` arm that is a real thing a body can be
+short of without having spent its reserve.
+
+**And it moves nothing.** By the time these people are in trouble the
+hedgerows are already bare, so this gate had already let them through. It is
+recorded because it is what sent me looking at what was actually taking the
+turn.
+
+#### The ablation that is not kept
+
+What *was* taking the turn, between a quarter and a half of a reserve, is
+`SeekShelter`: the override that sits above every drive, on `needs_shelter`,
+which in winter is everybody every turn. The note on it records a narrowing
+tried before #176 and rejected, with the reasoning that the override "is not
+what stands between a starving man and his supper; being unable to reach the
+store is".
+
+That premise had changed twice - a pit is remembered now (#176), and nobody is
+walked into the sea (#227) - so it was worth one more measurement. Narrowed to
+`is_too_cold`, over a settlement's whole life:
+
+| | as it is | narrowed |
+|---|---|---|
+| SeekShelter | 16,085 | 10,802 |
+| Move | 30,343 | 49,927 |
+| ready to breed | 368 | **6** |
+| births | 1 | **0** |
+
+The turns went into walking and bought nothing. `not of an age to breed`
+vanishes from the tally altogether, which is a thing only a settlement with
+children in it can report. A settlement that shelters less walks more and
+rears nobody. Reverted, and the note now carries both measurements so nobody
+spends the afternoon a third time.
+
+#### What the two that were kept moved
+
+Same fixture, same seed, one settlement of twelve:
+
+| | after #227 | after #228 |
+|---|---|---|
+| died of hunger | 9 | **7** |
+| turns anybody was ready to breed | 368 | **1,117** |
+| last person alive | day 342 | **lives out the year** |
+| starving turns the larder was shut on | 13 of 51 | **0 of 23** |
+
+It is still a settlement that collapses over its first winter, and the two
+tests that own that are still red. What has gone is one reason it could not
+feed itself out of a store it had already filled.

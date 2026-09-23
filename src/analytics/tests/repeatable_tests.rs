@@ -249,7 +249,13 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // And **up 6.0%** for the sea (#227). A settlement that is not standing
     // in salt water keeps three more people alive through the summer and
     // twice as much in its pits, and a living settlement rolls.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 632_944;
+    // And down 2.6% for the larder work of #228, with the short count above
+    // **not moving at all** - which is the shape to expect. None of it can
+    // fire inside two and a half days: a body does not get a quarter of the
+    // way through a three-week reserve in that time, and the pits are not
+    // empty enough for the second one to matter. Over a year, a man who gets
+    // what he came for out of the first hole stops walking to the next.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 616_785;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -28,8 +28,8 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 | test | reports | what is known |
 |---|---|---|
-| `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **#167's question, and it has moved for the first time.** It was 63,456 refusals of "could not feed a child" and no conception ever. After #227 the same fixture conceives once and bears one child, and its pits hold 8,178 at their fullest against 4,476. The gate is still far out of reach, but it is no longer unreachable in principle. Leave red; the next question is why a settlement starves with 6,700 units in the ground. |
-| `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same as the row above - #167's gate, now fifteen times out of reach rather than fifty-three. Its bound is sound: it counts by parentage, which is the right predicate. Leave red. |
+| `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **#167's question, and it is moving.** It was 63,456 refusals of "could not feed a child" and no conception ever. After #227 the same fixture conceives and bears one child; after #228 the turns anybody is actually *in condition* to breed went 368 to **1,117**, hunger deaths 9 to 7, and the last founder lives out the year instead of dying on day 342. Leave red: a settlement of twelve still collapses over its first winter with six thousand units in its pits, and until that stops there is nothing to raise a child on. |
+| `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same question as the row above. Its bound is sound: it counts by parentage, which is the right predicate. Leave red. |
 
 ## The predator layer, and what it turned out to be
 
@@ -188,6 +188,36 @@ ISSUES_FOUND #227.
 It still dies out, around day 335 instead of 327, with 6,700 units in its
 pits. Getting people out of the sea doubled the store and did not get the
 store into them.
+
+
+**What is under the two that are left, continued.** Still neither has come
+off. #227 got people out of the sea and doubled the store; #228 went after why
+they starve in front of it.
+
+Two things were wrong and one was not. **Every infant in the model read as
+living on its own reserve**, because `is_the_body_eating_itself` divided by a
+grown body's capacity and an infant's is a fifth of one - a completely full
+infant came out at 0.20 against a line of 0.25, for the whole of its infancy.
+And **a starving man gave up on his larder at the first empty hole**: the
+branch took the nearest pit he remembered and stopped, so a hole he had
+already emptied answered for all the others. Over a winter's samples of a body
+under a quarter of its own reserve carrying nothing, the branch came back
+empty 13 times in 51 - and in **all thirteen** the man remembered a pit with
+food in it.
+
+The third was the hedgerow gate asking an acute predicate (`is_starving`:
+thirty hours since the last bite) of a chronic question. That line is widened
+to the one this module already draws, and it **moves nothing** - by the time
+these people are in trouble the hedgerows are bare anyway.
+
+And an ablation that is not kept: narrowing the shelter override, whose
+recorded rejection rested on a premise that had since changed twice. It is
+still worse - births 1 to 0, `ready to breed` 368 to 6. The note now carries
+both measurements.
+
+Same fixture and seed: hunger deaths 9 to 7, turns anybody was ready to breed
+368 to **1,117**, and the last founder lives out the year rather than dying on
+day 342. ISSUES_FOUND #228.
 
 ## Two thresholds that flap, and are not re-baselined
 

@@ -238,9 +238,25 @@ impl Simulation {
     /// A quarter is the same line every measurement in ISSUES #173 through
     /// #178 is drawn at, which is the point of naming it here: one line, read
     /// by the decision and by the instrument that judges it.
+    ///
+    /// **Of its own reserve, and this asked against a grown man's.** An
+    /// infant's reserve capacity is a fifth of an adult's, so a completely
+    /// full infant - reserve at capacity, nothing drawn on at all - came out
+    /// at 0.20 and read as living on itself. Every infant in the model, every
+    /// turn of its infancy, for ever. Probed on a settlement's last winter:
+    /// `what_this_body_has_spare` **1.00**, `days_into_the_reserve` **0.0**,
+    /// and this returning true. That matters because the branch it guards
+    /// sits above every drive there is.
+    ///
+    /// `what_this_body_has_spare` is the answer the physiology already gives,
+    /// and its own note says why: "a child with a full small reserve is as
+    /// well-found as its father with a full large one". The same file has
+    /// `room_for_another_mouthful` asked of this body's stomach rather than a
+    /// grown one's, and `how_fast_this_body_burns` scaled by this body's
+    /// capacity, for the same reason. This was the one that was not.
+    /// See ISSUES_FOUND #228.
     pub(in crate::analytics) fn is_the_body_eating_itself(agent: &crate::agents::Agent) -> bool {
-        agent.state.physiology.reserve
-            / crate::agents::physiology::RESERVE_OF_A_GROWN_BODY
+        agent.state.physiology.what_this_body_has_spare()
             < Self::WHAT_IS_LEFT_WHEN_A_BODY_IS_LIVING_ON_ITSELF
     }
 
@@ -660,7 +676,47 @@ impl Simulation {
         // three days into his reserve does not keep larder discipline, and a
         // rule that let him starve beside a full pit would be a worse fault
         // than the one it fixed.
+        // **And "genuinely in trouble" is the line this module already draws.**
+        // It asked `is_starving`, which is an *acute* reading - nothing in the
+        // stomach and nothing in the gut, about thirty hours since the last
+        // bite - and used it for a *chronic* question. The two come apart
+        // exactly where it matters. Probed through a settlement's last winter,
+        // the adults run down their reserve day by day and are never once
+        // caught with an empty gut at the moment of asking:
+        //
+        // | day | reserve left | days into it | gut | opens the store |
+        // |---|---|---|---|---|
+        // | 279 | 0.60 | 8.5 | 500 | no |
+        // | 281 | 0.55 | 9.4 | 525 | no |
+        // | 283 | 0.51 | 10.3 | 50 | no |
+        // | 284 | 0.48 | 10.9 | 600 | no |
+        //
+        // A man ten days into a three-week reserve, thirteen paces from a pit
+        // with eight thousand units in it, kept out of it because he had a
+        // berry this morning.
+        //
+        // `is_the_body_eating_itself` is the line this module draws for
+        // exactly this decision, and its own note says why: "`is_starving` is
+        // three days into it, which is far too late to be the line at which a
+        // man goes to the larder rather than to the roof: measured, only 30.6%
+        // of the turns taken by a body under a quarter of its reserve were
+        // `is_starving`". That argument was written about this decision and
+        // then this decision went on asking the other question.
+        //
+        // Added to the two acute readings rather than put in their place. The
+        // two answer a different question - `state::is_starving` takes an
+        // `energy` arm as well, which is a thing a body can be short of
+        // without having spent its reserve - and a gate that lets somebody in
+        // should not be narrowed while widening it. Nobody the store was open
+        // to is shut out by this.
+        //
+        // **And it moves nothing in a settlement's winter**, which is worth
+        // recording because it is what sent me looking further: by the time
+        // these people are in trouble the hedgerows are already bare, so this
+        // gate has already let them through and something else is taking the
+        // turn. See ISSUES_FOUND #228.
         if self.are_the_hedgerows_bearing()
+            && !Self::is_the_body_eating_itself(agent)
             && !agent.state.is_starving()
             && !agent.nutrition.is_starving()
         {
@@ -691,9 +747,44 @@ impl Simulation {
         // agent's own memory now. `SpatialMemoryType::Storage` had a reader
         // and no writer until the sight pass was taught to notice a pit, and
         // the omniscience here is precisely what hid that.
-        let here = Position::new(agent_position.0, agent_position.1);
-        let (where_it_is, paces) = self.nearest_pit_i_remember(agent, agent_position)?;
+        // **And the nearest one he remembers is not always the one that
+        // answers.** This took the head of the list and stopped there, and a
+        // memory is a record of what *was* in a hole: a man standing on one he
+        // or somebody else has already emptied got `None` from the whole
+        // branch, though he might remember three more with food in them.
+        //
+        // Measured across a settlement's winter, over the samples where a body
+        // under a quarter of its own reserve was carrying nothing: the branch
+        // answered 38 times and came back empty 13, and **in every one of
+        // those 13 the man remembered a pit that had food in it.** A quarter
+        // of the turns a starving man got out of his own larder, thrown away
+        // on the first hole in the list. See ISSUES_FOUND #228.
+        //
+        // The order is unchanged - his own and his kin's before a stranger's,
+        // nearer before further - so the first pit that answers is still the
+        // one he would have walked to. He simply goes on to the next when it
+        // does not.
+        for (where_it_is, paces) in self.pits_i_remember(agent, agent_position) {
+            if let Some(action) = self.what_this_pit_offers(agent, agent_position, where_it_is, paces) {
+                return Some(action);
+            }
+        }
 
+        None
+    }
+
+    /// What one remembered pit is worth to this one: a handful out of it, a
+    /// walk to it, or nothing.
+    ///
+    /// Split out of `something_out_of_the_store` so that the branch can ask it
+    /// of each pit in turn. Everything in it was already there.
+    fn what_this_pit_offers(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        where_it_is: crate::world::Position,
+        paces: u32,
+    ) -> Option<Action> {
         // What is actually in it is a thing you find out by opening it. The
         // memory says a pit was worth walking to; the pit says what is in it
         // now, and if the walk was wasted the sight pass corrects the memory
@@ -756,6 +847,25 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<(crate::world::Position, u32)> {
+        self.pits_i_remember(agent, agent_position)
+            .into_iter()
+            .next()
+    }
+
+    /// Every pit this one remembers having food in it, in the order it would
+    /// try them.
+    ///
+    /// The same order `nearest_pit_i_remember` takes the head of, and for the
+    /// same reasons - whose hole it is before how far off it is. It exists
+    /// because the nearest remembered pit is not always the one that answers:
+    /// a memory is a record of what *was* there, and a hole somebody has
+    /// since emptied stops the whole branch when it is the only one asked.
+    /// See `something_out_of_the_store` and ISSUES_FOUND #228.
+    pub(in crate::analytics) fn pits_i_remember(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Vec<(crate::world::Position, u32)> {
         use crate::core::memory::SpatialMemoryType;
         use crate::world::Position;
 
@@ -772,7 +882,7 @@ impl Simulation {
         // because a rule that let a man starve beside a full larder over whose
         // hole it was would cost more than it bought. It is an order, not a
         // gate.
-        agent
+        let remembered = agent
             .memory
             .recall_locations(SpatialMemoryType::Storage)
             .into_iter()
@@ -787,8 +897,14 @@ impl Simulation {
                     .unwrap_or(false);
                 (there, paces, somebody_elses)
             })
-            .min_by_key(|(_, paces, somebody_elses)| (*somebody_elses, *paces))
+            .collect::<Vec<_>>();
+
+        let mut remembered = remembered;
+        remembered.sort_by_key(|(_, paces, somebody_elses)| (*somebody_elses, *paces));
+        remembered
+            .into_iter()
             .map(|(there, paces, _)| (there, paces))
+            .collect()
     }
 
     /// How much food in the pack is enough that a person leaves the store

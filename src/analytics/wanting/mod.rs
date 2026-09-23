@@ -504,6 +504,17 @@ impl Simulation {
         // man and his supper; being unable to reach the store is. Left as it
         // was, with the measurement recorded so nobody spends the afternoon on
         // it again.
+        //
+        // **Tried again at #228, on the grounds that the premise had changed
+        // twice** - the store is reachable now that a pit is remembered (#176)
+        // and that nobody is walked into the sea (#227) - and it is still not
+        // kept. Narrowed to `is_too_cold` on a settlement's whole life:
+        // SeekShelter 16,085 turns to 10,802 and Move 30,343 to 49,927, so the
+        // turns went into walking. What they bought: **births 1 to 0, `ready
+        // to breed` 368 to 6**, and `not of an age to breed` gone from the
+        // tally altogether, which is a thing only a settlement with children
+        // in it can report. A settlement that shelters less walks more and
+        // rears nobody. The afternoon is spent; do not spend it a third time.
         if agent.needs_shelter() && self.nearest_shelter_from(agent_position).is_some() {
             return (Action::SeekShelter, false);
         }

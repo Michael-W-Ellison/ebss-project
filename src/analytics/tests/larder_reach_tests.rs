@@ -122,3 +122,51 @@ fn a_bush_underfoot_still_beats_the_larder() {
         "he walked to the larder with a bush under his feet: {what:?}"
     );
 }
+
+/// An emptied hole does not stand between a starving man and the next one.
+///
+/// `something_out_of_the_store` took the nearest pit this one remembers and
+/// stopped there. A memory is a record of what *was* in a hole, so a man
+/// standing on one he or somebody else has already emptied got nothing from
+/// the whole branch - though he might remember three more with food in them.
+///
+/// Measured across a settlement's winter, over the samples where a body under
+/// a quarter of its own reserve was carrying nothing: the branch answered 38
+/// times and came back empty 13, and in every one of those 13 the man
+/// remembered a pit that had food in it. See ISSUES_FOUND #228.
+#[test]
+fn an_empty_hole_underfoot_does_not_hide_the_full_one_behind_it() {
+    use crate::core::memory::SpatialMemoryType;
+    use crate::world::{Belongs, Pit, Position};
+
+    let mut simulation = one_bush_and_a_full_pit((30, 0));
+    let here = simulation.population.agents[0].state.position;
+
+    // An empty hole right where he is standing, and he remembers it.
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(here.0, here.1),
+        holds: Vec::new(),
+        covered: true,
+        dug: 0,
+        belongs: Belongs::ToNobody,
+    });
+    simulation.population.agents[0]
+        .memory
+        .remember_how_much_is_there(SpatialMemoryType::Storage, (here.0, here.1, 0), 150);
+
+    // The full one five paces off is already remembered by the fixture.
+    let agent = simulation.population.agents[0].clone();
+    let what = simulation
+        .something_out_of_the_store(&agent, here)
+        .expect("he remembers a full pit five paces away");
+
+    match what {
+        Action::Move { target } => assert_eq!(
+            (target.0, target.1),
+            (here.0 + PACES_TO_THE_PIT, here.1),
+            "he was sent somewhere other than the pit that has food in it"
+        ),
+        Action::PickUp { .. } => panic!("there is nothing in the hole he is standing on"),
+        other => panic!("neither the full pit nor a walk to it: {other:?}"),
+    }
+}
