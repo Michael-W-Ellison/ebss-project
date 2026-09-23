@@ -415,6 +415,30 @@ energy balance up in #234. What comes first is the eleven months: what a
 discarding a surplus the body cannot bank and the pits never see.
 ISSUES_FOUND #235.
 
+
+**And the tenth: what a Gather yields.** Not the ground, and not the picking.
+Per person-day over three seeded settlement-years: **8.74 trips**, reaching for
+**34.31** items, of which the ground actually had **32.74** and the pack took
+**5.30** - against **11.5** burned and 9.39 eaten from all sources. Per trip,
+4.5 items in season and 2.3 out of it, on 98,613 trips of which 1.5% were out
+of season; something bears on 79% of days.
+
+Nothing is destroyed: what will not fit is put back on the node after
+`take_what_fits` and after the shedding has had its chance.
+
+The limit is the pack. Sampled daily over two settlement-years: **76% full**,
+**44% "other" by weight**, 26% kit, 29% food, and something the carrier would
+set down on 75% of samples. The first trip of the day fills what is left and
+the other seven put their armful back.
+
+Which closes the loop with #234: `what_i_burn_in_a_day` is what this body
+actually spent, effort included, so a settlement that walks more burns more. A
+settlement is busy enough to burn more than its packs can carry home, propped
+up by a sixth of its turns being free. ISSUES_FOUND #236.
+
+Next: the other candidate from #235 - the reserve cap discarding the surplus
+in the two months there is one.
+
 ## Two thresholds that flap, and are not re-baselined
 
 Two of the behavioural thresholds #298 was filed for. Each has crossed its

@@ -18931,3 +18931,77 @@ come first is the eleven months of shortfall, and the two candidates the
 measurements point at are **what a `Gather` actually yields** against the 11.5
 items a body burns in a day, and **the reserve cap discarding a surplus the
 body cannot bank and the pits never see.**
+
+### 236. What a Gather yields, measured: the ground is not the limit and neither is the picking
+
+#235 ended with two candidates for the eleven months of shortfall. This is the
+first of them, and the answer is that gathering is not where the food is lost.
+
+#### The numbers
+
+Three seeded settlement-years, 11,281 person-days, counted inside the Gather
+executor by a tally nothing reads for behaviour:
+
+| per person-day | |
+|---|---|
+| trips out | **8.74** |
+| items reached for | 34.31 |
+| items the ground actually had | **32.74** |
+| items the pack took | **5.30** |
+| items eaten (all sources) | 9.39 |
+| items burned | **11.5** |
+
+And per trip: **4.5 items in season, 2.3 out of it**, on 98,613 trips of which
+only 1.5% were out of season.
+
+So:
+
+- **The ground is not the limit.** 95% of what a forager reaches for is
+  standing there. `what_a_trip_brings_back` gives 8 to 14 in the bearing
+  window against 1 to 3 outside it, and something bears on **79% of days**,
+  with 3.4 of the seven food kinds bearing on an average day.
+- **The picking is not the limit either.** Eight and three quarter trips a
+  day, reaching for thirty-four items, against the eleven and a half a body
+  burns. A settlement reaches for three times its keep every day.
+- **Nothing is destroyed.** What will not fit is `put_it_back` on the node,
+  after `take_what_fits` and after `set_down_what_is_worth_less_than_food` has
+  been given its chance. The snare executor's old defect - taking a catch and
+  dropping it into nothing - is not present here.
+
+#### What the limit is
+
+The pack. Sampled once a day over two settlement-years, 7,605 pack-samples:
+
+| | |
+|---|---|
+| mean load against capacity | 28.1 of 36.8 - **76% full** |
+| samples with something the carrier would set down | **75%** |
+| of the load, by weight: other | **44%** |
+| food | 29% |
+| kit | 26% |
+
+A pack is three quarters full of which seven parts in ten are not food, and
+the first trip of the day fills what is left. The other seven trips reach for
+an armful and put it back.
+
+That is not waste - the ground keeps it, and a forager who cannot carry a
+whole patch is not a defect. It is a **ceiling**: what a settlement eats in a
+day is what its packs can carry home plus what it takes out of the ground on
+the spot, and the packs are mostly full of something else.
+
+#### And the loop it closes
+
+The gap between the 9.39 eaten and the 11.5 burned is not a fixed eighteen per
+cent of a fixed burn. `what_i_burn_in_a_day` is an average of what this body
+actually spent, effort included - so a settlement that walks more burns more.
+#234 measured six turns in seven going on walking or sheltering, and 15.4% of
+turns being a walk to the tile the agent was already standing on, which costs
+nothing.
+
+So the three findings are one finding: **a settlement is busy enough to burn
+more than its packs can carry home**, it is propped up by a sixth of its turns
+being free, and the food it does not carry stays in the ground where it will
+still be in November.
+
+The second candidate from #235 - the reserve cap discarding a surplus in the
+two months there is one - is untouched and is where this goes next.
