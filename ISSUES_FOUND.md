@@ -18565,3 +18565,77 @@ across the gap, and live on the difference out of their own reserve. The
 binding term is how often a body reaches the store at all - 0.75 trips a
 person-day against the two it would take - and that is a question about the
 shelter override and the walk, not about the pit. #231 has the arithmetic.
+
+### 233. The shelter override cannot end the condition that chooses it - measured, and two fixes for it that did not survive
+
+#231's turn budget, read from the tallies, put `SeekShelter` at **28.5% of
+every person-turn in the hungry gap** against `Eat` at 3.6%. This went after
+it, found a real structural oddity, tried two things, kept neither, and
+corrected a note this document had got wrong.
+
+#### What the override is actually doing
+
+Read from agent state only - no dice drawn, so the run is the run - over three
+seeded settlements across the gap, **99,046 person-turns**:
+
+| | share |
+|---|---|
+| `needs_shelter()` true | **28.3%** |
+| `is_too_cold()` true | **28.3%** - *the same turns* |
+| a roof within reach | 97.6%, at a mean of **0.5 paces** |
+| already under shelter | **24.1%** |
+| `SeekShelter` taken | 28.5% |
+
+So **the walk to shelter is not the cost.** The roof is half a pace away and
+the agent is usually standing under it already: almost every one of those
+turns is a huddle in place.
+
+And the huddle cannot end the spell. `needs_shelter` reads
+`active_exposures`, which hypothermia occupies for as long as
+`body_temp.is_too_cold()`; `seeking_shelter` answers by calling
+`ExposureStatus::recover`, which touches `exposure_damage` and `wetness` and
+not the body's temperature. Meanwhile
+`Agent::update_temperature_with_shelter` already warms a body at the
+sheltered rate wherever it is standing. **The action the override chooses
+does nothing the body was not getting anyway, and cannot resolve the state
+that selected it.**
+
+That is a genuine oddity and it is written down here rather than fixed,
+because both fixes for it measure badly.
+
+#### The two that did not survive
+
+Six seeded settlement-years, twelve founders each, against the state after
+#232:
+
+| | emptied | births | person-turns |
+|---|---|---|---|
+| after #232 | **0 of 6** | 8 | 1,039,210 |
+| a roof mends exposure without the turn | **0 of 6** | 8 | **1,039,210** |
+| the override skips the already-sheltered | **1 of 6** | 7 | 1,039,686 |
+
+**The first is inert.** It reproduced the baseline to the digit, seed by seed.
+`exposure_damage` feeds only `is_critical()`, and `is_critical()` never adds a
+turn to `needs_shelter()` - the table above shows the two predicates firing on
+exactly the same 28.3%. It changes a number nothing reads.
+
+**The second costs a settlement.** It gives back precisely what #232 bought,
+and person-turns do not move to pay for it. Reverted.
+
+#### And a correction, which is the part worth keeping
+
+#228 ablated this same override - narrowing `needs_shelter()` to
+`is_too_cold()` - and recorded the result as decisive: births 1 to 0, `ready
+to breed` 368 to 6, with a note in `wanting/mod.rs` telling the next reader
+not to spend the afternoon on it again.
+
+**That was one seed, and the two predicates are now measured as firing on the
+same turns.** An ablation that barely changes when a branch fires cannot have
+moved births by a factor of anything; a birth count of one falling to nought
+on a single settlement is a coin. The note has been rewritten with the
+six-seed figures and with an instruction not to cite the old ones.
+
+Two lessons, both already paid for once in this file: **measure a settlement
+over seeds, not over one**, and **measure from the tallies**, because a probe
+that asks the decision layer a second time in the same turn draws from the
+same seeded stream and moves the world it is reading (#231).

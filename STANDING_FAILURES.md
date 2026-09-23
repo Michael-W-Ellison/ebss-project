@@ -315,6 +315,30 @@ across the gap, and live on the difference out of their own reserve. The
 binding term is how often a body reaches the store at all - 0.75 trips a
 person-day against the two it would take - and #231 has that arithmetic.
 
+
+**And the seventh, which kept nothing.** #231's budget put `SeekShelter` at
+28.5% of every gap person-turn against `Eat` at 3.6%, so #233 went after it.
+
+The walk is not the cost: a roof is within **half a pace** on 97.6% of those
+turns and the agent is already under one on 24.1%, so almost every
+`SeekShelter` is a huddle in place. And it cannot end the spell -
+`needs_shelter` reads the exposure list, which hypothermia occupies for as
+long as the body is cold, while `update_temperature_with_shelter` already
+warms a sheltered body wherever it stands. The action does nothing the body
+was not getting anyway and cannot resolve the state that chose it.
+
+Both fixes measure badly and are reverted. Letting a roof mend exposure
+without the turn is **inert** - it reproduced the baseline to the digit on
+every seed, because `exposure_damage` feeds only `is_critical()` and that
+never adds a turn. Skipping the override for the already-sheltered costs a
+settlement: emptied 0 of 6 back to 1 of 6, births 8 to 7. The oddity is
+recorded rather than fixed. ISSUES_FOUND #233.
+
+**And #228's note about this override is corrected.** It called a one-seed
+ablation decisive (births 1 to 0) for a change that is now measured as hitting
+the same 28.3% of turns either way. The note in `wanting/mod.rs` now carries
+the six-seed figures and says not to cite the old ones.
+
 ## Two thresholds that flap, and are not re-baselined
 
 Two of the behavioural thresholds #298 was filed for. Each has crossed its

@@ -505,16 +505,28 @@ impl Simulation {
         // was, with the measurement recorded so nobody spends the afternoon on
         // it again.
         //
-        // **Tried again at #228, on the grounds that the premise had changed
-        // twice** - the store is reachable now that a pit is remembered (#176)
-        // and that nobody is walked into the sea (#227) - and it is still not
-        // kept. Narrowed to `is_too_cold` on a settlement's whole life:
-        // SeekShelter 16,085 turns to 10,802 and Move 30,343 to 49,927, so the
-        // turns went into walking. What they bought: **births 1 to 0, `ready
-        // to breed` 368 to 6**, and `not of an age to breed` gone from the
-        // tally altogether, which is a thing only a settlement with children
-        // in it can report. A settlement that shelters less walks more and
-        // rears nobody. The afternoon is spent; do not spend it a third time.
+        // **Tried again at #228 and at #233, and it is still not kept - but
+        // not for the reason #228 gave, which was wrong and is corrected
+        // here.**
+        //
+        // #228 narrowed it to `is_too_cold` on **one seed** and recorded
+        // births 1 to 0 and `ready to breed` 368 to 6 as a result. It is not
+        // one: `needs_shelter` and `is_too_cold` are measured at **28.3% of
+        // gap person-turns each - the same turns** - so that ablation barely
+        // changed when this fires at all, and a birth count of one falling to
+        // nought on a single settlement is a coin. Do not cite those numbers.
+        //
+        // What #233 measured instead, over six seeded settlement-years:
+        // skipping this override for somebody **already under shelter** -
+        // which is what the Shelter drive below has always done - costs a
+        // settlement. Emptied 0 of 6 to 1 of 6, births 8 to 7, person-turns
+        // flat. So it is reverted, and the oddity it was aimed at is recorded
+        // rather than fixed: a roof is within half a pace on 97.6% of those
+        // turns and the agent is already under one on 24.1% of them, so
+        // almost every `SeekShelter` is a huddle rather than a walk - and
+        // since `needs_shelter` reads the exposure *list*, which hypothermia
+        // sits on for as long as the body is cold, the action cannot end the
+        // condition that chose it. See ISSUES_FOUND #233.
         if agent.needs_shelter() && self.nearest_shelter_from(agent_position).is_some() {
             return (Action::SeekShelter, false);
         }
