@@ -18447,27 +18447,45 @@ store, not because it saves anybody.
 
 #### And the arithmetic, which is the useful part of this entry
 
-A settlement that has filled its pits still starves, and the numbers say
-plainly why. One `Eat` puts down `UNITS_IN_ONE_ITEM` - **one item** - per
-pass, and a grown body burns `UNITS_BURNED_IN_AN_ORDINARY_DAY`, which is
-**11.5 items a day**. So a body must spend **a quarter of every turn of its
-life eating** merely to stand still, and that is very nearly what it does:
-eat is 22.6% of a winter turn.
+**Corrected after #232, and the correction is a lesson about the instrument.**
+The turn shares in the table above came from a probe that called
+`generate_non_emotional_action` a second time in the same turn to see what the
+agent would choose. That draws from the same seeded stream, so **the probe
+moves the world it is measuring** - and worse, what it reads is what the
+decision layer would *offer*, not what the executor did.
 
-`eat_from_hand` goes on eating while there is room in the stomach and
-something in the hand, so the size of a meal is the size of what is being
-carried. Through the gap that is one or two items, and `WHAT_A_PERSON_TAKES_OUT`
-is eight - about two thirds of a day - so a trip to the pit has to be made
-more than once a day by everybody, for seventy-five days, against a shelter
-override that takes a quarter of every turn.
+Read from `actions_taken` alone, which is what the model actually did, the
+same three settlements across the gap - 99,046 person-turns - come out very
+differently:
 
-None of those numbers is obviously wrong on its own. Together they leave a
-settlement about twenty per cent short of its keep through the gap, which the
-three-week reserve hides until it is gone - which is exactly the shape the
-measurements show: full reserves until day 270, and everybody dead by day 345.
+| | share of person-turns |
+|---|---|
+| **Move** | **57.5%** |
+| SeekShelter | 28.5% |
+| Gather | 11.4% |
+| Sleep | 3.7% |
+| **Eat** | **3.6%** |
+| PickUp | 1.6% |
+
+A body in the hungry gap spends **six turns in seven walking or sheltering**,
+and eats **1.75 times a person-day**. At about a hundred energy a sitting that
+is some two hundred energy a day against the **1,440** a grown body burns -
+which is exactly the intake the physiology reports directly: 1,000 to 1,500
+energy a person-day through the summer, falling to **761 at day 300 and 440 at
+day 330**.
+
+The rest of the arithmetic stands. A grown body burns
+`UNITS_BURNED_IN_AN_ORDINARY_DAY`, which is **11.5 items a day**.
+`eat_from_hand` eats on while there is room in the stomach and something in
+the hand, so a meal is the size of what is carried - through the gap, one or
+two items. So the shortfall is not that eating is capped; it is that there is
+nothing in the pack to eat, and the turns that would fetch some are going on
+the walk and the roof.
 
 That is the standing problem, stated as arithmetic rather than as a symptom,
-and it is where the next work on this belongs.
+and it is where the next work on this belongs. **Measure it from the tallies.**
+A probe that asks the decision layer a second time is reading a different
+world and a different question.
 
 ### 232. A man at a pit holding two legumes and four hundred roots took the two legumes
 

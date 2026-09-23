@@ -282,15 +282,19 @@ settlement in six back off the floor, births and hunger deaths unchanged.
 ISSUES_FOUND #231.
 
 **The arithmetic that entry records is the useful part**, and it is what the
-next work belongs to. One `Eat` puts down one item; a grown body burns 11.5 a
-day; so a body must spend a quarter of every turn of its life eating to stand
-still, and does. A meal is the size of what is being carried, which through
-the gap is one or two items. `WHAT_A_PERSON_TAKES_OUT` is eight - two thirds
-of a day - so everybody must go to the pit more than once a day for
-seventy-five days, against a shelter override that takes a quarter of every
-turn. No one of those is obviously wrong; together they leave a settlement
-about twenty per cent short through the gap, which the three-week reserve
-hides until it is gone.
+next work belongs to - read from `actions_taken` rather than from a probe,
+because a probe that asks the decision layer a second time in the same turn
+draws from the same seeded stream and moves the world it is measuring. The
+first cut of those numbers was taken that way and is corrected in #231.
+
+What the model actually did, over 99,046 person-turns across the gap: **Move
+57.5%, SeekShelter 28.5%, Gather 11.4%, Eat 3.6%, PickUp 1.6%.** Six turns in
+seven walking or sheltering, and 1.75 sittings a person-day - some two hundred
+energy against the 1,440 a grown body burns, which matches what the physiology
+reports directly (761 a person-day at day 300, 440 at day 330). A meal is the
+size of what is carried, so the shortfall is not that eating is capped: there
+is nothing in the pack, and the turns that would fetch some go on the walk and
+the roof.
 
 
 **And the sixth, which is the one the fixture noticed.** `Pit::something_to_eat`
