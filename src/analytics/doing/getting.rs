@@ -598,7 +598,23 @@ impl Simulation {
                 if it_is_food {
                     self.food_items_into_packs += took as u64;
                 }
-                if took < harvested {
+                // What nobody kept goes back on the bush, once, put there by
+                // whoever did not keep it.
+                //
+                // This line used to run for every gather, and the two branches
+                // below then put the same crop back a second time - `harvested
+                // - eaten` for a man who ate it where he stood, and the whole
+                // `harvested` for a thing nobody can eat. So a bush handed a
+                // man his dinner and still had it, and a quarry gained a load
+                // every time somebody with a full pack asked it for one.
+                //
+                // Every fixture in `full_pack_tests` built a node at
+                // `amount == max_amount`, where `put_it_back`'s clamp swallows
+                // the whole of it, which is why it stood so long. On a node
+                // anybody has already been at - which is nearly every node in
+                // a settled country - it is food and stone out of nothing, on
+                // the branch #236 measured taking 84% of every armful.
+                if went_in_the_pack && took < harvested {
                     self.world.resources[resource_index].put_it_back(harvested - took);
                 }
                 let agent = &mut self.population.agents[agent_index];

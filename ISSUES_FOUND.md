@@ -19130,3 +19130,170 @@ burying its own claim on the turn when the body is full and the pack is not.
 The second is the one the model is already shaped for: the pits exist, the
 harvest rule exists, and #235 measured why it does not reach - the Hunger
 drive does not go through the branch that rule guards.
+
+### 238. The bush hands over its crop and still has it
+
+Two guard tests, both red against the model as it stood:
+
+```
+a_quarry_does_not_gain_stone_from_being_refused
+  a refused gather left more stone in the ground than it found: 100 then 101
+
+what_he_ate_where_he_stood_does_not_grow_back_on_the_bush
+  he ate off the bush and the bush did not lose what he ate: 100 then 100
+```
+
+`gathering` takes the crop off the node before it asks whether there is
+anywhere to put it, so everything it does not keep it has to hand back. It
+handed it back twice:
+
+```rust
+if took < harvested {
+    self.world.resources[resource_index].put_it_back(harvested - took);   // every gather
+}
+...
+} else {                                                    // nothing went in the pack
+    if it_is_food { ...
+        self.world.resources[resource_index]
+            .put_it_back(harvested.saturating_sub(eaten));  // again
+    }
+    self.world.resources[resource_index].put_it_back(harvested);          // or again
+```
+
+So a man with a full pack who eats a bush bare leaves the bush as full as he
+found it, and a quarry gains a load every time somebody who cannot carry
+stone asks it for one.
+
+#### Why it stood
+
+`put_it_back` clamps to `max_amount`, and **every fixture in
+`full_pack_tests` builds its node with `amount == max_amount`**, where the
+clamp swallows the whole of it. The two tests above are the same fixtures
+with the node set to 100 of a possible 500 - which is what nearly every node
+in a settled country is, because somebody has already been at it.
+
+It is food and stone out of nothing, on the branch #236 measured taking
+**84% of every armful** a settlement picks.
+
+#### The fix
+
+One condition. The early hand-back is the carried branch's, and the two
+branches below are already doing their own:
+
+```rust
+if went_in_the_pack && took < harvested {
+```
+
+Each branch now hands the crop back exactly once, and only what nobody kept.
+`eating.rs` was checked for the same shape and is correct: it puts back
+`left_in_the_hand - went_in`, once.
+
+#### What it costs, honestly
+
+It takes food out of the world, so it should cost survival, and it does.
+Six seeded settlement-years, twelve founders, paired against the same seeds:
+
+| | as it was | handed back once |
+|---|---|---|
+| person-turns lived | 1,039,182 | 1,027,601 |
+| births | 8 | 3 |
+| settlements emptied | 0 of 6 | 2 of 6 |
+
+**Read the third row against #239 before drawing anything from it.** A
+one per cent fall in person-turns is inside the noise of this measurement,
+and so is the whole of the emptied column.
+
+### 239. "Settlements emptied, of six" is noise, and this session steered by it
+
+The headline this session has been measured against - twelve founders, one
+year, six seeds, count the settlements that end with nobody in them - was run
+on a **second block of six seeds with no code change at all**:
+
+| seeds | person-turns | births | emptied |
+|---|---|---|---|
+| 0 to 5 | 1,039,182 | 8 | **0 of 6** |
+| 6 to 11 | 1,011,513 | 1 | **2 of 6** |
+
+Identical code. The emptied column moves from none to a third; births move by
+a factor of eight; person-turns move by 2.7%. So a change that shows one
+emptied settlement where the baseline showed none has shown nothing, and a
+change that costs one per cent of person-turns has shown nothing either.
+
+**What this retracts.** #232 was recorded as taking settlements emptied from
+3 of 6 to 0 of 6. That reading cannot bear the weight it was given: the null
+distribution of that statistic spans the whole of the claimed effect. The
+change itself - a pit handing out its largest stock rather than the first one
+it finds - is still right on its own terms, and the run after it is still the
+run the later baselines were taken against. What is withdrawn is the
+inference that it saved three settlements.
+
+Nothing else this session rests on the emptied column alone: #233, #234 and
+#235 were each reverted on person-turn costs of five to thirteen per cent,
+which is well outside this spread, and #237's gut deferral was rejected on an
+invariant rather than on a number.
+
+**What a usable measure looks like.** Paired seeds, which these are, and a
+quantity that is not a yes-or-no read off a chaotic system: person-turns
+lived is the best of what is already counted, and 1% of it is noise while 5%
+is not. A count of six coin flips is not a measurement and should not be
+quoted as one again.
+
+### 240. A full reserve is not a full body, and the gate that assumed it was
+
+The requirement was that agents take the room in their pack and their
+carrying capacity into account when planning and when acting. Most of that
+is already in the model and was put there one refusal at a time - #118 (take
+what fits rather than all or nothing), #126 (the carrying invariant), #206
+(one rule for what may leave a pack), #215 (weigh what is actually being
+reached for), #230 (ask whether it will go in *their* pack before handing it
+over). Measured over three seeded settlement-years, 11,281 person-days, every
+refusal in the model that is about room comes to **2,854**, and 2,295 of
+those are `Eat: Too full to eat`, which is a stomach and not a pack.
+
+So the explicit checks are working. What was missing was a corner in
+`could_this_gather_come_to_anything`, which deliberately skips the room check
+for food on the reasoning that the executor will shed or eat it on the spot.
+Neither is possible for a pack with no room and nothing in it anybody would
+set down - and if the body's reserve is also at the brim, the meal that
+branch offers is one `Physiology::advance` throws away on arrival. Three
+conditions, all of which have to hold:
+
+```rust
+if food_is_the_point
+    && !agent.could_i_take_another_handful(Self::what_one_of_these_weighs(wanted))
+    && agent.state.physiology.what_this_body_has_spare() >= Self::FULL_TO_THE_BRIM
+{
+    return false;
+}
+```
+
+Paired seeds, twice, against two different baselines:
+
+| | person-turns | against |
+|---|---|---|
+| before the hand-back fix | 1,035,058 | 1,039,182, **-0.4%** |
+| after it | 1,014,053 | 1,027,601, **-1.3%** |
+
+Both negative, both inside or at the edge of the 1% noise floor #239
+establishes. It does not pay for itself, and it is **reverted**.
+
+#### Why it cannot pay for itself
+
+The premise was wrong, and the model already had the number that says so.
+A body at a full reserve is not a body with nowhere to put a meal: it has a
+stomach, and behind the stomach a gut that holds a day's worth. What the
+reserve cap throws away is only what arrives at the brim in the turn it
+arrives - and #237 measured that at **17% to 22% of everything eaten**.
+
+Which is to say four fifths of a meal eaten at a full reserve is still
+absorbed, over the day that follows, as the reserve burns its 1,440 down and
+makes room. The gate refused the whole trip to avoid losing the fifth, and
+gave up the four fifths with it.
+
+**So the honest reading of "take the room into account" here is not a
+refusal.** A man at a full reserve standing on a bush he cannot carry should
+eat - he is not wasting his afternoon. What he should also be able to do is
+put the rest in the ground, and that is #237's second direction, untouched:
+give burying its own claim on the turn when the body is full and the pack is
+not. The one place in this area that genuinely failed to account for room was
+not a decision at all but the hand-back in the executor, and that is #238.

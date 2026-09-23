@@ -529,3 +529,16 @@ For contrast, the same eight seeds on what #224 was actually for:
 |---|---|---|---|
 | before | 0 to 2 | 0 to 2, **two worlds with none** | 0 to 100, two with none |
 | after | 1 to 8 | 4 to 15, all eight | 35 to 195, all eight |
+
+## And one that was never a test, but was being read like one
+
+`settlements emptied, of six` - twelve founders, one year, six seeds, count
+the worlds that end with nobody in them - is not a measurement. Run twice on
+identical code it gives **0 of 6 on seeds 0-5 and 2 of 6 on seeds 6-11**, with
+births moving by a factor of eight between the two blocks. It has been the
+headline for most of this session's changes and it cannot carry one. See
+ISSUES #239, which withdraws the inference #232 drew from it.
+
+Person-turns lived, on paired seeds, is the usable quantity of the three:
+2.7% between blocks of identical code, so 1% is noise and 5% is not. The
+reverts in #233, #234 and #235 were all taken on 5% to 13% and stand.

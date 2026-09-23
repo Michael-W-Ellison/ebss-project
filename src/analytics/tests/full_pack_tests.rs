@@ -451,3 +451,83 @@ fn a_man_with_room_for_a_root_is_offered_the_pit_and_gets_one() {
         "the executor said yes and no roots arrived"
     );
 }
+
+/// And the bush does not grow back what he ate off it.
+///
+/// `gathering` takes the crop off the node before it asks whether there is
+/// anywhere to put it, so everything it does not keep it has to hand back.
+/// It hands it back twice. The first `put_it_back(harvested - took)` runs for
+/// every gather, carried or not; then the branch for a pack with no room runs
+/// its own `put_it_back(harvested - eaten)`, and the one for a thing that is
+/// not food runs `put_it_back(harvested)` on top of that.
+///
+/// On a bush that is standing at its full amount the clamp to `max_amount`
+/// hides it entirely, which is why it has gone unseen: the fixtures all build
+/// a node with `amount == max_amount`. On a bush anybody has already been at
+/// it is food out of nothing - and this is the branch that #236 measured
+/// firing on 84% of every armful taken in a settlement, so it is not a corner.
+#[test]
+fn what_he_ate_where_he_stood_does_not_grow_back_on_the_bush() {
+    let mut simulation = a_pack_of_nothing_but_food_on_a_berry_patch();
+
+    simulation.take_a_turn();
+    fill_the_pack(&mut simulation, "meat");
+
+    // A bush somebody has already been at, which is what nearly every bush in
+    // a settled country is. The clamp to `max_amount` would otherwise absorb
+    // the whole of this.
+    simulation.world.resources[0].amount = 100;
+    let on_the_bush_before = simulation.world.resources[0].amount;
+
+    let result = simulation.execute_action(
+        &Action::Gather {
+            resource_type: "food".to_string(),
+        },
+        0,
+    );
+
+    assert!(
+        result.success,
+        "a hungry man on a berry patch was refused for want of room: {:?}",
+        result.message
+    );
+
+    let on_the_bush_after = simulation.world.resources[0].amount;
+
+    assert!(
+        on_the_bush_after < on_the_bush_before,
+        "he ate off the bush and the bush did not lose what he ate: \
+         {on_the_bush_before} then {on_the_bush_after}"
+    );
+}
+
+/// The same for a thing nobody can eat, where there is no meal to muddle it.
+///
+/// A pack with no room for stone gets `Inventory full - cannot carry more`,
+/// and the quarry gains a load every time it is asked.
+#[test]
+fn a_quarry_does_not_gain_stone_from_being_refused() {
+    let mut simulation = a_full_pack_on_a_berry_patch();
+
+    let here = simulation.population.agents[0].state.position;
+    let mut quarry = ResourceNode::new(ResourceType::Stone, Position::new(here.0, here.1), 500);
+    quarry.amount = 100;
+    simulation.world.resources.push(quarry);
+    let which = simulation.world.resources.len() - 1;
+
+    let on_the_ground_before = simulation.world.resources[which].amount;
+
+    let _ = simulation.execute_action(
+        &Action::Gather {
+            resource_type: "stone".to_string(),
+        },
+        0,
+    );
+
+    assert!(
+        simulation.world.resources[which].amount == on_the_ground_before,
+        "a refused gather left more stone in the ground than it found: \
+         {on_the_ground_before} then {}",
+        simulation.world.resources[which].amount
+    );
+}

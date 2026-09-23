@@ -266,7 +266,13 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // And down 0.9% for #232, where the larder offers the biggest stack
     // rather than the first one: a trip that brings back a load is a trip
     // that is not made again tomorrow.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 683_093;
+    // And down 0.45% for #238, where the crop is handed back to the bush
+    // once rather than twice. The short count above does not move, which is
+    // the shape to expect: nobody has a pack full enough to be refused inside
+    // two and a half days. Over a year the bushes and the quarries stop
+    // growing back what was taken off them, so there is less standing in the
+    // country to walk to and roll over.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 680_029;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
