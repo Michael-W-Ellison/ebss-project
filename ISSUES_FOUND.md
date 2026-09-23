@@ -18877,8 +18877,57 @@ the supper in the man's own bag*.
 `ScavengeWhatIsLyingAbout` together with the walk to one, through
 `a_catch_waiting`, which is that pair and was already written.
 
-**Held back pending its measurement**, which is running. On the gap alone it
-does what it should - agents carrying food fall from 52.8% of gap turns to
-24.4%, so the pack is being eaten down rather than hauled - but this session
-has twice now had an obviously-right change cost settlements (#233, #234), and
-what matters is the six-seed outcome, not the mechanism reading true.
+On the gap alone it does what it should: agents carrying food fall from 52.8%
+of gap turns to 24.4%, so the pack is eaten down rather than hauled.
+
+**It is not kept.** Six seeded settlement-years:
+
+| | as it is | `EatCarriedFood` reading the pack |
+|---|---|---|
+| settlements emptied | 0 of 6 | 0 of 6 |
+| person-turns lived | 1,039,210 | **957,759** |
+| births | **8** | **3** |
+| the year's ledger | 0.84 | **0.78** |
+
+Eating the supper in the bag makes the settlement eat *less* over the year and
+rear fewer than half as many children. Which is the third time this session an
+obviously-right change has cost something, and this one says why.
+
+#### The month-by-month ledger, which corrects the reading above
+
+A settlement of twelve burns 517,500 energy a month. What it eats:
+
+| month | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| eaten | 377k | 331k | 364k | 402k | 531k | 553k | 383k | 392k | 369k | 225k | 133k | 29k |
+| at a full reserve | 4 | 5 | 5 | 7 | **11** | **12** | 6 | 9 | 7 | 0 | 0 | 0 |
+
+**It is short in eleven months of twelve.** Not short in winter and fat in
+summer - short in March and short in July. The two months it clears its burn,
+months five and six, are the two months when eleven or twelve of the twelve
+are already at a full reserve - and a reserve at capacity discards what
+arrives: `self.reserve = (self.reserve + won).min(self.reserve_capacity)`.
+
+So the surplus that exists is destroyed through the mouth, and the deficit is
+everywhere else.
+
+**That corrects what this entry said above.** "It is not a supply problem" was
+read off the pits outliving the settlement, and that reading is wrong: the
+pits are a real buffer that is really drawn on, not idle surplus. What is left
+in them is what the last few people did not live long enough to eat. The
+settlement is short of food in almost every month of the year.
+
+And it is why eating the pack eagerly costs: food eaten in month five at a
+full reserve is food that is not in a pit in month eleven. The mis-wiring was
+holding the store up, the same way the standstill turn holds the energy
+balance up in #234 - and it is written down here rather than fixed for the
+same reason.
+
+#### What this leaves
+
+The defect is real and is not the thing to fix first: a way named for the pack
+that reads a snare is two names for one thing however it measures. What has to
+come first is the eleven months of shortfall, and the two candidates the
+measurements point at are **what a `Gather` actually yields** against the 11.5
+items a body burns in a day, and **the reserve cap discarding a surplus the
+body cannot bank and the pits never see.**

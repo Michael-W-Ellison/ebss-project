@@ -396,7 +396,23 @@ never touches the pack. Worse, `the_way_to_answer` puts
 `is_it_already_in_his_hand` first and that matches `CheckSnares` too, so a
 full snare took the turn ahead of the food the man was carrying.
 
-The fix is written and held back pending its six-seed measurement.
+The fix is written and **not kept**: six seeded settlement-years give
+person-turns 1,039,210 to 957,759, births 8 to 3, and the ledger 0.84 to 0.78.
+Eating the supper in the bag makes a settlement eat less over the year.
+
+**And that corrects the reading.** Month by month, a settlement of twelve burns
+517,500 and eats 377k / 331k / 364k / 402k / 531k / 553k / 383k / 392k / 369k
+/ 225k / 133k / 29k. It is short in **eleven months of twelve** - short in
+March as well as in November. The only two months it clears its burn are the
+two when eleven or twelve of the twelve are already at a full reserve, and a
+full reserve discards what arrives. So the pits are a real buffer that is
+really drawn on, not idle surplus, and eating the pack early is food not in a
+pit in month eleven.
+
+The mis-wiring is holding the store up, the way the standstill turn holds the
+energy balance up in #234. What comes first is the eleven months: what a
+`Gather` yields against the 11.5 items a day a body burns, and the reserve cap
+discarding a surplus the body cannot bank and the pits never see.
 ISSUES_FOUND #235.
 
 ## Two thresholds that flap, and are not re-baselined
