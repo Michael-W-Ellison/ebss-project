@@ -19069,10 +19069,49 @@ That is why both decision-layer answers cost lives, and it is the fourth time
 this session that an obvious waste has turned out to be load-bearing - see
 #233, #234, #235.
 
-#### What is committed here
+#### The fix that follows from the diagnosis, and why it is wrong
 
-The counter. The fix that follows from the diagnosis - **what the reserve has
-no room for stays in the gut**, and is drawn on as the reserve burns down,
-which is what a gut is for - is written and held back pending its six-seed
-measurement. It changes no decision: the only difference is that the food
-still exists tomorrow.
+**What the reserve has no room for stays in the gut**, drawn on as the reserve
+burns down, which is what a gut is for. It changes no decision; the only
+difference is that the food still exists tomorrow. Six seeded
+settlement-years said it was the best change of the session:
+
+| | as it is | the gut holds it |
+|---|---|---|
+| person-turns lived | 1,039,210 | **1,087,305** |
+| alive at the year's end, all six | 11 | **36** |
+| settlements emptied | 0 of 6 | 0 of 6 |
+| births | **8** | **1** |
+
+Survivors more than tripled. And then the gut was measured:
+
+| | |
+|---|---|
+| most ever held in one gut | **162,962 energy - 113 days of burn** |
+| entries in the gut vector | **17,285** |
+| mean at the year's end | 48,000 to 73,800, against a reserve capacity of 30,240 |
+
+A body ends the year carrying four months of food inside it, in seventeen
+thousand separate pieces. That is not a gut. It is a second store, larger than
+the reserve and larger than anything in the ground, invisible to every tally
+and carried through a famine.
+
+**So the survival gain was the artefact.** Everybody was given a 113-day
+larder and of course fewer of them died; births fell because a body that is
+never hungry never fills a pit, and the breeding gate reads what is put by.
+Not kept.
+
+#### What is committed, and what the real shape of a fix is
+
+The counter, and this entry.
+
+A gut has a capacity like a stomach does, and with one the surplus beyond it
+has nowhere to go and spills again - so deferring is not the answer either.
+The two honest directions are **to shorten the pipeline**, so that stopping at
+the brim does not leave a body hungry a day later, or **to make the surplus go
+into the ground rather than down the throat** - not by suppressing eating,
+which costs thirteen per cent of a settlement's person-turns, but by giving
+burying its own claim on the turn when the body is full and the pack is not.
+The second is the one the model is already shaped for: the pits exist, the
+harvest rule exists, and #235 measured why it does not reach - the Hunger
+drive does not go through the branch that rule guards.

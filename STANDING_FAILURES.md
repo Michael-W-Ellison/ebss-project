@@ -460,8 +460,20 @@ eaten today lands tomorrow, and a body that stops at the brim has nothing in
 the pipe when the brim drops. It has to keep eating and spilling to stay fed.
 Fourth load-bearing waste this session.
 
-The counter is committed; the fix that follows - what the reserve cannot take
-stays in the gut - is held back pending its measurement. ISSUES_FOUND #237.
+The counter is committed. The fix that follows - what the reserve cannot take
+stays in the gut - measured as the best change of the session (person-turns
+1,039,210 to 1,087,305, survivors at the year's end 11 to **36**, no settlement
+emptied) and is **not kept**: the gut it creates is unbounded. Most ever held
+in one, **162,962 energy - 113 days of burn - in 17,285 separate pieces**, and
+a mean at the year's end of two to three times the whole reserve capacity.
+That is a second store, larger than anything in the ground and invisible to
+every tally. The survival gain was the artefact, and births fell 8 to 1
+because a body that is never hungry never fills a pit.
+
+The real directions are to shorten the day-long pipeline, or to make the
+surplus go into the ground rather than down the throat - not by suppressing
+eating, which costs thirteen per cent of person-turns, but by giving burying
+its own claim on the turn when the body is full. ISSUES_FOUND #237.
 
 ## Two thresholds that flap, and are not re-baselined
 
