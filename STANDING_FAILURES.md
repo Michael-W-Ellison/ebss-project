@@ -339,6 +339,26 @@ ablation decisive (births 1 to 0) for a change that is now measured as hitting
 the same 28.3% of turns either way. The note in `wanting/mod.rs` now carries
 the six-seed figures and says not to cite the old ones.
 
+
+**And the eighth: the walk is not walking.** #231 put `Move` at 57.5% of every
+gap person-turn. Read against agent positions, only **19,186** of those 56,982
+turns changed anybody's position, and barely a thousand were refused.
+
+A `Move` whose target is the tile the agent is standing on returns **success**
+- "Already at destination" - so it is booked as a `Move`, costs the whole
+turn, and appears in no refusal tally. Every instrument this project has for
+finding wasted turns reads refusals, and this is not one. Counted from inside
+that branch: **15,296 of 99,046 gap person-turns, 15.4%** - one turn in six -
+against `Eat` at 3.6% and the store at 1.6%. The walking that does happen
+nets 1.9 paces a person-day out of ten covered.
+
+The counter is committed and stays. The obvious guard - a drive whose answer
+is to stand still has not answered - removes 86% of them and is **not kept**:
+gap person-turns fell 99,046 to 69,641, so thirty per cent fewer people were
+alive to take them. Something downstream is living on those turns, and which
+caller proposes the walk wants finding out rather than guessing at.
+ISSUES_FOUND #234.
+
 ## Two thresholds that flap, and are not re-baselined
 
 Two of the behavioural thresholds #298 was filed for. Each has crossed its

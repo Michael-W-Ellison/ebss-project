@@ -18639,3 +18639,73 @@ Two lessons, both already paid for once in this file: **measure a settlement
 over seeds, not over one**, and **measure from the tallies**, because a probe
 that asks the decision layer a second time in the same turn draws from the
 same seeded stream and moves the world it is reading (#231).
+
+### 234. One turn in six was a walk to the tile the agent was already standing on, and nothing could see it
+
+#231's turn budget put `Move` at 57.5% of every person-turn in the hungry gap.
+#233 ruled out the shelter override as the cost. This is what the walking
+turned out to be.
+
+#### Two readings that did not agree
+
+Over three seeded settlements across the gap, from tallies and from agent
+positions - **99,046 person-turns**:
+
+| | |
+|---|---|
+| turns booked as `Move` | **56,982** |
+| turns in which anybody's position changed | **19,186** |
+| `Move` refusals | about 1,300 |
+
+Two `Move`s in three left the agent where it was and were not refused.
+
+And the walking that did happen goes nowhere in particular: a body covers
+**ten paces a person-day and nets 1.9** - a churn of **5.3x**, five paces in
+six undone.
+
+#### What it is
+
+```rust
+if current_2d == target_2d && current_pos.2 == target.2 {
+    return ActionResult::success()
+        .with_message("Already at destination".to_string());
+}
+```
+
+A `Move` whose target is the tile the agent is on. It is booked as a `Move`,
+it costs the whole turn, and it returns **success** - so it is in no refusal
+tally, no failure count, and no `actions_failed_because` line. Every
+instrument this project has built for finding wasted turns works by reading
+refusals, and this one is not a refusal.
+
+Counted from inside that branch, by a counter that writes to a tally nothing
+reads for behaviour and so does not move the run:
+
+| | share of gap person-turns |
+|---|---|
+| **a walk to where the agent already stood** | **15,296 - 15.4%** |
+| `Eat` | 3.6% |
+| the store | 1.6% |
+
+One turn in six. Against eating at one in twenty-eight.
+
+By whether the agent was on an errand at the time: **no errand 6,910**, Rest
+4,171, Preparedness 1,948, Curiosity 1,049, Reproduction 828.
+
+#### What is done about it here: the counter, and nothing else yet
+
+The counter stays, whatever is eventually done about the waste, because a
+thing that cannot be seen comes back. It is the fix for the *instrument*, and
+that much is not in doubt.
+
+The obvious guard - a drive whose answer is to stand where it is standing has
+not answered, so `how_this_agent_answers` returns `None` and the turn passes
+to the next drive - removes 86% of them, 15,296 to 2,070. It is **not kept**
+on this measurement: gap person-turns fell from 99,046 to 69,641, which is
+thirty per cent fewer people alive to take them, and `SeekShelter` halved
+while `Move` rose and `GoWithout` appeared from nowhere at 3,620. Something
+downstream is living on those turns.
+
+That is the next piece of work and it wants finding out rather than guessing
+at: which caller proposes the walk, and what the turn does instead when it is
+refused one.
