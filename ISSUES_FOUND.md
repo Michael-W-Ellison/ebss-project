@@ -18714,6 +18714,58 @@ looks like pure waste. Inside the gap the same arms show what moved:
 `SeekShelter` halved, `Move` rose, and `GoWithout` appeared from nowhere at
 3,620. Something downstream is living on those turns.
 
-That is the next piece of work and it wants finding out rather than guessing
-at: which caller proposes the walk, and what the turn does instead when it is
-refused one.
+#### Why removing it hurts: the wasted turn is free
+
+```rust
+return ActionResult::success()
+    .with_message("Already at destination".to_string());
+```
+
+No `.with_energy_cost()`. A real `Move` costs `2.0 * what_this_load_costs /
+movement_speed`, and `what_came_of_it` charges the body exactly
+`action_result.energy_cost` - so **a walk to where you are standing burns
+nothing at all.**
+
+That is the whole of why the guard cost three settlements. A settlement in the
+gap is already about twenty per cent short of its keep (#231), and one turn in
+six costing nothing is a subsidy on that scale. Take the standstill away and
+something real and energy-costing goes in the slot instead.
+
+**The waste is load-bearing.** It is still waste - a body that stands still
+should be resting, not walking nowhere, and `Action::Wait` and `Sleep` both
+exist and are honest about it - but it cannot simply be deleted, and anything
+that removes it has to put the energy back or find the twenty per cent.
+
+#### Where it comes from, and two guesses that were wrong
+
+Tagged at the standstill by what was pressing, whether there was a plan, a
+goal and an errand: **`plan=false` on all of them and `goal=true` on nearly
+all**, spread across Rest 7,450, Preparedness 2,285, Curiosity 1,721,
+Sustenance 585, Social 344, Reproduction 212.
+
+Two readings of that were wrong and are recorded so nobody repeats them:
+
+- **Not the Rest drive's midden step.** `somewhere_that_does_not_stink`
+  returns `None` when the ground underfoot is fine and explicitly skips
+  `dx == 0 && dy == 0`, so it cannot return the agent's own tile.
+- **Not the goal path.** `generate_action_for_goal` contains one `Move` and it
+  is `position + 10`. Worse, the "by Rest" label was an artefact of the
+  instrument: that function takes `what_presses_hardest()` as its fallback
+  drive, which is the same function the counter was reading. The tag was the
+  probe looking at itself.
+
+What *was* found, in the percept path - the "follow your own nose" fallback
+reached when no drive had an answer:
+
+- `Percept::ResourceDetected` returned `Move { target: *position }` with no
+  check. The sight and smell passes report what is at the agent's own feet
+  along with everything else, so every one of those became a walk to itself.
+- `Percept::DangerDetected` with the danger underfoot gives `dx` and `dy` of
+  nought, so the flee target comes out as the agent's own position: fleeing a
+  thing you are standing on, by not moving.
+
+Both are fixed. They account for only **18%** of the standstills - 15,296 to
+12,597 - so the bulk is still unattributed across the thirty-odd places the
+decision layer builds a `Move`. That is the next piece of work, and the
+finding above is the constraint on it: the turns are free, and the model is
+living on them.

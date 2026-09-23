@@ -355,9 +355,15 @@ nets 1.9 paces a person-day out of ten covered.
 The counter is committed and stays. The obvious guard - a drive whose answer
 is to stand still has not answered - removes 86% of them and is **not kept**.
 Over six seeded settlement-years it costs three settlements: emptied 0 of 6 to
-**3 of 6**, person-turns 1,039,210 to **969,013**, births 8 to 7. Something
-downstream is living on those turns, and which caller proposes the walk wants
-finding out rather than guessing at. ISSUES_FOUND #234.
+**3 of 6**, person-turns 1,039,210 to **969,013**, births 8 to 7.
+
+**And the reason is that the wasted turn is free.** The early return carries
+no energy cost, where a real `Move` costs `2.0 * load / speed` and the body is
+charged exactly what the result says. A settlement in the gap is already about
+twenty per cent short of its keep, so one turn in six costing nothing is a
+subsidy on that scale: take it away and something real goes in the slot. The
+waste is load-bearing, and anything that removes it has to put the energy back
+or find the twenty per cent. ISSUES_FOUND #234.
 
 ## Two thresholds that flap, and are not re-baselined
 
