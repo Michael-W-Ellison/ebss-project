@@ -18272,3 +18272,117 @@ child.
 Across those six settlement-years: **two births, and three settlements in six
 emptied completely.** That is the standing problem, and none of #227, #228 or
 #229 has touched it.
+
+### 230. Eighty-seven per cent of every gift anybody tried to make was refused, and the decision that made them outranks every drive
+
+Chasing the settlements that empty. The instrument that found this is the
+refusal tally, and the number is not subtle:
+
+| refusal | count in one settlement-year of at most twelve people |
+|---|---|
+| **`GiveTo: Nothing of mine they have any use for`** | **6,230** |
+| `Treat: herbs did nothing` | 827 |
+| `GiveTo: No room in their pack for it` | 825 |
+| `SpreadMuck: Nothing spoiled to tip out` | 796 |
+| `Eat: Too full to eat` | 776 |
+
+`GiveTo` was chosen 7,156 times and **6,230 of them came to nothing** - 87 per
+cent. And the decision that chose them, `a_child_of_mine_to_feed`, sits at the
+head of `generate_non_emotional_action`, **above every drive there is**. Seven
+thousand turns, by eight to twelve people, in one year.
+
+Three faults, each of which had to go before the next one showed.
+
+#### One: the executor had no arm for one's own child
+
+```rust
+// the decision
+if let Some(to) = self.a_child_of_mine_to_feed(agent, agent_position) {
+    return (Action::GiveTo { to }, false);
+}
+
+// the executor, in full
+fn what_i_would_hand_over(&self, me, them) -> Option<(String, u32)> {
+    if let Some(coat) = self.a_coat_for_somebody_bare(me, them) { ... }
+    if let Some(meal) = self.a_meal_for_somebody_with_none(me, them) { ... }
+    let mine = self.population.agents[me].what_i_can_spare()?;   // excludes food
+    ...
+}
+```
+
+`a_meal_for_somebody_with_none` is the **band** rule - the man beside you -
+and it keeps a whole day's food back, deliberately: *"Nobody strips their own
+pack for a neighbour who is merely peckish."* A parent is not a neighbour, and
+`a_child_of_mine_to_feed` fires on any meal past what is not worth a trip, two
+units. So a parent holding between two units and a day's food chose to feed
+its child, above everything else, every turn, and was told there was nothing
+of his the child could use.
+
+Two spellings of one question, which is the fault this project keeps finding,
+and worse than usual because the decision it contradicts outranks every drive.
+
+Answered by giving the executor the arm the decision already had, rather than
+by narrowing the decision to the band's rule. `a_child_of_mine_to_feed` now
+goes *through* that arm, the way `somebody_beside_me_with_nothing_to_eat` has
+always gone through the band's - one question, one answer.
+
+#### Two: nobody asked whether it would go in
+
+With the giver's half put right, the refusal did not go away. It changed its
+name:
+
+| | before | after one |
+|---|---|---|
+| `GiveTo` chosen | 7,156 | 1,208 |
+| `Nothing of mine they have any use for` | 6,230 | - |
+| **`No room in their pack for it`** | 825 | **1,098** |
+
+`hand_over` calls `Inventory::add_item`, which refuses what will not fit. The
+giving branches asked nothing at all about the taker, though the store branch
+has asked `could_i_take_another_handful` before offering a man his own larder
+since #215 - after exactly this measurement, 264,453 times over.
+
+Both branches ask it now. And `hand_over` makes room the way `PickUp` does,
+with `set_down_what_is_worth_less_than_food`: a child with a pack of stones
+and nothing to eat puts a stone down and takes the supper.
+
+#### Three, and it is #215 again, word for word
+
+That still did not move it. The two sides were asking about **different
+amounts**: the giving branches ask `could_i_take_another_handful`, which is
+*one unit*, and `giving_to` hands over `(mine.1 / 2).max(1)` - **half the
+stack**. A man with room for three was offered twenty, and `hand_over` was all
+or nothing, so neither of them got anything.
+
+`hand_over` now takes what fits. A gift of twenty into room for three is
+three, and what will not go stays with the giver, which is what its own
+docstring already claimed.
+
+#### What the three of them moved
+
+Six seeded settlement-years, twelve founders each:
+
+| | before | after |
+|---|---|---|
+| **births** | **2** | **9** |
+| person-turns lived | 1,016,901 | 1,037,206 |
+| `GiveTo` turns wasted | 87% | **45%** |
+| ...in absolute terms | ~37,000 | **468** |
+| settlements that emptied | 3 of 6 | 4 of 6 |
+
+Births up four and a half times, and the wasted turns down by ninety-eight per
+cent. That last row is not a typo and is not hidden: **one more settlement in
+six emptied.** More children are born and more of them die, and a binary count
+over six samples moving by one is not a result either way. What is a result is
+that a settlement now has children in it at all.
+
+It is the largest move either roll count has ever taken - the year is **up
+11.8%** - and the short count does not move at all, which is the right shape:
+a gift that lands changes what a settlement *is* over a year and almost
+nothing about a particular afternoon.
+
+#### What is left of it
+
+468 wasted giving turns across six years, split between the two names, almost
+all of them on the generic barter path - `what_i_can_spare`, which is about
+materials rather than food and is a different question. Left alone.

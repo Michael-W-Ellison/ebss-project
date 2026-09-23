@@ -152,6 +152,30 @@ impl Simulation {
             return Some(meal);
         }
 
+        // And one's own child, which had no arm here at all.
+        //
+        // **This was the largest refusal left in the model.** The decision
+        // layer's `a_child_of_mine_to_feed` sits above every drive there is
+        // and fires when a parent has any meal to spare past what is not
+        // worth a trip - two units. The executor's only food arm was the one
+        // above, which is the *band* rule and keeps a whole day's food back,
+        // because the man beside you is not your child. So a parent with
+        // between two units and a day's food chose to feed its child, every
+        // turn, above everything else, and was told **"Nothing of mine they
+        // have any use for"**: 6,230 refusals against 7,156 `GiveTo` chosen -
+        // **87% of every one** - in a single settlement-year of at most
+        // twelve people.
+        //
+        // Two spellings of one question, which is the fault this project
+        // keeps finding, and worse here than usual because the decision it
+        // contradicts outranks every drive. Answered by giving the executor
+        // the arm the decision already had, rather than by narrowing the
+        // decision to the band's rule: a parent feeding a child out of the
+        // last of the pack is what that branch is for. See ISSUES_FOUND #230.
+        if let Some(meal) = self.a_meal_for_a_child_of_mine(me, them) {
+            return Some(meal);
+        }
+
         let mine = self.population.agents[me].what_i_can_spare()?;
 
         let they_have = self.population.agents[them].how_many_i_have(&mine.0);
@@ -164,6 +188,64 @@ impl Simulation {
         }
 
         Some(mine)
+    }
+
+    /// Whether a gift of this would actually go into their pack.
+    ///
+    /// The decision and the executor were asking different questions about
+    /// the *giver* - see `a_meal_for_a_child_of_mine` - and neither was
+    /// asking anything at all about the *taker*. `hand_over` calls
+    /// `Inventory::add_item`, which refuses what will not fit and returns
+    /// nought, and the turn is spent either way.
+    ///
+    /// With the giver's half put right, this became the whole of what was
+    /// left: **1,098 refusals of "No room in their pack for it" against 1,208
+    /// `GiveTo` chosen**. `could_i_take_another_handful` is the question the
+    /// store branch already asks before offering a man his own larder, for
+    /// exactly the same reason and after exactly the same measurement - see
+    /// #215. See ISSUES_FOUND #230.
+    fn would_it_go_in_their_pack(&self, them: usize, what: &str) -> bool {
+        let each = self.population.agents[them]
+            .inventory
+            .get_item(what)
+            .map(|held| held.what_one_of_them_weighs())
+            .unwrap_or(crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS);
+
+        self.population.agents[them].could_i_take_another_handful(each)
+    }
+
+    /// A meal for a hungry child of my own.
+    ///
+    /// The executor's half of `a_child_of_mine_to_feed`, and it asks the same
+    /// three questions in the same order: is this one mine, is it hungry
+    /// enough to matter, and have I a meal to spare. What it does not ask is
+    /// the band rule's day's keep-back - see the note at the call site.
+    fn a_meal_for_a_child_of_mine(&self, me: usize, them: usize) -> Option<(String, u32)> {
+        let giver = &self.population.agents[me];
+        let taker = &self.population.agents[them];
+
+        let mine_to_feed = giver
+            .relationships
+            .get_relationship(&taker.id)
+            .is_some_and(|bond| {
+                bond.relationship_type == crate::agents::emotions::RelationshipType::Child
+            });
+        if !mine_to_feed {
+            return None;
+        }
+
+        if Self::how_hungry_is_this_one(taker) < Self::WHEN_A_CHILD_IS_HUNGRY_ENOUGH_TO_FEED {
+            return None;
+        }
+
+        // And it has nothing of its own, which is the decision's question too.
+        if taker.find_best_food_to_eat().is_some() {
+            return None;
+        }
+
+        let (what, how_many) = giver.what_meal_i_can_spare()?;
+        self.would_it_go_in_their_pack(them, &what)
+            .then_some((what, how_many))
     }
 
     /// Food in my pack that somebody standing here has none of.
@@ -205,7 +287,10 @@ impl Simulation {
 
         let (what, _) = giver.what_food_i_can_spare()?;
         let spare = giver.how_many_i_have(&what).min(mine - keeps_back);
-        (spare > 0).then_some((what, spare))
+        if spare == 0 || !self.would_it_go_in_their_pack(them, &what) {
+            return None;
+        }
+        Some((what, spare))
     }
 
     /// What a person keeps on them rather than handing over: a day's eating.
@@ -768,6 +853,12 @@ impl Simulation {
         // what this branch is for; the band branch keeps a day back because
         // the man beside you is not your child.
 
+        let me = self
+            .population
+            .agents
+            .iter()
+            .position(|other| other.id == agent.id)?;
+
         self.population
             .agents
             .iter()
@@ -790,11 +881,23 @@ impl Simulation {
                         bond.relationship_type == crate::agents::emotions::RelationshipType::Child
                     })
             })
-            // Hungry, and with nothing of its own to eat
+            // Hungry, and with nothing of its own to eat - and with room for
+            // what would be handed over. Asked through the executor's own
+            // answer rather than restated here, which is the whole point of
+            // #230: `somebody_beside_me_with_nothing_to_eat` has always gone
+            // through `a_meal_for_somebody_with_none`, and this branch had no
+            // such counterpart to go through.
             .filter(|them| {
                 Self::how_hungry_is_this_one(them) >= Self::WHEN_A_CHILD_IS_HUNGRY_ENOUGH_TO_FEED
             })
             .filter(|them| them.find_best_food_to_eat().is_none())
+            .filter(|them| {
+                self.population
+                    .agents
+                    .iter()
+                    .position(|other| other.id == them.id)
+                    .is_some_and(|they| self.a_meal_for_a_child_of_mine(me, they).is_some())
+            })
             .min_by(|a, b| {
                 Self::how_hungry_is_this_one(b)
                     .partial_cmp(&Self::how_hungry_is_this_one(a))

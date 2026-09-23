@@ -9,8 +9,10 @@ A test that is red and tracked is a known cost. A test that is red and
 untracked makes every future full run read as normal. Keep the count here
 honest and close nothing without a measurement.
 
-**Last full run**: `cargo test --lib` - 2,641 tests, 36 minutes, **3 failed**,
-2 ignored. #228 took none off and broke none; what it moved is recorded below. Two of the three are one question - the store that fills and is
+**Last full run**: `cargo test --lib` - 2,642 tests, 36 minutes, **3 failed**,
+2 ignored. #228, #229 and #230 took none off and broke none; what they moved
+is recorded below. #230 is the one that moved the model: births across six
+seeded settlement-years went from two to nine. Two of the three are one question - the store that fills and is
 never eaten out of - and the third is a binary threshold that has now been on
 both sides of its line four times.
 
@@ -237,6 +239,32 @@ was noise. ISSUES_FOUND #229.
 The standing problem is unchanged and is now measured across six seeds rather
 than one: **two births in six settlement-years of twelve founders, and half
 the settlements empty completely.**
+
+
+**And the fourth look, which found the largest refusal in the model.**
+`GiveTo` was chosen 7,156 times in a settlement-year of at most twelve people
+and **6,230 of them came to nothing** - 87 per cent - and the decision that
+chose them sits above every drive there is.
+
+Three faults, each hiding the next. The executor had **no arm for one's own
+child**: its only food path was the band rule, which keeps a day's food back
+because the man beside you is not your child, while the decision fires on any
+meal past two units. Then nobody asked whether the gift would go in the
+taker's pack, though the store branch has asked exactly that since #215. Then
+- #215 again, word for word - the two sides asked about different *amounts*:
+the giver checks room for **one unit** and `giving_to` hands over **half the
+stack**, and `hand_over` was all or nothing, so a man with room for three was
+offered twenty and neither of them got anything.
+
+Six seeded settlement-years, twelve founders each: **births 2 to 9**,
+person-turns 1,016,901 to 1,037,206, wasted giving turns from about 37,000 to
+468. One more settlement in six emptied, which is more children born and more
+of them dying, and a binary count over six samples moving by one either way.
+ISSUES_FOUND #230.
+
+The two red tests above are unchanged. Their fixtures are longer and larger
+than the six-seed probe, and a settlement that now has children in it still
+does not hold them at six and nine thousand turns.
 
 ## Two thresholds that flap, and are not re-baselined
 

@@ -255,7 +255,12 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // way through a three-week reserve in that time, and the pits are not
     // empty enough for the second one to matter. Over a year, a man who gets
     // what he came for out of the first hole stops walking to the next.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 616_785;
+    // And **up 11.8%** for the giving of #230, the largest single move either
+    // count has taken. The short count again does not move: a gift that lands
+    // rather than being refused changes what a settlement *is* over a year -
+    // nine children born across six seeded years against two - and changes
+    // almost nothing about a particular afternoon.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 689_403;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

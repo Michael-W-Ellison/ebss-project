@@ -921,3 +921,62 @@ fn a_gift_of_food_is_still_food() {
         Some(2)
     );
 }
+
+/// A gift into a pack with room for three is three, not nothing.
+///
+/// `hand_over` was all or nothing, and the two sides of a gift were asking
+/// about different amounts: the giving branches ask
+/// `could_i_take_another_handful`, which is **one** unit, and `giving_to`
+/// hands over **half the stack**. So a man with room for three was offered
+/// twenty and told "No room in their pack for it", and neither of them got
+/// anything - the same shape as #215, where the store asked for room for half
+/// a unit while the executor needed a whole one, 264,453 times.
+///
+/// Measured over six seeded settlement-years, with the giver's half of #230
+/// already put right: 1,098 refusals of "No room in their pack for it"
+/// against 1,208 `GiveTo` chosen. See ISSUES_FOUND #230.
+#[test]
+fn a_gift_goes_in_as_far_as_it_will() {
+    use crate::agents::{AgentConfig, InventoryItem, Population};
+    use crate::analytics::Simulation;
+    use crate::world::nutrition::FoodDatabase;
+    use crate::world::{ItemType, World, WorldConfig};
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
+
+    let database = FoodDatabase::new();
+    let mut stack = InventoryItem::new_with_weight("fish".to_string(), 20, 0.5);
+    stack.food_data = database.create_food_data(&ItemType::Fish, 0);
+    simulation.population.agents[0].inventory.add_item(stack);
+
+    // A pack with room for three of them and nothing in it worth setting
+    // down, so that the shedding above this cannot quietly make more.
+    {
+        let them = &mut simulation.population.agents[1];
+        them.inventory.get_all_items_mut().clear();
+        them.inventory.max_weight = 1.5;
+    }
+
+    let went = simulation.hand_over_for_test(0, 1, "fish", 20);
+    assert_eq!(went, 3, "twenty into room for three is three");
+
+    assert_eq!(
+        simulation.population.agents[1]
+            .inventory
+            .get_item("fish")
+            .map(|item| item.quantity),
+        Some(3),
+        "and the three are in their pack"
+    );
+    assert_eq!(
+        simulation.population.agents[0]
+            .inventory
+            .get_item("fish")
+            .map(|item| item.quantity),
+        Some(17),
+        "the giver is down by exactly what went and no more"
+    );
+}
