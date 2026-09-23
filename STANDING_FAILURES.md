@@ -292,6 +292,25 @@ turn. No one of those is obviously wrong; together they leave a settlement
 about twenty per cent short through the gap, which the three-week reserve
 hides until it is gone.
 
+
+**And the sixth, which is the one the fixture noticed.** `Pit::something_to_eat`
+answered with the **first** meal in the pit rather than the largest stack, and
+a trip to the larder takes eight *capped at that one stack*. So a man standing
+over a pit holding two legumes and four hundred roots took the two legumes and
+came back tomorrow for two more. Over three seeded settlements through the
+hungry gap: 1,635 trips yielding 5.5 items each against the eight asked for,
+and **eighteen** refused for want of room - so it was never the pack.
+
+Six seeded settlement-years: **settlements that emptied went from 3 of 6 to
+0 of 6.** Every settlement now has somebody alive at the end of its first
+year, which is the first time that has been true. Person-turns and births are
+flat. ISSUES_FOUND #232.
+
+They still get 9,359 items out of the ground against the 23,730 they burn
+across the gap, and live on the difference out of their own reserve. The
+binding term is how often a body reaches the store at all - 0.75 trips a
+person-day against the two it would take - and #231 has that arithmetic.
+
 ## Two thresholds that flap, and are not re-baselined
 
 Two of the behavioural thresholds #298 was filed for. Each has crossed its

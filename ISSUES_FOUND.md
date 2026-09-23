@@ -18468,3 +18468,82 @@ measurements show: full reserves until day 270, and everybody dead by day 345.
 
 That is the standing problem, stated as arithmetic rather than as a symptom,
 and it is where the next work on this belongs.
+
+### 232. A man at a pit holding two legumes and four hundred roots took the two legumes
+
+#231 recorded the arithmetic of the hungry gap and said the next work belonged
+there. This is it, and it is a defect rather than a knob.
+
+#### The measurement
+
+Three seeded settlements through the gap, with **no decision function called
+twice** - a probe that asks the decision layer a second time in the same turn
+draws from the same seeded stream and moves the world it is measuring, so this
+one reads only tallies:
+
+| | |
+|---|---|
+| person-days across the gap | 2,071 |
+| items those bodies burned | 23,817 |
+| items that came out of the pits | **9,008** |
+| trips to the store | 1,635 |
+| **items per trip** | **5.5**, against the eight asked for |
+| trips refused for want of room | **18** |
+
+Eighteen. So it was never the pack that was short - the shedding and the
+room-checking of #215 and #230 are doing their work. It was the stack.
+
+#### What it was
+
+```rust
+pub fn something_to_eat(&self) -> Option<&str> {
+    self.holds.iter().find(|item| Self::is_it_a_meal(item)).map(...)
+}
+```
+
+`find` - **the first meal in the pit**. And `picking_up` asks for
+`WHAT_A_PERSON_TAKES_OUT.min(wanted.quantity)`: eight, **capped at what is in
+that one stack**.
+
+A pit is filled a burial at a time and holds many kinds. So a man standing
+over one holding two legumes and four hundred roots was offered the two
+legumes, took them, and walked away - and came back tomorrow, and was offered
+two more.
+
+This is the same function #43 fixed once already, for the same kind of reason:
+it used to answer with whatever was nearest the top *including things nobody
+could eat*, and one settlement in sixteen starved standing on its own larder
+picking up an uncut haunch. The meal test was added and the ordering was left
+alone.
+
+It takes the largest stack now. A person at a larder takes a load, and which
+load is whichever makes the walk worth taking.
+
+#### What it moved
+
+Six seeded settlement-years, twelve founders each:
+
+| | before | after |
+|---|---|---|
+| **settlements that emptied** | **3 of 6** | **0 of 6** |
+| person-turns lived | 1,040,633 | 1,039,210 |
+| births | 9 | 8 |
+| items per trip to the store | 5.5 | 6.0 |
+| items out of the pits across the gap | 9,008 | 9,359 |
+
+**Every settlement now has somebody alive at the end of its first year.** That
+is the first time that has been true in this fixture.
+
+And the rest of it barely moves, which is worth saying plainly: person-turns
+and births are flat, and the yield per trip goes up by half an item. What
+changed is not how much food a settlement gets through the winter - it is that
+the last few people through the worst of it are no longer being handed two
+legumes at a time.
+
+#### What is still true
+
+They still get **9,359 items out of the ground against the 23,730 they burn**
+across the gap, and live on the difference out of their own reserve. The
+binding term is how often a body reaches the store at all - 0.75 trips a
+person-day against the two it would take - and that is a question about the
+shelter override and the walk, not about the pit. #231 has the arithmetic.

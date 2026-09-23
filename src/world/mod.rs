@@ -339,10 +339,28 @@ impl Pit {
     /// who could not eat it: they picked it up, were no better fed for it,
     /// and picked it up again. One settlement in sixteen starved to death
     /// standing on its own larder doing exactly that. See ISSUES_FOUND #43.
+    ///
+    /// **And the most of one kind, not the first of any.** It still answered
+    /// with whatever was nearest the top among the meals, and a trip to the
+    /// larder takes what it is offered: `WHAT_A_PERSON_TAKES_OUT` is eight,
+    /// capped at what is in that one stack. So a man standing over a pit
+    /// holding two legumes and four hundred roots took **the two legumes**
+    /// and walked away, and came back tomorrow for two more.
+    ///
+    /// Measured over three seeded settlements through the hungry gap, with no
+    /// decision function called twice so that the run is the run: 1,635 trips
+    /// to the store yielding **5.5 items each** against the eight asked for,
+    /// and only **eighteen** of them refused for want of room - so it was not
+    /// the pack that was short, it was the stack. 9,008 items came out of the
+    /// ground against the 23,817 those bodies burned.
+    ///
+    /// A person at a larder takes a load. Which load is whichever makes the
+    /// walk worth taking. See ISSUES_FOUND #232.
     pub fn something_to_eat(&self) -> Option<&str> {
         self.holds
             .iter()
-            .find(|item| Self::is_it_a_meal(item))
+            .filter(|item| Self::is_it_a_meal(item))
+            .max_by_key(|item| item.quantity)
             .map(|item| item.item_id.as_str())
     }
 
