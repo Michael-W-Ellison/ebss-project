@@ -18795,3 +18795,90 @@ the two percept arms are written down above so that whoever comes back to them
 does not have to find them again - and the dose-response is written down so
 that nobody spends the afternoon removing the waste and wondering why the
 settlements died.
+
+### 235. The twenty per cent, located: a settlement dies with more in its pits than it was short, and the strategy called "eat the food you are carrying" is a snare check
+
+#234 ended by saying the order of work is the shortfall first. This is the
+shortfall.
+
+#### The year's ledger
+
+Three seeded settlement-years, from tallies only - `energy_that_went_down`
+against each body's own `what_i_burn_in_a_day`:
+
+| seed | person-days | burned | eaten | ratio | left in the pits |
+|---|---|---|---|---|---|
+| 0 | 3,714 | 5,338,599 | 4,089,386 | **0.77** | 4,460 items |
+| 1 | 3,885 | 5,356,384 | 4,792,642 | **0.89** | **6,396** |
+| 2 | 3,682 | 5,080,890 | 4,363,287 | **0.86** | 4,984 |
+
+A settlement takes in about **0.84** of what it spends, and makes up the rest
+out of its own reserve until there is none. That is the twenty per cent.
+
+And the last column is the shape of it. The shortfall in items is 9,994 /
+4,510 / 5,741; the pits at the end hold 4,460 / 6,396 / 4,984. **For two
+settlements in three there is more food left in the ground than the whole
+year's shortfall.** Another 876 to 1,151 items are lying on the grass.
+
+It is not a supply problem. The food is gathered, it is buried, and it is
+never eaten.
+
+#### Two things it is not
+
+**Not the trip size.** `WHAT_A_PERSON_TAKES_OUT` raised from eight to
+twenty-four moves the ledger to 0.72 / 0.88 / 0.89 - nothing, in either
+direction. Three times the load per journey buys no food.
+
+**Not the store being shut.** Asked of state across the gap, 99,046
+person-turns: `something_out_of_the_store` has an answer ready on **78.8%** of
+them. The emergency gate that reaches it -
+`is_the_body_eating_itself && !has_edible_food` - is open on **1.7%**. And the
+rung added at #231 inside `food_action` is **never reached**: one of the three
+above it always answers first, at carrying-food 52.8%, a-remembered-place
+28.4%, something-edible-in-reach 18.8%.
+
+#### What it is
+
+| across the gap | |
+|---|---|
+| Hunger is the top drive | **30.9%** of person-turns |
+| ...of those, carrying edible food | 55.7% |
+| ...of those, shelter takes the turn | 11.9% |
+| `is_this_lot_for_the_store` (the "saving it" gate) | **0.0%** |
+| willingness to eat, where it stands | mean **0.85**, never shy |
+| **they eat** | **1.75 times a person-day** |
+
+Some fifteen turns a person-day where hunger is the most pressing thing in the
+world and the supper is in the bag, and they eat under twice. Nothing in the
+lessons, the season or the shelter accounts for it.
+
+The Hunger drive does not go through `food_action` at all. It goes through the
+strategy layer - `the_way_to_answer` over `Strategy::all_for(Hunger)`, eleven
+ways - and:
+
+```rust
+Strategy::EatCarriedFood => self.a_catch_at_my_feet(agent, agent_position),
+```
+
+`a_catch_at_my_feet` looks for **a snare the agent is standing on** and
+answers `CheckSnares`. Nothing in it touches the pack. The way called *eat the
+food you are carrying* is a trapline check, and eating what you carry was
+reachable only through `GatherWildFood`'s internals winning a utility sort.
+
+Two names for one thing, which is this project's oldest defect. And the
+expensive half is the ordering: `the_way_to_answer` takes
+`is_it_already_in_his_hand` first, and that matches `Eat` **and**
+`CheckSnares` - so standing on a full snare, this way took the turn *ahead of
+the supper in the man's own bag*.
+
+#### What is done about it
+
+`EatCarriedFood` reads the pack. The snare at the feet is not lost: it goes to
+`ScavengeWhatIsLyingAbout` together with the walk to one, through
+`a_catch_waiting`, which is that pair and was already written.
+
+**Held back pending its measurement**, which is running. On the gap alone it
+does what it should - agents carrying food fall from 52.8% of gap turns to
+24.4%, so the pack is being eaten down rather than hauled - but this session
+has twice now had an obviously-right change cost settlements (#233, #234), and
+what matters is the six-seed outcome, not the mechanism reading true.

@@ -374,6 +374,31 @@ So the standstill is not the thing to fix. It is a symptom of the twenty per
 cent, and it is holding the model up. **The order of work is the shortfall
 first, the free turns after.** ISSUES_FOUND #234.
 
+
+**And the ninth: the twenty per cent, located.** A settlement takes in
+**0.84** of what it burns over a year (0.77 / 0.89 / 0.86 across three seeds)
+and makes up the rest from its own reserve until there is none. It dies with
+4,460 to 6,396 items in its pits - **for two seeds in three, more than the
+whole year's shortfall** - and another thousand on the grass. Not a supply
+problem.
+
+Not the trip size either: `WHAT_A_PERSON_TAKES_OUT` from eight to twenty-four
+moves the ledger 0.72 / 0.88 / 0.89, which is nothing. And not the store being
+shut: it has an answer on **78.8%** of gap turns while the gate that reaches
+it is open on 1.7%.
+
+What it is: Hunger is the top drive on **30.9%** of gap turns, the supper is
+in the bag on 55.7% of those, nothing in the lessons or the season objects -
+and they eat **1.75 times a person-day**. The Hunger drive goes through the
+strategy layer, and `Strategy::EatCarriedFood` was implemented as
+`a_catch_at_my_feet`, which answers `CheckSnares` for a snare underfoot and
+never touches the pack. Worse, `the_way_to_answer` puts
+`is_it_already_in_his_hand` first and that matches `CheckSnares` too, so a
+full snare took the turn ahead of the food the man was carrying.
+
+The fix is written and held back pending its six-seed measurement.
+ISSUES_FOUND #235.
+
 ## Two thresholds that flap, and are not re-baselined
 
 Two of the behavioural thresholds #298 was filed for. Each has crossed its
