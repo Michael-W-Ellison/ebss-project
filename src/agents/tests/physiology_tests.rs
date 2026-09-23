@@ -654,3 +654,62 @@ fn a_rich_food_fills_a_stomach_faster_than_a_thin_one() {
         "a body should need far more leaf than fat to fill up: {on_leaf} against {on_fat}"
     );
 }
+
+/// Nothing stays in the gut longer than a day, however full the body is.
+///
+/// A gut needs no capacity of its own: what limits it is that food can only
+/// sit in it for `MINUTES_TO_DIGEST`, so what it holds is bounded by what was
+/// eaten in the last twenty-four hours and by nothing else.
+///
+/// **This is written because the invariant was broken and nothing said so.**
+/// `advance` banks what the gut gives up with
+/// `(reserve + won).min(reserve_capacity)`, so a body at capacity digests its
+/// dinner into nothing - 17% to 22% of everything a settlement eats, see
+/// ISSUES_FOUND #237. The obvious answer is to leave in the gut what the
+/// reserve cannot take, and that is wrong precisely here: it lets food sit
+/// past the day. Measured over a settlement-year it grew a gut to **162,962
+/// energy - a hundred and thirteen days of burn - in 17,285 pieces**, which
+/// is a second store larger than the reserve and invisible to every tally.
+/// It measured as the best change of the session on survival, for that
+/// reason, and was not kept.
+///
+/// So: feed a body that has nowhere to put anything, for a week, and watch
+/// the gut rather than the reserve.
+#[test]
+fn nothing_sits_in_the_gut_longer_than_a_day() {
+    let mut body = Physiology::for_a_body_of(1.0);
+    body.reserve = body.reserve_capacity;
+
+    // A week of eating whenever there is room, on a body that is already full
+    // and spends nothing - the hardest case for this, and the one the fix
+    // that broke it was aimed at.
+    let mut most_it_ever_held = 0.0f32;
+    for _ in 0..(7 * MINUTES_PER_DAY / MINUTES_PER_TURN) {
+        eat_a_sitting_of_ordinary_food(&mut body);
+        body.advance(MINUTES_PER_TURN, 0.0);
+        body.reserve = body.reserve_capacity;
+
+        most_it_ever_held = most_it_ever_held.max(body.in_the_gut());
+
+        for morsel in &body.gut {
+            assert!(
+                body.minute.saturating_sub(morsel.arrived_at) <= MINUTES_TO_DIGEST,
+                "something has been in the gut {} minutes, and a day is {}",
+                body.minute.saturating_sub(morsel.arrived_at),
+                MINUTES_TO_DIGEST
+            );
+        }
+    }
+
+    // And what that comes to: a day's worth of what a stomach can pass, not a
+    // season's. The stomach is the thing with a capacity; the gut is bounded
+    // by the clock through it.
+    let a_days_worth_of_stomachs =
+        STOMACH_CAPACITY * (MINUTES_PER_DAY as f32 / MINUTES_A_MEAL_HOLDS as f32);
+    assert!(
+        most_it_ever_held <= a_days_worth_of_stomachs * 3.0,
+        "the gut held {most_it_ever_held:.0}, which is {:.1} days of an ordinary \
+         burn - a gut bounded by a day cannot hold that",
+        most_it_ever_held / UNITS_BURNED_IN_AN_ORDINARY_DAY
+    );
+}

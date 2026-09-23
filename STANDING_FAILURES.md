@@ -470,6 +470,14 @@ That is a second store, larger than anything in the ground and invisible to
 every tally. The survival gain was the artefact, and births fell 8 to 1
 because a body that is never hungry never fills a pit.
 
+A gut wants no capacity of its own, which was the wrong reading of the
+failure: what bounds it is that food can only sit there for
+`MINUTES_TO_DIGEST`, so it holds a day of what a stomach can pass. On the
+unmodified model the oldest thing in any gut is 1,410 minutes against the
+1,440 limit. The deferral broke that clock, which is the whole of why the gut
+grew. `physiology_tests::nothing_sits_in_the_gut_longer_than_a_day` holds it
+now and fails against the deferral on the first turn past the limit.
+
 The real directions are to shorten the day-long pipeline, or to make the
 surplus go into the ground rather than down the throat - not by suppressing
 eating, which costs thirteen per cent of person-turns, but by giving burying

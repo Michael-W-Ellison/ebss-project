@@ -19105,8 +19105,23 @@ Not kept.
 
 The counter, and this entry.
 
-A gut has a capacity like a stomach does, and with one the surplus beyond it
-has nowhere to go and spills again - so deferring is not the answer either.
+**And a gut does not want a capacity.** That was the wrong reading of why the
+deferral failed, and the right one is simpler: a stomach has a capacity, and
+what bounds a gut is that food can only sit in it for `MINUTES_TO_DIGEST` -
+so what it holds is a day of what a stomach can pass and nothing else.
+Measured on the unmodified model over two settlement-years, the oldest thing
+in any gut is **1,410 minutes against the 1,440 limit** and the most ever held
+is about 4,500 energy. The bound is already there and it is a clock, not a
+number somebody chose.
+
+The deferral broke exactly that: it let food sit past the day, which is how a
+gut reached a hundred and thirteen days of burn. So it is not that deferring
+overflows some capacity - it is that deferring is not a thing a gut does.
+`physiology_tests::nothing_sits_in_the_gut_longer_than_a_day` holds the
+invariant now: a body at a full reserve, fed for a week, with every morsel's
+age checked every turn. Against the deferral it fails on the first turn past
+the limit - "something has been in the gut 1470 minutes, and a day is 1440".
+
 The two honest directions are **to shorten the pipeline**, so that stopping at
 the brim does not leave a body hungry a day later, or **to make the surplus go
 into the ground rather than down the throat** - not by suppressing eating,
