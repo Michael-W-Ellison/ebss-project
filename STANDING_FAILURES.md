@@ -9,8 +9,8 @@ A test that is red and tracked is a known cost. A test that is red and
 untracked makes every future full run read as normal. Keep the count here
 honest and close nothing without a measurement.
 
-**Last full run**: `cargo test --lib` - 2,637 tests, 37 minutes, **3 failed**,
-2 ignored. Two of the three are one question - the store that fills and is
+**Last full run**: `cargo test --lib` - 2,641 tests, 36 minutes, **3 failed**,
+2 ignored. #228 took none off and broke none; what it moved is recorded below. Two of the three are one question - the store that fills and is
 never eaten out of - and the third is a binary threshold that has now been on
 both sides of its line four times.
 
@@ -218,6 +218,25 @@ both measurements.
 Same fixture and seed: hunger deaths 9 to 7, turns anybody was ready to breed
 368 to **1,117**, and the last founder lives out the year rather than dying on
 day 342. ISSUES_FOUND #228.
+
+
+**And a third look under them, which found a real fault and moved nothing.**
+The turn that kept coming up for a man a third through his own reserve was
+`GiveTo` - seven to eight thousand of them in a settlement-year. One father,
+four consecutive days, was handing his child **nine whole fish**, harmful by
+the third day and spoiled as well by the fourth, and choosing it again each
+morning because the child still had nothing to eat. `a_child_of_mine_to_feed`
+asked `what_food_i_can_spare`, which asks `is_food`; the store branch had
+already named what is wrong with that and the giving branch went on asking it.
+
+Fixed, and **measurably neutral**: six seeded settlement-years give
+person-turns 1,016,653 to 1,016,901, births 2 either way, three settlements in
+six emptied either way. A single seed read much louder in both directions and
+was noise. ISSUES_FOUND #229.
+
+The standing problem is unchanged and is now measured across six seeds rather
+than one: **two births in six settlement-years of twelve founders, and half
+the settlements empty completely.**
 
 ## Two thresholds that flap, and are not re-baselined
 

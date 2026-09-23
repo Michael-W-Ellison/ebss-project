@@ -291,6 +291,59 @@ fn feeding_a_child_reaches_the_turn() {
     );
 }
 
+/// And what he hands over is supper, not whatever is in the pack.
+///
+/// `a_child_of_mine_to_feed` asked `what_food_i_can_spare`, which asks
+/// `is_food` - and `is_food` answers yes to an uncut haunch, a stack that has
+/// gone over, and raw flesh the carrier has been ill off. The store branch
+/// names that distinction and acts on it; this one did not.
+///
+/// Measured on a settlement's last winter: a father four days running, a
+/// third of the way through his own reserve, handing his child **nine whole
+/// fish** - harmful by the third day and spoiled as well by the fourth - and
+/// choosing it again next morning, because the child still had nothing to
+/// eat. See ISSUES_FOUND #229.
+#[test]
+fn a_parent_hands_a_child_supper_and_not_what_has_gone_over() {
+    use crate::world::nutrition::{CookingOutcome, FoodDatabase};
+
+    let mut simulation = a_parent_and_a_hungry_child();
+
+    // Take away the good food and leave him a ruined stack, which `is_food`
+    // counts and nobody can eat.
+    {
+        let parent = &mut simulation.population.agents[0];
+        parent.inventory.get_all_items_mut().clear();
+
+        let database = FoodDatabase::new();
+        let mut burnt =
+            crate::agents::InventoryItem::new_with_weight("meat".to_string(), 20, 0.5);
+        let mut food = database
+            .create_food_data(&crate::world::ItemType::Meat, 0)
+            .expect("meat is in the database");
+        food.cook(CookingOutcome::Ruins);
+        burnt.food_data = Some(food);
+        let _ = parent.inventory.add_item(burnt);
+    }
+
+    let parent = &simulation.population.agents[0];
+    assert!(
+        parent.what_food_i_can_spare().is_some(),
+        "the fixture is not testing anything: `is_food` should still count this"
+    );
+    assert_eq!(
+        parent.what_meal_i_can_spare(),
+        None,
+        "twenty ruined joints are not a meal anybody can be handed"
+    );
+    assert!(
+        simulation
+            .a_child_of_mine_to_feed(parent, parent.state.position)
+            .is_none(),
+        "he offered his child a stack that has gone over"
+    );
+}
+
 /// A hungry child that is nothing to this agent gets nothing. A gift is one
 /// thing and feeding your own is another.
 #[test]

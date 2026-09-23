@@ -18180,3 +18180,95 @@ Same fixture, same seed, one settlement of twelve:
 It is still a settlement that collapses over its first winter, and the two
 tests that own that are still red. What has gone is one reason it could not
 feed itself out of a store it had already filled.
+
+### 229. A father handed his child nine spoiled fish, four days running
+
+Following #228's winter probe further. The turn that kept coming up for a man
+a third of the way through his own reserve was not shelter and was not the
+larder: it was `GiveTo`, seven to eight thousand times in a settlement-year.
+
+#### What he was handing over
+
+One man, four consecutive days, day 290 to day 293 of the settlement's last
+winter:
+
+| day | his own reserve left | meals he has | what he offers his child | spoiled | harmful |
+|---|---|---|---|---|---|
+| 290 | 0.35 | **0** | 9 fish | no | no |
+| 291 | 0.33 | **0** | 9 fish | no | no |
+| 292 | 0.31 | **0** | 9 fish | no | **yes** |
+| 293 | 0.29 | **0** | 9 fish | **yes** | **yes** |
+
+He has no meals at all, because a whole fish is not a meal until somebody
+takes a knife to it (#153). He offers the child nine of them anyway, and by
+the third day they are harmful and by the fourth they have gone over as well.
+And he chooses it again the next morning, because the gift does not feed the
+child, so the child still has nothing to eat, so the override fires again.
+
+#### The question that was asked
+
+```rust
+// a_child_of_mine_to_feed
+agent.what_food_i_can_spare()?;
+```
+
+`what_food_i_can_spare` filters on `InventoryItem::is_food`. The store branch
+already names exactly what is wrong with that, about its own side of the same
+question:
+
+> And it counts meals rather than food, which is not the same thing. `is_food`
+> answers yes to an uncut haunch, a stack that has gone over, and raw flesh
+> this one has been ill off - none of which is supper.
+
+That was written, acted on where the store reads it, and the giving branch
+went on asking the other question. `a_meal_for_somebody_with_none` - the
+branch that feeds the man beside you rather than your own child - has always
+counted meals and always kept a day back. It was only the parent that did not.
+
+`Agent::what_meal_i_can_spare` is the same shape as
+`what_food_i_can_spare` asked of `is_this_a_meal`, and `a_child_of_mine_to_feed`
+asks it. `what_food_i_can_spare` is left where it is: `is_food` is the right
+question for what to *bury*, because what wants putting in the ground is
+whatever will not keep.
+
+#### What it moved, which is nothing
+
+Six seeded settlement-years, twelve founders each, before and after:
+
+| | before | after |
+|---|---|---|
+| person-turns lived | 1,016,653 | 1,016,901 |
+| births | 2 | 2 |
+| settlements that emptied | 3 of 6 | 3 of 6 |
+| turns anybody was ready to breed | 23,228 | 23,903 |
+
+A fifth of a per cent on person-turns and three per cent on the breeding
+window, all of the latter from one seed. **This does not save anybody.** It is
+kept because a father handing his child a spoiled fish is wrong on its own
+terms and because the turn it spends is a turn: the same man offered the same
+nine fish four mornings in a row and the child ate none of them.
+
+A single seed said something louder in both directions - the last founder
+dying on day 345 rather than living out the year - and six seeds say it was
+noise. Recorded so that the single-seed reading is not mistaken for a result
+later.
+
+#### And a keep-back that was tried and is not kept
+
+`a_meal_for_somebody_with_none` keeps a day's food back and
+`a_child_of_mine_to_feed` keeps only `WHAT_IS_NOT_WORTH_A_TRIP`, which is two
+units - so a father at a fifth of his own reserve hands over everything but
+two roots, day after day. Matching them was tried: person-turns 1,016,901 to
+1,016,533 and the breeding window 23,903 to 23,222. Nothing, and the wrong
+way.
+
+Not kept, and the reason is in the design rather than the measurement: a
+parent feeding a child out of the last of the pack is what that branch is
+for. The band branch keeps a day back because the man beside you is not your
+child.
+
+#### What is still true
+
+Across those six settlement-years: **two births, and three settlements in six
+emptied completely.** That is the standing problem, and none of #227, #228 or
+#229 has touched it.

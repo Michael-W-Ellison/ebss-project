@@ -2462,6 +2462,32 @@ impl Agent {
             .map(|(name, item)| (name.clone(), item.quantity - Self::WHAT_IS_NOT_WORTH_A_TRIP))
     }
 
+    /// Food in the pack that somebody else could make a meal of now.
+    ///
+    /// The same shape as `what_food_i_can_spare` and a different question.
+    /// That one asks `is_food`, which is right for burying - what wants
+    /// putting in the ground is whatever will not keep - and wrong for
+    /// handing to somebody, because `is_food` answers yes to an uncut haunch,
+    /// a stack that has gone over, and raw flesh this one has been ill off.
+    /// None of those is supper. The store branch names that distinction and
+    /// acts on it; the giving branch asked the other question.
+    ///
+    /// Measured on a settlement's last winter: a father four days running,
+    /// a third of the way through his own reserve, handing his child **nine
+    /// whole fish** - by the third day harmful and by the fourth spoiled as
+    /// well - and choosing it again the next morning because the child still
+    /// had nothing to eat. See ISSUES_FOUND #229.
+    pub fn what_meal_i_can_spare(&self) -> Option<(String, u32)> {
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(name, item)| {
+                item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP && self.is_this_a_meal(name)
+            })
+            .max_by_key(|(_, item)| item.quantity)
+            .map(|(name, item)| (name.clone(), item.quantity - Self::WHAT_IS_NOT_WORTH_A_TRIP))
+    }
+
     /// The best thing in the pack that is worth laying out to dry.
     ///
     /// `what_food_i_can_spare` picks the *largest* stack and every branch of

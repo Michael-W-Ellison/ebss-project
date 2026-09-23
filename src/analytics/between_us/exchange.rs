@@ -754,8 +754,19 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<uuid::Uuid> {
-        // Nothing spare, nothing doing
-        agent.what_food_i_can_spare()?;
+        // Nothing spare, nothing doing - and a *meal* spare, not food.
+        // `what_food_i_can_spare` asks `is_food`, which is the right question
+        // for what to bury and the wrong one for what to put in a child's
+        // hand: see `Agent::what_meal_i_can_spare` and ISSUES_FOUND #229.
+        agent.what_meal_i_can_spare()?;
+
+        // A day's keep-back was tried here too, to match
+        // `a_meal_for_somebody_with_none`, and is **not** kept. Over six
+        // seeded settlement-years it moved person-turns 1,016,901 to
+        // 1,016,533 and `ready to breed` 23,903 to 23,222 - nothing, and the
+        // wrong way. A parent feeding a child out of the last of the pack is
+        // what this branch is for; the band branch keeps a day back because
+        // the man beside you is not your child.
 
         self.population
             .agents
