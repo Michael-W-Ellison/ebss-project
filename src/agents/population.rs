@@ -1841,8 +1841,7 @@ impl Population {
             // patch as a lie had agents concluding that four thousand honest
             // tips were falsehoods and half the settlement liars.
             let really_here: std::collections::BTreeSet<crate::world::Position> = world
-                .resources
-                .iter()
+                .nodes_near(agent_pos, vision_range)
                 .map(|resource| resource.position)
                 .filter(|where_it_is| {
                     (where_it_is.x - agent_pos.x).abs() <= range
@@ -1873,9 +1872,8 @@ impl Population {
                     // until now the only thing he took away was that it was
                     // there at all.
                     let how_much = world
-                        .resources
-                        .iter()
-                        .find(|resource| resource.position == *where_it_is)
+                        .nodes_on(*where_it_is)
+                        .next()
                         .map(|resource| resource.amount)
                         .unwrap_or(0);
 
@@ -1947,9 +1945,8 @@ impl Population {
                 agent.exploration_knowledge.who_told_me.remove(&where_it_is);
 
                 let how_much = world
-                    .resources
-                    .iter()
-                    .find(|resource| resource.position == where_it_is)
+                    .nodes_on(where_it_is)
+                    .next()
                     .map(|resource| resource.amount)
                     .unwrap_or(0);
                 agent
@@ -2026,8 +2023,7 @@ impl Population {
                 u32,
                 crate::core::memory::HowSteady,
             )> = world
-                .resources
-                .iter()
+                .nodes_near(agent_pos, vision_range)
                 .filter(|resource| resource.amount > 0)
                 .filter(|resource| {
                     let dx = resource.position.x - agent_pos.x;

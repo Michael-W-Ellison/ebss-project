@@ -407,8 +407,10 @@ impl Simulation {
         let exploration_radius = 3; // Can see 3 tiles in each direction
         let really_here: std::collections::BTreeSet<crate::world::Position> = self
             .world
-            .resources
-            .iter()
+            .nodes_near(
+                crate::world::Position::new(target_x, target_y),
+                exploration_radius as u32,
+            )
             .filter(|resource| {
                 (resource.position.x - target_x).abs() <= exploration_radius
                     && (resource.position.y - target_y).abs() <= exploration_radius
@@ -527,9 +529,8 @@ impl Simulation {
 
             let how_much = self
                 .world
-                .resources
-                .iter()
-                .find(|resource| resource.position == where_it_is)
+                .nodes_on(where_it_is)
+                .next()
                 .map(|resource| resource.amount)
                 .unwrap_or(0);
             agent
@@ -543,7 +544,10 @@ impl Simulation {
 
         // Discover nearby resources (within exploration radius)
         let mut discoveries = Vec::new();
-        for resource in &self.world.resources {
+        for resource in self.world.nodes_near(
+            crate::world::Position::new(target_x, target_y),
+            exploration_radius as u32,
+        ) {
             let resource_pos = crate::world::Position::new(
                 resource.position.x,
                 resource.position.y,

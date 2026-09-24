@@ -1049,8 +1049,7 @@ impl Simulation {
 
         let best = self
             .world
-            .resources
-            .iter()
+            .nodes_near(here, radius)
             .filter(|resource| resource.anything_to_take())
             .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
             .filter(|resource| here.distance_to(&resource.position) <= radius)

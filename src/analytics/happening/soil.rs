@@ -44,12 +44,7 @@ impl Simulation {
 
         for where_it_is in came_up {
             // Not on top of something already growing there.
-            if self
-                .world
-                .resources
-                .iter()
-                .any(|resource| resource.position == where_it_is)
-            {
+            if self.world.nodes_on(where_it_is).next().is_some() {
                 continue;
             }
 
@@ -65,7 +60,7 @@ impl Simulation {
             let mut volunteer =
                 ResourceNode::new(ResourceType::Food, where_it_is, how_much);
             volunteer.amount = how_much;
-            self.world.resources.push(volunteer);
+            self.world.put_a_node_down(volunteer);
 
             debug!("Something came up on the midden at {where_it_is:?}");
 
@@ -220,12 +215,7 @@ impl Simulation {
                 continue;
             }
 
-            if self
-                .world
-                .resources
-                .iter()
-                .any(|resource| resource.position == where_it_fell)
-            {
+            if self.world.nodes_on(where_it_fell).next().is_some() {
                 continue;
             }
 
@@ -235,7 +225,7 @@ impl Simulation {
                 Self::WHAT_ONE_SEED_COMES_TO,
             );
             plant.amount = 1;
-            self.world.resources.push(plant);
+            self.world.put_a_node_down(plant);
 
             debug!("A dropped grain took root at {where_it_fell:?}");
 

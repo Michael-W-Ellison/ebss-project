@@ -239,6 +239,10 @@ impl ResourceType {
     ///
     /// So this asks `is_it_food` rather than keeping a second list. What is
     /// left here is only how far a thing carries.
+    /// The strongest smell anything lying on the ground gives off, which is
+    /// how far off it is worth asking what a nose can smell.
+    pub const THE_STRONGEST_RAW_SMELL: f32 = 0.24;
+
     pub fn raw_scent_strength(&self) -> f32 {
         // Damp ground and vegetation, faintly. Not food, and the one other
         // thing a nose is for in this world.
@@ -253,7 +257,7 @@ impl ResourceType {
 
         match self {
             // Flesh gives itself away from further off
-            ResourceType::Meat | ResourceType::Fish => 0.24,
+            ResourceType::Meat | ResourceType::Fish => Self::THE_STRONGEST_RAW_SMELL,
 
             // Barely detectable: you have to be standing among them
             _ => 0.08,

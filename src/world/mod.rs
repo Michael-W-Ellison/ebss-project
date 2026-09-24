@@ -72,6 +72,7 @@ pub mod resource_spawning;
 pub mod nutrition;
 pub mod soil;
 pub mod sleeping;
+pub mod node_index;
 pub mod belonging;
 
 // Re-exports
@@ -241,6 +242,11 @@ pub struct World {
     /// Keep every node awake whatever: for measuring what sleeping does.
     #[serde(default)]
     pub nobody_sleeps: bool,
+
+    /// The nodes filed by where they stand, so a question about somewhere
+    /// reads only what is near it. See `world::node_index`.
+    #[serde(skip)]
+    where_the_nodes_are: node_index::WhereTheNodesAre,
 
     /// Which sorts of strange plant feed a person in this world, by kind.
     ///
@@ -1249,6 +1255,7 @@ impl World {
             first_day_logged: 0,
             where_people_are: None,
             nobody_sleeps: false,
+            where_the_nodes_are: node_index::WhereTheNodesAre::default(),
         };
 
 
@@ -1947,7 +1954,7 @@ impl World {
         }
 
         // Check resources
-        if self.resources.iter().any(|r| &r.position == pos) {
+        if self.nodes_on(*pos).next().is_some() {
             return true;
         }
 
@@ -1959,11 +1966,12 @@ impl World {
     }
 
     pub fn get_resource_at(&self, pos: &Position) -> Option<&ResourceNode> {
-        self.resources.iter().find(|r| &r.position == pos)
+        self.nodes_on(*pos).next()
     }
 
     pub fn get_resource_at_mut(&mut self, pos: &Position) -> Option<&mut ResourceNode> {
-        self.resources.iter_mut().find(|r| &r.position == pos)
+        let number = self.node_numbers_on(*pos).first().copied()?;
+        self.resources.get_mut(number)
     }
 
     pub fn get_building_at(&self, pos: &Position) -> Option<&Building> {
@@ -1985,6 +1993,82 @@ impl World {
             }
             keeping
         });
+
+        self.file_the_nodes();
+    }
+
+    // ===== Where the nodes are =====
+
+    /// Refile the nodes by where they stand, if the file has fallen out of
+    /// step with the list. See `world::node_index`.
+    pub fn file_the_nodes(&mut self) {
+        if !self.where_the_nodes_are.is_it_up_to_date(&self.resources) {
+            self.where_the_nodes_are = node_index::WhereTheNodesAre::file(
+                &self.resources,
+                self.grid.width,
+                self.grid.height,
+            );
+        }
+    }
+
+    /// Put a new node on the map, and file it. Returns its number.
+    pub fn put_a_node_down(&mut self, node: ResourceNode) -> usize {
+        let up_to_date = self.where_the_nodes_are.is_it_up_to_date(&self.resources);
+        if up_to_date {
+            self.where_the_nodes_are.another(&node);
+        }
+        self.resources.push(node);
+        self.resources.len() - 1
+    }
+
+    /// Take a node off the map. Every node after it moves up one, so the file
+    /// is made again.
+    pub fn take_a_node_up(&mut self, number: usize) -> ResourceNode {
+        let node = self.resources.remove(number);
+        self.where_the_nodes_are = node_index::WhereTheNodesAre::default();
+        self.file_the_nodes();
+        node
+    }
+
+    /// The number of every node within `reach` cells either way of `at`, in
+    /// list order.
+    ///
+    /// A square, not a walk: whoever asks applies its own measure of distance
+    /// to what comes back, as it did to the whole list.
+    pub fn node_numbers_near(&self, at: Position, reach: u32) -> Vec<usize> {
+        let reach = reach.min(i32::MAX as u32) as i32;
+        let within = |node: &ResourceNode| {
+            (node.position.x - at.x).abs() <= reach && (node.position.y - at.y).abs() <= reach
+        };
+
+        if self.where_the_nodes_are.is_it_up_to_date(&self.resources) {
+            self.where_the_nodes_are
+                .near(at.x, at.y, reach)
+                .into_iter()
+                .filter(|&number| within(&self.resources[number]))
+                .collect()
+        } else {
+            (0..self.resources.len())
+                .filter(|&number| within(&self.resources[number]))
+                .collect()
+        }
+    }
+
+    /// Every node within `reach` cells either way of `at`, in list order.
+    pub fn nodes_near(&self, at: Position, reach: u32) -> impl Iterator<Item = &ResourceNode> + '_ {
+        self.node_numbers_near(at, reach)
+            .into_iter()
+            .map(move |number| &self.resources[number])
+    }
+
+    /// The number of every node standing on `at`, in list order.
+    pub fn node_numbers_on(&self, at: Position) -> Vec<usize> {
+        self.node_numbers_near(at, 0)
+    }
+
+    /// Every node standing on `at`, in list order.
+    pub fn nodes_on(&self, at: Position) -> impl Iterator<Item = &ResourceNode> + '_ {
+        self.nodes_near(at, 0)
     }
 
     // ===== Heat Source Management =====
@@ -2946,8 +3030,8 @@ impl World {
                     }
 
                     // Check for resources at this position
-                    for resource in &self.resources {
-                        if resource.position == explore_pos && resource.amount > 0 {
+                    for resource in self.nodes_on(explore_pos) {
+                        if resource.amount > 0 {
                             agent_exploration.discover_resource(
                                 explore_pos,
                                 resource.resource_type,

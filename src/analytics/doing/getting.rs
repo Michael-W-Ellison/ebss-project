@@ -193,7 +193,8 @@ impl Simulation {
                 .is_some_and(|tile| tile.terrain.is_the_water_salt())
         };
 
-        for (i, resource) in self.world.resources.iter().enumerate() {
+        for i in self.world.node_numbers_near(agent_pos, Self::FORAGE_RADIUS) {
+            let resource = &self.world.resources[i];
             let matches_request = (resource.resource_type == resource_type_enum
                 || (gathering_food
                     && (Self::edible_item_for(resource.resource_type).is_some()
@@ -1356,9 +1357,8 @@ impl Simulation {
 
         let standing = self
             .world
-            .resources
-            .iter()
-            .find(|resource| resource.position == reach)
+            .nodes_on(reach)
+            .next()
             .map(|resource| resource.amount)
             .unwrap_or(0);
 
@@ -1403,11 +1403,7 @@ impl Simulation {
         let caught = ((Self::FISH_PER_CAST as f32 * spear).round() as u32).max(1);
 
         let taken = {
-            let resource = self
-                .world
-                .resources
-                .iter_mut()
-                .find(|resource| resource.position == reach);
+            let resource = self.world.get_resource_at_mut(&reach);
             match resource {
                 Some(resource) => {
                     let taken = caught.min(resource.amount);

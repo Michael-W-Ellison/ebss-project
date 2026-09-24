@@ -80,9 +80,9 @@ impl Simulation {
         // farmed, which is the one place a farmer would not be doing it.
         let standing = self
             .world
-            .resources
-            .iter()
-            .position(|resource| resource.position == tile_position);
+            .node_numbers_on(tile_position)
+            .first()
+            .copied();
 
         if let Some(standing) = standing {
             let crop = self.world.resources[standing].resource_type;
@@ -172,7 +172,7 @@ impl Simulation {
             Self::FIELD_YIELD,
         );
         field.amount = 0;
-        self.world.resources.push(field);
+        self.world.put_a_node_down(field);
 
         let agent = &mut self.population.agents[agent_index];
         agent
@@ -215,7 +215,7 @@ impl Simulation {
         let turned_under = self.world.resources[standing].amount;
         let crop = self.world.resources[standing].resource_type;
 
-        self.world.resources.remove(standing);
+        self.world.take_a_node_up(standing);
 
         // The ground is broken now, which is half of what a day behind a
         // plough buys. The other half is the crop itself going in as muck: a
@@ -256,9 +256,9 @@ impl Simulation {
         let agent_position = self.population.agents[agent_index].state.position;
         let here = Position::new(agent_position.0, agent_position.1);
 
-        let Some(index) = self.world.resources.iter().position(|resource| {
-            resource.position == here
-                && resource.amount > Self::WHAT_A_CUTTING_TAKES
+        let Some(index) = self.world.node_numbers_on(here).into_iter().find(|&number| {
+            let resource = &self.world.resources[number];
+            resource.amount > Self::WHAT_A_CUTTING_TAKES
                 && Self::what_can_be_sown()
                     .into_iter()
                     .any(|(_, sowable, _)| sowable == resource.resource_type)
@@ -330,18 +330,13 @@ impl Simulation {
             return ActionResult::failure("Nothing will take here".to_string());
         }
 
-        if self
-            .world
-            .resources
-            .iter()
-            .any(|resource| resource.position == here)
-        {
+        if self.world.nodes_on(here).next().is_some() {
             return ActionResult::failure("Something already grows here".to_string());
         }
 
         let mut moved = ResourceNode::new(crop, here, Self::WHAT_A_MOVED_PLANT_COMES_TO);
         moved.amount = Self::WHAT_A_CUTTING_STARTS_WITH;
-        self.world.resources.push(moved);
+        self.world.put_a_node_down(moved);
 
         let agent = &mut self.population.agents[agent_index];
         agent
@@ -385,9 +380,9 @@ impl Simulation {
         // round a crop is a look at how heavy it stands.
         let standing_at = self
             .world
-            .resources
-            .iter()
-            .position(|resource| resource.position == tile_position);
+            .node_numbers_on(tile_position)
+            .first()
+            .copied();
         if let Some(index) = standing_at {
             self.looking_at_the_crop(agent_index, index);
         }

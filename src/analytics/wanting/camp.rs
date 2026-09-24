@@ -193,8 +193,7 @@ impl Simulation {
 
         let (there, carrying) = self
             .world
-            .resources
-            .iter()
+            .nodes_near(here, Self::HOW_FAR_A_PEOPLE_WILL_MOVE)
             .filter(|resource| resource.amount > 0)
             .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
             .map(|resource| (resource.position, here.distance_to(&resource.position), resource.amount))
@@ -238,8 +237,7 @@ impl Simulation {
         let here = crate::world::Position::new(position.0, position.1);
 
         self.world
-            .resources
-            .iter()
+            .nodes_near(here, radius)
             .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
             .filter(|resource| here.distance_to(&resource.position) <= radius)
             .map(|resource| resource.amount)
@@ -251,8 +249,7 @@ impl Simulation {
         let here = crate::world::Position::new(position.0, position.1);
 
         self.world
-            .resources
-            .iter()
+            .nodes_near(here, radius)
             .filter(|resource| here.distance_to(&resource.position) <= radius)
             .filter(|resource| {
                 self.world

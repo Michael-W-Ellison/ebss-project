@@ -501,8 +501,7 @@ impl Simulation {
         let now = self.current_turn;
 
         self.world
-            .resources
-            .iter()
+            .nodes_near(here, Self::AS_FAR_AS_CURIOSITY_WALKS)
             .filter(|resource| resource.anything_to_take())
             .filter(|resource| {
                 !agent
@@ -870,8 +869,7 @@ impl Simulation {
         let from = Position::new(position.0, position.1);
 
         self.world
-            .resources
-            .iter()
+            .nodes_near(from, radius)
             .filter(|resource| resource.anything_to_take() && wanted(resource))
             .map(|resource| (resource.position, from.distance_to(&resource.position)))
             .filter(|(_, distance)| *distance <= radius)
@@ -987,7 +985,7 @@ impl Simulation {
         let now = self.current_turn;
         let after_anything_edible = wanted == ResourceType::Food;
 
-        self.world.resources.iter().any(|resource| {
+        self.world.nodes_near(here, Self::FORAGE_RADIUS).any(|resource| {
             if !resource.anything_to_take() {
                 return false;
             }
@@ -1064,8 +1062,7 @@ impl Simulation {
         let now = self.current_turn;
 
         self.world
-            .resources
-            .iter()
+            .nodes_near(here, Self::ALREADY_STANDING_HERE)
             .filter(|resource| resource.anything_to_take())
             .filter(|resource| here.distance_to(&resource.position) <= Self::ALREADY_STANDING_HERE)
             .filter(|resource| {

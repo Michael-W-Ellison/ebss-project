@@ -245,7 +245,8 @@ impl Simulation {
         // prices a trip.
         let mut nearest_food: Option<(usize, u32)> = None;
         let mut best_worth: f32 = 0.0;
-        for (i, resource) in self.world.resources.iter().enumerate() {
+        for i in self.world.node_numbers_near(agent_pos, Self::FORAGE_RADIUS) {
+            let resource = &self.world.resources[i];
             if Self::edible_item_for(resource.resource_type).is_some() && resource.anything_to_take() {
                 let distance = agent_pos.distance_to(&resource.position);
                 if distance <= Self::FORAGE_RADIUS {
@@ -810,9 +811,9 @@ impl Simulation {
         let agent_position = self.population.agents[agent_index].state.position;
         let here = Position::new(agent_position.0, agent_position.1);
 
-        let Some(index) = self.world.resources.iter().position(|resource| {
-            resource.position == here
-                && resource.resource_type == crate::world::ResourceType::StrangePlant
+        let Some(index) = self.world.node_numbers_on(here).into_iter().find(|&number| {
+            let resource = &self.world.resources[number];
+            resource.resource_type == crate::world::ResourceType::StrangePlant
                 && resource.amount > 0
         }) else {
             return ActionResult::failure("Nothing here to try".to_string());

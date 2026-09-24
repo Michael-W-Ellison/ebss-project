@@ -27,6 +27,12 @@ use log::{debug, warn};
 impl Simulation {
     /// Execute one simulation turn
     pub fn take_a_turn(&mut self) {
+        // Every question about what is near somebody reads the nodes by where
+        // they stand, which is only right while the file agrees with the list.
+        // The world keeps it so as it goes; this catches a world just built or
+        // loaded, or a list somebody changed by hand. See `world::node_index`.
+        self.world.file_the_nodes();
+
         // Food does not sit on a fire forever: it is taken off, or it burns
         // away. Either way the smell of cooking is a passing thing, so old
         // contents are cleared before scents are worked out.

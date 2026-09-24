@@ -291,8 +291,10 @@ impl Simulation {
         agent_position: (i32, i32, i32),
     ) -> Option<crate::world::Position> {
         self.world
-            .resources
-            .iter()
+            .nodes_near(
+                crate::world::Position::new(agent_position.0, agent_position.1),
+                Self::CAST as u32,
+            )
             .filter(|resource| resource.resource_type.grows_in_water())
             .filter(|resource| resource.amount > 0)
             .map(|resource| resource.position)
@@ -363,8 +365,10 @@ impl Simulation {
         // settlement for and an empty pool next door is not.
         let (best, _) = self
             .world
-            .resources
-            .iter()
+            .nodes_near(
+                crate::world::Position::new(agent_position.0, agent_position.1),
+                Self::WORTH_WALKING_TO_WATER as u32,
+            )
             .filter(|resource| resource.resource_type.grows_in_water())
             .filter(|resource| resource.amount > 0)
             .filter_map(|resource| {

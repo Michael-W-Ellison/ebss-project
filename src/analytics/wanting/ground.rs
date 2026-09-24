@@ -172,8 +172,7 @@ impl Simulation {
         // agent per turn
         let occupied: std::collections::BTreeSet<(i32, i32)> = self
             .world
-            .resources
-            .iter()
+            .nodes_near(from, radius as u32)
             .map(|resource| (resource.position.x, resource.position.y))
             .collect();
 
@@ -407,7 +406,7 @@ impl Simulation {
         let from = Position::new(position.0, position.1);
         let mut best: Option<(Position, u32)> = None;
 
-        for resource in &self.world.resources {
+        for resource in self.world.nodes_near(from, Self::FIELD_WALK_RADIUS) {
             let distance = from.distance_to(&resource.position);
             if distance > Self::FIELD_WALK_RADIUS {
                 continue;
@@ -507,11 +506,7 @@ impl Simulation {
                 .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
                 .unwrap_or(false);
 
-            let taken = self
-                .world
-                .resources
-                .iter()
-                .any(|resource| resource.position == here);
+            let taken = self.world.nodes_on(here).next().is_some();
 
             if can_carry_it && !taken {
                 return Some(Action::PlantCutting);
@@ -540,11 +535,9 @@ impl Simulation {
         // plant nobody has tried standing on the same ground as a berry bush
         // was enough to hide the bush.
         self.world
-            .resources
-            .iter()
+            .nodes_on(here)
             .filter(|resource| {
-                resource.position == here
-                    && resource.amount > Self::WHAT_A_CUTTING_TAKES
+                resource.amount > Self::WHAT_A_CUTTING_TAKES
                     && resource.max_amount > Self::TOO_THIN_TO_DIG + Self::WHAT_A_CUTTING_TAKES
             })
             .find(|resource| {
@@ -618,8 +611,7 @@ impl Simulation {
         // that happens by accident.
         let strange = self
             .world
-            .resources
-            .iter()
+            .nodes_near(here, Self::FORAGE_RADIUS)
             .filter(|resource| {
                 resource.resource_type == ResourceType::StrangePlant && resource.amount > 0
             })
