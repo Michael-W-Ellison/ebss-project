@@ -945,6 +945,12 @@ pub struct ResourceNode {
     /// which is cleared every day.
     #[serde(default)]
     pub taken_since_it_ripened: u32,
+
+    /// The first day this has not been brought up to date, if nobody is near
+    /// enough to need it - counted in the world's growing days. See
+    /// `world::sleeping`.
+    #[serde(default)]
+    pub asleep_since: Option<u32>,
 }
 
 impl ResourceNode {
@@ -989,6 +995,7 @@ impl ResourceNode {
             on_a_field: false,
             ripe_stand: 0,
             taken_since_it_ripened: 0,
+            asleep_since: None,
         }
     }
 

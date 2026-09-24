@@ -19735,6 +19735,14 @@ not move: no field ripens in two and a half days.
 
 ### 248. Where the time goes, and what freezing far-off ground would buy
 
+> **Corrected at #249: resource nodes' daily regrowth is not where their time
+> goes.** The node column below was read by taking every node off the map,
+> which also took away every other loop that walks the node list. Timed
+> directly, regrowth is 12 ms a day of an empty 1,600-cell world; the rest is
+> `remove_depleted_resources` walking every node every turn, 37 ms. Freezing
+> nodes was built and is exact, and saves the 12.
+
+
 The proposal: ground far from any agent is frozen, and caught up to the season
 when somebody comes into range. Measured before answering, per simulated day
 on a quiet machine (release build), taking one system out at a time.
@@ -19789,3 +19797,72 @@ So, per simulated day:
 **Recommendation, in order:** freeze resource nodes with an exact catch-up
 from a weather log; profile the animal turn; and for the ordinary run, where
 people are 95% of the cost, look at the agent's decision loop.
+
+### 249. Ground nobody is near sleeps, and wakes exactly where it would have been
+
+Built as #248 proposed. A resource node further than `FAR_ENOUGH_TO_SLEEP`
+(128 cells either way) from every living person is not brought up to date.
+The distance is the longest any decision reads a node from (60, where a people
+looks for a new camp) plus a day's walk (48), and some over. When somebody
+comes within range, the node lives the days it missed over again, one at a
+time, through the same function the live pass uses.
+
+**The catch-up is exact, not an estimate.** Everything a wild node's day reads
+is either fixed for the node (its terrain and its ground's grade) or one value
+for the whole map that day. The air temperature and whether the water is ice
+come from the climate by kind of country alone: the position argument is
+ignored. So the world keeps an `AGrowingDay` for every day back to the oldest
+sleeping node - the rain, the season, and air and ice for each of the fourteen
+kinds of country - and throws away the days nobody needs any more. No
+randomness is involved anywhere in this.
+
+Field crops never sleep: they ripen, get brought in and wear their field, and
+there are only as many as a settlement farms. A world nobody has told where its
+people are - one run without a simulation over it - keeps everything awake,
+because not having been told is not the same as there being nobody there.
+
+#### Proved, not assumed
+
+`sleeping_tests` runs the same settlement twice on a 320-cell map for sixty
+days, once with sleeping and once without, and after waking the sleepers
+compares everything: the number of dice draws, every person's position,
+health and reserve, and every node's amount, carried inflow, flow and ripeness,
+to the bit. **They are identical**, with most of the map's nodes asleep most of
+the time. An empty world slept for a whole year - through every season's
+growth and fruit falling - also wakes identical. Neither roll-count fingerprint
+moved, since nothing on the default 50-cell map is ever far enough from anybody
+to sleep.
+
+#### What it saves, which is less than #248 said
+
+| per simulated day | awake | asleep |
+|---|---|---|
+| empty, no beasts, 400 cells | 2.5 ms | 2.1 ms |
+| empty, no beasts, 1,600 cells | 91 ms | 73 ms |
+| empty, with beasts, 800 cells | 220 ms | 217 ms |
+| twelve people, 400 cells | 669 ms | 670 ms (21,000 of 24,500 nodes asleep) |
+| twelve people, 800 cells | 4.6 s | 4.1 s (94,000 of 98,000 asleep) |
+
+At best 1.2 times. The reason is the correction added to #248: regrowth is
+cheap. Timed piece by piece on an empty 1,600-cell world with no beasts:
+`remove_depleted_resources` 37 ms a day, regrowth 12 ms, the animals' pass
+12 ms even with no animals in it, plants 9 ms. With beasts on an 800-cell map,
+the animals take 161 of about 175 ms.
+
+**The real cost is the people, and it grows with the map.** Twelve people
+cost about 110 ms a day on 50 cells, 670 ms on 400 and 4.6 s on 800. A person
+on the big map costs forty times what they do on the small one, and the map has
+240 times the nodes. Their decisions scan every node on the map, each turn,
+to find the ones within a few dozen cells.
+
+#### What would pay, in order
+
+1. **An index of nodes by patch of map**, so that a decision looking within
+   twenty cells asks twenty cells' worth of nodes and not the whole list. This
+   is where the time on a large map actually goes, and it grows with area times
+   people. The patches here in `WhoIsAwake` are the start of one.
+2. **`remove_depleted_resources` once when something runs out**, not a scan
+   every turn. Only a hand can empty a mineral seam, so the scan could be
+   restricted to where people are, or triggered by the harvest that emptied it.
+3. **The animals' turn**, which is most of the world's own time. At 0.37 ms a
+   beast a day it is likely searching for forage without an index too.

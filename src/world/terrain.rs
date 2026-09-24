@@ -40,6 +40,49 @@ pub enum TerrainType {
     Farmland,
 }
 
+impl TerrainType {
+    /// Every kind of country there is.
+    ///
+    /// The match in `every_kind_is_listed` stops compiling if a kind is added
+    /// and not put here, so this cannot fall behind the enum.
+    pub const EVERY_KIND: [TerrainType; 14] = [
+        TerrainType::Plains,
+        TerrainType::Forest,
+        TerrainType::Mountain,
+        TerrainType::Water,
+        TerrainType::Desert,
+        TerrainType::Wetland,
+        TerrainType::Meadow,
+        TerrainType::Hills,
+        TerrainType::Beach,
+        TerrainType::Riverbank,
+        TerrainType::Sea,
+        TerrainType::SaltMarsh,
+        TerrainType::SaltFlat,
+        TerrainType::Farmland,
+    ];
+
+    #[allow(dead_code)]
+    fn every_kind_is_listed(kind: TerrainType) {
+        match kind {
+            TerrainType::Plains
+            | TerrainType::Forest
+            | TerrainType::Mountain
+            | TerrainType::Water
+            | TerrainType::Desert
+            | TerrainType::Wetland
+            | TerrainType::Meadow
+            | TerrainType::Hills
+            | TerrainType::Beach
+            | TerrainType::Riverbank
+            | TerrainType::Sea
+            | TerrainType::SaltMarsh
+            | TerrainType::SaltFlat
+            | TerrainType::Farmland => {}
+        }
+    }
+}
+
 /// Terrain with properties
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Terrain {

@@ -59,6 +59,7 @@ pub mod portion_tests;
 pub mod salt_tests;
 pub mod scarcity_tests;
 pub mod soil_ladder_tests;
+pub mod sleeping_tests;
 pub mod sickness_tests;
 mod full_pack_tests;
 mod larder_reach_tests;
