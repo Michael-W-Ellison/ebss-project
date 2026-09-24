@@ -1454,21 +1454,169 @@ fn seaweed() -> PlantSpecies {
 // PLANT INSTANCES AND MANAGEMENT
 // ============================================================================
 
+/// Which kind of plant this is: a small number standing for its name.
+///
+/// Every plant used to carry its species as a `String` - twenty-four bytes in
+/// the struct and its own allocation on the heap besides, holding "oak_tree"
+/// or "grass" over again for each of the tens of thousands of plants on a map.
+/// There are about fifty species. So the name is kept once, here, and a plant
+/// carries two bytes that say which one.
+///
+/// It reads as the name it stands for everywhere a name was read: it derefs to
+/// `&str`, compares equal to one, orders by it, and is written to a save as
+/// the name - so a save does not depend on the order species happened to be
+/// met in, and nothing downstream sees a difference.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SpeciesId(u16);
+
+impl SpeciesId {
+    /// Room for this many species. A few dozen exist.
+    const HOW_MANY_THERE_CAN_BE: usize = 4096;
+
+    fn names() -> &'static [std::sync::OnceLock<&'static str>; Self::HOW_MANY_THERE_CAN_BE] {
+        static NAMES: [std::sync::OnceLock<&'static str>; SpeciesId::HOW_MANY_THERE_CAN_BE] =
+            [const { std::sync::OnceLock::new() }; SpeciesId::HOW_MANY_THERE_CAN_BE];
+        &NAMES
+    }
+
+    /// The number for this name, handing out the next one if it is new.
+    ///
+    /// Names are only ever added, so reading one back needs no lock; only
+    /// adding does, and that happens once per species per run.
+    pub fn called(name: &str) -> Self {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static HOW_MANY: AtomicUsize = AtomicUsize::new(0);
+        static ADDING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+        let names = Self::names();
+        let known = |upto: usize| {
+            (0..upto).find(|&i| names[i].get().is_some_and(|known| *known == name))
+        };
+
+        if let Some(i) = known(HOW_MANY.load(Ordering::Acquire)) {
+            return Self(i as u16);
+        }
+
+        let _adding = ADDING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let upto = HOW_MANY.load(Ordering::Acquire);
+        if let Some(i) = known(upto) {
+            return Self(i as u16);
+        }
+
+        assert!(upto < Self::HOW_MANY_THERE_CAN_BE, "more plant species than there is room for");
+        let _ = names[upto].set(Box::leak(name.to_owned().into_boxed_str()));
+        HOW_MANY.store(upto + 1, Ordering::Release);
+        Self(upto as u16)
+    }
+
+    /// The name this stands for.
+    pub fn as_str(&self) -> &'static str {
+        Self::names()[self.0 as usize]
+            .get()
+            .expect("a species number is only ever handed out with its name")
+    }
+}
+
+impl std::ops::Deref for SpeciesId {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl From<&str> for SpeciesId {
+    fn from(name: &str) -> Self {
+        Self::called(name)
+    }
+}
+
+impl From<String> for SpeciesId {
+    fn from(name: String) -> Self {
+        Self::called(&name)
+    }
+}
+
+impl From<&String> for SpeciesId {
+    fn from(name: &String) -> Self {
+        Self::called(name)
+    }
+}
+
+impl PartialEq<str> for SpeciesId {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<&str> for SpeciesId {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<String> for SpeciesId {
+    fn eq(&self, other: &String) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+/// By name, not by number, so that anything kept in order by species is in
+/// the same order it was when this was a `String`.
+impl PartialOrd for SpeciesId {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SpeciesId {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl std::fmt::Debug for SpeciesId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+impl std::fmt::Display for SpeciesId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Serialize for SpeciesId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for SpeciesId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+        Ok(Self::called(&name))
+    }
+}
+
 /// Individual plant instance in the world
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Plant {
     pub id: Uuid,
-    pub species_id: String,
+    pub species_id: SpeciesId,
     pub position: (i32, i32),
+    /// Out of `PlantSpecies::health`, which is the same for every plant of a
+    /// kind and so is not copied into each of them.
     pub current_health: f32,
-    pub max_health: f32,
     pub growth_stage: GrowthStage,
     pub growth_progress: f32, // 0.0 to 1.0 for current stage
     pub age_turns: u32,
     pub is_harvestable: bool,
     pub has_been_harvested: bool,
     pub regrow_timer: u32,
-    pub planted_by: Option<Uuid>, // Agent who planted it (for farming)
+    // `planted_by: Option<Uuid>` was here: seventeen bytes on every plant in
+    // the world, "nobody" on all the wild ones, written when a crop was sown
+    // and never once read.
     pub is_cultivated: bool, // Whether it's a farm plant vs wild
 
     /// The turn this plant has been grown up to.
@@ -1564,20 +1712,18 @@ impl GrowingConditions {
 
 impl Plant {
     /// Create a new plant instance
-    pub fn new(species_id: String, position: (i32, i32)) -> Self {
+    pub fn new(species_id: impl Into<SpeciesId>, position: (i32, i32)) -> Self {
         Self {
             id: crate::core::dice::name(),
-            species_id,
+            species_id: species_id.into(),
             position,
             current_health: 0.0, // Set from species
-            max_health: 0.0,
             growth_stage: GrowthStage::Seedling,
             growth_progress: 0.0,
             age_turns: 0,
             is_harvestable: false,
             has_been_harvested: false,
             regrow_timer: 0,
-            planted_by: None,
             is_cultivated: false,
             grown_up_to: 0,
             shade_on_it: 0.0,
@@ -1586,15 +1732,13 @@ impl Plant {
 
     /// Initialize with species data
     pub fn with_species(mut self, species: &PlantSpecies) -> Self {
-        self.max_health = species.health;
         self.current_health = species.health;
         self
     }
 
     /// Mark as cultivated/farmed
-    pub fn cultivated(mut self, planter_id: Uuid) -> Self {
+    pub fn cultivated(mut self) -> Self {
         self.is_cultivated = true;
-        self.planted_by = Some(planter_id);
         self
     }
 
@@ -1793,7 +1937,8 @@ impl PlantLedger {
 /// on a clock: see `PlantSpecies::seed_keeps_for_turns`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Seed {
-    pub species_id: String,
+    /// Two bytes rather than a copy of the name - see `SpeciesId`.
+    pub species_id: SpeciesId,
     pub position: (i32, i32),
 
     /// The turn it fell on.
@@ -1888,7 +2033,7 @@ impl PlantManager {
     /// So the turn is a parameter and every caller has to say which one.
     pub fn spawn_plant(
         &mut self,
-        species_id: String,
+        species_id: impl Into<SpeciesId>,
         position: (i32, i32),
         now: u32,
     ) -> Option<Uuid> {
@@ -1896,9 +2041,10 @@ impl PlantManager {
             return None;
         }
 
+        let species_id = species_id.into();
         let species = self.registry.as_ref()?.get(&species_id)?;
 
-        let mut plant = Plant::new(species_id.clone(), position).with_species(species);
+        let mut plant = Plant::new(species_id, position).with_species(species);
         plant.grown_up_to = now;
 
         let id = plant.id;
@@ -1909,20 +2055,20 @@ impl PlantManager {
     /// Spawn a cultivated plant (farmed)
     pub fn plant_crop(
         &mut self,
-        species_id: String,
+        species_id: impl Into<SpeciesId>,
         position: (i32, i32),
-        planter_id: Uuid,
         now: u32,
     ) -> Option<Uuid> {
         if self.plants.len() >= self.max_population {
             return None;
         }
 
+        let species_id = species_id.into();
         let species = self.registry.as_ref()?.get(&species_id)?;
 
-        let mut plant = Plant::new(species_id.clone(), position)
+        let mut plant = Plant::new(species_id, position)
             .with_species(species)
-            .cultivated(planter_id);
+            .cultivated();
         plant.grown_up_to = now;
 
         let id = plant.id;
@@ -2435,7 +2581,7 @@ impl PlantManager {
             // depends on how far short the ground is falling.
             let living = conditions.growth_share();
             if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
-                plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, ticks);
+                plant.current_health -= Self::what_a_bad_pass_costs(species.health, living, ticks);
             } else {
                 // What it puts back on is what the ground and the sky give it,
                 // so a plant on poor ground comes back slowly and one in a
@@ -2444,8 +2590,8 @@ impl PlantManager {
                 // again out of the same water and light and nutrient
                 // everything else here runs on.
                 plant.current_health = (plant.current_health
-                    + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
-                    .min(plant.max_health);
+                    + species.health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
+                    .min(species.health);
             }
 
             // What it grows with, it takes out of the ground
@@ -2571,11 +2717,11 @@ impl PlantManager {
 
         let living = conditions.growth_share();
         if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
-            plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, ticks);
+            plant.current_health -= Self::what_a_bad_pass_costs(species.health, living, ticks);
         } else {
             plant.current_health = (plant.current_health
-                + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
-                .min(plant.max_health);
+                + species.health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
+                .min(species.health);
         }
 
         let drawn = conditions.draw_per_tick() * ticks;
@@ -3511,7 +3657,10 @@ fn a_cropped_plant_takes_days_to_come_back_and_not_one_pass() {
     let mut plants = PlantManager::new(8);
     plants.spawn_plant("grass".to_string(), (4, 4), 0);
 
-    let most = plants.all_plants()[0].max_health;
+    let most = plants
+        .get_species(&plants.all_plants()[0].species_id)
+        .expect("grass is a species")
+        .health;
     plants.all_plants_mut()[0].current_health = 0.0;
 
     // One day of the best ground this world has, in one pass.

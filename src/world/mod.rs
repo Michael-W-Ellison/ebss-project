@@ -2203,7 +2203,6 @@ impl World {
         &mut self,
         species_id: String,
         position: (i32, i32),
-        planter_id: uuid::Uuid,
     ) -> Result<uuid::Uuid, String> {
         // Check if position is valid
         if position.0 < 0 || position.1 < 0 ||
@@ -2211,7 +2210,7 @@ impl World {
             return Err("Position out of bounds".to_string());
         }
 
-        self.plants.plant_crop(species_id, position, planter_id, self.turn)
+        self.plants.plant_crop(species_id, position, self.turn)
             .ok_or_else(|| "Failed to plant crop (max population reached or invalid species)".to_string())
     }
 
@@ -2736,10 +2735,7 @@ impl World {
                 if agent_exploration.explore_tile(explore_pos, current_turn) {
                     new_discoveries += 1;
 
-                    // Mark tile as globally explored
-                    if let Some(tile) = self.grid.get_tile_mut(&explore_pos) {
-                        tile.mark_explored();
-
+                    if let Some(tile) = self.grid.get_tile(&explore_pos) {
                         // Discover terrain type
                         agent_exploration.encounter_terrain(
                             tile.terrain.terrain_type,

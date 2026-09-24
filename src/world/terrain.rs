@@ -179,8 +179,14 @@ impl Default for Terrain {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tile {
     pub terrain: Terrain,
-    pub explored: bool, // Global exploration state (any agent has seen this)
-    pub last_seen_turn: Option<u32>, // When was this tile last observed
+
+    // `explored` and `last_seen_turn` used to be here, at nine of this
+    // struct's forty bytes. `last_seen_turn` was never written and never
+    // read, and `explored` was written once and read only by its own test:
+    // what anybody has seen is kept by the one who saw it, in
+    // `ExplorationKnowledge`, which is where every decision reads it. A
+    // global fog of war that nothing consulted cost 900 MB on a ten thousand
+    // cell map.
 
     /// The ground itself: what plants can draw on, and what is lying on it
     /// waiting to break down into more of the same
@@ -192,18 +198,9 @@ impl Tile {
     pub fn new(terrain_type: TerrainType) -> Self {
         Self {
             terrain: Terrain::new(terrain_type),
-            explored: false, // Tiles start unexplored (fog of war)
-            last_seen_turn: None,
             soil: super::soil::Soil::for_terrain(terrain_type),
         }
     }
-
-    /// Mark this tile as explored (globally)
-    pub fn mark_explored(&mut self) {
-        self.explored = true;
-    }
-
-
 
 }
 
@@ -264,11 +261,5 @@ mod tests {
     fn test_tile_creation() {
         let tile = Tile::new(TerrainType::Forest);
         assert_eq!(tile.terrain.terrain_type, TerrainType::Forest);
-        assert!(!tile.explored); // Tiles start unexplored (fog of war)
-
-        // Test marking as explored
-        let mut tile = tile;
-        tile.mark_explored();
-        assert!(tile.explored);
     }
 }

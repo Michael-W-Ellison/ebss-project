@@ -19432,3 +19432,95 @@ The blanket guard - "any `Move` to the tile underfoot is not an answer,
 return `None`" - was measured too and costs 0.8%, which is inside the noise
 but is the wrong shape: it catches the symptom everywhere instead of the two
 places that produce it, and it would hide the next one.
+
+### 244. A plant carried its own name, and a tile carried a fog of war nobody read
+
+The first two steps towards a map larger than a thousand cells a side. Both
+are bit-identical: a probe hashing the whole world, the dice-roll count, and
+every plant's full state - id, species, position, health, progress, shade,
+age, regrow timer, stage and flags - gives the same three numbers before and
+after, over 120 turns of seed 4242 and over a whole year of seed 0.
+
+#### `Tile`: 40 bytes to 32
+
+`last_seen_turn: Option<u32>` was never written and never read - every tile
+in every world held `None`. `explored: bool` was written once, in the
+exploration pass, and read only by its own unit test. What anybody has seen is
+kept by the one who saw it, in `ExplorationKnowledge::explored_tiles`, which
+is what every decision reads. The one reader outside the struct was
+`exploration_demo`, which now counts the union of what the agents have seen.
+
+Saves are JSON, so a save with the two fields in it still loads.
+
+#### `Plant`: 104 bytes and a heap allocation, to 56
+
+| field | was | now |
+|---|---|---|
+| `species_id` | `String`: 24 bytes, plus its own allocation of ~32 holding "oak_tree" again | `SpeciesId`: 2 bytes |
+| `planted_by: Option<Uuid>` | 17 bytes, `None` on every wild plant, written when a crop was sown and never read | gone |
+| `max_health` | 4 bytes, a copy of `PlantSpecies::health` | read from the species |
+
+`SpeciesId` is an interned name. It derefs to `&str`, compares equal to one,
+**orders by the name rather than the number** so that anything kept in order
+by species keeps its order, prints as the quoted string `Debug` gave before,
+and is written to a save as the name - so a save does not depend on the order
+species were first met in. Reading a name back takes no lock. `Seed` carried
+the same `String` and is now 16 bytes, from 40 and an allocation.
+
+On a 10,000-cell map at a quarter of a plant a tile, plants go from about
+**3.4 GB to 1.4 GB**, and tiles from 4.0 GB to 3.2 GB.
+
+#### What was not done, and why
+
+**The plant's `id: Uuid` stays**, at 16 of the 56 bytes. It is drawn from
+`core::dice::name()`, so replacing it with a counter would stop consuming a
+draw for every plant and move every later roll in the run. That is not a
+change to the model, but it would make this change impossible to verify as
+exact. It is the obvious next cut, and should be taken on its own and
+re-baselined.
+
+**The per-plant state stays at full width.** Health, progress and shade are
+`f32`, ages and timers `u32`. Packing them into eight and sixteen bits would
+take a plant to about 16 bytes, but it rounds: growth that adds less than one
+step per pass would stall, the same way woody litter would stop rotting at
+sixteen-bit resolution. That is a change to the model and wants the paired
+measurement. **An earlier estimate in conversation, "about 16 bytes with no
+change to behaviour", was wrong on the second half.** The exact pack is 56.
+
+### 245. The soil ladder, as decided
+
+Recorded before it is built, so that the decisions are in one place.
+
+Soil stops being a pool of nutrient and litter that decays everywhere every
+day, and becomes a **type** fixed by generation and a **grade** that only
+agents move.
+
+| grade | yield multiplier |
+|---|---|
+| very rich | x2 |
+| rich | x1.5 |
+| ordinary | x1 |
+| depleted | x0.5 |
+| exhausted | x0.25 |
+
+- **Wild plants yield a quarter of what the same plant yields on tilled
+  farmland**, and harvesting a wild plant never changes the grade.
+- **Farmland drops one grade once a full crop's worth of units has been
+  taken off it** - not per trip, since a crop comes off in armfuls of eight
+  to fourteen.
+- **A tile keeps its type and its original grade for ever.** Leaving it
+  fallow moves it one grade a year back towards the original, from either
+  side, and never past it.
+- **Beans and manure are the only ways to build soil past its original
+  grade.** A classic rotation - a bean crop after a cereal - holds a field
+  where it is while it still feeds people.
+- **Dung and buried waste raise the grade once they have rotted**, through a
+  short list of pending improvements rather than a daily pass. Animal dung
+  and the rest of the world's goings-on leave the soil alone.
+- **Agents learn a field's grade from what it produces**, not by being told
+  it: the decision to rest, rotate or manure has to come from what the
+  harvests have been.
+
+Still to settle when it is built: the rate at which beans and manure raise
+the grade, the ceiling, and whether abandoned farmland counts as fallow or
+goes back to wild terrain.
