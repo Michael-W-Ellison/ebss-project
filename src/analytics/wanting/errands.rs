@@ -100,6 +100,7 @@ impl Simulation {
                 };
 
                 let patch = self.nearest_resource_within(
+                    agent,
                     agent_position,
                     Self::CLOTHING_MATERIAL_RADIUS,
                     |node| node.resource_type == resource,

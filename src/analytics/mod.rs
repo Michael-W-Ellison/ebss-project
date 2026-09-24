@@ -500,8 +500,7 @@ impl Simulation {
 
         let now = self.current_turn;
 
-        self.world
-            .nodes_near(here, Self::AS_FAR_AS_CURIOSITY_WALKS)
+        self.nodes_known_to(agent, here, Self::AS_FAR_AS_CURIOSITY_WALKS)
             .filter(|resource| resource.anything_to_take())
             .filter(|resource| {
                 !agent
@@ -856,10 +855,97 @@ impl Simulation {
     /// population and returned no more warmth than not hunting at all.
     const HUNT_SEARCH_RADIUS: f32 = 12.0;
 
+    /// The nodes within `reach` cells either way of `from` that this agent
+    /// knows are there, in list order.
+    ///
+    /// What it can see from here, what it remembers, what it can smell and
+    /// what is under its hand - and nothing else. Every search for somewhere
+    /// to go read the whole map, so a man knew where every berry within sixty
+    /// paces was whether or not he had ever been that way, and a blind man
+    /// knew it as well as anybody. Now the ground an agent goes after is
+    /// ground it has some reason to think is there:
+    ///
+    /// - **in sight**: within `Agent::sight_range` of where it stands, the
+    ///   same circle the exploration pass looks over;
+    /// - **remembered**: a place in its `known_resources`, whether it saw the
+    ///   thing itself or was told - which is what makes being told worth
+    ///   anything;
+    /// - **smelled**: the source of a food or water smell it is picking up;
+    /// - **to hand**: the tile it is on and the four beside it.
+    ///
+    /// Remembering a place is not remembering what is on it now: whoever asks
+    /// still reads the node as it stands, so an agent walking to a patch it
+    /// remembers finds the patch as it is. What it cannot do is set out for
+    /// something it has never had any way of knowing about.
+    pub(in crate::analytics) fn nodes_this_one_knows_of(
+        &self,
+        agent: &crate::agents::Agent,
+        from: crate::world::Position,
+        reach: u32,
+    ) -> Vec<usize> {
+        use crate::agents::senses::ScentType;
+        use crate::world::Position;
+
+        let sight = agent.sight_range();
+        let within_reach = |at: &Position| {
+            (at.x - from.x).unsigned_abs() <= reach && (at.y - from.y).unsigned_abs() <= reach
+        };
+
+        // What is in view, and to hand
+        let mut known: Vec<usize> = self
+            .world
+            .node_numbers_near(from, reach.min(sight.max(1)))
+            .into_iter()
+            .filter(|&number| {
+                let at = self.world.resources[number].position;
+                let (dx, dy) = ((at.x - from.x) as i64, (at.y - from.y) as i64);
+                dx.abs() + dy.abs() <= 1 || dx * dx + dy * dy <= (sight as i64) * (sight as i64)
+            })
+            .collect();
+
+        // What it remembers
+        for at in agent
+            .exploration_knowledge
+            .known_resources
+            .keys()
+            .filter(|at| within_reach(at))
+        {
+            known.extend(self.world.node_numbers_on(*at));
+        }
+
+        // And what it can smell
+        for scent in agent.senses.smell.detected_scents.iter().filter(|scent| {
+            matches!(scent.scent_type, ScentType::Food | ScentType::Water)
+        }) {
+            let at = Position::new(scent.source_position.0, scent.source_position.1);
+            if within_reach(&at) {
+                known.extend(self.world.node_numbers_on(at));
+            }
+        }
+
+        known.sort_unstable();
+        known.dedup();
+        known
+    }
+
+    /// Every node within `reach` of `from` that this agent knows is there, in
+    /// list order. See `nodes_this_one_knows_of`.
+    pub(in crate::analytics) fn nodes_known_to<'a>(
+        &'a self,
+        agent: &crate::agents::Agent,
+        from: crate::world::Position,
+        reach: u32,
+    ) -> impl Iterator<Item = &'a crate::world::ResourceNode> + 'a {
+        self.nodes_this_one_knows_of(agent, from, reach)
+            .into_iter()
+            .map(move |number| &self.world.resources[number])
+    }
+
     /// Position of the closest resource within `radius` walking steps that the
-    /// agent has some use for
+    /// agent knows of and has some use for
     fn nearest_resource_within(
         &self,
+        agent: &crate::agents::Agent,
         position: (i32, i32, i32),
         radius: u32,
         wanted: impl Fn(&crate::world::ResourceNode) -> bool,
@@ -868,8 +954,7 @@ impl Simulation {
 
         let from = Position::new(position.0, position.1);
 
-        self.world
-            .nodes_near(from, radius)
+        self.nodes_known_to(agent, from, radius)
             .filter(|resource| resource.anything_to_take() && wanted(resource))
             .map(|resource| (resource.position, from.distance_to(&resource.position)))
             .filter(|(_, distance)| *distance <= radius)
@@ -985,7 +1070,7 @@ impl Simulation {
         let now = self.current_turn;
         let after_anything_edible = wanted == ResourceType::Food;
 
-        self.world.nodes_near(here, Self::FORAGE_RADIUS).any(|resource| {
+        self.nodes_known_to(agent, here, Self::FORAGE_RADIUS).any(|resource| {
             if !resource.anything_to_take() {
                 return false;
             }
@@ -1061,8 +1146,7 @@ impl Simulation {
         let here = Position::new(agent_position.0, agent_position.1);
         let now = self.current_turn;
 
-        self.world
-            .nodes_near(here, Self::ALREADY_STANDING_HERE)
+        self.nodes_known_to(agent, here, Self::ALREADY_STANDING_HERE)
             .filter(|resource| resource.anything_to_take())
             .filter(|resource| here.distance_to(&resource.position) <= Self::ALREADY_STANDING_HERE)
             .filter(|resource| {

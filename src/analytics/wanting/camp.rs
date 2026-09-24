@@ -90,7 +90,7 @@ impl Simulation {
         // The nearest place that answers it, however far off - this is a
         // decision to move house, so the ordinary foraging radius does not
         // apply
-        let there = self.nearest_resource_within(agent_position, Self::HOW_FAR_A_PEOPLE_WILL_MOVE, |resource| {
+        let there = self.nearest_resource_within(agent, agent_position, Self::HOW_FAR_A_PEOPLE_WILL_MOVE, |resource| {
             resource.resource_type == wanted
                 || (wanted == ResourceType::Food
                     && Self::edible_item_for(resource.resource_type).is_some())
@@ -192,8 +192,7 @@ impl Simulation {
         let here = crate::world::Position::new(agent_position.0, agent_position.1);
 
         let (there, carrying) = self
-            .world
-            .nodes_near(here, Self::HOW_FAR_A_PEOPLE_WILL_MOVE)
+            .nodes_known_to(agent, here, Self::HOW_FAR_A_PEOPLE_WILL_MOVE)
             .filter(|resource| resource.amount > 0)
             .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
             .map(|resource| (resource.position, here.distance_to(&resource.position), resource.amount))

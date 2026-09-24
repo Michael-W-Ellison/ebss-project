@@ -610,8 +610,7 @@ impl Simulation {
         // ever tried anything: sixteen tiles in ten thousand is not a thing
         // that happens by accident.
         let strange = self
-            .world
-            .nodes_near(here, Self::FORAGE_RADIUS)
+            .nodes_known_to(agent, here, Self::FORAGE_RADIUS)
             .filter(|resource| {
                 resource.resource_type == ResourceType::StrangePlant && resource.amount > 0
             })

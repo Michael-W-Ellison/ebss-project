@@ -245,7 +245,11 @@ impl Simulation {
         // prices a trip.
         let mut nearest_food: Option<(usize, u32)> = None;
         let mut best_worth: f32 = 0.0;
-        for i in self.world.node_numbers_near(agent_pos, Self::FORAGE_RADIUS) {
+        for i in self.nodes_this_one_knows_of(
+            &self.population.agents[agent_index],
+            agent_pos,
+            Self::FORAGE_RADIUS,
+        ) {
             let resource = &self.world.resources[i];
             if Self::edible_item_for(resource.resource_type).is_some() && resource.anything_to_take() {
                 let distance = agent_pos.distance_to(&resource.position);

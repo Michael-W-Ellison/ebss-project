@@ -298,7 +298,12 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // move: no field ripens inside two and a half days. Over a year a farmer
     // waits for the crop instead of picking at it green, and walks to fewer
     // fields that have nothing on them he may take.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 586_618;
+    // And up 6.6% for #250, where nobody sets out for anything they cannot
+    // see, remember, smell or reach. The short count does not move: nothing
+    // in the first two and a half days is chosen from past what a man can
+    // see. Over a year the search for the best food anywhere is what moves,
+    // because it read the whole map and now reads a man's memory.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 625_350;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

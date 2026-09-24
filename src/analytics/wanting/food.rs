@@ -127,7 +127,7 @@ impl Simulation {
         };
 
         let water_in_reach = self
-            .nearest_resource_within(agent_position, Self::FORAGE_RADIUS, drinkable)
+            .nearest_resource_within(agent, agent_position, Self::FORAGE_RADIUS, drinkable)
             .is_some();
 
         if carrying_water || water_in_reach {
@@ -193,7 +193,7 @@ impl Simulation {
 
         let would_drink_the_sea = agent.would_i_drink_the_sea();
 
-        self.nearest_resource_within(agent_position, Self::FORAGE_RADIUS, |resource| {
+        self.nearest_resource_within(agent, agent_position, Self::FORAGE_RADIUS, |resource| {
             if resource.resource_type != ResourceType::Water {
                 return false;
             }
@@ -314,7 +314,7 @@ impl Simulation {
 
         // Anything edible within foraging reach can simply be eaten
         if self
-            .nearest_edible_within(agent_position, Self::FORAGE_RADIUS)
+            .nearest_edible_within(agent, agent_position, Self::FORAGE_RADIUS)
             .is_some()
         {
             return Some(Action::Eat { food_type: "generic".to_string() });
@@ -631,7 +631,7 @@ impl Simulation {
 
         let mut best: Option<(Position, f32)> = None;
 
-        for resource in self.world.resources.iter() {
+        for resource in self.nodes_known_to(agent, here, u32::MAX) {
             if !resource.anything_to_take() {
                 continue;
             }
@@ -1001,7 +1001,7 @@ impl Simulation {
 
         // No wood, but trees within reach: fetch some
         if self
-            .nearest_resource_within(agent_position, Self::FORAGE_RADIUS, |resource| {
+            .nearest_resource_within(agent, agent_position, Self::FORAGE_RADIUS, |resource| {
                 resource.resource_type == crate::world::ResourceType::Wood
             })
             .is_some()
@@ -1017,10 +1017,11 @@ impl Simulation {
     /// Position of the closest edible resource within `radius` walking steps
     pub(in crate::analytics) fn nearest_edible_within(
         &self,
+        agent: &crate::agents::Agent,
         position: (i32, i32, i32),
         radius: u32,
     ) -> Option<crate::world::Position> {
-        self.nearest_resource_within(position, radius, |resource| {
+        self.nearest_resource_within(agent, position, radius, |resource| {
             Self::edible_item_for(resource.resource_type).is_some()
         })
     }
@@ -1048,8 +1049,7 @@ impl Simulation {
         let now = self.current_turn;
 
         let best = self
-            .world
-            .nodes_near(here, radius)
+            .nodes_known_to(agent, here, radius)
             .filter(|resource| resource.anything_to_take())
             .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
             .filter(|resource| here.distance_to(&resource.position) <= radius)
@@ -1073,7 +1073,7 @@ impl Simulation {
             })
             .map(|resource| resource.position);
 
-        best.or_else(|| self.nearest_edible_within(position, radius))
+        best.or_else(|| self.nearest_edible_within(agent, position, radius))
     }
 
     /// How much further away a place feels for having gone badly.

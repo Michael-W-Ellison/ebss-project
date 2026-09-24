@@ -28,12 +28,20 @@ use crate::environment::seasons::Season;
 /// How far from every living person a node has to be before it sleeps, in
 /// cells either way.
 ///
-/// The furthest anything anybody decides reads a node from is sixty cells -
-/// `HOW_FAR_A_PEOPLE_WILL_MOVE`, which is where a settlement looks for a new
-/// camp - and a person walks at most a cell a turn, forty-eight a day. A node
-/// is only brought up to date once a day, so what has to hold is that nobody
-/// can come within sixty of a node that slept through this morning's pass
-/// before the next one wakes it: sixty and forty-eight, and some over.
+/// The furthest anybody looks for something they have not already been told
+/// of or seen is sixty cells - `HOW_FAR_A_PEOPLE_WILL_MOVE`, which is where a
+/// settlement looks for a new camp - and a person walks at most a cell a turn,
+/// forty-eight a day. A node is only brought up to date once a day, so what
+/// has to hold is that nobody can come within sixty of a node that slept
+/// through this morning's pass before the next one wakes it: sixty and
+/// forty-eight, and some over.
+///
+/// A place somebody *remembers* can be further off than that - the search for
+/// the best food anywhere goes as far as a man's memory does - and a node that
+/// far off may be asleep, so it is read as it stood when it fell asleep rather
+/// than as it stands today. Which is roughly what the man remembers of it; but
+/// it is the one way a sleeping node can make a decision come out differently
+/// from a world where nothing sleeps. See ISSUES_FOUND #250.
 pub const FAR_ENOUGH_TO_SLEEP: i32 = 128;
 
 /// The side of the patches of map that are woken or left asleep together.

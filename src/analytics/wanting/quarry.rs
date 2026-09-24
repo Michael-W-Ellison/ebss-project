@@ -364,8 +364,8 @@ impl Simulation {
         // discounted by how far it is. A river in the run is worth crossing a
         // settlement for and an empty pool next door is not.
         let (best, _) = self
-            .world
-            .nodes_near(
+            .nodes_known_to(
+                agent,
                 crate::world::Position::new(agent_position.0, agent_position.1),
                 Self::WORTH_WALKING_TO_WATER as u32,
             )

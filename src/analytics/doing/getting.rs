@@ -193,7 +193,11 @@ impl Simulation {
                 .is_some_and(|tile| tile.terrain.is_the_water_salt())
         };
 
-        for i in self.world.node_numbers_near(agent_pos, Self::FORAGE_RADIUS) {
+        for i in self.nodes_this_one_knows_of(
+            &self.population.agents[agent_index],
+            agent_pos,
+            Self::FORAGE_RADIUS,
+        ) {
             let resource = &self.world.resources[i];
             let matches_request = (resource.resource_type == resource_type_enum
                 || (gathering_food

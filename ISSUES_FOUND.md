@@ -19866,3 +19866,108 @@ to find the ones within a few dozen cells.
    restricted to where people are, or triggered by the harvest that emptied it.
 3. **The animals' turn**, which is most of the world's own time. At 0.37 ms a
    beast a day it is likely searching for forage without an index too.
+
+### 250. Nobody reads the whole map to find a node, and nobody sets out for what they could not know is there
+
+"Agents should not be scanning the whole map. They should be relying on their
+memory and eye sight to find nodes."
+
+Two changes, committed separately because one is exact and the other is not.
+
+#### 1. The nodes are filed by where they stand (exact)
+
+Every agent-side question about the ground walked the whole node list and threw
+away what was too far off: the gather and forage executors, every "is there
+any X within reach" in the decision layer, the camp-moving search, fishing,
+field work, the sight pass that keeps memories current (three full walks per
+agent per turn), the exploration pass (a full walk **per newly seen tile**),
+and the smell pass (every smelling node on the map against every agent).
+
+`world::node_index` files node numbers by 8-cell patch. `World::nodes_near`
+and `nodes_on` read only the patches round the question and hand back nodes
+**in list order**, so every answer, down to which of two equal candidates
+comes first, is the one the whole-list walk gave. A year on seeds 0, 7 and
+4242 has the same fingerprint and the same dice-draw count before and after.
+
+Keeping the file right: a running world adds and removes nodes only through
+`World::put_a_node_down` / `take_a_node_up`; the world refiles after its own
+removals and at the start of every simulation turn. A list changed by hand (as
+tests do) no longer matches the file's count or last position, and questions
+fall back to walking the list until the next refiling - slower, still right.
+
+The smell pass now asks each nose only about ground within the reach of the
+strongest raw smell (`ResourceType::THE_STRONGEST_RAW_SMELL`), in the same
+order as before.
+
+#### 2. What an agent goes after is what it knows of (behaviour change)
+
+`Simulation::nodes_this_one_knows_of`: a node is somewhere to go only if the
+agent can **see** it (within `sight_range`, the circle the exploration pass
+looks over), **remembers** it (a place in `known_resources`, seen or told -
+which is what makes being told worth anything), **smells** it (the source of a
+food or water scent it is picking up) or has it **to hand** (its tile and the
+four beside it). Every search for somewhere to go uses it: both executors,
+`nearest_resource_within` and everything built on it, the best-food-anywhere
+search, the camp move, fishing, curiosity, strange plants.
+
+For a sighted agent this changes nothing inside 25 cells, since every
+25-step search fits inside the 25-cell sight circle. What changes:
+
+- **The best food anywhere** read the whole map. Now it reads what the agent
+  can see plus what it remembers - at most about a hundred places
+  (`WHAT_A_MAN_CAN_HOLD_IN_MIND`).
+- **Moving camp** (60 cells) and **clothing materials** (40) reach past sight,
+  so beyond 25 cells they go only to places somebody has seen or been told of.
+- **A blind agent** knew where everything within 25 cells was. It now knows
+  what it has been told, what it smells and what is under its hand.
+
+Measured on the usual 12 paired seeds, a year each, beasts out:
+
+| | person-turns | emptied |
+|---|---|---|
+| before (#247-#249, identical behaviour) | 2,012,190 | 3 of 12 |
+| now | 2,030,642 (+0.9%) | 6 of 12 |
+
+Within noise: seed-to-seed spread is about ±20%, so the total's standard error
+is about 3.5%, and "emptied" is noise (#239). Fields 663 against 691, gathers
+313,268 against 318,832. The year's roll count for seed 0 moves 586,618 ->
+625,350; the 120-turn count does not.
+
+#### What it bought
+
+Release build, 12 people unless stated, ms a simulated day, same machine and
+session:
+
+| map | before | index only | index + knowledge |
+|---|---|---|---|
+| 50 x 50 | 89.5 | 90.2 | 97.8 |
+| 400 x 400 | 694.5 | 356.3 | 359.0 |
+| 800 x 800 | 4,392 | 361.6 | 383.1 |
+| 800 x 800, 48 people | 16,219 | 1,026 | 1,219 |
+
+Twelve to sixteen times on the 800-cell map, and the cost of a person no longer
+grows with the map: 400 and 800 cells now cost the same. What is left there is
+mostly the world's own passes - the animals (about 160 ms a day at 800 cells,
+#249) and `remove_depleted_resources` walking every node every turn.
+
+#### One thing it does not make exact
+
+`world::sleeping` argued that nothing reads a node further than 60 cells from
+anybody. A remembered place can be further off than that: a trip's worth of
+roots pays for about four thousand paces of walking, so a place a man remembers
+can win the best-food search from any distance. If it is past
+`FAR_ENOUGH_TO_SLEEP` it may be asleep, and is read as it stood when it fell
+asleep. The old whole-map search did the same for every node on the map; now it
+is only remembered ones, and it happens only on maps over 128 cells. A sleeping
+node's amount is roughly what the man remembers of it. Still, it is the one way
+a sleeping node can make a decision come out differently from a world where
+nothing sleeps. The exact fix would be to wake a node when somebody decides to
+walk to it.
+
+#### Still to do, in order
+
+1. `remove_depleted_resources` only when a hand empties a seam, not a walk of
+   every node every turn.
+2. The animals' turn, which is now most of a big map's time.
+3. The standing reds are unchanged: `a_settlement_still_raises_children_late_on`
+   and `the_children_of_a_settlement_live_past_infancy`.
