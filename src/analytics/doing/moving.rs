@@ -70,6 +70,40 @@ impl Simulation {
 
         // Check if already at target (including Z-axis)
         if current_2d == target_2d && current_pos.2 == target.2 {
+            // Counted, because a walk to where you are standing is a turn
+            // that bought nothing and is invisible to every other
+            // instrument: it is booked as a `Move` and it succeeds.
+            // **Counted, because nothing else could see it.**
+            //
+            // A walk to the tile the agent is already standing on is booked
+            // as a `Move`, costs the whole turn, and returns *success* - so
+            // it appears in no refusal tally anywhere. It is the one wasted
+            // turn in this model that no instrument reached, which is why six
+            // passes over the turn budget went past it.
+            //
+            // Measured over three seeded settlements across the hungry gap,
+            // by this counter, which writes to a tally nothing reads for
+            // behaviour and so does not move the run: **15,296 of 99,046
+            // person-turns - 15.4% of them** - against `Eat` at 3.6% and the
+            // store at 1.6%. The other half of the same reading: a body
+            // covers ten paces a person-day and nets 1.9, so five paces in
+            // six are undone.
+            //
+            // By whether the agent was on an errand at the time: no errand
+            // 6,910, Rest 4,171, Preparedness 1,948, Curiosity 1,049,
+            // Reproduction 828.
+            //
+            // See ISSUES_FOUND #234. The counter stays whatever is done about
+            // the waste, because a thing that cannot be seen comes back.
+            let label = match self.population.agents[agent_index].errand.as_ref() {
+                Some(errand) => format!("move: already there, errand for {:?}", errand.for_drive),
+                None => "move: already there, no errand".to_string(),
+            };
+            *self.what_a_threat_came_to.entry(label).or_insert(0) += 1;
+            *self
+                .what_a_threat_came_to
+                .entry("move: already there".to_string())
+                .or_insert(0) += 1;
             return ActionResult::success()
                 .with_message("Already at destination".to_string());
         }

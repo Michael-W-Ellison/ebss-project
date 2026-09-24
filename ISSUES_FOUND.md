@@ -17205,3 +17205,2230 @@ That is the finding rather than the objection to it: **something in the
 predator layer is thirty times short of a living, and a wrong unit was paying
 the difference.** Filed rather than papered over, because paying it again with
 `TICKS_PER_DAY` is how it stayed hidden for a month.
+
+### 219. Nobody in this world ever grew up, and nobody ever died of old age: a body aged a minute per half hour lived
+
+Found while chasing two standing failures that claim a settlement holds people
+born into it. It is not what makes those fail - see the end of this entry -
+but it is a defect in its own right and a plain one.
+
+`AgentState::age` is counted in **ticks**. It is seeded that way
+(`agent.state.age = years * TICKS_PER_YEAR`), read that way
+(`LifeStage::from_age` divides by `TICKS_PER_YEAR`, `years_old` likewise), and
+compared against a `max_age` derived the same way
+(`YEARS_BEFORE_OLD_AGE_TAKES_YOU * TICKS_PER_YEAR`). Four places agree on the
+unit.
+
+The increment did not:
+
+```rust
+self.age += 1;
+self.life_stage = LifeStage::from_age(self.age);
+```
+
+`age_turn_with_modifier` is called once a step, and a step is thirty ticks. So
+a body aged one minute per half hour lived. Measured, by running one agent
+through a day of steps exactly as `Population::take_a_turn` does it:
+
+    a day of 48 passes moved `age` by 48
+    a day is 1,440 ticks  ->  thirty times too slow
+
+At that rate reaching sixteen takes **four hundred and eighty simulated
+years**. Nobody in this model has ever grown up, and since `is_too_old` reads
+the same counter against the same `max_age`, nobody has ever died of old age
+either - which is worth putting beside #201, "nothing caps it, and nine deaths
+in ten are illness". Old age was not failing to cap anything because the cap
+was wrong. It was never reached.
+
+It is `+= TICKS_BETWEEN_PLANS` now, and a day of steps moves a body by 1,440.
+
+#### Two things worth saying about how it was missed
+
+**It is the same defect 974bc32 described fixing, and that commit found six
+counters.** Its own message says: "`MINUTES_PER_TURN` was
+`MINUTES_PER_DAY / TICKS_PER_DAY`, which is right while a tick is a step and
+becomes 1 the moment a tick is a minute. Every body in the model would have
+advanced one minute per half hour lived - thirty times too slow, and nothing
+would have failed to compile." That was written about the physiology's clock,
+which was fixed. `AgentState::age` is a second body clock, four hundred lines
+away, and was not one of the six.
+
+**And the audit of #218 missed it too.** That sweep's third pattern was "every
+clock counter's own advance", and it was run as a grep for counters named for
+turns, ticks and `now`. This one is named `age`. The lesson is not to grep
+harder - it is that a counter's *name* is not what makes it a clock. What makes
+it a clock is that something divides it by `TICKS_PER_YEAR`, and that is what
+the next sweep should look for: not the increments, but the places that convert
+a stored number into a span of real time, and then what increments them.
+
+`lifecycle_and_survival_tests::test_agent_ages_over_time` asserted
+`initial_age + 1` and so pinned the defect rather than the behaviour. It now
+asserts the step *and* the day, because the step alone is the thing that was
+wrong and a day is the thing a person can check.
+
+#### And what it is not: the two tests that led here are still #167's question
+
+`longevity_tests::a_settlement_still_raises_children_late_on` and
+`survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` are
+still red with the ageing corrected, and the reason is not ageing. It is the
+one #167 named and measured, and the instrument it built says so directly.
+
+`Population::take_a_turn` already tallies where reproduction turns people away.
+Twelve founders, six thousand steps, seed 0:
+
+    step   500  alive 12  born-here 0  | could not feed a child  6,000
+    step  3000  alive 10  born-here 0  | could not feed a child 33,456
+    step  6000  alive 10  born-here 0  | could not feed a child 63,456
+
+**Sixty-three thousand refusals and not one for any other reason.** That is
+every living adult, every step, for four months of simulated time, while the
+settlement itself sits perfectly stable at ten to twelve alive. They are not
+starving. They simply never judge that they could feed a child.
+
+Weighing the gate against what the best-placed agent in the world actually
+holds:
+
+| | |
+|---|---|
+| the land gives nothing for | 75 days |
+| a grown body burns | 1,440 units a day |
+| so the gate wants | 129,600 units |
+| best-placed agent holds | 8,500 units |
+
+**A factor of fifteen.** #167 measured this same gate at fifty-three, so the
+store has improved three and a half times over since - which is #240, #241,
+#213 and the work after them doing their job - and it is still a long way from
+a gate that asks for a winter's food for two.
+
+The units were checked again and they are the same on both sides:
+`UNITS_BURNED_IN_AN_ORDINARY_DAY` is `MINUTES_PER_DAY` on purpose, one unit a
+minute, "which is why a day and a day's food are the same number". This is a
+real shortfall and not a scale mix-up, exactly as #167 found.
+
+So the conclusion stands unchanged and is worth restating rather than
+rediscovering a third time: **this is not a test problem and it is not a gate
+problem.** `expects_to_be_able_to_feed_a_child` was written deliberately at
+#48 and loosening it would undo a decision made on measurement. The binding
+constraint is upstream, and the number to watch is the ratio: fifty-three at
+#167, fifteen now.
+
+Both tests are correct and should stay red until the store fills. They are
+recorded in `STANDING_FAILURES.md` with that reason.
+
+### 220. A mill is built where the builder was standing, because the walk to the site was priced in a currency the site could not match
+
+`test_production_chain_buildings_cluster` asks that a mill be built near the
+farm it grinds for rather than next to whoever happened to be carrying the
+stone. It has been in the standing failures for as long as the register goes
+back.
+
+The placement machinery knows the answer. `infer_criteria_from_building` maps
+`Mill | Bakery => NearRelatedBuilding`, `BuildingType::prerequisites` maps
+`Mill => vec![Farm]`, and `score_location` pays `200 / (1 + distance)` for
+being near a prerequisite under a comment that says "strongly prefer being
+near prerequisites". None of that is wrong.
+
+What was wrong is what it was weighed against. Every criteria score in this
+file has the form `weight / (1 + distance)` and therefore **saturates** - it
+cannot exceed its weight however good the site. The walk to the site was
+`distance_to_agent * 2.0`, which **does not saturate**, across a search radius
+of thirty. Two terms in two different currencies, and past a tile or so the
+linear one always wins.
+
+Measured on the test's own fixture - a farm at (20,20), a builder at (50,50):
+
+| site | criteria | walk | total |
+|---|---|---|---|
+| beside the farm | 100.0 | 83.4 | **16.6** |
+| diagonal from it | 82.8 | 82.0 | **0.8** |
+| two tiles off | 66.7 | 84.8 | **-18.1** |
+| where the builder stood | 4.6 | 0.0 | **4.6** |
+
+**Only the four tiles orthogonally touching the farm could beat standing
+still**, and only just. So a production chain clustered if a passable tile
+happened to be adjacent to its prerequisite, and collapsed entirely if none
+was - which is not a placement rule, it is a terrain roll.
+
+That is also why the test looked so strange to chase: the same code put the
+mill at (21,20) in one binary and (49,49) in another, because the two rolled
+different terrain.
+
+#### The fix
+
+A building is put up once and stands for years. What it is next to is a
+permanent fact about it; how far the builder walked is a single afternoon. So
+the walk is a real cost and a **bounded** one, in the same shape as everything
+it is weighed against:
+
+```rust
+const WHAT_A_WALK_TO_THE_SITE_IS_WORTH: f32 = 40.0;
+
+fn what_the_walk_costs(distance_to_agent: f32) -> f32 {
+    Self::WHAT_A_WALK_TO_THE_SITE_IS_WORTH
+        * (1.0 - 1.0 / (1.0 + distance_to_agent.max(0.0)))
+}
+```
+
+Only `PlacementStrategy::NearResources` uses it - the strategy whose whole
+point is proximity to what a building needs.
+
+#### Measured over twenty-four worlds
+
+The mill's distance from its farm, same fixture, seeds 0 to 23:
+
+| | within 8 of the farm | nearer the farm than the builder | median | worst |
+|---|---|---|---|---|
+| before | 22 of 24 | 22 of 24 | 1.0 | **41.0** |
+| after | **24 of 24** | **24 of 24** | 1.0 | **2.0** |
+
+The old rule was right most of the time and catastrophically wrong the rest,
+which is the worst shape a rule can have: it looks correct until the world
+does not cooperate. The test is seeded now, and its docstring carries both
+rows, so the next person to read it knows what it is guarding rather than
+guessing.
+
+All seven tests in `agent_building_integration_tests` pass, including
+`test_agent_uses_spatial_planner_for_building`, which asks the opposite thing -
+that a workshop stay within twenty of its builder - and was the one at risk
+from making a distant site cheaper.
+
+#### Noted and not fixed: the criteria are worked out twice
+
+`analytics::determine_placement_approach` returns a `(PlacementCriteria,
+PlacementStrategy)` pair, and `execute_building_action` uses the strategy and
+passes the criteria to a `debug!` and nowhere else - because
+`find_optimal_location_for_agent` derives the criteria again for itself with
+`infer_criteria_from_building`. Two tables saying the same thing, in two
+modules, and only one of them load-bearing. They agree today. This is the
+shape of #231 ("is this food" answered eight ways) and wants the same
+treatment: one table, one caller.
+
+### 221. No fire was ever lit in any world, because a person keeps six sticks and a fire costs ten
+
+`cooking_tests::an_agent_lights_a_fire_and_cooks_on_it` gives an agent forty
+wood, twenty fish and a practised hand, runs four hundred turns and watches for
+anything burning. Nothing ever burns. Chasing it turned up three separate
+things, of which one is a real deadlock, one is a fixture asking for something
+the model forbids, and one is the model doing exactly what it was told.
+
+#### The deadlock
+
+`Agent::ENOUGH_TO_HAND` is six - "how much of a thing an agent keeps on its
+person before the rest is spare" - and `what_i_can_spare` banks everything
+above it. A campfire is built from `FIRE_BUILD_WOOD` and fed with
+`FIRE_FUEL_WOOD`, five and five.
+
+**Six kept against ten needed.** Measured on the test's own fixture, the agent
+banks thirty-four of its forty wood on its *second* turn and is four short of
+a fire for the rest of its life.
+
+And it is a deadlock rather than a delay, which is what makes it worth an
+entry. Relighting a cold hearth costs only the fuel, five, which six would
+cover - but there is no hearth to relight, because building the first one
+costs ten and nobody ever has ten. So the world contains no heat sources at
+all, ever, and everything that eats raw gives up about two thirds of what is
+in it.
+
+The two numbers were chosen in different files by different hands and never
+compared. What you keep of a material has to be at least what the commonest
+thing you do with it costs, so `ENOUGH_WOOD_TO_HAND` is now
+`WHAT_BUILDING_A_FIRE_TAKES + WHAT_FEEDING_A_FIRE_TAKES`, stated on `Agent`
+where the keeping happens, and `Simulation::FIRE_BUILD_WOOD` and
+`FIRE_FUEL_WOOD` derive from it. One spelling.
+
+#### The fixture asked for something the model forbids
+
+A whole fish does not go over a fire. The test immediately below this one -
+`an_agent_with_nothing_worth_cooking_lights_no_fire` - asserts exactly that,
+and says why: it has to be cut into portions first (#153). Cutting wants an
+edge, and `what_flesh_i_should_cut_up` refuses without one on purpose, because
+choosing to cut bare-handed spends the turn and comes straight back refused
+(#190).
+
+The fixture gave wood, fish and cooking skill, and **no knife**. So it handed
+the agent twenty fish it could not cook and a fire it had no reason to light,
+and then asked why it had not lit one. It has a `stoneknife` now.
+
+With both of those put right, a fire is lit - measured, and the probe that
+found it went from `ever lit: false` to `ever lit: true`.
+
+#### And the third thing is not a defect
+
+It is still red, and the reason is that the model is doing what it was told.
+Over twenty-four seeded worlds of four hundred turns, with the blade and the
+firewood both sorted:
+
+| | |
+|---|---|
+| worlds where a fire was lit | **5 of 24** |
+| first lit on turn | min 131, median 176, max 387 |
+| Dry chosen | 486 |
+| Cook chosen | 119 |
+| LightFire chosen | 6 |
+
+**The agent dries the fish four times more often than it cooks them**, and it
+is supposed to. The cooking branch is gated on `!putting_by` under a comment
+that says so in as many words: "not on a harvest, because cooking a thing
+stops it being dried, and drying is worth twenty times what cooking is." An
+agent handed twenty fish and nothing else to do is the archetypal harvest.
+
+So the test's claim and the model's decision disagree, and that is a question
+about what the model should do rather than a bug to fix. It is left red and
+recorded in `STANDING_FAILURES.md` with the numbers, because seeding it to one
+of the five worlds where a fire happens to get lit would be picking the answer.
+
+### 222. Two tests that measured the wrong thing: a harvest weighed through a full pack, and a thirst counted in the wrong unit
+
+Both were in the standing failures, both looked like model defects, and in
+both the model was right.
+
+#### The practised hand brought back nothing, because the pack was already full
+
+`specialisation_tests::a_dedicated_farmer_brings_back_more_than_a_casual_one`
+stands two agents on the same patch - one at Herbalism -8, one at +8 - has
+each gather three hundred times, and compares what the patch lost. It reported
+**0 against 25**: the practised hand took nothing and the casual one took
+twenty five.
+
+Not smaller. Nothing. And backwards.
+
+The gathering code is fine - `harvest_amount` is `.max(1)`, so three hundred
+trips cannot take nought unless something upstream stops them. What stops them
+is the pack. Instrumented, both arms end identically:
+
+    level -8: ok 300 err 0 | node took 25 | pack food 77, weight 42.0/42.0
+    level  8: ok 300 err 0 | node took  0 | pack food 77, weight 42.0/42.0
+
+**A pack holds forty-two and a founder sets out with food already in it.**
+Within a handful of trips both hands are full, every remaining trip succeeds
+and takes nothing, and what the patch lost is no longer a measure of what
+either hand brought back. It is a measure of how quickly each filled a bag -
+and the better hand fills it sooner, which is why the answer came out
+backwards.
+
+The agent carries its load home between trips now. On the same fixture:
+
+| | a season's harvest |
+|---|---|
+| casual hand, Herbalism -8 | 367 |
+| practised hand, Herbalism +8 | **913** |
+| ratio | **2.49** |
+
+Which is what the code says it does - "a practised hand ... brings back up to
+twice what a beginner does". It always did. Nobody could see it through a full
+pack.
+
+#### The waterskin was being drunk from all along
+
+`thirst_tests::agents_drink_from_a_carried_container` gives an agent a full
+waterskin, removes every water source, runs forty steps and asserts
+`turns_without_water < 40`. It reported **1020 turns dry**.
+
+`turns_without_water` is `current_turn - last_drank_turn`, and the world clock
+counts **ticks** - thirty to a step. Forty steps is 1,200 ticks. So the
+assertion compared a tick count against a step count, and was asking for a
+drink in the last two minutes of a twenty-hour run.
+
+And the number it reported was the answer: 1,200 less 1,020 is 180, so the
+agent drank at tick 180 - step six - and was fine for the rest of it. The test
+was holding the evidence that it passed.
+
+The bound is `STEPS * TICKS_BETWEEN_PLANS` now, which is the honest statement
+of the claim: less than the whole run means it drank at some point. Same
+family as #218 and #219, in a test bound rather than in the model.
+
+#### What these two have in common
+
+Neither was a threshold that wanted loosening and neither was a model defect.
+In both, the quantity being measured was not the quantity the claim was about:
+a node's depletion standing in for a harvest, a tick count standing in for a
+step count. Both had been red long enough to be treated as known, and both
+were reporting their own diagnosis in the failure message the whole time -
+"0 against 25" and "1020 turns dry" are each one arithmetic step from the
+answer.
+
+### 223. A strip of dried meat was as good a drink as the wet meat it was cut from
+
+The fire and the drying rack are for different jobs. Cooking gives up more of
+what is in a thing; drying makes it keep. The model already had both halves,
+and they were already the right way round:
+
+| | eaten | kept |
+|---|---|---|
+| Cooked | **0.95** utilization | 0.8 spoilage rate |
+| Dried | 0.85 utilization | **0.05** spoilage rate |
+
+Cooking is twelve per cent better at the table and drying is sixteen times
+better on the shelf. Neither is simply better, which is as it should be.
+
+What was missing is the third side of it: **drying takes the water out, and
+eating it dry costs the eater that water back.**
+
+#### What it did before
+
+`FoodData::effective_nutrition` applied the preparation's utilization to
+energy, protein and micronutrients, and left `water_content` alone. So a strip
+of dried meat carried the same 0.6 water as the wet meat it was cut from, and
+the four sites that read it -
+
+```rust
+if nutrition.water_content > 0.3 {
+    thirst.decrease(nutrition.water_content * 0.1);
+}
+```
+
+- slaked thirst for it exactly as if it were fresh. `decrease` was the only
+verb any of them used, so there was no way for a food to cost water even in
+principle.
+
+#### What it does now
+
+Two changes, and the second follows from the first.
+
+`effective_nutrition` scales `water_content` by
+`PreparationState::what_it_does_to_the_weight`, which is the function that
+already says what drying does - 0.35 for dried, 0.8 for cooked, 1.0 for raw.
+That is not a new number, it is the existing one applied where it belonged:
+the water drying drove off is gone, and the weight already knew.
+
+And `FoodData::what_it_does_to_thirst` states the whole rule once, signed:
+
+- above `WET_ENOUGH_TO_BE_A_DRINK`, unchanged - what is in it slakes thirst,
+  so nothing that was already a drink stops being one.
+- below it, the cost is the water actually driven off rather than a shortfall
+  against the threshold, because that is the water the gut has to put back.
+
+For meat at 0.6 water:
+
+| | thirst |
+|---|---|
+| raw | **+0.060** (unchanged) |
+| cooked | **+0.048** - a fire drives some water off too |
+| dried | **−0.039** - a debt against the waterskin |
+
+Two of the four call sites are foraging - fruit eaten off the bush, straight
+off the template with no preparation - so they keep the old rule and are
+unaffected by any of this. The two that eat from a pack go through the new one.
+
+`nutrition::tests::a_fire_feeds_you_and_a_drying_rack_keeps_it` pins all three
+facts together, so that moving any one of them has to be deliberate.
+
+#### And a thing this did not explain
+
+`cooking_tests::an_agent_lights_a_fire_and_cooks_on_it` is still red, and the
+obvious reading of #221's finding turns out to be wrong. `cooking_action` is
+gated on `!putting_by`, and `is_this_lot_for_the_store` returns false unless
+the season is autumn - so a world set in midsummer should cook freely.
+Measured over twenty-four worlds either way:
+
+| | fire lit | Dry | Cook | LightFire |
+|---|---|---|---|---|
+| midsummer | **0 of 24** | 341 | 83 | 0 |
+| autumn | 1 of 24 | 395 | 46 | 1 |
+
+Summer is *worse*, and `Cook` is chosen eighty-three times while `LightFire`
+is chosen none - so something between deciding to cook and there being a fire
+to cook on is unaccounted for. That is not the season and it is not the
+fixture. It is recorded here rather than guessed at, and the test carries the
+numbers in its docstring.
+
+**Answered in #224**, and it was three things rather than one.
+
+### 224. Cooking wanted a fire, and the only thing that knew how to get one was answering a different need
+
+Picking up exactly where #223 left off. The measurement recorded there was
+that `Cook` was chosen eighty-three times across twenty-four worlds in which
+no fire was ever lit, and `LightFire` none, and that "something between
+deciding to cook and there being a fire to cook on is unaccounted for".
+
+It is accounted for now, and it is three separate things.
+
+#### One: nothing checked whether there was a fire
+
+`Simulation::an_action_for` is the inverse of `Agent::what_was_tried` - the
+function curiosity and the verb matrix go through to turn a verb into
+something an agent can actually do. Every other verb in it is guarded by
+whatever the executor will ask for: `craft` will not name a step the makings
+cannot carry, `build` will not name a roof that is not a roof, `equip` will
+not name a thing that is not in the pack. The file states the rule in its own
+header - reaching for a verb that cannot be built spends the turn on nothing
+and teaches nothing.
+
+Cooking was the exception:
+
+```rust
+"cook" => Action::Cook { food_type: thing()? },
+```
+
+Any food in the pack, any time, fire or no fire. That is where the
+eighty-three came from, and every one of them was refused by the executor and
+written into `Lessons` as a thing that does not work - so the settlement was
+also busy learning that cooking is useless.
+
+It now asks `nearest_fire_from` first, which is the executor's own predicate.
+Getting a fire when there is none is deliberately *not* done here: this
+function has to round-trip with `what_was_tried`, and returning `LightFire`
+for the verb "cook" would have the agent choose one thing and learn about
+another - which is the "two spellings of one question" fault of #215 and #243.
+
+#### Two: a person tipped the makings of a fire onto the grass
+
+`Agent::what_i_would_set_down` sheds whatever is heaviest when the pack is
+over its limit, holding back only what `is_this_part_of_the_kit` names -
+tools and carriers. Firewood is neither.
+
+Measured on the cooking fixture, an agent handed **forty wood** was down to
+**four by turn six** and never had ten again. A fire is ten sticks
+(`WHAT_BUILDING_A_FIRE_TAKES` five, `WHAT_FEEDING_A_FIRE_TAKES` five, both
+from #221), so from turn six on there was no world in which the question
+"would you like to light a fire" could be answered yes.
+
+`what_stays_in_the_pack` now holds the last `ENOUGH_WOOD_TO_HAND` back from
+shedding, in both the choosing of what to drop and the counting of how much.
+Nought for everything else: shedding is what a body does when it physically
+cannot carry more, and holding six of every kind of rock back would leave
+agents permanently overloaded. Wood is the one case where what is being
+carried is the means to something the carrier wants tonight.
+
+With the floor in, wood holds at ten instead of four.
+
+#### Three, and the one that actually decided it: the chain was under the wrong drive
+
+`cooking_action` chains correctly and always did. It is a ladder - cook where
+you stand, walk to a fire that is burning, light one from the wood in the
+pack, go and cut wood if there is none - and a turn-by-turn probe of the
+fixture shows it returning `Some(LightFire)` on twenty-two of eighty turns,
+with ten wood and cut fish in hand.
+
+It was never once taken, because `cooking_action` answers **Sustenance** and
+the hunger that wants the cooking is **Hunger**. Drives are ranked by
+`how_hard_it_presses`, and a drive under its own threshold returns its bare
+urgency while an active one is multiplied by its band's precedence. Over the
+same eighty turns:
+
+| drive | pressing |
+|---|---|
+| Preparedness | 11.3 rising to 27.0 |
+| Rest | 0.02 to 1.46 |
+| Sustenance | **0.01** |
+
+Sustenance was never within two orders of magnitude of the top, so the arm
+that knew how to get a fire lit was never asked. Meanwhile `food_action`, the
+Hunger arm, had a cooking branch of its own that required a fire to already
+be burning and offered nothing when one was not - so a hungry agent with food,
+wood and no fire had nowhere to go.
+
+Cooking wants a fire the way any work wants its tool, and getting the tool is
+part of the work. `food_action` now lights one where it stands, when the wood
+is already in the pack.
+
+Only that step is taken from the Sustenance ladder. Walking to somebody
+else's fire and going out for wood stay where they are, because a branch that
+can send a hungry man across the valley must not stand in front of eating what
+he is carrying - which is the mistake recorded in that function's own header,
+where putting a want of a bowl at the head of the provisioning branch cost a
+settlement half its winter store.
+
+#### What it moved
+
+`cooking_tests::an_agent_lights_a_fire_and_cooks_on_it`, red since it was
+written, passes. Over the four hundred turns of that fixture: **LightFire 2,
+Cook 17, no Cook refused** - against 0, 83-across-24-worlds, and all of them
+refused.
+
+`afforded_tests::what_is_built_performs_the_verb_it_was_built_from` needed a
+fire in its fixture once "cook" started checking for one. That fixture already
+provides "something to hold, something underfoot, and somebody to talk to, so
+that the target-hungry arms have targets to find"; a lit campfire is the same
+kind of provision, and cooking wants one the way trading wants somebody.
+
+#### A first cut of the keep-back that was a veto, and why it is an ordering
+
+Worth recording, because the fault it caused is one this project has paid for
+before. `what_stays_in_the_pack` was first written as a filter - firewood
+below the keep-back simply never appeared among the things a body would set
+down. That is what `is_this_part_of_the_kit` does for tools and carriers, and
+it looked like the same rule.
+
+It is not the same rule, because of #126. A pack over its limit **refuses
+everything put into it**, so a body that cannot get back under its limit can
+never pick anything up again for the rest of its life. `max_weight` is worked
+out fresh each turn from what the body can lift, and a body that goes hungry
+lifts less - so a man loaded up in his strong summer wakes in November over
+his limit through no act of his own. With firewood vetoed, a man whose whole
+load was eight sticks he could no longer lift stood there holding them.
+
+Four tests caught it, and between them they say the whole thing:
+
+| test | what it saw |
+|---|---|
+| `larder_tests::a_body_that_weakens_sets_down_what_it_can_no_longer_carry` | 8.5 over the limit where nought was wanted |
+| `larder_tests::what_is_set_down_is_still_there_to_be_picked_up` | nothing on the grass |
+| `swap_tests::a_man_still_does_not_shed_his_axe_or_his_basket_to_make_room` | six sticks that would not go down |
+| `clothing_tests::a_cold_agent_ends_up_dressed` | 7 of 24 dressed - men who could not pick the flax up |
+
+The last one is the interesting one: it is not about shedding at all. It went
+red because a frozen pack refuses flax like it refuses everything else, which
+is exactly the shape #126 describes and the reason that finding exists.
+
+It is an ordering now. Anything with something to spare goes on the grass
+before anything that is down to its keep-back, and when there is nothing else
+left the keep-back goes too. A man who cannot lift his sticks puts the sticks
+down and goes cold; he does not stand there holding them until he starves.
+All four are green, and the fire is still lit.
+
+### 225. Every animal in the world walked two cells south-west a turn, because a wander was built out of a signed remainder
+
+`the_land_will_only_carry_so_many` put ten sheep on a fifty by fifty map and
+watched them all die. The register had it down as the predator layer's
+problem - three of the open failures pointed that way - and it is not. There
+are no predators in that fixture at all.
+
+#### What the measurement said
+
+The herd, probed every thirty days:
+
+| day | alive | mean hunger | plants | standing | grazers fed / tried |
+|---|---|---|---|---|---|
+| 0 | 10 | 0.0 | 614 | 40,867 | - |
+| 30 | 20 | 43 | 588 | 40,398 | 78 / 101 |
+| 80 | 23 | 116 | 575 | 40,186 | 173 / 808 |
+| 100 | 22 | 154 | 569 | 40,045 | 210 / 1,242 |
+| 130 | 0 | - | 557 | 39,706 | 245 / 1,519 |
+
+Two things in that table do not belong together. The standing growth on the
+map **barely moves** - 40,867 down to 39,706 over four months, three per cent
+- and the herd starves to death in front of it. And the ratio that says why:
+by the end **only one grazing animal in six finds anything within reach at
+all**, on a map with forty thousand units of forage on it.
+
+So the third column:
+
+| day | where the herd is |
+|---|---|
+| 0 | x 20-24, y 20-21 |
+| 10 | x 8-16, y 5-18 |
+| 20 | x 0-8, y 4-14 |
+| 30 | x -2-4, y -3-6, **five of twenty off the map** |
+| 100 | x 0-11, y -7-2 |
+
+They are put down in the middle of the map and they walk to the corner. Not
+wander - **walk**, in a straight line, in thirty days, and then spend the rest
+of their lives pressed against the edge and partly outside it, where nothing
+grows.
+
+#### What was wrong
+
+```rust
+let offset = (crate::core::dice::any::<i32>() % 5 - 2, ...);
+```
+
+`any::<i32>()` is a draw from the whole signed range, so half of them are
+negative. A remainder in Rust takes the sign of what it divides, so `% 5` is
+**-4 to 4** rather than 0 to 4, and taking two off that is **-6 to 2**. The
+mean is **minus two**, on both axes, every time anything wandered.
+
+Five places wrote it, and all five wrote it the same way:
+
+| | was | wanted |
+|---|---|---|
+| a hungry beast casting about | -6 to 2 | -2 to 2 |
+| a passive beast settling to graze | -3 to 1 | -1 to 1 |
+| an omnivore setting off | -6 to 2 | -2 to 2 |
+| `spawn_patch`, twice | -3r to r | -r to r |
+
+The last is not movement at all: a wood put down at a point stood mostly up
+and to the left of it.
+
+And there was no clamp. Every other way an animal moves holds it on the map -
+the migration pass clamps, the hunt clamps - and the one in the state machine
+did not, so an animal that drifted out stayed out. It could still be pulled
+back by `where_there_is_something_growing`, one cell a turn, against a drift
+of two cells a turn. It never was.
+
+#### What it does now
+
+`dice::a_step_of(reach)` is the one place a wander is drawn, inclusive at both
+ends, and `AnimalManager::let_it_wander` is the one place a beast takes one -
+and clamps to `world_bounds`, which the manager already knew and nothing in
+the state machine had ever asked for.
+
+`dice::tests::a_step_goes_as_far_each_way_and_nowhere_on_average` holds it:
+every cell within reach is reachable, nothing outside it is, and twenty
+thousand steps drift less than a twentieth of a cell.
+
+#### What it moved
+
+The same fixture, same seed:
+
+| | before | after |
+|---|---|---|
+| off the map at day 30 | 5 of 20 | **0** |
+| grazers that find something | 21% | **81%** |
+| what a mouth gets, day 100 | 4.4 of 8.6 wanted | **6.4** |
+| mean hunger at day 83 | 135 of 180 | **68** |
+| herd at day 130 | **dead** | 24 head and growing |
+
+Two of the five open failures came off with it, and neither is the one it was
+filed under:
+
+- `predator_prey_tests::the_land_will_only_carry_so_many` - 0 against 0.
+- `ecology_tests::most_of_what_lived_here_still_lives_here` - eight worlds
+  opened with 468 head and held 107.
+
+Both had been read as the predator layer running on the subsidy #218 took
+away. That reading was wrong, and the note in `STANDING_FAILURES.md` that
+recorded it is corrected: what was wrong with the country was that everything
+living on it was walking off the edge.
+
+#### And what this says about the rest
+
+`predator_prey_tests` and `ecology_tests` are now green end to end - 53 tests,
+including the hunting ones. The predator layer was starving because its prey
+was standing off the map, not because a wolf cannot make a living. #300's
+measurement - `taken` at 2 in month 6 and still 2 in month 60 - was taken in a
+world where the deer had all walked into the corner.
+
+### 226. A settlement that worked thirty-one things out was asked what it knew after everybody in it was dead
+
+`situation_tests::a_settlement_works_things_out_that_nobody_wrote_down` had
+been on the register as "probably downstream of the predator layer - less
+happening in the world to notice". With the predator layer explained away by
+#225 it needed looking at on its own terms, and what it turns out to be is
+neither the model nor the ecology.
+
+#### What it did
+
+Run twelve people for a year and a season, then ask them what they had worked
+out:
+
+```rust
+for _ in 0..(PLANNING_PERIODS_PER_YEAR + 400) {
+    simulation.take_a_turn();
+    if !simulation.population.agents.iter().any(|a| a.state.is_alive) {
+        break;
+    }
+}
+
+let worked_out: usize = simulation.population.agents.iter()
+    .map(|agent| agent.lessons.how_much_i_have_worked_out())
+    .sum();
+```
+
+`Population::turn` takes the dead off the roll - `agents.retain(is_alive)` -
+so by the time the loop breaks there is nobody left to ask and the sum is over
+an empty vector. It does not return a small number. It returns nought, and it
+would return nought however much the settlement had learned.
+
+#### What it was actually doing
+
+Probed turn by turn:
+
+| day | alive | worked out between them |
+|---|---|---|
+| 0 | 12 | 0 |
+| 10 | 12 | 6 |
+| 50 | 12 | 7 |
+| 125 | 12 | 19 |
+| 195 | 12 | **31** |
+| 326 | 1 | 7 |
+| 327 | 0 | 0 |
+
+The settlement works things out from the tenth day and goes on doing it for
+two hundred days. The claim the test makes is true and has been true all
+along. What was wrong is that the reading was taken from its graves.
+
+It now takes the high-water mark while the settlement is alive, which is what
+"a settlement works things out" means, and reports how many turns it lasted
+when it fails - so a future failure says whether nothing was learned or
+nobody lived.
+
+#### And the thing this uncovered, which is not fixed
+
+**A settlement of twelve dies out on day 327.** That is the real finding here
+and it is left red on purpose, in the two tests that own it:
+`survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` and
+`longevity_tests::a_settlement_still_raises_children_late_on`. It is the store
+that never fills - #167, #240, #241, #213 - and it must not be made to go away
+by loosening anything in the learning test.
+
+The general shape is worth naming, because it will be here again: **a
+measurement taken after a die-off reads the survivors, and a total die-off
+leaves no survivors to read.** Any test that runs a settlement out and then
+sums something over `population.agents` is reporting on whoever happened to
+live, and reports nought rather than a failure when nobody did.
+
+### 227. Three people in twelve were standing in the sea, and the pathfinder had put them there
+
+#226 uncovered that a settlement of twelve dies out on day 327 and left it to
+the two tests that own it. This is the first of what is under that, and it is
+not the store.
+
+#### What the dying were doing
+
+Over the last month of the settlement's life, by refusal:
+
+| refusal | count |
+|---|---|
+| `Move: No passable route toward destination (standing on Sea, which is walkable, with 0 ways out)` | **2,975** |
+| `Move: ... (standing on Wetland, which is not walkable, with 0 ways out)` | 910 |
+
+The message says the fault out loud. A man on a sea tile, ringed by fresh
+water, is boxed in on every side: the direct step, a breadth-first search of
+four thousand tiles and all four neighbours have been tried by the time this
+fires. He cannot walk to food. He cannot walk to the store. He starves where
+he is standing, and the pits behind him hold three thousand units the whole
+time.
+
+And they were not passing through. Probed every ten days through the year,
+agents *live* there: three of twelve standing in salt water at once, and one
+of them on tile (15, 30) from day 120 to day 190 - **seventy days in the
+sea.**
+
+#### Two answers to one question, again
+
+```rust
+// Terrain::is_walkable
+TerrainType::Water | TerrainType::Sea => false, // Requires swimming
+```
+
+```rust
+// Simulation::is_passable_tile
+if tile.terrain.terrain_type == TerrainType::Water {
+    return false;
+}
+```
+
+`Terrain::is_walkable` has said what a body can stand on since the sea was
+split off from fresh water for #155. `is_passable_tile` is a second answer to
+the same question, written before that split and never told about it, and it
+is the one the pathfinder asks. So the sea is a place a person may be walked
+to, and `SaltMarsh`, `SaltFlat` and `Farmland` were all added later under the
+same silence.
+
+It asks the terrain now. Adding a terrain cannot make it wrong again, which
+is the whole of the fix: the alternative - naming `Sea` here as well - would
+have been a third answer.
+
+This only governs where a foot may be **put**. Somebody already standing
+somewhere they should not be can still step off, because it is the candidate
+that is asked about and not the ground underneath them.
+
+#### What it moved
+
+One settlement of twelve, same seed, over its whole life:
+
+| | before | after |
+|---|---|---|
+| in the pits at their fullest | 4,476 | **8,178** |
+| standing in salt water | 3 of 12 | 0 |
+| people alive at day 240 | 12, reserve falling | 8, reserve 29,620 |
+| conceptions | 0 | **1** |
+| births | **0** | **1** |
+
+The birth is the one worth pausing on. `how_it_went` had recorded
+`could not feed a child` 178,913 times and **no conception in the history of
+this fixture**; there is now one, and `not of an age to breed` appears for the
+first time, which is a thing only a settlement with children in it can say.
+
+`off_the_map_tests::what_a_body_can_stand_on_has_one_answer` holds it, asked
+of all fourteen terrains rather than of the sea.
+
+#### What it does not fix
+
+The settlement still dies out, around day 335 instead of day 327, with
+**6,700 units still in its pits**. Getting people out of the sea doubled the
+store and did not get the store into them. That is the next thing, and it is
+what `survival_pressure_tests` and `longevity_tests` are still red about.
+
+### 228. Every infant in the model was permanently starving, and a starving man gave up on his larder at the first empty hole
+
+#227 left a settlement dying out with 6,700 units in its pits and said that
+was next. This is what is in it. Three things, two of which moved and one of
+which did not, and an ablation that was tried and is not kept.
+
+#### One: a full infant read as living on itself
+
+```rust
+pub(in crate::analytics) fn is_the_body_eating_itself(agent: &Agent) -> bool {
+    agent.state.physiology.reserve
+        / crate::agents::physiology::RESERVE_OF_A_GROWN_BODY
+        < Self::WHAT_IS_LEFT_WHEN_A_BODY_IS_LIVING_ON_ITSELF   // 0.25
+}
+```
+
+An infant's reserve capacity is 6,048 against a grown body's 30,240 - a fifth.
+So an infant with its reserve **completely full**, nothing drawn on at all,
+comes out at 0.20 and reads as living on itself. Every infant, every turn of
+its infancy, for ever. Probed on a settlement's last winter:
+
+| stage | capacity | its own reserve | this gate |
+|---|---|---|---|
+| Infant | 6,048 | **1.00 full** | **living on itself** |
+| Adult | 30,240 | 0.60 | not living on itself |
+
+That matters because the branch it guards sits above every drive there is, and
+because "a quarter is the same line every measurement in ISSUES #173 through
+#178 is drawn at" - so those measurements counted every child in the world as
+starving.
+
+`what_this_body_has_spare` is the answer the physiology already gives, and its
+own note says why: *"a child with a full small reserve is as well-found as its
+father with a full large one"*. The same file asks `room_for_another_mouthful`
+of this body's stomach rather than a grown one's, and scales
+`how_fast_this_body_burns` by this body's capacity, for exactly this reason.
+This was the one that was not.
+
+#### Two: the nearest hole he remembers is not always the one with food in it
+
+`something_out_of_the_store` took the head of the remembered-pit list and
+stopped:
+
+```rust
+let (where_it_is, paces) = self.nearest_pit_i_remember(agent, agent_position)?;
+```
+
+A memory is a record of what *was* in a hole. A man standing on one that he or
+somebody else has since emptied got `None` from the whole branch - and the
+turn fell through to the shelter override above every drive - though he might
+remember three more with food in them.
+
+Measured across a settlement's winter, over the samples where a body under a
+quarter of **its own** reserve was carrying nothing:
+
+| | before | after |
+|---|---|---|
+| the branch answered | 38 | 23 of 23 |
+| came back empty | 13 | **0** |
+| ...of those, remembered a pit that had food | **13 of 13** | - |
+| person-samples under a quarter at all | 51 | **23** |
+
+Every single one of those thirteen was a starving man giving up on a full
+larder because the first hole in his list was empty. The order is unchanged -
+his own and his kin's before a stranger's, nearer before further - so the
+first pit that answers is still the one he would have walked to. He simply
+goes on to the next when it does not.
+
+#### Three: the hedgerow gate, which moved nothing
+
+The store shuts while the hedgerows bear, with an escape for anybody
+"genuinely in trouble". The escape asked `is_starving`, which is an **acute**
+reading - nothing in the stomach and nothing in the gut, about thirty hours
+since the last bite - for a **chronic** question. The two come apart exactly
+where it matters:
+
+| day | reserve left | days into it | gut | opens the store |
+|---|---|---|---|---|
+| 279 | 0.60 | 8.5 | 500 | no |
+| 281 | 0.55 | 9.4 | 525 | no |
+| 283 | 0.51 | 10.3 | 50 | no |
+| 284 | 0.48 | 10.9 | 600 | no |
+
+A man ten days into a three-week reserve, thirteen paces from a pit with eight
+thousand units in it, kept out of it because he had a berry that morning. And
+`is_the_body_eating_itself`'s own note is an argument against exactly this:
+*"`is_starving` is three days into it, which is far too late to be the line at
+which a man goes to the larder rather than to the roof"*.
+
+That line is added to the two acute readings rather than put in their place -
+a gate that lets somebody in should not be narrowed while widening it, and
+`state::is_starving` has an `energy` arm that is a real thing a body can be
+short of without having spent its reserve.
+
+**And it moves nothing.** By the time these people are in trouble the
+hedgerows are already bare, so this gate had already let them through. It is
+recorded because it is what sent me looking at what was actually taking the
+turn.
+
+#### The ablation that is not kept
+
+What *was* taking the turn, between a quarter and a half of a reserve, is
+`SeekShelter`: the override that sits above every drive, on `needs_shelter`,
+which in winter is everybody every turn. The note on it records a narrowing
+tried before #176 and rejected, with the reasoning that the override "is not
+what stands between a starving man and his supper; being unable to reach the
+store is".
+
+That premise had changed twice - a pit is remembered now (#176), and nobody is
+walked into the sea (#227) - so it was worth one more measurement. Narrowed to
+`is_too_cold`, over a settlement's whole life:
+
+| | as it is | narrowed |
+|---|---|---|
+| SeekShelter | 16,085 | 10,802 |
+| Move | 30,343 | 49,927 |
+| ready to breed | 368 | **6** |
+| births | 1 | **0** |
+
+The turns went into walking and bought nothing. `not of an age to breed`
+vanishes from the tally altogether, which is a thing only a settlement with
+children in it can report. A settlement that shelters less walks more and
+rears nobody. Reverted, and the note now carries both measurements so nobody
+spends the afternoon a third time.
+
+#### What the two that were kept moved
+
+Same fixture, same seed, one settlement of twelve:
+
+| | after #227 | after #228 |
+|---|---|---|
+| died of hunger | 9 | **7** |
+| turns anybody was ready to breed | 368 | **1,117** |
+| last person alive | day 342 | **lives out the year** |
+| starving turns the larder was shut on | 13 of 51 | **0 of 23** |
+
+It is still a settlement that collapses over its first winter, and the two
+tests that own that are still red. What has gone is one reason it could not
+feed itself out of a store it had already filled.
+
+### 229. A father handed his child nine spoiled fish, four days running
+
+Following #228's winter probe further. The turn that kept coming up for a man
+a third of the way through his own reserve was not shelter and was not the
+larder: it was `GiveTo`, seven to eight thousand times in a settlement-year.
+
+#### What he was handing over
+
+One man, four consecutive days, day 290 to day 293 of the settlement's last
+winter:
+
+| day | his own reserve left | meals he has | what he offers his child | spoiled | harmful |
+|---|---|---|---|---|---|
+| 290 | 0.35 | **0** | 9 fish | no | no |
+| 291 | 0.33 | **0** | 9 fish | no | no |
+| 292 | 0.31 | **0** | 9 fish | no | **yes** |
+| 293 | 0.29 | **0** | 9 fish | **yes** | **yes** |
+
+He has no meals at all, because a whole fish is not a meal until somebody
+takes a knife to it (#153). He offers the child nine of them anyway, and by
+the third day they are harmful and by the fourth they have gone over as well.
+And he chooses it again the next morning, because the gift does not feed the
+child, so the child still has nothing to eat, so the override fires again.
+
+#### The question that was asked
+
+```rust
+// a_child_of_mine_to_feed
+agent.what_food_i_can_spare()?;
+```
+
+`what_food_i_can_spare` filters on `InventoryItem::is_food`. The store branch
+already names exactly what is wrong with that, about its own side of the same
+question:
+
+> And it counts meals rather than food, which is not the same thing. `is_food`
+> answers yes to an uncut haunch, a stack that has gone over, and raw flesh
+> this one has been ill off - none of which is supper.
+
+That was written, acted on where the store reads it, and the giving branch
+went on asking the other question. `a_meal_for_somebody_with_none` - the
+branch that feeds the man beside you rather than your own child - has always
+counted meals and always kept a day back. It was only the parent that did not.
+
+`Agent::what_meal_i_can_spare` is the same shape as
+`what_food_i_can_spare` asked of `is_this_a_meal`, and `a_child_of_mine_to_feed`
+asks it. `what_food_i_can_spare` is left where it is: `is_food` is the right
+question for what to *bury*, because what wants putting in the ground is
+whatever will not keep.
+
+#### What it moved, which is nothing
+
+Six seeded settlement-years, twelve founders each, before and after:
+
+| | before | after |
+|---|---|---|
+| person-turns lived | 1,016,653 | 1,016,901 |
+| births | 2 | 2 |
+| settlements that emptied | 3 of 6 | 3 of 6 |
+| turns anybody was ready to breed | 23,228 | 23,903 |
+
+A fifth of a per cent on person-turns and three per cent on the breeding
+window, all of the latter from one seed. **This does not save anybody.** It is
+kept because a father handing his child a spoiled fish is wrong on its own
+terms and because the turn it spends is a turn: the same man offered the same
+nine fish four mornings in a row and the child ate none of them.
+
+A single seed said something louder in both directions - the last founder
+dying on day 345 rather than living out the year - and six seeds say it was
+noise. Recorded so that the single-seed reading is not mistaken for a result
+later.
+
+#### And a keep-back that was tried and is not kept
+
+`a_meal_for_somebody_with_none` keeps a day's food back and
+`a_child_of_mine_to_feed` keeps only `WHAT_IS_NOT_WORTH_A_TRIP`, which is two
+units - so a father at a fifth of his own reserve hands over everything but
+two roots, day after day. Matching them was tried: person-turns 1,016,901 to
+1,016,533 and the breeding window 23,903 to 23,222. Nothing, and the wrong
+way.
+
+Not kept, and the reason is in the design rather than the measurement: a
+parent feeding a child out of the last of the pack is what that branch is
+for. The band branch keeps a day back because the man beside you is not your
+child.
+
+#### What is still true
+
+Across those six settlement-years: **two births, and three settlements in six
+emptied completely.** That is the standing problem, and none of #227, #228 or
+#229 has touched it.
+
+### 230. Eighty-seven per cent of every gift anybody tried to make was refused, and the decision that made them outranks every drive
+
+Chasing the settlements that empty. The instrument that found this is the
+refusal tally, and the number is not subtle:
+
+| refusal | count in one settlement-year of at most twelve people |
+|---|---|
+| **`GiveTo: Nothing of mine they have any use for`** | **6,230** |
+| `Treat: herbs did nothing` | 827 |
+| `GiveTo: No room in their pack for it` | 825 |
+| `SpreadMuck: Nothing spoiled to tip out` | 796 |
+| `Eat: Too full to eat` | 776 |
+
+`GiveTo` was chosen 7,156 times and **6,230 of them came to nothing** - 87 per
+cent. And the decision that chose them, `a_child_of_mine_to_feed`, sits at the
+head of `generate_non_emotional_action`, **above every drive there is**. Seven
+thousand turns, by eight to twelve people, in one year.
+
+Three faults, each of which had to go before the next one showed.
+
+#### One: the executor had no arm for one's own child
+
+```rust
+// the decision
+if let Some(to) = self.a_child_of_mine_to_feed(agent, agent_position) {
+    return (Action::GiveTo { to }, false);
+}
+
+// the executor, in full
+fn what_i_would_hand_over(&self, me, them) -> Option<(String, u32)> {
+    if let Some(coat) = self.a_coat_for_somebody_bare(me, them) { ... }
+    if let Some(meal) = self.a_meal_for_somebody_with_none(me, them) { ... }
+    let mine = self.population.agents[me].what_i_can_spare()?;   // excludes food
+    ...
+}
+```
+
+`a_meal_for_somebody_with_none` is the **band** rule - the man beside you -
+and it keeps a whole day's food back, deliberately: *"Nobody strips their own
+pack for a neighbour who is merely peckish."* A parent is not a neighbour, and
+`a_child_of_mine_to_feed` fires on any meal past what is not worth a trip, two
+units. So a parent holding between two units and a day's food chose to feed
+its child, above everything else, every turn, and was told there was nothing
+of his the child could use.
+
+Two spellings of one question, which is the fault this project keeps finding,
+and worse than usual because the decision it contradicts outranks every drive.
+
+Answered by giving the executor the arm the decision already had, rather than
+by narrowing the decision to the band's rule. `a_child_of_mine_to_feed` now
+goes *through* that arm, the way `somebody_beside_me_with_nothing_to_eat` has
+always gone through the band's - one question, one answer.
+
+#### Two: nobody asked whether it would go in
+
+With the giver's half put right, the refusal did not go away. It changed its
+name:
+
+| | before | after one |
+|---|---|---|
+| `GiveTo` chosen | 7,156 | 1,208 |
+| `Nothing of mine they have any use for` | 6,230 | - |
+| **`No room in their pack for it`** | 825 | **1,098** |
+
+`hand_over` calls `Inventory::add_item`, which refuses what will not fit. The
+giving branches asked nothing at all about the taker, though the store branch
+has asked `could_i_take_another_handful` before offering a man his own larder
+since #215 - after exactly this measurement, 264,453 times over.
+
+Both branches ask it now. And `hand_over` makes room the way `PickUp` does,
+with `set_down_what_is_worth_less_than_food`: a child with a pack of stones
+and nothing to eat puts a stone down and takes the supper.
+
+#### Three, and it is #215 again, word for word
+
+That still did not move it. The two sides were asking about **different
+amounts**: the giving branches ask `could_i_take_another_handful`, which is
+*one unit*, and `giving_to` hands over `(mine.1 / 2).max(1)` - **half the
+stack**. A man with room for three was offered twenty, and `hand_over` was all
+or nothing, so neither of them got anything.
+
+`hand_over` now takes what fits. A gift of twenty into room for three is
+three, and what will not go stays with the giver, which is what its own
+docstring already claimed.
+
+#### What the three of them moved
+
+Six seeded settlement-years, twelve founders each:
+
+| | before | after |
+|---|---|---|
+| **births** | **2** | **9** |
+| person-turns lived | 1,016,901 | 1,037,206 |
+| `GiveTo` turns wasted | 87% | **45%** |
+| ...in absolute terms | ~37,000 | **468** |
+| settlements that emptied | 3 of 6 | 4 of 6 |
+
+Births up four and a half times, and the wasted turns down by ninety-eight per
+cent. That last row is not a typo and is not hidden: **one more settlement in
+six emptied.** More children are born and more of them die, and a binary count
+over six samples moving by one is not a result either way. What is a result is
+that a settlement now has children in it at all.
+
+It is the largest move either roll count has ever taken - the year is **up
+11.8%** - and the short count does not move at all, which is the right shape:
+a gift that lands changes what a settlement *is* over a year and almost
+nothing about a particular afternoon.
+
+#### What is left of it
+
+468 wasted giving turns across six years, split between the two names, almost
+all of them on the generic barter path - `what_i_can_spare`, which is about
+materials rather than food and is a different question. Left alone.
+
+### 231. A store the hunger drive could not reach, and the arithmetic of why a settlement starves anyway
+
+#230 got food moving between people. This is the same question asked of the
+ground: with the settlement's whole winter store in the pits, what does a
+winter turn actually get spent on?
+
+Measured over three seeded settlements across the hungry gap - day 270
+onwards, **92,249 agent-turns**, by the verb the decision layer chose:
+
+| what a winter turn went on | share |
+|---|---|
+| **SeekShelter** | **27.0%** |
+| eat | 23.8% |
+| gather:water | 9.5% |
+| sleep | 12.3% |
+| move | 11.4% |
+| gather:food | 2.5% |
+| **the store** | **2.0%** |
+
+And what came out of the ground: **4.2 items a person-day**, against the
+**11.5** a grown body burns.
+
+#### The rung that was not there
+
+The larder was reachable from `food_action` only through
+`the_larder_or_this_walk`, which weighs the larder against a *walk* - and so
+needs somewhere to walk to. Both of its callers are inside branches that need
+a known food target. In deep winter there is none: nothing is standing
+anywhere, `the_best_food_anywhere` returns `None`, and both fall through.
+
+What was left was the starvation override at the head of
+`generate_non_emotional_action`, which fires only on
+`is_the_body_eating_itself` - **a quarter of the reserve**. A reserve is three
+weeks and the gap is seventy-five days, so a body spent the first sixteen days
+of the gap burning itself with the store in the ground behind it, and began
+eating out of it only once it was three-quarters gone.
+
+There is a rung for it now, above moving camp and above emigrating, because
+eating out of your own larder beats both. It is gated by
+`something_out_of_the_store`, which keeps its own discipline and stays shut
+while the hedgerows bear, so it cannot open the winter store in July.
+
+#### What it moved, which is small
+
+Six seeded settlement-years, twelve founders each:
+
+| | before | after |
+|---|---|---|
+| person-turns lived | 1,037,206 | 1,040,633 |
+| settlements that emptied | 4 of 6 | **3 of 6** |
+| births | 9 | 9 |
+| deaths of hunger | 42 | 42 |
+
+A third of a per cent on person-turns and one settlement back off the floor.
+The year roll count moves by **fifty draws in six hundred and eighty-nine
+thousand**. It is kept because a store the hunger drive cannot reach is not a
+store, not because it saves anybody.
+
+#### And the arithmetic, which is the useful part of this entry
+
+**Corrected after #232, and the correction is a lesson about the instrument.**
+The turn shares in the table above came from a probe that called
+`generate_non_emotional_action` a second time in the same turn to see what the
+agent would choose. That draws from the same seeded stream, so **the probe
+moves the world it is measuring** - and worse, what it reads is what the
+decision layer would *offer*, not what the executor did.
+
+Read from `actions_taken` alone, which is what the model actually did, the
+same three settlements across the gap - 99,046 person-turns - come out very
+differently:
+
+| | share of person-turns |
+|---|---|
+| **Move** | **57.5%** |
+| SeekShelter | 28.5% |
+| Gather | 11.4% |
+| Sleep | 3.7% |
+| **Eat** | **3.6%** |
+| PickUp | 1.6% |
+
+A body in the hungry gap spends **six turns in seven walking or sheltering**,
+and eats **1.75 times a person-day**. At about a hundred energy a sitting that
+is some two hundred energy a day against the **1,440** a grown body burns -
+which is exactly the intake the physiology reports directly: 1,000 to 1,500
+energy a person-day through the summer, falling to **761 at day 300 and 440 at
+day 330**.
+
+The rest of the arithmetic stands. A grown body burns
+`UNITS_BURNED_IN_AN_ORDINARY_DAY`, which is **11.5 items a day**.
+`eat_from_hand` eats on while there is room in the stomach and something in
+the hand, so a meal is the size of what is carried - through the gap, one or
+two items. So the shortfall is not that eating is capped; it is that there is
+nothing in the pack to eat, and the turns that would fetch some are going on
+the walk and the roof.
+
+That is the standing problem, stated as arithmetic rather than as a symptom,
+and it is where the next work on this belongs. **Measure it from the tallies.**
+A probe that asks the decision layer a second time is reading a different
+world and a different question.
+
+### 232. A man at a pit holding two legumes and four hundred roots took the two legumes
+
+#231 recorded the arithmetic of the hungry gap and said the next work belonged
+there. This is it, and it is a defect rather than a knob.
+
+#### The measurement
+
+Three seeded settlements through the gap, with **no decision function called
+twice** - a probe that asks the decision layer a second time in the same turn
+draws from the same seeded stream and moves the world it is measuring, so this
+one reads only tallies:
+
+| | |
+|---|---|
+| person-days across the gap | 2,071 |
+| items those bodies burned | 23,817 |
+| items that came out of the pits | **9,008** |
+| trips to the store | 1,635 |
+| **items per trip** | **5.5**, against the eight asked for |
+| trips refused for want of room | **18** |
+
+Eighteen. So it was never the pack that was short - the shedding and the
+room-checking of #215 and #230 are doing their work. It was the stack.
+
+#### What it was
+
+```rust
+pub fn something_to_eat(&self) -> Option<&str> {
+    self.holds.iter().find(|item| Self::is_it_a_meal(item)).map(...)
+}
+```
+
+`find` - **the first meal in the pit**. And `picking_up` asks for
+`WHAT_A_PERSON_TAKES_OUT.min(wanted.quantity)`: eight, **capped at what is in
+that one stack**.
+
+A pit is filled a burial at a time and holds many kinds. So a man standing
+over one holding two legumes and four hundred roots was offered the two
+legumes, took them, and walked away - and came back tomorrow, and was offered
+two more.
+
+This is the same function #43 fixed once already, for the same kind of reason:
+it used to answer with whatever was nearest the top *including things nobody
+could eat*, and one settlement in sixteen starved standing on its own larder
+picking up an uncut haunch. The meal test was added and the ordering was left
+alone.
+
+It takes the largest stack now. A person at a larder takes a load, and which
+load is whichever makes the walk worth taking.
+
+#### What it moved
+
+Six seeded settlement-years, twelve founders each:
+
+| | before | after |
+|---|---|---|
+| **settlements that emptied** | **3 of 6** | **0 of 6** |
+| person-turns lived | 1,040,633 | 1,039,210 |
+| births | 9 | 8 |
+| items per trip to the store | 5.5 | 6.0 |
+| items out of the pits across the gap | 9,008 | 9,359 |
+
+**Every settlement now has somebody alive at the end of its first year.** That
+is the first time that has been true in this fixture.
+
+And the rest of it barely moves, which is worth saying plainly: person-turns
+and births are flat, and the yield per trip goes up by half an item. What
+changed is not how much food a settlement gets through the winter - it is that
+the last few people through the worst of it are no longer being handed two
+legumes at a time.
+
+#### What is still true
+
+They still get **9,359 items out of the ground against the 23,730 they burn**
+across the gap, and live on the difference out of their own reserve. The
+binding term is how often a body reaches the store at all - 0.75 trips a
+person-day against the two it would take - and that is a question about the
+shelter override and the walk, not about the pit. #231 has the arithmetic.
+
+### 233. The shelter override cannot end the condition that chooses it - measured, and two fixes for it that did not survive
+
+> **Re-measured at #241 and the reason given below is wrong.** On twelve
+> paired seeds the skip costs 1.0%, which is noise - not a settlement. It
+> stays reverted because it buys nothing, not because it is expensive.
+
+
+#231's turn budget, read from the tallies, put `SeekShelter` at **28.5% of
+every person-turn in the hungry gap** against `Eat` at 3.6%. This went after
+it, found a real structural oddity, tried two things, kept neither, and
+corrected a note this document had got wrong.
+
+#### What the override is actually doing
+
+Read from agent state only - no dice drawn, so the run is the run - over three
+seeded settlements across the gap, **99,046 person-turns**:
+
+| | share |
+|---|---|
+| `needs_shelter()` true | **28.3%** |
+| `is_too_cold()` true | **28.3%** - *the same turns* |
+| a roof within reach | 97.6%, at a mean of **0.5 paces** |
+| already under shelter | **24.1%** |
+| `SeekShelter` taken | 28.5% |
+
+So **the walk to shelter is not the cost.** The roof is half a pace away and
+the agent is usually standing under it already: almost every one of those
+turns is a huddle in place.
+
+And the huddle cannot end the spell. `needs_shelter` reads
+`active_exposures`, which hypothermia occupies for as long as
+`body_temp.is_too_cold()`; `seeking_shelter` answers by calling
+`ExposureStatus::recover`, which touches `exposure_damage` and `wetness` and
+not the body's temperature. Meanwhile
+`Agent::update_temperature_with_shelter` already warms a body at the
+sheltered rate wherever it is standing. **The action the override chooses
+does nothing the body was not getting anyway, and cannot resolve the state
+that selected it.**
+
+That is a genuine oddity and it is written down here rather than fixed,
+because both fixes for it measure badly.
+
+#### The two that did not survive
+
+Six seeded settlement-years, twelve founders each, against the state after
+#232:
+
+| | emptied | births | person-turns |
+|---|---|---|---|
+| after #232 | **0 of 6** | 8 | 1,039,210 |
+| a roof mends exposure without the turn | **0 of 6** | 8 | **1,039,210** |
+| the override skips the already-sheltered | **1 of 6** | 7 | 1,039,686 |
+
+**The first is inert.** It reproduced the baseline to the digit, seed by seed.
+`exposure_damage` feeds only `is_critical()`, and `is_critical()` never adds a
+turn to `needs_shelter()` - the table above shows the two predicates firing on
+exactly the same 28.3%. It changes a number nothing reads.
+
+**The second costs a settlement.** It gives back precisely what #232 bought,
+and person-turns do not move to pay for it. Reverted.
+
+#### And a correction, which is the part worth keeping
+
+#228 ablated this same override - narrowing `needs_shelter()` to
+`is_too_cold()` - and recorded the result as decisive: births 1 to 0, `ready
+to breed` 368 to 6, with a note in `wanting/mod.rs` telling the next reader
+not to spend the afternoon on it again.
+
+**That was one seed, and the two predicates are now measured as firing on the
+same turns.** An ablation that barely changes when a branch fires cannot have
+moved births by a factor of anything; a birth count of one falling to nought
+on a single settlement is a coin. The note has been rewritten with the
+six-seed figures and with an instruction not to cite the old ones.
+
+Two lessons, both already paid for once in this file: **measure a settlement
+over seeds, not over one**, and **measure from the tallies**, because a probe
+that asks the decision layer a second time in the same turn draws from the
+same seeded stream and moves the world it is reading (#231).
+
+### 234. One turn in six was a walk to the tile the agent was already standing on, and nothing could see it
+
+> **Re-measured at #241 and the rejection below was wrong.** Both candidates
+> are free on twelve paired seeds - the blanket guard at -0.8% and the narrow
+> one at +0.1% - and both raise gathering by about 4%. The narrow one is now
+> kept: see #243.
+
+
+#231's turn budget put `Move` at 57.5% of every person-turn in the hungry gap.
+#233 ruled out the shelter override as the cost. This is what the walking
+turned out to be.
+
+#### Two readings that did not agree
+
+Over three seeded settlements across the gap, from tallies and from agent
+positions - **99,046 person-turns**:
+
+| | |
+|---|---|
+| turns booked as `Move` | **56,982** |
+| turns in which anybody's position changed | **19,186** |
+| `Move` refusals | about 1,300 |
+
+Two `Move`s in three left the agent where it was and were not refused.
+
+And the walking that did happen goes nowhere in particular: a body covers
+**ten paces a person-day and nets 1.9** - a churn of **5.3x**, five paces in
+six undone.
+
+#### What it is
+
+```rust
+if current_2d == target_2d && current_pos.2 == target.2 {
+    return ActionResult::success()
+        .with_message("Already at destination".to_string());
+}
+```
+
+A `Move` whose target is the tile the agent is on. It is booked as a `Move`,
+it costs the whole turn, and it returns **success** - so it is in no refusal
+tally, no failure count, and no `actions_failed_because` line. Every
+instrument this project has built for finding wasted turns works by reading
+refusals, and this one is not a refusal.
+
+Counted from inside that branch, by a counter that writes to a tally nothing
+reads for behaviour and so does not move the run:
+
+| | share of gap person-turns |
+|---|---|
+| **a walk to where the agent already stood** | **15,296 - 15.4%** |
+| `Eat` | 3.6% |
+| the store | 1.6% |
+
+One turn in six. Against eating at one in twenty-eight.
+
+By whether the agent was on an errand at the time: **no errand 6,910**, Rest
+4,171, Preparedness 1,948, Curiosity 1,049, Reproduction 828.
+
+#### What is done about it here: the counter, and nothing else yet
+
+The counter stays, whatever is eventually done about the waste, because a
+thing that cannot be seen comes back. It is the fix for the *instrument*, and
+that much is not in doubt.
+
+The obvious guard - a drive whose answer is to stand where it is standing has
+not answered, so `how_this_agent_answers` returns `None` and the turn passes
+to the next drive - removes 86% of them, 15,296 to 2,070. It is **not kept**,
+and over six seeded settlement-years the cost is not marginal:
+
+| | after #232 | with the guard |
+|---|---|---|
+| settlements that emptied | **0 of 6** | **3 of 6** |
+| person-turns lived | 1,039,210 | **969,013** |
+| births | 8 | 7 |
+
+Three settlements and seven per cent of everybody's life, for removing what
+looks like pure waste. Inside the gap the same arms show what moved:
+`SeekShelter` halved, `Move` rose, and `GoWithout` appeared from nowhere at
+3,620. Something downstream is living on those turns.
+
+#### Why removing it hurts: the wasted turn is free
+
+```rust
+return ActionResult::success()
+    .with_message("Already at destination".to_string());
+```
+
+No `.with_energy_cost()`. A real `Move` costs `2.0 * what_this_load_costs /
+movement_speed`, and `what_came_of_it` charges the body exactly
+`action_result.energy_cost` - so **a walk to where you are standing burns
+nothing at all.**
+
+That is the whole of why the guard cost three settlements. A settlement in the
+gap is already about twenty per cent short of its keep (#231), and one turn in
+six costing nothing is a subsidy on that scale. Take the standstill away and
+something real and energy-costing goes in the slot instead.
+
+**The waste is load-bearing.** It is still waste - a body that stands still
+should be resting, not walking nowhere, and `Action::Wait` and `Sleep` both
+exist and are honest about it - but it cannot simply be deleted, and anything
+that removes it has to put the energy back or find the twenty per cent.
+
+#### Where it comes from, and two guesses that were wrong
+
+Tagged at the standstill by what was pressing, whether there was a plan, a
+goal and an errand: **`plan=false` on all of them and `goal=true` on nearly
+all**, spread across Rest 7,450, Preparedness 2,285, Curiosity 1,721,
+Sustenance 585, Social 344, Reproduction 212.
+
+Two readings of that were wrong and are recorded so nobody repeats them:
+
+- **Not the Rest drive's midden step.** `somewhere_that_does_not_stink`
+  returns `None` when the ground underfoot is fine and explicitly skips
+  `dx == 0 && dy == 0`, so it cannot return the agent's own tile.
+- **Not the goal path.** `generate_action_for_goal` contains one `Move` and it
+  is `position + 10`. Worse, the "by Rest" label was an artefact of the
+  instrument: that function takes `what_presses_hardest()` as its fallback
+  drive, which is the same function the counter was reading. The tag was the
+  probe looking at itself.
+
+What *was* found, in the percept path - the "follow your own nose" fallback
+reached when no drive had an answer:
+
+- `Percept::ResourceDetected` returned `Move { target: *position }` with no
+  check. The sight and smell passes report what is at the agent's own feet
+  along with everything else, so every one of those became a walk to itself.
+- `Percept::DangerDetected` with the danger underfoot gives `dx` and `dy` of
+  nought, so the flee target comes out as the agent's own position: fleeing a
+  thing you are standing on, by not moving.
+
+Both are fixable and account for **18%** of the standstills - 15,296 to
+12,597. **Neither is kept, and the reason is the point of this entry.**
+
+#### The dose-response, which settles it
+
+Three arms, six seeded settlement-years each, against the state after #232:
+
+| standstills removed | settlements emptied | person-turns | births |
+|---|---|---|---|
+| none (baseline) | **0 of 6** | 1,039,210 | 8 |
+| 18% - the two percept fixes | **1 of 6** | 1,025,463 | 7 |
+| 86% - the blanket guard | **3 of 6** | 969,013 | 7 |
+
+Monotone. The more of the waste is taken away, the more settlements die, and
+the cost scales with how much is removed rather than with what was removed -
+one arm is a two-line correction in the percept path, the other a guard on
+every drive, and they sit on the same line.
+
+That is not a coincidence between two unrelated changes. It is the subsidy
+being withdrawn in two different doses.
+
+**So the standstill is not the thing to fix.** It is a symptom of an energy
+balance that is about twenty per cent short (#231), and it is holding the
+model up. Anything that removes it will cost until that twenty per cent is
+found. The order of work is: the shortfall first, the free turns after.
+
+What is kept from all of this is the counter. The thirty-odd `Move` sites and
+the two percept arms are written down above so that whoever comes back to them
+does not have to find them again - and the dose-response is written down so
+that nobody spends the afternoon removing the waste and wondering why the
+settlements died.
+
+### 235. The twenty per cent, located: a settlement dies with more in its pits than it was short, and the strategy called "eat the food you are carrying" is a snare check
+
+> **Re-measured at #241 and confirmed.** The rewiring costs **7.8%** of a
+> settlement's person-turns on twelve paired seeds, five to eight times the
+> noise floor. It stays reverted.
+
+
+#234 ended by saying the order of work is the shortfall first. This is the
+shortfall.
+
+#### The year's ledger
+
+Three seeded settlement-years, from tallies only - `energy_that_went_down`
+against each body's own `what_i_burn_in_a_day`:
+
+| seed | person-days | burned | eaten | ratio | left in the pits |
+|---|---|---|---|---|---|
+| 0 | 3,714 | 5,338,599 | 4,089,386 | **0.77** | 4,460 items |
+| 1 | 3,885 | 5,356,384 | 4,792,642 | **0.89** | **6,396** |
+| 2 | 3,682 | 5,080,890 | 4,363,287 | **0.86** | 4,984 |
+
+A settlement takes in about **0.84** of what it spends, and makes up the rest
+out of its own reserve until there is none. That is the twenty per cent.
+
+And the last column is the shape of it. The shortfall in items is 9,994 /
+4,510 / 5,741; the pits at the end hold 4,460 / 6,396 / 4,984. **For two
+settlements in three there is more food left in the ground than the whole
+year's shortfall.** Another 876 to 1,151 items are lying on the grass.
+
+It is not a supply problem. The food is gathered, it is buried, and it is
+never eaten.
+
+#### Two things it is not
+
+**Not the trip size.** `WHAT_A_PERSON_TAKES_OUT` raised from eight to
+twenty-four moves the ledger to 0.72 / 0.88 / 0.89 - nothing, in either
+direction. Three times the load per journey buys no food.
+
+**Not the store being shut.** Asked of state across the gap, 99,046
+person-turns: `something_out_of_the_store` has an answer ready on **78.8%** of
+them. The emergency gate that reaches it -
+`is_the_body_eating_itself && !has_edible_food` - is open on **1.7%**. And the
+rung added at #231 inside `food_action` is **never reached**: one of the three
+above it always answers first, at carrying-food 52.8%, a-remembered-place
+28.4%, something-edible-in-reach 18.8%.
+
+#### What it is
+
+| across the gap | |
+|---|---|
+| Hunger is the top drive | **30.9%** of person-turns |
+| ...of those, carrying edible food | 55.7% |
+| ...of those, shelter takes the turn | 11.9% |
+| `is_this_lot_for_the_store` (the "saving it" gate) | **0.0%** |
+| willingness to eat, where it stands | mean **0.85**, never shy |
+| **they eat** | **1.75 times a person-day** |
+
+Some fifteen turns a person-day where hunger is the most pressing thing in the
+world and the supper is in the bag, and they eat under twice. Nothing in the
+lessons, the season or the shelter accounts for it.
+
+The Hunger drive does not go through `food_action` at all. It goes through the
+strategy layer - `the_way_to_answer` over `Strategy::all_for(Hunger)`, eleven
+ways - and:
+
+```rust
+Strategy::EatCarriedFood => self.a_catch_at_my_feet(agent, agent_position),
+```
+
+`a_catch_at_my_feet` looks for **a snare the agent is standing on** and
+answers `CheckSnares`. Nothing in it touches the pack. The way called *eat the
+food you are carrying* is a trapline check, and eating what you carry was
+reachable only through `GatherWildFood`'s internals winning a utility sort.
+
+Two names for one thing, which is this project's oldest defect. And the
+expensive half is the ordering: `the_way_to_answer` takes
+`is_it_already_in_his_hand` first, and that matches `Eat` **and**
+`CheckSnares` - so standing on a full snare, this way took the turn *ahead of
+the supper in the man's own bag*.
+
+#### What is done about it
+
+`EatCarriedFood` reads the pack. The snare at the feet is not lost: it goes to
+`ScavengeWhatIsLyingAbout` together with the walk to one, through
+`a_catch_waiting`, which is that pair and was already written.
+
+On the gap alone it does what it should: agents carrying food fall from 52.8%
+of gap turns to 24.4%, so the pack is eaten down rather than hauled.
+
+**It is not kept.** Six seeded settlement-years:
+
+| | as it is | `EatCarriedFood` reading the pack |
+|---|---|---|
+| settlements emptied | 0 of 6 | 0 of 6 |
+| person-turns lived | 1,039,210 | **957,759** |
+| births | **8** | **3** |
+| the year's ledger | 0.84 | **0.78** |
+
+Eating the supper in the bag makes the settlement eat *less* over the year and
+rear fewer than half as many children. Which is the third time this session an
+obviously-right change has cost something, and this one says why.
+
+#### The month-by-month ledger, which corrects the reading above
+
+A settlement of twelve burns 517,500 energy a month. What it eats:
+
+| month | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| eaten | 377k | 331k | 364k | 402k | 531k | 553k | 383k | 392k | 369k | 225k | 133k | 29k |
+| at a full reserve | 4 | 5 | 5 | 7 | **11** | **12** | 6 | 9 | 7 | 0 | 0 | 0 |
+
+**It is short in eleven months of twelve.** Not short in winter and fat in
+summer - short in March and short in July. The two months it clears its burn,
+months five and six, are the two months when eleven or twelve of the twelve
+are already at a full reserve - and a reserve at capacity discards what
+arrives: `self.reserve = (self.reserve + won).min(self.reserve_capacity)`.
+
+So the surplus that exists is destroyed through the mouth, and the deficit is
+everywhere else.
+
+**That corrects what this entry said above.** "It is not a supply problem" was
+read off the pits outliving the settlement, and that reading is wrong: the
+pits are a real buffer that is really drawn on, not idle surplus. What is left
+in them is what the last few people did not live long enough to eat. The
+settlement is short of food in almost every month of the year.
+
+And it is why eating the pack eagerly costs: food eaten in month five at a
+full reserve is food that is not in a pit in month eleven. The mis-wiring was
+holding the store up, the same way the standstill turn holds the energy
+balance up in #234 - and it is written down here rather than fixed for the
+same reason.
+
+#### What this leaves
+
+The defect is real and is not the thing to fix first: a way named for the pack
+that reads a snare is two names for one thing however it measures. What has to
+come first is the eleven months of shortfall, and the two candidates the
+measurements point at are **what a `Gather` actually yields** against the 11.5
+items a body burns in a day, and **the reserve cap discarding a surplus the
+body cannot bank and the pits never see.**
+
+### 236. What a Gather yields, measured: the ground is not the limit and neither is the picking
+
+#235 ended with two candidates for the eleven months of shortfall. This is the
+first of them, and the answer is that gathering is not where the food is lost.
+
+#### The numbers
+
+Three seeded settlement-years, 11,281 person-days, counted inside the Gather
+executor by a tally nothing reads for behaviour:
+
+| per person-day | |
+|---|---|
+| trips out | **8.74** |
+| items reached for | 34.31 |
+| items the ground actually had | **32.74** |
+| items the pack took | **5.30** |
+| items eaten (all sources) | 9.39 |
+| items burned | **11.5** |
+
+And per trip: **4.5 items in season, 2.3 out of it**, on 98,613 trips of which
+only 1.5% were out of season.
+
+So:
+
+- **The ground is not the limit.** 95% of what a forager reaches for is
+  standing there. `what_a_trip_brings_back` gives 8 to 14 in the bearing
+  window against 1 to 3 outside it, and something bears on **79% of days**,
+  with 3.4 of the seven food kinds bearing on an average day.
+- **The picking is not the limit either.** Eight and three quarter trips a
+  day, reaching for thirty-four items, against the eleven and a half a body
+  burns. A settlement reaches for three times its keep every day.
+- **Nothing is destroyed.** What will not fit is `put_it_back` on the node,
+  after `take_what_fits` and after `set_down_what_is_worth_less_than_food` has
+  been given its chance. The snare executor's old defect - taking a catch and
+  dropping it into nothing - is not present here.
+
+#### What the limit is
+
+The pack. Sampled once a day over two settlement-years, 7,605 pack-samples:
+
+| | |
+|---|---|
+| mean load against capacity | 28.1 of 36.8 - **76% full** |
+| samples with something the carrier would set down | **75%** |
+| of the load, by weight: other | **44%** |
+| food | 29% |
+| kit | 26% |
+
+A pack is three quarters full of which seven parts in ten are not food, and
+the first trip of the day fills what is left. The other seven trips reach for
+an armful and put it back.
+
+That is not waste - the ground keeps it, and a forager who cannot carry a
+whole patch is not a defect. It is a **ceiling**: what a settlement eats in a
+day is what its packs can carry home plus what it takes out of the ground on
+the spot, and the packs are mostly full of something else.
+
+#### And the loop it closes
+
+The gap between the 9.39 eaten and the 11.5 burned is not a fixed eighteen per
+cent of a fixed burn. `what_i_burn_in_a_day` is an average of what this body
+actually spent, effort included - so a settlement that walks more burns more.
+#234 measured six turns in seven going on walking or sheltering, and 15.4% of
+turns being a walk to the tile the agent was already standing on, which costs
+nothing.
+
+So the three findings are one finding: **a settlement is busy enough to burn
+more than its packs can carry home**, it is propped up by a sixth of its turns
+being free, and the food it does not carry stays in the ground where it will
+still be in November.
+
+The second candidate from #235 - the reserve cap discarding a surplus in the
+two months there is one - is untouched and is where this goes next.
+
+### 237. A fifth of everything a settlement eats is digested into nothing
+
+#235's second candidate, and it is the largest single loss in the model.
+
+```rust
+self.reserve = (self.reserve + won).min(self.reserve_capacity);
+```
+
+A body already at capacity digests its dinner into nothing. The food was
+picked, carried home and eaten, and a pit would have held it until November.
+
+#### How much
+
+Counted on that line over three seeded settlement-years:
+
+| seed | spilled | of what was eaten | of what was burned |
+|---|---|---|---|
+| 0 | 706,465 | **17.3%** | 13.2% |
+| 1 | 1,065,049 | **22.2%** | 19.9% |
+| 2 | 852,712 | **19.5%** | 16.8% |
+
+Agents sit at a full reserve on **48% to 55% of all person-turns**. Take the
+spill off the intake and the year's ledger falls from 0.84 of what a
+settlement burns to about **0.67**.
+
+No instrument could see it. `energy_that_went_down` counts what enters the
+stomach and `actions_failed` counts refusals; a meal that is eaten, digested
+and discarded is neither. `Physiology::spilled_at_the_brim` counts it now, on
+the same argument as the standstill counter of #234: this was the largest loss
+in the model and nothing could see it.
+
+#### Two ways of making them stop eating, and why neither works
+
+**The season, not the belly.** `is_this_lot_for_the_store` - the rule that
+decides a load is a harvest rather than supper - opens with
+`if !matches!(current_season(), Season::Fall) { return false }`. A quarter of
+the year. The honest condition is not the calendar, it is being full: "a full
+belly is not a surplus, a surplus is food that is still there tomorrow" is
+what `expects_to_be_able_to_feed_a_child` says about breeding, and a full
+*reserve* with food in hand is exactly that surplus.
+
+Letting a full body put by in any month doubled how often the rule fires -
+5.5%-9.8% of person-turns to 11%-21% - and spilled **not one unit less**
+(707k / 1,065k / 853k against 706k / 1,065k / 853k, one seed bit-identical).
+The Hunger drive does not reach the pack through that branch; see #235.
+
+**The hedge.** `food_action`'s next rung - "anything edible within foraging
+reach can simply be eaten" - had no such gate at all, so a body at a full
+reserve grazes a bush and the bush is gone for nothing. Gating it did cut the
+spill on two seeds of three, and cost **thirteen per cent of a settlement's
+person-turns**.
+
+#### Why: the pipeline is a day long
+
+`MINUTES_TO_DIGEST` is `MINUTES_PER_DAY`. What is eaten today lands tomorrow.
+A body that stops eating at the brim has nothing in the pipe when the brim
+drops, so it goes hungry a day later for having been sensible. **It has to
+keep eating and spilling to stay fed.**
+
+That is why both decision-layer answers cost lives, and it is the fourth time
+this session that an obvious waste has turned out to be load-bearing - see
+#233, #234, #235.
+
+#### The fix that follows from the diagnosis, and why it is wrong
+
+**What the reserve has no room for stays in the gut**, drawn on as the reserve
+burns down, which is what a gut is for. It changes no decision; the only
+difference is that the food still exists tomorrow. Six seeded
+settlement-years said it was the best change of the session:
+
+| | as it is | the gut holds it |
+|---|---|---|
+| person-turns lived | 1,039,210 | **1,087,305** |
+| alive at the year's end, all six | 11 | **36** |
+| settlements emptied | 0 of 6 | 0 of 6 |
+| births | **8** | **1** |
+
+Survivors more than tripled. And then the gut was measured:
+
+| | |
+|---|---|
+| most ever held in one gut | **162,962 energy - 113 days of burn** |
+| entries in the gut vector | **17,285** |
+| mean at the year's end | 48,000 to 73,800, against a reserve capacity of 30,240 |
+
+A body ends the year carrying four months of food inside it, in seventeen
+thousand separate pieces. That is not a gut. It is a second store, larger than
+the reserve and larger than anything in the ground, invisible to every tally
+and carried through a famine.
+
+**So the survival gain was the artefact.** Everybody was given a 113-day
+larder and of course fewer of them died; births fell because a body that is
+never hungry never fills a pit, and the breeding gate reads what is put by.
+Not kept.
+
+#### What is committed, and what the real shape of a fix is
+
+The counter, and this entry.
+
+**And a gut does not want a capacity.** That was the wrong reading of why the
+deferral failed, and the right one is simpler: a stomach has a capacity, and
+what bounds a gut is that food can only sit in it for `MINUTES_TO_DIGEST` -
+so what it holds is a day of what a stomach can pass and nothing else.
+Measured on the unmodified model over two settlement-years, the oldest thing
+in any gut is **1,410 minutes against the 1,440 limit** and the most ever held
+is about 4,500 energy. The bound is already there and it is a clock, not a
+number somebody chose.
+
+The deferral broke exactly that: it let food sit past the day, which is how a
+gut reached a hundred and thirteen days of burn. So it is not that deferring
+overflows some capacity - it is that deferring is not a thing a gut does.
+`physiology_tests::nothing_sits_in_the_gut_longer_than_a_day` holds the
+invariant now: a body at a full reserve, fed for a week, with every morsel's
+age checked every turn. Against the deferral it fails on the first turn past
+the limit - "something has been in the gut 1470 minutes, and a day is 1440".
+
+The two honest directions are **to shorten the pipeline**, so that stopping at
+the brim does not leave a body hungry a day later, or **to make the surplus go
+into the ground rather than down the throat** - not by suppressing eating,
+which costs thirteen per cent of a settlement's person-turns, but by giving
+burying its own claim on the turn when the body is full and the pack is not.
+The second is the one the model is already shaped for: the pits exist, the
+harvest rule exists, and #235 measured why it does not reach - the Hunger
+drive does not go through the branch that rule guards.
+
+### 238. The bush hands over its crop and still has it
+
+Two guard tests, both red against the model as it stood:
+
+```
+a_quarry_does_not_gain_stone_from_being_refused
+  a refused gather left more stone in the ground than it found: 100 then 101
+
+what_he_ate_where_he_stood_does_not_grow_back_on_the_bush
+  he ate off the bush and the bush did not lose what he ate: 100 then 100
+```
+
+`gathering` takes the crop off the node before it asks whether there is
+anywhere to put it, so everything it does not keep it has to hand back. It
+handed it back twice:
+
+```rust
+if took < harvested {
+    self.world.resources[resource_index].put_it_back(harvested - took);   // every gather
+}
+...
+} else {                                                    // nothing went in the pack
+    if it_is_food { ...
+        self.world.resources[resource_index]
+            .put_it_back(harvested.saturating_sub(eaten));  // again
+    }
+    self.world.resources[resource_index].put_it_back(harvested);          // or again
+```
+
+So a man with a full pack who eats a bush bare leaves the bush as full as he
+found it, and a quarry gains a load every time somebody who cannot carry
+stone asks it for one.
+
+#### Why it stood
+
+`put_it_back` clamps to `max_amount`, and **every fixture in
+`full_pack_tests` builds its node with `amount == max_amount`**, where the
+clamp swallows the whole of it. The two tests above are the same fixtures
+with the node set to 100 of a possible 500 - which is what nearly every node
+in a settled country is, because somebody has already been at it.
+
+It is food and stone out of nothing, on the branch #236 measured taking
+**84% of every armful** a settlement picks.
+
+#### The fix
+
+One condition. The early hand-back is the carried branch's, and the two
+branches below are already doing their own:
+
+```rust
+if went_in_the_pack && took < harvested {
+```
+
+Each branch now hands the crop back exactly once, and only what nobody kept.
+`eating.rs` was checked for the same shape and is correct: it puts back
+`left_in_the_hand - went_in`, once.
+
+#### What it costs, honestly
+
+It takes food out of the world, so it should cost survival, and it does.
+Six seeded settlement-years, twelve founders, paired against the same seeds:
+
+| | as it was | handed back once |
+|---|---|---|
+| person-turns lived | 1,039,182 | 1,027,601 |
+| births | 8 | 3 |
+| settlements emptied | 0 of 6 | 2 of 6 |
+
+**Read the third row against #239 before drawing anything from it.** A
+one per cent fall in person-turns is inside the noise of this measurement,
+and so is the whole of the emptied column.
+
+### 239. "Settlements emptied, of six" is noise, and this session steered by it
+
+The headline this session has been measured against - twelve founders, one
+year, six seeds, count the settlements that end with nobody in them - was run
+on a **second block of six seeds with no code change at all**:
+
+| seeds | person-turns | births | emptied |
+|---|---|---|---|
+| 0 to 5 | 1,039,182 | 8 | **0 of 6** |
+| 6 to 11 | 1,011,513 | 1 | **2 of 6** |
+
+Identical code. The emptied column moves from none to a third; births move by
+a factor of eight; person-turns move by 2.7%. So a change that shows one
+emptied settlement where the baseline showed none has shown nothing, and a
+change that costs one per cent of person-turns has shown nothing either.
+
+**What this retracts.** #232 was recorded as taking settlements emptied from
+3 of 6 to 0 of 6. That reading cannot bear the weight it was given: the null
+distribution of that statistic spans the whole of the claimed effect. The
+change itself - a pit handing out its largest stock rather than the first one
+it finds - is still right on its own terms, and the run after it is still the
+run the later baselines were taken against. What is withdrawn is the
+inference that it saved three settlements.
+
+Nothing else this session rests on the emptied column alone: #233, #234 and
+#235 were each reverted on person-turn costs of five to thirteen per cent,
+which is well outside this spread, and #237's gut deferral was rejected on an
+invariant rather than on a number.
+
+**What a usable measure looks like.** Paired seeds, which these are, and a
+quantity that is not a yes-or-no read off a chaotic system: person-turns
+lived is the best of what is already counted, and 1% of it is noise while 5%
+is not. A count of six coin flips is not a measurement and should not be
+quoted as one again.
+
+### 240. A full reserve is not a full body, and the gate that assumed it was
+
+The requirement was that agents take the room in their pack and their
+carrying capacity into account when planning and when acting. Most of that
+is already in the model and was put there one refusal at a time - #118 (take
+what fits rather than all or nothing), #126 (the carrying invariant), #206
+(one rule for what may leave a pack), #215 (weigh what is actually being
+reached for), #230 (ask whether it will go in *their* pack before handing it
+over). Measured over three seeded settlement-years, 11,281 person-days, every
+refusal in the model that is about room comes to **2,854**, and 2,295 of
+those are `Eat: Too full to eat`, which is a stomach and not a pack.
+
+So the explicit checks are working. What was missing was a corner in
+`could_this_gather_come_to_anything`, which deliberately skips the room check
+for food on the reasoning that the executor will shed or eat it on the spot.
+Neither is possible for a pack with no room and nothing in it anybody would
+set down - and if the body's reserve is also at the brim, the meal that
+branch offers is one `Physiology::advance` throws away on arrival. Three
+conditions, all of which have to hold:
+
+```rust
+if food_is_the_point
+    && !agent.could_i_take_another_handful(Self::what_one_of_these_weighs(wanted))
+    && agent.state.physiology.what_this_body_has_spare() >= Self::FULL_TO_THE_BRIM
+{
+    return false;
+}
+```
+
+Paired seeds, twice, against two different baselines:
+
+| | person-turns | against |
+|---|---|---|
+| before the hand-back fix | 1,035,058 | 1,039,182, **-0.4%** |
+| after it | 1,014,053 | 1,027,601, **-1.3%** |
+
+Both negative, both inside or at the edge of the 1% noise floor #239
+establishes. It does not pay for itself, and it is **reverted**.
+
+#### Why it cannot pay for itself
+
+The premise was wrong, and the model already had the number that says so.
+A body at a full reserve is not a body with nowhere to put a meal: it has a
+stomach, and behind the stomach a gut that holds a day's worth. What the
+reserve cap throws away is only what arrives at the brim in the turn it
+arrives - and #237 measured that at **17% to 22% of everything eaten**.
+
+Which is to say four fifths of a meal eaten at a full reserve is still
+absorbed, over the day that follows, as the reserve burns its 1,440 down and
+makes room. The gate refused the whole trip to avoid losing the fifth, and
+gave up the four fifths with it.
+
+**So the honest reading of "take the room into account" here is not a
+refusal.** A man at a full reserve standing on a bush he cannot carry should
+eat - he is not wasting his afternoon. What he should also be able to do is
+put the rest in the ground, and that is #237's second direction, untouched:
+give burying its own claim on the turn when the body is full and the pack is
+not. The one place in this area that genuinely failed to account for room was
+not a decision at all but the hand-back in the executor, and that is #238.
+
+### 241. Every reverted change of this session, re-measured on paired seeds
+
+#239 established that the statistic this session had been steering by cannot
+carry a conclusion. So every change that was reverted on it has been run
+again: twelve seeds, twelve founders, one year each, the same seeds in every
+arm, against one baseline taken on the same HEAD.
+
+**Baseline: 2,018,715 person-turns, 3 births, 6 of 12 settlements emptied,
+294,062 gathers.**
+
+| arm | person-turns | against baseline | gathers | births |
+|---|---|---|---|---|
+| #233 shelter override, skipped for somebody already under a roof | 1,998,085 | **-1.0%** | 292,036 | 3 |
+| #234 a `Move` to the tile underfoot is not an answer (blanket) | 2,003,275 | **-0.8%** | 306,692 | 4 |
+| #234 the same, at the two percepts that cause it | **2,020,337** | **+0.1%** | 305,591 | 5 |
+| #235 `EatCarriedFood` wired to the pack instead of a snare | 1,861,919 | **-7.8%** | 284,089 | 8 |
+| #240 the pack-room gate on gathering | 1,931,539 | **-4.3%** | 289,301 | 7 |
+| a child in arms no longer halves a pack (#242) | 2,016,853 | **-0.1%** | 293,950 | 3 |
+
+#### What this changes
+
+**#234 was rejected wrongly, and both its candidates are free.** They were
+reverted on readings that #239 has since disqualified. On paired seeds the
+blanket guard costs 0.8% and the narrow one costs nothing at all - and both
+raise gathering by about 4%, which is the shape to expect from giving back a
+turn that was being spent walking to where the agent already stood. The
+narrow one is **kept**: see #243.
+
+**#235 and #240 are confirmed, and by a wide margin.** 7.8% and 4.3% are five
+to eight times the noise floor, and they are the two arms that were rejected
+on the clearest reasoning rather than on the emptied column. #235's rewiring
+feeds people - it takes `eaten_units` up by half and births from three to
+eight - and kills them sooner, which is the structural shortfall of #236
+showing through: a settlement that eats its stores faster does not thereby
+have more.
+
+**#233 stands reverted, but for a different reason than was recorded.** It
+does not cost a settlement; it costs one per cent, which is nothing, and buys
+nothing either. The oddity it was aimed at is still there and is still
+recorded rather than fixed.
+
+#### And the emptied column, one more time
+
+It reads 6, 8, 6, 7, 7, 8, 6 across these seven arms, against person-turn
+moves running from +0.1% to -7.8%. The arm that costs 7.8% of everybody's
+life and the arm that costs nothing both read 7. It is not measuring
+survival. See #239.
+
+### 242. A child in arms no longer costs a mother half her pack
+
+Removed on instruction. What it was:
+
+```rust
+let hands = if self.hands_full_of_child { 0.5 } else { 1.0 };
+let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong * years * hands;
+```
+
+from "Age 0-2: must remain with a parent agent at all times. Parent agent has
+one *hand* occupied with the child, limiting the types of work the parent
+agent can accomplish."
+
+**It was the wrong half of the sentence.** What the specification limits is
+the *work*, and this halved a load. The model has a real hands mechanic -
+two slots, `a_hand_to_spare`, and verbs that want one free, which is how
+stitching is gated - and the child never went near it. So the rule limited no
+work at all. The only thing it ever did was halve a woman's pack for the two
+years she most needs one, in a model whose settlements cannot carry home what
+they gather in eleven months of twelve (#236).
+
+Gone: the `hands_full_of_child` field, the `CARRIED_IN_ARMS_UNTIL` age, the
+`in_arms` flag in `feed_the_small_children` and the loop at the end of the kin
+phase that wrote the field every turn.
+
+`growing_up_tests::a_child_in_arms_takes_up_a_hand` asserted the restriction.
+It is now `a_mother_of_an_infant_carries_what_anybody_carries`, which builds a
+mother, an infant and a childless woman of the same body, runs the kin phase,
+and asserts the two grown women carry the same - so reintroducing it anywhere
+in that phase fails there.
+
+**If it is ever wanted back, it wants the hands.** `Agent::hands` is two slots
+and `a_hand_to_spare` is already the question every verb asks. A child in one
+of those slots would limit the work the specification says it limits, and
+would leave the pack alone.
+
+### 243. The turn spent walking to where you already stand
+
+`Simulation::walking` returns **success** for a `Move` whose target is the
+tile the agent is on - "Already at destination" - so the turn is booked as a
+`Move`, costs the whole of itself, and appears in no refusal tally anywhere.
+It is the one wasted turn in this model that no instrument could see, and a
+counter put inside that branch measured it at **15,296 of 99,046 person-turns
+across three seeded settlements - 15.4% of them**, against `Eat` at 3.6%.
+
+The counter was committed at #234; the fix was not, because it measured badly
+on a statistic #239 has since disqualified. Re-measured on twelve paired
+seeds it costs **nothing** - 2,020,337 person-turns against a baseline of
+2,018,715 - and takes gathering up 3.9%. See #241.
+
+**What is kept is the narrow one.** Two percepts cause it, and both are
+answered where they arise rather than by a blanket guard on every `Move`:
+
+- `DangerDetected` for a threat on the tile underfoot. The flee target is
+  computed from `dx` and `dy`, which are both nought, so it comes out as the
+  agent's own position. Somewhere - anywhere - is the answer to a thing you
+  are standing on, and the branch below already knows how to pick one.
+- `ResourceDetected` for the ground underfoot. The sight and smell passes
+  report what is at the agent's own feet along with everything else, and this
+  answered every one of them with a walk.
+
+Not turned into a `Gather`: this is the "follow your own nose" path, reached
+only when no drive had an answer, and a gather proposed here would not have
+been through `could_this_gather_come_to_anything`. The plan and the goal get
+the turn instead.
+
+The blanket guard - "any `Move` to the tile underfoot is not an answer,
+return `None`" - was measured too and costs 0.8%, which is inside the noise
+but is the wrong shape: it catches the symptom everywhere instead of the two
+places that produce it, and it would hide the next one.

@@ -1186,7 +1186,7 @@ impl Simulation {
     /// one at a time which is lying.
 
     fn is_passable_tile(&self, x: i32, y: i32) -> bool {
-        use crate::world::{Position, TerrainType};
+        use crate::world::Position;
 
         if x < 0
             || x >= self.world.grid.width as i32
@@ -1198,8 +1198,28 @@ impl Simulation {
 
         let pos = Position::new(x, y);
 
+        // What a body can stand on is the terrain's own question, and this is
+        // the second place that answered it.
+        //
+        // It named `TerrainType::Water` and nothing else. `Terrain::is_walkable`
+        // has said `Water | Sea => false` since the sea was split off from
+        // fresh water, and this was never told - so the pathfinder walked
+        // people into the sea and let them live there. Measured over one
+        // settlement-year: **three of twelve people standing in salt water at
+        // once**, one of them on the same sea tile from day 120 to day 190,
+        // and 2,975 refusals of "No passable route toward destination
+        // (standing on Sea, which is walkable, with 0 ways out)" - a man in a
+        // one-cell pocket of sea, ringed by fresh water this function does
+        // refuse, boxed in for the rest of his life. He cannot walk to food or
+        // to the store. He starves where he is standing. See ISSUES_FOUND #227.
+        //
+        // Asked of the terrain now, so that adding a terrain cannot make this
+        // wrong again. This only governs where a foot may be *put*: somebody
+        // already standing somewhere they should not be can still step off,
+        // because it is the candidate that is asked about and not the ground
+        // underneath them.
         if let Some(tile) = self.world.grid.get_tile(&pos) {
-            if tile.terrain.terrain_type == TerrainType::Water {
+            if !tile.terrain.is_walkable() {
                 return false;
             }
         }

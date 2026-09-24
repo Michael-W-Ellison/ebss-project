@@ -135,10 +135,40 @@ fn an_agent_will_not_eat_what_it_has_ruined() {
     assert_eq!(agent.find_best_food_to_eat(), None);
 }
 
-/// An agent with wood and raw fish gets a fire going and cooks at it.
+/// An agent with wood, a knife and raw fish gets a fire going and cooks at it.
 ///
 /// The agent is given a practised hand so the outcome does not turn on a
 /// twenty-percent chance of burning the first batch.
+///
+/// **And an edge, without which this asks for something the model forbids.**
+/// A whole fish does not go over a fire - `an_agent_with_nothing_worth_cooking_lights_no_fire`
+/// just below asserts exactly that, and it has to be cut into portions first
+/// (#153). Cutting wants a blade, and `Agent::what_flesh_i_should_cut_up`
+/// refuses without one on purpose, because choosing to cut bare-handed spends
+/// the turn and comes straight back refused (#190). So the fixture handed the
+/// agent twenty fish it could not cook, a fire it had no reason to light, and
+/// then asked why it had not lit one.
+///
+/// The other half of why it never did was real and is fixed: the agent banked
+/// its firewood down to `ENOUGH_TO_HAND`, six, while a fire costs ten. See
+/// ISSUES_FOUND #221.
+///
+/// **And the last of it: there was no fire because nobody could ask for one.**
+/// A fire and a drying rack are for different jobs and the model says so:
+/// cooking gives up more of what is in a thing (0.95 against 0.85) and drying
+/// makes it keep far longer (a twentieth the rate against four fifths) - see
+/// `nutrition::tests::a_fire_feeds_you_and_a_drying_rack_keeps_it`, which pins
+/// that trade-off. That was never the reason either. `Cook` was chosen
+/// eighty-three times across twenty-four worlds and `LightFire` none, because
+/// the arm that knows how to get a fire lit answers **Sustenance** while the
+/// hunger that wants the cooking answers **Hunger**, and Sustenance sat under
+/// its own threshold at hundredths while Preparedness ran at eleven and up.
+/// Over eighty turns it offered `LightFire` on twenty-two of them and was
+/// outranked on every one.
+///
+/// Cooking wants a fire the way any work wants its tool, and getting the tool
+/// is part of the work: `food_action` now lights one where it stands when the
+/// wood is already in the pack. See ISSUES_FOUND #224.
 #[test]
 fn an_agent_lights_a_fire_and_cooks_on_it() {
     let mut world = World::new(WorldConfig::default());
@@ -158,6 +188,9 @@ fn an_agent_lights_a_fire_and_cooks_on_it() {
             .inventory
             .add_item(InventoryItem::new_with_weight("wood".to_string(), 40, 2.0));
         agent.inventory.add_item(food_item("fish", ItemType::Fish, 20));
+        agent
+            .inventory
+            .add_item(InventoryItem::new("stoneknife".to_string(), 1));
         agent.skills.set_skill_level(SkillType::Cooking, 8);
     }
 

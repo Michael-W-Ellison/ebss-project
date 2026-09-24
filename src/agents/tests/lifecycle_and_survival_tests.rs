@@ -28,16 +28,40 @@ fn test_agent_starts_with_full_health_and_energy() {
     assert_eq!(agent.state.life_stage, crate::agents::LifeStage::Adult);
 }
 
+/// A body ages by the time that passed, not by the number of times it was asked.
+///
+/// This asserted `initial_age + 1` and so pinned the defect rather than the
+/// behaviour: `age` is counted in ticks - seeded as `years * TICKS_PER_YEAR`,
+/// compared against a `max_age` derived the same way - and a step is
+/// `TICKS_BETWEEN_PLANS` of them. At one a step a body aged thirty times too
+/// slowly, reaching sixteen after four hundred and eighty simulated years, so
+/// nobody ever grew up and nobody ever died of old age. See ISSUES_FOUND #219.
+///
+/// The day is asserted as well as the step, because the step alone is the
+/// thing that was wrong and a day is the thing a person can check.
 #[test]
 fn test_agent_ages_over_time() {
+    use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_BETWEEN_PLANS, TICKS_PER_DAY};
+
     let mut agent = Agent::new(AgentConfig::default());
 
     let initial_age = agent.state.age;
-
-    // Age the agent
     agent.age_turn();
+    assert_eq!(
+        agent.state.age,
+        initial_age + TICKS_BETWEEN_PLANS,
+        "a step is half an hour and `age` is in ticks, so it moves by {TICKS_BETWEEN_PLANS}"
+    );
 
-    assert_eq!(agent.state.age, initial_age + 1);
+    let a_day_ago = agent.state.age;
+    for _ in 1..PLANNING_PERIODS_PER_DAY {
+        agent.age_turn();
+    }
+    assert_eq!(
+        agent.state.age - a_day_ago + TICKS_BETWEEN_PLANS,
+        TICKS_PER_DAY,
+        "and a day of steps is a day of ticks"
+    );
 }
 
 #[test]

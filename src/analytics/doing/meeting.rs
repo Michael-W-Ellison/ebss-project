@@ -69,6 +69,51 @@ impl Simulation {
         let mut handed = stack.clone();
         handed.quantity = going;
 
+        // And a pack that is merely full makes room for it, the way it does
+        // for anything it picks up off the ground.
+        //
+        // `could_i_take_another_handful` - which both giving branches now ask
+        // before offering anything - answers yes when there is room *or* when
+        // there is something the taker would put down. `PickUp` honours the
+        // second half of that by calling `set_down_what_is_worth_less_than_food`;
+        // `hand_over` did not, so it called `add_item` on a full pack and
+        // refused. With the giver's half of #230 put right, this was the
+        // whole of what was left: **1,098 refusals of "No room in their pack
+        // for it" against 1,208 `GiveTo` chosen.**
+        //
+        // A child with a pack of stones and nothing to eat puts a stone down
+        // and takes the supper. See ISSUES_FOUND #230.
+        let each = handed.what_one_of_them_weighs();
+        let wants = going as f32 * each;
+        if self.population.agents[to].inventory.weight_capacity_remaining() < wants {
+            let _ = self.set_down_what_is_worth_less_than_food(to, wants);
+        }
+
+        // And what will not all go in goes in as far as it will.
+        //
+        // This was all or nothing, and the two sides of the gift were asking
+        // about different amounts: the giving branches ask
+        // `could_i_take_another_handful`, which is **one** unit, and
+        // `giving_to` hands over **half the stack**. So a man with room for
+        // three offered twenty and was told "No room in their pack for it",
+        // and neither of them got anything - the same shape as #215, where
+        // the store asked for room for half a unit while the executor needed
+        // a whole one, 264,453 times.
+        //
+        // A gift of twenty into room for three is three. See ISSUES_FOUND #230.
+        let going = if each <= 0.0 {
+            going
+        } else {
+            let room = self.population.agents[to].inventory.weight_capacity_remaining();
+            going.min((room / each).floor().max(0.0) as u32)
+        };
+        if going == 0 {
+            return 0;
+        }
+
+        let mut handed = handed;
+        handed.quantity = going;
+
         if !self.population.agents[to].inventory.add_item(handed) {
             return 0;
         }

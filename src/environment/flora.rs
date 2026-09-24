@@ -1943,8 +1943,12 @@ impl PlantManager {
         let count = ((radius * radius) as f32 * density) as u32;
 
         for _ in 0..count {
-            let offset_x = (crate::core::dice::any::<i32>() % (radius as i32 * 2)) - radius as i32;
-            let offset_y = (crate::core::dice::any::<i32>() % (radius as i32 * 2)) - radius as i32;
+            // Round the centre, not off to one side of it - see
+            // `dice::a_step_of`. Written as `% (radius * 2) - radius` this
+            // scattered a patch from `-3r` to `r`, so a wood put down at a
+            // point stood mostly up and to the left of it.
+            let offset_x = crate::core::dice::a_step_of(radius as i32);
+            let offset_y = crate::core::dice::a_step_of(radius as i32);
 
             let pos = (center.0 + offset_x, center.1 + offset_y);
 

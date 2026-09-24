@@ -224,3 +224,60 @@ fn somebody_fed_and_cold_is_not_diverted_to_the_larder() {
          for everybody it was written for"
     );
 }
+
+/// And a well-fed infant is not living on itself, though it carries a fifth
+/// of what its father does.
+///
+/// An infant's reserve capacity is a fifth of a grown body's, and this gate
+/// divided by a grown body's. So an infant with its reserve completely full -
+/// nothing drawn on at all - came out at 0.20 and read as living on itself,
+/// every turn of its infancy, for ever. The branch it guards sits above every
+/// drive there is. See ISSUES_FOUND #228.
+///
+/// Both ends, because a gate that answers no to everybody is as wrong as one
+/// that answers yes: the same small body with its reserve actually spent must
+/// still read true.
+#[test]
+fn a_full_small_body_is_as_well_found_as_a_full_large_one() {
+    use crate::agents::{AgentConfig, Population};
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = crate::analytics::Simulation::new(
+        crate::world::World::new(crate::world::WorldConfig::default()),
+        population,
+    );
+
+    // A body a fifth the size of a grown one, which is about an infant's.
+    let small = 0.2;
+    {
+        let body = &mut simulation.population.agents[0].state.physiology;
+        body.now_a_body_of(small);
+        body.reserve = body.reserve_capacity;
+    }
+
+    let body = &simulation.population.agents[0].state.physiology;
+    assert!(
+        (body.what_this_body_has_spare() - 1.0).abs() < 1e-3,
+        "the fixture did not fill it: {}",
+        body.what_this_body_has_spare()
+    );
+    assert!(
+        !crate::analytics::Simulation::is_the_body_eating_itself(
+            &simulation.population.agents[0]
+        ),
+        "a small body with a full reserve is not living on itself"
+    );
+
+    // And the same body with four fifths of its own reserve gone is.
+    {
+        let body = &mut simulation.population.agents[0].state.physiology;
+        body.reserve = body.reserve_capacity * 0.2;
+    }
+    assert!(
+        crate::analytics::Simulation::is_the_body_eating_itself(
+            &simulation.population.agents[0]
+        ),
+        "a small body four fifths through its own reserve is living on itself"
+    );
+}

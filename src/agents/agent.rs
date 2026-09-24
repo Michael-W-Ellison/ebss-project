@@ -1155,7 +1155,22 @@ impl AgentState {
             return;
         }
 
-        self.age += 1;
+        // A step is half an hour, and `age` is counted in ticks - it is seeded
+        // as `years * TICKS_PER_YEAR`, compared against a `max_age` derived
+        // the same way, and divided by `TICKS_PER_YEAR` to get a life stage.
+        // So it advances by the ticks a step covers, not by one.
+        //
+        // It read `+= 1`, which is a minute per half hour lived: a day moved a
+        // body on by forty-eight ticks where a day is one thousand four
+        // hundred and forty, so **every body in this world aged thirty times
+        // too slowly**. Reaching sixteen took four hundred and eighty
+        // simulated years, which is to say nobody ever grew up and nobody ever
+        // died of old age. It is the same defect 974bc32 described fixing for
+        // `MINUTES_PER_TURN` - this counter was simply not one of the six it
+        // found - and the audit of ISSUES_FOUND #218 missed it too, because it
+        // swept counters named for turns and ticks and this one is named
+        // `age`. See ISSUES_FOUND #219.
+        self.age += crate::environment::seasons::TICKS_BETWEEN_PLANS;
         self.life_stage = LifeStage::from_age(self.age);
 
         // === SURVIVAL MECHANICS ===
@@ -1660,19 +1675,6 @@ impl AgentState {
 pub struct Agent {
     pub id: Uuid,
 
-    /// Whether one of this agent's hands has a child in it.
-    ///
-    /// "Age 0-2: must remain with a parent agent at all times. Parent agent
-    /// has one *hand* occupied with the child." Worked out once a turn in the
-    /// kin phase, which is where the caregivers and their charges are already
-    /// walked, and read by `update_inventory_capacity_from_transport`.
-    ///
-    /// A field rather than a question, because an agent cannot see the rest of
-    /// the population from inside itself and what it can carry is asked of it
-    /// alone, every turn, from four places.
-    #[serde(default)]
-    pub hands_full_of_child: bool,
-
     /// The tick this one is free to think again.
     ///
     /// "Once an agent plans an action, it would not change its mind unless its
@@ -1862,7 +1864,6 @@ impl Agent {
     pub fn new(config: AgentConfig) -> Self {
         let mut agent = Self {
             id: crate::core::dice::name(),
-            hands_full_of_child: false,
             busy_until: 0,
             state: AgentState::new(),
             drives: if config.random_weights {
@@ -2152,6 +2153,44 @@ impl Agent {
     /// spare.
     pub const ENOUGH_TO_HAND: u32 = 6;
 
+    /// What a campfire is built from, and what is then put on it to burn.
+    ///
+    /// Stated here rather than in the decision layer because what a person
+    /// keeps to hand has to be able to see it - see `ENOUGH_WOOD_TO_HAND`
+    /// below. `Simulation::FIRE_BUILD_WOOD` and `FIRE_FUEL_WOOD` derive from
+    /// these, so there is one spelling.
+    pub const WHAT_BUILDING_A_FIRE_TAKES: u32 = 5;
+    pub const WHAT_FEEDING_A_FIRE_TAKES: u32 = 5;
+
+    /// And how much firewood a person keeps, which is a different question
+    /// again.
+    ///
+    /// **What you keep of a material has to be at least what the commonest
+    /// thing you do with it costs.** A fire is built from five and fed with
+    /// five more. `ENOUGH_TO_HAND` is six, so an agent banked everything
+    /// above six - measured, on its *second* turn, forty down to six - and
+    /// spent the rest of its life four short of a fire.
+    ///
+    /// Relighting a cold hearth costs only the fuel, five, which it could
+    /// have afforded. But no hearth could ever be built to relight, so the
+    /// shortfall was a deadlock rather than a delay: **no fire was ever lit
+    /// in any world**, and everything that eats raw gave up about two thirds
+    /// of what was in it. See ISSUES_FOUND #221.
+    pub const ENOUGH_WOOD_TO_HAND: u32 =
+        Self::WHAT_BUILDING_A_FIRE_TAKES + Self::WHAT_FEEDING_A_FIRE_TAKES;
+
+    /// How much of this particular thing is worth keeping back.
+    ///
+    /// A person does not keep the same amount of everything: six of a thing
+    /// is a sensible pocketful, and six sticks is not a fire.
+    fn how_much_of_this_to_keep(name: &str) -> u32 {
+        if name == "wood" {
+            Self::ENOUGH_WOOD_TO_HAND
+        } else {
+            Self::ENOUGH_TO_HAND
+        }
+    }
+
     /// And how much food, which is a different question.
     ///
     /// Food is not flint: six armfuls of berries is not a sensible thing to
@@ -2179,12 +2218,14 @@ impl Agent {
             .get_all_items()
             .iter()
             .filter(|(name, item)| {
-                item.quantity > Self::ENOUGH_TO_HAND
+                item.quantity > Self::how_much_of_this_to_keep(name)
                     && item.food_data.is_none()
                     && !name.contains("food")
             })
             .max_by_key(|(_, item)| item.quantity)
-            .map(|(name, item)| (name.clone(), item.quantity - Self::ENOUGH_TO_HAND))
+            .map(|(name, item)| {
+                (name.clone(), item.quantity - Self::how_much_of_this_to_keep(name))
+            })
     }
 
     /// How much more weight this pack is holding than its owner can carry.
@@ -2251,6 +2292,39 @@ impl Agent {
                 .any(|(carrier, _)| *carrier == called)
     }
 
+    /// What goes on the grass last, because it is the means to a job rather
+    /// than a load.
+    ///
+    /// Tools and carriers are held back from shedding outright by
+    /// `is_this_part_of_the_kit`. Firewood is nearly the same kind of thing: a
+    /// fire is built from ten sticks, and a person who tips the last of his
+    /// bundle on the grass has no fire tonight. Measured on the cooking
+    /// fixture, an agent given forty wood was down to **four by turn six** and
+    /// never had ten again, so `cooking_action` - which does chain correctly,
+    /// and returns `LightFire` the moment there is food worth cooking and wood
+    /// to burn - was never once asked with both in hand.
+    ///
+    /// **Nearly, and the difference matters.** This is an ordering and not a
+    /// veto: the last ten sticks go down after everything else, and they do
+    /// still go down. Written as a veto it broke the carrying invariant of
+    /// #126 - a pack over its limit refuses everything put into it, so a body
+    /// that cannot get back under its limit can never pick anything up again
+    /// for the rest of its life. A man whose whole load is eight sticks he can
+    /// no longer lift puts the sticks down and goes cold; he does not stand
+    /// there holding them until he starves.
+    ///
+    /// Nought for everything else. Holding six of every kind of rock back
+    /// would leave agents permanently overloaded. This is the one case where
+    /// what is being carried is the means to something the carrier is going to
+    /// want tonight. See ISSUES_FOUND #224.
+    fn what_stays_in_the_pack(name: &str) -> u32 {
+        if name == "wood" {
+            Self::ENOUGH_WOOD_TO_HAND
+        } else {
+            0
+        }
+    }
+
     pub fn what_i_would_set_down(&self) -> Option<String> {
         self.inventory
             .get_all_items()
@@ -2260,9 +2334,16 @@ impl Agent {
             .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
             .max_by(|a, b| {
                 let load = |item: &InventoryItem| item.quantity as f32 * item.weight_per_unit;
-                load(a.1)
-                    .partial_cmp(&load(b.1))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                // Anything with something to spare goes before anything that
+                // is down to what it keeps back - see `what_stays_in_the_pack`.
+                let has_spare = |(name, item): &(&String, &InventoryItem)| {
+                    item.quantity > Self::what_stays_in_the_pack(name)
+                };
+                has_spare(a).cmp(&has_spare(b)).then(
+                    load(a.1)
+                        .partial_cmp(&load(b.1))
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                )
             })
             .map(|(name, _)| name.clone())
     }
@@ -2313,8 +2394,16 @@ impl Agent {
             return item.quantity;
         }
 
+        // What is over and above what this one keeps back goes first - see
+        // `what_stays_in_the_pack`. When there is nothing over, the keep-back
+        // itself goes, because a body that cannot get under its limit can
+        // never pick anything up again (#126). It is the order that is kept,
+        // not the sticks.
+        let spare = item.quantity.saturating_sub(Self::what_stays_in_the_pack(what));
+        let most = if spare > 0 { spare } else { item.quantity };
+
         let wanted = (self.how_much_too_much_i_am_carrying() / each).ceil() as u32;
-        wanted.clamp(1, item.quantity)
+        wanted.clamp(1, most)
     }
 
     /// How much of this one goes on the grass to make room for something
@@ -2355,6 +2444,32 @@ impl Agent {
                 item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP && item.is_food()
             })
             // What keeps worst is what most wants burying
+            .max_by_key(|(_, item)| item.quantity)
+            .map(|(name, item)| (name.clone(), item.quantity - Self::WHAT_IS_NOT_WORTH_A_TRIP))
+    }
+
+    /// Food in the pack that somebody else could make a meal of now.
+    ///
+    /// The same shape as `what_food_i_can_spare` and a different question.
+    /// That one asks `is_food`, which is right for burying - what wants
+    /// putting in the ground is whatever will not keep - and wrong for
+    /// handing to somebody, because `is_food` answers yes to an uncut haunch,
+    /// a stack that has gone over, and raw flesh this one has been ill off.
+    /// None of those is supper. The store branch names that distinction and
+    /// acts on it; the giving branch asked the other question.
+    ///
+    /// Measured on a settlement's last winter: a father four days running,
+    /// a third of the way through his own reserve, handing his child **nine
+    /// whole fish** - by the third day harmful and by the fourth spoiled as
+    /// well - and choosing it again the next morning because the child still
+    /// had nothing to eat. See ISSUES_FOUND #229.
+    pub fn what_meal_i_can_spare(&self) -> Option<(String, u32)> {
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(name, item)| {
+                item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP && self.is_this_a_meal(name)
+            })
             .max_by_key(|(_, item)| item.quantity)
             .map(|(name, item)| (name.clone(), item.quantity - Self::WHAT_IS_NOT_WORTH_A_TRIP))
     }
@@ -6169,16 +6284,17 @@ impl Agent {
         // stops a child using one is the pulling, which is the movement half.
         let years = self.state.what_i_can_do_for_my_age();
 
-        // And whether one of those hands has a child in it.
+        // A child in arms is **not** counted here, and was.
         //
-        // "Age 0-2: must remain with a parent agent at all times. Parent agent
-        // has one *hand* occupied with the child, limiting the types of work
-        // the parent agent can accomplish." One hand, so half of what two of
-        // them hold; the basket on the back is unaffected, which is exactly
-        // why somebody carrying a baby wants one.
-        let hands = if self.hands_full_of_child { 0.5 } else { 1.0 };
-
-        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong * years * hands;
+        // "Age 0-2: ... Parent agent has one *hand* occupied with the child,
+        // limiting the types of work the parent agent can accomplish." That
+        // was read as half of what two hands hold, which is the wrong half of
+        // the sentence: what it limits is the *work*, and no work in this
+        // model asks whether a hand is free. So the only thing it ever did was
+        // halve a mother's pack in the two years she most needs one, on a
+        // model whose settlements are short of what they can carry home in
+        // eleven months of twelve (#236). Removed on instruction.
+        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong * years;
         let in_something = self.transport.total_additional_capacity();
 
         self.inventory.max_weight = in_hand + in_something;
@@ -7773,10 +7889,14 @@ impl Agent {
             let nutrition = food_data.effective_nutrition();
             self.nutrition.consume(&nutrition.scale(amount as f32));
 
-            // Also satisfy thirst from water content
-            if nutrition.water_content > 0.3 {
-                if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
-                    thirst.decrease(nutrition.water_content * 0.1 * amount as f32);
+            // What this does to thirst, which may be to make it worse -
+            // see `FoodData::what_it_does_to_thirst`.
+            if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+                let to_thirst = food_data.what_it_does_to_thirst() * amount as f32;
+                if to_thirst >= 0.0 {
+                    thirst.decrease(to_thirst);
+                } else {
+                    thirst.increase(-to_thirst);
                 }
             }
         } else {
@@ -7915,10 +8035,15 @@ impl Agent {
         // Apply nutrition to agent
         self.nutrition.consume(&nutrition);
 
-        // Satisfy thirst from water content
-        if nutrition.water_content > 0.3 {
-            if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
-                thirst.decrease(nutrition.water_content * 0.1);
+        // What this does to thirst, which may be to make it worse: what
+        // drying took out of a thing, the gut puts back out of the body.
+        // See `FoodData::what_it_does_to_thirst`.
+        if let Some(thirst) = self.drives.get_mut(DriveType::Thirst) {
+            let to_thirst = food_data.what_it_does_to_thirst();
+            if to_thirst >= 0.0 {
+                thirst.decrease(to_thirst);
+            } else {
+                thirst.increase(-to_thirst);
             }
         }
 

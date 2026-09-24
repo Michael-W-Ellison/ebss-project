@@ -291,6 +291,59 @@ fn feeding_a_child_reaches_the_turn() {
     );
 }
 
+/// And what he hands over is supper, not whatever is in the pack.
+///
+/// `a_child_of_mine_to_feed` asked `what_food_i_can_spare`, which asks
+/// `is_food` - and `is_food` answers yes to an uncut haunch, a stack that has
+/// gone over, and raw flesh the carrier has been ill off. The store branch
+/// names that distinction and acts on it; this one did not.
+///
+/// Measured on a settlement's last winter: a father four days running, a
+/// third of the way through his own reserve, handing his child **nine whole
+/// fish** - harmful by the third day and spoiled as well by the fourth - and
+/// choosing it again next morning, because the child still had nothing to
+/// eat. See ISSUES_FOUND #229.
+#[test]
+fn a_parent_hands_a_child_supper_and_not_what_has_gone_over() {
+    use crate::world::nutrition::{CookingOutcome, FoodDatabase};
+
+    let mut simulation = a_parent_and_a_hungry_child();
+
+    // Take away the good food and leave him a ruined stack, which `is_food`
+    // counts and nobody can eat.
+    {
+        let parent = &mut simulation.population.agents[0];
+        parent.inventory.get_all_items_mut().clear();
+
+        let database = FoodDatabase::new();
+        let mut burnt =
+            crate::agents::InventoryItem::new_with_weight("meat".to_string(), 20, 0.5);
+        let mut food = database
+            .create_food_data(&crate::world::ItemType::Meat, 0)
+            .expect("meat is in the database");
+        food.cook(CookingOutcome::Ruins);
+        burnt.food_data = Some(food);
+        let _ = parent.inventory.add_item(burnt);
+    }
+
+    let parent = &simulation.population.agents[0];
+    assert!(
+        parent.what_food_i_can_spare().is_some(),
+        "the fixture is not testing anything: `is_food` should still count this"
+    );
+    assert_eq!(
+        parent.what_meal_i_can_spare(),
+        None,
+        "twenty ruined joints are not a meal anybody can be handed"
+    );
+    assert!(
+        simulation
+            .a_child_of_mine_to_feed(parent, parent.state.position)
+            .is_none(),
+        "he offered his child a stack that has gone over"
+    );
+}
+
 /// A hungry child that is nothing to this agent gets nothing. A gift is one
 /// thing and feeding your own is another.
 #[test]
@@ -448,22 +501,43 @@ fn the_camp_is_not_a_parent_for_the_very_young() {
     );
 }
 
-/// A parent carrying somebody under two has one hand occupied and carries half
-/// of what two hands hold.
+/// A mother of an infant carries what anybody else of her body carries.
+///
+/// This test used to assert the opposite. "Age 0-2: ... Parent agent has one
+/// *hand* occupied with the child, limiting the types of work the parent
+/// agent can accomplish" was read as half of what two hands hold - and that
+/// is the wrong half of the sentence. What the specification limits is the
+/// *work*, and no work in this model asks whether a hand is free, so the only
+/// thing the rule ever did was halve a woman's pack for the two years she
+/// most needs one, in a model whose settlements cannot carry home what they
+/// gather in eleven months of twelve (#236).
+///
+/// Run through the kin phase rather than off a field, so that reintroducing
+/// it anywhere in that phase fails here.
 #[test]
-fn a_child_in_arms_takes_up_a_hand() {
-    let mut free = somebody_of(30, (0, 0, 0));
-    let mut carrying = somebody_of(30, (0, 0, 0));
+fn a_mother_of_an_infant_carries_what_anybody_carries() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (25, 25, 0)));
+    population.agents.push(somebody_of(30, (40, 40, 0)));
+    let mother = population.agents[0].id;
 
-    carrying.hands_full_of_child = true;
-    carrying.take_up_the_cart();
-    free.take_up_the_cart();
+    let mut infant = somebody_of(1, (25, 25, 0));
+    infant.parent_ids = vec![mother];
+    population.agents.push(infant);
 
-    assert!(
-        carrying.total_carrying_capacity() < free.total_carrying_capacity(),
-        "one hand is not two: {:.1} against {:.1}",
-        carrying.total_carrying_capacity(),
-        free.total_carrying_capacity()
+    let mut simulation = Simulation::new(a_world(), population);
+    simulation.feed_the_small_children();
+
+    for index in 0..2 {
+        simulation.population.agents[index].take_up_the_cart();
+    }
+
+    assert_eq!(
+        simulation.population.agents[0].total_carrying_capacity(),
+        simulation.population.agents[1].total_carrying_capacity(),
+        "the one with a baby at her feet carries {:.1} against {:.1}",
+        simulation.population.agents[0].total_carrying_capacity(),
+        simulation.population.agents[1].total_carrying_capacity()
     );
 }
 
@@ -866,5 +940,64 @@ fn a_gift_of_food_is_still_food() {
             .get_item("fish")
             .map(|i| i.quantity),
         Some(2)
+    );
+}
+
+/// A gift into a pack with room for three is three, not nothing.
+///
+/// `hand_over` was all or nothing, and the two sides of a gift were asking
+/// about different amounts: the giving branches ask
+/// `could_i_take_another_handful`, which is **one** unit, and `giving_to`
+/// hands over **half the stack**. So a man with room for three was offered
+/// twenty and told "No room in their pack for it", and neither of them got
+/// anything - the same shape as #215, where the store asked for room for half
+/// a unit while the executor needed a whole one, 264,453 times.
+///
+/// Measured over six seeded settlement-years, with the giver's half of #230
+/// already put right: 1,098 refusals of "No room in their pack for it"
+/// against 1,208 `GiveTo` chosen. See ISSUES_FOUND #230.
+#[test]
+fn a_gift_goes_in_as_far_as_it_will() {
+    use crate::agents::{AgentConfig, InventoryItem, Population};
+    use crate::analytics::Simulation;
+    use crate::world::nutrition::FoodDatabase;
+    use crate::world::{ItemType, World, WorldConfig};
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
+
+    let database = FoodDatabase::new();
+    let mut stack = InventoryItem::new_with_weight("fish".to_string(), 20, 0.5);
+    stack.food_data = database.create_food_data(&ItemType::Fish, 0);
+    simulation.population.agents[0].inventory.add_item(stack);
+
+    // A pack with room for three of them and nothing in it worth setting
+    // down, so that the shedding above this cannot quietly make more.
+    {
+        let them = &mut simulation.population.agents[1];
+        them.inventory.get_all_items_mut().clear();
+        them.inventory.max_weight = 1.5;
+    }
+
+    let went = simulation.hand_over_for_test(0, 1, "fish", 20);
+    assert_eq!(went, 3, "twenty into room for three is three");
+
+    assert_eq!(
+        simulation.population.agents[1]
+            .inventory
+            .get_item("fish")
+            .map(|item| item.quantity),
+        Some(3),
+        "and the three are in their pack"
+    );
+    assert_eq!(
+        simulation.population.agents[0]
+            .inventory
+            .get_item("fish")
+            .map(|item| item.quantity),
+        Some(17),
+        "the giver is down by exactly what went and no more"
     );
 }

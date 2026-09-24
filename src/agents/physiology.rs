@@ -410,6 +410,24 @@ pub struct Physiology {
     pub units_ever_eaten: f32,
     #[serde(default)]
     pub meals_ever_eaten: u32,
+
+    /// Energy that finished digesting with nowhere to go.
+    ///
+    /// `advance` banks what the gut gives up with
+    /// `(reserve + won).min(reserve_capacity)`, so a body already at capacity
+    /// digests its dinner into nothing. The food was picked, carried and
+    /// eaten, and a pit would have held it until November.
+    ///
+    /// Measured over three seeded settlement-years: **706,465 / 1,065,049 /
+    /// 852,712 energy - 17.3%, 22.2% and 19.5% of everything the settlement
+    /// ate.** Agents sit at a full reserve on 48% to 55% of all person-turns.
+    ///
+    /// An instrument: nothing reads it. It is here because this was the
+    /// largest single loss in the model and no tally could see it - the same
+    /// argument as the standstill counter in `Simulation::walking`. See
+    /// ISSUES_FOUND #237.
+    #[serde(default)]
+    pub spilled_at_the_brim: f32,
 }
 
 impl Physiology {
@@ -440,6 +458,7 @@ impl Physiology {
                 * what_a_body_this_size_burns(share),
             units_ever_eaten: 0.0,
             meals_ever_eaten: 0,
+            spilled_at_the_brim: 0.0,
         }
     }
 
@@ -624,6 +643,8 @@ impl Physiology {
         });
         if won > 0.0 {
             self.waste += won * 0.25;
+            let room = (self.reserve_capacity - self.reserve).max(0.0);
+            self.spilled_at_the_brim += (won - room).max(0.0);
             self.reserve = (self.reserve + won).min(self.reserve_capacity);
         }
 

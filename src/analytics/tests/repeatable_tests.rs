@@ -140,7 +140,27 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // two and a half days is long enough for a spell of weather to end now
     // that a ten-hour front lasts ten hours instead of twelve days. A world
     // whose weather turns over draws for its weather.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_600;
+    // And down 4.2% again for the placement and firewood work of #220-#222.
+    // The short count moves because what an agent keeps in its pack changed:
+    // it holds ten wood now rather than six, so it banks less, carries more,
+    // and decides differently about both.
+    // And down 4.7% for the fire chain of #224. Both counts move and the long
+    // one moves further, which is the shape to expect from a change that adds
+    // a thing to the world rather than only a branch to a turn: over two and a
+    // half days a handful of turns go on lighting a fire and cooking at it
+    // instead of on drying and pottering, while over a year the fires
+    // themselves burn, consume and go out.
+    // And up 2.0% for the wander that had a direction in it (#225). The short
+    // count rises and the long one falls, which is the shape of a herd that
+    // stays on the map: more animals alive to take turns over two and a half
+    // days, and over a year the beasts that used to stand off the edge where
+    // nothing grows are standing on ground that feeds them, so fewer of them
+    // are drawing for a hungry beast's search.
+    // And down 2.7% for the sea (#227), where the year is up 6.0%. A person
+    // who cannot be walked into the water takes a different step on the few
+    // turns of two and a half days that a coast comes into, and over a year
+    // lives long enough to take a great many more of them.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_895;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -206,7 +226,62 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // world with a fifth of the animals on it and wild food coming back at
     // the rate it was actually measured at has fewer things happening in it
     // to draw for.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 571_835;
+    // And a tenth of a per cent for #220-#222, which is the shape to expect
+    // from a change that alters what one pass does rather than what the world
+    // is: the short count moved thirty times further than the long one.
+    // And down 8.7% for the hydration cost of dried food (#223), with the
+    // short count above **not moving at all** - which is exactly the shape to
+    // expect. A hundred and twenty turns is two and a half days and nobody
+    // lives on dried meat for two and a half days; a year is long enough for
+    // what a winter store does to a body's water to tell.
+    //
+    // And **up 18.7%** for the fire chain of #224 - the first rise either of
+    // these counts has recorded, and the only one so far that is not a
+    // correction. Every previous move was a rate being put back on its proper
+    // clock, and every one of those took things *out* of the world. This puts
+    // something in: fires are lit now, and a fire is a thing that goes on
+    // happening. It burns through its fuel, it heats what is left at it, it
+    // draws for how the cooking comes out, and it goes out - a year of that
+    // is a year of rolls that were never made before, on top of the turns the
+    // people themselves spend lighting and cooking rather than drying.
+    // And down 3.6% for #225 - see the short count above, which moved the
+    // other way.
+    // And **up 6.0%** for the sea (#227). A settlement that is not standing
+    // in salt water keeps three more people alive through the summer and
+    // twice as much in its pits, and a living settlement rolls.
+    // And down 2.6% for the larder work of #228, with the short count above
+    // **not moving at all** - which is the shape to expect. None of it can
+    // fire inside two and a half days: a body does not get a quarter of the
+    // way through a three-week reserve in that time, and the pits are not
+    // empty enough for the second one to matter. Over a year, a man who gets
+    // what he came for out of the first hole stops walking to the next.
+    // And **up 11.8%** for the giving of #230, the largest single move either
+    // count has taken. The short count again does not move: a gift that lands
+    // rather than being refused changes what a settlement *is* over a year -
+    // nine children born across six seeded years against two - and changes
+    // almost nothing about a particular afternoon.
+    // And down a *hundredth* of a per cent - fifty draws in six hundred and
+    // eighty-nine thousand - for the larder rung of #231. A man who walks to
+    // the pit instead of casting about does not roll for where to cast.
+    // And down 0.9% for #232, where the larder offers the biggest stack
+    // rather than the first one: a trip that brings back a load is a trip
+    // that is not made again tomorrow.
+    // And down 0.45% for #238, where the crop is handed back to the bush
+    // once rather than twice. The short count above does not move, which is
+    // the shape to expect: nobody has a pack full enough to be refused inside
+    // two and a half days. Over a year the bushes and the quarries stop
+    // growing back what was taken off them, so there is less standing in the
+    // country to walk to and roll over.
+    // And **up 4.6%** for #243, where a percept that reports the ground
+    // underfoot no longer answers with a walk to it. The short count above
+    // does not move: over two and a half days nobody has lived long enough
+    // for the difference to compound. Over a year it is the largest rise
+    // since the giving of #230, and for the same reason - a settlement that
+    // spends a turn in six on something rather than on standing still is a
+    // settlement with more people in it at the end, and a living settlement
+    // rolls. Gathering is up 3.9% across twelve seeds and person-turns are
+    // flat, so what the turn bought was work rather than survival.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 711_032;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

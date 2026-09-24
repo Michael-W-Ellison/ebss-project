@@ -73,7 +73,18 @@ impl Simulation {
                 match percept {
                     Percept::DangerDetected { threat_type: _, position, severity } => {
                         // High-priority: flee from danger
-                        if let Some(danger_pos) = position {
+                        //
+                        // Danger on the tile underfoot has no direction in it:
+                        // `dx` and `dy` are both nought, so the flee target
+                        // comes out as the agent's own position and the turn
+                        // is spent walking nowhere. Somewhere - anywhere - is
+                        // the answer to a thing you are standing on, and the
+                        // branch below already knows how to pick one. See
+                        // ISSUES_FOUND #234.
+                        let underfoot = position
+                            .is_some_and(|at| at.0 == agent_position.0 && at.1 == agent_position.1);
+
+                        if let Some(danger_pos) = position.filter(|_| !underfoot) {
                             // Move away from danger position
                             let dx = agent_position.0 - danger_pos.0;
                             let dy = agent_position.1 - danger_pos.1;
@@ -102,7 +113,26 @@ impl Simulation {
                     }
                     Percept::ResourceDetected {  position, .. } => {
                         // High-salience resource (usually means high hunger/thirst)
-                        // Move towards it
+                        // Move towards it - unless it is the ground underfoot.
+                        //
+                        // The sight and smell passes report what is at the
+                        // agent's own feet along with everything else, and
+                        // this answered every one of them with a walk. A walk
+                        // to where you are standing costs the whole turn and
+                        // returns *success*, so it was in no refusal tally
+                        // anywhere: see the counter in `Simulation::walking`
+                        // and ISSUES_FOUND #234.
+                        //
+                        // Standing aside rather than turning it into a
+                        // `Gather`: this is the "follow your own nose" path,
+                        // reached only when no drive had an answer, and a
+                        // gather proposed here would not have been through
+                        // `could_this_gather_come_to_anything`. The plan and
+                        // the goal below get the turn instead.
+                        if position.0 == agent_position.0 && position.1 == agent_position.1 {
+                            return None;
+                        }
+
                         return Some(Action::Move {
                             target: *position,
                         });
@@ -504,6 +534,29 @@ impl Simulation {
         // man and his supper; being unable to reach the store is. Left as it
         // was, with the measurement recorded so nobody spends the afternoon on
         // it again.
+        //
+        // **Tried again at #228 and at #233, and it is still not kept - but
+        // not for the reason #228 gave, which was wrong and is corrected
+        // here.**
+        //
+        // #228 narrowed it to `is_too_cold` on **one seed** and recorded
+        // births 1 to 0 and `ready to breed` 368 to 6 as a result. It is not
+        // one: `needs_shelter` and `is_too_cold` are measured at **28.3% of
+        // gap person-turns each - the same turns** - so that ablation barely
+        // changed when this fires at all, and a birth count of one falling to
+        // nought on a single settlement is a coin. Do not cite those numbers.
+        //
+        // What #233 measured instead, over six seeded settlement-years:
+        // skipping this override for somebody **already under shelter** -
+        // which is what the Shelter drive below has always done - costs a
+        // settlement. Emptied 0 of 6 to 1 of 6, births 8 to 7, person-turns
+        // flat. So it is reverted, and the oddity it was aimed at is recorded
+        // rather than fixed: a roof is within half a pace on 97.6% of those
+        // turns and the agent is already under one on 24.1% of them, so
+        // almost every `SeekShelter` is a huddle rather than a walk - and
+        // since `needs_shelter` reads the exposure *list*, which hypothermia
+        // sits on for as long as the body is cold, the action cannot end the
+        // condition that chose it. See ISSUES_FOUND #233.
         if agent.needs_shelter() && self.nearest_shelter_from(agent_position).is_some() {
             return (Action::SeekShelter, false);
         }

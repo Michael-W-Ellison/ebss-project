@@ -500,6 +500,30 @@ fn an_attempt_goes_down_with_the_afternoon_it_was_made_in() {
 /// summer job or that a fire is what firing wants: what is here is ten coarse
 /// facts about the afternoon and the arithmetic to notice that one of them
 /// goes with a thing working.
+///
+/// **Read while the settlement is alive, which is the part this got wrong.**
+/// It used to run the year out and then ask the survivors, and
+/// `Population::turn` takes the dead off the roll - `agents.retain(is_alive)`
+/// - so an empty settlement answers every question with nought. Probed
+/// turn by turn, this fixture holds twelve people who work out between five
+/// and thirty-one things between them, and then dies out on **day 327**:
+///
+/// | day | alive | worked out |
+/// |---|---|---|
+/// | 10 | 12 | 6 |
+/// | 125 | 12 | 19 |
+/// | 195 | 12 | 31 |
+/// | 327 | 0 | 0 |
+///
+/// So the settlement was working things out the whole time and the reading
+/// was taken from its graves. The high-water mark is what the claim is about
+/// and is what is asserted on.
+///
+/// The die-off is real and is somebody else's: it is the same store that
+/// `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy`
+/// and `longevity_tests::a_settlement_still_raises_children_late_on` are red
+/// about, and those two own it. Nothing here should be made to pass by
+/// keeping people alive, and nothing here hides the fact that they are not.
 #[test]
 fn a_settlement_works_things_out_that_nobody_wrote_down() {
     let mut world = World::new(WorldConfig::default());
@@ -512,24 +536,33 @@ fn a_settlement_works_things_out_that_nobody_wrote_down() {
 
     // Long enough for a year to turn, which is what most of these lessons are
     // about.
+    let mut worked_out = 0;
+    let mut lasted = 0;
     for _ in 0..(crate::environment::seasons::PLANNING_PERIODS_PER_YEAR + 400) {
         simulation.take_a_turn();
         if !simulation.population.agents.iter().any(|a| a.state.is_alive) {
             break;
         }
+        lasted += 1;
+
+        let between_them: usize = simulation
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| agent.lessons.how_much_i_have_worked_out())
+            .sum();
+        worked_out = worked_out.max(between_them);
     }
 
-    let worked_out: usize = simulation
-        .population
-        .agents
-        .iter()
-        .map(|agent| agent.lessons.how_much_i_have_worked_out())
-        .sum();
-
+    assert!(
+        lasted > 0,
+        "the settlement was empty before the first turn was taken"
+    );
     assert!(
         worked_out > 0,
-        "a year and a season of twelve people living, and not one of them \
-         noticed that anything ever went better on one sort of afternoon \
-         than another"
+        "twelve people lived {} turns and not one of them ever noticed that \
+         anything went better on one sort of afternoon than another",
+        lasted
     );
 }

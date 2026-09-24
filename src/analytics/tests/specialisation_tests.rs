@@ -238,6 +238,29 @@ fn a_dedicated_farmer_brings_back_more_than_a_casual_one() {
                 },
                 0,
             );
+
+            // And carries it home, so the next trip has a pack to fill.
+            //
+            // Without this the test measured nothing. A pack holds 42 and a
+            // founder sets out with food already in it, so within a handful
+            // of trips **both hands sat at 42.0 of 42.0 carrying 77 food**
+            // and the remaining trips took nothing at all. What the node lost
+            // was then not what either hand brought back but how quickly each
+            // filled a bag - and the better hand fills it sooner, so the
+            // measurement came out backwards: 0 for the practised hand
+            // against 25 for the casual one. See ISSUES_FOUND #222.
+            let carried: Vec<(String, u32)> = simulation.population.agents[0]
+                .inventory
+                .get_all_items()
+                .iter()
+                .filter(|(_, item)| item.food_data.is_some())
+                .map(|(name, item)| (name.clone(), item.quantity))
+                .collect();
+            for (name, quantity) in carried {
+                simulation.population.agents[0]
+                    .inventory
+                    .remove_item(&name, quantity);
+            }
         }
 
         before - simulation.world.resources[0].amount

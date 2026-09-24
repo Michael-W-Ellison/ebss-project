@@ -174,11 +174,24 @@ fn the_sea_costs_more_than_it_gives() {
             agent.drank_salt_water(0);
         }
 
-        for turn in 1..=(crate::environment::seasons::TICKS_PER_DAY * 3) {
-            agent.state.last_ate_turn = turn;
+        // Three days as the model lives them: a pass every half hour, and the
+        // clock moving thirty ticks each time, which is what
+        // `Population::take_a_turn` does.
+        //
+        // It read `TICKS_PER_DAY * 3` and so took four thousand three hundred
+        // and twenty passes - ninety days, not three. `advance` is handed
+        // `MINUTES_PER_TURN` a pass and a body dries out in
+        // `MINUTES_TO_DIE_OF_THIRST`, which is exactly three days, so both men
+        // were empty on day three and sat at nought for the eighty-seven
+        // after it. That is the 0-against-0 this test reported. See
+        // ISSUES_FOUND #218 for the same mistake in the model.
+        use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_BETWEEN_PLANS};
+        for pass in 1..=(PLANNING_PERIODS_PER_DAY * 3) {
+            let now = pass * TICKS_BETWEEN_PLANS;
+            agent.state.last_ate_turn = now;
             agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
-            agent.turn_with_percepts(turn);
-            agent.process_survival_turn(turn);
+            agent.turn_with_percepts(now);
+            agent.process_survival_turn(now);
         }
 
         agent.state.physiology.hydration

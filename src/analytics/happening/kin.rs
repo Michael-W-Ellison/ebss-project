@@ -227,11 +227,7 @@ impl Simulation {
     /// for consumption**." Which is to say that under ten they cannot.
     pub(in crate::analytics) const OLD_ENOUGH_TO_COOK: u32 = 10;
 
-    /// And the age up to which being carried occupies one of a parent's hands.
-    pub(in crate::analytics) const CARRIED_IN_ARMS_UNTIL: u32 = 2;
-
-    /// Feed the small children out of their parents, and fill the hands of the
-    /// parents carrying the smallest.
+    /// Feed the small children out of their parents.
     ///
     /// Two things the specification asks for that nothing did. The nursing
     /// machinery below fed an infant *on demand* - a mouthful whenever
@@ -346,7 +342,6 @@ impl Simulation {
         struct AMouthToFeed {
             child: uuid::Uuid,
             parent: uuid::Uuid,
-            in_arms: bool,
             wants_food: f32,
             wants_water: f32,
         }
@@ -386,17 +381,10 @@ impl Simulation {
                 Some(AMouthToFeed {
                     child: child.id,
                     parent,
-                    in_arms: child.state.years_old() <= Self::CARRIED_IN_ARMS_UNTIL,
                     wants_food: a_turn,
                     wants_water: A_DRINK_IS_WORTH * MINUTES_PER_TURN as f32 / MINUTES_PER_DAY as f32,
                 })
             })
-            .collect();
-
-        let carrying: std::collections::BTreeSet<uuid::Uuid> = mouths
-            .iter()
-            .filter(|mouth| mouth.in_arms)
-            .map(|mouth| mouth.parent)
             .collect();
 
         for mouth in &mouths {
@@ -462,10 +450,6 @@ impl Simulation {
                 parent.state.physiology.hydration =
                     (parent.state.physiology.hydration - water).max(0.0);
             }
-        }
-
-        for agent in &mut self.population.agents {
-            agent.hands_full_of_child = carrying.contains(&agent.id);
         }
     }
 

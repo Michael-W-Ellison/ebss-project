@@ -161,8 +161,22 @@ fn test_housing_clusters_near_settlement() {
     }
 }
 
+/// A mill is built by the farm it grinds for, wherever the builder was standing.
+///
+/// **Seeded, because this used to turn on the terrain roll.** The criteria pay
+/// `200 / (1 + distance)`, which saturates, and the walk to the site used to
+/// cost `distance * 2.0`, which does not - so only the four tiles orthogonally
+/// touching the farm could beat the builder standing still, and whether the
+/// mill clustered came down to whether one of those four happened to be
+/// passable. Measured over twenty-four worlds: **22 of 24** put it within
+/// eight of the farm and two put it forty-one tiles away, beside the builder.
+/// The walk is a bounded cost now - see
+/// `SpatialPlanner::what_the_walk_costs` - and the same twenty-four worlds
+/// give **24 of 24**, a median distance of 1.0 and a worst case of 2.0.
+/// See ISSUES_FOUND #220.
 #[test]
 fn test_production_chain_buildings_cluster() {
+    crate::core::dice::seed(0);
     let world = World::new(WorldConfig::default());
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());

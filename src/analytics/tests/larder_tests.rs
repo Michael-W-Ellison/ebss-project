@@ -997,6 +997,39 @@ fn a_haunch_nobody_has_cut_up_is_not_what_the_store_offers() {
     );
 }
 
+/// And what it offers is the most of one kind, not the first of any.
+///
+/// A trip to the larder takes `WHAT_A_PERSON_TAKES_OUT` - eight - **capped at
+/// what is in that one stack**. `something_to_eat` answered with whatever was
+/// nearest the top among the meals, so a man standing over a pit holding two
+/// legumes and four hundred roots took the two legumes and walked away, and
+/// came back tomorrow for two more.
+///
+/// Measured over three seeded settlements through the hungry gap: 1,635 trips
+/// to the store yielding 5.5 items each against the eight asked for, and only
+/// eighteen refused for want of room - it was not the pack that was short, it
+/// was the stack. See ISSUES_FOUND #232.
+#[test]
+fn the_store_offers_the_load_that_makes_the_walk_worth_taking() {
+    let pit = Pit {
+        where_it_is: Position::new(25, 25),
+        holds: vec![supper(2, 0), {
+            let mut plenty = supper(400, 0);
+            plenty.item_id = "roots".to_string();
+            plenty
+        }],
+        covered: true,
+        dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
+    };
+
+    assert_eq!(
+        pit.something_to_eat(),
+        Some("roots"),
+        "it offered the two on top over the four hundred behind them"
+    );
+}
+
 /// Nor is a stack that has gone over.
 #[test]
 fn what_has_gone_over_is_not_what_the_store_offers() {

@@ -86,15 +86,28 @@ fn agents_drink_from_a_carried_container() {
         .resources
         .retain(|r| r.resource_type != crate::world::ResourceType::Water);
 
-    for _ in 0..40 {
+    // Forty steps, which is forty half-hours and not forty ticks.
+    const STEPS: u32 = 40;
+    for _ in 0..STEPS {
         simulation.take_a_turn();
     }
 
     let agent = &simulation.population.agents[0];
 
+    // `turns_without_water` is `current_turn - last_drank_turn`, and the world
+    // clock counts **ticks** - thirty to a step. So the whole run is
+    // `STEPS * TICKS_BETWEEN_PLANS` ticks dry if the agent never drinks, and
+    // anything less than that means it did.
+    //
+    // This read `< 40`, comparing a tick count against a step count, and so
+    // asked for a drink in the last two minutes of a twenty-hour run. It
+    // reported "1020 turns dry" - which, against a run of 1,200 ticks, was
+    // the agent telling us it had drunk at tick 180 and been fine ever since.
+    // Same family as ISSUES_FOUND #218 and #219, in a test bound.
+    let the_whole_run = STEPS * crate::environment::seasons::TICKS_BETWEEN_PLANS;
     assert!(
-        agent.state.turns_without_water < 40,
-        "an agent with a full waterskin should have drunk from it, {} turns dry",
+        agent.state.turns_without_water < the_whole_run,
+        "an agent with a full waterskin should have drunk from it at some          point in {the_whole_run} ticks, and it is {} dry",
         agent.state.turns_without_water
     );
 }

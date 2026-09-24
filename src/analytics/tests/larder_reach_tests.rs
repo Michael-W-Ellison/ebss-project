@@ -122,3 +122,96 @@ fn a_bush_underfoot_still_beats_the_larder() {
         "he walked to the larder with a bush under his feet: {what:?}"
     );
 }
+
+/// An emptied hole does not stand between a starving man and the next one.
+///
+/// `something_out_of_the_store` took the nearest pit this one remembers and
+/// stopped there. A memory is a record of what *was* in a hole, so a man
+/// standing on one he or somebody else has already emptied got nothing from
+/// the whole branch - though he might remember three more with food in them.
+///
+/// Measured across a settlement's winter, over the samples where a body under
+/// a quarter of its own reserve was carrying nothing: the branch answered 38
+/// times and came back empty 13, and in every one of those 13 the man
+/// remembered a pit that had food in it. See ISSUES_FOUND #228.
+#[test]
+fn an_empty_hole_underfoot_does_not_hide_the_full_one_behind_it() {
+    use crate::core::memory::SpatialMemoryType;
+    use crate::world::{Belongs, Pit, Position};
+
+    let mut simulation = one_bush_and_a_full_pit((30, 0));
+    let here = simulation.population.agents[0].state.position;
+
+    // An empty hole right where he is standing, and he remembers it.
+    simulation.world.pits.push(Pit {
+        where_it_is: Position::new(here.0, here.1),
+        holds: Vec::new(),
+        covered: true,
+        dug: 0,
+        belongs: Belongs::ToNobody,
+    });
+    simulation.population.agents[0]
+        .memory
+        .remember_how_much_is_there(SpatialMemoryType::Storage, (here.0, here.1, 0), 150);
+
+    // The full one five paces off is already remembered by the fixture.
+    let agent = simulation.population.agents[0].clone();
+    let what = simulation
+        .something_out_of_the_store(&agent, here)
+        .expect("he remembers a full pit five paces away");
+
+    match what {
+        Action::Move { target } => assert_eq!(
+            (target.0, target.1),
+            (here.0 + PACES_TO_THE_PIT, here.1),
+            "he was sent somewhere other than the pit that has food in it"
+        ),
+        Action::PickUp { .. } => panic!("there is nothing in the hole he is standing on"),
+        other => panic!("neither the full pit nor a walk to it: {other:?}"),
+    }
+}
+
+/// And with nothing standing anywhere at all, the larder is still the answer.
+///
+/// The store was reachable from the hunger drive only through
+/// `the_larder_or_this_walk`, which weighs the larder against a **walk** and
+/// so needs somewhere to walk to. In deep winter there is nowhere: both
+/// callers of it fall through, and what was left was the starvation override
+/// at the head of the decision, which fires only below a quarter of the
+/// reserve.
+///
+/// So a body spent the first three weeks of a seventy-five day hungry gap
+/// burning itself with the settlement's whole winter store in the ground
+/// behind it. Measured over three seeded settlements across the gap, 92,249
+/// agent-turns: **27.0% on SeekShelter against 2.0% on the store**, and 4.2
+/// items a person-day out of the pits against the 11.5 a grown body burns.
+/// See ISSUES_FOUND #231.
+#[test]
+fn a_bare_country_still_leaves_the_larder() {
+    // Nothing growing anywhere, which is what the hungry gap is.
+    let mut simulation = one_bush_and_a_full_pit((30, 0));
+    simulation.world.resources.clear();
+
+    let agent = simulation.population.agents[0].clone();
+    let here = agent.state.position;
+
+    assert!(
+        simulation.the_best_food_anywhere(&agent, here).is_none(),
+        "the fixture is not testing anything: something is still standing"
+    );
+
+    // Merely hungry, not desperate - which is the case this had no rung for.
+    let what = simulation
+        .food_action(&agent, here, false)
+        .expect("a hungry man with a full pit five paces off should be doing something");
+
+    match what {
+        Action::Move { target } => assert_eq!(
+            (target.0, target.1),
+            (here.0 + PACES_TO_THE_PIT, here.1),
+            "he set off somewhere that is not the larder"
+        ),
+        Action::PickUp { .. } => {}
+        other => panic!("neither the pit nor a walk to it: {other:?}"),
+    }
+}
