@@ -78,21 +78,87 @@ fn broken_ground_yields_four_times_wild() {
 
 // --- what wears it ----------------------------------------------------------
 
-/// A field goes down a rung once a whole crop's worth has come off it, and not
-/// once a trip.
-#[test]
-fn a_whole_crop_wears_a_field_a_rung_and_a_trip_does_not() {
-    let mut field = Field::broken_out_of(TerrainType::Plains, 0);
-    let a_whole_crop = 100;
+/// A ripe crop on a field and the field under it, with nothing else in the
+/// world to get in the way.
+fn a_ripe_crop_on_a_field(crop: ResourceType) -> (World, Position) {
+    let mut world = World::new(WorldConfig::default());
+    world.resources.clear();
 
-    for trip in 0..9 {
-        field.a_crop_came_off(11, a_whole_crop, false, trip);
+    // In its season, so that nothing falls off it while it waits
+    let in_season = (0..crate::environment::seasons::DAYS_PER_YEAR)
+        .find(|day| crop.is_it_bearing(*day) && crop.is_it_bearing(*day + 5))
+        .expect("it bears some time in the year");
+    world.climate.calendar.day_of_year = in_season;
+    let here = Position::new(12, 12);
+    world.grid.get_tile_mut(&here).unwrap().terrain =
+        crate::world::Terrain::new(TerrainType::Plains);
+    assert!(world.grid.break_ground(&here, 0));
+
+    let mut node = ResourceNode::new(crop, here, 80);
+    node.amount = node.how_heavy_a_crop_it_carries(world.grid.what_it_yields_here_for(&here, crop));
+    node.on_a_field = true;
+    node.it_has_ripened();
+    world.resources.push(node);
+    (world, here)
+}
+
+fn a_day_goes_by(world: &mut World) {
+    for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_DAY {
+        world.take_a_turn();
     }
-    assert_eq!(field.grade, SoilGrade::Ordinary, "ninety-nine units is not a crop");
+}
 
-    field.a_crop_came_off(11, a_whole_crop, false, 10);
-    assert_eq!(field.grade, SoilGrade::Depleted, "a hundred and ten is");
-    assert_eq!(field.taken_since_it_last_fell, 10, "and what is over counts towards the next");
+/// "Crops must finish growing." A field crop that is not ripe cannot be
+/// picked, and nothing choosing where to gather sees anything there.
+#[test]
+fn a_crop_still_growing_is_not_picked() {
+    let mut node = ResourceNode::new(ResourceType::Grain, Position::new(1, 1), 80);
+    node.amount = 50;
+    node.on_a_field = true;
+
+    assert_eq!(node.what_can_be_taken(), 0);
+    assert!(!node.anything_to_take(), "a field of green wheat is nothing to walk to");
+    assert_eq!(node.harvest(10), 0, "and nothing comes off it");
+
+    node.it_has_ripened();
+    assert!(node.anything_to_take(), "ripe, it is");
+}
+
+/// A field goes down a rung when three quarters of a ripe crop has come off
+/// it - its harvest - and not before, however many trips that takes.
+#[test]
+fn a_harvest_wears_a_field_a_rung_and_a_trip_does_not() {
+    let (mut world, here) = a_ripe_crop_on_a_field(ResourceType::Food);
+    let stand = world.resources[0].ripe_stand;
+    let the_harvest = stand * 3 / 4;
+
+    world.resources[0].harvest(the_harvest - 1);
+    a_day_goes_by(&mut world);
+    assert_eq!(
+        world.grid.field_at(&here).unwrap().grade,
+        SoilGrade::Ordinary,
+        "one short of three quarters is not a harvest"
+    );
+
+    world.resources[0].harvest(1);
+    a_day_goes_by(&mut world);
+    assert_eq!(world.grid.field_at(&here).unwrap().grade, SoilGrade::Depleted, "that is");
+}
+
+/// And nothing more comes off once the harvest is in: the quarter left is the
+/// plant, and it has to grow and ripen again.
+#[test]
+fn picking_stops_when_the_harvest_is_in() {
+    let (mut world, _here) = a_ripe_crop_on_a_field(ResourceType::Food);
+    let stand = world.resources[0].ripe_stand;
+
+    let took = world.resources[0].harvest(stand);
+    assert_eq!(took, stand * 3 / 4, "three quarters of it and no more");
+    assert!(!world.resources[0].anything_to_take());
+    assert_eq!(world.resources[0].amount, stand - took, "the plant is still standing");
+
+    a_day_goes_by(&mut world);
+    assert_eq!(world.resources[0].ripe_stand, 0, "and it is growing again");
 }
 
 /// And down to exhausted, which is where it stops.
@@ -100,7 +166,7 @@ fn a_whole_crop_wears_a_field_a_rung_and_a_trip_does_not() {
 fn a_field_cropped_without_end_is_exhausted_and_no_worse() {
     let mut field = Field::broken_out_of(TerrainType::Plains, 0);
     for crop in 0..10 {
-        field.a_crop_came_off(100, 100, false, crop);
+        field.the_harvest_is_in(false, crop);
     }
     assert_eq!(field.grade, SoilGrade::Exhausted);
 }
@@ -131,42 +197,65 @@ fn a_wild_harvest_leaves_the_ground_as_it_was() {
     assert!(world.grid.field_at(&here).is_none());
 }
 
-/// What comes off a field by hand is counted against it however it came off -
-/// and what was handed straight back is not.
+/// What comes off a field is counted however it came off - and what was
+/// handed straight back is not.
 #[test]
 fn what_comes_off_a_field_is_the_net_of_what_was_taken() {
-    let mut world = World::new(WorldConfig::default());
-    world.resources.clear();
-    let here = Position::new(12, 12);
-    world.grid.get_tile_mut(&here).unwrap().terrain =
-        crate::world::Terrain::new(TerrainType::Plains);
-    assert!(world.grid.break_ground(&here, 0));
-
-    let mut crop = ResourceNode::new(ResourceType::Grain, here, 80);
-    let full = crop.how_heavy_a_crop_it_carries(world.grid.what_it_yields_here(&here));
-    crop.amount = full;
-    world.resources.push(crop);
+    let (mut world, here) = a_ripe_crop_on_a_field(ResourceType::Food);
 
     // Taken and handed straight back, the way a full pack does it
-    world.resources[0].harvest(full);
-    world.resources[0].put_it_back(full);
-    for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_DAY {
-        world.take_a_turn();
-    }
+    let all = world.resources[0].what_can_be_taken();
+    world.resources[0].harvest(all);
+    world.resources[0].put_it_back(all);
+    a_day_goes_by(&mut world);
     assert_eq!(
         world.grid.field_at(&here).unwrap().grade,
         SoilGrade::Ordinary,
         "nothing was kept, so nothing is counted"
     );
+    assert!(world.resources[0].anything_to_take(), "and the harvest is still there");
 
-    // And the whole of it kept. Stood up again first: the day that went by
-    // did what days do to a crop out of its season.
-    world.resources[0].amount = full;
-    assert_eq!(world.resources[0].harvest(full), full);
-    for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_DAY {
-        world.take_a_turn();
-    }
+    // And the harvest kept
+    let all = world.resources[0].what_can_be_taken();
+    world.resources[0].harvest(all);
+    a_day_goes_by(&mut world);
     assert_eq!(world.grid.field_at(&here).unwrap().grade, SoilGrade::Depleted);
+}
+
+/// A ripe crop that falls, or is eaten off, before anybody brings it in wears
+/// nothing: nobody's hand took it.
+#[test]
+fn a_crop_nobody_brought_in_wears_nothing() {
+    let (mut world, here) = a_ripe_crop_on_a_field(ResourceType::Food);
+    world.resources[0].amount = world.resources[0].ripe_stand / 5;
+    a_day_goes_by(&mut world);
+
+    assert_eq!(world.grid.field_at(&here).unwrap().grade, SoilGrade::Ordinary);
+    assert_eq!(world.resources[0].ripe_stand, 0, "it is growing again");
+}
+
+/// Grain repays the plough more than anything else does.
+#[test]
+fn grain_repays_the_plough_most() {
+    let (world, here) = a_ripe_crop_on_a_field(ResourceType::Food);
+    let grain = world.grid.what_it_yields_here_for(&here, ResourceType::Grain);
+    let berries = world.grid.what_it_yields_here_for(&here, ResourceType::Food);
+    let beans = world.grid.what_it_yields_here_for(&here, ResourceType::Legumes);
+
+    assert_eq!(berries, 4.0, "four times the wild for a berry bush in rows");
+    assert_eq!(beans, 4.0);
+    assert_eq!(grain, 10.0, "and ten for grain");
+
+    // Which is what makes a rotation worth running: grain feeds more people
+    // than beans off the same field, per day of growing, and beans feed the
+    // ground.
+    let energy_per_day = |crop: ResourceType, plough: f32, energy: f32| {
+        crop.how_fast_it_comes_back() * plough * energy
+    };
+    assert!(
+        energy_per_day(ResourceType::Grain, grain, 60.0)
+            > energy_per_day(ResourceType::Legumes, beans, 45.0) * 1.2
+    );
 }
 
 // --- what builds it ---------------------------------------------------------
@@ -217,8 +306,8 @@ fn muck_and_beans_build_past_the_natural_grade() {
 #[test]
 fn a_year_fallow_brings_a_worn_field_a_rung_back() {
     let mut field = Field::broken_out_of(TerrainType::Plains, 0);
-    field.a_crop_came_off(100, 100, false, 0);
-    field.a_crop_came_off(100, 100, false, 0);
+    field.the_harvest_is_in(false, 0);
+    field.the_harvest_is_in(false, 0);
     assert_eq!(field.grade, SoilGrade::Exhausted);
 
     field.a_day_goes_by(A_YEAR - 1);
@@ -240,7 +329,6 @@ fn a_year_fallow_brings_a_worn_field_a_rung_back() {
 fn a_year_fallow_lets_a_built_up_field_back_down_a_rung() {
     let mut field = Field::broken_out_of(TerrainType::Plains, 0);
     field.a_bean_crop_came_in(0);
-    field.a_crop_came_off(1, 1_000, true, 0);
     field.a_bean_crop_came_in(0);
     assert_eq!(field.grade, SoilGrade::VeryRich);
 
@@ -252,9 +340,9 @@ fn a_year_fallow_lets_a_built_up_field_back_down_a_rung() {
 #[test]
 fn cropping_is_not_rest() {
     let mut field = Field::broken_out_of(TerrainType::Plains, 0);
-    field.a_crop_came_off(100, 100, false, 0);
+    field.the_harvest_is_in(false, 0);
 
-    field.a_crop_came_off(10, 100, false, A_YEAR / 2);
+    field.a_crop_came_off(A_YEAR / 2);
     field.a_day_goes_by(A_YEAR);
     assert_eq!(field.grade, SoilGrade::Depleted, "cropped half way through the year");
 }
@@ -270,7 +358,7 @@ fn a_field_given_up_goes_back_to_the_wild() {
     world.grid.get_tile_mut(&here).unwrap().terrain =
         crate::world::Terrain::new(TerrainType::Meadow);
     assert!(world.grid.break_ground(&here, 0));
-    world.grid.field_at_mut(&here).unwrap().a_crop_came_off(100, 100, false, 0);
+    world.grid.field_at_mut(&here).unwrap().the_harvest_is_in(false, 0);
     assert_eq!(world.grid.field_at(&here).unwrap().grade, SoilGrade::Ordinary);
 
     // A year's rest brings it back to the rich loam it was
@@ -334,9 +422,13 @@ fn a_farmer_on_a_field(crop: ResourceType, grade: SoilGrade) -> (crate::analytic
 }
 
 fn a_full_stand(simulation: &mut crate::analytics::Simulation, here: &Position) {
-    let yields = simulation.world.grid.what_it_yields_here(here);
+    let crop = simulation.world.resources[0].resource_type;
+    let yields = simulation.world.grid.what_it_yields_here_for(here, crop);
     let full = simulation.world.resources[0].how_heavy_a_crop_it_carries(yields);
-    simulation.world.resources[0].amount = full;
+    let node = &mut simulation.world.resources[0];
+    node.amount = full;
+    node.on_a_field = true;
+    node.it_has_ripened();
 }
 
 /// Nobody is told the grade of a field. A full stand of crop on it says what

@@ -293,7 +293,12 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // yield four times the wild, wear a rung a crop, and are ploughed in and
     // sown again - a different year's work, and a year in which the country
     // round it no longer changes under its plants.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 595_980;
+    // And down 1.6% for #247, where a field crop is picked ripe or not at
+    // all and a harvest is three quarters of it. The short count does not
+    // move: no field ripens inside two and a half days. Over a year a farmer
+    // waits for the crop instead of picking at it green, and walks to fewer
+    // fields that have nothing on them he may take.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 586_618;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

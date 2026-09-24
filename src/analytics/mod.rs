@@ -503,7 +503,7 @@ impl Simulation {
         self.world
             .resources
             .iter()
-            .filter(|resource| resource.amount > 0)
+            .filter(|resource| resource.anything_to_take())
             .filter(|resource| {
                 !agent
                     .exploration_knowledge
@@ -872,7 +872,7 @@ impl Simulation {
         self.world
             .resources
             .iter()
-            .filter(|resource| resource.amount > 0 && wanted(resource))
+            .filter(|resource| resource.anything_to_take() && wanted(resource))
             .map(|resource| (resource.position, from.distance_to(&resource.position)))
             .filter(|(_, distance)| *distance <= radius)
             .min_by_key(|(_, distance)| *distance)
@@ -988,7 +988,7 @@ impl Simulation {
         let after_anything_edible = wanted == ResourceType::Food;
 
         self.world.resources.iter().any(|resource| {
-            if resource.amount == 0 {
+            if !resource.anything_to_take() {
                 return false;
             }
             if here.distance_to(&resource.position) > Self::FORAGE_RADIUS {
@@ -1066,7 +1066,7 @@ impl Simulation {
         self.world
             .resources
             .iter()
-            .filter(|resource| resource.amount > 0)
+            .filter(|resource| resource.anything_to_take())
             .filter(|resource| here.distance_to(&resource.position) <= Self::ALREADY_STANDING_HERE)
             .filter(|resource| {
                 !agent

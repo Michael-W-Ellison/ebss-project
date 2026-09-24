@@ -264,7 +264,7 @@ pub fn what_this_ground_carries_in(
     }
 
     node.amount = node
-        .how_heavy_a_crop_it_carries(grid.what_it_yields_here(&pos))
+        .how_heavy_a_crop_it_carries(grid.what_it_yields_here_for(&pos, resource_type))
         .max(1);
 
     // And how good a year it is, which for the mast is most of the answer.

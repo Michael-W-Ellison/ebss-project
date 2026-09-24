@@ -540,6 +540,27 @@ impl Grid {
         }
     }
 
+    /// What this ground makes of this crop, against the same plant on ordinary
+    /// wild ground: the grade's multiplier, and on broken ground what the
+    /// plough does for that crop - see `ResourceType::what_the_plough_does_for_it`.
+    pub fn what_it_yields_here_for(&self, at: &Position, crop: crate::world::ResourceType) -> f32 {
+        let Some((soil, grade)) = self.soil_at(at) else {
+            return 0.0;
+        };
+        if !soil.grows_anything() {
+            return 0.0;
+        }
+        let broken = self
+            .get_tile(at)
+            .is_some_and(|tile| tile.terrain.is_cultivated());
+        grade.multiplier()
+            * if broken {
+                crop.what_the_plough_does_for_it()
+            } else {
+                1.0
+            }
+    }
+
     /// What the ground gives a wild plant, on the 0-to-1 scale the flora's
     /// growing conditions are read on.
     ///
@@ -590,10 +611,17 @@ impl Grid {
         }
     }
 
-    /// Units came off the crop on the field here. See `Field::a_crop_came_off`.
-    pub fn a_crop_came_off(&mut self, at: &Position, units: u32, a_whole_crop: u32, pods: bool, now: u32) {
+    /// Something came off the crop on the field here today.
+    pub fn a_crop_came_off(&mut self, at: &Position, now: u32) {
         if let Some(field) = self.key(at).and_then(|key| self.fields.get_mut(&key)) {
-            field.a_crop_came_off(units, a_whole_crop, pods, now);
+            field.a_crop_came_off(now);
+        }
+    }
+
+    /// The harvest is in on the field here. See `Field::the_harvest_is_in`.
+    pub fn the_harvest_is_in(&mut self, at: &Position, pods: bool, now: u32) {
+        if let Some(field) = self.key(at).and_then(|key| self.fields.get_mut(&key)) {
+            field.the_harvest_is_in(pods, now);
         }
     }
 

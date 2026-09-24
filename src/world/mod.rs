@@ -2474,28 +2474,43 @@ impl World {
     }
 
     /// What came off each crop by hand since yesterday, reckoned against the
-    /// field it grew on.
+    /// field it grew on - and whether its harvest is in.
     ///
     /// Every hand that takes a crop goes through `ResourceNode::harvest` and
-    /// every armful handed back through `put_it_back`, so the node's count is
-    /// the net whichever path took it. Off wild ground it counts for nothing:
-    /// "harvesting from a wild plant should not change the grade of the soil".
+    /// every armful handed back through `put_it_back`, so the node's counts
+    /// are the net whichever path took it. Off wild ground it counts for
+    /// nothing: "harvesting from a wild plant should not change the grade of
+    /// the soil".
+    ///
+    /// This is also where a crop learns whether it is in a field, which it is
+    /// for as long as the ground under it is one: a field given back to the
+    /// wild gives its crop back to be picked as it stands.
     fn what_came_off_the_fields(&mut self) {
         let now = self.turn;
         for resource in self.resources.iter_mut() {
             let taken = std::mem::take(&mut resource.taken_by_hand);
-            if taken == 0 || self.grid.field_at(&resource.position).is_none() {
+            let at = resource.position;
+
+            resource.on_a_field = self.grid.field_at(&at).is_some();
+            if !resource.on_a_field {
+                resource.it_is_growing_again();
                 continue;
             }
-            let a_whole_crop =
-                resource.how_heavy_a_crop_it_carries(self.grid.what_it_yields_here(&resource.position));
-            self.grid.a_crop_came_off(
-                &resource.position,
-                taken,
-                a_whole_crop,
-                resource.resource_type.feeds_the_ground(),
-                now,
-            );
+
+            if taken > 0 {
+                self.grid.a_crop_came_off(&at, now);
+            }
+
+            if resource.the_harvest_is_in() {
+                // Three quarters of the ripe crop has come off by hand
+                self.grid
+                    .the_harvest_is_in(&at, resource.resource_type.feeds_the_ground(), now);
+                resource.it_is_growing_again();
+            } else if resource.ripe_stand > 0 && resource.what_can_be_taken() == 0 {
+                // Or it fell, or was eaten off, before anybody brought it in.
+                // Nobody's hand took it, so it wears nothing.
+                resource.it_is_growing_again();
+            }
         }
     }
 
@@ -2564,9 +2579,12 @@ impl World {
             let ground_water =
                 crate::world::soil::Soil::humidity(terrain_type, precipitation);
 
-            // What the ground makes of it: its grade, and four times that on a
-            // field. Asked before the tile is borrowed for its weeds.
-            let what_the_ground_yields = self.grid.what_it_yields_here(&resource.position);
+            // What the ground makes of it: its grade, and on a field what the
+            // plough does for this crop. Asked before the tile is borrowed for
+            // its weeds.
+            let what_the_ground_yields = self
+                .grid
+                .what_it_yields_here_for(&resource.position, resource.resource_type);
 
             let soil = match self.grid.get_tile_mut(&resource.position) {
                 Some(tile) => &mut tile.soil,
@@ -2607,23 +2625,35 @@ impl World {
             // has been since the last one. The rates inside are per-pass
             // numbers fitted when a pass was ten turns, and they are read
             // against that - see `ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO`.
-            let was_standing = resource.amount;
-            resource.regenerate_in_ground(
-                temperature,
-                ground_water,
-                season_modifier,
-                what_the_ground_yields,
-                kept,
-                crate::environment::seasons::ONCE_A_DAY as f32,
-            );
+            // A ripe crop has finished growing, and waits to be brought in.
+            let ripe = resource.on_a_field && resource.ripe_stand > 0;
+            if !ripe {
+                resource.regenerate_in_ground(
+                    temperature,
+                    ground_water,
+                    season_modifier,
+                    what_the_ground_yields,
+                    kept,
+                    crate::environment::seasons::ONCE_A_DAY as f32,
+                );
+            }
 
-            // A bean crop on a field that has just come to its full stand has
-            // matured, and a bean crop that matures raises the ground a rung.
-            // `Field::a_bean_crop_came_in` counts it once per stand.
-            if cultivated && resource.resource_type.feeds_the_ground() {
+            // And a field crop ripens when it comes to its full stand, or when
+            // its season is on its last day and it has to be whatever it has
+            // come to. A bean crop that ripens has matured, and raises the
+            // ground a rung.
+            if resource.on_a_field && !ripe {
                 let a_full_stand = resource.how_heavy_a_crop_it_carries(what_the_ground_yields);
-                if was_standing < a_full_stand && resource.amount >= a_full_stand {
-                    self.grid.a_bean_crop_came_in(&resource.position, self.turn);
+                let the_last_day = !resource
+                    .resource_type
+                    .is_it_bearing((today + 1) % crate::environment::seasons::DAYS_PER_YEAR);
+                let come_to_it = (a_full_stand > 0 && resource.amount >= a_full_stand)
+                    || (the_last_day && resource.amount > 0);
+                if come_to_it {
+                    resource.it_has_ripened();
+                    if resource.resource_type.feeds_the_ground() {
+                        self.grid.a_bean_crop_came_in(&resource.position, self.turn);
+                    }
                 }
             }
 

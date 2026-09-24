@@ -200,7 +200,7 @@ impl Simulation {
                         || knows_it_is_food(resource))))
                 && a_drink_this_one_would_take(resource);
 
-            if matches_request && resource.amount > 0 {
+            if matches_request && resource.anything_to_take() {
                 let distance = agent_pos.distance_to(&resource.position);
                 if distance <= Self::FORAGE_RADIUS {
                     // A trip for food is worth what it brings back.
@@ -382,7 +382,8 @@ impl Simulation {
             // whoever is near enough watches the ground go bare, and
             // that is what stops a settlement walking back to it every
             // morning for the rest of the season.
-            let picked_out = self.world.resources[resource_index].amount == 0;
+            // Nothing left a hand can take: bare, or a field whose harvest is in
+            let picked_out = !self.world.resources[resource_index].anything_to_take();
             let now = self.current_turn;
             if harvested > 0 {
                 self.population.agents[agent_index]

@@ -19661,3 +19661,131 @@ field and the rotation it leads to.
 Both roll-count fingerprints moved and are re-baselined with their reasons: the
 120-turn count **up 37%**, since the world differs from turn nought, and the
 year **down 16%**.
+
+### 247. A field crop is picked ripe, a harvest is three quarters of it, and grain takes the plough best
+
+Three instructions: **"Fields should not be picked before being ripe. Crops
+must finish growing."** **"Field tiles reduce after 75% of the crop is
+harvested."** **"Give grain a larger multiplier for farmland."**
+
+#### Ripe or not at all
+
+A crop on a field ripens when it comes to its full stand, or on the last day
+of its season, when it has to be whatever it has come to. Until then
+`what_can_be_taken` is nought. Ripe, it stops growing, and a hand can take
+three quarters of what it ripened at - the harvest - and never the last
+quarter, which is the plant. When the harvest is in, the field goes down a rung
+(a pod crop's harvest excepted) and what is left grows on until it ripens
+again. A bean crop raises the ground when it ripens, which is once a crop
+because a ripe crop does not grow. A ripe crop that falls or is grazed before
+anybody brings it in wears nothing: nobody's hand took it.
+
+This replaced "a whole crop's worth taken off, by any number of trips", and
+with it the running count and the flag that stopped an unpicked bean stand
+counting twice. Fill time does not suffer: capacity and growth both scale with
+the grade and the plough, so a field fills as fast as a wild patch of the same
+plant - about twenty to forty-five days for grain against a season of ninety.
+
+**Nothing chooses a green field.** Nineteen places picked where to gather or
+eat by asking `amount > 0`, which says yes to a field of green wheat, and a
+decision that says yes to what the executor refuses is a walk for nothing -
+the defect this document keeps finding. There is one question now,
+`ResourceNode::anything_to_take`, and every place that chooses food asks it.
+Water keeps its own answer: a spring at its springline still gives a drink.
+Choosing a camp still counts a growing crop, since that is a season's decision.
+
+**And farmers read their fields.** A harvest is only taken ripe, so everybody
+who takes one reads a ripe stand. Beliefs held about fields at a year's end
+roughly doubled, 83 to 178.
+
+#### Grain
+
+`ResourceType::what_the_plough_does_for_it`: four for everything, ten for
+grain. Ten keeps what grain had over a berry bush in rows before the ladder
+(three against 1.15). It also makes rotation worth running: per day of growing,
+grain now gives 9.0 of food energy against beans' 6.3. At a flat four, beans
+gave more than grain and built the ground as well.
+
+**It does not change what is sown.** Grain stood on 3 fields of 691. A farmer
+sows what he is carrying, and grain comes first in his order of preference,
+so he is simply never carrying it when he breaks ground. The multiplier is in
+place for when he does; getting grain into a pack is the next lever.
+
+#### Measured
+
+Twelve paired seeded settlement-years, against the ladder of #246 on the same
+seeds:
+
+| | ladder | ripe, 75%, grain x10 |
+|---|---|---|
+| person-turns | 1,985,610 | **2,012,190 (+1.3%)** |
+| births | 4 | 7 |
+| fields at the year's end | 690 | 691 |
+| depleted or exhausted | 187 | 206 |
+| very rich | 68 | 68 |
+| beans / berries / grain / bare | 66 / 611 / 4 / 9 | 55 / 628 / 3 / 5 |
+| beliefs about fields | 83 | 178 |
+
+The per-seed pairs run from -10% to +25%, so +1.3% is no detectable effect. It
+puts the settlement back level with where it stood before the ladder
+(2,017,697).
+
+The year's roll count is down 1.6% and re-baselined. The 120-turn count does
+not move: no field ripens in two and a half days.
+
+### 248. Where the time goes, and what freezing far-off ground would buy
+
+The proposal: ground far from any agent is frozen, and caught up to the season
+when somebody comes into range. Measured before answering, per simulated day
+on a quiet machine (release build), taking one system out at a time.
+
+**With nobody in the world, the animals first taken out:**
+
+| map | whole world | plants | resource nodes |
+|---|---|---|---|
+| 200 x 200 | 0.97 ms | 0.21 (9,926) | 0.55 (6,150) |
+| 400 x 400 | 3.60 ms | 0.54 (39,973) | 2.54 (24,538) |
+| 800 x 800 | 19.1 ms | 4.20 (159,281) | 15.1 (98,067) |
+| 1,600 x 1,600 | 108 ms | 18.9 (633,883) | 92.2 (392,204) |
+
+**With the animals in**, at 800 x 800: 256 ms a day, of which the 647 beasts
+are about 239. **With twelve people** on the default 50 x 50 map: 157 ms a
+day, of which the world is 8 and the people about 150.
+
+So, per simulated day:
+
+| | costs |
+|---|---|
+| a person | ~12.5 ms |
+| an animal | ~0.37 ms |
+| a resource node | ~0.24 us |
+| a plant | ~0.03 us |
+
+**What freezing would buy:**
+
+- **On the maps run today, nothing.** A settlement on 50 x 50 spends 95% of its
+  time in its people's decisions, and nothing is far from anybody.
+- **Plants are already frozen.** Each is worked out once in four months, when
+  its zone comes round, and brought up to date whenever something stands on it
+  (`PlantManager::grow_a_zone`, `catch_up_one`). That is the proposal already,
+  and it is why a plant costs a tenth of what a node does.
+- **Resource nodes are the real win among cells.** Every node regrows every day
+  wherever it is: 85% of an empty 1,600-cell world's time, rising in step with
+  its area - about 3.6 seconds a simulated day at 10,000 x 10,000. Nothing in
+  their regrowth is local except the tile's terrain and grade; the weather is
+  one value a day for the whole map. So a node far from anybody can sleep, and
+  on waking replay its missed days from a log of daily weather - 360 small
+  entries a year - rather than from a guess. That is exact, and costs a node
+  nothing while nobody is near it.
+- **The animals are most of the world's time, and freezing does not reach
+  them.** They move, so they are not cells, and the herds far from people are
+  what a big map exists for. The equivalent for them is a coarse model - herds
+  as numbers per region, played out in detail near people - which is a much
+  larger piece of work. Before that, a beast costing 0.37 ms a day is worth
+  profiling: it is likely searching for forage without a spatial index.
+- **It does not save memory.** A frozen node is still a node. Memory is the
+  next step's business: summarising what is far away, as #245 described.
+
+**Recommendation, in order:** freeze resource nodes with an exact catch-up
+from a weather log; profile the animal turn; and for the ordinary run, where
+people are 95% of the cost, look at the agent's decision loop.

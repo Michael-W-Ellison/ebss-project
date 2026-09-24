@@ -218,13 +218,6 @@ pub struct Field {
     /// The terrain it was, which it goes back to when it is given up.
     pub was: TerrainType,
 
-    /// Units taken off the crop since the ground last went down a rung.
-    ///
-    /// A crop comes off in armfuls of eight to fourteen, so the ground goes
-    /// down a rung once a whole crop's worth has come off it and not once a
-    /// trip.
-    pub taken_since_it_last_fell: u32,
-
     /// Since when nothing has been taken off it, or since a year's rest last
     /// did its work.
     pub rested_since: u32,
@@ -241,13 +234,6 @@ pub struct Field {
 
     /// When the muck that has come to a rung will have rotted in.
     pub mucked_ready_at: Option<u32>,
-
-    /// Whether the bean crop standing now has already given its rung.
-    ///
-    /// A bean crop raises the ground once, when it comes to maturity. Without
-    /// this a stand nobody picked would count again every time a richer rung
-    /// let it fill a little further, and climb to the top on its own.
-    pub a_bean_crop_is_in: bool,
 }
 
 /// What became of a field on its day.
@@ -279,13 +265,11 @@ impl Field {
             natural,
             grade: natural,
             was,
-            taken_since_it_last_fell: 0,
             rested_since: now,
             worked_at: now,
             natural_since: Some(now),
             muck_in_it: 0.0,
             mucked_ready_at: None,
-            a_bean_crop_is_in: false,
         }
     }
 
@@ -301,38 +285,32 @@ impl Field {
         self.worked_at = now;
     }
 
-    /// Units came off the crop standing on it.
+    /// Something came off the crop standing on it today.
     ///
-    /// `a_whole_crop` is what the crop stands at on this ground as it is now.
-    /// A pod crop takes nothing from the ground it grows in, so what comes off
-    /// one does not wear it - but it does mean the stand now in is no longer
-    /// the one that gave its rung.
-    pub fn a_crop_came_off(&mut self, units: u32, a_whole_crop: u32, pods: bool, now: u32) {
-        if units == 0 {
-            return;
-        }
+    /// Cropped is not rested, and somebody is working it.
+    pub fn a_crop_came_off(&mut self, now: u32) {
         self.worked_at = now;
         self.rested_since = now;
-        self.a_bean_crop_is_in = false;
+    }
 
+    /// The harvest is in: three quarters of a ripe crop has come off it.
+    ///
+    /// "Harvests from tilled farmland are much more abundant but their harvest
+    /// reduces the future production capability of the farmland." A rung for
+    /// each harvest - except a pod crop's, which takes nothing from the ground
+    /// it grows in.
+    pub fn the_harvest_is_in(&mut self, pods: bool, now: u32) {
+        self.a_crop_came_off(now);
         if pods {
             return;
         }
-
-        self.taken_since_it_last_fell += units;
-        if a_whole_crop > 0 && self.taken_since_it_last_fell >= a_whole_crop {
-            self.taken_since_it_last_fell -= a_whole_crop;
-            let poorer = self.grade.poorer();
-            self.now_at(poorer, now);
-        }
+        let poorer = self.grade.poorer();
+        self.now_at(poorer, now);
     }
 
-    /// A bean crop on it has come to maturity.
+    /// A bean crop on it has come to maturity, which is when it ripens - once
+    /// a crop, since a ripe crop does not grow.
     pub fn a_bean_crop_came_in(&mut self, now: u32) {
-        if self.a_bean_crop_is_in {
-            return;
-        }
-        self.a_bean_crop_is_in = true;
         let richer = self.grade.richer();
         self.now_at(richer, now);
     }

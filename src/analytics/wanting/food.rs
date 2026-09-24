@@ -632,7 +632,7 @@ impl Simulation {
         let mut best: Option<(Position, f32)> = None;
 
         for resource in self.world.resources.iter() {
-            if resource.amount == 0 {
+            if !resource.anything_to_take() {
                 continue;
             }
             let Some(kind) = Self::edible_item_for(resource.resource_type) else {
@@ -1051,7 +1051,7 @@ impl Simulation {
             .world
             .resources
             .iter()
-            .filter(|resource| resource.amount > 0)
+            .filter(|resource| resource.anything_to_take())
             .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
             .filter(|resource| here.distance_to(&resource.position) <= radius)
             // Nor ground this one stripped itself and has no reason to think

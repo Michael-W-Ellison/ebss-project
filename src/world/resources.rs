@@ -437,6 +437,25 @@ impl ResourceType {
     /// answer rather than a list repeated at each of the places that asks: the
     /// day's field reckoning, the growing pass, the ploughing-in, and the
     /// sowing choice.
+    /// How many times what the same plant yields wild, this yields on broken
+    /// ground.
+    ///
+    /// Four for everything - "wild plants produce yields 1/4th that of plants
+    /// in tilled farmland" - and ten for grain, which is the plant farming was
+    /// invented for. Ten keeps what grain had over a berry bush in rows before
+    /// the soil ladder, three against 1.15; and it is what makes a rotation
+    /// worth running. Per day of growing, a bean crop gives 0.035 x 45 of food
+    /// energy and grain 0.015 x 60, so on the same four-to-one beans out-yield
+    /// grain and build the ground while grain wears it, and nobody would ever
+    /// sow wheat. At ten, grain gives 9.0 to the beans' 6.3: the crop that
+    /// feeds you and the crop that feeds the ground. See ISSUES_FOUND #247.
+    pub fn what_the_plough_does_for_it(&self) -> f32 {
+        match self {
+            ResourceType::Grain => 10.0,
+            _ => crate::world::soil::WHAT_BROKEN_GROUND_YIELDS_OVER_WILD,
+        }
+    }
+
     pub fn feeds_the_ground(&self) -> bool {
         matches!(self, ResourceType::Legumes)
     }
@@ -900,6 +919,32 @@ pub struct ResourceNode {
     /// calls `harvest`, so a beast grazing or fruit falling never counts.
     #[serde(default)]
     pub taken_by_hand: u32,
+
+    /// Whether this is a crop in a field, which it is for as long as the
+    /// ground under it is one. Set by the day's field reckoning.
+    ///
+    /// A field crop is picked ripe or not at all: "crops must finish
+    /// growing". Wild growth is picked as it stands.
+    #[serde(default)]
+    pub on_a_field: bool,
+
+    /// What the crop stood at when it ripened, while it is ripe; nought while
+    /// it is still growing.
+    ///
+    /// A crop ripens when it comes to its full stand, or when its season is at
+    /// its last day and it has to be whatever it has come to. Ripe, it stops
+    /// growing, and three quarters of it is the harvest.
+    #[serde(default)]
+    pub ripe_stand: u32,
+
+    /// Units taken off this ripe crop by hand, net of what was handed back.
+    ///
+    /// When it comes to three quarters of the ripe stand the harvest is in:
+    /// nothing more comes off, the field goes down a rung, and what is left
+    /// grows on until it is ripe again. Counted apart from `taken_by_hand`,
+    /// which is cleared every day.
+    #[serde(default)]
+    pub taken_since_it_ripened: u32,
 }
 
 impl ResourceNode {
@@ -927,6 +972,9 @@ impl ResourceNode {
     pub fn put_it_back(&mut self, how_much: u32) {
         self.amount += how_much;
         self.taken_by_hand = self.taken_by_hand.saturating_sub(how_much);
+        if self.on_a_field && self.ripe_stand > 0 {
+            self.taken_since_it_ripened = self.taken_since_it_ripened.saturating_sub(how_much);
+        }
     }
     pub fn new(resource_type: ResourceType, position: Position, amount: u32) -> Self {
         Self {
@@ -938,6 +986,9 @@ impl ResourceNode {
             kind: 0,
             flow: 0.0,
             taken_by_hand: 0,
+            on_a_field: false,
+            ripe_stand: 0,
+            taken_since_it_ripened: 0,
         }
     }
 
@@ -959,6 +1010,9 @@ impl ResourceNode {
         let harvested = amount.min(self.what_can_be_taken());
         self.amount -= harvested;
         self.taken_by_hand += harvested;
+        if self.on_a_field && self.ripe_stand > 0 {
+            self.taken_since_it_ripened += harvested;
+        }
         harvested
     }
 
@@ -978,11 +1032,72 @@ impl ResourceNode {
     /// two units out of four hundred and left them there for the rest of the
     /// world's life. See ISSUES_FOUND #46 and #53.
     pub fn what_can_be_taken(&self) -> u32 {
+        // A field crop is picked ripe or not at all, and only the harvest of
+        // it: three quarters of what it ripened at. What is left is not
+        // gleanings to be scraped up - it is the plant, and it grows on.
+        if self.on_a_field {
+            if self.ripe_stand == 0 {
+                return 0;
+            }
+            // The harvest less what has come off it, and never into the
+            // quarter that is the plant - however the rest went, by hand or
+            // fallen or grazed.
+            let the_plant = self.ripe_stand - self.the_harvest();
+            return self
+                .the_harvest()
+                .saturating_sub(self.taken_since_it_ripened)
+                .min(self.amount.saturating_sub(the_plant));
+        }
+
         if self.resource_type != ResourceType::Water {
             return self.amount;
         }
 
         self.amount.saturating_sub(self.springline())
+    }
+
+    /// Whether a hand could take anything here at all.
+    ///
+    /// The one question for anything choosing where to gather or eat. It was
+    /// asked as `amount > 0` in a score of places, which says yes to a field
+    /// of green wheat - and a decision that says yes to what the executor will
+    /// refuse is a walk for nothing.
+    ///
+    /// Water keeps its own answer: a spring down to its springline still gives
+    /// a drink from what is coming out of the ground, which is why `harvest`
+    /// lets it, so anything standing in it at all is worth the walk.
+    pub fn anything_to_take(&self) -> bool {
+        if self.resource_type == ResourceType::Water {
+            return self.amount > 0;
+        }
+        self.what_can_be_taken() > 0
+    }
+
+    /// Three quarters of the ripe stand: what comes off a field before the
+    /// harvest is in.
+    pub fn the_harvest(&self) -> u32 {
+        self.ripe_stand * Self::THE_HARVEST_IS_IN_AT.0 / Self::THE_HARVEST_IS_IN_AT.1
+    }
+
+    /// Three quarters of a ripe crop is a harvest.
+    pub const THE_HARVEST_IS_IN_AT: (u32, u32) = (3, 4);
+
+    /// Whether three quarters of the ripe crop has come off by hand.
+    pub fn the_harvest_is_in(&self) -> bool {
+        self.ripe_stand > 0 && self.taken_since_it_ripened >= self.the_harvest()
+    }
+
+    /// The crop has ripened at what it stands at now.
+    pub fn it_has_ripened(&mut self) {
+        self.ripe_stand = self.amount;
+        self.taken_since_it_ripened = 0;
+    }
+
+    /// The crop is not ripe any more: harvested, or fallen, or no longer a
+    /// crop in a field at all. What stands grows on.
+    pub fn it_is_growing_again(&mut self) {
+        self.ripe_stand = 0;
+        self.taken_since_it_ripened = 0;
     }
 
     /// A drink taken from the flow itself, at a spring that is down to its

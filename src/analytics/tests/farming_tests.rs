@@ -314,31 +314,29 @@ fn a_practised_farmer_clears_more_in_a_turn() {
 // Which plants are suitable
 // --------------------------------------------------------------------------
 
-/// Every crop repays the plough the same four times.
+/// Every crop repays the plough four times over, and grain ten.
 ///
-/// "Wild plants produce yields 1/4th that of plants in tilled farmland." This
-/// used to be the opposite claim - that grain took to the plough three times
-/// over and a berry bush in rows was still a berry bush, `takes_to_the_plough`
-/// one number per crop. The difference between crops is in how fast each kind
-/// grows and what it is worth to eat now, and what breaking ground does is the
-/// same for all of them. See ISSUES_FOUND #246, which also says what that does
-/// to the choice between beans and grain.
+/// "Wild plants produce yields 1/4th that of plants in tilled farmland", and
+/// "give grain a larger multiplier for farmland". Before the soil ladder this
+/// was one factor per crop - grain three, a berry bush in rows 1.15; the
+/// ladder made it four for everything, which let beans out-yield grain and
+/// build the ground besides, so nobody had a reason to sow wheat. See
+/// ISSUES_FOUND #247.
 #[test]
-fn every_crop_repays_the_plough_the_same() {
-    use crate::world::soil::WHAT_BROKEN_GROUND_YIELDS_OVER_WILD;
-    use crate::world::SoilGrade;
-
-    let wild = SoilGrade::Ordinary.multiplier();
-    let broken = wild * WHAT_BROKEN_GROUND_YIELDS_OVER_WILD;
-
-    for crop in [ResourceType::Grain, ResourceType::Food, ResourceType::Legumes] {
-        let patch = ResourceNode::new(crop, Position::new(1, 1), 100);
-        assert_eq!(
-            patch.how_heavy_a_crop_it_carries(broken),
-            patch.how_heavy_a_crop_it_carries(wild) * 4,
-            "a field of {crop:?} should stand four times as thick as the same plant wild"
-        );
+fn every_crop_repays_the_plough_and_grain_most() {
+    for crop in [ResourceType::Food, ResourceType::Legumes, ResourceType::Roots] {
+        assert_eq!(crop.what_the_plough_does_for_it(), 4.0, "{crop:?}");
     }
+    assert_eq!(ResourceType::Grain.what_the_plough_does_for_it(), 10.0);
+
+    let wild = crate::world::SoilGrade::Ordinary.multiplier();
+    let grain = ResourceNode::new(ResourceType::Grain, Position::new(1, 1), 100);
+    let berries = ResourceNode::new(ResourceType::Food, Position::new(1, 1), 100);
+    assert!(
+        grain.how_heavy_a_crop_it_carries(wild * ResourceType::Grain.what_the_plough_does_for_it())
+            > berries.how_heavy_a_crop_it_carries(wild * ResourceType::Food.what_the_plough_does_for_it()),
+        "a field of grain stands thicker than a field of berry bushes"
+    );
 }
 
 /// An agent sows what it has, and prefers what it has found works.

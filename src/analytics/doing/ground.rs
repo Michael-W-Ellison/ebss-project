@@ -24,10 +24,15 @@ impl Simulation {
     /// for what a farmer can and cannot tell from it.
     ///
     /// What a stand says is the grade that would carry a stand that heavy as
-    /// a full crop on broken ground. Wild ground is not read here: nothing
-    /// anybody does to it changes it, so there is nothing to find out.
+    /// a full crop on broken ground. A ripe crop is the one to read: it has
+    /// finished growing, so what it ripened at is what the ground carried,
+    /// and since nobody picks a field crop until it is ripe, everybody who
+    /// takes a harvest reads one. A crop still growing, seen while weeding,
+    /// can only say the ground is at least that good. Wild ground is not read
+    /// here: nothing anybody does to it changes it, so there is nothing to
+    /// find out.
     pub(in crate::analytics) fn looking_at_the_crop(&mut self, agent_index: usize, resource_index: usize) {
-        use crate::world::soil::{SoilGrade, WHAT_BROKEN_GROUND_YIELDS_OVER_WILD};
+        use crate::world::SoilGrade;
 
         let Some(crop) = self.world.resources.get(resource_index) else {
             return;
@@ -37,14 +42,20 @@ impl Simulation {
             return;
         }
 
-        let a_full_stand = crop.how_heavy_a_crop_it_carries(self.world.grid.what_it_yields_here(&at));
-        let on_ordinary_loam = crop.how_heavy_a_crop_it_carries(WHAT_BROKEN_GROUND_YIELDS_OVER_WILD);
+        let a_full_stand = crop.how_heavy_a_crop_it_carries(
+            self.world.grid.what_it_yields_here_for(&at, crop.resource_type),
+        );
+        let on_ordinary_loam =
+            crop.how_heavy_a_crop_it_carries(crop.resource_type.what_the_plough_does_for_it());
         if on_ordinary_loam == 0 {
             return;
         }
 
-        let it_says = SoilGrade::nearest_to(crop.amount as f32 / on_ordinary_loam as f32);
-        let full = a_full_stand > 0 && crop.amount >= a_full_stand;
+        // Ripe, it is read at what it ripened at, whatever has come off it
+        // since; growing, at what stands.
+        let stand = if crop.ripe_stand > 0 { crop.ripe_stand } else { crop.amount };
+        let it_says = SoilGrade::nearest_to(stand as f32 / on_ordinary_loam as f32);
+        let full = a_full_stand > 0 && stand >= a_full_stand;
 
         self.population.agents[agent_index].saw_a_stand_on((at.x, at.y), it_says, full);
     }

@@ -246,7 +246,7 @@ impl Simulation {
         let mut nearest_food: Option<(usize, u32)> = None;
         let mut best_worth: f32 = 0.0;
         for (i, resource) in self.world.resources.iter().enumerate() {
-            if Self::edible_item_for(resource.resource_type).is_some() && resource.amount > 0 {
+            if Self::edible_item_for(resource.resource_type).is_some() && resource.anything_to_take() {
                 let distance = agent_pos.distance_to(&resource.position);
                 if distance <= Self::FORAGE_RADIUS {
                     let bad = remembers.how_bad_is_it_there(resource.position, now);

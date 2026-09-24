@@ -59,8 +59,8 @@ fn the_grade(simulation: &Simulation, where_it_is: &Position) -> SoilGrade {
         .grade
 }
 
-/// Grow what is on the field to its full stand, in the weeks both crops bear.
-fn grow_it_to_a_full_stand(simulation: &mut Simulation, field: &Position) {
+/// Grow what is on the field until it is ripe, in the weeks both crops bear.
+fn grow_it_until_it_is_ripe(simulation: &mut Simulation) {
     let midsummer = crate::environment::seasons::Season::Summer.first_day()
         + crate::environment::seasons::DAYS_PER_SEASON
         - 10;
@@ -68,21 +68,20 @@ fn grow_it_to_a_full_stand(simulation: &mut Simulation, field: &Position) {
 
     for _ in 0..20_000 {
         simulation.world.take_a_turn();
-        let yields = simulation.world.grid.what_it_yields_here(field);
-        let node = &simulation.world.resources[0];
-        if node.amount >= node.how_heavy_a_crop_it_carries(yields) {
+        if simulation.world.resources[0].ripe_stand > 0 {
             return;
         }
     }
-    panic!("the crop never came to a full stand");
+    panic!("the crop never ripened");
 }
 
-/// Take the whole of what is standing off by hand, and let a day go by for
-/// the ground to reckon it.
-fn take_the_crop_off(simulation: &mut Simulation) {
-    let all = simulation.world.resources[0].amount;
-    let took = simulation.world.resources[0].harvest(all);
-    assert_eq!(took, all);
+/// Bring the harvest in by hand - all a hand can take, which is three
+/// quarters of it - and let a day go by for the ground to reckon it.
+fn bring_the_harvest_in(simulation: &mut Simulation) {
+    let the_harvest = simulation.world.resources[0].what_can_be_taken();
+    assert!(the_harvest > 0, "a ripe crop is there to be taken");
+    simulation.world.resources[0].harvest(the_harvest);
+    assert!(!simulation.world.resources[0].anything_to_take(), "and then the harvest is in");
     for _ in 0..crate::environment::seasons::PLANNING_PERIODS_PER_DAY {
         simulation.world.take_a_turn();
     }
@@ -92,18 +91,18 @@ fn take_the_crop_off(simulation: &mut Simulation) {
 
 /// Cropping wheat costs the ground a rung; cropping beans gains it one.
 ///
-/// The same ground, grown to the same full stand and taken off by the same
-/// hand, and the only difference is which plant was standing on it.
+/// The same ground, grown until ripe and harvested by the same hand, and the
+/// only difference is which plant was standing on it.
 #[test]
 fn a_pod_row_leaves_the_ground_better_than_it_found_it() {
     let (mut wheat, field) = a_field_of(ResourceType::Grain, SoilGrade::Ordinary);
     let (mut beans, bean_field) = a_field_of(ResourceType::Legumes, SoilGrade::Ordinary);
 
-    grow_it_to_a_full_stand(&mut wheat, &field);
-    take_the_crop_off(&mut wheat);
+    grow_it_until_it_is_ripe(&mut wheat);
+    bring_the_harvest_in(&mut wheat);
 
-    grow_it_to_a_full_stand(&mut beans, &bean_field);
-    take_the_crop_off(&mut beans);
+    grow_it_until_it_is_ripe(&mut beans);
+    bring_the_harvest_in(&mut beans);
 
     assert_eq!(
         the_grade(&wheat, &field),
@@ -124,28 +123,26 @@ fn a_year_of_beans_answers_a_year_of_wheat() {
     let mut field = Field::broken_out_of(TerrainType::Plains, 0);
     let started = field.grade;
 
-    field.a_crop_came_off(100, 100, false, 10);
+    field.the_harvest_is_in(false, 10);
     assert_eq!(field.grade, started.poorer(), "the wheat took a rung");
 
     field.a_bean_crop_came_in(20);
     assert_eq!(field.grade, started, "and the beans gave it back");
 }
 
-/// A bean crop counts once, when it matures - not again every time a richer
-/// rung lets the same stand fill a little further.
+/// A bean crop counts once, when it ripens: a ripe crop does not grow, so a
+/// stand nobody picks cannot ripen again and again and climb to the top on
+/// its own.
 #[test]
 fn a_bean_crop_standing_there_counts_once() {
-    let mut field = Field::broken_out_of(TerrainType::Plains, 0);
+    let (mut beans, field) = a_field_of(ResourceType::Legumes, SoilGrade::Depleted);
 
-    field.a_bean_crop_came_in(10);
-    field.a_bean_crop_came_in(20);
-    field.a_bean_crop_came_in(30);
-    assert_eq!(field.grade, SoilGrade::Rich, "one stand, one rung");
+    grow_it_until_it_is_ripe(&mut beans);
+    for _ in 0..(30 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY) {
+        beans.world.take_a_turn();
+    }
 
-    // Picked, it is a new stand when it comes in again
-    field.a_crop_came_off(5, 1_000, true, 40);
-    field.a_bean_crop_came_in(50);
-    assert_eq!(field.grade, SoilGrade::VeryRich);
+    assert_eq!(the_grade(&beans, &field), SoilGrade::Ordinary, "one crop, one rung");
 }
 
 /// The top of the ladder is the top: nobody makes an infinite larder out of
