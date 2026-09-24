@@ -263,12 +263,9 @@ pub fn what_this_ground_carries_in(
         return node;
     }
 
-    let fertility = grid
-        .get_tile(&pos)
-        .map(|tile| tile.soil.fertility())
-        .unwrap_or(0.5);
-
-    node.amount = node.standing_capacity(fertility).max(1);
+    node.amount = node
+        .how_heavy_a_crop_it_carries(grid.what_it_yields_here(&pos))
+        .max(1);
 
     // And how good a year it is, which for the mast is most of the answer.
     if resource_type.does_it_have_mast_years() {
@@ -653,7 +650,6 @@ mod tests {
     fn some_ground() -> Grid {
         let mut grid = Grid::new(40, 40);
         grid.generate_terrain();
-        grid.settle_soil();
         grid
     }
 

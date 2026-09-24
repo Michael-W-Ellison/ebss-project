@@ -406,7 +406,6 @@ fn main() {
     // so the turn wants a world to stand in.
     let mut ground = ebss::world::Grid::new(64, 64);
     ground.generate_terrain();
-    ground.settle_soil();
     let mut growing = ebss::environment::PlantManager::new(500);
     growing.spawn_naturalistic(&ground);
 

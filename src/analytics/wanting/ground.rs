@@ -191,11 +191,14 @@ impl Simulation {
                     continue;
                 }
 
+                // Open grass, or a field with nothing standing on it: a crop
+                // ploughed in leaves ground that wants sowing again, and it
+                // is nearer and already broken.
                 let tillable = self
                     .world
                     .grid
                     .get_tile(&candidate)
-                    .map(|tile| tile.terrain.can_be_tilled())
+                    .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
                     .unwrap_or(false);
 
                 if !tillable {
@@ -357,7 +360,7 @@ impl Simulation {
         // would break ground at all is a man who would plough a crop in, and
         // because the ground he already has is nearer than the ground he has
         // not.
-        if let Some(under) = self.a_stand_worth_turning_under(agent_position) {
+        if let Some(under) = self.a_stand_worth_turning_under(agent, agent_position) {
             if under.x == agent_position.0 && under.y == agent_position.1 {
                 return Some(Action::TillSoil);
             }
@@ -378,40 +381,52 @@ impl Simulation {
         })
     }
 
-    /// The nearest stand of a ground-feeding crop standing on ground poor
-    /// enough to be worth giving it to.
+    /// The nearest stand worth turning under: a ground-feeding crop on a field
+    /// its farmer thinks poor, or anything at all on a field he thinks worn to
+    /// nothing.
     ///
-    /// Both halves matter. A pod row on good ground is food and should be
-    /// picked; a pod row on ground that will not carry a crop is worth more
-    /// under the plough than in a basket, and that is the whole judgement a
-    /// green manure asks for.
+    /// Both halves of the first matter. A pod row on good ground is food and
+    /// should be picked; a pod row on ground that will not carry a crop is
+    /// worth more under the plough than in a basket, and that is the whole
+    /// judgement a green manure asks for. The second is how a field changes
+    /// crop: what stands on ground at the bottom of the ladder is not worth
+    /// picking, and the ground wants something else in it.
+    ///
+    /// What he thinks, not what the ground is: the grade of a field is
+    /// something a farmer works out from what has come off it - see
+    /// `Agent::saw_a_stand_on` - and a field he has never seen a crop on he
+    /// has no opinion of, and leaves alone.
     pub(in crate::analytics) fn a_stand_worth_turning_under(
         &self,
+        agent: &crate::agents::Agent,
         position: (i32, i32, i32),
     ) -> Option<crate::world::Position> {
-        use crate::world::Position;
+        use crate::world::resources::ResourceNode;
+        use crate::world::{Position, SoilGrade};
 
         let from = Position::new(position.0, position.1);
         let mut best: Option<(Position, u32)> = None;
 
         for resource in &self.world.resources {
-            if !resource.resource_type.feeds_the_ground() || resource.amount == 0 {
-                continue;
-            }
-
             let distance = from.distance_to(&resource.position);
             if distance > Self::FIELD_WALK_RADIUS {
                 continue;
             }
 
-            let poor = self
-                .world
-                .grid
-                .get_tile(&resource.position)
-                .map(|tile| tile.soil.fertility() < Self::TOO_POOR_FOR_A_HUNGRY_CROP)
-                .unwrap_or(false);
+            let Some(thought) =
+                agent.what_i_make_of_the_field_at((resource.position.x, resource.position.y))
+            else {
+                continue;
+            };
 
-            if !poor {
+            let poor = ResourceNode::WHAT_ORDINARY_WILD_GROUND_CARRIES * thought.multiplier()
+                < Self::TOO_POOR_FOR_A_HUNGRY_CROP;
+            let worn_to_nothing = thought == SoilGrade::LADDER[0];
+
+            let worth_it = (resource.resource_type.feeds_the_ground() && resource.amount > 0 && poor)
+                || worn_to_nothing;
+
+            if !worth_it {
                 continue;
             }
 

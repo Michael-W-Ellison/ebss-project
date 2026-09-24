@@ -85,6 +85,17 @@ pub struct Grid {
     /// exactly what it saw before.
     #[serde(default)]
     ground_with_something_on_it: std::collections::BTreeSet<(usize, usize)>,
+
+    /// The ground somebody has broken, and what has happened to each piece of
+    /// it since.
+    ///
+    /// The only soil state the map stores. Everywhere else is its terrain's
+    /// natural ground, worked out when asked - see `SoilType::natural_to` - so
+    /// a map costs nothing for its soil however large it is, and this holds a
+    /// few hundred entries for a settlement's fields. Keyed (row, column) like
+    /// the register above, so walking it walks the map in a fixed order.
+    #[serde(default)]
+    fields: std::collections::BTreeMap<(usize, usize), crate::world::soil::Field>,
 }
 
 impl Grid {
@@ -125,6 +136,7 @@ impl Grid {
 
         Self {
             ground_with_something_on_it: std::collections::BTreeSet::new(),
+            fields: std::collections::BTreeMap::new(),
             width,
             height,
             tiles,
@@ -452,16 +464,192 @@ impl Grid {
         }
     }
 
-    /// Give every tile the soil its final terrain deserves.
+    // ===== The ground itself =====
+
+    fn key(&self, at: &Position) -> Option<(usize, usize)> {
+        self.is_valid_position(at)
+            .then(|| (at.y as usize, at.x as usize))
+    }
+
+    /// The field on this tile, if somebody has broken it.
+    pub fn field_at(&self, at: &Position) -> Option<&crate::world::soil::Field> {
+        self.fields.get(&self.key(at)?)
+    }
+
+    /// The field on this tile, to be changed.
+    pub fn field_at_mut(&mut self, at: &Position) -> Option<&mut crate::world::soil::Field> {
+        let key = self.key(at)?;
+        self.fields.get_mut(&key)
+    }
+
+    /// Every field on the map, in a fixed order.
+    pub fn every_field(&self) -> impl Iterator<Item = (Position, &crate::world::soil::Field)> {
+        self.fields
+            .iter()
+            .map(|((y, x), field)| (Position::new(*x as i32, *y as i32), field))
+    }
+
+    /// What kind of ground this is, and how good.
     ///
-    /// Terrain is assigned by mutating tiles that were created as plains, so
-    /// without this every marsh and mountainside in the world would be sitting
-    /// on ordinary grassland soil.
-    pub fn settle_soil(&mut self) {
-        for row in &mut self.tiles {
-            for tile in row.iter_mut() {
-                tile.soil = crate::world::soil::Soil::for_terrain(tile.terrain.terrain_type);
+    /// A field's own record where there is one, and the terrain's natural
+    /// ground everywhere else.
+    pub fn soil_at(&self, at: &Position) -> Option<(crate::world::soil::SoilType, crate::world::soil::SoilGrade)> {
+        if let Some(field) = self.field_at(at) {
+            return Some((field.soil, field.grade));
+        }
+        let tile = self.get_tile(at)?;
+        Some(crate::world::soil::SoilType::natural_to(tile.terrain.terrain_type))
+    }
+
+    /// What this ground makes of anything growing on it, against ordinary
+    /// wild ground.
+    ///
+    /// The grade's multiplier, times `WHAT_BROKEN_GROUND_YIELDS_OVER_WILD` on
+    /// broken ground, and nothing at all where nothing grows.
+    pub fn what_it_yields_here(&self, at: &Position) -> f32 {
+        use crate::world::soil::WHAT_BROKEN_GROUND_YIELDS_OVER_WILD;
+
+        let Some((soil, grade)) = self.soil_at(at) else {
+            return 0.0;
+        };
+        if !soil.grows_anything() {
+            return 0.0;
+        }
+        let broken = self
+            .get_tile(at)
+            .is_some_and(|tile| tile.terrain.is_cultivated());
+        grade.multiplier()
+            * if broken {
+                WHAT_BROKEN_GROUND_YIELDS_OVER_WILD
+            } else {
+                1.0
             }
+    }
+
+    /// How good this ground is, on its own: its grade, and not what breaking
+    /// it would do for a crop on top. Half for ordinary ground, one for very
+    /// rich, which is the scale the old fertility was read on - so a farmer
+    /// who put beans in ground "under half" still does.
+    pub fn how_good_the_ground_is(&self, at: &Position) -> f32 {
+        match self.soil_at(at) {
+            Some((soil, grade)) if soil.grows_anything() => {
+                crate::world::resources::ResourceNode::WHAT_ORDINARY_WILD_GROUND_CARRIES
+                    * grade.multiplier()
+            }
+            _ => 0.0,
+        }
+    }
+
+    /// What the ground gives a wild plant, on the 0-to-1 scale the flora's
+    /// growing conditions are read on.
+    ///
+    /// Ordinary wild ground is half, which is where the old nutrient model had
+    /// open plains, and very rich ground is all of it.
+    pub fn what_a_plant_gets_here(&self, at: &Position) -> f32 {
+        (crate::world::resources::ResourceNode::WHAT_ORDINARY_WILD_GROUND_CARRIES
+            * self.what_it_yields_here(at))
+        .clamp(0.0, 1.0)
+    }
+
+    /// Whether anything will come up here at all.
+    pub fn will_anything_grow_on(&self, at: &Position) -> bool {
+        self.what_it_yields_here(at) > 0.0
+    }
+
+    /// Break this ground into a field, if it will be broken.
+    ///
+    /// Returns whether it is a field now. Ground that is already a field is
+    /// worked rather than broken again; ground that cannot be tilled is left
+    /// as it is.
+    pub fn break_ground(&mut self, at: &Position, now: u32) -> bool {
+        use crate::world::soil::Field;
+        use crate::world::{Terrain, TerrainType};
+
+        let Some(key) = self.key(at) else {
+            return false;
+        };
+        let terrain = self.tiles[key.0][key.1].terrain.terrain_type;
+        let already = terrain == TerrainType::Farmland;
+
+        if !already && !Terrain::new(terrain).can_be_tilled() {
+            return false;
+        }
+
+        self.fields
+            .entry(key)
+            .or_insert_with(|| Field::broken_out_of(terrain, now))
+            .somebody_worked_it(now);
+        self.tiles[key.0][key.1].terrain = Terrain::new(TerrainType::Farmland);
+        true
+    }
+
+    /// Somebody weeded or otherwise worked the field here.
+    pub fn somebody_worked_the_field(&mut self, at: &Position, now: u32) {
+        if let Some(field) = self.key(at).and_then(|key| self.fields.get_mut(&key)) {
+            field.somebody_worked_it(now);
+        }
+    }
+
+    /// Units came off the crop on the field here. See `Field::a_crop_came_off`.
+    pub fn a_crop_came_off(&mut self, at: &Position, units: u32, a_whole_crop: u32, pods: bool, now: u32) {
+        if let Some(field) = self.key(at).and_then(|key| self.fields.get_mut(&key)) {
+            field.a_crop_came_off(units, a_whole_crop, pods, now);
+        }
+    }
+
+    /// A bean crop on the field here has come to maturity.
+    pub fn a_bean_crop_came_in(&mut self, at: &Position, now: u32) {
+        if let Some(field) = self.key(at).and_then(|key| self.fields.get_mut(&key)) {
+            field.a_bean_crop_came_in(now);
+        }
+    }
+
+    /// Somebody put muck worth `worth` on the ground here.
+    ///
+    /// Returns whether it will come to anything, which on wild ground it never
+    /// does: only a field is built by what is carried to it.
+    pub fn somebody_mucked(&mut self, at: &Position, worth: f32, now: u32) -> bool {
+        self.key(at)
+            .and_then(|key| self.fields.get_mut(&key))
+            .is_some_and(|field| field.somebody_mucked_it(worth, now))
+    }
+
+    /// A day goes by for every field on the map.
+    ///
+    /// Only the fields: wild ground does not change, so this costs what the
+    /// settlement farms rather than what the map is. A field that has gone
+    /// back to the wild gets its terrain back, loses its weeds - a meadow
+    /// cannot be any weedier than it already is - and its record.
+    pub fn a_day_goes_by_for_the_fields(&mut self, now: u32) {
+        use crate::world::soil::WhatBecameOfIt;
+
+        let mut gone_wild = Vec::new();
+        for (key, field) in self.fields.iter_mut() {
+            if field.a_day_goes_by(now) == WhatBecameOfIt::GoneBackToTheWild {
+                gone_wild.push((*key, field.was));
+            }
+        }
+
+        for ((y, x), was) in gone_wild {
+            self.fields.remove(&(y, x));
+            let tile = &mut self.tiles[y][x];
+            tile.terrain = crate::world::Terrain::new(was);
+            tile.soil.weeds = 0.0;
+            tile.soil.pests = 0.0;
+        }
+    }
+
+    /// Let every midden on the map air out, a day's worth.
+    ///
+    /// Only the ground somebody has left something on: nowhere else has
+    /// anything to air. This used to be the whole map every day, because it
+    /// rode along with rotting the litter every tile was born with.
+    pub fn a_day_of_air_for_the_middens(&mut self, precipitation: f32) {
+        let noted: Vec<(usize, usize)> = self.ground_with_something_on_it.iter().copied().collect();
+        for (y, x) in noted {
+            let tile = &mut self.tiles[y][x];
+            let humidity = crate::world::soil::Soil::humidity(tile.terrain.terrain_type, precipitation);
+            tile.soil.air_out(humidity, crate::environment::seasons::ONCE_A_DAY as f32);
         }
     }
 

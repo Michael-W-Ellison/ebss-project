@@ -15,62 +15,56 @@ use crate::core::DriveType;
 use crate::environment::Action;
 use crate::world::{TerrainType, World, WorldConfig};
 
-/// A field carries a heavier crop than the same ground left wild, and gets
-/// there on soil that would only half feed a hedgerow.
+/// A field yields four times what the same ground does wild, and richer
+/// ground carries a heavier crop than thinner.
 ///
-/// It does not grow faster than the plant's kind can grow. Breaking ground buys
-/// two things - what the crop can get at, and how much of it the ground will
-/// carry - and neither of them is speed.
+/// "Wild plants produce yields 1/4th that of plants in tilled farmland." This
+/// used to claim the opposite about pace - that breaking ground bought what a
+/// crop could get at and how heavy it stood, and never speed, so on ground
+/// with everything in it a field and a hedgerow grew at one rate. A yield is a
+/// crop over a season, which is the pace, so the field now outgrows the
+/// hedgerow on every grade of ground. See ISSUES_FOUND #246.
 #[test]
-fn a_field_outyields_the_hedgerow_without_outrunning_it() {
-    use crate::world::soil::Soil;
+fn a_field_yields_four_times_the_hedgerow() {
+    use crate::world::soil::{SoilGrade, WHAT_BROKEN_GROUND_YIELDS_OVER_WILD};
     use crate::world::{Position, ResourceNode, ResourceType};
 
-    fn grown(cultivated: bool, fertility: f32) -> u32 {
-        let mut soil = Soil::for_terrain(TerrainType::Plains);
+    fn grown(cultivated: bool, grade: SoilGrade) -> u32 {
         // Large enough that neither run reaches the ceiling: this is about the
         // rate, and the ceiling is measured separately
         let mut patch = ResourceNode::new(ResourceType::Grain, Position::new(10, 10), 40000);
         patch.amount = 0;
+        let yields = grade.multiplier()
+            * if cultivated {
+                WHAT_BROKEN_GROUND_YIELDS_OVER_WILD
+            } else {
+                1.0
+            };
 
         for _ in 0..300 {
-            // Held steady, so this measures the rate rather than depletion
-            soil.nutrients = fertility;
-            patch.regenerate_in_ground(20.0, 0.6, 1.0, cultivated, &mut soil, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
+            patch.regenerate_in_ground(20.0, 0.6, 1.0, yields, 1.0, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
         }
 
         patch.amount
     }
 
-    // On middling ground, a worked field gets far more out of it
-    let wild = grown(false, 0.4);
-    let field = grown(true, 0.4);
+    for grade in SoilGrade::LADDER {
+        let wild = grown(false, grade);
+        let field = grown(true, grade);
 
-    assert!(
-        field > wild * 2,
-        "a field should beat the hedgerow beside it: {field} against {wild}"
-    );
+        assert!(wild > 0, "nothing grew wild on {} ground", grade.called());
+        assert!(
+            field * 100 >= wild * 390 && field * 100 <= wild * 410,
+            "a field on {} ground should yield four times the hedgerow: {field} against {wild}",
+            grade.called()
+        );
+    }
 
-    // On ground that already has everything in it, both grow at the same pace:
-    // that pace is the plant's, not the farmer's
-    let wild_rich = grown(false, 1.0);
-    let field_rich = grown(true, 1.0);
-
-    assert_eq!(
-        field_rich, wild_rich,
-        "nothing grows faster than its kind grows, however well the ground is worked"
-    );
-
-    // What a field does buy on top of that is how heavy a crop the ground will
-    // carry
-    let mut rich = Soil::for_terrain(TerrainType::Plains);
-    rich.nutrients = 1.0;
-    let mut thin = Soil::for_terrain(TerrainType::Plains);
-    thin.nutrients = 0.2;
-
+    // And richer ground carries a heavier crop
     let patch = ResourceNode::new(ResourceType::Grain, Position::new(10, 10), 100);
     assert!(
-        patch.standing_capacity(rich.fertility()) > patch.standing_capacity(thin.fertility()),
+        patch.how_heavy_a_crop_it_carries(SoilGrade::VeryRich.multiplier())
+            > patch.how_heavy_a_crop_it_carries(SoilGrade::Depleted.multiplier()),
         "rich ground should carry a heavier crop than thin"
     );
 }

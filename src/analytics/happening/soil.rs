@@ -294,12 +294,8 @@ impl Simulation {
         // And what the dead leave where they fell
         let bodies = std::mem::take(&mut self.population.bodies_where_they_fell);
 
-        for (position, soft, bone) in bodies {
+        for (position, soft, _bone) in bodies {
             let here = Position::new(position.0, position.1);
-            if let Some(tile) = self.world.grid.get_tile_mut(&here) {
-                tile.soil.add_leaf_litter(soft);
-                tile.soil.add_woody_litter(bone);
-            }
 
             // And it fouls the ground it fell on, which is the whole reason a
             // body is a thing you want to be away from. Until now a corpse was

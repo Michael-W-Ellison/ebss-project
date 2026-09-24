@@ -188,8 +188,10 @@ pub struct Tile {
     // global fog of war that nothing consulted cost 900 MB on a ten thousand
     // cell map.
 
-    /// The ground itself: what plants can draw on, and what is lying on it
-    /// waiting to break down into more of the same
+    /// What somebody has left on this ground: muck, the seed in it, and on a
+    /// field its weeds and vermin. The ground's own kind and grade are not
+    /// here - wild ground's follow from its terrain, and a field's are on the
+    /// grid's record of it. See `world::soil`.
     #[serde(default)]
     pub soil: super::soil::Soil,
 }
@@ -198,7 +200,7 @@ impl Tile {
     pub fn new(terrain_type: TerrainType) -> Self {
         Self {
             terrain: Terrain::new(terrain_type),
-            soil: super::soil::Soil::for_terrain(terrain_type),
+            soil: super::soil::Soil::default(),
         }
     }
 

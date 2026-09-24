@@ -29,8 +29,7 @@ use crate::environment::flora::GrowingConditions;
 use crate::environment::{
     Season, SeasonalCalendar, DAYS_PER_SEASON, DAYS_PER_YEAR, PLANNING_PERIODS_PER_DAY, TICKS_PER_DAY, PLANNING_PERIODS_PER_YEAR, TICKS_PER_YEAR,
 };
-use crate::world::soil::Soil;
-use crate::world::{ClimateManager, Position, ResourceNode, ResourceType, TerrainType, World, WorldConfig};
+use crate::world::{ClimateManager, Position, ResourceNode, ResourceType, World, WorldConfig};
 use std::collections::BTreeSet;
 
 /// A year fits inside a run somebody would actually sit through.
@@ -252,23 +251,22 @@ fn an_agent_ages_by_the_calendar() {
 #[test]
 fn the_ground_gives_more_in_summer() {
     fn grown_over(season: Season) -> u32 {
-        let mut soil = Soil::for_terrain(TerrainType::Plains);
         // Room enough that neither season runs into the ceiling: this is
         // about how fast the ground gives, not how much it will hold
         let mut patch = ResourceNode::new(ResourceType::Food, Position::new(5, 5), 20_000);
         patch.amount = 0;
         let mut grown = 0;
 
+        // Ordinary wild ground, which is what open plains are
+        let plains = crate::world::SoilGrade::Ordinary.multiplier();
+
         for _ in 0..400 {
-            // Hold the ground as it was: this is about the season, not about
-            // the patch stripping the soil under it
-            soil = Soil::for_terrain(TerrainType::Plains);
             grown += patch.regenerate_in_ground(
                 18.0,
                 0.5,
                 season.plant_growth_modifier(),
-                false,
-                &mut soil,
+                plains,
+                1.0,
                 crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO,
             );
         }

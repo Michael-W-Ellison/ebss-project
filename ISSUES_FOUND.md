@@ -19524,3 +19524,140 @@ agents move.
 Still to settle when it is built: the rate at which beans and manure raise
 the grade, the ceiling, and whether abandoned farmland counts as fallow or
 goes back to wild terrain.
+
+### 246. The soil ladder: a kind and a grade, and only people move it
+
+Built as #245 set it out, with the last open questions settled: **beans raise
+the grade when they come to maturity; muck raises it a season after it goes
+on; the top is very rich, and the ladder is one list so a rung can be added;
+abandoned farmland lies fallow back to its natural grade, and a year at that
+grade with nobody working it and it is wild land again.**
+
+#### What replaced what
+
+Every tile carried a `Soil` of seven floats: a pool of nutrient, two pools of
+litter, and four things somebody might have left on it. Every leaf that fell,
+every beast that dunged and every plant that grew moved the pool, and one pass
+a day rotted the litter on every tile in the world into it. After a year three
+tiles in five had drifted from where they started, so none of it could be left
+unstored.
+
+Now a tile's ground has a **type** (loam, silt, peat, sand, stone, salt) and a
+**grade** on `SoilGrade::LADDER` - exhausted x0.25, depleted x0.5, ordinary
+x1, rich x1.5, very rich x2 - and the grade is a straight multiplier on what
+anything growing there yields. Wild ground's type and grade follow from its
+terrain and are never stored. Only a **field** has a record, `Field`, kept
+sparse on the grid, and only people change one:
+
+| what | does |
+|---|---|
+| a whole crop's worth taken off by hand | down a rung (a pod crop excepted) |
+| a bean crop coming to maturity | up a rung, once per stand |
+| muck, a rung's worth, a season on | up a rung |
+| a year with nothing taken off | a rung back towards natural, from either side, never past |
+| a year at natural with nobody working it | back to its old terrain, record dropped |
+
+Broken ground yields **four times** what the same ground does wild, for every
+crop. What wild ground yields is anchored to where the old pool actually
+settled - measured over two seeded years on a hundred-cell map, a riverbank or
+marsh at 0.94 of what ground could hold, a wood at 0.83, a meadow at 0.71,
+plains at 0.51 - so each terrain takes the rung nearest, and wild food stands
+about where it stood.
+
+A crop's units are counted as they leave by hand, on the node: `harvest` adds
+and `put_it_back` takes away, so every path nets itself and nothing but a hand
+counts. Beasts grazing, fruit falling and dung do nothing to the ground.
+
+What people leave on the ground - the midden's smell and seed, and a field's
+weeds and vermin - is unchanged and still on the tile. The daily pass that
+aired middens now runs over the ground register rather than the map.
+
+#### Agents learn a grade from what grows
+
+Nobody is told a grade. A farmer who sees a **full stand** - harvesting it,
+eating off it, weeding round it - reads the grade that would carry a stand that
+heavy; a stand still filling can only raise what he thought, and on a field he
+has no opinion of tells him nothing. What he believes lags the field by one
+crop. The two decisions that used to read the soil directly - what to sow, and
+what to plough under - read his belief now.
+
+Two gaps in the old farming had to close for rotation to be possible at all:
+
+- **A bare field could never be sown again.** Breaking ground was refused on
+  anything already a field, so a crop ploughed in left the field bare for ever.
+  A bare field is sown again now, and is preferred as nearer ground to break.
+- **A field carried its first crop for ever.** Nodes do not die, and nothing
+  but a pod row could be ploughed in. Now anything on a field its farmer
+  believes exhausted is ploughed in, and tired ground gets beans if he has them.
+
+#### Measured
+
+Twelve paired seeded settlement-years against the current HEAD:
+
+| | HEAD | ladder |
+|---|---|---|
+| person-turns | 2,017,697 | 1,985,610 (**-1.6%**) |
+| births | 6 | 4 |
+
+**No detectable effect on survival.** The per-seed pairs run from -24% to +20%,
+so the standard error of that mean is about 3.5%. What the fields did, summed
+over the twelve settlements at the year's end:
+
+| | |
+|---|---|
+| fields | 690, about 57 a settlement |
+| grades | very rich 68, rich 261, ordinary 174, depleted 64, exhausted 123 |
+| crops on them | berries 611, beans 66, grain 4, bare 9 |
+| farmer beliefs held about them | 83 |
+| actions over the year | spread muck 8,576, till 3,444, tend 794, plant a cutting 303 |
+
+So fields wear - 27% end the year depleted or exhausted - and are built up, 10%
+very rich. But **rotation rarely fires**: 83 beliefs across 690 fields means
+most farmers never see a full stand, because a crop is picked long before it
+fills. The rule is right and too strict to see much use. Reading a field from
+what it has yielded over a season, rather than from one full stand, is the
+likely next step, and wants its own measurement.
+
+**Grain is almost never sown** - 4 fields in 690 - because farmers sow what
+they carry, and they carry berries. The flat four-to-one for every crop replaced
+`takes_to_the_plough` (grain 3, flax 1.6, berries 1.15, herbs 1), which makes a
+field of berries three and a half times what it was. It also means **beans
+out-yield grain**: per unit of growing time a bean crop gives 0.035 x 45 of
+food energy against grain's 0.015 x 60, and beans build the ground while grain
+wears it. Grain's old plough factor hid that. Nothing measured here shows it
+biting yet, because nobody sows grain; it will when somebody does. The choice
+is whether the plough does the same for every crop or more for some.
+
+#### Memory and time
+
+`Tile` goes from 32 bytes to **20**, and `Soil` from 28 to 16: the four rare
+fields that remain. A field record is only where somebody has broken ground.
+
+**Time did not move.** An empty 400-cell world ran 3.2-3.5 ms a simulated day
+before and after, over three runs each. The daily rot pass cost well under a
+millisecond a day at 160,000 tiles; the cost of a day is the plants and the
+beasts. What the ladder buys is the memory and a model that says what it does.
+
+#### Tests
+
+Rewritten onto the ladder: `rotation_tests`, `land_tests`, `farming_tests`,
+`midden_tests`, `nutrient_loop_tests`, `husbandry_tests`, `bearing_tests`,
+`fishery_tests`, `calendar_tests`, `ecology_tests`, `ground_tests`,
+`salt_tests`, `scarcity_tests` and `survival_pressure_tests::the_crop_falls_with_the_ground`.
+Several asserted what the ladder reverses and now assert the new rule: that a
+beast's dung leaves the ground as it was, that food rotting where it lay is
+counted as waste rather than turned to litter, that a field outgrows the
+hedgerow on every grade, and that every crop takes the plough alike.
+
+**Deleted because what they tested is gone**: `what_rots_depends_on_where_it_fell`,
+`dense_matter_outlasts_soft`, `what_rots_feeds_the_ground`,
+`a_crop_draws_the_ground_down`, `a_wood_feeds_itself` (land);
+`what_nobody_picks_goes_back_into_the_ground` (bearing);
+`the_loop_turns_and_loses`, `the_farmed_ground_holds_up_longer` (nutrient loop);
+`a_fish_takes_nothing_out_of_the_bank` (fishery). New:
+`soil_ladder_tests`, 22 tests, one rule each, including how a farmer reads a
+field and the rotation it leads to.
+
+Both roll-count fingerprints moved and are re-baselined with their reasons: the
+120-turn count **up 37%**, since the world differs from turn nought, and the
+year **down 16%**.

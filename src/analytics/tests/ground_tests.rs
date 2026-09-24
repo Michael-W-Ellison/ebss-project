@@ -319,9 +319,15 @@ fn a_thing_across_the_map_is_not() {
 // What the weather does to it
 // --------------------------------------------------------------------------
 
-/// Food left lying goes first, and goes into the ground.
+/// Food left lying goes first, and is counted as rotted where it lay.
+///
+/// This used to assert that what the berries were ended up in the ground as
+/// litter. Nothing left lying changes the ground now - wild ground is what it
+/// was made, and only muck carried to a field on purpose builds one - so what
+/// is left of the claim is that the food goes, and that the world knows it
+/// went to waste. See ISSUES_FOUND #246.
 #[test]
-fn food_left_lying_goes_into_the_ground() {
+fn food_left_lying_goes_first_and_is_counted_as_wasted() {
     let here = Position::new(25, 25);
     let mut simulation = a_person_at(here);
 
@@ -331,47 +337,11 @@ fn food_left_lying_goes_into_the_ground() {
         .create_food_data(&crate::world::ItemType::Food, 0);
 
     simulation.world.somebody_left_this(supper, here, 0);
-
-    let litter = |simulation: &Simulation| {
-        simulation
-            .world
-            .grid
-            .get_tile(&here)
-            .map(|tile| tile.soil.litter())
-            .unwrap_or(0.0)
-    };
-
-    // **Measured across the moment the berries go, not across the run.**
-    //
-    // This used to read the litter at turn nought, wind the world on for
-    // `HOW_LONG_A_THING_LIES_THERE / 2`, and assert the litter had gone up.
-    // Two things were wrong with that and the second is the interesting one.
-    //
-    // Litter decomposes - that is what litter is for - so the reading at turn
-    // nought is not a floor, it is the start of a curve going down. The tile
-    // begins with a quarter of a unit of leaf on it and is under a hundredth
-    // of that within twenty days, so the comparison only means anything over
-    // a span short enough that what was already there has not gone.
-    //
-    // And that span grew. `HOW_LONG_A_THING_LIES_THERE` is a season and a
-    // half, so it went from thirty-six days to a hundred and thirty-five when
-    // a season went from twenty-four days to ninety - and half of that is
-    // sixty-seven days, by which point the quarter-unit the tile started with
-    // has decomposed to nine ten-thousandths whatever the berries did. The
-    // test had stopped being about the berries and become a test that leaf
-    // litter does not rot, which is the opposite of what this file is for.
-    //
-    // So: watch the turn they go, and read the ground either side of it.
-    let mut before_they_went = litter(&simulation);
-    let mut after_they_went = None;
+    let wasted_before = simulation.world.food_that_rotted_where_it_lay;
 
     for _ in 0..(World::HOW_LONG_A_THING_LIES_THERE / 2 / TICKS_BETWEEN_PLANS) {
-        let last_reading = litter(&simulation);
         simulation.world.take_a_turn();
-
         if simulation.world.what_is_lying_at(&here).is_empty() {
-            before_they_went = last_reading;
-            after_they_went = Some(litter(&simulation));
             break;
         }
     }
@@ -380,12 +350,11 @@ fn food_left_lying_goes_into_the_ground() {
         simulation.world.what_is_lying_at(&here).is_empty(),
         "a basket of berries does not keep on open ground"
     );
-
-    let after = after_they_went.expect("they went, so there is a turn they went on");
     assert!(
-        after > before_they_went,
-        "and what it was is in the ground now: {before_they_went} before they \
-         went, {after} after"
+        simulation.world.food_that_rotted_where_it_lay >= wasted_before + 10,
+        "and the ten of them are counted as rotted where they lay: {} to {}",
+        wasted_before,
+        simulation.world.food_that_rotted_where_it_lay
     );
 }
 

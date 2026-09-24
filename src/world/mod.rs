@@ -75,7 +75,7 @@ pub mod belonging;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
-pub use soil::Soil;
+pub use soil::{Field, Soil, SoilGrade, SoilType};
 pub use belonging::{Access, Belongs};
 pub use resources::{Bearing, Resource, ResourceType, ResourceNode};
 pub use buildings::{Building, BuildingType, BuildingState};
@@ -995,7 +995,6 @@ impl World {
 
     fn what_is_lying_about_weathers(&mut self) {
         let now = self.turn;
-        let mut back_to_the_ground: Vec<(Position, f32)> = Vec::new();
         let mut dried: Vec<(Position, String)> = Vec::new();
 
         // What is lying out in the weather goes off faster than what is in
@@ -1117,7 +1116,6 @@ impl World {
                 .as_ref()
                 .is_some_and(|food| food.freshness <= 0.0)
             {
-                back_to_the_ground.push((left.where_it_is, left.item.quantity as f32 * 0.05));
                 wasted += left.item.quantity as u64;
                 return false;
             }
@@ -1131,7 +1129,6 @@ impl World {
             };
 
             if gone && left.item.food_data.is_some() {
-                back_to_the_ground.push((left.where_it_is, left.item.quantity as f32 * 0.05));
                 wasted += left.item.quantity as u64;
             }
 
@@ -1140,12 +1137,6 @@ impl World {
 
         self.food_that_rotted_where_it_lay =
             self.food_that_rotted_where_it_lay.saturating_add(wasted);
-
-        for (where_it_is, worth) in back_to_the_ground {
-            if let Some(tile) = self.grid.get_tile_mut(&where_it_is) {
-                tile.soil.add_leaf_litter(worth);
-            }
-        }
     }
 
     /// How many different unknown plants grow in a world.
@@ -1230,8 +1221,6 @@ impl World {
             food_that_rotted_in_the_ground: 0,
         };
 
-        // The ground under the terrain that was just generated
-        world.grid.settle_soil();
 
 
         // Place initial resources, as many of them as this much ground
@@ -2448,7 +2437,7 @@ impl World {
 
         // Regenerate resources based on climate conditions (every 10 turns to reduce overhead)
         if self.turn % crate::environment::seasons::ONCE_A_DAY == 0 {
-            self.rot_what_is_lying_about();
+            self.a_day_goes_by_for_the_ground();
             self.regenerate_resources();
         }
 
@@ -2467,46 +2456,46 @@ impl World {
         self.grid.forget_bare_ground();
     }
 
-    /// Regenerate renewable resources based on climate and weather conditions
-    /// Break down everything lying on the ground into nutrient.
+    /// A day goes by for the ground.
     ///
-    /// The rate is the ground's to decide: wet country turns leaf fall into
-    /// soil inside a season, and a desert holds what falls on it more or less
-    /// forever. Density does the rest - the leaves that come off a tree are
-    /// gone long before the tree is.
-    fn rot_what_is_lying_about(&mut self) {
-        use crate::world::soil::Soil;
-
-        // Rain reaches everywhere; the ground decides what it does with it
+    /// Middens air out, fields age, and what came off every crop by hand since
+    /// yesterday is reckoned against the field it grew on.
+    ///
+    /// This used to be every tile in the world, every day, rotting the leaf
+    /// litter each one was born with into nutrient. Wild ground does not
+    /// change now - only people change a grade - so the day costs what is
+    /// happening on the map rather than what the map is: the middens on the
+    /// ground register, and the fields. See ISSUES_FOUND #246.
+    fn a_day_goes_by_for_the_ground(&mut self) {
         let precipitation = self.climate.weather.weather_type.precipitation_intensity();
+        self.grid.a_day_of_air_for_the_middens(precipitation);
+        self.what_came_off_the_fields();
+        self.grid.a_day_goes_by_for_the_fields(self.turn);
+    }
 
-        // A pass stands for however long it has been since the last one, which
-        // is one number and not two. This read ten while the trigger in
-        // `World::take_a_turn` read ten separately, in another function - two
-        // spellings of one cadence, and shortening the turn would have moved
-        // one and not the other.
-        //
-        // Ticks, and named so. It was right as a span all along; what was
-        // wrong was at the other end, where `Soil::decay`'s rates were per
-        // pass and were being paid out per tick of it. See ISSUES_FOUND #218.
-        const TICKS_THIS_PASS_STANDS_FOR: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
-
-        // Every tile in the world, because every tile in the world has litter
-        // on it - `Soil::for_terrain` gives a forest floor 1.5 and a desert
-        // 0.02, and rot never quite takes the last of it. There is nothing to
-        // narrow here and the register would hold the whole map. One pass a
-        // day over a million tiles is about half a millisecond, which is a
-        // twentieth of what the two sweeps that *could* be narrowed were
-        // costing. See ISSUES_FOUND.md #128.
-        for row in &mut self.grid.tiles {
-            for tile in row.iter_mut() {
-                if tile.soil.litter() <= 0.0 {
-                    continue;
-                }
-
-                let humidity = Soil::humidity(tile.terrain.terrain_type, precipitation);
-                tile.soil.decay(humidity, TICKS_THIS_PASS_STANDS_FOR);
+    /// What came off each crop by hand since yesterday, reckoned against the
+    /// field it grew on.
+    ///
+    /// Every hand that takes a crop goes through `ResourceNode::harvest` and
+    /// every armful handed back through `put_it_back`, so the node's count is
+    /// the net whichever path took it. Off wild ground it counts for nothing:
+    /// "harvesting from a wild plant should not change the grade of the soil".
+    fn what_came_off_the_fields(&mut self) {
+        let now = self.turn;
+        for resource in self.resources.iter_mut() {
+            let taken = std::mem::take(&mut resource.taken_by_hand);
+            if taken == 0 || self.grid.field_at(&resource.position).is_none() {
+                continue;
             }
+            let a_whole_crop =
+                resource.how_heavy_a_crop_it_carries(self.grid.what_it_yields_here(&resource.position));
+            self.grid.a_crop_came_off(
+                &resource.position,
+                taken,
+                a_whole_crop,
+                resource.resource_type.feeds_the_ground(),
+                now,
+            );
         }
     }
 
@@ -2575,6 +2564,10 @@ impl World {
             let ground_water =
                 crate::world::soil::Soil::humidity(terrain_type, precipitation);
 
+            // What the ground makes of it: its grade, and four times that on a
+            // field. Asked before the tile is borrowed for its weeds.
+            let what_the_ground_yields = self.grid.what_it_yields_here(&resource.position);
+
             let soil = match self.grid.get_tile_mut(&resource.position) {
                 Some(tile) => &mut tile.soil,
                 None => continue,
@@ -2588,6 +2581,16 @@ impl World {
                 soil.nobody_weeded_this(growing, 1.0);
             }
 
+            // And what is taking it before the farmer does. A field is the best
+            // ground there is and everything else knows it: what a crop keeps
+            // is what the weeds and the vermin leave. On unbroken ground this
+            // is one - a meadow cannot get any weedier than it already is.
+            let kept = if cultivated {
+                soil.what_the_crop_keeps()
+            } else {
+                1.0
+            };
+
             // A hedgerow out of season carries nothing. Growth was seasonal
             // from the beginning and what was *standing* was not, so a berry
             // bush that had grown all summer still had its berries on it in
@@ -2596,7 +2599,7 @@ impl World {
             // and no use for a store. What is on the plant now falls off it
             // outside the weeks it bears, which is what fruit does.
             if !resource.resource_type.is_it_bearing(today) {
-                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TURN, soil);
+                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TURN);
                 continue;
             }
 
@@ -2604,14 +2607,25 @@ impl World {
             // has been since the last one. The rates inside are per-pass
             // numbers fitted when a pass was ten turns, and they are read
             // against that - see `ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO`.
-            let _regen_amount = resource.regenerate_in_ground(
+            let was_standing = resource.amount;
+            resource.regenerate_in_ground(
                 temperature,
                 ground_water,
                 season_modifier,
-                cultivated,
-                soil,
+                what_the_ground_yields,
+                kept,
                 crate::environment::seasons::ONCE_A_DAY as f32,
             );
+
+            // A bean crop on a field that has just come to its full stand has
+            // matured, and a bean crop that matures raises the ground a rung.
+            // `Field::a_bean_crop_came_in` counts it once per stand.
+            if cultivated && resource.resource_type.feeds_the_ground() {
+                let a_full_stand = resource.how_heavy_a_crop_it_carries(what_the_ground_yields);
+                if was_standing < a_full_stand && resource.amount >= a_full_stand {
+                    self.grid.a_bean_crop_came_in(&resource.position, self.turn);
+                }
+            }
 
             // And how good a year it is, which only the mast asks. A wood
             // that stood full last autumn stands nearly bare this one, and

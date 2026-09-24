@@ -299,6 +299,7 @@ impl Simulation {
             let today = self.world.climate.calendar.day_of_year;
             let here = self.world.resources[food_index].resource_type;
             let armful = Self::what_a_trip_brings_back(here, today, rng);
+            self.looking_at_the_crop(agent_index, food_index);
             let harvested = self.world.resources[food_index].harvest(armful);
 
             if harvested > 0 {

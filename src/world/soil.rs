@@ -1,45 +1,415 @@
 // src/world/soil.rs
 //! What is under a plant's feet.
 //!
-//! Growth in this simulation used to be a number per species multiplied by the
-//! weather. Nothing was ever taken out of the ground and nothing was ever put
-//! back, so a patch of berries picked bare regrew exactly as fast on bare rock
-//! in a drought as in river silt after a wet spring.
+//! Soil is two things, and they are kept apart because they cost apart.
 //!
-//! A tile now carries soil: a stock of nutrients that plants draw on, and two
-//! pools of dead matter waiting to become more of it. The two pools are the
-//! whole of the decay model - what breaks down fast and what breaks down slowly
-//! - and which one a thing lands in is decided by how dense it was when it was
-//! alive. Leaves, dung and spoiled food are soft; trunks, branches and bone are
-//! woody.
+//! **What kind of ground it is, and how good.** A tile's ground has a *type*
+//! - loam, silt, peat, sand, stone, salt - and a *grade* on a ladder from
+//! exhausted to very rich. Wild ground is whatever it was made: its type and
+//! grade follow from its terrain and never change, so they are worked out
+//! when asked rather than stored, and a map costs nothing for them however
+//! large it is. Only people move a grade, and only on ground they have broken:
+//! a crop taken off a field wears it down, a bean crop, a season-old muck
+//! spreading or a year's rest builds it back. What a field has been through is
+//! a [`Field`], and the grid keeps one for each field and nothing for anywhere
+//! else.
 //!
-//! How fast either turns into nutrients depends on how wet the ground is. A
-//! tree that falls in a swamp is gone in a few years. The same tree in a desert
-//! is still lying there.
+//! This replaced a pool of nutrient and two pools of litter on every tile,
+//! rotted every day over the whole map by the weather. Every leaf that fell
+//! and every beast that dunged moved the ground somewhere, so after a year
+//! three tiles in five had drifted from where they began and none of it could
+//! be left unstored. See ISSUES_FOUND #246.
+//!
+//! **What somebody has left on it.** Muck, the seed in it, and on a field the
+//! weeds and vermin. These start at nought everywhere and arrive only where
+//! somebody does something, which is what the [`Soil`] on a tile still holds.
 
 use serde::{Deserialize, Serialize};
 
 use super::TerrainType;
 
-/// The state of the ground on one tile
+/// How good a piece of ground is: one rung of a ladder.
+///
+/// Each rung is a multiplier on what anything growing there yields, wild or
+/// sown. The rungs are listed once, in [`SoilGrade::LADDER`], and everything
+/// that climbs or descends goes through it - so a rung is added by adding it
+/// to the enum and to the ladder, and nothing else counts them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum SoilGrade {
+    Exhausted,
+    Depleted,
+    Ordinary,
+    Rich,
+    VeryRich,
+}
+
+impl SoilGrade {
+    /// Every rung, poorest first. The last is the top.
+    pub const LADDER: [SoilGrade; 5] = [
+        SoilGrade::Exhausted,
+        SoilGrade::Depleted,
+        SoilGrade::Ordinary,
+        SoilGrade::Rich,
+        SoilGrade::VeryRich,
+    ];
+
+    /// What this ground makes of anything growing in it.
+    pub fn multiplier(self) -> f32 {
+        match self {
+            SoilGrade::Exhausted => 0.25,
+            SoilGrade::Depleted => 0.5,
+            SoilGrade::Ordinary => 1.0,
+            SoilGrade::Rich => 1.5,
+            SoilGrade::VeryRich => 2.0,
+        }
+    }
+
+    /// The best ground there is.
+    pub fn the_top() -> Self {
+        Self::LADDER[Self::LADDER.len() - 1]
+    }
+
+    fn rung(self) -> usize {
+        Self::LADDER
+            .iter()
+            .position(|rung| *rung == self)
+            .expect("every grade is on the ladder")
+    }
+
+    /// One rung up, or where it is if it is at the top.
+    pub fn richer(self) -> Self {
+        Self::LADDER[(self.rung() + 1).min(Self::LADDER.len() - 1)]
+    }
+
+    /// One rung down, or where it is if it is at the bottom.
+    pub fn poorer(self) -> Self {
+        Self::LADDER[self.rung().saturating_sub(1)]
+    }
+
+    /// One rung nearer `aim`, from either side, and never past it.
+    pub fn towards(self, aim: SoilGrade) -> Self {
+        match self.cmp(&aim) {
+            std::cmp::Ordering::Less => self.richer(),
+            std::cmp::Ordering::Greater => self.poorer(),
+            std::cmp::Ordering::Equal => self,
+        }
+    }
+
+    /// The rung whose multiplier is nearest this one.
+    ///
+    /// For somebody working out what a field is from what it grew: nobody is
+    /// told the grade of anything.
+    pub fn nearest_to(multiplier: f32) -> Self {
+        *Self::LADDER
+            .iter()
+            .min_by(|a, b| {
+                (a.multiplier() - multiplier)
+                    .abs()
+                    .partial_cmp(&(b.multiplier() - multiplier).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .expect("the ladder has rungs")
+    }
+
+    /// What people would call it.
+    pub fn called(self) -> &'static str {
+        match self {
+            SoilGrade::Exhausted => "exhausted",
+            SoilGrade::Depleted => "depleted",
+            SoilGrade::Ordinary => "ordinary",
+            SoilGrade::Rich => "rich",
+            SoilGrade::VeryRich => "very rich",
+        }
+    }
+}
+
+/// What kind of ground it is.
+///
+/// Kept for ever, whatever happens to the grade: a loam worn down to nothing
+/// is still a loam, and rested it comes back to being the loam it was.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum SoilType {
+    Loam,
+    Silt,
+    Peat,
+    Sand,
+    Stone,
+    Salt,
+}
+
+impl SoilType {
+    /// What people would call it.
+    pub fn called(self) -> &'static str {
+        match self {
+            SoilType::Loam => "loam",
+            SoilType::Silt => "silt",
+            SoilType::Peat => "peat",
+            SoilType::Sand => "sand",
+            SoilType::Stone => "stone",
+            SoilType::Salt => "salt",
+        }
+    }
+
+    /// Whether anything grows in it at all.
+    ///
+    /// Not on a salt flat, which is the point of one.
+    pub fn grows_anything(self) -> bool {
+        !matches!(self, SoilType::Salt)
+    }
+
+    /// What ground of this terrain is, before anybody has done anything to it.
+    ///
+    /// The grades are read off what the old nutrient model settled at on wild
+    /// ground in its second year, when the litter every tile was born with had
+    /// rotted in: a riverbank or a marsh at 0.94 of what ground could hold, a
+    /// wood at 0.83, a meadow at 0.71, open plains at 0.51, hills at a third,
+    /// sand and rock at a tenth or so. Ordinary ground was half, so each
+    /// terrain takes the rung whose multiplier is nearest twice its figure,
+    /// and wild food comes up about where it came up before. Measured over two
+    /// seeded years on a hundred-cell map; see ISSUES_FOUND #246.
+    pub fn natural_to(terrain: TerrainType) -> (SoilType, SoilGrade) {
+        match terrain {
+            TerrainType::Wetland => (SoilType::Peat, SoilGrade::VeryRich),
+            TerrainType::Riverbank => (SoilType::Silt, SoilGrade::VeryRich),
+            TerrainType::SaltMarsh => (SoilType::Silt, SoilGrade::VeryRich),
+            TerrainType::Forest => (SoilType::Loam, SoilGrade::Rich),
+            TerrainType::Meadow => (SoilType::Loam, SoilGrade::Rich),
+            TerrainType::Plains => (SoilType::Loam, SoilGrade::Ordinary),
+            // Ground that was broken before anybody kept a record of it.
+            // Nothing is generated as farmland; this is for a field a test or
+            // an old save put down without a `Field` to go with it.
+            TerrainType::Farmland => (SoilType::Loam, SoilGrade::Ordinary),
+            TerrainType::Water | TerrainType::Sea => (SoilType::Silt, SoilGrade::Ordinary),
+            TerrainType::Hills => (SoilType::Stone, SoilGrade::Depleted),
+            TerrainType::Beach => (SoilType::Sand, SoilGrade::Exhausted),
+            TerrainType::Desert => (SoilType::Sand, SoilGrade::Exhausted),
+            TerrainType::Mountain => (SoilType::Stone, SoilGrade::Exhausted),
+            TerrainType::SaltFlat => (SoilType::Salt, SoilGrade::Exhausted),
+        }
+    }
+}
+
+/// How many times what the same plant yields wild, a plant yields on broken
+/// ground.
+///
+/// "Wild plants produce yields 1/4th that of plants in tilled farmland." One
+/// number for every crop: the difference between crops is in how fast each
+/// kind grows and what it is worth to eat, not in what the plough does for it.
+pub const WHAT_BROKEN_GROUND_YIELDS_OVER_WILD: f32 = 4.0;
+
+/// A season and a year on the world clock, which counts ticks.
+pub const A_SEASON: u32 =
+    crate::environment::seasons::TICKS_PER_DAY * crate::environment::seasons::DAYS_PER_SEASON;
+pub const A_YEAR: u32 = crate::environment::seasons::TICKS_PER_YEAR;
+
+/// Ground somebody has broken, and what has happened to it since.
+///
+/// The only soil state the world stores. Wild ground is its terrain's natural
+/// soil and has no `Field`; a tile gets one when it is broken and loses it
+/// when it has gone back to the wild.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Field {
+    /// What kind of ground it is, which it keeps whatever is done to it.
+    pub soil: SoilType,
+    /// What it was before anybody broke it, which a rest brings it back to.
+    pub natural: SoilGrade,
+    /// What it is now.
+    pub grade: SoilGrade,
+    /// The terrain it was, which it goes back to when it is given up.
+    pub was: TerrainType,
+
+    /// Units taken off the crop since the ground last went down a rung.
+    ///
+    /// A crop comes off in armfuls of eight to fourteen, so the ground goes
+    /// down a rung once a whole crop's worth has come off it and not once a
+    /// trip.
+    pub taken_since_it_last_fell: u32,
+
+    /// Since when nothing has been taken off it, or since a year's rest last
+    /// did its work.
+    pub rested_since: u32,
+
+    /// When anybody last did anything with it: broke it, cropped it, weeded
+    /// it, mucked it.
+    pub worked_at: u32,
+
+    /// Since when it has been back at its natural grade, if it is.
+    pub natural_since: Option<u32>,
+
+    /// Muck in the ground that has not yet come to a rung.
+    pub muck_in_it: f32,
+
+    /// When the muck that has come to a rung will have rotted in.
+    pub mucked_ready_at: Option<u32>,
+
+    /// Whether the bean crop standing now has already given its rung.
+    ///
+    /// A bean crop raises the ground once, when it comes to maturity. Without
+    /// this a stand nobody picked would count again every time a richer rung
+    /// let it fill a little further, and climb to the top on its own.
+    pub a_bean_crop_is_in: bool,
+}
+
+/// What became of a field on its day.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhatBecameOfIt {
+    StillAField,
+    GoneBackToTheWild,
+}
+
+impl Field {
+    /// How much muck it takes to bring ground up a rung.
+    ///
+    /// Ten units of spoiled food, or somewhat over one spoiled fish - see
+    /// `MUCK_PER_UNIT` and `MUCK_PER_FISH`. A handful of rotten berries tipped
+    /// on a field does not make it rich; a season's spoil from a household
+    /// does. Small tippings add up.
+    pub const ENOUGH_MUCK_FOR_A_RUNG: f32 = 1.2;
+
+    /// Ground broken out of `terrain`, today.
+    pub fn broken_out_of(terrain: TerrainType, now: u32) -> Self {
+        let was = if terrain == TerrainType::Farmland {
+            TerrainType::Plains
+        } else {
+            terrain
+        };
+        let (soil, natural) = SoilType::natural_to(terrain);
+        Self {
+            soil,
+            natural,
+            grade: natural,
+            was,
+            taken_since_it_last_fell: 0,
+            rested_since: now,
+            worked_at: now,
+            natural_since: Some(now),
+            muck_in_it: 0.0,
+            mucked_ready_at: None,
+            a_bean_crop_is_in: false,
+        }
+    }
+
+    fn now_at(&mut self, grade: SoilGrade, now: u32) {
+        if grade != self.grade {
+            self.grade = grade;
+            self.natural_since = (grade == self.natural).then_some(now);
+        }
+    }
+
+    /// Somebody worked it: weeded it, broke it again, walked a crop in.
+    pub fn somebody_worked_it(&mut self, now: u32) {
+        self.worked_at = now;
+    }
+
+    /// Units came off the crop standing on it.
+    ///
+    /// `a_whole_crop` is what the crop stands at on this ground as it is now.
+    /// A pod crop takes nothing from the ground it grows in, so what comes off
+    /// one does not wear it - but it does mean the stand now in is no longer
+    /// the one that gave its rung.
+    pub fn a_crop_came_off(&mut self, units: u32, a_whole_crop: u32, pods: bool, now: u32) {
+        if units == 0 {
+            return;
+        }
+        self.worked_at = now;
+        self.rested_since = now;
+        self.a_bean_crop_is_in = false;
+
+        if pods {
+            return;
+        }
+
+        self.taken_since_it_last_fell += units;
+        if a_whole_crop > 0 && self.taken_since_it_last_fell >= a_whole_crop {
+            self.taken_since_it_last_fell -= a_whole_crop;
+            let poorer = self.grade.poorer();
+            self.now_at(poorer, now);
+        }
+    }
+
+    /// A bean crop on it has come to maturity.
+    pub fn a_bean_crop_came_in(&mut self, now: u32) {
+        if self.a_bean_crop_is_in {
+            return;
+        }
+        self.a_bean_crop_is_in = true;
+        let richer = self.grade.richer();
+        self.now_at(richer, now);
+    }
+
+    /// Somebody put muck on it, worth `worth`.
+    ///
+    /// Returns whether it will come to anything: a field already at the top
+    /// has nowhere to go, and one with a rung's worth already rotting in has
+    /// to wait for that before the next can start.
+    pub fn somebody_mucked_it(&mut self, worth: f32, now: u32) -> bool {
+        self.worked_at = now;
+        if self.grade == SoilGrade::the_top() {
+            return false;
+        }
+        self.muck_in_it += worth.max(0.0);
+        if self.mucked_ready_at.is_none() && self.muck_in_it >= Self::ENOUGH_MUCK_FOR_A_RUNG {
+            self.muck_in_it -= Self::ENOUGH_MUCK_FOR_A_RUNG;
+            self.mucked_ready_at = Some(now + A_SEASON);
+        }
+        true
+    }
+
+    /// A day goes by.
+    ///
+    /// Muck that has had its season comes to a rung. A year with nothing
+    /// taken off brings the ground one rung back towards what it was, from
+    /// either side, and never past it. And ground that has sat at its natural
+    /// grade for a year with nobody doing anything with it is not a field any
+    /// more.
+    pub fn a_day_goes_by(&mut self, now: u32) -> WhatBecameOfIt {
+        if let Some(ready) = self.mucked_ready_at {
+            if now >= ready {
+                self.mucked_ready_at = None;
+                let richer = self.grade.richer();
+                self.now_at(richer, now);
+                if self.muck_in_it >= Self::ENOUGH_MUCK_FOR_A_RUNG {
+                    self.muck_in_it -= Self::ENOUGH_MUCK_FOR_A_RUNG;
+                    self.mucked_ready_at = Some(now + A_SEASON);
+                }
+            }
+        }
+
+        if now.saturating_sub(self.rested_since) >= A_YEAR {
+            self.rested_since = now;
+            let back = self.grade.towards(self.natural);
+            self.now_at(back, now);
+        }
+
+        let a_year_at_its_natural = self
+            .natural_since
+            .is_some_and(|since| now.saturating_sub(since) >= A_YEAR);
+        let a_year_untouched = now.saturating_sub(self.worked_at) >= A_YEAR;
+
+        if a_year_at_its_natural && a_year_untouched && self.mucked_ready_at.is_none() {
+            WhatBecameOfIt::GoneBackToTheWild
+        } else {
+            WhatBecameOfIt::StillAField
+        }
+    }
+
+    /// What people would call it: "very rich loam".
+    pub fn called(&self) -> String {
+        format!("{} {}", self.grade.called(), self.soil.called())
+    }
+}
+
+/// What somebody has left on a tile.
+///
+/// Muck, the seed in it, and on a field the weeds and vermin. All of it starts
+/// at nought everywhere and only arrives where somebody does something.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Soil {
-    /// What a plant can draw on now, 0.0 to 1.0
-    pub nutrients: f32,
-
-    /// Leaves, dung, spoiled food: open, wet, and quick to go
-    pub leaf_litter: f32,
-
-    /// Trunks, branches, bone: dense, dry inside, and slow
-    pub woody_litter: f32,
-
     /// Fresh dung lying on the surface: what a midden smells of.
     ///
-    /// Separate from the litter because it is a different question. Litter is
-    /// about what the ground will have to eat next year; this is about what
-    /// the ground smells of today, and it goes off much faster than it breaks
-    /// down. What it turns into is in the litter already - this is only the
-    /// smell of it, and the seeds in it.
+    /// Its own question rather than part of the ground's grade. This is about
+    /// what the ground smells of today, and it goes off much faster than
+    /// anything that would change a field.
     #[serde(default)]
     pub fouling: f32,
 
@@ -56,8 +426,7 @@ pub struct Soil {
     ///
     /// "Farmers should not just drop seeds and get crops. They need to
     /// maintain the fields, clearing weeds and removing pests." Broken ground
-    /// is the best ground there is and everything else knows it: a field left
-    /// alone goes back to being a meadow, and what it carries goes with it.
+    /// is the best ground there is and everything else knows it.
     #[serde(default)]
     pub weeds: f32,
 
@@ -67,103 +436,28 @@ pub struct Soil {
 }
 
 impl Soil {
-    /// The most nutrient any ground holds at once.
+    /// What one unit of food, eaten, leaves for the ground.
     ///
-    /// Nutrients above this run off or blow away rather than banking up, which
-    /// is what stops a settlement turning one field into an infinite larder by
-    /// piling refuse on it for ten thousand turns.
-    pub const MAX_NUTRIENTS: f32 = 1.0;
+    /// These size a midden and nothing else now: what a camp leaves on a tile,
+    /// how foul it gets and how much seed is in it. They are the figures they
+    /// were when they also fed a nutrient pool, so a midden smells exactly as
+    /// it did.
+    pub const WASTE_PER_MEAL: f32 = 0.0015;
 
-    /// How much litter one tile can hold before more of it simply will not fit
-    pub const MAX_LITTER: f32 = 4.0;
+    /// And one that spoiled before anybody could eat it: nothing took a share
+    /// of this on the way.
+    pub const WASTE_PER_SPOILED: f32 = Self::WASTE_PER_MEAL / 0.6;
 
-    /// What share of the matter in litter ends up in the ground rather than
-    /// going off into the air.
-    ///
-    /// The rest is lost. This is the number that makes a closed loop
-    /// impossible: everything that goes round comes back a little smaller.
-    pub const KEPT_FROM_ROT: f32 = 0.6;
+    /// What a fish leaves, forty times what a unit of crop does: it was grown
+    /// at sea on a whole catchment and walked into reach on its own.
+    pub const WHAT_A_FISH_LEAVES: f32 = Self::WASTE_PER_SPOILED * 40.0;
 
-    /// What one unit of standing crop takes out of the ground to grow.
-    ///
-    /// Growth and return are two ends of the same arithmetic, so they live
-    /// beside each other. `ResourceNode::regenerate_in_ground` draws this per
-    /// unit it grows; everything that puts matter back is measured against it.
-    pub const NUTRIENT_PER_UNIT_GROWN: f32 = 0.0015;
-
-    /// The litter left by one unit of food that was eaten.
-    ///
-    /// A body keeps some of what it eats and passes the rest. Set so that a
-    /// meal returns about three fifths of the nutrient that growing it took,
-    /// once rot has taken its own cut - the loop turns, and loses on every
-    /// turn, which is what a loop of this kind does.
-    pub const WASTE_PER_MEAL: f32 = Self::NUTRIENT_PER_UNIT_GROWN;
-
-    /// And by one unit that spoiled before anybody could eat it.
-    ///
-    /// Nothing took a share of this on the way, so all of what it was grown
-    /// with is still in it.
-    pub const WASTE_PER_SPOILED: f32 =
-        Self::NUTRIENT_PER_UNIT_GROWN / Self::KEPT_FROM_ROT;
-
-    /// What a plant leaves in the ground it grew in, per unit of crop.
-    ///
-    /// The largest return of the three, and the one that was missing longest.
-    /// A plant takes up far more than ends up in the part anybody carries
-    /// away: the roots, the stalk and the leaves stay where they grew and go
-    /// back into that same tile. Only the grain leaves the field.
-    ///
-    /// Set so that about half of what the plant took up stays put, which is
-    /// roughly where a cereal sits. Without it the model treated every plant
-    /// as though the whole of it were carried off, and a settlement's fields
-    /// fell from 0.53 fertility to 0.04 inside thirty thousand turns however
-    /// much its people put back at the other end.
-    pub const RESIDUE_PER_UNIT_GROWN: f32 =
-        Self::NUTRIENT_PER_UNIT_GROWN * 0.5 / Self::KEPT_FROM_ROT;
-
-    /// What a pod crop puts into the ground, per unit of crop.
-    ///
-    /// Exactly what an ordinary crop takes out, so that a year of beans and a
-    /// year of wheat are equal and opposite on the ledger. That is the whole
-    /// of a two-course rotation, written as one number: a field cropped and
-    /// then rested under legumes comes back to where it started, and one
-    /// cropped twice running does not.
-    ///
-    /// A legume also takes nothing out on the way - see
-    /// `ResourceType::feeds_the_ground` - so on top of this it keeps the
-    /// residue every plant leaves, and a field under beans ends the season
-    /// better than it began. That is right: a bean row is not a rest, it is a
-    /// crop that pays rent.
-    pub const WHAT_A_LEGUME_FIXES_PER_UNIT_GROWN: f32 = Self::NUTRIENT_PER_UNIT_GROWN;
-
-    /// What one fish is worth to the ground it is buried in.
-    ///
-    /// This is the number that makes a fishery different in kind from every
-    /// other food a settlement has. Everything else on the land is a return:
-    /// a crop meal gives back some part of what growing the crop took out of
-    /// that same country, and rot takes its cut on the way, so the best the
-    /// land can do is lose slowly. A fish was not grown here. It was grown at
-    /// sea and fed on a whole catchment, and it walked into the settlement's
-    /// reach on its own. Burying it in a field is the one way the country a
-    /// settlement farms gets richer than it was.
-    ///
-    /// Set at forty times what a unit of crop returns, which is about what a
-    /// fish is against a turnip and is why people who had rivers buried fish
-    /// with the seed corn long before anybody could say what nitrogen was.
-    pub const NUTRIENT_PER_FISH: f32 = Self::WASTE_PER_SPOILED * 40.0;
-
-    /// What is left of a fish, eaten, for the ground to have.
-    ///
-    /// A third of it went as guts at the waterside before anybody carried it
-    /// home, and a body keeps a quarter of what it eats. This is the rest.
-    pub const WASTE_PER_FISH_EATEN: f32 = Self::NUTRIENT_PER_FISH * 0.4;
+    /// What is left of a fish, eaten. A third went as guts at the waterside,
+    /// and a body keeps a quarter of what it eats.
+    pub const WASTE_PER_FISH_EATEN: f32 = Self::WHAT_A_FISH_LEAVES * 0.4;
 
     /// And of one that turned before anybody got to it.
-    ///
-    /// Nothing took a share on the way except the guts, so almost all of what
-    /// the sea put into it is still there. A glut of fish nobody could eat or
-    /// dry in time is the single richest thing that ever lands on a field.
-    pub const WASTE_PER_FISH_SPOILED: f32 = Self::NUTRIENT_PER_FISH * 0.65;
+    pub const WASTE_PER_FISH_SPOILED: f32 = Self::WHAT_A_FISH_LEAVES * 0.65;
 
     /// Whether a thing in somebody's pack came out of the water.
     ///
@@ -173,7 +467,7 @@ impl Soil {
         name.contains("fish") || name.contains("salmon") || name.contains("trout")
     }
 
-    /// What one unit of this, eaten, leaves for the ground.
+    /// What one unit of this, eaten, leaves.
     pub fn waste_from_eating(item_id: &str) -> f32 {
         if Self::came_out_of_the_water(item_id) {
             Self::WASTE_PER_FISH_EATEN
@@ -182,7 +476,7 @@ impl Soil {
         }
     }
 
-    /// What one unit of this, spoiled and never eaten, leaves for the ground.
+    /// What one unit of this, spoiled and never eaten, leaves.
     pub fn waste_from_spoilage(item_id: &str) -> f32 {
         if Self::came_out_of_the_water(item_id) {
             Self::WASTE_PER_FISH_SPOILED
@@ -191,53 +485,10 @@ impl Soil {
         }
     }
 
-    /// The ground as it starts, before anything has lived or died on it.
-    ///
-    /// River silt and marsh are rich, mountain and sand are all but bare, and
-    /// woodland sits somewhere in between with a century of leaf fall already
-    /// in it.
-    pub fn for_terrain(terrain: TerrainType) -> Self {
-        let (nutrients, leaf_litter) = match terrain {
-            TerrainType::Wetland => (0.85, 1.2),
-            TerrainType::Riverbank => (0.80, 0.6),
-            TerrainType::Forest => (0.65, 1.5),
-            TerrainType::Meadow => (0.60, 0.4),
-            TerrainType::Plains => (0.50, 0.3),
-            TerrainType::Farmland => (0.55, 0.2),
-            TerrainType::Hills => (0.35, 0.2),
-            TerrainType::Beach => (0.15, 0.1),
-            TerrainType::Mountain => (0.10, 0.05),
-            TerrainType::Desert => (0.08, 0.02),
-            TerrainType::Water => (0.30, 0.2),
-            TerrainType::Sea => (0.30, 0.2),
-            // A salt marsh grows a great deal and almost none of it is any
-            // use to anybody
-            TerrainType::SaltMarsh => (0.55, 1.0),
-            // And nothing at all grows on a salt flat, which is the point of
-            // one
-            TerrainType::SaltFlat => (0.02, 0.0),
-        };
-
-        Self {
-            nutrients,
-            leaf_litter,
-            woody_litter: match terrain {
-                TerrainType::Forest => 0.8,
-                TerrainType::Wetland => 0.3,
-                _ => 0.05,
-            },
-            fouling: 0.0,
-            seeds_dropped: 0.0,
-            weeds: 0.0,
-            pests: 0.0,
-        }
-    }
-
     /// How wet this ground is, from the country it is in and the weather over
     /// it.
     ///
-    /// This is the single thing that decides how fast anything lying on it
-    /// breaks down.
+    /// What decides how fast a midden airs out, and what a plant has to drink.
     pub fn humidity(terrain: TerrainType, precipitation: f32) -> f32 {
         let ground = match terrain {
             TerrainType::Water
@@ -259,22 +510,17 @@ impl Soil {
         (ground + precipitation.clamp(0.0, 1.0) * 0.3).clamp(0.0, 1.0)
     }
 
-    /// Put soft matter on the ground: leaves, dung, spoiled food, offal
-    pub fn add_leaf_litter(&mut self, amount: f32) {
-        self.leaf_litter = (self.leaf_litter + amount).clamp(0.0, Self::MAX_LITTER);
-    }
-
     /// What somebody has just passed, with whatever was in it.
     ///
-    /// Goes into the litter like anything else soft, and additionally leaves
-    /// the two things that make a midden a midden: a smell, and seeds.
+    /// A smell, and seeds. Not a change to the ground's grade: people void
+    /// where they happen to be, and only muck carried to a field on purpose
+    /// builds one - see `Field::somebody_mucked_it`.
     ///
     /// This is soil on its own, and knows nothing about the map it sits in.
     /// If you have a grid in your hand, call `Grid::somebody_voided_on`
     /// instead: fouling and seed are the two things the ground register is
     /// keeping track of, and a tile fouled behind its back never gets visited.
     pub fn somebody_voided_here(&mut self, amount: f32) {
-        self.add_leaf_litter(amount);
         self.fouling = (self.fouling + amount).clamp(0.0, Self::AS_FOUL_AS_IT_GETS);
         self.seeds_dropped =
             (self.seeds_dropped + amount * Self::WHAT_COMES_THROUGH_WHOLE).clamp(0.0, 1.0);
@@ -315,10 +561,12 @@ impl Soil {
     }
 
     /// Whether what was dropped here is ready to come up.
+    ///
+    /// The ground has to be able to grow anything at all as well, which is a
+    /// question for the grid - see `Grid::will_anything_grow_on`.
     pub fn ready_to_sprout(&self) -> bool {
         self.seeds_dropped >= Self::ENOUGH_TO_COME_UP
             && self.fouling <= Self::BROKEN_DOWN_ENOUGH_TO_GROW_IN
-            && self.nutrients > 0.0
     }
 
     /// Take the seed off the ground, because it has come up.
@@ -326,164 +574,41 @@ impl Soil {
         std::mem::take(&mut self.seeds_dropped)
     }
 
-    /// Put dense matter on the ground: trunks, branches, bone
-    pub fn add_woody_litter(&mut self, amount: f32) {
-        self.woody_litter = (self.woody_litter + amount).clamp(0.0, Self::MAX_LITTER);
-    }
-
-    /// Everything lying on this tile waiting to break down
-    pub fn litter(&self) -> f32 {
-        self.leaf_litter + self.woody_litter
-    }
-
-    /// Break down what is lying here, turning it into nutrient.
+    /// Let a midden air out.
     ///
-    /// `humidity` runs 0.0 to 1.0 and does most of the work: dry ground barely
-    /// rots at all. Density does the rest - soft matter goes an order of
-    /// magnitude faster than wood, which is why a fallen tree outlasts the
-    /// leaves that fell with it by decades.
+    /// `humidity` runs 0.0 to 1.0 and does most of the work: dry ground holds
+    /// its smell a long time. Run only over the ground somebody has left
+    /// something on - see `Grid::where_the_ground_is_doing_something` - since
+    /// nowhere else has anything to air.
     ///
-    /// Returns how much nutrient was released, which is mostly of interest to
-    /// tests.
-    pub fn decay(&mut self, humidity: f32, ticks: f32) -> f32 {
-        // Share of soft litter that goes in a day in ideal conditions, and of
-        // wood, which is dense enough to keep the wet out of its middle.
-        //
-        // Per day, and divided into the ticks the pass stands for, because
-        // `ticks` is a span on the world clock and these were per-pass numbers
-        // being paid out per minute. At 1,440 a day a fallen tree was half
-        // gone in five days in a wet wood, against the four years this file's
-        // own doc claims for it, and a midden stopped smelling overnight at
-        // every humidity there is - which put
-        // `FOUL_ENOUGH_TO_WALK_AWAY_FROM` out of reach of anything.
-        //
-        // The day these are anchored to is the twelve-tick day: the caller has
-        // always passed `ONCE_A_DAY`, and `ONCE_A_DAY` was twelve when the
-        // rates and the loop last agreed - the same calendar at which
-        // `ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO` gives its right
-        // answer. So the figures are the old per-pass rates times twelve, and
-        // the error was a hundred and twentyfold rather than thirty.
-        // See ISSUES_FOUND #218.
-        const LEAF_IN_A_DAY: f32 = 0.0072;
-        const WOOD_IN_A_DAY: f32 = 0.00048;
-
+    /// The rate is the one the fouling always went off at: a tenth of a midden
+    /// in a wet day, an order of magnitude faster than the rot under it used
+    /// to go, which is why the ground people walked away from a season ago is
+    /// ground they will sit on again. See ISSUES_FOUND #218 for why it is per
+    /// day and divided into ticks.
+    pub fn air_out(&mut self, humidity: f32, ticks: f32) {
+        const FOULING_IN_A_DAY: f32 = 0.072;
         let a_day = crate::environment::seasons::TICKS_PER_DAY as f32;
-        let leaf_rate = LEAF_IN_A_DAY / a_day;
-        let wood_rate = WOOD_IN_A_DAY / a_day;
+        let fouling_rate = FOULING_IN_A_DAY / a_day;
 
-        // Rot needs water. Bone dry ground holds what falls on it more or less
-        // indefinitely, which is why a desert keeps its dead.
         let wetness = humidity.clamp(0.0, 1.0);
         let activity = wetness * wetness;
-
         if activity <= 0.0 {
-            return 0.0;
+            return;
         }
 
-        // A midden stops smelling long before it stops being there. This runs
-        // an order of magnitude faster than the rot underneath it, which is
-        // why the ground people walked away from a season ago is ground they
-        // will sit on again.
-        const FOULING_IN_A_DAY: f32 = 0.072;
-        let fouling_rate = FOULING_IN_A_DAY / a_day;
         self.fouling = (self.fouling - self.fouling * fouling_rate * activity * ticks).max(0.0);
-
-        let from_leaves = (self.leaf_litter * leaf_rate * activity * ticks).min(self.leaf_litter);
-        let from_wood = (self.woody_litter * wood_rate * activity * ticks).min(self.woody_litter);
-
-        self.leaf_litter -= from_leaves;
-        self.woody_litter -= from_wood;
-
-        // Some of it is lost to the air rather than staying in the ground
-        let released = (from_leaves + from_wood) * Self::KEPT_FROM_ROT;
-        let before = self.nutrients;
-        self.nutrients = (self.nutrients + released).min(Self::MAX_NUTRIENTS);
-
-        self.nutrients - before
-    }
-
-    /// Take nutrient out of the ground, returning how much was actually there
-    /// to take
-    pub fn draw(&mut self, wanted: f32) -> f32 {
-        /// The most any one pass may take, as a share of what is there.
-        ///
-        /// A caller works out what it wants from a reading of this soil and
-        /// then asks for that rate over the whole span its pass stands for.
-        /// Taken in small steps that is fine, because the rate falls as the
-        /// ground empties; taken in one lump over four months it is not,
-        /// because it is the opening rate applied to ground that would have
-        /// been getting poorer all the way through. The straight-line answer
-        /// runs ahead of the true one, and a growing pass that stands for
-        /// fourteen hundred and forty turns strips ground that fine steps
-        /// would only have thinned - see `PlantManager::grow_a_zone`.
-        ///
-        /// Half is the round number that keeps the error bounded without
-        /// pretending to integrate anything: whatever the span, the ground
-        /// still has half of what it started the pass with.
-        const THE_MOST_ONE_PASS_TAKES: f32 = 0.5;
-
-        let taken = wanted
-            .min(self.nutrients * THE_MOST_ONE_PASS_TAKES)
-            .max(0.0);
-        self.nutrients -= taken;
-        taken
-    }
-
-    /// Put nutrient into the ground, returning how much it actually took.
-    ///
-    /// The counterpart to [`Soil::draw`], and until legumes there was nothing
-    /// that needed one: every plant in the model was a withdrawal and the
-    /// deposits all came in as litter, which is a slower and lossier road -
-    /// `decay` keeps only `KEPT_FROM_ROT` of it. What a pod crop fixes goes
-    /// straight in, because it was fixed in the ground rather than dropped on
-    /// top of it.
-    ///
-    /// Ground already at `MAX_NUTRIENTS` takes nothing, which is what stops a
-    /// settlement turning one tile into an infinite larder by leaving beans on
-    /// it for ten thousand turns.
-    pub fn feed(&mut self, amount: f32) -> f32 {
-        let before = self.nutrients;
-        self.nutrients = (self.nutrients + amount.max(0.0)).min(Self::MAX_NUTRIENTS);
-        self.nutrients - before
     }
 
     /// Whether somebody has left something on this ground.
     ///
     /// Muck and the seed in it: the two things that are *put* on a tile by
-    /// something happening there, as against the litter that every piece of
-    /// ground in the world carries from the day it is made. Two phases of the
-    /// turn - what comes up out of a midden, and what a midden smells of -
-    /// used to look for these by walking every tile in the world, which made
-    /// a turn cost the area of the map rather than what was happening on it.
-    /// At a hundred square kilometres that was 47ms a turn and three and a
-    /// half minutes a simulated year.
-    ///
-    /// The first cut of this asked whether the ground had *anything* on it,
-    /// litter included, and so answered yes for every tile in the world -
-    /// `Soil::for_terrain` gives a forest floor 1.5 of leaf litter and even a
-    /// desert 0.02. A register that holds everything is not a register. What
-    /// distinguishes these two is that they start at nought everywhere and
-    /// only ever arrive through `somebody_voided_here`.
-    ///
-    /// Litter is not in here on purpose: every tile has some, so rotting it is
-    /// honest work over the whole map and stays a sweep. It runs once in ten
-    /// turns and costs about half a millisecond over a million tiles, which is
-    /// a twentieth of what these two were costing.
-    ///
-    /// See ISSUES_FOUND.md #128.
+    /// something happening there. Two phases of the turn - what comes up out
+    /// of a midden, and what a midden smells of - read this through the
+    /// ground register rather than walking every tile in the world. See
+    /// ISSUES_FOUND.md #128.
     pub fn has_somebody_left_something_here(&self) -> bool {
         self.fouling > 0.0 || self.seeds_dropped > 0.0
-    }
-
-    /// How well fed this ground is, as a fraction of what it could hold
-    pub fn fertility(&self) -> f32 {
-        (self.nutrients / Self::MAX_NUTRIENTS).clamp(0.0, 1.0)
-    }
-}
-
-impl Default for Soil {
-    fn default() -> Self {
-        Self::for_terrain(TerrainType::Plains)
     }
 }
 

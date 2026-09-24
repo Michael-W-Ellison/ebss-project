@@ -438,7 +438,6 @@ fn a_beast_on_a_plant(
             tile.terrain = Terrain::new(TerrainType::Meadow);
         }
     }
-    grid.settle_soil();
 
     let mut plants = PlantManager::new(64);
     plants.spawn_plant(plant.to_string(), (8, 8), 0);
@@ -482,35 +481,34 @@ fn a_grazing_animal_takes_the_plant_down_with_it() {
     );
 }
 
-/// And what it does not use lands on the ground behind it.
+/// And what it passes leaves the ground as it was.
 ///
-/// Most of a mouthful goes straight through. That is what a grazing animal
-/// does for the ground it walks on, and until now nothing in the model did it:
-/// what an animal ate came from nowhere and went nowhere.
+/// This used to be the opposite claim - that what a deer did not digest went
+/// into the ground as litter and made it richer. "Normal animal waste and map
+/// interactions need not change soil": wild ground is what it was made, and
+/// only what people do moves a grade. So a deer can graze a patch all it
+/// likes and the patch stands on the same ground. See ISSUES_FOUND #246.
 #[test]
-fn what_an_animal_passes_goes_back_into_the_ground() {
+fn what_an_animal_passes_leaves_the_ground_as_it_was() {
     use crate::world::Position;
 
     let (mut grid, mut plants, mut animals) = a_beast_on_a_plant("deer", "grass");
 
     let underfoot = Position::new(8, 8);
-    let before = grid
-        .get_tile(&underfoot)
-        .map(|tile| tile.soil.litter())
-        .unwrap_or(0.0);
+    let before = grid.soil_at(&underfoot);
 
     for pass in 0..20u32 {
         animals.turn_in_world(&mut grid, &mut plants, 10.0, grazing_weather(pass));
     }
 
-    let after = grid
-        .get_tile(&underfoot)
-        .map(|tile| tile.soil.litter())
-        .unwrap_or(0.0);
-
+    assert_eq!(
+        grid.soil_at(&underfoot),
+        before,
+        "a deer grazed the patch and the ground under it moved"
+    );
     assert!(
-        after > before,
-        "the ground under a feeding deer is no richer: {before:.4} to {after:.4}"
+        grid.field_at(&underfoot).is_none(),
+        "and nothing a beast does makes a field of it"
     );
 }
 

@@ -4962,11 +4962,9 @@ impl AnimalManager {
     /// stopped a herd growing was a hard number in a field.
     ///
     /// Now a mouthful comes off a plant that is standing there and the plant
-    /// is that much less of a plant for it. What is left over after the animal
-    /// has taken what it can use lands on the ground behind it - see
-    /// `WHAT_AN_ANIMAL_GETS_OUT_OF_A_MOUTHFUL` - so the greater part of what
-    /// is grazed comes back to the soil a little further on, which is what
-    /// grazing animals are for as far as the ground is concerned.
+    /// is that much less of a plant for it. What comes through the animal is
+    /// nothing to the ground: wild ground is what it was made, and only people
+    /// change a grade. It used to be litter - see ISSUES_FOUND #246.
     fn what_the_grazers_took(
         &mut self,
         grid: &mut crate::world::Grid,
@@ -4974,8 +4972,6 @@ impl AnimalManager {
         grazing_passes: f32,
         weather: GrazingWeather,
     ) {
-        use crate::world::Position;
-
         if grazing_passes <= 0.0 {
             return;
         }
@@ -5006,7 +5002,6 @@ impl AnimalManager {
         let mut cropped: BTreeMap<usize, f32> = BTreeMap::new();
         let mut pulled_up: std::collections::BTreeSet<usize> =
             std::collections::BTreeSet::new();
-        let mut dunged: Vec<((i32, i32), f32)> = Vec::new();
         let mut took_altogether = 0.0f64;
         let mut mouths = 0u64;
         let mut reached = 0u64;
@@ -5145,11 +5140,9 @@ impl AnimalManager {
             took_altogether += taken as f64;
             mouths += 1;
 
-            // And what came straight through lands where the animal is now.
-            dunged.push((
-                animal.position,
-                taken * (1.0 - Self::WHAT_AN_ANIMAL_GETS_OUT_OF_A_MOUTHFUL),
-            ));
+            // What came straight through lands where the animal is now, and
+            // is nothing to the ground: only people change a grade. See
+            // ISSUES_FOUND #246.
         }
 
         // Take it off the plants, and take up what was pulled up.
@@ -5169,13 +5162,6 @@ impl AnimalManager {
 
         // The dead go back into the ground on the plants' own pass - see
         // `PlantManager::what_died`, which is what reads a plant at nothing.
-
-        for (at, muck) in dunged {
-            let here = Position::new(at.0, at.1);
-            if let Some(tile) = grid.get_tile_mut(&here) {
-                tile.soil.add_leaf_litter(muck);
-            }
-        }
     }
 
     /// The tile an animal is on, and the eight around it.
@@ -5360,16 +5346,6 @@ impl AnimalManager {
     /// forty-four hectares carrying ten thousand of them will feed deer in the
     /// low hundreds.
     const MORE_THAN_IT_BURNS: f32 = 3.0;
-
-    /// How much of a mouthful an animal actually gets out of it.
-    ///
-    /// A grazing animal digests something over half of what it eats and the
-    /// rest goes through and lands on the ground behind it. Of the half it
-    /// does digest, nearly all is burnt for warmth and movement and leaves as
-    /// breath and water; only a few per cent ever becomes animal. So what the
-    /// ground gets back is what came straight through, and what it loses for
-    /// good is what the animal burned.
-    const WHAT_AN_ANIMAL_GETS_OUT_OF_A_MOUTHFUL: f32 = 0.55;
 
     /// How many of a litter or clutch are put on the map.
     ///
@@ -7320,7 +7296,6 @@ mod tests {
     fn test_animal_manager_turn_aging() {
         let mut grid = crate::world::Grid::new(8, 8);
         grid.generate_terrain();
-        grid.settle_soil();
         let mut plants = crate::environment::PlantManager::new(16);
 
         let mut manager = AnimalManager::new(100);

@@ -160,7 +160,14 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // who cannot be walked into the water takes a different step on the few
     // turns of two and a half days that a coast comes into, and over a year
     // lives long enough to take a great many more of them.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_895;
+    // And **up 37%** for the soil ladder (#246). The largest move this count
+    // has taken, and in two and a half days, because it changes the world
+    // before anybody moves in it: what a patch opens carrying was read off a
+    // nutrient pool and is read off a grade now, what every wild plant grows
+    // on was a pool its neighbours drew down and is its terrain's grade, and
+    // no daily pass rots litter across the map. A different country from
+    // turn nought is a different set of draws from turn nought.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 9_461;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -281,7 +288,12 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // settlement with more people in it at the end, and a living settlement
     // rolls. Gathering is up 3.9% across twelve seeds and person-turns are
     // flat, so what the turn bought was work rather than survival.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 711_032;
+    // And **down 16%** for the soil ladder (#246), which moved the short
+    // count above the other way. Over a year the settlement farms: fields
+    // yield four times the wild, wear a rung a crop, and are ploughed in and
+    // sown again - a different year's work, and a year in which the country
+    // round it no longer changes under its plants.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 595_980;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

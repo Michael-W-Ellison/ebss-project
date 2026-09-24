@@ -1729,6 +1729,16 @@ pub struct Agent {
     /// knowing - see `environment::making::Making::obvious`.
     #[serde(default)]
     found_out: std::collections::BTreeSet<String>,
+    /// What this one makes of each field it has seen a crop on.
+    ///
+    /// Nobody is told the grade of a piece of ground. What a farmer has is
+    /// what came up on it: a full stand of crop is as heavy as that ground
+    /// carries, and so says exactly what it is; a stand heavier than he
+    /// thought the ground could carry says it is better than he thought. What
+    /// he believes lags what the field is by one crop, which is how a farmer
+    /// finds out a field is tired - see `Agent::saw_a_stand_on`.
+    #[serde(default)]
+    what_i_make_of_the_fields: std::collections::BTreeMap<(i32, i32), crate::world::SoilGrade>,
     /// What has answered which need, and where it answered it.
     #[serde(default)]
     pub patterns: super::patterns::Patterns,
@@ -1890,6 +1900,7 @@ impl Agent {
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             times_laid_up: std::collections::BTreeMap::new(),
             found_out: Self::what_anybody_is_born_knowing(),
+            what_i_make_of_the_fields: std::collections::BTreeMap::new(),
             wonderings: Vec::new(),
             food_i_ate: 0,
             food_that_rotted_on_me: 0,
@@ -3401,6 +3412,32 @@ impl Agent {
     pub fn is_that_plant_food(&self, kind: u8) -> bool {
         self.found_out
             .contains(&Self::what_i_call_that_plant(kind, true))
+    }
+
+    /// What this one makes of the field at `at`, if it has seen a crop on it.
+    pub fn what_i_make_of_the_field_at(&self, at: (i32, i32)) -> Option<crate::world::SoilGrade> {
+        self.what_i_make_of_the_fields.get(&at).copied()
+    }
+
+    /// Seen a stand of crop on the field at `at`, heavy enough to say the
+    /// ground is `it_says`.
+    ///
+    /// A full stand - the crop as heavy as it gets there - says exactly what
+    /// the ground is, and is believed whatever was believed before, better or
+    /// worse. A stand still filling only says the ground is *at least* that
+    /// good: it raises what he thought and never lowers it, and on a field he
+    /// has no opinion of yet it tells him nothing, since a crop half grown on
+    /// the best ground in the country looks like a crop on poor ground.
+    pub fn saw_a_stand_on(&mut self, at: (i32, i32), it_says: crate::world::SoilGrade, a_full_stand: bool) {
+        match self.what_i_make_of_the_fields.get(&at) {
+            _ if a_full_stand => {
+                self.what_i_make_of_the_fields.insert(at, it_says);
+            }
+            Some(thought) if it_says > *thought => {
+                self.what_i_make_of_the_fields.insert(at, it_says);
+            }
+            _ => {}
+        }
     }
 
     /// Write down what that plant turned out to be.

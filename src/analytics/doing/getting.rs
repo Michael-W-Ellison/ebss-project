@@ -356,6 +356,10 @@ impl Simulation {
                 (whole as u32) + u32::from(rng.gen::<f32>() < worth - whole);
             let harvest_amount = harvest_amount.max(1);
 
+            // A look at the crop before it is picked, which is when a man can
+            // see how heavy it stands
+            self.looking_at_the_crop(agent_index, resource_index);
+
             // Harvest resource
             let where_it_grew = self.world.resources[resource_index].position;
             let harvested = {
@@ -1431,7 +1435,7 @@ impl Simulation {
         catch.food_data = food_data;
         agent.inventory.add_item(catch);
         agent.state.waste_carried +=
-            taken as f32 * crate::world::Soil::NUTRIENT_PER_FISH * Self::OFFAL_SHARE;
+            taken as f32 * crate::world::Soil::WHAT_A_FISH_LEAVES * Self::OFFAL_SHARE;
         agent
             .skills
             .practise(crate::agents::SkillType::Fishing, 12, turn_now);

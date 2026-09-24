@@ -15,9 +15,43 @@ use crate::environment::ActionResult;
 use log::debug;
 
 impl Simulation {
+    /// Somebody standing over the crop at `resource_index` sees how heavy it
+    /// stands, and makes what he will of the field under it.
+    ///
+    /// The one place a look at a crop becomes a belief about a field, so that
+    /// every hand that takes a crop - gathering it, eating it off the stalk,
+    /// weeding round it - reads it the same way. See `Agent::saw_a_stand_on`
+    /// for what a farmer can and cannot tell from it.
+    ///
+    /// What a stand says is the grade that would carry a stand that heavy as
+    /// a full crop on broken ground. Wild ground is not read here: nothing
+    /// anybody does to it changes it, so there is nothing to find out.
+    pub(in crate::analytics) fn looking_at_the_crop(&mut self, agent_index: usize, resource_index: usize) {
+        use crate::world::soil::{SoilGrade, WHAT_BROKEN_GROUND_YIELDS_OVER_WILD};
+
+        let Some(crop) = self.world.resources.get(resource_index) else {
+            return;
+        };
+        let at = crop.position;
+        if self.world.grid.field_at(&at).is_none() {
+            return;
+        }
+
+        let a_full_stand = crop.how_heavy_a_crop_it_carries(self.world.grid.what_it_yields_here(&at));
+        let on_ordinary_loam = crop.how_heavy_a_crop_it_carries(WHAT_BROKEN_GROUND_YIELDS_OVER_WILD);
+        if on_ordinary_loam == 0 {
+            return;
+        }
+
+        let it_says = SoilGrade::nearest_to(crop.amount as f32 / on_ordinary_loam as f32);
+        let full = a_full_stand > 0 && crop.amount >= a_full_stand;
+
+        self.population.agents[agent_index].saw_a_stand_on((at.x, at.y), it_says, full);
+    }
+
     /// `Action::TillSoil`.
     pub(in crate::analytics) fn tilling_soil(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
-        use crate::world::{Position, ResourceNode, TerrainType};
+        use crate::world::{Position, ResourceNode};
 
         let agent_position = self.population.agents[agent_index].state.position;
         let tile_position = Position::new(agent_position.0, agent_position.1);
@@ -45,39 +79,61 @@ impl Simulation {
 
             // A pod row is worth more under the plough than in a basket when
             // the ground is poor, and turning it under is the whole point -
-            // see `ploughing_a_crop_in`. Anything else standing here is
-            // somebody's dinner and stays where it is.
+            // see `ploughing_a_crop_in`.
             if crop.feeds_the_ground() && on_it > 0 {
+                return self.ploughing_a_crop_in(agent_index, standing, turn_now);
+            }
+
+            // And so is whatever stands on a field its farmer thinks is worn
+            // to nothing: what comes off it is not worth the picking, and the
+            // ground wants something else in it. This is how a field changes
+            // crop - it goes under, and is sown again - and without it a field
+            // carried the crop it was first sown with for ever.
+            if self.population.agents[agent_index].what_i_make_of_the_field_at((tile_position.x, tile_position.y))
+                == Some(crate::world::SoilGrade::LADDER[0])
+            {
                 return self.ploughing_a_crop_in(agent_index, standing, turn_now);
             }
 
             return ActionResult::failure("Something already grows here".to_string());
         }
 
-        if !crate::world::Terrain::new(ground).can_be_tilled() {
+        // Open grass is broken; a field with nothing standing on it is sown
+        // again. A bare field used to be refused as though it were not ground
+        // at all, so a crop ploughed in left the field bare for ever.
+        let ground_will_take_seed = crate::world::Terrain::new(ground).can_be_tilled()
+            || crate::world::Terrain::new(ground).is_cultivated();
+        if !ground_will_take_seed {
             return ActionResult::failure(format!(
                 "Cannot break {:?} into a field",
                 ground
             ));
         }
 
-        if let Some(tile) = self.world.grid.get_tile_mut(&tile_position) {
-            tile.terrain = crate::world::Terrain::new(TerrainType::Farmland);
-        }
+        // Broken, and on the record as a field from today: what kind of ground
+        // it is and what grade it was, which a rest brings it back to.
+        let now = self.world.turn;
+        self.world.grid.break_ground(&tile_position, now);
 
         // What goes in the ground is what the agent has to put in it,
         // and of what it has, whatever it has come to believe is worth
         // sowing. Nobody hands out grain seed: an agent that has only
         // ever stripped berry bushes sows berries, works the field all
         // season, and finds out what a berry bush thinks of a plough.
-        // What this ground is worth, which is something a man standing on it
-        // can see and which decides whether he puts a hungry crop in it.
-        let how_good_the_ground_is = self
-            .world
-            .grid
-            .get_tile(&tile_position)
-            .map(|tile| tile.soil.fertility())
-            .unwrap_or(0.5);
+        // What this ground is worth, which decides whether he puts a hungry
+        // crop in it. Wild ground he can see: what grows on it wild is what it
+        // is, and nobody has ever changed it. A field is what he makes of it
+        // from what has come off it - see `Agent::saw_a_stand_on` - and a
+        // field he has never seen a crop on he takes for ordinary ground.
+        let how_good_the_ground_is = if self.world.grid.field_at(&tile_position).is_some() {
+            crate::world::resources::ResourceNode::WHAT_ORDINARY_WILD_GROUND_CARRIES
+                * self.population.agents[agent_index]
+                    .what_i_make_of_the_field_at((tile_position.x, tile_position.y))
+                    .unwrap_or(crate::world::SoilGrade::Ordinary)
+                    .multiplier()
+        } else {
+            self.world.grid.how_good_the_ground_is(&tile_position)
+        };
 
         let sown = Self::what_this_one_would_sow(
             &self.population.agents[agent_index],
@@ -144,29 +200,25 @@ impl Simulation {
         standing: usize,
         turn_now: u32,
     ) -> ActionResult {
-        use crate::world::{Soil, TerrainType};
-
         let where_it_stands = self.world.resources[standing].position;
         let turned_under = self.world.resources[standing].amount;
         let crop = self.world.resources[standing].resource_type;
 
         self.world.resources.remove(standing);
 
+        // The ground is broken now, which is half of what a day behind a
+        // plough buys. The other half is the crop itself going in as muck: a
+        // green manure is manure, and comes to a rung a season after it goes
+        // under, the same as anything carted onto a field - see
+        // `Field::somebody_mucked_it`.
+        let now = self.world.turn;
+        self.world.grid.break_ground(&where_it_stands, now);
+        self.world.grid.somebody_mucked(
+            &where_it_stands,
+            turned_under as f32 * Self::MUCK_PER_UNIT,
+            now,
+        );
         if let Some(tile) = self.world.grid.get_tile_mut(&where_it_stands) {
-            // The harvestable part, which is exactly what the residue path
-            // does *not* leave behind: `regenerate_in_ground` gives the
-            // ground the roots and the stalk of everything that grows, and
-            // the rest is what somebody carries off. Turning the crop under
-            // is choosing not to carry it off.
-            tile.soil.feed(turned_under as f32 * Soil::NUTRIENT_PER_UNIT_GROWN);
-            tile.soil
-                .add_leaf_litter(turned_under as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
-
-            // And the ground is broken now, which is the other half of what
-            // a day behind a plough buys.
-            if crate::world::Terrain::new(tile.terrain.terrain_type).can_be_tilled() {
-                tile.terrain = crate::world::Terrain::new(TerrainType::Farmland);
-            }
             tile.soil.somebody_worked_this_field();
         }
 
@@ -318,13 +370,20 @@ impl Simulation {
         }
 
         // A walk out to a field that is still bare after all this work
-        // is what teaches an agent that it sowed the wrong thing.
-        let standing = self
+        // is what teaches an agent that it sowed the wrong thing - and a walk
+        // round a crop is a look at how heavy it stands.
+        let standing_at = self
             .world
             .resources
             .iter()
-            .find(|resource| resource.position == tile_position)
-            .map(|resource| (resource.resource_type, resource.amount));
+            .position(|resource| resource.position == tile_position);
+        if let Some(index) = standing_at {
+            self.looking_at_the_crop(agent_index, index);
+        }
+        let standing = standing_at.map(|index| {
+            let resource = &self.world.resources[index];
+            (resource.resource_type, resource.amount)
+        });
 
         if let Some((crop, amount)) = standing {
             if let Some((called, _, _)) = Self::what_can_be_sown()
@@ -365,6 +424,10 @@ impl Simulation {
 
             before - (tile.soil.weeds + tile.soil.pests)
         };
+
+        // A field somebody is keeping is not a field anybody has given up on.
+        let now = self.world.turn;
+        self.world.grid.somebody_worked_the_field(&tile_position, now);
 
         let agent = &mut self.population.agents[agent_index];
         agent
@@ -412,13 +475,6 @@ impl Simulation {
             return ActionResult::failure("Nothing spoiled to tip out".to_string());
         }
 
-        let before = self
-            .world
-            .grid
-            .get_tile(&tile_position)
-            .map(|tile| tile.soil.fertility() + tile.soil.litter())
-            .unwrap_or(0.0);
-
         let mut tipped = 0;
         let mut worth = 0.0;
         {
@@ -441,23 +497,15 @@ impl Simulation {
             }
         }
 
-        // Spoiled food is soft matter and goes quickly, given wet ground
-        if let Some(tile) = self.world.grid.get_tile_mut(&tile_position) {
-            tile.soil.add_leaf_litter(worth);
-        }
-
-        let after = self
-            .world
-            .grid
-            .get_tile(&tile_position)
-            .map(|tile| tile.soil.fertility() + tile.soil.litter())
-            .unwrap_or(0.0);
-
-        // What the agent can actually see: the ground here is richer
-        // than it was. Whether that was worth doing is a judgement it
-        // makes for itself, and gets wrong sometimes - tipping muck on
-        // bare rock or in a desert does nothing much.
-        let worked = after > before + 0.05;
+        // Onto a field it goes into the ground, and a season on it comes to a
+        // rung - see `Field::somebody_mucked_it`. Anywhere else it is only
+        // muck on the ground: wild ground is what it was made.
+        //
+        // Whether that was worth doing is a judgement the agent makes for
+        // itself: muck tipped on a field that can still take it is muck that
+        // will tell, and muck tipped anywhere else never will.
+        let now = self.world.turn;
+        let worked = self.world.grid.somebody_mucked(&tile_position, worth, now);
 
         let agent = &mut self.population.agents[agent_index];
         agent.practices.record_outcome(Practice::SpreadingMuck, worked);
@@ -466,8 +514,11 @@ impl Simulation {
             .practise(crate::agents::SkillType::Farming, 10, turn_now);
 
         debug!(
-            "Agent {} tipped {} spoiled units onto {:?} (ground {:.2} -> {:.2})",
-            agent.id, tipped, tile_position, before, after
+            "Agent {} tipped {} spoiled units onto {:?} ({})",
+            agent.id,
+            tipped,
+            tile_position,
+            if worked { "it will tell" } else { "it will not" }
         );
 
         ActionResult::success()

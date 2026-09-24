@@ -36,18 +36,26 @@ fn give_food(agent: &mut Agent, quantity: u32) {
 }
 
 /// Ground worked out carries a smaller crop, not merely a slower one.
+///
+/// On the soil ladder now: a field of ordinary loam worn to depleted and then
+/// to exhausted carries three quarters less than it did, which is most of it.
 #[test]
 fn the_crop_falls_with_the_ground() {
-    let field = ResourceNode::new(ResourceType::Grain, Position::new(5, 5), 80);
+    use crate::world::soil::{SoilGrade, WHAT_BROKEN_GROUND_YIELDS_OVER_WILD};
 
-    let fresh = field.standing_capacity(0.55);
-    let tired = field.standing_capacity(0.25);
-    let spent = field.standing_capacity(0.03);
+    let field = ResourceNode::new(ResourceType::Grain, Position::new(5, 5), 80);
+    let on = |grade: SoilGrade| {
+        field.how_heavy_a_crop_it_carries(grade.multiplier() * WHAT_BROKEN_GROUND_YIELDS_OVER_WILD)
+    };
+
+    let fresh = on(SoilGrade::Ordinary);
+    let tired = on(SoilGrade::Depleted);
+    let spent = on(SoilGrade::Exhausted);
 
     assert!(fresh > tired && tired > spent, "{fresh} {tired} {spent}");
     assert!(
-        spent < fresh / 4,
-        "ground worked from 0.55 to 0.03 should lose most of its yield: {fresh} to {spent}"
+        spent * 4 <= fresh,
+        "ground worked from ordinary to exhausted should lose most of its yield: {fresh} to {spent}"
     );
 }
 

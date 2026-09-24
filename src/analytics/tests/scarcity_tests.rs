@@ -65,7 +65,8 @@ fn a_bush_carries_what_the_ground_under_it_carries() {
     assert!(!growing.is_empty(), "a world should have something growing in it");
 
     for patch in &growing {
-        let at_its_best = patch.standing_capacity(1.0);
+        let at_its_best = patch
+            .how_heavy_a_crop_it_carries(crate::world::SoilGrade::the_top().multiplier());
         assert!(
             patch.amount <= at_its_best,
             "a {:?} patch carries {} where the richest ground would carry {at_its_best}",

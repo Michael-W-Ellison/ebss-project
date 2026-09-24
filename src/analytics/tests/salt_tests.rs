@@ -95,16 +95,20 @@ fn salt_can_be_had_in_three_places() {
 /// Nothing grows on a salt flat. That is the point of one.
 #[test]
 fn nothing_grows_on_a_salt_flat() {
-    use crate::world::Soil;
+    use crate::world::{Grid, Position, Terrain};
 
-    let flat = Soil::for_terrain(TerrainType::SaltFlat);
-    let plains = Soil::for_terrain(TerrainType::Plains);
+    let mut grid = Grid::new(4, 4);
+    grid.tiles[1][1].terrain = Terrain::new(TerrainType::SaltFlat);
+    grid.tiles[2][2].terrain = Terrain::new(TerrainType::Plains);
 
+    assert_eq!(
+        grid.what_it_yields_here(&Position::new(1, 1)),
+        0.0,
+        "a salt flat should be dead ground"
+    );
     assert!(
-        flat.nutrients < plains.nutrients / 10.0,
-        "a salt flat should be all but dead ground: {} against {}",
-        flat.nutrients,
-        plains.nutrients
+        grid.what_it_yields_here(&Position::new(2, 2)) > 0.0,
+        "and open plains should not be"
     );
 }
 

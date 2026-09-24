@@ -48,7 +48,7 @@ fn a_farmer_on_a_field(where_it_is: Position) -> Simulation {
 /// looking after.
 #[test]
 fn a_field_nobody_works_goes_over_to_weeds() {
-    let mut soil = Soil::for_terrain(TerrainType::Plains);
+    let mut soil = Soil::default();
 
     assert_eq!(soil.weeds, 0.0, "fresh ground starts clean");
     assert_eq!(soil.pests, 0.0);
@@ -80,7 +80,7 @@ fn a_field_nobody_works_goes_over_to_weeds() {
 /// loses, not what any ground loses.
 #[test]
 fn bare_ground_grows_no_weeds_worth_pulling() {
-    let mut soil = Soil::for_terrain(TerrainType::Plains);
+    let mut soil = Soil::default();
 
     for _ in 0..1000 {
         soil.nobody_weeded_this(0.0, 1.0);
@@ -93,19 +93,19 @@ fn bare_ground_grows_no_weeds_worth_pulling() {
 /// What the weeds and the vermin leave is what the farmer gets.
 #[test]
 fn what_the_weeds_leave_is_what_the_crop_keeps() {
-    let clean = Soil::for_terrain(TerrainType::Plains);
+    let clean = Soil::default();
     assert_eq!(
         clean.what_the_crop_keeps(),
         1.0,
         "a clean field loses nothing"
     );
 
-    let mut going_over = Soil::for_terrain(TerrainType::Plains);
+    let mut going_over = Soil::default();
     for _ in 0..200 {
         going_over.nobody_weeded_this(1.0, 1.0);
     }
 
-    let mut overrun = Soil::for_terrain(TerrainType::Plains);
+    let mut overrun = Soil::default();
     for _ in 0..2000 {
         overrun.nobody_weeded_this(1.0, 1.0);
     }
@@ -131,14 +131,17 @@ fn what_the_weeds_leave_is_what_the_crop_keeps() {
 #[test]
 fn a_worked_field_carries_a_crop_and_a_neglected_one_does_not() {
     fn grown(worked: bool) -> u32 {
-        let mut soil = Soil::for_terrain(TerrainType::Plains);
+        let mut soil = Soil::default();
         // Large enough that neither run reaches the ceiling: this is about
         // what the weeds take out of the growing, not what the ground carries
         let mut field = ResourceNode::new(ResourceType::Grain, Position::new(10, 10), 40000);
         field.amount = 0;
 
+        // A field of ordinary loam
+        let yields = crate::world::SoilGrade::Ordinary.multiplier()
+            * crate::world::soil::WHAT_BROKEN_GROUND_YIELDS_OVER_WILD;
+
         for turn in 0..1200 {
-            soil.nutrients = 0.6;
             soil.nobody_weeded_this(1.0, 1.0);
 
             // A turn round the field every few days, which is what a farmer
@@ -147,7 +150,14 @@ fn a_worked_field_carries_a_crop_and_a_neglected_one_does_not() {
                 soil.somebody_worked_this_field();
             }
 
-            field.regenerate_in_ground(20.0, 0.6, 1.0, true, &mut soil, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
+            field.regenerate_in_ground(
+                20.0,
+                0.6,
+                1.0,
+                yields,
+                soil.what_the_crop_keeps(),
+                crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO,
+            );
         }
 
         field.amount
@@ -166,7 +176,7 @@ fn a_worked_field_carries_a_crop_and_a_neglected_one_does_not() {
 /// again if nobody comes back.
 #[test]
 fn working_a_field_puts_it_right_for_a_while() {
-    let mut soil = Soil::for_terrain(TerrainType::Plains);
+    let mut soil = Soil::default();
 
     for _ in 0..400 {
         soil.nobody_weeded_this(1.0, 1.0);
@@ -304,32 +314,31 @@ fn a_practised_farmer_clears_more_in_a_turn() {
 // Which plants are suitable
 // --------------------------------------------------------------------------
 
-/// Not every plant repays a plough.
+/// Every crop repays the plough the same four times.
+///
+/// "Wild plants produce yields 1/4th that of plants in tilled farmland." This
+/// used to be the opposite claim - that grain took to the plough three times
+/// over and a berry bush in rows was still a berry bush, `takes_to_the_plough`
+/// one number per crop. The difference between crops is in how fast each kind
+/// grows and what it is worth to eat now, and what breaking ground does is the
+/// same for all of them. See ISSUES_FOUND #246, which also says what that does
+/// to the choice between beans and grain.
 #[test]
-fn grain_repays_the_plough_and_a_berry_bush_does_not() {
-    assert!(
-        ResourceType::Grain.takes_to_the_plough() > ResourceType::Food.takes_to_the_plough(),
-        "grain is the plant farming was invented for"
-    );
-    assert!(
-        ResourceType::Food.takes_to_the_plough() < 1.5,
-        "and a berry bush in rows is still a berry bush"
-    );
+fn every_crop_repays_the_plough_the_same() {
+    use crate::world::soil::WHAT_BROKEN_GROUND_YIELDS_OVER_WILD;
+    use crate::world::SoilGrade;
 
-    let grain = ResourceNode::new(ResourceType::Grain, Position::new(1, 1), 100);
-    let berries = ResourceNode::new(ResourceType::Food, Position::new(1, 1), 100);
+    let wild = SoilGrade::Ordinary.multiplier();
+    let broken = wild * WHAT_BROKEN_GROUND_YIELDS_OVER_WILD;
 
-    assert!(
-        grain.how_heavy_a_crop_it_carries(0.6, true)
-            > berries.how_heavy_a_crop_it_carries(0.6, true),
-        "a field of grain stands thicker than a field of berry bushes"
-    );
-
-    assert_eq!(
-        grain.how_heavy_a_crop_it_carries(0.6, false),
-        grain.standing_capacity(0.6),
-        "and unbroken ground carries what it always carried"
-    );
+    for crop in [ResourceType::Grain, ResourceType::Food, ResourceType::Legumes] {
+        let patch = ResourceNode::new(crop, Position::new(1, 1), 100);
+        assert_eq!(
+            patch.how_heavy_a_crop_it_carries(broken),
+            patch.how_heavy_a_crop_it_carries(wild) * 4,
+            "a field of {crop:?} should stand four times as thick as the same plant wild"
+        );
+    }
 }
 
 /// An agent sows what it has, and prefers what it has found works.
@@ -565,7 +574,7 @@ fn a_volunteer_on_the_midden_teaches_whoever_sees_it() {
     }
     if let Some(tile) = world.grid.get_tile_mut(&where_it_is) {
         for _ in 0..2000 {
-            tile.soil.decay(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
+            tile.soil.air_out(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
         }
     }
 
