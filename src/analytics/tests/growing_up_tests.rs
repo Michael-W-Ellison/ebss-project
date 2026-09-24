@@ -501,22 +501,43 @@ fn the_camp_is_not_a_parent_for_the_very_young() {
     );
 }
 
-/// A parent carrying somebody under two has one hand occupied and carries half
-/// of what two hands hold.
+/// A mother of an infant carries what anybody else of her body carries.
+///
+/// This test used to assert the opposite. "Age 0-2: ... Parent agent has one
+/// *hand* occupied with the child, limiting the types of work the parent
+/// agent can accomplish" was read as half of what two hands hold - and that
+/// is the wrong half of the sentence. What the specification limits is the
+/// *work*, and no work in this model asks whether a hand is free, so the only
+/// thing the rule ever did was halve a woman's pack for the two years she
+/// most needs one, in a model whose settlements cannot carry home what they
+/// gather in eleven months of twelve (#236).
+///
+/// Run through the kin phase rather than off a field, so that reintroducing
+/// it anywhere in that phase fails here.
 #[test]
-fn a_child_in_arms_takes_up_a_hand() {
-    let mut free = somebody_of(30, (0, 0, 0));
-    let mut carrying = somebody_of(30, (0, 0, 0));
+fn a_mother_of_an_infant_carries_what_anybody_carries() {
+    let mut population = Population::new();
+    population.agents.push(somebody_of(30, (25, 25, 0)));
+    population.agents.push(somebody_of(30, (40, 40, 0)));
+    let mother = population.agents[0].id;
 
-    carrying.hands_full_of_child = true;
-    carrying.take_up_the_cart();
-    free.take_up_the_cart();
+    let mut infant = somebody_of(1, (25, 25, 0));
+    infant.parent_ids = vec![mother];
+    population.agents.push(infant);
 
-    assert!(
-        carrying.total_carrying_capacity() < free.total_carrying_capacity(),
-        "one hand is not two: {:.1} against {:.1}",
-        carrying.total_carrying_capacity(),
-        free.total_carrying_capacity()
+    let mut simulation = Simulation::new(a_world(), population);
+    simulation.feed_the_small_children();
+
+    for index in 0..2 {
+        simulation.population.agents[index].take_up_the_cart();
+    }
+
+    assert_eq!(
+        simulation.population.agents[0].total_carrying_capacity(),
+        simulation.population.agents[1].total_carrying_capacity(),
+        "the one with a baby at her feet carries {:.1} against {:.1}",
+        simulation.population.agents[0].total_carrying_capacity(),
+        simulation.population.agents[1].total_carrying_capacity()
     );
 }
 

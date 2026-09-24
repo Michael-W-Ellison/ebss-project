@@ -1675,19 +1675,6 @@ impl AgentState {
 pub struct Agent {
     pub id: Uuid,
 
-    /// Whether one of this agent's hands has a child in it.
-    ///
-    /// "Age 0-2: must remain with a parent agent at all times. Parent agent
-    /// has one *hand* occupied with the child." Worked out once a turn in the
-    /// kin phase, which is where the caregivers and their charges are already
-    /// walked, and read by `update_inventory_capacity_from_transport`.
-    ///
-    /// A field rather than a question, because an agent cannot see the rest of
-    /// the population from inside itself and what it can carry is asked of it
-    /// alone, every turn, from four places.
-    #[serde(default)]
-    pub hands_full_of_child: bool,
-
     /// The tick this one is free to think again.
     ///
     /// "Once an agent plans an action, it would not change its mind unless its
@@ -1877,7 +1864,6 @@ impl Agent {
     pub fn new(config: AgentConfig) -> Self {
         let mut agent = Self {
             id: crate::core::dice::name(),
-            hands_full_of_child: false,
             busy_until: 0,
             state: AgentState::new(),
             drives: if config.random_weights {
@@ -6298,16 +6284,17 @@ impl Agent {
         // stops a child using one is the pulling, which is the movement half.
         let years = self.state.what_i_can_do_for_my_age();
 
-        // And whether one of those hands has a child in it.
+        // A child in arms is **not** counted here, and was.
         //
-        // "Age 0-2: must remain with a parent agent at all times. Parent agent
-        // has one *hand* occupied with the child, limiting the types of work
-        // the parent agent can accomplish." One hand, so half of what two of
-        // them hold; the basket on the back is unaffected, which is exactly
-        // why somebody carrying a baby wants one.
-        let hands = if self.hands_full_of_child { 0.5 } else { 1.0 };
-
-        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong * years * hands;
+        // "Age 0-2: ... Parent agent has one *hand* occupied with the child,
+        // limiting the types of work the parent agent can accomplish." That
+        // was read as half of what two hands hold, which is the wrong half of
+        // the sentence: what it limits is the *work*, and no work in this
+        // model asks whether a hand is free. So the only thing it ever did was
+        // halve a mother's pack in the two years she most needs one, on a
+        // model whose settlements are short of what they can carry home in
+        // eleven months of twelve (#236). Removed on instruction.
+        let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong * years;
         let in_something = self.transport.total_additional_capacity();
 
         self.inventory.max_weight = in_hand + in_something;
