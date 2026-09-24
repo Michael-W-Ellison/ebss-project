@@ -272,7 +272,16 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // two and a half days. Over a year the bushes and the quarries stop
     // growing back what was taken off them, so there is less standing in the
     // country to walk to and roll over.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 680_029;
+    // And **up 4.6%** for #243, where a percept that reports the ground
+    // underfoot no longer answers with a walk to it. The short count above
+    // does not move: over two and a half days nobody has lived long enough
+    // for the difference to compound. Over a year it is the largest rise
+    // since the giving of #230, and for the same reason - a settlement that
+    // spends a turn in six on something rather than on standing still is a
+    // settlement with more people in it at the end, and a living settlement
+    // rolls. Gathering is up 3.9% across twelve seeds and person-turns are
+    // flat, so what the turn bought was work rather than survival.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 711_032;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

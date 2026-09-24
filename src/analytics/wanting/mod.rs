@@ -73,7 +73,18 @@ impl Simulation {
                 match percept {
                     Percept::DangerDetected { threat_type: _, position, severity } => {
                         // High-priority: flee from danger
-                        if let Some(danger_pos) = position {
+                        //
+                        // Danger on the tile underfoot has no direction in it:
+                        // `dx` and `dy` are both nought, so the flee target
+                        // comes out as the agent's own position and the turn
+                        // is spent walking nowhere. Somewhere - anywhere - is
+                        // the answer to a thing you are standing on, and the
+                        // branch below already knows how to pick one. See
+                        // ISSUES_FOUND #234.
+                        let underfoot = position
+                            .is_some_and(|at| at.0 == agent_position.0 && at.1 == agent_position.1);
+
+                        if let Some(danger_pos) = position.filter(|_| !underfoot) {
                             // Move away from danger position
                             let dx = agent_position.0 - danger_pos.0;
                             let dy = agent_position.1 - danger_pos.1;
@@ -102,7 +113,26 @@ impl Simulation {
                     }
                     Percept::ResourceDetected {  position, .. } => {
                         // High-salience resource (usually means high hunger/thirst)
-                        // Move towards it
+                        // Move towards it - unless it is the ground underfoot.
+                        //
+                        // The sight and smell passes report what is at the
+                        // agent's own feet along with everything else, and
+                        // this answered every one of them with a walk. A walk
+                        // to where you are standing costs the whole turn and
+                        // returns *success*, so it was in no refusal tally
+                        // anywhere: see the counter in `Simulation::walking`
+                        // and ISSUES_FOUND #234.
+                        //
+                        // Standing aside rather than turning it into a
+                        // `Gather`: this is the "follow your own nose" path,
+                        // reached only when no drive had an answer, and a
+                        // gather proposed here would not have been through
+                        // `could_this_gather_come_to_anything`. The plan and
+                        // the goal below get the turn instead.
+                        if position.0 == agent_position.0 && position.1 == agent_position.1 {
+                            return None;
+                        }
+
                         return Some(Action::Move {
                             target: *position,
                         });

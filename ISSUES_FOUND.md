@@ -18568,6 +18568,11 @@ shelter override and the walk, not about the pit. #231 has the arithmetic.
 
 ### 233. The shelter override cannot end the condition that chooses it - measured, and two fixes for it that did not survive
 
+> **Re-measured at #241 and the reason given below is wrong.** On twelve
+> paired seeds the skip costs 1.0%, which is noise - not a settlement. It
+> stays reverted because it buys nothing, not because it is expensive.
+
+
 #231's turn budget, read from the tallies, put `SeekShelter` at **28.5% of
 every person-turn in the hungry gap** against `Eat` at 3.6%. This went after
 it, found a real structural oddity, tried two things, kept neither, and
@@ -18641,6 +18646,12 @@ that asks the decision layer a second time in the same turn draws from the
 same seeded stream and moves the world it is reading (#231).
 
 ### 234. One turn in six was a walk to the tile the agent was already standing on, and nothing could see it
+
+> **Re-measured at #241 and the rejection below was wrong.** Both candidates
+> are free on twelve paired seeds - the blanket guard at -0.8% and the narrow
+> one at +0.1% - and both raise gathering by about 4%. The narrow one is now
+> kept: see #243.
+
 
 #231's turn budget put `Move` at 57.5% of every person-turn in the hungry gap.
 #233 ruled out the shelter override as the cost. This is what the walking
@@ -18797,6 +18808,11 @@ that nobody spends the afternoon removing the waste and wondering why the
 settlements died.
 
 ### 235. The twenty per cent, located: a settlement dies with more in its pits than it was short, and the strategy called "eat the food you are carrying" is a snare check
+
+> **Re-measured at #241 and confirmed.** The rewiring costs **7.8%** of a
+> settlement's person-turns on twelve paired seeds, five to eight times the
+> noise floor. It stays reverted.
+
 
 #234 ended by saying the order of work is the shortfall first. This is the
 shortfall.
@@ -19297,3 +19313,122 @@ put the rest in the ground, and that is #237's second direction, untouched:
 give burying its own claim on the turn when the body is full and the pack is
 not. The one place in this area that genuinely failed to account for room was
 not a decision at all but the hand-back in the executor, and that is #238.
+
+### 241. Every reverted change of this session, re-measured on paired seeds
+
+#239 established that the statistic this session had been steering by cannot
+carry a conclusion. So every change that was reverted on it has been run
+again: twelve seeds, twelve founders, one year each, the same seeds in every
+arm, against one baseline taken on the same HEAD.
+
+**Baseline: 2,018,715 person-turns, 3 births, 6 of 12 settlements emptied,
+294,062 gathers.**
+
+| arm | person-turns | against baseline | gathers | births |
+|---|---|---|---|---|
+| #233 shelter override, skipped for somebody already under a roof | 1,998,085 | **-1.0%** | 292,036 | 3 |
+| #234 a `Move` to the tile underfoot is not an answer (blanket) | 2,003,275 | **-0.8%** | 306,692 | 4 |
+| #234 the same, at the two percepts that cause it | **2,020,337** | **+0.1%** | 305,591 | 5 |
+| #235 `EatCarriedFood` wired to the pack instead of a snare | 1,861,919 | **-7.8%** | 284,089 | 8 |
+| #240 the pack-room gate on gathering | 1,931,539 | **-4.3%** | 289,301 | 7 |
+| a child in arms no longer halves a pack (#242) | 2,016,853 | **-0.1%** | 293,950 | 3 |
+
+#### What this changes
+
+**#234 was rejected wrongly, and both its candidates are free.** They were
+reverted on readings that #239 has since disqualified. On paired seeds the
+blanket guard costs 0.8% and the narrow one costs nothing at all - and both
+raise gathering by about 4%, which is the shape to expect from giving back a
+turn that was being spent walking to where the agent already stood. The
+narrow one is **kept**: see #243.
+
+**#235 and #240 are confirmed, and by a wide margin.** 7.8% and 4.3% are five
+to eight times the noise floor, and they are the two arms that were rejected
+on the clearest reasoning rather than on the emptied column. #235's rewiring
+feeds people - it takes `eaten_units` up by half and births from three to
+eight - and kills them sooner, which is the structural shortfall of #236
+showing through: a settlement that eats its stores faster does not thereby
+have more.
+
+**#233 stands reverted, but for a different reason than was recorded.** It
+does not cost a settlement; it costs one per cent, which is nothing, and buys
+nothing either. The oddity it was aimed at is still there and is still
+recorded rather than fixed.
+
+#### And the emptied column, one more time
+
+It reads 6, 8, 6, 7, 7, 8, 6 across these seven arms, against person-turn
+moves running from +0.1% to -7.8%. The arm that costs 7.8% of everybody's
+life and the arm that costs nothing both read 7. It is not measuring
+survival. See #239.
+
+### 242. A child in arms no longer costs a mother half her pack
+
+Removed on instruction. What it was:
+
+```rust
+let hands = if self.hands_full_of_child { 0.5 } else { 1.0 };
+let in_hand = Self::WHAT_TWO_HANDS_HOLD * how_strong * years * hands;
+```
+
+from "Age 0-2: must remain with a parent agent at all times. Parent agent has
+one *hand* occupied with the child, limiting the types of work the parent
+agent can accomplish."
+
+**It was the wrong half of the sentence.** What the specification limits is
+the *work*, and this halved a load. The model has a real hands mechanic -
+two slots, `a_hand_to_spare`, and verbs that want one free, which is how
+stitching is gated - and the child never went near it. So the rule limited no
+work at all. The only thing it ever did was halve a woman's pack for the two
+years she most needs one, in a model whose settlements cannot carry home what
+they gather in eleven months of twelve (#236).
+
+Gone: the `hands_full_of_child` field, the `CARRIED_IN_ARMS_UNTIL` age, the
+`in_arms` flag in `feed_the_small_children` and the loop at the end of the kin
+phase that wrote the field every turn.
+
+`growing_up_tests::a_child_in_arms_takes_up_a_hand` asserted the restriction.
+It is now `a_mother_of_an_infant_carries_what_anybody_carries`, which builds a
+mother, an infant and a childless woman of the same body, runs the kin phase,
+and asserts the two grown women carry the same - so reintroducing it anywhere
+in that phase fails there.
+
+**If it is ever wanted back, it wants the hands.** `Agent::hands` is two slots
+and `a_hand_to_spare` is already the question every verb asks. A child in one
+of those slots would limit the work the specification says it limits, and
+would leave the pack alone.
+
+### 243. The turn spent walking to where you already stand
+
+`Simulation::walking` returns **success** for a `Move` whose target is the
+tile the agent is on - "Already at destination" - so the turn is booked as a
+`Move`, costs the whole of itself, and appears in no refusal tally anywhere.
+It is the one wasted turn in this model that no instrument could see, and a
+counter put inside that branch measured it at **15,296 of 99,046 person-turns
+across three seeded settlements - 15.4% of them**, against `Eat` at 3.6%.
+
+The counter was committed at #234; the fix was not, because it measured badly
+on a statistic #239 has since disqualified. Re-measured on twelve paired
+seeds it costs **nothing** - 2,020,337 person-turns against a baseline of
+2,018,715 - and takes gathering up 3.9%. See #241.
+
+**What is kept is the narrow one.** Two percepts cause it, and both are
+answered where they arise rather than by a blanket guard on every `Move`:
+
+- `DangerDetected` for a threat on the tile underfoot. The flee target is
+  computed from `dx` and `dy`, which are both nought, so it comes out as the
+  agent's own position. Somewhere - anywhere - is the answer to a thing you
+  are standing on, and the branch below already knows how to pick one.
+- `ResourceDetected` for the ground underfoot. The sight and smell passes
+  report what is at the agent's own feet along with everything else, and this
+  answered every one of them with a walk.
+
+Not turned into a `Gather`: this is the "follow your own nose" path, reached
+only when no drive had an answer, and a gather proposed here would not have
+been through `could_this_gather_come_to_anything`. The plan and the goal get
+the turn instead.
+
+The blanket guard - "any `Move` to the tile underfoot is not an answer,
+return `None`" - was measured too and costs 0.8%, which is inside the noise
+but is the wrong shape: it catches the symptom everywhere instead of the two
+places that produce it, and it would hide the next one.
