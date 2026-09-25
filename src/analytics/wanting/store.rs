@@ -738,8 +738,18 @@ impl Simulation {
         // these people are in trouble the hedgerows are already bare, so this
         // gate has already let them through and something else is taking the
         // turn. See ISSUES_FOUND #228.
+        //
+        // **And a body that is wasting is in trouble**, which is the line the
+        // physiology draws and this did not: under half its reserve a body
+        // loses health every turn (`Physiology::is_wasting`), and the store
+        // stayed shut to it until a quarter. Traced through a third summer:
+        // two adults feeding five small children between them, at 0.43 to
+        // 0.69 of their reserve and losing health, beside pits holding 7,932
+        // items that did not move by one from day 30 to day 210 - and both
+        // dead of hunger with them still full. See ISSUES_FOUND #255.
         if self.are_the_hedgerows_bearing()
             && !Self::is_the_body_eating_itself(agent)
+            && !agent.state.physiology.is_wasting()
             && !agent.state.is_starving()
             && !agent.nutrition.is_starving()
         {

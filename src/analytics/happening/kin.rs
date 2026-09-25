@@ -344,6 +344,13 @@ impl Simulation {
             parent: uuid::Uuid,
             wants_food: f32,
             wants_water: f32,
+            /// How big a body the child's is beside the parent's.
+            ///
+            /// Water is kept as a share of each body's own skinful, so a
+            /// small child's day of water is a small share of a grown
+            /// person's. Food is not: it is counted in units, which are
+            /// already the child's size.
+            its_size_to_theirs: f32,
         }
 
         let grown: Vec<(uuid::Uuid, (i32, i32, i32))> = self
@@ -378,11 +385,30 @@ impl Simulation {
                     * MINUTES_PER_TURN as f32
                     / MINUTES_PER_DAY as f32;
 
+                // A body's water is sized as its eating is.
+                //
+                // This charged the parent a grown person's share of their own
+                // skin for every small child they held, because a child's
+                // hydration and a parent's are each a share of a different
+                // body: a parent with two infants dried out as though they
+                // were drinking for three grown people. See ISSUES_FOUND #255.
+                let its_size_to_theirs = self
+                    .population
+                    .agents
+                    .iter()
+                    .find(|a| a.id == parent)
+                    .map(|them| {
+                        crate::agents::agent::what_a_body_this_age_eats(child.state.years_old())
+                            / crate::agents::agent::what_a_body_this_age_eats(them.state.years_old())
+                    })
+                    .unwrap_or(1.0);
+
                 Some(AMouthToFeed {
                     child: child.id,
                     parent,
                     wants_food: a_turn,
                     wants_water: A_DRINK_IS_WORTH * MINUTES_PER_TURN as f32 / MINUTES_PER_DAY as f32,
+                    its_size_to_theirs,
                 })
             })
             .collect();
@@ -469,7 +495,7 @@ impl Simulation {
                 parent.state.physiology.reserve =
                     (parent.state.physiology.reserve - food).max(0.0);
                 parent.state.physiology.hydration =
-                    (parent.state.physiology.hydration - water).max(0.0);
+                    (parent.state.physiology.hydration - water * mouth.its_size_to_theirs).max(0.0);
             }
         }
     }
