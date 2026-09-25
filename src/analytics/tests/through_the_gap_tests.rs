@@ -145,3 +145,55 @@ fn the_worst_plant_leaves_a_taster_standing() {
         "somebody under the line was let near a strange plant"
     );
 }
+
+/// A walk out of a pocket goes out of the pocket.
+///
+/// Somebody in a bay of water that opens behind them, heading for somewhere
+/// past its far wall. The direct step is clear until the wall and the way
+/// round lies back the way they came, so taking the direct step whenever it
+/// was clear and asking the search only when it was not had them step to the
+/// wall, be sent back a pace, step to the wall again - for as long as they
+/// lived. Traced through a winter, two days of it on the way to a pit nine
+/// paces off. See ISSUES_FOUND #254.
+#[test]
+fn a_walk_does_not_bounce_off_the_end_of_a_bay() {
+    use crate::world::{Terrain, TerrainType};
+
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+
+    // Open ground, then a bay of water: walls along y = 3 and y = 9 and across
+    // x = 25, open to the east.
+    for x in 10..45 {
+        for y in 0..15 {
+            let ground = if (y == 3 || y == 9) && (25..=35).contains(&x) || (x == 25 && (3..=9).contains(&y)) {
+                TerrainType::Water
+            } else {
+                TerrainType::Meadow
+            };
+            if let Some(tile) = simulation.world.grid.get_tile_mut(&Position::new(x, y)) {
+                tile.terrain = Terrain::new(ground);
+            }
+        }
+    }
+    simulation.world.buildings.clear();
+
+    let target = (19, 6, 0);
+    simulation.population.agents[0].state.position = (28, 6, 0);
+    simulation.population.agents[0].stepped_from = None;
+
+    let mut got_there = false;
+    for _ in 0..80 {
+        simulation.execute_action(&Action::Move { target }, 0);
+        let at = simulation.population.agents[0].state.position;
+        if (at.0, at.1) == (target.0, target.1) {
+            got_there = true;
+            break;
+        }
+    }
+
+    let at = simulation.population.agents[0].state.position;
+    assert!(got_there, "eighty steps and still at {at:?}, short of {target:?}");
+}

@@ -1156,14 +1156,19 @@ fn an_empty_store_wants_filling() {
     );
 }
 
-/// A store with a lean season's eating in it for everybody about does not.
+/// A store with what a settlement fills it to for everybody about does not.
+///
+/// That is a lean season's eating a head and a child's on top, with a margin -
+/// see `what_a_store_is_filled_to_a_mouth` and ISSUES_FOUND #254. One winter
+/// a head left nothing over for the child the breeding gate asks to be
+/// provided for.
 #[test]
 fn a_store_with_a_winter_in_it_does_not_want_filling() {
     let mut simulation = a_digger();
     let mouths = 1;
     simulation.world.pits.push(Pit {
         where_it_is: Position::new(25, 25),
-        holds: vec![supper(mouths * Simulation::what_one_mouth_wants_put_by(), 0)],
+        holds: vec![supper(mouths * Simulation::what_a_store_is_filled_to_a_mouth(), 0)],
         covered: true,
         dug: 0,
         belongs: crate::world::Belongs::ToNobody,
@@ -1268,7 +1273,8 @@ fn nobody_buries_into_a_store_that_is_already_a_winter_deep() {
     let mut simulation = a_digger_in_the_lean_season();
     let here = Position::new(25, 25);
 
-    let a_winter = Simulation::what_one_mouth_wants_put_by();
+    // As deep as a settlement fills it: a winter a head and a child's on top.
+    let a_winter = Simulation::what_a_store_is_filled_to_a_mouth();
     let mut buried = 0;
     let mut where_it_is = here.clone();
     while buried < a_winter {

@@ -163,10 +163,23 @@ impl Simulation {
         // Take the direct step when it is clear; otherwise search for a
         // route around whatever is in the way before falling back to a
         // sidestep, so agents do not oscillate against an obstacle.
+        //
+        // **But not straight back onto the tile just left.** The direct step
+        // and the search do not agree about which way to go round something,
+        // and taking whichever is open first let them take turns: on one
+        // tile the direct step was clear and stepped west, on the next it was
+        // blocked and the search said the way round lay back east. Traced
+        // through a winter, somebody on half their reserve walked between two
+        // tiles a pace apart for two days on the way to a pit nine paces
+        // off, until they starved. Where the direct step would undo the last
+        // one, the search decides, and it decides the same way from both
+        // tiles. See ISSUES_FOUND #254.
+        let came_off = self.population.agents[agent_index].stepped_from;
         let direct_step = candidates
             .first()
             .copied()
-            .filter(|candidate| self.is_passable_tile(candidate.0, candidate.1));
+            .filter(|candidate| self.is_passable_tile(candidate.0, candidate.1))
+            .filter(|candidate| came_off != Some((candidate.0, candidate.1)));
 
         let step = direct_step
             .or_else(|| self.next_step_toward(current_pos, *target))
@@ -234,6 +247,7 @@ impl Simulation {
 
         // Update agent position (including Z-axis)
         let agent = &mut self.population.agents[agent_index];
+        agent.stepped_from = Some((current_pos.0, current_pos.1));
         agent.state.position = (next_x, next_y, next_z);
 
         // Calculate remaining 3D distance

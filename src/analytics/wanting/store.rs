@@ -135,6 +135,29 @@ impl Simulation {
         )
     }
 
+    /// What a settlement fills its store to, for each mouth about it.
+    ///
+    /// One mouth's winter was the whole of it, and that leaves nothing over
+    /// for the child anybody needs to provide for: the breeding gate asks for a
+    /// parent's winter and a newborn's put by, `(1 + a newborn's share)` of
+    /// what this was sized at. A settlement that did everything asked of it
+    /// filled its pits to one winter a head, stopped, and could never breed
+    /// at all - whoever wanted a child had to be hoarding privately on top.
+    /// See ISSUES_FOUND #254.
+    ///
+    /// So the store is filled to a winter a head and a child's winter on top,
+    /// and a quarter again, because it is counted in items and an item of
+    /// spring leaf is a quarter of an item of anything else, and because what
+    /// is buried is not all still food by February.
+    pub(in crate::analytics) fn what_a_store_is_filled_to_a_mouth() -> u32 {
+        let a_winter = Self::what_one_mouth_wants_put_by() as f32;
+        let and_a_child = 1.0 + crate::agents::agent::what_a_body_this_age_eats(0);
+        (a_winter * and_a_child * Self::WHAT_A_STORE_LOSES_BY_FEBRUARY).ceil() as u32
+    }
+
+    /// The margin a store is filled with, over what it is meant to feed.
+    pub(in crate::analytics) const WHAT_A_STORE_LOSES_BY_FEBRUARY: f32 = 1.25;
+
     /// Whether burying this now would still be food when the land has nothing.
     ///
     /// Burying went ahead of every way of preserving a thing, on the reasoning
@@ -187,7 +210,7 @@ impl Simulation {
             .world
             .how_much_is_in_the_ground_near(here, Self::WORTH_WALKING_TO_THE_STORE);
 
-        put_by < mouths * Self::what_one_mouth_wants_put_by()
+        put_by < mouths * Self::what_a_store_is_filled_to_a_mouth()
     }
 
     /// How much more this settlement's pits could take, within reach.
@@ -333,7 +356,7 @@ impl Simulation {
 
         if !matches!(
             self.world.climate.current_season(),
-            crate::environment::seasons::Season::Fall
+            crate::environment::seasons::Season::Fall | crate::environment::seasons::Season::Summer
         ) {
             return None;
         }
@@ -536,7 +559,7 @@ impl Simulation {
                 .world
                 .how_much_is_in_the_ground_near(here, Self::WORTH_WALKING_TO_THE_STORE)
                 + self.how_much_room_is_left_near(here)
-                >= self.how_many_mouths_about(here).max(1) * Self::what_one_mouth_wants_put_by();
+                >= self.how_many_mouths_about(here).max(1) * Self::what_a_store_is_filled_to_a_mouth();
 
             if enough_hole_for_the_winter {
                 if let Some((pit, _)) = self

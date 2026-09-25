@@ -437,6 +437,27 @@ impl Simulation {
                     .min(child.state.physiology.reserve_capacity);
                 child.state.physiology.hydration =
                     (child.state.physiology.hydration + water).min(1.0);
+
+                // And the same share of a turn's worth of what the rest of
+                // the body is kept on.
+                //
+                // A body has two stores of what it has eaten: the physiology's
+                // reserve, which is what hunger is reckoned on and what this
+                // feeding has always filled, and `nutrition` - energy, protein
+                // and the things only fresh food carries - which only
+                // `Action::Eat` ever filled. A child this young never eats for
+                // itself, so its `nutrition` ran down from the day it was born:
+                // felt energy follows it (`Agent::turn_nutrition`) and went to
+                // nought, and the first children a settlement ever bore died of
+                // exhaustion and of a poor diet with their bellies full. What a
+                // parent feeds a small child is a whole diet, so it goes into
+                // both. See ISSUES_FOUND #254.
+                if mouth.wants_food > 0.0 {
+                    let share = (food / mouth.wants_food).clamp(0.0, 1.0);
+                    child
+                        .nutrition
+                        .consume(&crate::world::nutrition::what_a_turn_of_being_fed_is_worth().scale(share));
+                }
             }
 
             if let Some(parent) = self

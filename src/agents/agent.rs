@@ -1694,6 +1694,11 @@ pub struct Agent {
     #[serde(default)]
     pub busy_until: u32,
 
+    /// The tile this one last stepped off, so that a walk does not turn
+    /// straight back onto it - see `Simulation::moving`.
+    #[serde(default)]
+    pub stepped_from: Option<(i32, i32)>,
+
     pub state: AgentState,
     pub drives: DriveState,
     pub behavior_trees: Vec<BehaviorTree>,
@@ -1875,6 +1880,7 @@ impl Agent {
         let mut agent = Self {
             id: crate::core::dice::name(),
             busy_until: 0,
+            stepped_from: None,
             state: AgentState::new(),
             drives: if config.random_weights {
                 DriveState::with_random_weights()
@@ -2826,9 +2832,18 @@ impl Agent {
             return;
         }
 
+        // Through `lose_health`, like every other drain on a body, so that it
+        // is booked under its own name and a body it empties is dead. It
+        // wrote the field directly: an illness took people without a word,
+        // their deaths went down to whatever had spoken last - "the weather",
+        // "a mishap" - and one that reached nought was not dead, because the
+        // turn's mending put a fraction back before anybody looked, and the
+        // illness took it off again. Traced, somebody with a wound that had
+        // turned walked about at nought health for two days. See
+        // ISSUES_FOUND #254.
         let severity = ailing.severity;
-        self.state.health =
-            (self.state.health - severity * Self::WHAT_A_TURN_OF_ILLNESS_COSTS).max(0.0);
+        self.state
+            .lose_health(severity * Self::WHAT_A_TURN_OF_ILLNESS_COSTS, AgentState::ILLNESS);
         self.state.energy =
             (self.state.energy - severity * Self::WHAT_ILLNESS_TAKES_OUT_OF_YOU).max(0.0);
     }
@@ -2996,7 +3011,20 @@ impl Agent {
     ///
     /// Small on purpose. A week of it at full severity comes to about a
     /// quarter of a healthy body, which is a bad illness and not a sentence.
-    const WHAT_A_TURN_OF_ILLNESS_COSTS: f32 = 0.25;
+    ///
+    /// **Said in weeks and converted now**, because it was `0.25` a turn,
+    /// written when a week was about a hundred turns. A week is 336 now, so a
+    /// week at full severity took 84 - and an illness lasts up to ten days, so
+    /// a wound that turned was very nearly a sentence after all: traced, a fed,
+    /// dry, sheltered man went from 39 health to nothing in four days. Over
+    /// three years of twelve settlements it was a leading cause of death among
+    /// grown people, booked to whatever else had last touched them. See
+    /// ISSUES_FOUND #254.
+    const WHAT_A_TURN_OF_ILLNESS_COSTS: f32 = Self::WHAT_A_WEEK_OF_ILLNESS_COSTS
+        / (7 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY) as f32;
+
+    /// A week at full severity: a quarter of a healthy body.
+    const WHAT_A_WEEK_OF_ILLNESS_COSTS: f32 = 25.0;
 
     /// And what it takes out of somebody's day.
     ///
@@ -5065,7 +5093,18 @@ impl Agent {
         self.take_health_down_to(body_condition);
 
         // Update energy (basic metabolism)
-        self.state.energy = (self.state.energy - 0.1).max(0.0);
+        //
+        // And not for anybody under six, for the reason
+        // `AgentState::age_turn_with_modifier` gives for its own drain: this
+        // pool is filled by `Action::Eat` and nothing else, and a child that
+        // young takes no turn and so never eats for itself - it is fed
+        // straight into its body. That drain was waived for them and this one
+        // was not, so every child a settlement bore ran dry in three weeks and
+        // died of exhaustion in six, fed and watered and full of milk. See
+        // ISSUES_FOUND #254.
+        if self.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL {
+            self.state.energy = (self.state.energy - 0.1).max(0.0);
+        }
     }
 
     /// Update agent with time progression (includes aging and survival mechanics)

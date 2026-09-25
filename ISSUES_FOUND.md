@@ -20172,3 +20172,90 @@ means through a winter. Over the two-year runs of #252 every pregnancy that
 began ended with the carrier dead before term. That is #252's shortfall of food
 showing up in the one place that needs the most of it, not a fault in this
 number.
+
+### 254. Walks that bounced, a store one child short, children who ran dry, and an illness priced for the wrong calendar
+
+Continuing #252 towards "settlements must last generations". Each of these was
+found by tracing one person - a starving one, a newborn, a man dying of the
+weather in fine weather - turn by turn. Measured together at the end.
+
+#### 1. A walk bounced between two tiles
+
+`Simulation::moving` took the direct step whenever it was clear and asked the
+route search only when it was not. The two disagree about which way round a
+thing is: in a bay open behind somebody, the direct step walked them to the
+wall, the search sent them back a pace to go round, and the direct step walked
+them to the wall again. Traced: somebody on half their reserve going to a pit
+nine paces off, for two days, until they starved. A person now remembers the
+tile they last stepped off (`Agent::stepped_from`), and where the direct step
+would undo the last one the search decides - which it decides the same way
+from both tiles. `a_walk_does_not_bounce_off_the_end_of_a_bay` stays at
+(26, 6) for ever without it.
+
+#### 2. The store was sized one child short
+
+`does_the_store_still_want_filling` stopped at one winter a head. The breeding
+gate asks each parent for their winter *and a newborn's* - so a settlement that
+did everything asked of it filled its pits to exactly the point where nobody
+could breed, and stopped. The store is now filled to
+`what_a_store_is_filled_to_a_mouth`: a winter, a newborn's share on top, and a
+quarter again because it is counted in items (a unit of spring leaf is a
+quarter of anything else) and not all of it is still food by February. Loads
+are carried home to it from summer as well as autumn. Pits at month 9 rose
+from 5,000-8,900 to 6,000-12,800 on six seeds.
+
+#### 3. The first children ran dry
+
+Children were born and every one died at about six weeks of exhaustion, fed,
+watered and full of milk. Two things a body is kept up by only eating for
+yourself, and a child under six never eats for itself:
+
+- `Agent::take_a_turn` charged 0.1 energy a turn as basic metabolism, and
+  unlike the other metabolic drain it did not spare the under-sixes. Three
+  weeks to empty.
+- Felt energy is pulled towards `nutrition.energy_reserves`, and nutrition
+  (energy, protein, what only fresh food carries) was filled by
+  `Action::Eat` and nothing else. `feed_the_small_children` fed the child's
+  physiology and nothing more, so its nutrition ran down, energy followed it
+  to nought, and the rest died of "a poor diet".
+
+The drain now spares them, and a child fed by a grown person gets the same
+share of `what_a_turn_of_being_fed_is_worth` - a turn's metabolism at its
+busiest - into its nutrition. Children born now live until something else
+happens to their people.
+
+#### 4. An illness was a week's work in two days
+
+`WHAT_A_TURN_OF_ILLNESS_COSTS` was `0.25` a turn, beside a comment saying a
+week at full severity costs a quarter of a body. That was true on a calendar
+of about a hundred turns a week; a week is 336 turns now, so it cost 84, and an
+illness lasts up to ten days. A wound that turned killed a fed, dry man in four
+days. It is said in weeks and converted now (25 a week).
+
+It also wrote health directly instead of through `lose_health`, so an illness
+was never booked by name - its deaths went to whatever had last touched the
+body, very often "the weather", which is why well-fed people seemed to be dying
+of mild weather - and a body it emptied was not dead: the turn's mending put a
+fraction back before the death check, the illness took it off again, and
+somebody walked about at nought health for two days. It goes through
+`lose_health(ILLNESS)` now.
+
+#### Measured
+
+Twelve seeds, animals in, release build:
+
+| | end of year 1 | end of year 2 | end of year 3 | alive at year 3 |
+|---|---|---|---|---|
+| before #252 | 14 | 5 | - | - |
+| after #252/#253 | 51 | 20 | - | - |
+| after this | 117 | 75 | 60 | 9 of 12 settlements |
+
+One settlement (seed 4) is at fifteen people in year three, three of them born
+there and alive. The others that survive are stable at six to twelve and
+childless: in them "could not feed a child" is every adult's every turn. Their
+pits peak at 650 to 930 items a head each autumn, against the 1,040 the
+breeding gate asks - and eat it down to nearly nothing by spring. That is the
+next thing.
+
+The recorded dice counts move: 7,244 for the short run, 645,031 for the year.
+Two larder tests that pinned the old store size read the new one.

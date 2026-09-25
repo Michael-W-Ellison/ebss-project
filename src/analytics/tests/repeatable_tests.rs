@@ -171,7 +171,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // see it: a man who stepped round a half-built burrow now walks over it,
     // somebody hungry eats before he huddles, and a pack of rot is emptied to
     // make room for supper - each a different turn from the first morning.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_043;
+    // And up 3% for #254: a walk that will not turn straight back onto the
+    // tile it just left, and a store filled to what the breeding gate asks.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_244;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -310,7 +312,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // And up 1.2% for #252 and #253: people get into the stores through the
     // winter and out of the rot in their packs, fewer die of a strange plant,
     // and a pregnancy lasts nine months rather than a night.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 633_099;
+    // And up 1.9% for #254: the store is filled for a child as well, from
+    // summer; walks leave pockets; small children are fed all through and
+    // live; and an illness costs a week what it says it does.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 645_031;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
