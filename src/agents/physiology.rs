@@ -40,6 +40,10 @@ pub const MINUTES_TO_DIE_OF_THIRST: u32 = 3 * MINUTES_PER_DAY;
 /// Three weeks without food and an adult is dead.
 pub const MINUTES_TO_STARVE: u32 = 21 * MINUTES_PER_DAY;
 
+/// The share of its reserve below which a body is wasting: taking it out of
+/// itself, and losing health for it. Half of three weeks.
+pub const WASTING_BELOW: f32 = 0.5;
+
 /// What a body burns in a day at an ordinary level of activity.
 ///
 /// One unit a minute. That is where the figure comes from, and it is why a day
@@ -767,7 +771,7 @@ impl Physiology {
     /// Half of three weeks. Going a day without food is not this; going ten
     /// days is.
     pub fn is_wasting(&self) -> bool {
-        self.reserve < self.reserve_capacity * 0.5
+        self.reserve < self.reserve_capacity * WASTING_BELOW
     }
 
     /// Put this body where it would be after this long without food.

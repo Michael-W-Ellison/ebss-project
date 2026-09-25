@@ -197,3 +197,89 @@ fn a_walk_does_not_bounce_off_the_end_of_a_bay() {
     let at = simulation.population.agents[0].state.position;
     assert!(got_there, "eighty steps and still at {at:?}, short of {target:?}");
 }
+
+/// A parent with a small child at their feet is not sent to where they are
+/// already standing because there is a wolf about.
+///
+/// The walk to a child in danger was a `Move` to the child's tile, which is
+/// the parent's own when the child is held, and the walker books that as
+/// done. The branch sits above eating, so for as long as a wolf hung about
+/// the parent did nothing at all: traced, eight days of it standing on a
+/// pit. See ISSUES_FOUND #255.
+#[test]
+fn a_parent_holding_a_child_is_not_sent_to_where_they_stand() {
+    use crate::agents::Agent;
+
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+    world
+        .spawn_animal("wolf".to_string(), (33, 30))
+        .expect("a wolf should spawn");
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+    let parent = simulation.population.agents[0].id;
+    simulation.population.agents[0].state.position = (30, 30, 0);
+    simulation.population.agents[0].state.now_this_many_years_old(30);
+
+    let mut child = Agent::with_parents(AgentConfig::default(), vec![parent], simulation.current_turn);
+    child.state.position = (30, 30, 0);
+    simulation.population.agents.push(child);
+
+    let agent = simulation.population.agents[0].clone();
+    let answer = simulation.protective_action(&agent, agent.state.position);
+    assert!(
+        !matches!(answer, Some(Action::Move { target }) if (target.0, target.1) == (30, 30)),
+        "a parent holding their child was sent to the tile they stand on: {answer:?}"
+    );
+
+    // And one whose child is a few paces off still goes to it.
+    simulation.population.agents[1].state.position = (32, 30, 0);
+    let agent = simulation.population.agents[0].clone();
+    assert!(
+        matches!(simulation.protective_action(&agent, agent.state.position), Some(Action::Move { target }) if (target.0, target.1) == (32, 30)),
+        "a child with a wolf beside it and its parent away should bring the parent"
+    );
+}
+
+/// Somebody a little under half their reserve and eating is not dying.
+///
+/// Wasting took five health a day at any depth, so a body that fell just past
+/// the line and was climbing back died three weeks later whatever it ate.
+/// See ISSUES_FOUND #255.
+#[test]
+fn a_body_just_past_the_line_is_not_on_a_clock() {
+    use crate::agents::Agent;
+    use crate::environment::seasons::{PLANNING_PERIODS_PER_DAY, TICKS_BETWEEN_PLANS};
+
+    let mut just_past = Agent::new(AgentConfig::default());
+    let mut near_empty = Agent::new(AgentConfig::default());
+    for (agent, share) in [(&mut just_past, 0.48), (&mut near_empty, 0.05)] {
+        agent.state.now_this_many_years_old(30);
+        let capacity = agent.state.physiology.reserve_capacity;
+        agent.state.physiology.reserve = capacity * share;
+    }
+
+    let a_day = PLANNING_PERIODS_PER_DAY;
+    for turn in 0..a_day {
+        for agent in [&mut just_past, &mut near_empty] {
+            // Kept where they are: this is about the damage, not the eating.
+            let held = agent.state.physiology.reserve;
+            agent.state.physiology.hydration = 1.0;
+            agent.process_survival_turn(turn * TICKS_BETWEEN_PLANS);
+            agent.state.physiology.reserve = held;
+        }
+    }
+
+    let lost_just_past = 100.0 - just_past.state.health;
+    let lost_near_empty = 100.0 - near_empty.state.health;
+    assert!(
+        lost_just_past < 0.5,
+        "a day at 0.48 of the reserve cost {lost_just_past:.2} health"
+    );
+    assert!(
+        lost_near_empty > 3.0,
+        "and a day at the bottom of it should still hurt: {lost_near_empty:.2}"
+    );
+}

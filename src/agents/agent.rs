@@ -1210,7 +1210,19 @@ impl AgentState {
         if self.physiology.starved() {
             self.lose_health(self.health, Self::HUNGER);
         } else if self.physiology.is_wasting() {
-            self.lose_health(0.1 / reserve, Self::HUNGER);
+            // As deep as the body has gone past the line, and no deeper.
+            //
+            // A flat rate from the line down killed anybody who crossed it and
+            // then ate: at five health a day a body that fell to 0.45 of its
+            // reserve and was climbing back died on a clock of its own - three
+            // weeks, whatever it ate. Traced through a second winter: a parent
+            // standing on a pit of three hundred items, eating, the reserve
+            // going 0.38 to 0.49, health going 82 to nought in sixteen days.
+            // Nothing at the line and the whole rate at empty: going without
+            // altogether still ends at an empty reserve on the same day it
+            // always did. See ISSUES_FOUND #255.
+            let past_the_line = 1.0 - self.physiology.what_this_body_has_spare() / physiology::WASTING_BELOW;
+            self.lose_health(0.1 / reserve * past_the_line.clamp(0.0, 1.0), Self::HUNGER);
         }
 
         // Energy depletion (normal metabolism), made worse by working thirsty.

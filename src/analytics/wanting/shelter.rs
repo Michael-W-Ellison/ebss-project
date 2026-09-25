@@ -627,21 +627,30 @@ impl Simulation {
         }
 
         // Anything with teeth near one of them brings a parent at a run
-        let hunted = mine.iter().find(|child| {
-            self.world
-                .get_animals_in_radius((child.0, child.1), Self::DANGER_TO_A_CHILD as f32)
-                .into_iter()
-                .any(|animal| {
-                    animal.is_alive()
-                        && !animal.is_domesticated
-                        && self
-                            .world
-                            .animals
-                            .get_species(&animal.species_id)
-                            .map(|species| !species.prey_species.is_empty())
-                            .unwrap_or(false)
-                })
-        });
+        // A child already at this one's feet is as guarded as walking can
+        // make it. Going to it was a `Move` to the tile underfoot, which the
+        // walker books as done - and this branch sits above eating, so for as
+        // long as a wolf hung about, a parent did nothing else. Traced
+        // through a second winter: eight days of it, the reserve falling from
+        // 0.60 to 0.43, standing on a pit. See ISSUES_FOUND #255.
+        let hunted = mine
+            .iter()
+            .filter(|child| (child.0, child.1) != (agent_position.0, agent_position.1))
+            .find(|child| {
+                self.world
+                    .get_animals_in_radius((child.0, child.1), Self::DANGER_TO_A_CHILD as f32)
+                    .into_iter()
+                    .any(|animal| {
+                        animal.is_alive()
+                            && !animal.is_domesticated
+                            && self
+                                .world
+                                .animals
+                                .get_species(&animal.species_id)
+                                .map(|species| !species.prey_species.is_empty())
+                                .unwrap_or(false)
+                    })
+            });
 
         if let Some(child) = hunted {
             return Some(Action::Move {
