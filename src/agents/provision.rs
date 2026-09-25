@@ -138,6 +138,47 @@ pub fn how_long_the_land_gives_nothing() -> u32 {
     })
 }
 
+/// The day of the year the hungry gap begins: the first day of the run
+/// `how_long_the_land_gives_nothing` measures.
+pub fn when_the_land_stops_giving() -> u32 {
+    use crate::environment::seasons::DAYS_PER_YEAR;
+    static ANSWER: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+
+    *ANSWER.get_or_init(|| {
+        let gap = how_long_the_land_gives_nothing();
+        let mut running = 0;
+        for day in 0..(DAYS_PER_YEAR * 2) {
+            running = if is_anything_bearing_on(day % DAYS_PER_YEAR) {
+                0
+            } else {
+                running + 1
+            };
+            if day >= DAYS_PER_YEAR && running == gap {
+                return (day + 1 + DAYS_PER_YEAR - gap) % DAYS_PER_YEAR;
+            }
+        }
+        0
+    })
+}
+
+/// The hungry gap ahead of somebody standing on this day of the year: how
+/// many days until it begins, and how many days of it are still to come.
+///
+/// Inside it, it has already begun and what is to come is what is left of
+/// it. Outside it, the whole of the next one is to come.
+pub fn the_gap_ahead(day_of_year: u32) -> (u32, u32) {
+    use crate::environment::seasons::DAYS_PER_YEAR;
+
+    let gap = how_long_the_land_gives_nothing();
+    let starts = when_the_land_stops_giving();
+    let since_it_started = (day_of_year % DAYS_PER_YEAR + DAYS_PER_YEAR - starts) % DAYS_PER_YEAR;
+    if since_it_started < gap {
+        (0, gap - since_it_started)
+    } else {
+        (DAYS_PER_YEAR - since_it_started, gap)
+    }
+}
+
 /// Whether anything a person can eat is growing anywhere on this day.
 pub fn is_anything_bearing_on(day_of_year: u32) -> bool {
     crate::world::ResourceType::all()
@@ -267,6 +308,10 @@ pub struct WhatIsPutBy {
     /// asking "what would still be here in a month" has to be able to take it
     /// back off again. Nought unless somebody says otherwise.
     pub units_in_the_body: f32,
+    /// The day of the year this was reckoned on, which is what anything
+    /// asking "how much of the hungry gap is still ahead" needs.
+    #[serde(default)]
+    pub day_of_year: u32,
 }
 
 impl WhatIsPutBy {
@@ -283,6 +328,7 @@ impl WhatIsPutBy {
             how_near_winter,
             rung: HowLongTheFoodLasts::reckon(days_in_hand, winter_days, how_near_winter),
             units_in_the_body: 0.0,
+            day_of_year,
         }
     }
 

@@ -155,6 +155,60 @@ fn a_child_waits_on_a_surplus_and_not_on_a_full_stomach() {
     );
 }
 
+/// A child is charged to the winter it will live through.
+///
+/// A pregnancy is nine months. Conceived as the land stops giving, a child is
+/// born the next autumn and never sees the winter its parent is putting by
+/// for, so what that parent needs in hand is their own winter and no more.
+/// Conceived in spring, a child is born into the gap and eats through the end
+/// of it, and its share is asked for. See ISSUES_FOUND #255.
+#[test]
+fn a_child_is_charged_to_the_winter_it_lives_through() {
+    use crate::agents::pregnancy::DAYS_A_PREGNANCY_LASTS;
+    use crate::agents::provision::{how_long_the_land_gives_nothing, the_gap_ahead, when_the_land_stops_giving, WhatIsPutBy};
+    use crate::environment::seasons::DAYS_PER_YEAR;
+
+    let gap = how_long_the_land_gives_nothing();
+    let starts = when_the_land_stops_giving();
+    assert_eq!(the_gap_ahead(starts), (0, gap), "on its first day the whole gap is ahead");
+    assert_eq!(the_gap_ahead(starts + 10), (0, gap - 10), "and ten days in, ten are behind");
+    assert_eq!(
+        the_gap_ahead(starts + gap),
+        (DAYS_PER_YEAR - gap, gap),
+        "and the day it ends, the next is a year off its start"
+    );
+
+    let parent = fed_adult();
+    let a_day = parent.state.physiology.what_i_burn_in_a_day;
+    let their_own_winter = a_day * gap as f32;
+    let with_a_childs_share = their_own_winter
+        + a_day * crate::agents::agent::what_a_body_this_age_eats(0) * gap as f32;
+    let with = |units: f32, day: u32| {
+        let mut agent = fed_adult();
+        agent.state.what_the_larder_says = Some(WhatIsPutBy::reckon(units, a_day, 90.0, day));
+        agent.enough_put_by_for_a_child()
+    };
+
+    // Conceived the day before the gap: born long after it.
+    let autumn = (starts + DAYS_PER_YEAR - 1) % DAYS_PER_YEAR;
+    assert!(
+        with(their_own_winter * 1.01, autumn),
+        "a child conceived in autumn was charged a winter it is not alive for"
+    );
+    assert!(
+        !with(their_own_winter * 0.9, autumn),
+        "and less than the parent's own winter still will not do"
+    );
+
+    // Conceived so it is born on the gap's first day: its share of the whole.
+    let born_into_it = (starts + DAYS_PER_YEAR - DAYS_A_PREGNANCY_LASTS % DAYS_PER_YEAR) % DAYS_PER_YEAR;
+    assert!(
+        !with(their_own_winter * 1.01, born_into_it),
+        "a child born into the gap eats through it"
+    );
+    assert!(with(with_a_childs_share * 1.01, born_into_it));
+}
+
 /// A famine takes the young before it takes the grown.
 #[test]
 fn a_hungry_year_takes_the_children_first() {
