@@ -452,6 +452,51 @@ fn a_man_with_room_for_a_root_is_offered_the_pit_and_gets_one() {
     );
 }
 
+/// And rot is not ballast.
+///
+/// The fixture above fills the pack with fresh meat, which is rightly kept.
+/// The same pack full of meat that has gone over was kept too, because
+/// `what_i_would_set_down` never offered food of any kind - and traced through
+/// a settlement's winter that was a man with seventy-eight spoiled legumes and
+/// no room, walking between two full pits a pace apart until he starved. What
+/// cannot be eaten is the first thing to go. See ISSUES_FOUND #252.
+#[test]
+fn a_pack_full_of_rot_makes_room_for_the_larder() {
+    let mut simulation = a_starving_man_on_a_pit_of_roots(0.5);
+    if let Some(meat) = simulation.population.agents[0]
+        .inventory
+        .get_all_items_mut()
+        .get_mut("meat")
+    {
+        if let Some(ref mut food) = meat.food_data {
+            food.freshness = 0.0;
+        }
+    }
+
+    assert_eq!(
+        simulation.population.agents[0].what_i_would_set_down().as_deref(),
+        Some("meat"),
+        "a stack gone past eating should be the first thing out of the pack"
+    );
+
+    let agent = simulation.population.agents[0].clone();
+    let here = agent.state.position;
+    let what = simulation.something_out_of_the_store(&agent, here);
+    let Some(Action::PickUp { what }) = what else {
+        panic!("standing on a pit of roots with a pack of rot, he was not offered the pit: {what:?}");
+    };
+
+    let result = simulation.execute_action(&Action::PickUp { what }, 0);
+    assert!(result.success, "and the executor refused him: {:?}", result.message);
+    assert!(
+        simulation.population.agents[0]
+            .inventory
+            .get_item("roots")
+            .is_some_and(|got| got.quantity > 0),
+        "the rot went and no roots came in"
+    );
+}
+
 /// And the bush does not grow back what he ate off it.
 ///
 /// `gathering` takes the crop off the node before it asks whether there is

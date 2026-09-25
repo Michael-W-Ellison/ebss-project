@@ -20041,3 +20041,134 @@ nothing changes nothing. Release build, ms a simulated day:
 The empty map is 2.8 times quicker. A settled map does not move: at 800 cells
 its time is the animals and the people, not the sweep. The animals' turn is
 what is left to look at.
+
+### 252. Settlements came through their first winter with food still in the ground: rot in the pack, shelter before supper, and scaffolding walls
+
+"Can settlements exist over multiple generations? This is a requirement."
+
+They could not. Twelve seeded settlements of twelve, animals in, two years
+each (release build):
+
+| | end of year 1 | end of year 2 | empty by month 24 | births |
+|---|---|---|---|---|
+| before | 14 people | 5 | 7 of 12 | 8, none alive at the end |
+
+Every one of them died the same way. Population held at about twelve for six
+months, then starved in months 10 to 12 - **with 2,400 to 6,000 items still
+in the pits**. The pits fell by 400 to 1,000 items a month while ten people
+needed about 3,500; people ate 450 to 800 energy a day against a burn of
+1,440, and the reserve covered the gap for about forty days. The breeding gate
+("could not feed a child") refused about 90% of every adult turn, so almost
+nobody was born, and the few that were did not see the spring.
+
+Traced person by person, three separate faults stood between a starving body
+and a full larder.
+
+#### 1. Rotten food was never put down
+
+`Agent::what_i_would_set_down` never offered food, rotten or not. A harvest
+that turned in the pack stayed in the pack, and a full pack cannot take a
+handful out of a pit. So `could_i_take_another_handful` said no, the store
+branch passed over the pit underfoot and sent the man to the next pit he
+remembered - and that one sent him back. Traced: **seventy-eight spoiled
+legumes** in a 42-weight pack, a pit of three hundred fresh items under his
+feet, and a walk between two full pits a pace apart, every turn, until he
+starved. People under half their reserve spent **five decisions in six on
+`Move`**, nearly all of it towards a pit.
+
+Food past eating (spoiled or harmful) is now the first thing set down, heaviest
+first, by the same function the decision and the executor both ask. It lands
+where he stands and goes into the ground. A farmer who manures still has
+whatever rot he had no need to drop.
+
+#### 2. Shelter took every turn from a hungry man with supper in his pack
+
+The shelter override fires on being cold at all, and in the hungry gap
+everybody is cold every turn. The existing carve-out let a body reach the store
+only once it was on the last quarter of its reserve *and* had nothing to eat.
+Above that line the override took every turn - including from somebody with a
+meal in the pack, and huddling does not end the cold that chose it. Traced: a
+man on 28% of his reserve walked to a pit, arrived with room to spare, and was
+sent to the roof before he lifted anything out, turn after turn.
+
+Now a body whose Hunger drive is active eats what it carries, or with nothing
+to eat gets something out of a store it knows of (whose own rules still decide
+whether it is the season for opening it), and only then goes in out of the
+cold. The notes against narrowing the shelter rule (#228, #233) are kept: this
+does not narrow it. It puts eating, which is a single turn and can be done
+under a roof, in front of it for somebody hungry.
+
+#### 3. Unfinished buildings were walls
+
+`Simulation::is_passable_tile` refused any building site not yet finished, as
+scaffolding. A settlement starts shelters all round where it lives. Traced:
+somebody on a hillside between three begun-and-abandoned burrows and a river,
+**no way out of the tile they stood on**, refused a step 14,560 times towards a
+larder eight paces off. About 29,000 refused `Move`s a year across the twelve
+worlds were this. A site is somewhere you can walk across now.
+
+#### And a fourth that is not about winter: tasting while unwell
+
+A strange plant that is poison does 12 to 55 damage, "the high end kills
+somebody who was not in good condition to start with". Nothing asked what
+condition the taster was in, and a winter leaves everybody in poor condition:
+**eighteen people in twelve settlement-years died of a mouthful**, one and a
+half per settlement a year. Tasting now waits until the taster could take the
+worst plant there is and still stand (`WELL_ENOUGH_TO_RISK_IT` = 70 health), on
+both paths that choose it. Plant deaths went to nought.
+
+#### Measured
+
+Same twelve seeds, animals in, two years each, with #253's nine-month
+pregnancy:
+
+| | end of year 1 | end of year 2 | empty by month 24 |
+|---|---|---|---|
+| before | 14 | 5 | 7 of 12 |
+| after | 51 | 20 | 4 of 12 |
+
+Winter intake rose from 450-800 energy a day to 600-1,000, and draws from the
+store from 2.5-5 items a person-day to 4-15. **It is not enough.** People still
+starve through the gap, only more slowly; settlements still shrink every year;
+and nobody is yet born who lives. What is left, in order:
+
+- **Walking to far pits.** Most of a thin body's turns are still walks to pits
+  4 to 15+ paces off. `pits_i_remember` puts a man's own pit and his kin's
+  before a nearer stranger's, whatever the distance.
+- **The breeding gate.** It asks for enough put by to see a parent and a
+  newborn through the 75-day gap: about 130,000 units each. A settlement of
+  twelve peaks at 5,000 to 8,000 items in the ground, around half of that.
+  As decided, the gate stays and the food has to rise to meet it.
+
+#### "A blow" is not what killed them
+
+`process_deaths` names a death by `what_took_the_most` - whatever took the
+most health over the whole life - not by the final hit. A man mauled in the
+spring who starves in the winter is booked as "a blow". Tallied at the damage
+sites themselves, killing blows are about ten a year across the twelve worlds
+(fights with animals, and between people); the forty-odd "a blow" deaths a year
+were mostly hunger finishing people an earlier injury had worn down. Worth
+remembering before reading the death table as violence.
+
+### 253. A pregnancy lasted thirteen hours
+
+`PREGNANCY_DURATION` was `800`, compared against the population's clock, which
+counts ticks (thirty a turn). Eight hundred ticks is thirteen and a third
+hours: a pair conceived after breakfast and the child was born before dawn.
+The mother's `reproduction_cooldown` of `800`, "full pregnancy duration", is
+counted a turn at a time and so came to sixteen days. Neither was ever on the
+calendar; #218 listed the cooldown among the bare durations and left it.
+
+Decided: about nine months. `PREGNANCY_DURATION` is now
+`DAYS_A_PREGNANCY_LASTS` (270) days in ticks. The carrier's cooldown is gone,
+since the pregnancy itself keeps them out of the next round for as long as it
+lasts; the other parent keeps their couple of days. The pregnancy unit tests
+are written against the duration rather than against 800, and
+`a_pregnancy_lasts_about_nine_months` holds it there.
+
+What it costs a settlement is what a child should cost: a body carrying at
+1.3 times its burn and slowing in the last half, for most of a year, which
+means through a winter. Over the two-year runs of #252 every pregnancy that
+began ended with the carrier dead before term. That is #252's shortfall of food
+showing up in the one place that needs the most of it, not a fault in this
+number.

@@ -1203,9 +1203,13 @@ impl Population {
                             // Store pregnancy info to apply after iteration
                             new_offspring.push((carrier_idx, pregnancy, mother_id, father_id, pos));
 
-                            // Add cooldown (prevent immediate re-reproduction)
-                            self.reproduction_cooldown.insert(mother_id, 800); // Full pregnancy duration
-                            self.reproduction_cooldown.insert(father_id, 100); // Short cooldown for males
+                            // The one carrying is kept out of the next round by
+                            // the pregnancy itself, for as long as it lasts. The
+                            // `800` that stood here for it was sixteen days,
+                            // counted a turn at a time, against a pregnancy of
+                            // nine months - see `PREGNANCY_DURATION`. The other
+                            // is out of it for a couple of days.
+                            self.reproduction_cooldown.insert(father_id, 100);
                         }
                     }
                 }

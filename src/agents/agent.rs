@@ -2337,6 +2337,45 @@ impl Agent {
     }
 
     pub fn what_i_would_set_down(&self) -> Option<String> {
+        // Food that has gone past eating goes before anything else.
+        //
+        // Food was never set down, rotten or not, so a pack that filled with
+        // a harvest that turned stayed full of it. Traced through a
+        // settlement's winter: a man standing on a pit of three hundred fresh
+        // items with **seventy-eight spoiled legumes** filling all but three
+        // of his forty-two, nothing he would put down, and so no room for a
+        // handful of anything. Every turn the store branch passed over the
+        // pit under his feet and sent him to the next one, and the next one
+        // sent him back - he walked between two full larders a pace apart
+        // until he starved. People on the last quarter of their reserve spent
+        // **five turns in six walking**, almost all of it towards a pit.
+        //
+        // What cannot be eaten is worth less than anything else in the pack.
+        // It goes on the ground where he stands and rots into it, which is
+        // where a midden's worth of it was going to end up anyway; somebody
+        // who manures a field still has whatever of it he had no need to
+        // shed. See ISSUES_FOUND #252.
+        let past_eating = self
+            .inventory
+            .get_all_items()
+            .iter()
+            .filter(|(_, item)| item.quantity > 0)
+            .filter(|(_, item)| {
+                item.food_data
+                    .as_ref()
+                    .is_some_and(|food| food.is_spoiled() || food.is_harmful())
+            })
+            .max_by(|a, b| {
+                let load = |item: &InventoryItem| item.quantity as f32 * item.what_one_of_them_weighs();
+                load(a.1)
+                    .partial_cmp(&load(b.1))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(name, _)| name.clone());
+        if past_eating.is_some() {
+            return past_eating;
+        }
+
         self.inventory
             .get_all_items()
             .iter()

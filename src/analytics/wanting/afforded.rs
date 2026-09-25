@@ -440,7 +440,10 @@ impl Simulation {
             "tendfield" => Action::TendField,
             "excavate" => Action::Excavate,
             "freeze" => Action::Freeze,
-            "taste" => Action::Taste,
+            // The same condition the tasting branch sets: well enough that
+            // the worst plant there is leaves you standing.
+            "taste" if agent.state.health >= Self::WELL_ENOUGH_TO_RISK_IT => Action::Taste,
+            "taste" => return None,
             "setsnare" => Action::SetSnare,
             "checksnares" => Action::CheckSnares,
             "spreadmuck" => Action::SpreadMuck,

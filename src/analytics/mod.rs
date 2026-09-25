@@ -1329,12 +1329,21 @@ impl Simulation {
             }
         }
 
-        // A finished building is somewhere to go, not an obstacle: agents take
-        // shelter by standing in one, so refusing to walk onto its tile makes
-        // shelter unreachable by any route the pathfinder will take. A site
-        // still under construction is scaffolding, and does block.
-        if let Some(building) = self.world.get_building_at(&pos) {
-            return building.is_completed();
+        // A building is somewhere to go, not an obstacle: agents take shelter
+        // by standing in one, so refusing to walk onto its tile makes shelter
+        // unreachable by any route the pathfinder will take.
+        //
+        // **And so is one still going up.** A site used to block, as
+        // scaffolding, and a settlement starts its shelters all round the
+        // place it lives: traced through a winter, somebody stood on a
+        // hillside between three burrows that had been begun and never
+        // finished and a river on the fourth side, with **no way out of the
+        // one tile they were on**, and spent 14,560 turns being refused a step
+        // towards a larder eight paces away until they starved. A half-dug
+        // burrow is a hole you can climb across, and a half-built house is a
+        // floor. See ISSUES_FOUND #252.
+        if self.world.get_building_at(&pos).is_some() {
+            return true;
         }
 
         // Resources sit on the ground rather than walling it off - a berry

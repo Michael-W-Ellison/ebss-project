@@ -167,7 +167,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // on was a pool its neighbours drew down and is its terrain's grade, and
     // no daily pass rots litter across the map. A different country from
     // turn nought is a different set of draws from turn nought.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 9_461;
+    // And down a quarter for #252. Two and a half days is long enough to
+    // see it: a man who stepped round a half-built burrow now walks over it,
+    // somebody hungry eats before he huddles, and a pack of rot is emptied to
+    // make room for supper - each a different turn from the first morning.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_043;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -303,7 +307,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // in the first two and a half days is chosen from past what a man can
     // see. Over a year the search for the best food anywhere is what moves,
     // because it read the whole map and now reads a man's memory.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 625_350;
+    // And up 1.2% for #252 and #253: people get into the stores through the
+    // winter and out of the rot in their packs, fewer die of a strange plant,
+    // and a pregnancy lasts nine months rather than a night.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 633_099;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

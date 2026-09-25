@@ -576,6 +576,11 @@ impl Simulation {
     /// per turn of the walk and meant nobody in eight worlds ever arrived.
     pub(in crate::analytics) const HOW_OFTEN_ANYBODY_RISKS_IT: f64 = 0.06;
 
+    /// How well somebody has to be to try a strange plant: well enough that
+    /// the worst one there is leaves them standing.
+    pub(in crate::analytics) const WELL_ENOUGH_TO_RISK_IT: f32 =
+        Self::WHAT_A_BAD_PLANT_DOES.1 + 15.0;
+
     /// Trying an unknown plant.
     pub(in crate::analytics) fn tasting_action(
         &self,
@@ -589,6 +594,20 @@ impl Simulation {
         // plant is a different story and a worse one; this is the idle
         // curiosity that finds things out cheaply.
         if !agent.immediate_needs_met() {
+            return None;
+        }
+
+        // Nor by somebody who is not well. The worst a plant does is what
+        // `WHAT_A_BAD_PLANT_DOES` says, and it was written so that the top of
+        // it "kills somebody who was not in good condition to start with" -
+        // but nothing asked what condition the taster was in, and a winter
+        // leaves everybody in poor condition. Over twelve settlement-years,
+        // **eighteen people died of a mouthful of something strange**, one
+        // and a half a settlement a year: an eighth of a people of twelve,
+        // every year, to idle curiosity. Somebody well enough that the worst
+        // plant there is leaves them standing tries things; somebody who is
+        // not, waits. See ISSUES_FOUND #252.
+        if agent.state.health < Self::WELL_ENOUGH_TO_RISK_IT {
             return None;
         }
 
