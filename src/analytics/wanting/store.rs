@@ -283,6 +283,21 @@ impl Simulation {
             < Self::WHAT_IS_LEFT_WHEN_A_BODY_IS_LIVING_ON_ITSELF
     }
 
+    /// Whether this one has a small child of their own, fed through their
+    /// body, getting less than a whole share of it.
+    pub(in crate::analytics) fn a_child_of_mine_is_going_short(&self, agent: &crate::agents::Agent) -> bool {
+        let belly = agent.state.physiology.what_this_body_has_spare();
+        if Self::what_share_a_small_child_gets(belly) >= 1.0 {
+            return false;
+        }
+
+        self.population.agents.iter().any(|child| {
+            child.state.is_alive
+                && child.parent_ids.contains(&agent.id)
+                && child.state.years_old() <= Self::FED_WITHOUT_ASKING_UNTIL
+        })
+    }
+
     /// The share of a reserve below which a body is spending itself.
     pub(in crate::analytics) const WHAT_IS_LEFT_WHEN_A_BODY_IS_LIVING_ON_ITSELF: f32 = 0.25;
 
@@ -747,9 +762,20 @@ impl Simulation {
         // 0.69 of their reserve and losing health, beside pits holding 7,932
         // items that did not move by one from day 30 to day 210 - and both
         // dead of hunger with them still full. See ISSUES_FOUND #255.
+        //
+        // **And nor is a parent whose small child is going short.** A child
+        // under six is fed through its parent's body and gets less than a
+        // full share as soon as the parent is under four-fifths of their own
+        // reserve (`what_share_a_small_child_gets`). A parent eating for two
+        // or three off the hedgerows sits there all autumn: traced, eleven
+        // adults with eleven small children between them at 0.69 to 0.76 of
+        // their reserve, beside 10,962 items in the ground, and the children
+        // on three-quarter rations dying of it through the winter. A larder
+        // is exactly what feeding a child is for. See ISSUES_FOUND #255.
         if self.are_the_hedgerows_bearing()
             && !Self::is_the_body_eating_itself(agent)
             && !agent.state.physiology.is_wasting()
+            && !self.a_child_of_mine_is_going_short(agent)
             && !agent.state.is_starving()
             && !agent.nutrition.is_starving()
         {

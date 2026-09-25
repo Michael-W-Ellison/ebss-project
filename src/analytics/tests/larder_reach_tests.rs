@@ -215,3 +215,46 @@ fn a_bare_country_still_leaves_the_larder() {
         other => panic!("neither the pit nor a walk to it: {other:?}"),
     }
 }
+
+/// A parent whose small child is on short rations opens the larder in any
+/// season.
+///
+/// The store is kept shut while the hedgerows bear, and a small child is fed
+/// through its parent's body at less than a full share as soon as the parent
+/// is under four-fifths of their reserve. So a parent eating for two off the
+/// hedge sat at seven-tenths all autumn beside a full larder, and the child
+/// went on three-quarter rations into the winter. See ISSUES_FOUND #255.
+#[test]
+fn a_parent_whose_child_is_going_short_opens_the_larder_in_summer() {
+    use crate::agents::Agent;
+
+    let mut simulation = one_bush_and_a_full_pit((30, 0));
+    simulation.world.climate.calendar.day_of_year = 150;
+    assert!(simulation.are_the_hedgerows_bearing(), "the fixture wants the hedgerows bearing");
+
+    let capacity = simulation.population.agents[0].state.physiology.reserve_capacity;
+    simulation.population.agents[0].state.physiology.reserve = capacity * 0.7;
+    simulation.population.agents[0].state.energy = 100.0;
+    if let Some(hunger) = simulation.population.agents[0].drives.get_mut(DriveType::Hunger) {
+        hunger.value = 0.0;
+    }
+    // Breakfast in them, so that nobody is acutely starving and the only
+    // question is the reserve.
+    simulation.population.agents[0].state.physiology.eat(100.0, 1.0);
+
+    let agent = simulation.population.agents[0].clone();
+    let here = agent.state.position;
+    assert!(
+        simulation.something_out_of_the_store(&agent, here).is_none(),
+        "somebody at seven-tenths with nobody to feed keeps the summer larder shut"
+    );
+
+    let mut child = Agent::with_parents(AgentConfig::default(), vec![agent.id], simulation.current_turn);
+    child.state.position = here;
+    simulation.population.agents.push(child);
+
+    assert!(
+        simulation.something_out_of_the_store(&agent, here).is_some(),
+        "a parent at seven-tenths, and so a child on three-quarter rations, was kept out of a full larder"
+    );
+}
