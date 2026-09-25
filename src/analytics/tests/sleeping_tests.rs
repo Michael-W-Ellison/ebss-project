@@ -160,3 +160,131 @@ fn the_ground_near_somebody_stays_awake() {
     }
     assert!(world.how_many_are_asleep() > 0, "and the far corners sleep");
 }
+
+/// Everybody remembers food in far country - further off than anything stays
+/// awake - so the search for the best food anywhere reads nodes that are
+/// asleep. A node is brought up to date before anybody decides with it in
+/// mind, so the settlement decides exactly as it would have with nothing
+/// asleep. See ISSUES_FOUND #251.
+#[test]
+fn remembering_far_country_decides_the_same_as_if_it_never_slept() {
+    const TURNS: usize = 60 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as usize;
+
+    let remembering_far_country = |sleeping: bool| {
+        let mut simulation = a_settlement_on_a_big_map(7, sleeping);
+        let far_food: Vec<(crate::world::Position, crate::world::ResourceType)> = simulation
+            .world
+            .resources
+            .iter()
+            .filter(|node| node.resource_type.is_edible())
+            .map(|node| (node.position, node.resource_type))
+            .collect();
+        for agent in &mut simulation.population.agents {
+            let (x, y, _) = agent.state.position;
+            for (at, what) in &far_food {
+                let far = (at.x - x).abs() > crate::world::sleeping::FAR_ENOUGH_TO_SLEEP
+                    || (at.y - y).abs() > crate::world::sleeping::FAR_ENOUGH_TO_SLEEP;
+                if far {
+                    agent.exploration_knowledge.discover_resource(*at, *what, 0);
+                }
+            }
+        }
+        simulation
+    };
+
+    let mut awake = remembering_far_country(false);
+    let rolled_before = crate::core::dice::draws_taken();
+    for _ in 0..TURNS {
+        awake.take_a_turn();
+    }
+    let rolled_awake = crate::core::dice::draws_taken() - rolled_before;
+
+    let mut slept = remembering_far_country(true);
+    let rolled_before = crate::core::dice::draws_taken();
+    for _ in 0..TURNS {
+        slept.take_a_turn();
+    }
+    let rolled_slept = crate::core::dice::draws_taken() - rolled_before;
+
+    assert_eq!(rolled_slept, rolled_awake, "the sleeping world rolled differently");
+    assert_eq!(everybody(&slept), everybody(&awake), "and its people are not the same people");
+
+    slept.world.wake_everything();
+    assert_eq!(every_node(&slept.world), every_node(&awake.world));
+}
+
+/// One patch in far country, stripped bare, and a man two hundred cells off
+/// who remembers it. While nobody is near, it sleeps through the weeks it
+/// would have borne again, and read as it stands it is still bare: he would
+/// not set out for it. Woken before he makes up his mind, it is what it would
+/// have been in a world where nothing slept, and he sets out for it as he
+/// would have there.
+#[test]
+fn a_far_patch_he_remembers_is_read_as_it_stands_today() {
+    use crate::world::{Position, ResourceNode, ResourceType};
+
+    const HERE: (i32, i32) = (10, 10);
+    let far_patch = Position::new(290, 290);
+    let days = 40;
+
+    let the_country = |sleeping: bool| {
+        crate::core::dice::seed(3);
+        let mut world = World::new(WorldConfig::default().with_size(320, 320));
+        world.nobody_sleeps = !sleeping;
+        world.resources.clear();
+        let mut patch = ResourceNode::new(ResourceType::Food, far_patch, 60);
+        patch.amount = 0;
+        world.resources.push(patch);
+        world.file_the_nodes();
+        // From the first day the berries come on, so that there is something
+        // for it to have borne while it slept.
+        let the_berries_come_on = (0..crate::environment::seasons::DAYS_PER_YEAR)
+            .find(|&day| {
+                ResourceType::Food.is_it_bearing(day)
+                    && !ResourceType::Food.is_it_bearing(
+                        (day + crate::environment::seasons::DAYS_PER_YEAR - 1)
+                            % crate::environment::seasons::DAYS_PER_YEAR,
+                    )
+            })
+            .expect("berries bear some time in the year");
+        world.climate.calendar.day_of_year = the_berries_come_on;
+        for _ in 0..(days * crate::environment::seasons::PLANNING_PERIODS_PER_DAY) {
+            world.people_are_at(vec![HERE]);
+            world.take_a_turn();
+        }
+
+        let mut population = Population::new();
+        population.spawn_agent(AgentConfig::default());
+        let mut simulation = Simulation::new(world, population);
+        let agent = &mut simulation.population.agents[0];
+        agent.state.position = (HERE.0, HERE.1, 0);
+        agent.exploration_knowledge.known_resources.clear();
+        agent
+            .exploration_knowledge
+            .discover_resource(far_patch, ResourceType::Food, 0);
+        simulation
+    };
+
+    let awake = the_country(false);
+    let mut slept = the_country(true);
+    let here = (HERE.0, HERE.1, 0);
+
+    // The fixture is only worth anything if sleeping left it behind.
+    assert!(slept.world.resources[0].asleep_since.is_some(), "the far patch should be asleep");
+    assert_eq!(slept.world.resources[0].amount, 0, "asleep, it is as bare as it fell asleep");
+    assert!(
+        awake.world.resources[0].amount > 0,
+        "and awake it has borne again in {days} days - pick a better season"
+    );
+    let he_would = awake.the_best_food_anywhere(&awake.population.agents[0].clone(), here);
+    assert_eq!(he_would, Some(far_patch), "with nothing asleep he sets out for it");
+    assert_eq!(
+        slept.the_best_food_anywhere(&slept.population.agents[0].clone(), here),
+        None,
+        "read asleep, it is bare"
+    );
+
+    slept.wake_what_this_one_remembers(0);
+    assert_eq!(slept.world.resources[0].amount, awake.world.resources[0].amount);
+    assert_eq!(slept.the_best_food_anywhere(&slept.population.agents[0].clone(), here), he_would);
+}

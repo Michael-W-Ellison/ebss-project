@@ -306,6 +306,7 @@ impl Simulation {
             let armful = Self::what_a_trip_brings_back(here, today, rng);
             self.looking_at_the_crop(agent_index, food_index);
             let harvested = self.world.resources[food_index].harvest(armful);
+            self.world.did_that_empty_it(food_index);
 
             if harvested > 0 {
                 let agent = &mut self.population.agents[agent_index];
@@ -827,6 +828,7 @@ impl Simulation {
         let feeds_you = self.world.does_this_one_feed_you(kind);
 
         self.world.resources[index].harvest(1);
+        self.world.did_that_empty_it(index);
 
         let agent = &mut self.population.agents[agent_index];
         agent.now_i_know_that_plant(kind, feeds_you);

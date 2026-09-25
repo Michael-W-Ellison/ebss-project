@@ -38,10 +38,9 @@ use crate::environment::seasons::Season;
 ///
 /// A place somebody *remembers* can be further off than that - the search for
 /// the best food anywhere goes as far as a man's memory does - and a node that
-/// far off may be asleep, so it is read as it stood when it fell asleep rather
-/// than as it stands today. Which is roughly what the man remembers of it; but
-/// it is the one way a sleeping node can make a decision come out differently
-/// from a world where nothing sleeps. See ISSUES_FOUND #250.
+/// far off may be asleep. So everything a person remembers is brought up to
+/// today before they decide anything (`World::wake_the_nodes_at`), and is read
+/// as it would have stood had it never slept. See ISSUES_FOUND #250 and #251.
 pub const FAR_ENOUGH_TO_SLEEP: i32 = 128;
 
 /// The side of the patches of map that are woken or left asleep together.

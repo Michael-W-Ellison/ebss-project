@@ -62,6 +62,7 @@ pub mod soil_ladder_tests;
 pub mod sleeping_tests;
 pub mod node_index_tests;
 pub mod knowing_where_things_are_tests;
+pub mod worked_out_tests;
 pub mod sickness_tests;
 mod full_pack_tests;
 mod larder_reach_tests;

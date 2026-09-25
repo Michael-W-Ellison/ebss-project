@@ -248,6 +248,13 @@ pub struct World {
     #[serde(skip)]
     where_the_nodes_are: node_index::WhereTheNodesAre,
 
+    /// Whether anything is known to have run out since the list was last
+    /// swept for worked-out seams. Not having looked - a world just built or
+    /// loaded - counts as something having run out. See
+    /// `remove_depleted_resources`.
+    #[serde(skip)]
+    pub(crate) swept_since_anything_ran_out: bool,
+
     /// Which sorts of strange plant feed a person in this world, by kind.
     ///
     /// Drawn once when the country is made and never shown to anybody living
@@ -1256,6 +1263,7 @@ impl World {
             where_people_are: None,
             nobody_sleeps: false,
             where_the_nodes_are: node_index::WhereTheNodesAre::default(),
+            swept_since_anything_ran_out: false,
         };
 
 
@@ -1995,20 +2003,66 @@ impl World {
         });
 
         self.file_the_nodes();
+        self.swept_since_anything_ran_out = true;
+    }
+
+    /// Sweep for worked-out seams, if anything has run out since the last
+    /// sweep.
+    ///
+    /// The sweep walked every node on the map every turn - 37 ms of every
+    /// simulated day on a 1,600-cell map with nobody in it (ISSUES_FOUND #249)
+    /// - to find what can only be found where somebody has been digging. What
+    /// renews stays when it is emptied, and nothing but a pair of hands takes
+    /// the last of what does not: so the world is told when a hand empties
+    /// something (`did_that_empty_it`), and sweeps then.
+    fn sweep_if_anything_ran_out(&mut self) {
+        if !self.swept_since_anything_ran_out {
+            self.remove_depleted_resources();
+            return;
+        }
+
+        debug_assert!(
+            !self.resources.iter().any(|r| r.amount == 0 && !r.is_renewable()),
+            "something ran out that nobody told the world about - whatever \
+             emptied it has to ask `World::did_that_empty_it`"
+        );
+    }
+
+    /// Whether taking from this node just now took the last of something
+    /// that does not come back. If it did, the world sweeps for it at the
+    /// end of the turn. Asked by whatever takes from a node.
+    pub fn did_that_empty_it(&mut self, number: usize) -> bool {
+        let emptied = self
+            .resources
+            .get(number)
+            .is_some_and(|node| node.amount == 0 && !node.is_renewable());
+        if emptied {
+            self.swept_since_anything_ran_out = false;
+        }
+        emptied
     }
 
     // ===== Where the nodes are =====
 
     /// Refile the nodes by where they stand, if the file has fallen out of
     /// step with the list. See `world::node_index`.
+    ///
+    /// A list that has changed behind the file's back may have changed in any
+    /// way at all, including something in it having run out, so it is swept
+    /// as well at the end of the turn.
     pub fn file_the_nodes(&mut self) {
         if !self.where_the_nodes_are.is_it_up_to_date(&self.resources) {
-            self.where_the_nodes_are = node_index::WhereTheNodesAre::file(
-                &self.resources,
-                self.grid.width,
-                self.grid.height,
-            );
+            self.refile();
+            self.swept_since_anything_ran_out = false;
         }
+    }
+
+    fn refile(&mut self) {
+        self.where_the_nodes_are = node_index::WhereTheNodesAre::file(
+            &self.resources,
+            self.grid.width,
+            self.grid.height,
+        );
     }
 
     /// Put a new node on the map, and file it. Returns its number.
@@ -2018,15 +2072,16 @@ impl World {
             self.where_the_nodes_are.another(&node);
         }
         self.resources.push(node);
-        self.resources.len() - 1
+        let number = self.resources.len() - 1;
+        self.did_that_empty_it(number);
+        number
     }
 
     /// Take a node off the map. Every node after it moves up one, so the file
     /// is made again.
     pub fn take_a_node_up(&mut self, number: usize) -> ResourceNode {
         let node = self.resources.remove(number);
-        self.where_the_nodes_are = node_index::WhereTheNodesAre::default();
-        self.file_the_nodes();
+        self.refile();
         node
     }
 
@@ -2560,8 +2615,8 @@ impl World {
         // via World::get_completed_crafts_for_agent() to add items to their inventories
         self.crafting_manager.take_a_turn();
 
-        // Remove depleted resources
-        self.remove_depleted_resources();
+        // Remove depleted resources, if anything has been depleted
+        self.sweep_if_anything_ran_out();
 
         // And drop the ground that has gone bare again off the visiting list.
         // Once a turn rather than on every read, so a reader may see a tile
@@ -2796,6 +2851,42 @@ impl World {
         }
         self.growing_days.clear();
         self.first_day_logged = today;
+    }
+
+    /// Bring whatever is asleep at these places up to today, as though
+    /// nobody had ever been far from it.
+    ///
+    /// For a node somebody is about to make up their mind about from a long
+    /// way off - a place they remember. It lives its missed days over from
+    /// the log exactly as it would on being walked up to, so what they decide
+    /// with it in mind is what they would have decided in a world where
+    /// nothing slept. If nobody comes near, the next day's pass puts it back
+    /// to sleep from there.
+    pub fn wake_the_nodes_at(&mut self, places: impl IntoIterator<Item = Position>) {
+        let today = self.days_gone_by;
+        for at in places {
+            for number in self.node_numbers_on(at) {
+                if self.resources[number].asleep_since.is_none() {
+                    continue;
+                }
+                let terrain = self
+                    .grid
+                    .get_tile(&at)
+                    .map(|t| t.terrain.terrain_type)
+                    .unwrap_or(TerrainType::Plains);
+                let yields = self
+                    .grid
+                    .what_it_yields_here_for(&at, self.resources[number].resource_type);
+                Self::catch_up(
+                    &mut self.resources[number],
+                    terrain,
+                    yields,
+                    &self.growing_days,
+                    self.first_day_logged,
+                    today,
+                );
+            }
+        }
     }
 
     /// How many nodes are asleep.

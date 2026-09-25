@@ -19952,6 +19952,8 @@ mostly the world's own passes - the animals (about 160 ms a day at 800 cells,
 
 #### One thing it does not make exact
 
+> **Fixed at #251:** everything a person remembers is woken before they decide.
+
 `world::sleeping` argued that nothing reads a node further than 60 cells from
 anybody. A remembered place can be further off than that: a trip's worth of
 roots pays for about four thousand paces of walking, so a place a man remembers
@@ -19971,3 +19973,71 @@ walk to it.
 2. The animals' turn, which is now most of a big map's time.
 3. The standing reds are unchanged: `a_settlement_still_raises_children_late_on`
    and `the_children_of_a_settlement_live_past_infancy`.
+
+### 251. A far place is read as it stands today, and worked-out seams are looked for only when one is worked out
+
+The two loose ends #250 left.
+
+#### A remembered place is woken before anybody makes up their mind about it
+
+#250 let a man remember a place any distance off, and a place further than
+`FAR_ENOUGH_TO_SLEEP` from everybody may be asleep - so the best-food search
+read it as it stood when it fell asleep. A patch stripped bare and then left
+alone through the weeks it would have borne again was still bare to him, and
+he would not set out for it; in a world where nothing slept, he would have.
+
+Now, before anybody decides anything, every place they remember is brought up
+to today (`Simulation::wake_what_this_one_remembers`, through
+`World::wake_the_nodes_at`). It is the same catch-up a node gets when somebody
+walks up to it, lived over from the weather log, so it is exact. Sight, smell
+and touch never reach a sleeping node - they are always near somebody - so
+memory is the only way a decision can read one, and waking what is remembered
+covers every one. If nobody goes near, the next day's pass puts it back to
+sleep from where it now stands.
+
+This wakes whatever the man *might* go to, not only what he picks, because
+choosing between places reads all of them: a stale reading of the one he
+passes over can decide the choice as much as the one he takes.
+
+`sleeping_tests::a_far_patch_he_remembers_is_read_as_it_stands_today` is the
+case above. A stripped patch 280 cells off sleeps through forty days of
+berry season. Asleep it is still bare and the search returns nothing. In a
+world with nothing asleep, the patch has borne and he sets out for it. Woken,
+it holds exactly what the awake world's patch holds, and he sets out for it. A
+second test gives a whole settlement memory of every edible node beyond the
+sleep distance on a 320-cell map and runs sixty days both ways: same dice,
+same people, same nodes.
+
+#### Worked-out seams are looked for when something is worked out
+
+`remove_depleted_resources` walked every node on the map every turn to find
+spent minerals: 37 ms of every simulated day on an empty 1,600-cell map
+(#249). What renews stays when emptied, so only something that does not come
+back is ever removed, and only a hand takes the last of one.
+
+So whatever takes from a node asks `World::did_that_empty_it` (the gather,
+forage, fishing, tasting and cutting executors, and the world's own harvest
+and help actions), and the world sweeps at the end of that turn only if the
+answer was yes. It also sweeps on its first turn, after being loaded, and
+after the list has been changed behind the node file's back, since any of
+those could have left something empty. A node put down already empty counts
+as having run out. In a debug build every turn that does not sweep checks that
+it had nothing to sweep, so a new way of emptying a seam that forgets to say
+so fails the test suite rather than leaving a spent seam on the map.
+
+#### Measured
+
+A year on seeds 0, 7 and 4242 has the same fingerprint and the same dice-draw
+count as #250: on a 50-cell map nothing ever sleeps, and a sweep that finds
+nothing changes nothing. Release build, ms a simulated day:
+
+| | before | after |
+|---|---|---|
+| empty, no beasts, 800 cells | 13.2 | 4.7 |
+| empty, no beasts, 1,600 cells | 66.4 | 23.8 |
+| 12 people, 50 cells | 95.6 | 98.5 |
+| 12 people, 800 cells | 375.9 | 368.7 |
+
+The empty map is 2.8 times quicker. A settled map does not move: at 800 cells
+its time is the animals and the people, not the sweep. The animals' turn is
+what is left to look at.

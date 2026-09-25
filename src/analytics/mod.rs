@@ -928,6 +928,30 @@ impl Simulation {
         known
     }
 
+    /// Bring every place this agent remembers up to today, before it makes up
+    /// its mind.
+    ///
+    /// What an agent sees, smells or has to hand is always near somebody -
+    /// itself - so it is never asleep. What it remembers can be anywhere, and
+    /// a node far enough from everybody sleeps (`world::sleeping`): read as it
+    /// stands, it is what it was when it fell asleep. The search for the best
+    /// food anywhere goes as far as memory does, so a man could set out for a
+    /// patch that had borne since, or pass one that had since fallen bare,
+    /// on a stale reading no world without sleep would ever have given him.
+    /// Woken first, it is read as it would have stood. See ISSUES_FOUND #251.
+    pub(in crate::analytics) fn wake_what_this_one_remembers(&mut self, agent_index: usize) {
+        let Some(agent) = self.population.agents.get(agent_index) else {
+            return;
+        };
+        let remembered: Vec<crate::world::Position> = agent
+            .exploration_knowledge
+            .known_resources
+            .keys()
+            .copied()
+            .collect();
+        self.world.wake_the_nodes_at(remembered);
+    }
+
     /// Every node within `reach` of `from` that this agent knows is there, in
     /// list order. See `nodes_this_one_knows_of`.
     pub(in crate::analytics) fn nodes_known_to<'a>(

@@ -601,7 +601,8 @@ impl World {
         };
 
         // Find and harvest resource
-        if let Some(resource_node) = self.get_resource_at_mut(resource_position) {
+        let number = self.node_numbers_on(*resource_position).first().copied();
+        if let Some(resource_node) = number.map(|number| &mut self.resources[number]) {
             if resource_node.resource_type != resource_type {
                 return ActionResult::Failure {
                     reason: "Wrong resource type".to_string(),
@@ -609,6 +610,9 @@ impl World {
             }
 
             let harvested = resource_node.harvest(effective_amount);
+            if resource_node.amount == 0 && !resource_node.is_renewable() {
+                self.swept_since_anything_ran_out = false;
+            }
 
             if harvested > 0 {
                 // Convert resource to item type
@@ -1048,6 +1052,9 @@ impl World {
                 if let Some(resource) = self.resources.first_mut() {
                     let bonus = (5.0 * effective_contribution) as u32;
                     let harvested = resource.harvest(bonus.max(1));
+                    if resource.amount == 0 && !resource.is_renewable() {
+                        self.swept_since_anything_ran_out = false;
+                    }
                     if harvested > 0 {
                         // Add bonus to storehouse
                         let item_type = match resource.resource_type {

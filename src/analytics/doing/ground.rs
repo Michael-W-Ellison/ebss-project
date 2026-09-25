@@ -285,6 +285,7 @@ impl Simulation {
         // slip is a piece of the plant and not a piece of this year's
         // crop. A patch dug over for slips carries less from now on.
         self.world.resources[index].harvest(Self::WHAT_A_CUTTING_TAKES);
+        self.world.did_that_empty_it(index);
         self.world.resources[index].max_amount = self.world.resources[index]
             .max_amount
             .saturating_sub(Self::WHAT_A_CUTTING_TAKES);

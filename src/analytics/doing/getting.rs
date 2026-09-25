@@ -381,6 +381,7 @@ impl Simulation {
                     taken
                 }
             };
+            self.world.did_that_empty_it(resource_index);
 
             // What everybody standing here can see about this patch.
             // Stripping the last of something is not a private fact:
@@ -1417,6 +1418,9 @@ impl Simulation {
                 None => 0,
             }
         };
+        if let Some(&number) = self.world.node_numbers_on(reach).first() {
+            self.world.did_that_empty_it(number);
+        }
 
         if taken == 0 {
             return ActionResult::failure("The reach is empty".to_string());

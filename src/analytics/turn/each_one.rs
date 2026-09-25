@@ -200,6 +200,10 @@ impl Simulation {
 
             self.keep_the_goals_and_the_plan_current(agent_index);
 
+            // Whatever far-off place this one might set out for is read as it
+            // stands today, not as it was when nobody was near it.
+            self.wake_what_this_one_remembers(agent_index);
+
             // Fleeing comes out as an ordinary `Move`, so without a note of why
             // it was chosen it is invisible to both the tally and the errand.
             let mut ran_for_it = false;
