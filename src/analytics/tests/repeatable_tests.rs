@@ -320,7 +320,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // a parent holding a child is not walked to their own feet, and wasting
     // hurts by depth. Not traced to any one of those; the short count does
     // not move.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 556_943;
+    // And up 22.7% for #256 to #259: a small child with one parent and handed
+    // between them, a parent eating for it, poison plants passed on in talk,
+    // the walk priced into what is learned. Not traced to any one of those.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 683_166;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

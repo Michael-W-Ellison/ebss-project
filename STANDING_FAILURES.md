@@ -28,16 +28,22 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #255): `cargo test --lib` - 2,698 passed,
-3 failed, 2 ignored, 72 minutes. Two are the multi-generation requirement; the
-third was the recorded dice count, which #255 moves and records.
+**Last full run** (ISSUES_FOUND #259): `cargo test --lib` - 2,705 passed,
+3 failed, 2 ignored, 53 minutes. Two are the multi-generation requirement; the
+third was the recorded dice count, which #256 to #259 move and #259 records.
 
 | test | reports | what is known |
 |---|---|---|
 | `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **A stated requirement: settlements must last generations.** Nine thousand turns is half a year on today's calendar, and a pregnancy is nine months (#253), so as written this cannot pass whatever the model does; it wants rewriting against the calendar. After #255, twelve settlements over five years: 10 of 12 still standing at the end of year five, 59 people, 29 children born. |
 | `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same requirement, same calendar problem (6,000 turns is four months, not "four full years"). Its bound is sound: it counts by parentage. |
 
-What stands in the way, measured (#255): settlements now fill their pits past
+Measured over sixteen years (#259): four settlements of twelve still there,
+one to five founders each, and none of the forty-three children born in them
+reached five. Children are fed through a parent on the specification's bands,
+and a parent feeding one cannot eat enough: every meal is a walk. The work
+going on is to let people anticipate and learn that - see #259.
+
+What stood in the way before that, measured (#255): settlements now fill their pits past
 a winter a head and mostly come through, but they shrink - from 132 people to
 59 over five years - and most children born do not live to six. Parents eat
 about 1,216 a day in every season, however far behind they are, where the
