@@ -796,16 +796,8 @@ impl FoodDatabase {
         // === MEAT & FISH (High protein, moderate energy) ===
 
         // Meat - high protein, moderate energy, low micronutrients
-        //
-        // A unit of it is a portion off a two-kilo joint, and it was priced at
-        // thirty - hardly more than a handful of berries - so a whole deer
-        // came to three days' eating. The physiology's own sitting is "twenty
-        // units of ordinary forage, four of a fat carcass", which is a
-        // hundred and twenty a unit; the whole template is four times what it
-        // was, so what a portion of meat is made of does not change, only how
-        // much of it there is. See ISSUES_FOUND #257.
         self.entries.insert(ItemType::Meat, FoodTemplate {
-            base_nutrition: NutritionalContent::new(120.0, 200.0, 40.0, 0.6),
+            base_nutrition: NutritionalContent::new(30.0, 50.0, 10.0, 0.6),
             base_spoilage_turns: Self::days(10), // Under a season raw, and then it is carrion
             default_preparation: PreparationState::Raw,
         });

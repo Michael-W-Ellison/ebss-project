@@ -889,7 +889,6 @@ impl Simulation {
                     for drop in &species.drops {
                         if rng.gen_bool(drop.drop_chance as f64) {
                             let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
-                            let quantity = species.what_comes_off_it(drop, quantity);
                             items_gained.push(match as_good_a_knife {
                                 Some(quality) => crate::environment::ItemStack::of_quality(
                                     drop.material_id.clone(),

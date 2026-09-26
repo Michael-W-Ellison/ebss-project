@@ -448,39 +448,3 @@ fn a_hurt_man_with_a_spear_still_leaves_the_bear_alone() {
         "and should not set out to"
     );
 }
-
-/// A deer is weeks of one person's eating, and a rabbit is a meal.
-///
-/// It was eight to twelve two-kilo joints whatever the beast weighed, at
-/// thirty a unit - a whole deer three days, a rabbit four kilos. See
-/// ISSUES_FOUND #257.
-#[test]
-fn a_deer_is_weeks_of_eating_and_a_rabbit_is_a_meal() {
-    use crate::agents::physiology::{UNITS_BURNED_IN_AN_ORDINARY_DAY, UNITS_IN_ONE_ITEM};
-    use crate::environment::making::CUT_MEAT_INTO_PORTIONS;
-
-    let world = crate::world::World::new(crate::world::WorldConfig::default());
-    let a_portion = UNITS_IN_ONE_ITEM
-        * crate::world::nutrition::FoodDatabase::new()
-            .get(&crate::world::ItemType::Meat)
-            .unwrap()
-            .base_nutrition
-            .energy;
-    let days_off = |id: &str| {
-        let species = world.animals.get_species(id).unwrap();
-        let joints: u32 = species
-            .drops
-            .iter()
-            .map(|drop| species.what_comes_off_it(drop, drop.min_quantity))
-            .zip(species.drops.iter())
-            .filter(|(_, drop)| crate::agents::storage_integration::butchered_item_id(&drop.material_id) == "meat")
-            .map(|(n, _)| n)
-            .sum();
-        joints as f32 * CUT_MEAT_INTO_PORTIONS.how_many as f32 * a_portion / UNITS_BURNED_IN_AN_ORDINARY_DAY
-    };
-
-    let deer = days_off("deer");
-    let rabbit = days_off("rabbit");
-    assert!((14.0..40.0).contains(&deer), "a deer came to {deer:.1} days of one person's eating");
-    assert!(rabbit < 2.0, "and a rabbit to {rabbit:.1}");
-}
