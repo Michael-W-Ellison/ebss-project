@@ -20389,3 +20389,54 @@ Pit peaks now run 900 to 1,700 items a head. What is left:
 
 The recorded dice count moves to 556,943 for the year (down 13.7%); not traced
 to any one of the changes.
+
+### 256. A small child was with both its parents, and a parent ate for one
+
+After #255, parents took in about 1,216 a day in every season - measured
+over four seeds and three years, 30-day windows, by energy absorbed from the
+gut - where the childless ate what they needed (870 to 1,140). Parents sat at
+two-thirds of their reserve, which hands a small child three-quarters of a
+feed, and most children did not live to six.
+
+#### 1. The other parent followed the child about
+
+A child under six is kept on the first of its parents still living
+(`the_small_stay_with_their_people`). `protective_action` counted it as with
+both, so to the other parent it was always wherever the first one was - past
+the eight-pace leash, or near something with teeth - and that parent walked
+after it. Tagged turn by turn, 24% of every parent's turns went on it; parents
+spent 49% of their turns walking against 19% for everybody else, and gathered
+and ate at half the rate. Only the parent a small child is kept with goes to
+it now (`Simulation::who_a_small_child_is_kept_with`); a child old enough to
+walk off still brings either. The straying-child test in `husbandry_tests`
+was on the old calendar - "4,000" and "700" were turns, and made both of them
+infants - and wants a child old enough to wander, which it now has.
+
+#### 2. A sitting was one body's supper
+
+Every sitting aimed at a third of a grown day and answered a hunger as though
+it had fed one body. A body now records what it passes on to small children
+(`Physiology::also_feeding`, set by the feeding each turn), and a sitting aims
+at a third of its day and theirs, answering a hunger in proportion. On its own
+this moved a parent's intake from 1,216 to 1,234 a day - the parent's time,
+not their appetite, was what was short - but it is what a parent eating for a
+child is.
+
+#### Measured
+
+Parents' reserves: 0.67 to 0.72 with one small child, 0.65 to 0.78 with two.
+
+Twelve seeds, five years, animals in:
+
+| | settlements at year 5 | people | born | children who died |
+|---|---|---|---|---|
+| #255 | 10 of 12 | 59 | 29 | 25 |
+| #256 | 9 of 12 | 55 | 41 | 33 |
+
+More are born and more live, and the settlements are not larger for it:
+individual seeds swing from run to run by more than the difference. What
+kills now is not a full larder nobody reaches. Of the hunger deaths in years
+three to five, 36 fall in the last month of winter and 28 in the first three
+of spring, and in nearly every one the settlement's pits hold one to twenty
+items a head: the store runs out before the land comes back, most often in a
+settlement that has grown from eleven to sixteen since it was laid in.
