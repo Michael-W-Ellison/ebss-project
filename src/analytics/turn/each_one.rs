@@ -219,6 +219,9 @@ impl Simulation {
                 ran_for_it,
             );
 
+            // How this turn's need gets answered is said by whatever answers
+            // it, this turn - see `Agent::by_what_way`.
+            self.population.agents[agent_index].by_what_way = None;
             let action_result = self.execute_action(&action, agent_index);
 
             // And now he is busy with it until it is done.

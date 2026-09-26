@@ -1794,15 +1794,24 @@ pub struct Agent {
     /// coincidences to be reinforced.
     #[serde(default)]
     pub lately: std::collections::VecDeque<String>,
-    /// The way of answering the need that this turn's action was chosen under.
+    /// The way this turn's need was actually answered.
     ///
-    /// Set where the strategy is picked and read where the episode is written
-    /// down, which are two different layers a turn apart - see
-    /// `Element::By` and `analytics::wanting::strategy`. `None` for a drive
-    /// whose arm has no strategies yet, and for every action that comes from
-    /// somewhere other than a drive's own answer.
+    /// Set by whatever answered it - a meal out of the pack says whether the
+    /// food was carried or fetched from a store for it, a meal off a bush says
+    /// so - and read where the episode is written down as `Element::By`.
+    /// Cleared before every action, so it never outlives the turn it names.
+    ///
+    /// This was meant to be set where a strategy is picked and never was set
+    /// anywhere, so the one element that tells food about you from food in a
+    /// pit went down against nothing. See ISSUES_FOUND #259.
     #[serde(default)]
     pub by_what_way: Option<String>,
+
+    /// When this one last took food out of a store, which is what makes the
+    /// next meal out of the pack a meal from the store rather than one they
+    /// were already carrying.
+    #[serde(default)]
+    pub took_from_the_store_at: Option<u32>,
 
     /// How often this one does the things that have a how-often.
     ///
@@ -1869,6 +1878,17 @@ pub struct Agent {
     ///
     /// See `Errand`.
     pub errand: Option<Errand>,
+    /// A walk that got where it was going, kept until whatever it was for is
+    /// answered, so the answer is priced at the walk as well as the work.
+    ///
+    /// The errand itself is let go the turn somebody arrives - before they do
+    /// anything there - so the meal at the end of a nine-turn walk was
+    /// credited as one turn's work and a bearing nobody had walked, and going
+    /// for food cost the same as having it about you. That is the whole of
+    /// why the place memory had to be switched off (`somewhere_that_answered`).
+    /// See ISSUES_FOUND #259.
+    #[serde(default)]
+    pub the_walk_behind_me: Option<Errand>,
     pub current_plan: Option<ActionPlan>,
     /// Planning engine for generating and learning from plans
     pub planner: Planner,
@@ -1939,6 +1959,7 @@ impl Agent {
             rhythms: std::collections::BTreeMap::new(),
             lately: std::collections::VecDeque::new(),
             by_what_way: None,
+            took_from_the_store_at: None,
             hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
@@ -1946,6 +1967,7 @@ impl Agent {
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
             satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker::new(),
             errand: None,
+            the_walk_behind_me: None,
             current_plan: None,
             planner: Planner::new(),
             plan_step_turns: 0,
@@ -7068,6 +7090,23 @@ impl Agent {
         }
     }
 
+    /// How a meal out of the pack was come by: carried about, or fetched out
+    /// of a store for it.
+    ///
+    /// Written as the way it was answered (`Element::By`), which is the one
+    /// thing that tells the two apart - both are `Did("eat")`. Without it the
+    /// pattern layer could not learn that food about you answers hunger better
+    /// than food in a pit an afternoon's walk off, because it could not tell
+    /// which it had eaten. See ISSUES_FOUND #259.
+    pub fn how_this_meal_was_come_by(&self, now: u32) -> crate::analytics::wanting::strategy::Strategy {
+        use crate::analytics::wanting::strategy::Strategy;
+        let a_day = crate::environment::seasons::TICKS_PER_DAY;
+        match self.took_from_the_store_at {
+            Some(at) if now.saturating_sub(at) <= a_day => Strategy::EatStoredFood,
+            _ => Strategy::EatCarriedFood,
+        }
+    }
+
     /// Link what was just done to the need it answered.
     ///
     /// The specification's pattern formation: "when an agent satisfies drive
@@ -7143,6 +7182,19 @@ impl Agent {
         if !answered_anything {
             self.patterns.it_did_not(aimed_at, &elements);
         }
+
+        // A walk is paid for once, by what it was for, and does not wait for
+        // ever for it.
+        if let Some(walk) = self.the_walk_behind_me.as_mut() {
+            let its_answer_came = action_result
+                .drive_changes
+                .iter()
+                .any(|(need, change)| *need == walk.for_drive && *change <= -Patterns::ENOUGH_TO_NOTICE);
+            walk.set_aside += 1;
+            if its_answer_came || walk.set_aside > Self::A_WALK_WAITS_FOR_ITS_ANSWER {
+                self.the_walk_behind_me = None;
+            }
+        }
     }
 
     /// The elements of what just happened: everything that was true of it
@@ -7195,7 +7247,7 @@ impl Agent {
 
         elements.push(Element::At(where_it_was));
 
-        if let Some(errand) = &self.errand {
+        if let Some(errand) = self.errand.as_ref().or(self.the_walk_behind_me.as_ref()) {
             if let Some(bearing) = Bearing::from_home(errand.set_out_from, where_it_was) {
                 elements.push(Element::Toward(bearing));
             }
@@ -7432,8 +7484,21 @@ impl Agent {
     fn how_long_that_took(&self) -> u32 {
         self.errand
             .as_ref()
+            .or(self.the_walk_behind_me.as_ref())
             .map(|errand| errand.turns_on_it.max(1))
             .unwrap_or(1)
+    }
+
+    /// How long a finished walk waits for the thing it was for.
+    ///
+    /// Long enough to take food out of a pit and eat it, or to fill a skin and
+    /// drink; not so long that an unrelated meal an afternoon later is charged
+    /// for the walk.
+    pub const A_WALK_WAITS_FOR_ITS_ANSWER: u32 = 4;
+
+    /// The walk just finished, while it is still waiting for its answer.
+    pub fn arrived_from(&mut self, walk: Errand) {
+        self.the_walk_behind_me = Some(Errand { set_aside: 0, ..walk });
     }
 
     /// Ground this agent would walk back to for a need, if any.

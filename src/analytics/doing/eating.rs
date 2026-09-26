@@ -189,6 +189,7 @@ impl Simulation {
                     "Agent {} ate {} of carried {} ({:.0} energy), reset starvation timer",
                     agent.id, mouthfuls, item_id, energy_in
                 );
+                agent.by_what_way = Some(format!("{:?}", agent.how_this_meal_was_come_by(self.current_turn)));
 
                 return ActionResult::success()
                     .with_drive_change(
@@ -369,6 +370,10 @@ impl Simulation {
                     "Agent {} foraged and ate food, restored {:.1} energy, reset starvation timer",
                     agent.id, nutrition.energy
                 );
+                agent.by_what_way = Some(format!(
+                    "{:?}",
+                    crate::analytics::wanting::strategy::Strategy::GatherWildFood
+                ));
 
                 // One portion goes down here; the rest of the armful
                 // goes home in the pack. That is what turns a meal

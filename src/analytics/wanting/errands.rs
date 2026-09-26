@@ -452,7 +452,12 @@ impl Simulation {
                     "errand: gave up on it"
                 };
                 *self.what_a_threat_came_to.entry(why.to_string()).or_insert(0) += 1;
-                self.population.agents[agent_index].errand = None;
+                let agent = &mut self.population.agents[agent_index];
+                if let Some(walk) = agent.errand.take() {
+                    if walk.arrived(here) {
+                        agent.arrived_from(walk);
+                    }
+                }
                 return action;
             }
 

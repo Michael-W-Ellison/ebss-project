@@ -683,6 +683,10 @@ impl Simulation {
                         if let Some(kind) = Self::edible_item_for(resource_type_enum) {
                             let (eaten, went_in, nutrition) =
                                 self.a_sitting_from_the_hand(agent_index, kind, harvested);
+                            self.population.agents[agent_index].by_what_way = Some(format!(
+                                "{:?}",
+                                crate::analytics::wanting::strategy::Strategy::GatherWildFood
+                            ));
 
                             self.world.resources[resource_index]
                                 .put_it_back(harvested.saturating_sub(eaten));

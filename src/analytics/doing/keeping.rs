@@ -425,12 +425,19 @@ impl Simulation {
                 pit.take_out(what, taking);
             }
             self.what_came_out_of_the_store += taking as u64;
+            self.population.agents[agent_index].took_from_the_store_at = Some(self.current_turn);
 
             let agent = &mut self.population.agents[agent_index];
             debug!("Agent {} took {taking} {what} out of the pit", agent.id);
 
+            // Food in the hand is not food in the belly, and answers no hunger.
+            // This took a tenth off it, which is exactly the size of a thing
+            // the pattern layer notices - so taking food out of a pit was
+            // credited as though it were the meal, and the meal that followed
+            // was credited again. The eating is what answers; the taking out
+            // goes down as the step before it (`Element::Then`). See
+            // ISSUES_FOUND #259.
             return ActionResult::success()
-                .with_drive_change(DriveType::Hunger, -0.1)
                 .with_energy_cost(1.5)
                 .with_message(format!("Took {taking} {what} out of the pit"));
         }
