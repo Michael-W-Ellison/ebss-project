@@ -20500,3 +20500,86 @@ year five 55 to 59, settlements standing 9 and 9 - and person-months 7,020 to
 6,537, which says more about the measure than the change. One seed can halve or
 double between two arms that differ in nothing it touches; on twelve seeds over
 five years a difference of seven per cent either way is inside the noise.
+
+### 259. Sixteen years and no second generation; why parents could not eat enough; and what learning could not see
+
+#### Sixteen years
+
+Twelve seeds run for sixteen years after #258 (one seed a run, four at a
+time): four settlements are still there at year sixteen, of one to five
+people each, **every one of them a founder**. Forty-three children were born
+across the twelve and none reached five - twenty died of hunger in their first
+year, eight at one (hunger, and thirst once orphaned), seven at two to four of
+a poor diet. There are no grandchildren because there are no grown children.
+
+A small child is fed through its parent's body on the specification's bands -
+a whole share only while the parent is above four-fifths of their reserve -
+and parents feeding a child sat at 0.72 to 0.78. Why they did not eat more,
+measured turn by turn over two seeds and three years:
+
+| | parents | everybody else |
+|---|---|---|
+| turns hungry | 31% | 12% |
+| of those, with food on them | 15% | 19% |
+| of those, spent eating | 6% | 20% |
+| of those, spent walking | 58% | 39% |
+| of those, rest pressing harder than hunger | 55% | 40% |
+
+A hungry parent had nothing on them, so every meal was a walk at one tile a
+turn; and a quarter of the walking was the child-safety walk.
+
+#### What was changed
+
+- **A small child is handed between its parents** (`Agent::carried_by`,
+  `Simulation::hand_the_small_ones_over`): when the two are within a few paces
+  and the one carrying it is a tenth of a reserve worse off, it goes to the
+  other, who carries and feeds it. It had stayed six years with the first of
+  its parents still living, who ate for two while the other ate for one.
+- **A carried child is not walked after.** It catches up with its carrier at
+  the start of the next turn, so a step left it a pace behind and, with a wolf
+  about, the parent went back for it every turn - 14% of a hungry parent's
+  turns after #256. Only a child who can walk off is walked after.
+
+Neither helped on its own (twelve seeds, five years: 23 people at year five
+against 59, which is inside the noise but not better). What was left was
+walking: hungry parents walked on 57% of those turns and ate on 6%.
+
+#### Phase one: letting learning see what happened
+
+The direction from here is that survival should come from drives and from
+action patterns that have answered them, not from rules. Surveyed, twelve
+hard-coded branches sit above the drive ranking; a hungry man with supper
+about him never reaches it. The pattern layer records a great deal and changes
+little, because it could not see the things that make carrying food better
+than fetching it:
+
+- **The walk was not in the price.** The errand was let go the turn somebody
+  arrived, before they did anything there, so the meal at the end of a
+  nine-turn walk was credited as one turn's work with no bearing. A finished
+  walk is now kept (`Agent::the_walk_behind_me`) until the act that answers
+  its drive, or four turns, and prices that act and gives it its bearing.
+- **Taking food out of a pit was credited as eating** - a tenth off hunger,
+  exactly the size the pattern layer notices - and the meal after it credited
+  again. It answers no hunger now; it goes down as the step before the meal.
+- **How a meal was come by was never written down.** `by_what_way` was meant
+  to carry it and nothing ever set it, so food about you and food in a pit an
+  afternoon off were one `Did("eat")`. A meal now says whether it was carried
+  (`EatCarriedFood`), fetched from a store for it (`EatStoredFood`, food taken
+  out within the day) or picked off a bush (`GatherWildFood`). Water is not
+  labelled yet.
+
+**The place memory stays off.** `somewhere_that_answered` was switched off
+because walking to remembered ground cost a settlement a fifth of its people,
+with a note that it should come back once a walk is priced. With the walk
+priced, twelve seeds over three years:
+
+| | person-months | standing at year 3 | people | hunger deaths |
+|---|---|---|---|---|
+| off | 5,022 | 8 | 75 | 69 |
+| on | 4,446 | 6 | 60 | 73 |
+| on, each place worth what it paid over one more than the walk from here | 4,680 | 8 | 56 | 86 |
+
+Pricing the walk into what is learned is not enough to make walking to a
+remembered place pay: the choice itself takes somebody away from the
+settlement and the food about it, and the first version did not even ask how
+far the place was from where they stood. It stays off.
