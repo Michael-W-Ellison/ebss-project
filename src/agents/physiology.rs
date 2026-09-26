@@ -990,7 +990,12 @@ impl Physiology {
         // ordinary body, and a body that has been living off its reserve wants
         // more than a day's worth in hand before it stops looking for the next
         // meal.
-        let gut = self.energy_in_the_gut() / (UNITS_BURNED_IN_AN_ORDINARY_DAY * out_of);
+        // A day's food behind it for everybody this body feeds, not only for
+        // itself: a parent passing a fifth of every meal to a newborn has a
+        // day and a fifth to find. See ISSUES_FOUND #261.
+        let for_the_household = 1.0 + self.also_feeding.max(0.0);
+        let gut = self.energy_in_the_gut()
+            / (UNITS_BURNED_IN_AN_ORDINARY_DAY * out_of * for_the_household);
         let enough_behind_it = 1.0 + (1.0 - share_of_reserve);
         let by_gut = if gut >= enough_behind_it {
             0.0
@@ -1035,7 +1040,13 @@ impl Physiology {
             return 0.0;
         }
 
-        by_reserve * by_belly * by_gut
+        // And it rises for the household. A parent's hunger was read off the
+        // parent's body alone, so somebody feeding a child through themselves
+        // got hungry, ate and fetched as though they were feeding one, and
+        // sat at two-thirds of their reserve handing the child three-quarter
+        // rations. Forty-six children born over sixteen years in twelve
+        // settlements, and none reached five. See ISSUES_FOUND #261.
+        by_reserve * by_belly * by_gut * for_the_household
     }
 }
 

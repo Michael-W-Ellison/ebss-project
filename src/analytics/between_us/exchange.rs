@@ -465,8 +465,28 @@ impl Simulation {
     /// How much stone comes out of a hole somebody digs.
     pub(in crate::analytics) const WHAT_COMES_OUT_OF_A_HOLE: u32 = 3;
 
-    /// How much a person carries away from a store in one go.
+    /// How much a person carries away from a store in one go, at the least.
+    ///
+    /// The floor of it: what a trip takes is a day's eating for everybody the
+    /// person feeds - see `what_a_day_of_this_household_is`.
     pub(in crate::analytics) const WHAT_A_PERSON_TAKES_OUT: u32 = 8;
+
+    /// A day's eating, in stored items, for this body and the small children
+    /// it feeds through itself.
+    ///
+    /// What a trip to the store is for. Eight was half a grown body's day and
+    /// took no account of anybody else, so a parent feeding a child walked to
+    /// the pit for every other meal and still came home short of the child's
+    /// share. A walk to the larder is worth what the day ahead will eat. See
+    /// ISSUES_FOUND #261.
+    pub(in crate::analytics) fn what_a_day_of_this_household_is(agent: &crate::agents::Agent) -> u32 {
+        let body = &agent.state.physiology;
+        let a_day = crate::agents::physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY
+            * body.how_fast_this_body_burns()
+            * (1.0 + body.also_feeding.max(0.0));
+        ((a_day / crate::agents::provision::UNITS_IN_ONE_STORED_ITEM).ceil() as u32)
+            .max(Self::WHAT_A_PERSON_TAKES_OUT)
+    }
 
     /// And how much they keep on them when they are standing on it.
     ///

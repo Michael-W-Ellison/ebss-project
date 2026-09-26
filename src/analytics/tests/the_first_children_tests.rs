@@ -158,3 +158,32 @@ fn a_parent_eats_for_the_child_they_feed() {
     simulation.feed_the_small_children();
     assert_eq!(simulation.population.agents[0].state.physiology.also_feeding, 0.0);
 }
+
+/// A parent's hunger rises for the household, and a trip to the store brings
+/// back a day for all of them.
+///
+/// A parent's hunger was read off the parent's body alone, so they ate and
+/// fetched for one while feeding two, and sat at two-thirds of their reserve
+/// handing the child three-quarter rations. See ISSUES_FOUND #261.
+#[test]
+fn a_parent_is_hungry_for_the_household() {
+    let mut alone = Agent::new(AgentConfig::default());
+    alone.state.now_this_many_years_old(30);
+    let capacity = alone.state.physiology.reserve_capacity;
+    alone.state.physiology.reserve = capacity * 0.75;
+    let mut feeding = alone.clone();
+    feeding.state.physiology.also_feeding = 0.2;
+
+    let by_themselves = alone.state.physiology.how_fast_hunger_rises();
+    let for_two = feeding.state.physiology.how_fast_hunger_rises();
+    assert!(by_themselves > 0.0);
+    assert!(
+        for_two > by_themselves * 1.15,
+        "feeding a child did not make them any hungrier: {for_two:.2} against {by_themselves:.2}"
+    );
+
+    let a_day_alone = Simulation::what_a_day_of_this_household_is(&alone);
+    let a_day_for_two = Simulation::what_a_day_of_this_household_is(&feeding);
+    assert!(a_day_alone >= 11, "a trip to the store brought back {a_day_alone}, under a grown day");
+    assert!(a_day_for_two > a_day_alone, "and no more for somebody feeding a child");
+}

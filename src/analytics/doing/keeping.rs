@@ -387,7 +387,8 @@ impl Simulation {
             // shared with the gate that offers this and with `total_weight`
             // itself: see `InventoryItem::what_one_of_them_weighs`.
             let each = wanted.what_one_of_them_weighs().max(f32::EPSILON);
-            let asking_for = Self::WHAT_A_PERSON_TAKES_OUT.min(wanted.quantity);
+            let asking_for = Self::what_a_day_of_this_household_is(&self.population.agents[agent_index])
+                .min(wanted.quantity);
             // `set_down_what_is_worth_less_than_food` answers with the room it
             // *made*, which is nought for a pack that had room already and
             // needed to shed nothing. What is wanted here is the room there
