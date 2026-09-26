@@ -20626,3 +20626,14 @@ The errand test asked for more turns kept to than walks set out, which reads how
 long walks are, not whether they finish; walks got shorter and 99% of them
 arrive (1,193 of 1,203, against 941 of 969), and it asks whether they arrive now.
 The recorded dice counts move to 6,909 and 610,769.
+
+#### Sixteen years with #260 in
+
+Twelve seeds, sixteen years: settlements last longer - most now run seven to
+fifteen years where most were gone by year four to eleven - but three are left
+at year sixteen, of one to three founders each, and **none of the forty-six
+children born reached five**: seventeen died of hunger in their first year, ten
+at one, fourteen of a poor diet at two to four. Taking food along reaches
+everybody but parents, because a parent's walks are mostly for food, and a walk
+for food is its own answer; parents are still hungry on 28% of their turns with
+nothing on them, and their children still live on three-quarter rations.

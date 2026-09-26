@@ -39,7 +39,8 @@ third was the recorded dice count, which #256 to #259 move and #259 records.
 
 Measured over sixteen years (#259): four settlements of twelve still there,
 one to five founders each, and none of the forty-three children born in them
-reached five. Children are fed through a parent on the specification's bands,
+reached five. With #260 in, settlements last years longer, three are left at
+year sixteen, and none of forty-six children reached five. Children are fed through a parent on the specification's bands,
 and a parent feeding one cannot eat enough: every meal is a walk. The work
 going on is to let people anticipate and learn that - see #259.
 
