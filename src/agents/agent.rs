@@ -6599,48 +6599,45 @@ impl Agent {
         self.enough_put_by_for_a_child()
     }
 
-    /// Whether there is enough put by to see this agent through the hungry gap
-    /// ahead, and a newborn through as much of it as the child will be alive
-    /// for.
+    /// Whether there is enough put by to see this agent and a newborn through
+    /// the stretch of the year the land gives nothing.
     ///
     /// What is put by, not what has been eaten: the pack and this agent's
     /// share of the camp's stores, with the stomach and the gut taken back off
-    /// - see `WhatIsPutBy::units_put_by`. Against what this agent will get
-    /// through in what is left of the next gap, and a newborn's fifth of a
-    /// grown appetite for the days of it that fall after the birth.
+    /// - see `WhatIsPutBy::units_put_by`. Against what the two of them would
+    /// get through in that stretch, a newborn counting for a fifth of a grown
+    /// appetite on the specification's own table.
     ///
     /// This is the whole of "do not breed until there is a surplus", and it is
-    /// deliberately a hard number rather than a feeling. It used to charge the
-    /// child for the whole of the next gap whenever it was conceived. But a
-    /// pregnancy is nine months: a child conceived in autumn is born the next
-    /// summer, after the winter its parent is provisioning for, and the winter
-    /// it lives through is one its parent has a whole summer and autumn to lay
-    /// in for. Charged a winter it would never see, the gate asked a settlement
-    /// for a fifth again what its stores are filled to, and measured, it never
-    /// once opened: pits in a settlement that had come through three winters
-    /// peaked at 650 to 930 items a head against a gate of about 1,040. See
-    /// ISSUES_FOUND #255.
+    /// deliberately a hard number rather than a feeling: a parent's winter and
+    /// a newborn's, whenever the child is conceived.
     ///
-    /// Falls back to the whole charge, and the pack alone, before the first
-    /// reckoning has run, which is the only time `what_the_larder_says` is
-    /// empty for a live agent.
+    /// **It was timed for a while, and that was measured and undone.** A child
+    /// conceived in autumn is born after the winter its parent is putting by
+    /// for, so the gate was taught to charge the child only for the gap days
+    /// it would be alive through - which in autumn is none. Every adult in a
+    /// settlement then had enough on the same day: nine or eleven of twelve
+    /// conceived in the first autumn, and the next winter had a fifth again
+    /// as many mouths after nine months of pregnancy on top. Over twelve
+    /// seeds and five years, with the larder fixes of #255 in, the timed rule
+    /// left 7 settlements of 12 standing and 19 people; this one left 10 and
+    /// 59, with births spread out as the stores allowed. See ISSUES_FOUND
+    /// #255.
+    ///
+    /// Falls back to the pack alone before the first reckoning of the year has
+    /// run, which is the only time `what_the_larder_says` is empty for a live
+    /// agent.
     pub fn enough_put_by_for_a_child(&self) -> bool {
-        let a_day = self.state.physiology.what_i_burn_in_a_day;
-        let a_newborns_day = a_day * what_a_body_this_age_eats(0);
+        let gap = super::provision::how_long_the_land_gives_nothing() as f32;
+        let for_the_two_of_them = self.state.physiology.what_i_burn_in_a_day
+            * (1.0 + what_a_body_this_age_eats(0));
 
-        let Some(larder) = self.state.what_the_larder_says.as_ref() else {
-            let gap = super::provision::how_long_the_land_gives_nothing() as f32;
-            let put_by = self.food_put_by() as f32 * super::provision::UNITS_IN_ONE_STORED_ITEM;
-            return put_by >= (a_day + a_newborns_day) * gap;
+        let put_by = match self.state.what_the_larder_says.as_ref() {
+            Some(larder) => larder.units_put_by(),
+            None => self.food_put_by() as f32 * super::provision::UNITS_IN_ONE_STORED_ITEM,
         };
 
-        let (starts_in, lasts) = super::provision::the_gap_ahead(larder.day_of_year);
-        let ends_in = starts_in + lasts;
-        let born_in = super::pregnancy::DAYS_A_PREGNANCY_LASTS;
-        let the_childs_days_of_it = ends_in.saturating_sub(born_in.max(starts_in));
-
-        larder.units_put_by()
-            >= a_day * lasts as f32 + a_newborns_day * the_childs_days_of_it as f32
+        put_by >= for_the_two_of_them * gap
     }
 
     /// Check if agent should attempt reproduction given current survival state
