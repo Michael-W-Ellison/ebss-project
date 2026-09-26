@@ -3519,6 +3519,18 @@ impl Agent {
         }
     }
 
+    /// The strange plants this one knows to be poison, which is the first
+    /// thing anybody tells anybody about them.
+    pub fn the_plants_i_would_warn_about(&self) -> Vec<u8> {
+        self.found_out
+            .iter()
+            .filter_map(|known| {
+                let kind = known.strip_prefix("plant:")?.strip_suffix(":bad")?;
+                kind.parse().ok()
+            })
+            .collect()
+    }
+
     /// Write down what that plant turned out to be.
     pub fn now_i_know_that_plant(&mut self, kind: u8, good: bool) {
         self.found_out

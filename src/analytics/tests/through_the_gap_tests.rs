@@ -325,3 +325,29 @@ fn the_parent_not_holding_a_small_child_is_not_sent_after_it() {
         "the parent twenty paces off was sent after a child in the other's arms: {answer:?}"
     );
 }
+
+/// Somebody who knows a plant is poison says so.
+///
+/// Only an onlooker close enough to watch a taster fall ill used to learn it,
+/// so every person found each bad plant for themselves. See ISSUES_FOUND #258.
+#[test]
+fn a_poison_plant_is_passed_on_in_talk() {
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+    simulation.population.agents[0].state.position = (20, 20, 0);
+    simulation.population.agents[1].state.position = (20, 20, 0);
+    simulation.population.agents[0].now_i_know_that_plant(3, false);
+    simulation.population.agents[0].now_i_know_that_plant(5, true);
+
+    assert!(!simulation.population.agents[1].have_i_tried_that_plant(3));
+    let listener = simulation.population.agents[1].id;
+    let said = simulation.execute_action(&Action::ShareInformation { target_agent_id: listener }, 0);
+    assert!(said.success, "{:?}", said.message);
+
+    let heard = &simulation.population.agents[1];
+    assert!(heard.have_i_tried_that_plant(3) && !heard.is_that_plant_food(3), "the warning did not reach them");
+    assert!(!heard.have_i_tried_that_plant(5), "and a good one is still theirs to find out");
+}
