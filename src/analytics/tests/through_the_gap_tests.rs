@@ -443,3 +443,74 @@ fn a_small_child_is_handed_to_the_better_fed_parent() {
     simulation.hand_the_small_ones_over();
     assert_eq!(simulation.who_a_small_child_is_kept_with(&simulation.population.agents[2]), Some(fresh));
 }
+
+/// A body knows roughly when its hunger will next ask, meal in it or not.
+///
+/// The estimate read a rate hunger does not rise at, and a body with a meal
+/// in it - rising at nought - was told it would never be hungry again. See
+/// ISSUES_FOUND #260.
+#[test]
+fn a_body_knows_when_it_will_next_be_hungry() {
+    use crate::agents::Agent;
+
+    let mut empty = Agent::new(AgentConfig::default());
+    empty.state.now_this_many_years_old(30);
+    let mut fed = empty.clone();
+    fed.state.physiology.eat(100.0, 5.0);
+
+    let empty_in = empty.how_long_before_this_asks(DriveType::Hunger);
+    let fed_in = fed.how_long_before_this_asks(DriveType::Hunger);
+    assert!(fed_in.is_some(), "a body with a meal in it was told it will never be hungry");
+    assert!(
+        fed_in.unwrap() > empty_in.unwrap_or(0),
+        "a meal in the stomach should put hunger off: {fed_in:?} against {empty_in:?}"
+    );
+}
+
+/// Somebody setting off on a long walk that is not for food takes something
+/// to eat on the way - unless they have found that it does not pay.
+///
+/// Nobody took food anywhere: hungry people had something on them 15% of the
+/// time, and every meal was a walk. See ISSUES_FOUND #260.
+#[test]
+fn a_long_walk_takes_supper_along() {
+    use crate::agents::patterns::Element;
+    use crate::analytics::wanting::strategy::Strategy;
+    use crate::world::{Pit, Position};
+
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+    let here = (20, 20, 0);
+    simulation.population.agents[0].state.position = here;
+    simulation.population.agents[0].state.now_this_many_years_old(30);
+    simulation.population.agents[0].inventory.get_all_items_mut().clear();
+
+    let mut roots = crate::agents::InventoryItem::new_with_weight("roots".to_string(), 40, 1.0);
+    roots.food_data = simulation.food_database.create_food_data(&crate::world::ItemType::Roots, 0);
+    let mut pit = Pit {
+        where_it_is: Position::new(here.0, here.1),
+        holds: Vec::new(),
+        covered: true,
+        dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
+    };
+    pit.put_in(roots);
+    simulation.world.pits.push(pit);
+
+    let far = (60, 20, 0);
+    assert!(
+        matches!(simulation.what_to_take_along(0, far, DriveType::Thirst), Some(Action::PickUp { .. })),
+        "set off forty paces with nothing to eat, standing on a pit"
+    );
+    assert_eq!(simulation.what_to_take_along(0, far, DriveType::Hunger), None, "a walk for food is its own answer");
+    assert_eq!(simulation.what_to_take_along(0, (21, 20, 0), DriveType::Thirst), None, "and a step is not a journey");
+
+    // Having found that carried meals answer worse than fetched ones, they do
+    // not bother.
+    let patterns = &mut simulation.population.agents[0].patterns;
+    patterns.it_worked(DriveType::Hunger, &[Element::By(format!("{:?}", Strategy::EatCarriedFood))], 0.01, 100);
+    patterns.it_worked(DriveType::Hunger, &[Element::By(format!("{:?}", Strategy::EatStoredFood))], 0.2, 100);
+    assert_eq!(simulation.what_to_take_along(0, far, DriveType::Thirst), None, "learned it does not pay, and took it anyway");
+}

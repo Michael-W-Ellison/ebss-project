@@ -5303,6 +5303,31 @@ impl Agent {
             return Some(0);
         }
 
+        // Hunger is not built up at a rate anybody chose: it rises at what the
+        // body's three tables say (`Physiology::how_fast_hunger_rises`), and
+        // not at all while the last meal is still in the stomach. This read the
+        // generic rate for it, which is not the rate hunger climbs at, and a
+        // body that had just eaten - rising at nought - was told it would
+        // never be hungry again. Now: the meal leaving the stomach, then the
+        // climb at an ordinary appetite. See ISSUES_FOUND #260.
+        if drive_type == crate::core::DriveType::Hunger {
+            use super::physiology::{AN_ORDINARY_APPETITE, TURNS_A_MEAL_HOLDS};
+            let body = &self.state.physiology;
+            let rising = body.how_fast_hunger_rises();
+            let (waiting, rate) = if rising > 0.0 {
+                (0.0, rising)
+            } else {
+                let still_in_me = body.energy_in_the_stomach()
+                    / body.what_a_sitting_is_for_whoever_it_feeds().max(1.0);
+                (still_in_me.min(1.0) * TURNS_A_MEAL_HOLDS, AN_ORDINARY_APPETITE)
+            };
+            let climbing = drive_type.base_accumulation_rate() * rate;
+            if climbing <= 0.0 {
+                return None;
+            }
+            return Some((waiting + (drive.threshold - drive.value).max(0.0) / climbing).ceil() as u32);
+        }
+
         let climbing = drive_type.base_accumulation_rate() * drive.pressure();
         if climbing <= 0.0 {
             return None;

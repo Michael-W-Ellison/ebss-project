@@ -48,12 +48,20 @@ fn a_walk_is_finished_rather_than_re_decided_at_every_step() {
         "{set_out} errands set out and not one of them arrived"
     );
 
-    // A walk of more than a single step, on average. Before this, every tile
-    // was a fresh decision and a trip of any length rarely finished.
+    // Most walks finish. Before errands, every tile was a fresh decision and a
+    // trip of any length rarely did.
+    //
+    // This asked for more turns kept to than walks set out, which is a
+    // reading of how *long* walks are rather than whether they are finished,
+    // and it has been on both sides of its line (STANDING_FAILURES): when
+    // somebody takes food along before a long walk (#260) walks get shorter
+    // and 99% of them arrive - 1,193 of 1,203, against 941 of 969 - while
+    // the ratio it read fell from 0.78 to 0.44. What the test is about is
+    // whether they are dropped.
     assert!(
-        kept_to as f64 / set_out.max(1) as f64 > 0.5,
+        got_there as f64 / set_out.max(1) as f64 > 0.5,
         "errands are being dropped as fast as they are made: \
-         {set_out} set out, {kept_to} kept to"
+         {set_out} set out, {got_there} got there, {kept_to} turns kept to"
     );
 }
 

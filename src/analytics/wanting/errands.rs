@@ -478,6 +478,14 @@ impl Simulation {
         // No errand. If this turn is the start of a walk, that is one.
         if let Action::Move { target } = action {
             if let Some(for_drive) = presses_hardest {
+                // And before setting out, what the walk will want on the way.
+                if let Some(first) = self.what_to_take_along(agent_index, target, for_drive) {
+                    *self
+                        .what_a_threat_came_to
+                        .entry("errand: took food along first".to_string())
+                        .or_insert(0) += 1;
+                    return first;
+                }
                 let pressed_this_hard =
                     self.population.agents[agent_index].how_hard_it_presses(for_drive);
                 let set_out_from = self.population.agents[agent_index].state.position;
@@ -498,6 +506,106 @@ impl Simulation {
         }
 
         action
+    }
+
+    /// Food to take along on a walk that will outlast the meal in you.
+    ///
+    /// The one question in the model that looks ahead to a meal: I am setting
+    /// off somewhere that is not food - will I be hungry before I am back, and
+    /// have I anything on me? A body works out when its hunger will next ask
+    /// (`Agent::how_long_before_this_asks`) against the walk there and back,
+    /// and if the walk is the longer and the pack is short, taking something
+    /// from the pit underfoot or the hedge beside it is a way of answering a
+    /// hunger that has not asked yet.
+    ///
+    /// **A way, not a rule.** Whether it is worth doing is what this body has
+    /// found: every meal now says how it was come by (`Element::By`), and a
+    /// body that has learned carried meals answer its hunger worse than meals
+    /// fetched or picked where they grow does not bother. Until it has found
+    /// out either way it tries - which is how anybody finds out. Nobody took
+    /// food anywhere before this: hungry people had something on them 15% of
+    /// the time, and every meal was a walk. See ISSUES_FOUND #260.
+    pub(in crate::analytics) fn what_to_take_along(
+        &self,
+        agent_index: usize,
+        going_to: (i32, i32, i32),
+        for_drive: crate::core::DriveType,
+    ) -> Option<Action> {
+        use crate::agents::patterns::Element;
+        use crate::analytics::wanting::strategy::Strategy;
+        use crate::core::DriveType;
+
+        // A walk for food is its own answer.
+        if for_drive == DriveType::Hunger {
+            return None;
+        }
+
+        let agent = &self.population.agents[agent_index];
+
+        // Once, and then go. Whatever was just taken is what there is.
+        if agent
+            .lately
+            .back()
+            .is_some_and(|last| last.starts_with("gather") || last.starts_with("pickup"))
+        {
+            return None;
+        }
+
+        let here = agent.state.position;
+        let paces = ((going_to.0 - here.0).abs() + (going_to.1 - here.1).abs()) as u32;
+        let there_and_back = paces * 2;
+
+        let asks_in = agent.how_long_before_this_asks(DriveType::Hunger)?;
+        if asks_in >= there_and_back {
+            return None;
+        }
+
+        // Enough for the sittings the walk will outlast, counted in what is on
+        // this body and nowhere else: a share of a pit twenty paces behind is
+        // no supper on the way.
+        let sittings = 1 + (there_and_back - asks_in) / crate::agents::physiology::TURNS_A_MEAL_HOLDS.max(1.0) as u32;
+        let a_sitting_in_items = (agent.state.physiology.what_a_sitting_is_for_whoever_it_feeds()
+            / crate::agents::provision::UNITS_IN_ONE_STORED_ITEM)
+            .ceil() as u32;
+        if agent.how_many_meals_i_have() >= sittings * a_sitting_in_items.max(1) {
+            return None;
+        }
+
+        // What this body has found about carrying food against the other ways.
+        let learned = |way: Strategy| {
+            agent
+                .patterns
+                .strength(DriveType::Hunger, &Element::By(format!("{way:?}")))
+        };
+        let carried = learned(Strategy::EatCarriedFood);
+        let otherwise = learned(Strategy::EatStoredFood).max(learned(Strategy::GatherWildFood));
+        if carried > 0.0 && otherwise > 0.0 && carried < otherwise {
+            return None;
+        }
+
+        // A pit underfoot, then the hedge within reach.
+        let underfoot = crate::world::Position::new(here.0, here.1);
+        if let Some(pit) = self.world.pit_at(underfoot) {
+            if let Some(what) = pit.something_to_eat() {
+                let each = pit
+                    .holds
+                    .iter()
+                    .find(|held| held.item_id == what)
+                    .map(|held| held.what_one_of_them_weighs())
+                    .unwrap_or(crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS);
+                if agent.could_i_take_another_handful(each) {
+                    return Some(Action::PickUp { what: what.to_string() });
+                }
+            }
+        }
+
+        if agent.could_i_take_another_handful(crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS)
+            && self.could_this_gather_come_to_anything(agent, here, "food")
+        {
+            return Some(Action::Gather { resource_type: "food".to_string() });
+        }
+
+        None
     }
 
     pub(in crate::analytics) fn retarget_unreachable_move(&mut self, agent_index: usize, action: Action) -> Action {
