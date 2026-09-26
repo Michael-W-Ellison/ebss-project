@@ -315,7 +315,12 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // And up 1.9% for #254: the store is filled for a child as well, from
     // summer; walks leave pockets; small children are fed all through and
     // live; and an illness costs a week what it says it does.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 645_031;
+    // And down 13.7% for #255: the store opens to a wasting body and to a
+    // parent whose child is short, the winter presses from two months out,
+    // a parent holding a child is not walked to their own feet, and wasting
+    // hurts by depth. Not traced to any one of those; the short count does
+    // not move.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 556_943;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
