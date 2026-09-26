@@ -243,13 +243,17 @@ fn a_parent_goes_after_a_straying_child() {
 
     let parent_id = simulation.population.agents[0].id;
     simulation.population.agents[0].state.position = (10, 10, 0);
-    simulation.population.agents[0].state.age = 4000;
+    // Years, not turns: 4,000 and 700 were turns on a calendar a quarter as
+    // long, and made both of them infants. And a child old enough to wander,
+    // because one under six is carried by whoever it is kept with and cannot
+    // be anywhere else - see `the_small_stay_with_their_people`.
+    simulation.population.agents[0].state.now_this_many_years_old(30);
     simulation.population.agents[0].update_life_stage();
 
     {
         let child = &mut simulation.population.agents[1];
         child.parent_ids = vec![parent_id];
-        child.state.age = 700;
+        child.state.now_this_many_years_old(8);
         child.update_life_stage();
         child.state.position = (10, 11, 0);
     }

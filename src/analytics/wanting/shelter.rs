@@ -619,6 +619,18 @@ impl Simulation {
             .filter(|child| {
                 matches!(child.state.life_stage, LifeStage::Infant | LifeStage::Child)
             })
+            // And a child too small to walk away is with whichever parent it
+            // is kept with, not with both. `the_small_stay_with_their_people`
+            // puts it on the first of its parents still living, so to the
+            // other parent it was always wherever that one was - more often
+            // than not past the leash, or near something with teeth - and
+            // that parent walked after it. Measured, a quarter of every
+            // parent's turns went on it, and parents gathered and ate at half
+            // the rate of anybody else. See ISSUES_FOUND #256.
+            .filter(|child| {
+                child.state.years_old() >= LifeStage::KEPT_WITH_A_PARENT_UNTIL
+                    || self.who_a_small_child_is_kept_with(child) == Some(agent.id)
+            })
             .map(|child| child.state.position)
             .collect();
 

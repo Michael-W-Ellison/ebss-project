@@ -124,3 +124,37 @@ fn a_week_of_illness_is_a_bad_week_and_not_a_sentence() {
         "and what took it should be on the record as illness"
     );
 }
+
+/// A parent feeding a small child eats for it.
+///
+/// Every sitting stopped at a third of a grown day and answered a hunger as
+/// though it had fed one body, so parents took in the same whatever they were
+/// passing on, sat at two-thirds of their reserve, and handed their children
+/// three-quarters of a feed. See ISSUES_FOUND #256.
+#[test]
+fn a_parent_eats_for_the_child_they_feed() {
+    let mut simulation = a_parent_and_a_newborn();
+    simulation.population.agents[0].state.now_this_many_years_old(30);
+
+    simulation.feed_the_small_children();
+
+    let parent = &simulation.population.agents[0].state.physiology;
+    let newborn_share = crate::agents::agent::what_a_body_this_age_eats(0);
+    assert!(
+        (parent.also_feeding - newborn_share).abs() < 0.1,
+        "a parent with a newborn should be eating a fifth again: {:.2}",
+        parent.also_feeding
+    );
+
+    let a_sitting = crate::agents::physiology::WHAT_A_SITTING_AIMS_AT;
+    assert!(parent.what_a_sitting_is_for_whoever_it_feeds() > a_sitting);
+    assert!(
+        parent.what_this_meal_answers_here(a_sitting) < 1.0,
+        "one body's supper is not all of a hunger that is eating for two"
+    );
+
+    // And once the child is gone, nobody is eaten for.
+    simulation.population.agents[1].state.is_alive = false;
+    simulation.feed_the_small_children();
+    assert_eq!(simulation.population.agents[0].state.physiology.also_feeding, 0.0);
+}

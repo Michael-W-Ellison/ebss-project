@@ -372,6 +372,12 @@ pub struct Physiology {
     /// The body's own clock, in minutes lived
     pub minute: u32,
 
+    /// What this body is passing on to small children it feeds, as a share of
+    /// its own day's eating. Nought for anybody not feeding one; a fifth for a
+    /// grown body with a newborn. Set each turn by the feeding itself.
+    #[serde(default)]
+    pub also_feeding: f32,
+
     /// One is watered, nought is dead of thirst
     pub hydration: f32,
 
@@ -449,6 +455,7 @@ impl Physiology {
         let share = share.clamp(0.05, 1.0);
         Self {
             minute: 0,
+            also_feeding: 0.0,
             hydration: 1.0,
             swallowed: Vec::new(),
             stomach: Vec::new(),
@@ -520,6 +527,26 @@ impl Physiology {
     }
 
     /// What is in the stomach now.
+    /// What a sitting down to eat aims at for a body feeding others through
+    /// itself: a third of its own day and a third of theirs.
+    ///
+    /// A parent of small children eats for them, and nothing said so. Every
+    /// sitting stopped at a third of a grown day and answered a hunger as
+    /// though it had fed one body, so a parent ate as often and as much as
+    /// anybody and passed a fifth of it on per child. Measured, parents took
+    /// in about 1,216 a day in every season however far behind they were,
+    /// sat at two-thirds of their reserve, and handed their children
+    /// three-quarters of a feed. See ISSUES_FOUND #256.
+    pub fn what_a_sitting_is_for_whoever_it_feeds(&self) -> f32 {
+        WHAT_A_SITTING_AIMS_AT * (1.0 + self.also_feeding.max(0.0))
+    }
+
+    /// How much of a hunger a meal of this much energy answers, for this
+    /// body - which is less of one for a body that is eating for others too.
+    pub fn what_this_meal_answers_here(&self, energy_in: f32) -> f32 {
+        (energy_in / self.what_a_sitting_is_for_whoever_it_feeds()).clamp(0.0, 1.0)
+    }
+
     pub fn in_the_stomach(&self) -> f32 {
         self.stomach.iter().map(|m| m.remaining).sum()
     }
@@ -930,7 +957,7 @@ impl Physiology {
         // energy, nineteen units of ordinary forage and eighty of spring leaf
         // are the same supper and only the energy can say so. Read as volume,
         // a body with a full supper of anything dense in it read as empty.
-        let belly = self.energy_in_the_stomach() / (WHAT_A_SITTING_AIMS_AT * out_of);
+        let belly = self.energy_in_the_stomach() / (self.what_a_sitting_is_for_whoever_it_feeds() * out_of);
 
         // How full is full enough to stop wanting more, for this body now.
         //

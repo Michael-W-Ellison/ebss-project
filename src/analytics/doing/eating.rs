@@ -194,7 +194,7 @@ impl Simulation {
                     .with_drive_change(
                         DriveType::Hunger,
                         -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
-                            * physiology::what_this_meal_answers(energy_in),
+                            * agent.state.physiology.what_this_meal_answers_here(energy_in),
                     )
                     .with_energy_cost(1.0) // Eating from inventory is cheap
                     .with_message(format!(
@@ -335,7 +335,7 @@ impl Simulation {
                 let mut eaten_here = 0u32;
                 let mut energy_in = 0.0f32;
                 while eaten_here < harvested
-                    && energy_in < physiology::WHAT_A_SITTING_AIMS_AT
+                    && energy_in < agent.state.physiology.what_a_sitting_is_for_whoever_it_feeds()
                 {
                     let went_down = agent
                         .state

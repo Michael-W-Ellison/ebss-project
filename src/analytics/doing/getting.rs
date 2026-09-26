@@ -691,7 +691,10 @@ impl Simulation {
                                 .with_drive_change(
                                     DriveType::Hunger,
                                     -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
-                                        * physiology::what_this_meal_answers(went_in),
+                                        * self.population.agents[agent_index]
+                                            .state
+                                            .physiology
+                                            .what_this_meal_answers_here(went_in),
                                 )
                                 .with_energy_cost(10.0)
                                 .with_message(format!(

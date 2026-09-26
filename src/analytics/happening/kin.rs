@@ -302,6 +302,22 @@ impl Simulation {
             .copied()
     }
 
+    /// Which of its parents a small child is kept with: the first of them
+    /// still living and grown, which is where `the_small_stay_with_their_people`
+    /// puts it.
+    pub(in crate::analytics) fn who_a_small_child_is_kept_with(
+        &self,
+        child: &crate::agents::Agent,
+    ) -> Option<uuid::Uuid> {
+        child.parent_ids.iter().copied().find(|id| {
+            self.population.agents.iter().any(|a| {
+                a.id == *id
+                    && a.state.is_alive
+                    && a.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+            })
+        })
+    }
+
     pub(in crate::analytics) fn the_small_stay_with_their_people(&mut self) {
         let where_their_people_are: Vec<(usize, (i32, i32, i32))> = {
             let grown: Vec<(uuid::Uuid, (i32, i32, i32))> = self
@@ -412,6 +428,28 @@ impl Simulation {
                 })
             })
             .collect();
+
+        // What each grown body is feeding besides itself, counted afresh:
+        // a child that has grown out of it, wandered off or died is no longer
+        // eaten for.
+        for grown in self.population.agents.iter_mut() {
+            grown.state.physiology.also_feeding = 0.0;
+        }
+        for mouth in &mouths {
+            if let Some(parent) = self
+                .population
+                .agents
+                .iter_mut()
+                .find(|a| a.id == mouth.parent && a.state.is_alive)
+            {
+                let their_turn = parent.state.physiology.what_i_burn_in_a_day
+                    * MINUTES_PER_TURN as f32
+                    / MINUTES_PER_DAY as f32;
+                if their_turn > 0.0 {
+                    parent.state.physiology.also_feeding += mouth.wants_food / their_turn;
+                }
+            }
+        }
 
         for mouth in &mouths {
             // The parent's own store decides the share

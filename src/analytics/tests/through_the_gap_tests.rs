@@ -283,3 +283,45 @@ fn a_body_just_past_the_line_is_not_on_a_clock() {
         "and a day at the bottom of it should still hurt: {lost_near_empty:.2}"
     );
 }
+
+/// A small child is with one parent, and the other is not sent after it.
+///
+/// A child under six is kept on the first of its parents still living, so to
+/// the other it was always wherever that one was - past the leash, or near a
+/// wolf - and the other walked after it: a quarter of every parent's turns.
+/// See ISSUES_FOUND #256.
+#[test]
+fn the_parent_not_holding_a_small_child_is_not_sent_after_it() {
+    use crate::agents::Agent;
+
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+    world
+        .spawn_animal("wolf".to_string(), (33, 30))
+        .expect("a wolf should spawn");
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+    for (i, at) in [(0usize, (50, 30, 0)), (1, (30, 30, 0))] {
+        simulation.population.agents[i].state.position = at;
+        simulation.population.agents[i].state.now_this_many_years_old(30);
+    }
+    let (holding, other) = (simulation.population.agents[0].id, simulation.population.agents[1].id);
+
+    let mut child = Agent::with_parents(AgentConfig::default(), vec![holding, other], simulation.current_turn);
+    child.state.position = (50, 30, 0);
+    simulation.population.agents.push(child);
+    assert_eq!(
+        simulation.who_a_small_child_is_kept_with(&simulation.population.agents[2]),
+        Some(holding)
+    );
+
+    let the_other = simulation.population.agents[1].clone();
+    let answer = simulation.protective_action(&the_other, the_other.state.position);
+    assert!(
+        !matches!(answer, Some(Action::Move { .. })),
+        "the parent twenty paces off was sent after a child in the other's arms: {answer:?}"
+    );
+}
