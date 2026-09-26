@@ -208,6 +208,14 @@ pub enum DietType {
     Omnivore,
 }
 
+/// The share of a carcass that is meat: the dressed weight of a deer or a
+/// sheep is about half of what it weighed alive, and some of that is bone.
+pub const WHAT_OF_A_CARCASS_IS_MEAT: f32 = 0.45;
+
+/// What one joint off a carcass weighs, which is what `Simulation::butcher`
+/// makes one.
+pub const KILOS_IN_A_JOINT: f32 = 2.0;
+
 impl AnimalSpecies {
     /// Whether this is the farmyard form of something the registry already
     /// has wild, so that stocking a country with both would put the same
@@ -502,6 +510,23 @@ impl AnimalSpecies {
             WHAT_A_SIXTY_KILO_SHEEP_TAKES * (self.mass_kg.max(0.001) / 60.0).sqrt();
 
         for_its_bulk * (1.0 + self.defense / 10.0)
+    }
+
+    /// How many of a drop come off one of these when it is killed, given what
+    /// the drop table rolled.
+    ///
+    /// Flesh by what the animal weighs, and everything else as the table has
+    /// it. The table gave a deer eight to twelve two-kilo joints and a
+    /// rabbit one or two - four kilos off a rabbit, and a deer that fed a
+    /// person three days. What is on an animal to eat is about
+    /// `WHAT_OF_A_CARCASS_IS_MEAT` of it, cut into joints of the weight
+    /// `Simulation::butcher` gives one. See ISSUES_FOUND #257.
+    pub fn what_comes_off_it(&self, drop: &AnimalDrop, rolled: u32) -> u32 {
+        if crate::agents::storage_integration::butchered_item_id(&drop.material_id) != "meat" {
+            return rolled;
+        }
+
+        ((self.mass_kg * WHAT_OF_A_CARCASS_IS_MEAT / KILOS_IN_A_JOINT).round() as u32).max(1)
     }
 
     /// What one of these brings to a hunt.
