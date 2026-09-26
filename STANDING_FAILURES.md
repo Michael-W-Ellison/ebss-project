@@ -28,20 +28,22 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #254): `cargo test --lib` - 2,693 passed,
-2 failed, 2 ignored, 61 minutes. The two that fail are the multi-generation
-requirement.
+**Last full run** (ISSUES_FOUND #255): `cargo test --lib` - 2,698 passed,
+3 failed, 2 ignored, 72 minutes. Two are the multi-generation requirement; the
+third was the recorded dice count, which #255 moves and records.
 
 | test | reports | what is known |
 |---|---|---|
-| `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **Now a stated requirement: settlements must last generations.** Nine thousand turns is half a year on today's calendar, and a pregnancy is nine months (#253), so as written this cannot pass whatever the model does; it wants rewriting against the calendar. After #254 twelve settlements hold 117 people at the end of year one, 75 at year two and 60 at year three (9 of 12 still standing), and one has three children born there alive in year three. The rest of the survivors are childless: the breeding gate refuses every adult every turn. |
+| `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **A stated requirement: settlements must last generations.** Nine thousand turns is half a year on today's calendar, and a pregnancy is nine months (#253), so as written this cannot pass whatever the model does; it wants rewriting against the calendar. After #255, twelve settlements over five years: 10 of 12 still standing at the end of year five, 59 people, 29 children born. |
 | `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same requirement, same calendar problem (6,000 turns is four months, not "four full years"). Its bound is sound: it counts by parentage. |
 
-What stands in the way, measured (#254): a settlement that survives is
-stable and childless. Its pits peak at 650 to 930 items a head each autumn,
-against the 1,040 the breeding gate asks, and are eaten down to nearly nothing
-by spring. Having would-be parents lay in for a child was tried and measured
-worse (46 alive at year three against 60), and is not kept.
+What stands in the way, measured (#255): settlements now fill their pits past
+a winter a head and mostly come through, but they shrink - from 132 people to
+59 over five years - and most children born do not live to six. Parents eat
+about 1,216 a day in every season, however far behind they are, where the
+childless eat what they need; a parent at two-thirds of their reserve hands a
+small child three-quarters of a feed, and the child runs down on it. Blows -
+predators and quarrels - take ten to sixteen people a year across the twelve.
 
 ## The predator layer, and what it turned out to be
 

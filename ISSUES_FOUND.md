@@ -20259,3 +20259,133 @@ next thing.
 
 The recorded dice counts move: 7,244 for the short run, 645,031 for the year.
 Two larder tests that pinned the old store size read the new one.
+
+### 255. Settlements starved beside full larders: a drive that woke on the first day of winter, stores kept shut to the wasting, parents who could not leave their children's side
+
+The requirement is that a settlement lasts generations. After #254 the
+surviving settlements were childless, because the breeding gate - a parent's
+winter and a newborn's share put by - never opened: pits peaked at 650 to 930
+items a head against about 1,040.
+
+#### The timed gate, tried and undone
+
+The first answer was to time the gate. A pregnancy is nine months, so a child
+conceived in autumn is born the next summer and never sees the winter its
+parent is putting by for; the gate was taught to charge the child only for
+the gap days it would be alive through. It opened - and every adult in a
+settlement had enough on the same day. Nine to eleven of twelve conceived in
+the first autumn, and the winter after the births (a fifth again as many
+mouths, after nine months of pregnancy at up to 1.3 times the burn) took the
+settlements. Every one of twelve was dead by year four.
+
+That was not the gate's fault alone: with no children at all the same
+settlements died in years three and four, their harvests shrinking every
+year. So the larder came first, and the gate was measured again at the end
+(below) and put back as it was.
+
+#### Why the harvest shrank
+
+Not the land. Wild ground never wears (only fields do), sleeping nodes catch up
+exactly (runs with every node kept awake came out within 0.1%), and doubling
+wild regrowth barely moved the pits: with it, 12,000 units stood ripe within
+thirty paces of seed 9 all summer while its pits peaked at 7,400. Year one is
+richer because the world starts with stock standing on it; after that the
+flow is what there is. The limit was what people did with their turns.
+
+Almost nothing a settlement gathers goes through `Gather` for the store: in
+year two, 1,200 food gathers against 21,800 for water, while roots, greens and
+legumes by the ten thousand were eaten at the bush. What fills a store is
+`putting_food_by`, only in autumn, only when Preparedness wins the turn - and
+it won one autumn turn in twenty.
+
+#### 1. The winter rung could not wake the drive before the winter
+
+The Preparedness drive wakes at 0.4. The winter rung ("enough for the month,
+not the winter") pressed at 0.4 times the nearness of the winter, and the
+nearness reaches one on the first day of winter - so the drive woke then, when
+there is nothing left on the land, and not an hour before. All autumn anybody
+with a month in hand laid in nothing more, and a settlement's pits topped out
+at a month a head.
+
+While the land still bears, a winter not put by now presses at 0.8 times the
+square root of the nearness, crossing the threshold about two months out; it
+never makes a shorter larder feel easier than a longer one, and once the land
+stops giving it is what it was. Pit peaks rose by 1,500 to 4,700 items a
+seed-year and autumn trips for the store roughly tripled.
+
+#### 2. The store was shut to the wasting
+
+While the hedgerows bear the store opens only to a body "eating itself", at a
+quarter of its reserve - but a body loses health from half
+(`Physiology::is_wasting`). Traced: two adults and five small children at 0.43
+to 0.69 of their reserve, losing health, beside 7,932 items that did not move
+by one from day 30 to day 210, both adults dead of hunger. A wasting body now
+opens the store in any season.
+
+#### 3. A child's water was a grown man's
+
+A small child's drink is taken from its parent as a share of the parent's
+skin, and the child's hydration is a share of its own. The same fraction was
+charged to both, so a parent with two infants dried out as though drinking for
+three grown people. The parent now pays in proportion to the child's size.
+
+#### 4. A parent holding a child was walked to their own feet
+
+`protective_action` sends a parent to a child with a predator near it. A small
+child is at its parent's feet, so this was a `Move` to the tile underfoot,
+which the walker books as done - and it sits above eating. Traced: eight days
+of nothing, the reserve falling 0.60 to 0.43, on top of a pit. A child already
+at the parent's tile is left out of that walk.
+
+#### 5. Wasting was a clock
+
+Wasting cost a flat five health a day anywhere under half the reserve, so a
+body that crossed the line and was climbing back died three weeks later
+whatever it ate. Traced: reserve 0.38 to 0.49 and eating, health 82 to nought
+in sixteen days, standing on a pit of 300 items. The loss now scales from
+nothing at the line to the whole rate at empty; a body with nothing to eat
+still reaches an empty reserve on the same day.
+
+#### 6. A parent eating for two was kept out of the larder
+
+A child under six is fed through its parent's body and gets less than a full
+share once the parent is under four-fifths of their reserve. The store is
+kept shut in the bearing season to anybody not wasting, so parents feeding
+children off the hedge sat at 0.69 to 0.76 all autumn beside 10,962 items and
+their children went into the winter on three-quarter rations. A parent with a
+small child going short now opens the store in any season.
+
+#### Measured
+
+Twelve seeds, five years, animals in, everything above in:
+
+| breeding gate | settlements standing at year 5 | people | born | hunger deaths, years 2-3 |
+|---|---|---|---|---|
+| timed | 7 of 12 | 19 | 54 | 115 |
+| a parent's winter and a newborn's, whenever conceived | **10 of 12** | **59** | 29 | 29 |
+
+Before any of it, with the timed gate, every settlement was gone by year four.
+The gate is back to charging a child its whole share whenever it is
+conceived.
+
+Pit peaks now run 900 to 1,700 items a head. What is left:
+
+- **Settlements shrink**, from 132 people to 59 over five years.
+- **Children mostly do not live to six.** Parents eat about 1,216 a day in
+  every season however far behind they are, where the childless eat what they
+  need (870 to 1,140). A parent is hungry whenever the stomach and gut do not
+  cover the reserve's deficit, which at two-thirds is always, so how much a
+  parent eats is how often they get to - enough for themselves and about one
+  small child. At two-thirds of their reserve a parent hands a small child
+  three-quarters of a feed, and the child runs down on it.
+- **Blows** - predators and quarrels - take ten to sixteen people a year
+  across the twelve, and in a small settlement that is the end of it.
+- A deer is worth about three person-days: 8 to 12 two-kilo lumps, each cut
+  into three portions of 150 units. Hunting brings a settlement 2 to 50 meat a
+  year, and meat and fish are the only food in the gap.
+- Fields are nearly all berries (grain gets ten times the plough and nobody
+  sows it, having none to sow) and a third are worn to the bottom two grades by
+  year three.
+
+The recorded dice count moves to 556,943 for the year (down 13.7%); not traced
+to any one of the changes.
