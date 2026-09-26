@@ -20475,3 +20475,28 @@ ten days, and the pits peaked lower. Keeping the value and the old joint
 counts came out between. Carcass size wants revisiting together with how
 often anybody hunts and how a kill too big to carry is brought home and kept,
 not on its own.
+
+### 258. Nobody told anybody which plant was poison
+
+"A blow" is the second cause of death after hunger, and most of it is not a
+blow. Split by where the damage came from, over four settlements and three
+years: tasting a strange plant that turned out to be poison 2,275 health,
+coming off worse fighting an animal 1,108, a hunted animal turning 132, a beast
+attacking unprovoked 104, one person against another nothing. Eating something
+gone harmful and a poison plant both go through `take_damage`, and so are
+booked as a blow.
+
+Only somebody standing close enough to watch a taster fall ill learned that a
+plant was poison, and it was never passed on - so every person, and every child
+as it grew, found each bad plant for themselves at 12 to 55 health a time.
+Whoever shares information now also passes on every plant they know to be
+poison (`Agent::the_plants_i_would_warn_about`); a good plant is still the
+listener's to find out. On the same four seeds, plant damage falls from 2,275
+to 1,285 - what is left is mostly the first taster of each kind, which is the
+point of there being strange plants.
+
+Over twelve seeds and five years: deaths booked as a blow 58 to 46, people at
+year five 55 to 59, settlements standing 9 and 9 - and person-months 7,020 to
+6,537, which says more about the measure than the change. One seed can halve or
+double between two arms that differ in nothing it touches; on twelve seeds over
+five years a difference of seven per cent either way is inside the noise.
