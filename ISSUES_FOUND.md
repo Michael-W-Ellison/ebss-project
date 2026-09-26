@@ -20583,3 +20583,46 @@ Pricing the walk into what is learned is not enough to make walking to a
 remembered place pay: the choice itself takes somebody away from the
 settlement and the food about it, and the first version did not even ask how
 far the place was from where they stood. It stays off.
+
+### 260. Nobody ever took food anywhere
+
+Phase two of letting survival come from anticipation and learning rather than
+rules (#259).
+
+**A body could not tell when it would next be hungry.**
+`Agent::how_long_before_this_asks` - which calls itself the only
+forward-looking question in the model - read the generic rate a drive builds
+at, and hunger does not build at it: it rises at what the body's three tables
+say, and not at all while a meal is still in the stomach. So a body that had
+just eaten was told it would never be hungry again. It reads the body now: the
+meal leaving the stomach, then the climb at an ordinary appetite.
+
+**Nobody took food anywhere.** A hungry person had something on them 15% of
+the time and every meal was a walk; nothing in the model looked ahead to a meal
+on the way. Now somebody setting out on a walk that is not for food weighs when
+their hunger will ask against the walk there and back, and what is in their pack
+- only their pack - against the sittings the walk will outlast; if they will be
+hungry on the way with too little on them, they take food along first, from the
+pit underfoot or the hedge within reach, once, and go
+(`Simulation::what_to_take_along`).
+
+**It is a way, not a rule.** Every meal says how it was come by (#259), and a
+body that has learned carried meals answer its hunger worse than meals fetched
+or picked where they grow does not bother. Until it has found out either way,
+it tries.
+
+Twelve seeds, three years, against #259:
+
+| | person-months | standing at year 3 | people | hunger deaths | thirst deaths |
+|---|---|---|---|---|---|
+| #259 | 5,022 | 8 | 75 | 69 | 16 |
+| #260 | **5,274** | **12** | **120** | **47** | **0** |
+
+Every settlement standing at the end of year three, for the first time. What a
+hungry parent does has hardly moved (hungry on 28% of turns, walking on 62% of
+those); the gain is everybody else, carrying supper.
+
+The errand test asked for more turns kept to than walks set out, which reads how
+long walks are, not whether they finish; walks got shorter and 99% of them
+arrive (1,193 of 1,203, against 941 of 969), and it asks whether they arrive now.
+The recorded dice counts move to 6,909 and 610,769.
