@@ -20440,3 +20440,38 @@ three to five, 36 fall in the last month of winter and 28 in the first three
 of spring, and in nearly every one the settlement's pits hold one to twenty
 items a head: the store runs out before the land comes back, most often in a
 settlement that has grown from eleven to sixteen since it was laid in.
+
+### 257. Two levers that did not move the food: a longer winter, and a bigger carcass
+
+After #256 the hunger that is left falls in the last month of winter and the
+first three of spring, with the pits at one to twenty items a head. Pits
+peak at about 950 to 1,170 items per mouth, counting a small child as a fifth.
+Two ways of raising that were measured on twelve seeds over five years, in
+person-months lived (the same seeds in every arm; one seed can swing by a
+factor of two between arms, so a few per cent is inside the noise):
+
+| arm | person-months | years 3-5 | pit peak a head, years 1-3 |
+|---|---|---|---|
+| #256 | 7,020 | 3,675 | 1,082 / 1,172 / 1,174 |
+| lay in for the winter and a month | 7,059 | 3,690 | 1,171 / 1,129 / 1,034 |
+| meat by the beast's mass, at four times the worth | 6,421 | 3,154 | 997 / 969 / 833 |
+| meat at four times the worth, joints as the table has them | 6,584 | 3,361 | 1,020 / 1,102 / 829 |
+
+**Laying in for longer changed nothing.** Asking the Preparedness drive to be
+satisfied only at the winter and a month did not raise the pits at all: they
+stop where they stop because that is what an autumn's work brings home, not
+because anybody is content. Not kept.
+
+**A bigger carcass made things worse.** A deer was eight to twelve two-kilo
+joints whatever it weighed, and a portion of meat was priced at 30, hardly
+above a handful of berries - so a whole deer was three days of one person's
+eating, against the physiology's own sitting of "four of a fat carcass",
+which is about 120 a unit. Both were put right: joints off the beast's mass
+at 45%, and the meat template four times what it was. It was committed and
+reverted. Nobody hunted more for it - 156 kills against 182 over the
+settlement-years - so all a bigger carcass did was put a heavier load of
+joints in the hunter's pack, where they cannot be eaten until cut and turn in
+ten days, and the pits peaked lower. Keeping the value and the old joint
+counts came out between. Carcass size wants revisiting together with how
+often anybody hunts and how a kill too big to carry is brought home and kept,
+not on its own.
