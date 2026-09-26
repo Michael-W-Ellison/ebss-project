@@ -627,10 +627,16 @@ impl Simulation {
             // that parent walked after it. Measured, a quarter of every
             // parent's turns went on it, and parents gathered and ate at half
             // the rate of anybody else. See ISSUES_FOUND #256.
-            .filter(|child| {
-                child.state.years_old() >= LifeStage::KEPT_WITH_A_PARENT_UNTIL
-                    || self.who_a_small_child_is_kept_with(child) == Some(agent.id)
-            })
+            //
+            // Nor to one in their own arms. A child being carried catches up
+            // with whoever carries it at the start of the next turn, so one
+            // step taken left it a pace behind - and with anything with teeth
+            // about, the parent was sent back for it, a step there and a step
+            // back, turn after turn. Measured after the first half of this, 14%
+            // of a hungry parent's turns still went on it. A small child is
+            // wherever its carrier is; only a child who can walk off can be
+            // walked after. See ISSUES_FOUND #259.
+            .filter(|child| child.state.years_old() >= LifeStage::KEPT_WITH_A_PARENT_UNTIL)
             .map(|child| child.state.position)
             .collect();
 

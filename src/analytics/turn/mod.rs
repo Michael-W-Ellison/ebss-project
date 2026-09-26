@@ -194,6 +194,7 @@ impl Simulation {
         // specification makes "must remain with a parent agent at all times" a
         // fact about the child's position, and the feeding pass below reads
         // position. See `the_small_stay_with_their_people`.
+        self.hand_the_small_ones_over();
         self.the_small_stay_with_their_people();
         self.feed_the_small_children();
         self.process_nursing();

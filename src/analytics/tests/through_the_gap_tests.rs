@@ -234,7 +234,11 @@ fn a_parent_holding_a_child_is_not_sent_to_where_they_stand() {
         "a parent holding their child was sent to the tile they stand on: {answer:?}"
     );
 
-    // And one whose child is a few paces off still goes to it.
+    // And one whose child is old enough to wander, and a few paces off with a
+    // wolf beside it, still goes to it. A small child is never a few paces
+    // off: it is carried - see `a_parent_is_not_sent_back_for_the_child_in_their_arms`.
+    simulation.population.agents[1].state.now_this_many_years_old(8);
+    simulation.population.agents[1].update_life_stage();
     simulation.population.agents[1].state.position = (32, 30, 0);
     let agent = simulation.population.agents[0].clone();
     assert!(
@@ -350,4 +354,92 @@ fn a_poison_plant_is_passed_on_in_talk() {
     let heard = &simulation.population.agents[1];
     assert!(heard.have_i_tried_that_plant(3) && !heard.is_that_plant_food(3), "the warning did not reach them");
     assert!(!heard.have_i_tried_that_plant(5), "and a good one is still theirs to find out");
+}
+
+/// A parent is not sent back for the child in their arms.
+///
+/// A carried child catches up with its carrier at the start of the next turn,
+/// so a step left it a pace behind, and with a wolf about the parent went
+/// back for it - a step there and a step back, turn after turn. See
+/// ISSUES_FOUND #259.
+#[test]
+fn a_parent_is_not_sent_back_for_the_child_in_their_arms() {
+    use crate::agents::Agent;
+
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+    world
+        .spawn_animal("wolf".to_string(), (33, 30))
+        .expect("a wolf should spawn");
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+    let parent = simulation.population.agents[0].id;
+    simulation.population.agents[0].state.position = (30, 30, 0);
+    simulation.population.agents[0].state.now_this_many_years_old(30);
+
+    // A pace behind, the way a carried child is after one step.
+    let mut child = Agent::with_parents(AgentConfig::default(), vec![parent], simulation.current_turn);
+    child.state.position = (31, 30, 0);
+    simulation.population.agents.push(child);
+
+    let agent = simulation.population.agents[0].clone();
+    let answer = simulation.protective_action(&agent, agent.state.position);
+    assert!(
+        !matches!(answer, Some(Action::Move { .. })),
+        "a parent was sent back a pace for a child they are carrying: {answer:?}"
+    );
+}
+
+/// Parents hand a small child between them, and whoever is carrying it feeds
+/// it.
+///
+/// It stayed six years with the first of its parents still living, who ate
+/// for two and never caught up while the other ate for one. See
+/// ISSUES_FOUND #259.
+#[test]
+fn a_small_child_is_handed_to_the_better_fed_parent() {
+    use crate::agents::Agent;
+
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+    for (i, spare) in [(0usize, 0.55), (1, 0.9)] {
+        let agent = &mut simulation.population.agents[i];
+        agent.state.now_this_many_years_old(30);
+        agent.state.position = (20, 20, 0);
+        agent.state.physiology.reserve = agent.state.physiology.reserve_capacity * spare;
+    }
+    let (worn, fresh) = (simulation.population.agents[0].id, simulation.population.agents[1].id);
+    let mut child = Agent::with_parents(AgentConfig::default(), vec![worn, fresh], simulation.current_turn);
+    child.state.position = (20, 20, 0);
+    simulation.population.agents.push(child);
+
+    assert_eq!(simulation.who_a_small_child_is_kept_with(&simulation.population.agents[2]), Some(worn));
+
+    // Apart, nothing can be handed over.
+    simulation.population.agents[1].state.position = (40, 20, 0);
+    simulation.hand_the_small_ones_over();
+    assert_eq!(simulation.population.agents[2].carried_by, None, "handed across twenty paces");
+
+    // Together, it goes to the one who has more to give.
+    simulation.population.agents[1].state.position = (21, 20, 0);
+    simulation.hand_the_small_ones_over();
+    assert_eq!(simulation.who_a_small_child_is_kept_with(&simulation.population.agents[2]), Some(fresh));
+
+    simulation.the_small_stay_with_their_people();
+    assert_eq!(simulation.population.agents[2].state.position, (21, 20, 0), "and goes with them");
+
+    simulation.feed_the_small_children();
+    assert!(simulation.population.agents[1].state.physiology.also_feeding > 0.0, "and they feed it");
+    assert_eq!(simulation.population.agents[0].state.physiology.also_feeding, 0.0);
+
+    // And it does not go straight back over a small difference.
+    simulation.population.agents[1].state.physiology.reserve =
+        simulation.population.agents[1].state.physiology.reserve_capacity * 0.6;
+    simulation.hand_the_small_ones_over();
+    assert_eq!(simulation.who_a_small_child_is_kept_with(&simulation.population.agents[2]), Some(fresh));
 }

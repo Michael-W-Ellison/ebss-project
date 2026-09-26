@@ -1766,6 +1766,13 @@ pub struct Agent {
     pub storage_preferences: super::storage_management::StoragePreferences, // Storage management preferences
     pub parent_ids: Vec<Uuid>,
 
+    /// Which of its parents a small child is being carried by, when it has
+    /// been handed from one to the other. Nobody until the first handing
+    /// over, when it is with the first of its parents still living. See
+    /// `Simulation::who_a_small_child_is_kept_with`.
+    #[serde(default)]
+    pub carried_by: Option<Uuid>,
+
     /// Ways of working the agent has picked up rather than been born knowing.
     /// Nothing tells an agent to spread muck on a field: it tries it, sees what
     /// happens, and watches its neighbours.
@@ -1926,6 +1933,7 @@ impl Agent {
             whereabouts: super::whereabouts::Whereabouts::default(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
+            carried_by: None,
             practices: super::practices::Practices::new(),
             lessons: super::practices::Lessons::new(),
             rhythms: std::collections::BTreeMap::new(),

@@ -279,6 +279,14 @@ impl Simulation {
         child: &crate::agents::Agent,
         grown: &[(uuid::Uuid, (i32, i32, i32))],
     ) -> Option<(uuid::Uuid, (i32, i32, i32))> {
+        // Whoever it was last handed to, if they are still about.
+        if let Some(carrier) = child
+            .carried_by
+            .and_then(|id| grown.iter().find(|(who, _)| *who == id))
+        {
+            return Some(*carrier);
+        }
+
         if let Some(theirs) = child
             .parent_ids
             .iter()
@@ -309,13 +317,83 @@ impl Simulation {
         &self,
         child: &crate::agents::Agent,
     ) -> Option<uuid::Uuid> {
-        child.parent_ids.iter().copied().find(|id| {
+        let about = |id: &uuid::Uuid| {
             self.population.agents.iter().any(|a| {
                 a.id == *id
                     && a.state.is_alive
                     && a.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
             })
-        })
+        };
+
+        child
+            .carried_by
+            .filter(|id| about(id))
+            .or_else(|| child.parent_ids.iter().copied().find(|id| about(id)))
+    }
+
+    /// How much better off the other parent has to be before a small child is
+    /// handed across: enough that it is worth the handing, and not so little
+    /// that it goes back and forth every time they pass.
+    pub(in crate::analytics) const WORTH_HANDING_OVER_AT: f32 = 0.1;
+
+    /// A small child is passed to its other parent when the two of them are
+    /// together and the one carrying it is the worse off.
+    ///
+    /// A child under six is fed through whichever parent carries it, and it
+    /// stayed with the same one for six years: the first of its parents still
+    /// living. That parent ate for two and never caught up - parents sat at
+    /// two-thirds of their reserve, which hands a child three-quarters of a
+    /// feed - while the other ate for one. Forty-three children were born over
+    /// sixteen years in twelve settlements and none reached five. The two of
+    /// them share it now, a handing over at a time. See ISSUES_FOUND #259.
+    pub(in crate::analytics) fn hand_the_small_ones_over(&mut self) {
+        let spare_of = |agents: &[crate::agents::Agent], id: uuid::Uuid| {
+            agents
+                .iter()
+                .find(|a| a.id == id && a.state.is_alive)
+                .map(|a| (a.state.physiology.what_this_body_has_spare(), a.state.position))
+        };
+
+        let mut handed: Vec<(usize, uuid::Uuid)> = Vec::new();
+        for (at, child) in self.population.agents.iter().enumerate() {
+            if !child.state.is_alive
+                || child.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+            {
+                continue;
+            }
+            let Some(carrier) = self.who_a_small_child_is_kept_with(child) else {
+                continue;
+            };
+            let Some((carrier_spare, carrier_at)) = spare_of(&self.population.agents, carrier) else {
+                continue;
+            };
+
+            let better_placed = child
+                .parent_ids
+                .iter()
+                .copied()
+                .filter(|id| *id != carrier)
+                .filter(|id| {
+                    self.population.agents.iter().any(|a| {
+                        a.id == *id
+                            && a.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+                    })
+                })
+                .filter_map(|id| spare_of(&self.population.agents, id).map(|(spare, stood)| (id, spare, stood)))
+                .filter(|(_, _, stood)| {
+                    Self::within((carrier_at.0, carrier_at.1), (stood.0, stood.1), Self::WITHIN_A_FEW_PACES)
+                })
+                .filter(|(_, spare, _)| *spare > carrier_spare + Self::WORTH_HANDING_OVER_AT)
+                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            if let Some((to, _, _)) = better_placed {
+                handed.push((at, to));
+            }
+        }
+
+        for (at, to) in handed {
+            self.population.agents[at].carried_by = Some(to);
+        }
     }
 
     pub(in crate::analytics) fn the_small_stay_with_their_people(&mut self) {
