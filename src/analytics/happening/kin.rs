@@ -512,6 +512,32 @@ impl Simulation {
         // eaten for.
         for grown in self.population.agents.iter_mut() {
             grown.state.physiology.also_feeding = 0.0;
+            grown.the_small_ones_i_answer_for = 0.0;
+        }
+
+        // And the small ones each parent answers for, carried or not.
+        let small_ones: Vec<(Vec<uuid::Uuid>, f32)> = self
+            .population
+            .agents
+            .iter()
+            .filter(|child| child.state.is_alive)
+            .filter(|child| child.state.years_old() < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL)
+            .map(|child| {
+                (
+                    child.parent_ids.clone(),
+                    crate::agents::agent::what_a_body_this_age_eats(child.state.years_old()),
+                )
+            })
+            .collect();
+        for (parents, eats) in small_ones {
+            for parent in self
+                .population
+                .agents
+                .iter_mut()
+                .filter(|a| a.state.is_alive && parents.contains(&a.id))
+            {
+                parent.the_small_ones_i_answer_for += eats;
+            }
         }
         for mouth in &mouths {
             if let Some(parent) = self

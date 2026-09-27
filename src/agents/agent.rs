@@ -1813,6 +1813,12 @@ pub struct Agent {
     #[serde(default)]
     pub took_from_the_store_at: Option<u32>,
 
+    /// The small children of this one's own, alive and under six, counted by
+    /// what each eats against a grown body - carried by this one or by the
+    /// other parent. Set every turn by `Simulation::feed_the_small_children`.
+    #[serde(default)]
+    pub the_small_ones_i_answer_for: f32,
+
     /// How often this one does the things that have a how-often.
     ///
     /// Keyed by `Undertaking` because a rhythm belongs to a kind of work
@@ -1960,6 +1966,7 @@ impl Agent {
             lately: std::collections::VecDeque::new(),
             by_what_way: None,
             took_from_the_store_at: None,
+            the_small_ones_i_answer_for: 0.0,
             hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
@@ -6696,8 +6703,14 @@ impl Agent {
     /// agent.
     pub fn enough_put_by_for_a_child(&self) -> bool {
         let gap = super::provision::how_long_the_land_gives_nothing() as f32;
+        // And the children already here. This asked a parent for their own
+        // winter and one newborn's whatever they were feeding already, so a
+        // parent with two infants had a third on the same terms as somebody
+        // with none - and once children lived, a settlement of six grown
+        // people had twelve small ones by its fourth winter and starved in
+        // it. See ISSUES_FOUND #261.
         let for_the_two_of_them = self.state.physiology.what_i_burn_in_a_day
-            * (1.0 + what_a_body_this_age_eats(0));
+            * (1.0 + self.the_small_ones_i_answer_for.max(0.0) + what_a_body_this_age_eats(0));
 
         let put_by = match self.state.what_the_larder_says.as_ref() {
             Some(larder) => larder.units_put_by(),

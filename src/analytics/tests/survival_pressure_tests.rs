@@ -506,3 +506,31 @@ fn the_children_of_a_settlement_live_past_infancy() {
         "six thousand turns in, a settlement should hold people born into it, not {born_here}"
     );
 }
+
+/// A parent already feeding small children needs their winters put by as well
+/// before another.
+///
+/// The gate asked for a parent's winter and one newborn's whatever they were
+/// feeding already, and once children lived a settlement of six grown people
+/// had twelve small ones by its fourth winter and starved in it. See
+/// ISSUES_FOUND #261.
+#[test]
+fn a_parent_counts_the_children_already_here() {
+    use crate::agents::provision::{how_long_the_land_gives_nothing, WhatIsPutBy};
+
+    let gap = how_long_the_land_gives_nothing() as f32;
+    let a_day = fed_adult().state.physiology.what_i_burn_in_a_day;
+    let newborn = crate::agents::agent::what_a_body_this_age_eats(0);
+    let enough_for_one_more = a_day * (1.0 + newborn) * gap * 1.01;
+
+    let mut without = fed_adult();
+    without.state.what_the_larder_says = Some(WhatIsPutBy::reckon(enough_for_one_more, a_day, 90.0, 0));
+    assert!(without.enough_put_by_for_a_child());
+
+    let mut with_two = without.clone();
+    with_two.the_small_ones_i_answer_for = 2.0 * newborn;
+    assert!(
+        !with_two.enough_put_by_for_a_child(),
+        "a parent feeding two infants had a third on the same stores as somebody with none"
+    );
+}

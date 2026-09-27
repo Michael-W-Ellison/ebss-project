@@ -20637,3 +20637,31 @@ at one, fourteen of a poor diet at two to four. Taking food along reaches
 everybody but parents, because a parent's walks are mostly for food, and a walk
 for food is its own answer; parents are still hungry on 28% of their turns with
 nothing on them, and their children still live on three-quarter rations.
+
+### 261. A parent's needs did not include the children they feed
+
+After #260 a parent's hunger was still read off the parent's body alone, so
+somebody passing a fifth of every meal to a newborn got hungry, ate and fetched
+as though they fed one.
+
+- **Hunger rises for the household.** The gut reading asks for a day's food for
+  everybody the body feeds, and the rate climbs by the same share
+  (`Physiology::also_feeding`).
+- **A trip to the store brings back a day for the household**
+  (`Simulation::what_a_day_of_this_household_is`), where it was a flat eight
+  items - half a grown day and nothing for the child.
+
+Sixteen years, twelve seeds: **for the first time children grow up** - one born
+in seed 4 is alive and grown at year sixteen, one lived to nine, one to five.
+But settlements died sooner: eight of twelve were gone in years three to five,
+where after #260 most lasted seven to fifteen. With children living, a
+settlement of six grown people had eight or twelve small ones by its third or
+fourth winter, its pits peaked near 590 items a head, and it starved; the
+children, left without anybody to feed them, died of thirst (28 of 45 child
+deaths).
+
+- **A parent counts the children already here before another.** The breeding
+  gate asked for a parent's winter and one newborn's whatever they already fed,
+  so a parent with two infants had a third on the same terms as somebody with
+  none. It asks for the winters of the small ones they answer for as well now
+  (`Agent::the_small_ones_i_answer_for`, both parents, carried or not).
