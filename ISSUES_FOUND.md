@@ -20665,3 +20665,18 @@ deaths).
   so a parent with two infants had a third on the same terms as somebody with
   none. It asks for the winters of the small ones they answer for as well now
   (`Agent::the_small_ones_i_answer_for`, both parents, carried or not).
+
+#### Sixteen years with the household counted
+
+| sixteen years, twelve seeds | left at year 16 | who | born | oldest a child lived to | person-years |
+|---|---|---|---|---|---|
+| #260 | 3 | founders | 46 | 4 | 804 |
+| + hungry for the household, a day from the store | 2 | a grown child and founders | 46 | grown | 640 |
+| + the children already here counted before another | 3 | founders | 36 | 10 | 657 |
+
+Children live longer; settlements do not. Five of twelve still go in years
+three and four, straight after a first burst of births: the gate counts a child
+once it is born, and every adult who conceives in the first autumn does so
+before any child exists. What a settlement does is boom and bust - a few years
+of births outgrow what an autumn lays in, a winter takes most of it, and the
+children left die of thirst with nobody to feed them.
