@@ -1819,6 +1819,12 @@ pub struct Agent {
     #[serde(default)]
     pub the_small_ones_i_answer_for: f32,
 
+    /// Whether this one is nursing a child of their own body, which keeps
+    /// them from conceiving another. Set every turn by
+    /// `Simulation::feed_the_small_children`. See `NURSED_UNTIL`.
+    #[serde(default)]
+    pub nursing_a_child: bool,
+
     /// How often this one does the things that have a how-often.
     ///
     /// Keyed by `Undertaking` because a rhythm belongs to a kind of work
@@ -1967,6 +1973,7 @@ impl Agent {
             by_what_way: None,
             took_from_the_store_at: None,
             the_small_ones_i_answer_for: 0.0,
+            nursing_a_child: false,
             hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
@@ -6557,6 +6564,18 @@ impl Agent {
             return false;
         }
 
+        // Nor anybody nursing one. A body feeding an infant at the breast
+        // does not conceive, which is what spaces human children two to three
+        // years apart; the sixteen days of cooldown that stood in for it were
+        // taken out when pregnancy became nine months long, and nothing took
+        // their place - so a parent could conceive again the week after a
+        // birth, and a settlement of six grown people had eight or twelve
+        // small children by its fourth winter and starved in it. See
+        // ISSUES_FOUND #262.
+        if self.nursing_a_child {
+            return false;
+        }
+
         true
     }
 
@@ -7127,6 +7146,11 @@ impl Agent {
             }
         }
     }
+
+    /// How long a child is nursed, in years, which is as long as the one who
+    /// bore it does not conceive again. Two years of it and nine months of
+    /// the next pregnancy puts children about three years apart.
+    pub const NURSED_UNTIL: u32 = 2;
 
     /// How a meal out of the pack was come by: carried about, or fetched out
     /// of a store for it.

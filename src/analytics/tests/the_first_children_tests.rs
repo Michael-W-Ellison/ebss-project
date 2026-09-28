@@ -187,3 +187,36 @@ fn a_parent_is_hungry_for_the_household() {
     assert!(a_day_alone >= 11, "a trip to the store brought back {a_day_alone}, under a grown day");
     assert!(a_day_for_two > a_day_alone, "and no more for somebody feeding a child");
 }
+
+/// Somebody nursing their own infant does not conceive again, and somebody
+/// whose infant has died does.
+///
+/// Nothing spaced births once pregnancy was nine months: a parent could
+/// conceive the week after a birth. See ISSUES_FOUND #262.
+#[test]
+fn a_nursing_mother_does_not_conceive() {
+    let mut simulation = a_parent_and_a_newborn();
+    simulation.population.agents[0].state.now_this_many_years_old(25);
+    simulation.population.agents[0].update_life_stage();
+    simulation
+        .population
+        .agents[0]
+        .traits
+        .traits
+        .retain(|t| *t != crate::core::traits::Trait::Infertile);
+
+    simulation.feed_the_small_children();
+    assert!(simulation.population.agents[0].nursing_a_child);
+    assert!(!simulation.population.agents[0].can_reproduce(), "conceived with an infant at the breast");
+
+    // Grown past it.
+    simulation.population.agents[1].state.now_this_many_years_old(Agent::NURSED_UNTIL);
+    simulation.feed_the_small_children();
+    assert!(!simulation.population.agents[0].nursing_a_child, "still nursing a child of two");
+
+    // And an infant that has died is not nursed.
+    simulation.population.agents[1].state.now_this_many_years_old(0);
+    simulation.population.agents[1].state.is_alive = false;
+    simulation.feed_the_small_children();
+    assert!(!simulation.population.agents[0].nursing_a_child);
+}

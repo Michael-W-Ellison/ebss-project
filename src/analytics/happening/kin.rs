@@ -513,6 +513,29 @@ impl Simulation {
         for grown in self.population.agents.iter_mut() {
             grown.state.physiology.also_feeding = 0.0;
             grown.the_small_ones_i_answer_for = 0.0;
+            grown.nursing_a_child = false;
+        }
+
+        // And whoever bore an infant still at the breast is nursing it - the
+        // first of a child's parents is the one who carried it (`give_birth`).
+        // Only while it lives: a mother whose infant has died is not nursing.
+        let at_the_breast: Vec<uuid::Uuid> = self
+            .population
+            .agents
+            .iter()
+            .filter(|child| child.state.is_alive)
+            .filter(|child| child.state.years_old() < crate::agents::Agent::NURSED_UNTIL)
+            .filter_map(|child| child.parent_ids.first().copied())
+            .collect();
+        for bore_it in at_the_breast {
+            if let Some(mother) = self
+                .population
+                .agents
+                .iter_mut()
+                .find(|a| a.id == bore_it && a.state.is_alive)
+            {
+                mother.nursing_a_child = true;
+            }
         }
 
         // And the small ones each parent answers for, carried or not.
