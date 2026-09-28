@@ -20697,3 +20697,38 @@ child before their settlement fails, so spacing seldom binds. What takes the
 settlements that go in years three and four is the first autumn, in which many
 different couples each conceive once - and nothing a single mother's body does
 reaches that.
+
+### 263. Every ready couple conceived in the same week
+
+A pair rolled for conception every turn at the product of their two
+fertilities, near 0.6 for a well-fed pair, so a couple conceived within an
+hour or two of both being ready. The first autumn's put-by opened the gate
+for most couples in the same few weeks, and they all conceived at once:
+eight pregnancies at a time in a settlement of twelve. Now each person has
+one fertile day in every thirty (`Agent::DAYS_IN_A_CYCLE`). Which day it is
+comes from their id, so the days fall across the month. On that day they
+get one chance, with one partner (`last_cycle_tried`), at
+`FECUNDABILITY` (0.25) × both partners' fertility, about 15% for a healthy
+pair.
+
+Sixteen years, twelve seeds, against #262:
+
+| | #262 | #263 |
+|---|---|---|
+| person-years | 703 | **1,205** |
+| settlements standing at year 16 | 4 | **8** |
+| conceptions | 79 | 27 |
+| most carrying at once, any seed | 8 | 2 |
+| a child alive at year 16 | none | seed 4 (two) |
+
+The booms are gone. So are the busts they caused. The settlements that
+used to empty in years three and four mostly stand now with seven to eleven
+founders. But almost nobody in them conceives. The monthly chance is not
+what holds them back: `expects_to_be_able_to_feed_a_child` is. In seed 3,
+nine grown people stood "ready to breed" for 48 person-turns in year 1, 0 in
+years 3, 4, 6 and 9–14, and 2,119 at the most (year 8). That is a few
+person-days a year against 155,000 person-turns of "could not feed a child".
+A readiness window of a few days seldom meets a fertile day. Before this
+change the per-turn roll caught every such window. What decides whether
+children are born is now how rarely the put-by reaches what a household
+needs for a child through the gap.
