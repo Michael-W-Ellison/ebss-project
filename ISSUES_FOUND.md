@@ -20732,3 +20732,55 @@ A readiness window of a few days seldom meets a fertile day. Before this
 change the per-turn roll caught every such window. What decides whether
 children are born is now how rarely the put-by reaches what a household
 needs for a child through the gap.
+
+### 264. Why the stores stay short of what a child asks
+
+Measured on seeds 0, 3, 4 and 9 over six years, month by month, with each
+grown person's reason for not being ready to breed counted on every turn.
+The reasons are checked in this order: hungry, thirsty, tired, some other
+bodily need, gone short lately, not enough put by, no wish for a child.
+Years 2–6 of seeds 3, 4 and 9:
+
+| reason | share of adult-turns |
+|---|---|
+| not enough put by | **68.6%** |
+| hungry / thirsty / tired / other body | 29.3% |
+| no wish for a child | 0.6% |
+| gone short lately | 0.1% |
+| ready | 1.2% |
+
+The store follows the same curve every year. It is near empty at the end of
+the hungry gap (day 360). It rises slowly through spring (0–35% of what the
+gate asks by day 180). It climbs fast after harvest and peaks around day 270
+at **60–105%** of the gate's ask. It is drawn down through the gap, which
+begins on day 285 and runs 75 days. Rot is small, 300–850 items a year
+against 7,000–12,000 stored. The store is not being lost; it is eaten, and it
+is about the size of what the settlement eats in a winter.
+
+Three things keep the gate shut.
+
+**1. The gate asks for about 55% more than people eat.** The gate charges
+each adult `what_i_burn_in_a_day`. That is meant to be the body's own
+measure: `Physiology::tick` keeps a rolling daily average of what the body
+burned. But `Agent::age_turn` calls `Physiology::now_a_body_of` every turn,
+and that sets the figure back to the table's 1,440 units. Every adult in
+every month of every seed read exactly 1,440. Measured, adults burned
+**943 units a day and ate 1,041**. So a parent and newborn are asked for
+1,037 items through the gap, where their actual eating is about 680. The
+Preparedness drive reads the same figure, so it also over-counts what a
+winter takes.
+
+**2. The gate asks for a whole gap every day of the year.** From the end of
+one gap to midsummer the pits hold under a third of it. That is by design:
+the store has just been eaten. It shuts the gate for about seven months of
+every year whatever the harvest was. This is the timing #255 measured and
+chose to keep.
+
+**3. What is left is the autumn window.** Between day 240 and day 285 the
+median adult's share reaches 0.8–1.05 of the ask. Only in some years, and
+only for some days, does anyone get over 1.0. A monthly fertile day seldom
+falls inside that (#263).
+
+The filling is not stopped by the store's target. The target is 1,298 items
+a head; the pits peak at 700–1,000 a head and are still filling when the
+land stops bearing.
