@@ -112,11 +112,18 @@ pub fn attempt_impregnation(
         return None;
     }
 
+    // Once a cycle, on the carrier's own day of it. The caller marks the
+    // chance spent (`last_cycle_tried`) whether or not it takes.
+    if !carrier.could_conceive_now(current_turn) {
+        return None;
+    }
+
     // Calculate conception probability based on fertility.
     //
     // Clamped because this is handed straight to the sampler, which panics on
     // anything outside 0.0 to 1.0 rather than saturating.
-    let conception_chance = (carrier.fertility() * other.fertility()).clamp(0.0, 1.0);
+    let conception_chance =
+        (Agent::FECUNDABILITY * carrier.fertility() * other.fertility()).clamp(0.0, 1.0);
 
     if rng.gen_bool(conception_chance as f64) {
         Some(PregnancyState::new(current_turn, other.id))
@@ -559,7 +566,7 @@ mod tests {
         );
 
         // Would panic outright before the clamp
-        let _ = attempt_impregnation(&other, &carrier, 100);
+        let _ = attempt_impregnation(&other, &carrier, other.my_next_fertile_turn(0));
     }
 
     #[test]
@@ -798,17 +805,65 @@ mod tests {
         // carries is the caller's to decide, so the names had to go.
         let (carrier, other) = create_mating_pair();
 
-        // Try multiple times since it's probabilistic
+        // Try multiple times since it's probabilistic. On the carrier's
+        // fertile day, since no other day gives a chance at all.
+        let at = carrier.my_next_fertile_turn(100);
         let mut success = false;
-        for _ in 0..100 {
-            if let Some(pregnancy) = attempt_impregnation(&carrier, &other, 100) {
+        for _ in 0..200 {
+            if let Some(pregnancy) = attempt_impregnation(&carrier, &other, at) {
                 assert_eq!(pregnancy.father_id, other.id);
-                assert_eq!(pregnancy.conception_turn, 100);
+                assert_eq!(pregnancy.conception_turn, at);
                 success = true;
                 break;
             }
         }
-        assert!(success, "Impregnation should succeed at least once in 100 tries");
+        assert!(success, "Impregnation should succeed at least once in 200 tries");
+    }
+
+    /// A pair conceives on one day a cycle, the carrier's own, and not
+    /// every time. Everybody conceiving in the week the first autumn's
+    /// put-by let them was what emptied the settlements in their third and
+    /// fourth years - see ISSUES_FOUND #263.
+    #[test]
+    fn conception_comes_on_ones_own_day_and_not_every_time() {
+        use crate::environment::seasons::TICKS_PER_DAY;
+
+        let (carrier, other) = create_mating_pair();
+        let fertile = carrier.my_next_fertile_turn(0);
+        assert_eq!(
+            (fertile / TICKS_PER_DAY) % Agent::DAYS_IN_A_CYCLE,
+            carrier.my_fertile_day()
+        );
+
+        // Any other day of the cycle, never.
+        let another_day = fertile + TICKS_PER_DAY;
+        for _ in 0..200 {
+            assert!(attempt_impregnation(&carrier, &other, another_day).is_none());
+        }
+
+        // On the day, sometimes - but well short of always.
+        let took = (0..1000)
+            .filter(|_| attempt_impregnation(&carrier, &other, fertile).is_some())
+            .count();
+        assert!(took > 0, "never conceived on the fertile day");
+        assert!(took < 400, "conceived {} times in 1000 - a chance should be a chance", took);
+
+        // And once the cycle's chance is spent, not again until the next.
+        let mut spent = carrier.clone();
+        spent.last_cycle_tried = Some(Agent::the_cycle_at(fertile));
+        assert!(!spent.could_conceive_now(fertile));
+        let next = spent.my_next_fertile_turn(fertile);
+        assert_eq!(next - fertile, Agent::DAYS_IN_A_CYCLE * TICKS_PER_DAY);
+    }
+
+    /// The days fall differently for different people, so the chances in a
+    /// settlement are spread across the month.
+    #[test]
+    fn different_people_have_different_days() {
+        let days: std::collections::BTreeSet<u32> = (0..40)
+            .map(|_| Agent::new(AgentConfig::default()).my_fertile_day())
+            .collect();
+        assert!(days.len() > 10, "forty people shared only {} days", days.len());
     }
 
     #[test]

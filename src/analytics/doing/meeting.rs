@@ -634,7 +634,13 @@ impl Simulation {
             let female = &self.population.agents[female_index];
             let current_turn = self.current_turn;
 
-            if let Some(pregnancy) = attempt_impregnation(female, male, current_turn) {
+            let its_chance_this_cycle = female.could_conceive_now(current_turn);
+            let got = attempt_impregnation(female, male, current_turn);
+            if its_chance_this_cycle {
+                self.population.agents[female_index].last_cycle_tried =
+                    Some(crate::agents::Agent::the_cycle_at(current_turn));
+            }
+            if let Some(pregnancy) = got {
                 // Pregnancy started!
                 let female = &mut self.population.agents[female_index];
                 female.pregnancy = Some(pregnancy);

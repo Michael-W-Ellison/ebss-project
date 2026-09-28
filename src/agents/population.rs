@@ -1140,6 +1140,9 @@ impl Population {
             .map(|(i, _)| i)
             .collect();
 
+        // Whose chance this cycle was spent in this pass, taken or not.
+        let mut tried_this_turn: Vec<usize> = Vec::new();
+
         // Attempt reproduction for each potential pair
         for i in 0..alive_agents.len() {
             for j in (i + 1)..alive_agents.len() {
@@ -1184,6 +1187,15 @@ impl Population {
                         let carrier = &self.agents[carrier_idx];
                         let other = &self.agents[other_idx];
 
+                        // One chance a cycle, on the carrier's own day of it,
+                        // and with one partner - see `DAYS_IN_A_CYCLE`.
+                        if tried_this_turn.contains(&carrier_idx)
+                            || !carrier.could_conceive_now(self.current_turn)
+                        {
+                            continue;
+                        }
+                        tried_this_turn.push(carrier_idx);
+
                         // Try to impregnate - this uses proper pregnancy system
                         let got = attempt_impregnation(carrier, other, self.current_turn);
                         *self
@@ -1214,6 +1226,11 @@ impl Population {
                     }
                 }
             }
+        }
+
+        let this_cycle = Agent::the_cycle_at(self.current_turn);
+        for idx in tried_this_turn {
+            self.agents[idx].last_cycle_tried = Some(this_cycle);
         }
 
         // Apply pregnancies to female agents and emit pregnancy events

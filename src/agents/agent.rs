@@ -1825,6 +1825,11 @@ pub struct Agent {
     #[serde(default)]
     pub nursing_a_child: bool,
 
+    /// The cycle (see `DAYS_IN_A_CYCLE`) in which this one last had their
+    /// chance of conceiving, taken or not. A cycle gives one chance.
+    #[serde(default)]
+    pub last_cycle_tried: Option<u32>,
+
     /// How often this one does the things that have a how-often.
     ///
     /// Keyed by `Undertaking` because a rhythm belongs to a kind of work
@@ -1974,6 +1979,7 @@ impl Agent {
             took_from_the_store_at: None,
             the_small_ones_i_answer_for: 0.0,
             nursing_a_child: false,
+            last_cycle_tried: None,
             hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
@@ -7151,6 +7157,52 @@ impl Agent {
     /// bore it does not conceive again. Two years of it and nine months of
     /// the next pregnancy puts children about three years apart.
     pub const NURSED_UNTIL: u32 = 2;
+
+    /// How many days apart the chances of conceiving come. One day in each,
+    /// which day it is being this one's own - see `my_fertile_day`.
+    pub const DAYS_IN_A_CYCLE: u32 = 30;
+
+    /// The chance that a pair in their prime, well and wanting it, conceive
+    /// on the one day of a cycle it can happen. About a quarter, which is
+    /// what people manage; most couples take several months.
+    ///
+    /// What stood before was a roll every turn at the product of the two
+    /// fertilities, near 0.6 for a well-fed pair - every pair ready in the
+    /// same week conceived that week, and the first autumn's put-by opened
+    /// the gate for all of them at once. See ISSUES_FOUND #263.
+    pub const FECUNDABILITY: f32 = 0.25;
+
+    /// Which day of each cycle this one can conceive on. Their own, so the
+    /// chances in a settlement fall across the month and not on one day.
+    pub fn my_fertile_day(&self) -> u32 {
+        (self.id.as_u128() % Self::DAYS_IN_A_CYCLE as u128) as u32
+    }
+
+    /// Which cycle `now` falls in, counted from the start of the world.
+    pub fn the_cycle_at(now: u32) -> u32 {
+        now / crate::environment::seasons::TICKS_PER_DAY / Self::DAYS_IN_A_CYCLE
+    }
+
+    /// Whether `now` is this one's fertile day and their chance this cycle
+    /// is not already spent.
+    pub fn could_conceive_now(&self, now: u32) -> bool {
+        let day = now / crate::environment::seasons::TICKS_PER_DAY;
+        day % Self::DAYS_IN_A_CYCLE == self.my_fertile_day()
+            && self.last_cycle_tried != Some(Self::the_cycle_at(now))
+    }
+
+    /// The first tick at or after `from` on which `could_conceive_now` holds.
+    pub fn my_next_fertile_turn(&self, from: u32) -> u32 {
+        let a_day = crate::environment::seasons::TICKS_PER_DAY;
+        let mut day = from / a_day;
+        loop {
+            let at = (day * a_day).max(from);
+            if self.could_conceive_now(at) {
+                return at;
+            }
+            day += 1;
+        }
+    }
 
     /// How a meal out of the pack was come by: carried about, or fetched out
     /// of a store for it.
