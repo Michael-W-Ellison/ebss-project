@@ -20680,3 +20680,20 @@ once it is born, and every adult who conceives in the first autumn does so
 before any child exists. What a settlement does is boom and bust - a few years
 of births outgrow what an autumn lays in, a winter takes most of it, and the
 children left die of thirst with nobody to feed them.
+
+### 262. Nothing spaced births
+
+A cooldown of sixteen days stood in for birth spacing until pregnancy became
+nine months long, and it was taken out as covered by the pregnancy - which
+covers the pregnancy and nothing after it. Whoever bore a child now nurses it
+while it lives and is under two (`Agent::NURSED_UNTIL`) and does not conceive
+meanwhile (`Agent::nursing_a_child`); a mother whose infant has died is not
+nursing.
+
+It is right and it moves almost nothing. Sixteen years, twelve seeds: eleven
+seeds came out exactly as they did without it; 703 person-years against 657,
+four settlements left against three, 35 born. Almost nobody bears a second
+child before their settlement fails, so spacing seldom binds. What takes the
+settlements that go in years three and four is the first autumn, in which many
+different couples each conceive once - and nothing a single mother's body does
+reaches that.
