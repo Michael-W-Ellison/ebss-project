@@ -85,6 +85,11 @@ fn a_need_further_down_is_further_off() {
 /// Two people in the same field get two different answers, because the clock
 /// is read off each one's own drive. Here it is the weight of having been
 /// ignored - a need that has been denied for days builds faster.
+///
+/// Read off wanting company, which builds at a rate and presses the harder
+/// the longer it goes unanswered. It was hunger, which since #260 is read off
+/// the body - a stomach and a gut, not a grievance - so the two bodies gave
+/// two answers and the one going short was not the sooner.
 #[test]
 fn two_people_do_not_get_the_same_answer() {
     let mut world = World::new(WorldConfig::default());
@@ -97,34 +102,34 @@ fn two_people_do_not_get_the_same_answer() {
 
     let threshold = simulation.population.agents[0]
         .drives
-        .get(DriveType::Hunger)
+        .get(DriveType::Social)
         .map(|drive| drive.threshold)
-        .expect("hunger exists");
+        .expect("company is wanted");
 
     for who in 0..2 {
-        if let Some(hunger) = simulation.population.agents[who]
+        if let Some(social) = simulation.population.agents[who]
             .drives
-            .get_mut(DriveType::Hunger)
+            .get_mut(DriveType::Social)
         {
-            hunger.value = threshold * 0.5;
-            hunger.denied_turns = 0;
+            social.value = threshold * 0.5;
+            social.denied_turns = 0;
         }
     }
 
-    // One of them has been going short for two days.
-    if let Some(hunger) = simulation.population.agents[1]
+    // One of them has been going without for two days.
+    if let Some(social) = simulation.population.agents[1]
         .drives
-        .get_mut(DriveType::Hunger)
+        .get_mut(DriveType::Social)
     {
-        hunger.denied_turns = 24;
+        social.denied_turns = 24;
     }
 
     let easy = simulation.population.agents[0]
-        .how_long_before_this_asks(DriveType::Hunger)
-        .expect("hunger can ask");
+        .how_long_before_this_asks(DriveType::Social)
+        .expect("company can ask");
     let pressed = simulation.population.agents[1]
-        .how_long_before_this_asks(DriveType::Hunger)
-        .expect("hunger can ask");
+        .how_long_before_this_asks(DriveType::Social)
+        .expect("company can ask");
 
     assert!(
         pressed < easy,

@@ -28,9 +28,19 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #259): `cargo test --lib` - 2,705 passed,
-3 failed, 2 ignored, 53 minutes. Two are the multi-generation requirement; the
-third was the recorded dice count, which #256 to #259 move and #259 records.
+**Last full run** (ISSUES_FOUND #263): `cargo test --lib` - 2,709 passed,
+6 failed, 2 ignored, 56 minutes. After it, three are left:
+- The two multi-generation tests below.
+- `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it`, one of
+  the two thresholds that flap (below).
+
+The other three were fixed after the run:
+- Two were the recorded dice counts, which #261 to #263 moved; they are
+  re-recorded.
+- `anticipation_tests::two_people_do_not_get_the_same_answer` had failed on
+  every run since #260, which reads hunger's clock off the body rather than
+  off how long it has gone unanswered. It now asks the same question of
+  wanting company, which is still built that way.
 
 | test | reports | what is known |
 |---|---|---|

@@ -176,7 +176,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Down to 6,909 for #260: somebody setting out on a walk that will
     // outlast the meal in them takes food along first, and that is decided in
     // the first two and a half days.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_909;
+    // Down to 6,795 for #261 to #263: a pair ready to conceive no longer
+    // rolls for it every turn, only on the one day a month it can happen.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_795;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -328,7 +330,12 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // the walk priced into what is learned. Not traced to any one of those.
     // And down 10.6% for #260: food taken along on a walk that will outlast
     // the meal in you, and a body that knows when it will next be hungry.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 610_769;
+    // And up 18.9% for #261 to #263: the winter pressed on whoever bears,
+    // births spaced by nursing, and conception once a month on each one's own
+    // day at a chance of about a quarter. Fewer rolls for conceiving, but a
+    // settlement no longer all pregnant at once, and more of it alive to take
+    // turns. Not traced to any one of those.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 725_995;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
