@@ -20784,3 +20784,37 @@ falls inside that (#263).
 The filling is not stopped by the store's target. The target is 1,298 items
 a head; the pits peak at 700–1,000 a head and are still filling when the
 land stops bearing.
+
+### 265. The measured burn, tried and not taken
+
+This tested the fix #264 points to: stop `now_a_body_of` from resetting
+`what_i_burn_in_a_day` every turn, so each person's reckoning uses what
+their own body burns. It was tried in the analysis copy only. It works as
+written: within a month everybody's figure sits between 850 and 1,150
+instead of 1,440 for all. It makes the settlements worse.
+
+Sixteen years, twelve seeds, against #263:
+
+| | #263 | measured burn |
+|---|---|---|
+| person-years | 1,205 | **974** |
+| settlements standing at year 16 | 8 | **6** |
+| conceptions | 27 | 33 |
+| deaths from hunger | 36 | **65** |
+| peak store a head, years 1–5 (typical) | 1,000–1,200 | 750–900 |
+
+The gate does open. By day 270, 96% of seed-months had someone over it, and
+the median adult was at 1.25. But the same figure feeds Preparedness. With
+the winter reckoned at what the body burns, people feel provided for sooner
+and stop filling the pits about 20% earlier. A winter takes more out of the
+pits than the bodies burn: food sits in packs, is moved between pits, and
+rots, and the store is drawn on from day 270 though the land bears until
+day 285. #264 measured the pits falling by about 810 items a head over the
+last three months of the year, against about 680 burned. The table's 1,440
+was over-asking, and it was also, by accident, the margin that covered that
+difference. Take the margin away and the stores come up short in the
+winter.
+
+Not committed. What a winter costs a person is better learned from the
+store itself: how far it fell a head across the last gap. That would size
+the store and the gate alike.
