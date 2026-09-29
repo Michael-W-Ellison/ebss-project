@@ -20947,3 +20947,41 @@ monthly, measured around the settlement's centre:
   deer, elk, goats and reindeer are within 30 cells in every month.
   `hunting_action` only answers a want for hides, and a person at one cell
   a turn cannot close on them.
+
+### 269. Walking five cells a turn, tried
+
+In the analysis copy only: `Action::Move` takes up to five cells in a turn
+(50 metres instead of 10). A turn of walking costs what one did, so the
+cost per cell is a fifth. The trip-time estimates are divided by the pace
+too: the walk behind `what_to_take_along`, the errand give-up and
+turn-round, `how_long_this_would_take`, `what_this_patch_is_worth` and
+`what_this_way_is_worth`. Five is about how far the animals move in a turn
+(2–6), so people and game keep about the same footing.
+
+Sixteen years, twelve seeds, against #263:
+
+| | #263 | five cells a turn |
+|---|---|---|
+| person-years | 1,205 | **1,017** |
+| settlements standing at year 16 | 8 | **9** |
+| people alive at year 16 | 43 | 30 |
+| conceptions | 27 | 28 |
+| deaths from hunger | 36 | **47** |
+| deaths in the last quarter (days 270–360) | 57 | **84** |
+
+The stores are no fuller: median peak a head is 1,058–1,337, against
+1,057–1,126. Seeds 0, 3 and 9, years 1–3, against the same from #266:
+
+- **Winter actions:** Move rose from 24% to **36%** and SeekShelter fell from
+  42% to **28%**. More walking about in the cold, and "the weather" killed 4
+  where it had killed none.
+- **Attacks on animals:** from 673 to **4,721**, with hardly more meat to
+  show: `cut:meat` 206 to 231, `Meat snare` 196 to 204. People can get
+  within reach of animals now, and mostly end up fighting them.
+- **Still no winter fishing** (0 casts either way): it was written off in
+  the first spring (#266). Snare rounds rose only from 98 to 135.
+
+Walking faster did not by itself bring in winter food. What stops that is
+still the write-offs of #266, and that nothing makes hunting for meat a way
+of answering hunger. Fading (#267) failed on the cost of the walk, and this
+failed without the fading, so the two are worth trying together.
