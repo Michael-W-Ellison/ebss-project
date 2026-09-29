@@ -21109,3 +21109,32 @@ that means harm and outweighs the walker comes within sight, the same
 reckoning as the sight pass, and the danger is remembered. The prey
 distances are back at 5 and 12 cells. The winter hunger is not yet
 explained.
+
+### 274. At 5 km/h, stopping for danger on the way is not enough
+
+This added a stop for danger (#273) and put the prey distances back, then
+ran the same twelve seeds for five years on the big map:
+
+| | a cell a turn | 5 km/h (#273) | 5 km/h, stopping for danger |
+|---|---|---|---|
+| person-years | 667 | 534 | 522 |
+| deaths by a blow / a wound | 1 / 0 | 16 / 8 | 19 / 14 |
+| hunger in the winter | 13 | 19 | **9** |
+| store a head at the year's end (median) | 270 | 662 | 483 |
+| hunts (landed) | 5 (0) | 550 (115) | 135 (40) |
+| walks stopped for a beast | – | – | 215 |
+
+The food works: the fewest winter hunger deaths of any run, and twice the
+store. What kills is fights. Two hundred and fifteen walks stopped short of
+something, and the damage from fighting animals hardly moved (3,934). One
+year on seeds 0–3, with every lost exchange counted by species and mood:
+lion 3 and bear 3, **all while the person was angry**, and an eagle striking
+six times. A lion or a bear takes about thirty health an exchange, and
+somebody angry stands and fights once a minute for what is left of the half
+hour. The deaths come at about one a settlement every two years, in every
+year alike.
+
+On the small map a lion hardly ever came near anybody. At 25 times the
+pace, and with random wandering scaled up with the rest, big animals come
+into a settlement's country every few days, and the people there have no
+answer to a lion but to stand.
