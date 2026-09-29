@@ -21027,3 +21027,44 @@ twelve differ by about 6% in person-years. The variants since #263
 The rerun of passive snares on seeds 12–23 was lost to a container
 restart. The next change replaces walking altogether, so it was not
 repeated.
+
+### 272. Every settlement has lived on a quarter of a square kilometre
+
+A cell is ten metres a side (`Grid::METRES_PER_CELL`), a hundred square
+metres. `WorldConfig::default()` is **50 × 50 cells: 500 metres across**.
+It is what every long run in this file has used, and what the multi-
+generation tests (`longevity_tests`, `survival_pressure_tests`), both GUIs
+and `test_simulation` build. `WorldConfig::big_enough_for_an_ecology()`, a
+thousand cells across and a hundred square kilometres, is checked for its
+size by one land test and has never had anyone living on it. So the rivers
+fished out and the ground trapped out within a month (#268) were the whole
+country, not the ground near camp. A band of hunter-gatherers lives off
+tens of square kilometres.
+
+**Walking at 5 km/h, first year.** In the analysis copy behind `ZZ_HG`:
+
+- A turn is half an hour to be spent. A walk goes up to 250 cells (2.5 km)
+  and costs the minutes it takes, and what is left of the half hour goes on
+  whatever is done on arriving.
+- Walking burns 2.45 times an ordinary day's rate for the minutes it lasts
+  (3.5 METs against a day's average of about 1.4). That is about 29 units a
+  kilometre, 2% of a day, times the load on the back.
+- Snares within reach of the route are emptied on the way. The ground
+  about the arrival is woken, and the walker looks about.
+- Animals cover 25 times what they did: a sheep about a kilometre an hour,
+  a wolf 1.7.
+- The distances that were really how far is worth walking are ten times
+  what they were: water, prey, a trapline, curiosity, a new camp.
+
+Seed 3, one year, founders started at the middle of the big map:
+
+| | walking a cell a turn | 5 km/h |
+|---|---|---|
+| alive at the year's end | 12 | 11 (one hunger) |
+| pits at the peak | 8,999 (day 270) | 9,380 (full by day 210) |
+| **pits at the year's end** | **18** | **4,789** |
+| snare catches taken in passing | – | 1,026 |
+| cells walked | – | 211,048 (about half a km a person a day) |
+| seconds for the year | 395 | 708 (53 on the small map) |
+
+A five-year comparison on twelve seeds is running.
