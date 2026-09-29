@@ -20908,3 +20908,42 @@ if so, why here they do not. Among the candidates: how thin the reaches
 near camp run after the first spring, since the odds are
 0.15 + 0.4 × (fish / 60); two fish a catch; and the animals, which yielded
 no meat by any route after year one.
+
+### 268. What walking costs, and what the winter country holds
+
+**Walking, per turn, is cheap.** A step is charged 2 energy
+(`Simulation::walking`, times the load on the back), which
+`physiology::what_the_work_costs` turns into **0.7** of an ordinary rate.
+Asleep is 0.5, ordinary work (5) is 1.0 and hard work is 1.5. Being cold
+costs health (`ExposureType::Hypothermia`), not energy.
+
+**Per distance it is ruinous, because a turn is thirty minutes and one
+step.** A cell is ten metres (`SmallLife::hectares_in_a_hunting_ground`),
+so a person walks 20 metres an hour, about 250 times slower than someone
+walking at 5 km/h. Fishing water up to 14 cells off is seven hours each
+way. A kilometre takes a hundred turns and burns about two days' food,
+where a real kilometre costs about 3% of one. The rate is not what needs
+adjusting; the distance a turn covers is. It is also why nobody can hunt:
+animals move 2–6 cells a turn and a person moves one.
+
+**The winter country near a settlement.** Seeds 3 and 9, three years,
+monthly, measured around the settlement's centre:
+
+- **Snares already work passively.** 58–78 snares stay set all year and
+  catch 10–34 head a month, winter included. Almost none are collected. In
+  years 2–3: **caught 393, robbed 366, taken home 26** (seed 3); caught 370,
+  robbed 319, taken 52 (seed 9). A catch waits four to ten days before a
+  fox has it, and nobody walks the line: trapping is written off (#266) and
+  a round is up to 15 cells, seven hours out. The ground under the
+  settlement stays at **6–18%** of what it carries from the first month
+  on. A catch is one item of `meat` weighing 1.2, about 150 energy, a
+  tenth of a day. A two-kilogramme rabbit would be most of a day.
+- **Fish near camp are gathered out.** Within 20 cells the reaches hold
+  5–30% of their stock in spring and summer and **0–8 of 1,400–2,200** from
+  day 300 to the new year. They are emptied bare-handed as forage: 770–1,240
+  a month are gathered off fish nodes in the first three months of the
+  year, and 3,800 in the month before the gap.
+- **Big game is there all winter and nobody hunts it for meat.** 1–20 cows,
+  deer, elk, goats and reindeer are within 30 cells in every month.
+  `hunting_action` only answers a want for hides, and a person at one cell
+  a turn cannot close on them.
