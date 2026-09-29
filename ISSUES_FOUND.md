@@ -20818,3 +20818,48 @@ winter.
 Not committed. What a winter costs a person is better learned from the
 store itself: how far it fell a head across the last gap. That would size
 the store and the gate alike.
+
+### 266. Why nobody hunts, fishes or traps in the winter
+
+Measured on seeds 0, 3 and 9 over three years: every action a grown person
+took, by month, and every adult's record of hunting, fishing and trapping
+at the end of each year.
+
+**They stop in the first spring, and never start again.** The Fish action
+is taken 50–70 times a settlement in the first three months of year one,
+and not once after that in either seed that stands. Snares are set 45–65
+times in those months, then a handful a year. Hunting is attempted almost
+never. In the hungry gap (days 285–360) the actions are SeekShelter
+(45–49%), Move (18–19%), Gather (10–11%, which brings in nearly nothing),
+Eat (5%) and PickUp from the pits (4–5%). The pits are the only food
+coming in.
+
+**Why they stop.** At the end of year one, every adult in both seeds had
+fishing and trapping marked as not worth trying (`Lessons::worth_trying`
+false). Examples: fish 0/5, 1/5, 6/13, 8/16; trap 4/10, 13/24, 26/45.
+Three things combine:
+
+1. **The record for a kind of undertaking never fades.**
+   `Lessons::record` keeps `belief` and `attempts` for ever;
+   `Lessons::fade` only touches the particular records. `worth_trying` is a
+   cliff: after five attempts, a belief at or under 0.2 means never again.
+   A way written off in the spring is written off for life, in every
+   season.
+2. **A way has to succeed nearly two times in three to survive.** A success
+   adds 0.06 and a failure takes 0.10. Starting at 0.5, anything that works
+   less than 62.5% of the time drifts down to the line. Catching a fish on
+   half your casts, or finding something in a snare on 26 rounds of 45, is
+   a good return on the time. It gets written off because it is judged by
+   whether each attempt worked, not by what it brought in against the
+   alternatives. The alternative in the spring is picking greens off a
+   bush, which never fails.
+3. **Hunting for food is not a way at all.** `hunting_action` only answers
+   a want for hides (`wants_to_hunt`: "Hunting for the meat as such does
+   not pay"). The only hunt for meat is `food_action`'s opportunistic one,
+   for prey within five tiles of somebody hungry. `hunt` was 0/0 for nearly
+   everybody.
+
+Also, Preparedness never leads to fishing or hunting, only to gathering
+(in the autumn) and to snares. And a strongly hungry person (pressure 0.6
+or more) considers only the immediate ways, and fishing, hunting and the
+trapline are not among them.
