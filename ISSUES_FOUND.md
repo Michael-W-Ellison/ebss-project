@@ -20863,3 +20863,48 @@ Also, Preparedness never leads to fishing or hunting, only to gathering
 (in the autumn) and to snares. And a strongly hungry person (pressure 0.6
 or more) considers only the immediate ways, and fishing, hunting and the
 trapline are not among them.
+
+### 267. Letting the undertaking record fade, tried and not taken
+
+This tried the first fix #266 points to, in the analysis copy only.
+`Lessons::fade` now drifts each undertaking's belief back toward `UNTRIED`,
+halving over a season, the same way the particular records already fade. A
+way written off comes back to worth trying in about five weeks. It works as
+written: fishing and trapping were taken up again in every month of every
+year, winter included.
+
+Sixteen years, twelve seeds, against #263:
+
+| | #263 | fading |
+|---|---|---|
+| person-years | 1,205 | **733** |
+| settlements standing at year 16 | 8 | **4** |
+| conceptions | 27 | 24 |
+| deaths from hunger / thirst | 36 / 2 | **52 / 10** |
+
+Seeds 3 and 9, years 2 and 3, compared with the same seeds and years from
+the #266 probe:
+
+- **Fishing:** 28–71 casts a month, against none. By the end of year 3 the
+  records read 1/32, 2/32, 4/35, 9/42, 14/51, 18/58: about one cast in five
+  lands, and a landed cast is `FISH_PER_CAST` = 2 fish.
+- **Snares:** rounds walked went from 1–29 a month to 4–93. `Meat snare`
+  and `Butchered meat` harvests were **nought** in years 2 and 3 either way.
+- **Walking:** `Move` went from 91,000 to 218,000 over the two years, and
+  in the last quarter from 33,000 to 109,000. Fishing means walking to water
+  up to 14 tiles off; a trapline round is up to 15. In the winter that is
+  walking in the cold for about 0.4 of a fish a cast, against a day's need
+  of seven or eight items.
+
+What people learned the first time was right, in this world as it stands:
+the water and the snares near a settlement give almost nothing, and in
+winter the trip costs more than it brings. Fading also reached the other
+undertakings, and fighting in the last quarter rose from 0–25 to 10–31 a
+month.
+
+The question under the question is the world, not the learning: whether
+winter water and winter snares near a settlement ought to feed people, and
+if so, why here they do not. Among the candidates: how thin the reaches
+near camp run after the first spring, since the odds are
+0.15 + 0.4 × (fish / 60); two fish a catch; and the animals, which yielded
+no meat by any route after year one.
