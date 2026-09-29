@@ -21138,3 +21138,36 @@ On the small map a lion hardly ever came near anybody. At 25 times the
 pace, and with random wandering scaled up with the rest, big animals come
 into a settlement's country every few days, and the people there have no
 answer to a lion but to stand.
+
+### 275. People back away from what outweighs them; the winter goes hungry instead
+
+Three changes, in the analysis copy behind `ZZ_HG`:
+
+- Somebody angry at a beast that outweighs them (the sight pass's
+  reckoning, with a spear counted) backs away if there is anywhere to go.
+  They still stand when cornered, or when one of their own is in the way
+  (`somebody_of_mine_is_in_the_way`).
+- Nothing strikes at a grown person unless it weighs at least a quarter of
+  one (15 kg). An eagle does not take a man.
+- A walk stops at the edge of anywhere the walker remembers trouble
+  (`how_bad_is_it_there` over 0.5), unless it started there. A beast seen on
+  the way is remembered as trouble at that place.
+
+Twelve seeds, five years, big map:
+
+| | a cell a turn | 5 km/h (#274) | 5 km/h, backing away |
+|---|---|---|---|
+| person-years | 667 | 522 | 576 |
+| deaths by a blow | 1 | 36 | **2** |
+| damage fighting animals / beasts' attacks | 330 / 16 | 3,934 / 957 | **354 / 270** |
+| hunger (all) | 17 | 26 | **42** |
+| winter deaths by hunger / weather / thirst | 13 / 2 / 0 | 9 / 6 / 0 | 20 / 7 / 5 |
+| store a head at the year's end (median) | 270 | 483 | 471 |
+
+People backed away 579 times, stopped 257 walks for a beast and 237 short
+of a bad place. The fights are back where they were on a cell a turn. But
+the winter now kills from hunger, cold and thirst, with nearly twice the
+store in the ground, so the hungry are somewhere other than the store. Under
+`ZZ_HG`, `HOW_FAR_A_PEOPLE_WILL_MOVE` was scaled ten times with the other
+walking distances, so a people can move its camp six kilometres away from
+its pits. Being measured.
