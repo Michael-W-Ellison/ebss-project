@@ -21068,3 +21068,44 @@ Seed 3, one year, founders started at the middle of the big map:
 | seconds for the year | 395 | 708 (53 on the small map) |
 
 A five-year comparison on twelve seeds is running.
+
+### 273. Five years on the big map, and what walking fast walked into
+
+Twelve seeds, five years, the founders at the middle of the hundred square
+kilometres (#272):
+
+| | small map (#263, years 1–5) | big map, a cell a turn | big map, 5 km/h |
+|---|---|---|---|
+| person-years | 513 | **667** | 534 |
+| settlements standing at year 5 | 12 | **12** | 12 |
+| deaths | 42 | **19** | 59 |
+| conceptions | – | 9 | 11 |
+| store a head at the year's end (median) | – | 270 | **662** |
+
+**The big map alone** takes deaths in five years from 42 to 19, 13 of them
+hunger in the winter. The country is big enough not to be stripped. Almost
+nobody conceives: the gate of #264 is still shut.
+
+**Walking at 5 km/h** kept two and a half times the store over the winter.
+It also walked people into animals. Damage summed over the runs:
+
+| | a cell a turn | 5 km/h |
+|---|---|---|
+| fighting an animal | 330 | 3,076 |
+| a beast's attack | 16 | 839 |
+| a hunted animal turning | 0 | 250 |
+| hunts (landed) | 5 (0) | 550 (115) |
+
+Blows killed 26, where they had killed 1, and nearly all of those were
+healthy, fed people outside the winter. Hunger in the winter killed 19
+against 13, with twice the store.
+
+Two causes. A walk went up to 2.5 km without looking, and the walker only
+saw what was about them on arriving. And the prey worth going after on the
+way (`AS_NEAR_AS_PREY_HAS_TO_BE_TO_BOTHER`, `HUNT_SEARCH_RADIUS`) had been
+scaled ten times with the rest of the walking distances, so a hungry person
+went for anything within half a kilometre. Now: a walk stops when anything
+that means harm and outweighs the walker comes within sight, the same
+reckoning as the sight pass, and the danger is remembered. The prey
+distances are back at 5 and 12 cells. The winter hunger is not yet
+explained.
