@@ -21078,11 +21078,11 @@ kilometres (#272):
 |---|---|---|---|
 | person-years | 513 | **667** | 534 |
 | settlements standing at year 5 | 12 | **12** | 12 |
-| deaths | 42 | **19** | 59 |
+| deaths | 68 | **19** | 59 |
 | conceptions | – | 9 | 11 |
 | store a head at the year's end (median) | – | 270 | **662** |
 
-**The big map alone** takes deaths in five years from 42 to 19, 13 of them
+**The big map alone** takes deaths in five years from 68 to 19, 13 of them
 hunger in the winter. The country is big enough not to be stripped. Almost
 nobody conceives: the gate of #264 is still shut.
 
