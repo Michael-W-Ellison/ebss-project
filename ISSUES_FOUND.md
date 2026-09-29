@@ -21005,3 +21005,25 @@ robbed. Trying harder, or ranging further, costs more than the country
 gives back at a tenth of a day a rabbit and one cast in five. More effort
 is not the answer; a better return on less effort is. That is the passive
 trapping to try next.
+
+### 271. Passive snares, tried, and how much sixteen years vary between seeds
+
+**Passive snares**, in the analysis copy: whoever ends a turn within
+`CLOSE_ENOUGH_TO_A_SNARE` of a snare with something in it takes the catch,
+whoever set it, and counts it as trapping that worked. A head is six items
+of `meat`, two kilogrammes in all, instead of one item. Over twelve seeds
+and sixteen years, **11,632 head were carried home** (11,457 of them in
+passing) against about 80 before, and 15,922 were still robbed. Against
+#263: person-years 1,008 against 1,205, standing 7 against 8, hunger deaths
+39 against 36. The stores were no emptier. The loss was mostly blows in
+years 1–2 (43 against 28), and nothing ties that to the snares.
+
+**Seed-to-seed variation.** The current code on twelve new seeds (12–23):
+**1,348 person-years, 7 standing**, 41 conceptions, 11 born who lived to be
+counted. On seeds 0–11 it had 1,205, 8 standing and 27. So two sets of
+twelve differ by about 6% in person-years. The variants since #263
+(733–1,017) are below both, so they really were worse and not unlucky.
+
+The rerun of passive snares on seeds 12–23 was lost to a container
+restart. The next change replaces walking altogether, so it was not
+repeated.
