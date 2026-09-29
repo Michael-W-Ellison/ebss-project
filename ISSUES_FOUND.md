@@ -20985,3 +20985,23 @@ Walking faster did not by itself bring in winter food. What stops that is
 still the write-offs of #266, and that nothing makes hunting for meat a way
 of answering hunger. Fading (#267) failed on the cost of the walk, and this
 failed without the fading, so the two are worth trying together.
+
+### 270. Walking five cells a turn and fading together, tried
+
+The two changes of #267 and #269 together, in the analysis copy. Sixteen
+years, twelve seeds:
+
+| | #263 | walk ×5 | fading | both |
+|---|---|---|---|---|
+| person-years | 1,205 | 1,017 | 733 | **949** |
+| settlements standing at year 16 | 8 | 9 | 4 | **7** |
+| deaths from hunger / thirst | 36 / 2 | 47 / 3 | 52 / 10 | **62 / 12** |
+
+People do go back to the water and the snares. Seeds 0, 3 and 9, years
+1–3, in the last quarter: 168 casts and 339 snare rounds (none and 98
+before). But **Move is 53% of winter actions** and SeekShelter 19%. Of 1,232
+head caught in snares in years 2–3, **83 were carried home** and 1,141 were
+robbed. Trying harder, or ranging further, costs more than the country
+gives back at a tenth of a day a rabbit and one cast in five. More effort
+is not the answer; a better return on less effort is. That is the passive
+trapping to try next.
