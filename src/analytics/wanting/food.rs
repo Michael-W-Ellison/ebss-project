@@ -1114,11 +1114,11 @@ impl Simulation {
     pub(in crate::analytics) const AS_MUCH_AS_ONE_TRIP_TAKES: f32 =
         crate::agents::provision::AS_MUCH_AS_ONE_TRIP_TAKES;
 
-    /// How much of a turn one pace of walking comes to.
+    /// How many times a trip walks each pace: there and back.
     ///
-    /// A `Move` action is one tile, so a patch twenty paces off is twenty
-    /// turns of walking each way - most of two days - however cheap the
-    /// picking is at the end of it. Counted both ways.
+    /// A `Move` was one tile, so a patch twenty paces off was twenty turns of
+    /// walking each way - most of two days. At five kilometres an hour it is
+    /// four minutes; what a pace takes is `pace::turns_to_walk`.
     pub(in crate::analytics) const TURNS_A_PACE_TAKES: f32 = 2.0;
 
     /// What a trip to this patch is worth, per unit of effort spent on it.
@@ -1160,7 +1160,8 @@ impl Simulation {
         // two days there and back.
         //
         // So: what the trip is worth, less what it costs, per turn it takes.
-        let turns = 1.0 + paces as f32 * Self::TURNS_A_PACE_TAKES;
+        let turns = 1.0
+            + crate::world::pace::turns_to_walk(paces) * Self::TURNS_A_PACE_TAKES;
         (brings_back - costs) / turns
     }
 

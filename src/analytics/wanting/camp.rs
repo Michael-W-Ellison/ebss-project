@@ -112,7 +112,10 @@ impl Simulation {
     }
 
     /// How far a people will pick up and move for water they can count on.
-    pub(in crate::analytics) const HOW_FAR_A_PEOPLE_WILL_MOVE: u32 = 60;
+    ///
+    /// Six hundred metres when a person walked a cell a turn; six kilometres
+    /// now that they walk at five kilometres an hour - see `world::pace`.
+    pub(in crate::analytics) const HOW_FAR_A_PEOPLE_WILL_MOVE: u32 = 60 * crate::world::pace::HOW_MUCH_FURTHER_IS_WORTH_WALKING;
 
     /// What one person wants standing within reach of the camp before the
     /// ground counts as feeding them.

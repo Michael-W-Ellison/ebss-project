@@ -623,10 +623,18 @@ impl Physiology {
 
     /// Live for this many minutes, having spent this much energy doing it.
     pub fn advance(&mut self, minutes: u32, energy_spent: f32) {
+        self.advance_at(minutes, what_the_work_costs(energy_spent));
+    }
+
+    /// Live for this many minutes at this multiple of an ordinary day's rate.
+    ///
+    /// What `advance` does once it has turned an action's energy into a rate;
+    /// a turn that was part walking and part something else has a rate of its
+    /// own, mixed by the minute, and hands it in here.
+    pub fn advance_at(&mut self, minutes: u32, effort: f32) {
         if minutes == 0 {
             return;
         }
-        let effort = what_the_work_costs(energy_spent);
         let was = self.minute;
         let now = self.minute + minutes;
 

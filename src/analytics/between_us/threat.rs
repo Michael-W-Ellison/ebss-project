@@ -396,6 +396,41 @@ impl Simulation {
             away_from: (where_it_is.0, where_it_is.1, agent_position.2),
         };
 
+        // Angry is not a reason to stand in front of something that outweighs
+        // you. Somebody who could get away, and has nobody of their own in
+        // the way of it (above), backs off.
+        //
+        // With people walking kilometres and animals at their own paces, a
+        // lion or a bear came into a settlement's country every few days, and
+        // an angry man stood and fought it once a minute for the rest of the
+        // half hour: blows and wounds killed one person a settlement every
+        // two years (ISSUES_FOUND #274). Reckoned the way the sight pass
+        // reckons a beast, a spear counted.
+        let outweighs_me = self
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .find(|animal| animal.id == which)
+            .and_then(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                let armed = agent
+                    .what_i_have_to_work_with(crate::agents::SkillType::MeleeCombat)
+                    .is_some();
+                let i_am_worth = Self::WHAT_A_PERSON_IS_WORTH_TO_A_BEAST
+                    * if armed { Self::WHAT_A_SPEAR_ADDS } else { 1.0 };
+                let worth = Self::what_a_beast_is_worth_in_a_fight(
+                    animal.current_health,
+                    species.health,
+                    species.attack_damage,
+                );
+                Some(worth > i_am_worth)
+            })
+            .unwrap_or(false);
+        if outweighs_me && standing && could_run {
+            return ("backs away from something bigger", Some(run()));
+        }
+
         match (standing, could_fight, could_run) {
             // What it wanted to do, and it can
             (true, true, _) => ("stands its ground", Some(fight())),

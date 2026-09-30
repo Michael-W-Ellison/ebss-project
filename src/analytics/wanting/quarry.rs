@@ -258,8 +258,11 @@ impl Simulation {
     /// How far an agent can work a reach from where it stands
     pub(in crate::analytics) const CAST: i32 = 1;
 
-    /// How far an agent will walk to get to water
-    pub(in crate::analytics) const WORTH_WALKING_TO_WATER: i32 = 14;
+    /// How far an agent will walk to get to water.
+    ///
+    /// A hundred and forty metres was seven hours' walk at a cell a turn. At
+    /// five kilometres an hour, ten times that is seventeen minutes.
+    pub(in crate::analytics) const WORTH_WALKING_TO_WATER: i32 = 14 * crate::world::pace::HOW_MUCH_FURTHER_IS_WORTH_WALKING as i32;
 
     /// A reach carrying this many fish is as good as fishing gets
     pub(in crate::analytics) const A_GOOD_REACH: f32 = 60.0;
@@ -410,10 +413,11 @@ impl Simulation {
 
     /// How far an agent will go for a catch it knows is waiting.
     ///
-    /// A hundred and fifty metres at ten metres a cell. A trapline is set
-    /// round where you live; anything further off is a snare you will come
-    /// across when you come across it.
-    pub(in crate::analytics) const AS_FAR_AS_A_LINE_IS_WORTH_WALKING: i32 = 15;
+    /// A kilometre and a half at ten metres a cell, which is eighteen
+    /// minutes' walk. A trapline is set round where you live; anything
+    /// further off is a snare you will come across when you come across it.
+    /// It was a hundred and fifty metres while a walk was a cell a turn.
+    pub(in crate::analytics) const AS_FAR_AS_A_LINE_IS_WORTH_WALKING: i32 = 15 * crate::world::pace::HOW_MUCH_FURTHER_IS_WORTH_WALKING as i32;
 
     /// Trapping: set a line, and go round it.
     ///

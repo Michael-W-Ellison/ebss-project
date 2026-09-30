@@ -2953,9 +2953,11 @@ impl Animal {
     /// Off the same figure the rush reads, so an old or hurt animal is
     /// slower here too and there are not two answers to how fast it is.
     pub fn how_far_it_gets_in_a_turn(&self, species: &AnimalSpecies) -> i32 {
-        /// What a pace of one covers, which is what everything covered
-        /// before: twenty metres a turn, or a couple of kilometres a day.
-        const WHAT_A_PACE_OF_ONE_COVERS: f32 = 2.0;
+        /// What a pace of one covers. It was two cells, twenty metres a turn,
+        /// set against people who crossed one; at twenty-five times that a
+        /// sheep grazes its way across a kilometre an hour, on the same clock
+        /// as people walking at five. See `world::pace`.
+        const WHAT_A_PACE_OF_ONE_COVERS: f32 = 2.0 * crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO as f32;
 
         let going = species.speed * self.how_fast_it_still_is() * WHAT_A_PACE_OF_ONE_COVERS;
         (going.round() as i32).max(1)
@@ -3556,8 +3558,8 @@ impl AnimalManager {
                 }
             };
 
-            animal.position.0 += away(nearest.0, animal.position.0);
-            animal.position.1 += away(nearest.1, animal.position.1);
+            animal.position.0 = (animal.position.0 + away(nearest.0, animal.position.0) * crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO).max(0);
+            animal.position.1 = (animal.position.1 + away(nearest.1, animal.position.1) * crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO).max(0);
             animal.use_stamina(0.2);
         }
     }
@@ -3946,11 +3948,14 @@ impl AnimalManager {
         let edge = (grid.width as i32 - 1, grid.height as i32 - 1);
         for (idx, towards) in closing_up {
             if let Some(animal) = self.animals.get_mut(idx) {
+                // As far as a turn's pace takes it, and no further than its
+                // own kind.
+                let apart = (towards.0 - animal.position.0, towards.1 - animal.position.1);
                 animal.position.0 = (animal.position.0
-                    + (towards.0 - animal.position.0).signum())
+                    + apart.0.signum() * apart.0.abs().min(crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO))
                 .clamp(0, edge.0);
                 animal.position.1 = (animal.position.1
-                    + (towards.1 - animal.position.1).signum())
+                    + apart.1.signum() * apart.1.abs().min(crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO))
                 .clamp(0, edge.1);
             }
         }
@@ -3979,8 +3984,8 @@ impl AnimalManager {
         for (idx, _) in breaking_away {
             let (dx, dy) = EIGHT_WAYS[idx % EIGHT_WAYS.len()];
             if let Some(animal) = self.animals.get_mut(idx) {
-                animal.position.0 = (animal.position.0 + dx).clamp(0, edge.0);
-                animal.position.1 = (animal.position.1 + dy).clamp(0, edge.1);
+                animal.position.0 = (animal.position.0 + dx * crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO).clamp(0, edge.0);
+                animal.position.1 = (animal.position.1 + dy * crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO).clamp(0, edge.1);
             }
         }
     }
@@ -4807,7 +4812,7 @@ impl AnimalManager {
         // And who went looking for better ground. A step at a time, so that
         // crossing a hunting ground takes a hunter the best part of a season
         // and a country does not slosh from one corner to the other.
-        const HOW_FAR_A_HUNTER_RANGES_IN_A_TURN: i32 = 1;
+        const HOW_FAR_A_HUNTER_RANGES_IN_A_TURN: i32 = crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO;
         for (pred_idx, (dx, dy)) in moved_on {
             if already_moving.contains(&pred_idx) {
                 continue;
@@ -5321,7 +5326,7 @@ impl AnimalManager {
     /// Ten turns is most of a day and a cell is ten metres, so this is a few
     /// hundred metres of walking - which is what a grazing animal does in a
     /// day when the ground it is on has been eaten off.
-    const HOW_FAR_AN_ANIMAL_WALKS: i32 = 3;
+    const HOW_FAR_AN_ANIMAL_WALKS: i32 = 3 * crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO;
 
     /// How much a grown tree gives a browsing animal, per turn.
     ///
@@ -6321,6 +6326,8 @@ impl AnimalManager {
     /// described. Written once here so that the next one cannot be wrong on
     /// its own.
     fn let_it_wander(animal: &mut Animal, reach: i32, edge: Option<(i32, i32)>) {
+        // `reach` is in the paces the table was written in; see `world::pace`.
+        let reach = reach * crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO;
         animal.position.0 += crate::core::dice::a_step_of(reach);
         animal.position.1 += crate::core::dice::a_step_of(reach);
 
@@ -6386,6 +6393,12 @@ impl AnimalManager {
                     );
                     animal.position.0 += away.0 * it_covers;
                     animal.position.1 += away.1 * it_covers;
+                    // A run of fifty cells can go off the map, and nothing
+                    // stopped it when a run was two.
+                    if let Some((east, south)) = edge {
+                        animal.position.0 = animal.position.0.clamp(0, east);
+                        animal.position.1 = animal.position.1.clamp(0, south);
+                    }
                 }
                 return;
             }
@@ -6410,6 +6423,10 @@ impl AnimalManager {
                 );
                 animal.position.0 += away.0 * it_covers;
                 animal.position.1 += away.1 * it_covers;
+                if let Some((east, south)) = edge {
+                    animal.position.0 = animal.position.0.clamp(0, east);
+                    animal.position.1 = animal.position.1.clamp(0, south);
+                }
                 return;
             }
         }

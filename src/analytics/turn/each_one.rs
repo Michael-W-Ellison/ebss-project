@@ -45,7 +45,44 @@ impl Simulation {
             .collect();
 
         for agent_id in agent_ids {
+            if let Some(index) = self.population.agents.iter().position(|a| a.id == agent_id) {
+                let state = &mut self.population.agents[index].state;
+                state.minutes_left_this_turn = crate::environment::seasons::MINUTES_PER_TURN as f32;
+                state.walked_with_time_to_spare = false;
+            }
             self.one_persons_turn(agent_id, &agent_positions);
+
+            // A walk that arrived with time to spare leaves the rest of the
+            // half hour for whatever is done on arriving.
+            //
+            // "An agent should easily be capable of walking a kilometer in
+            // half an hour while accomplishing other tasks." A kilometre is
+            // twelve minutes at five kilometres an hour, and somebody who has
+            // walked to the larder has come to take something out of it, not
+            // to stand there until the next half hour. So they decide again,
+            // on what is about them now, until something that is not a walk
+            // takes the rest of the time, or it has gone. Bounded, so that a
+            // run of short walks cannot go on for ever.
+            let mut again = 0;
+            loop {
+                let Some(index) = self.population.agents.iter().position(|a| a.id == agent_id) else {
+                    break;
+                };
+                let agent = &mut self.population.agents[index];
+                if !agent.state.is_alive
+                    || !agent.state.walked_with_time_to_spare
+                    || agent.state.minutes_left_this_turn < Self::TIME_ENOUGH_TO_DO_SOMETHING
+                    || again >= Self::AS_MANY_THINGS_AS_A_HALF_HOUR_HOLDS
+                {
+                    agent.state.minutes_left_this_turn = 0.0;
+                    agent.state.walked_with_time_to_spare = false;
+                    break;
+                }
+                agent.state.walked_with_time_to_spare = false;
+                agent.busy_until = 0;
+                again += 1;
+                self.one_persons_turn(agent_id, &agent_positions);
+            }
 
             // And then, for anybody with something on them, the rest of the
             // half hour a minute at a time.
@@ -94,6 +131,13 @@ impl Simulation {
             }
         }
     }
+
+    /// Fewer minutes than this left of the half hour is not enough to start
+    /// anything on.
+    pub(in crate::analytics) const TIME_ENOUGH_TO_DO_SOMETHING: f32 = 2.0;
+
+    /// And how many decisions one half hour can hold.
+    pub(in crate::analytics) const AS_MANY_THINGS_AS_A_HALF_HOUR_HOLDS: u32 = 6;
 
     /// One person's turn: what is pressing, what they do about it, and what
     /// came of it.

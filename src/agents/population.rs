@@ -1810,6 +1810,21 @@ impl Population {
     /// Process exploration for all living agents
     /// Agents discover tiles within their vision range
     pub fn process_exploration_with_world(&mut self, world: &mut crate::world::World) {
+        self.process_exploration_of(world, None);
+    }
+
+    /// The same sight pass, for one person only, or for everybody.
+    ///
+    /// Once a turn for everybody, at wherever they stand when it begins; and
+    /// again for one person at the end of a walk, because a walk can now
+    /// cover two and a half kilometres and what is about the place it ended
+    /// is what the rest of the half hour is decided on. See
+    /// `Simulation::walking`.
+    pub fn process_exploration_of(
+        &mut self,
+        world: &mut crate::world::World,
+        only: Option<Uuid>,
+    ) {
         use crate::core::memory::SpatialMemoryType;
         use crate::core::DriveType;
 
@@ -1817,6 +1832,9 @@ impl Population {
 
         for agent in &mut self.agents {
             if !agent.state.is_alive {
+                continue;
+            }
+            if only.is_some_and(|id| id != agent.id) {
                 continue;
             }
 
