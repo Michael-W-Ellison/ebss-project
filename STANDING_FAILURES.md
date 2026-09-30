@@ -28,13 +28,13 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #278): every test, module by module
+**Last full run** (ISSUES_FOUND #282): every test, module by module
 (a background run is stopped at about half an hour, so the suite no longer
-runs in one piece), 2,717 tests. After the fixes that went with it, four are
-left:
-- The two multi-generation tests below.
-- Two ecology tests the walk at five kilometres an hour moved. Both passed
-  after #280; one is back, below (#282).
+runs in one piece). 2,717 tests run: 2,710 passed, 3 failed, 4 ignored.
+Two of the failures were the recorded dice counts, re-recorded since and
+passing. That leaves:
+- `ecology_tests::most_of_what_lived_here_still_lives_here`, below.
+- The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
 on this run; it is one of the two thresholds that flap (below).
