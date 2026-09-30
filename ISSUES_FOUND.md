@@ -21360,8 +21360,8 @@ turns.
 `most_of_what_lived_here_still_lives_here` was put down to the hunt in
 STANDING_FAILURES, and that was wrong. Over its eight worlds, before the
 pace change, after it, and after this, the herbivores almost all
-**starve**: 4,600 or so starvations against no herbivore taken by a
-predator in any of the three. The hunters on a half-kilometre map are
+**starve**: 1,392, 1,363 and 1,310 herbivores starved in the three runs,
+and not one herbivore was taken by a predator in any of them. The hunters on a half-kilometre map are
 kestrels, hawks, owls, eagles, otters and seals. Head at year five, of 468:
 137 before the pace change, 110 after it, 117 after this, against a bar of
 117. Species kept: 37, 36 and 42 of 56. The head count at five years
