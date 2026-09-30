@@ -21380,7 +21380,7 @@ with nobody on it and seed 3, it empties the country:
 |---|---|---|---|
 | before the pace change (#277) | 1,034 | 604 | 11 |
 | the pace change, the old hunt | 1,242 | 622 | 283 |
-| #280's hunt | 135 | 44 | about 1,830 |
+| #280's hunt | 135 | 44 | 1,813 |
 
 Neither of the first two is a working ecology either. The large herbivores
 go from starvation and old age in both, and goats and kestrels take over.
