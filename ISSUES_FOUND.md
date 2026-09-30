@@ -21350,9 +21350,10 @@ change they took 12 of 12 inside five turns.
 - **A bolt is one turn.** A frightened animal stayed in flight for eight
   turns. At the new pace that is four kilometres. The reading it fled on is
   only refreshed every four turns, so it kept fleeing from a wolf it had
-  left behind after the first turn. Now it bolts once
-  (`HOW_LONG_A_FRIGHT_LASTS` = 2 turns in the state), and the reading is
-  cleared after the bolt.
+  left behind after the first turn. Now it bolts once and stands wary for
+  the rest of the state (`HOW_LONG_A_FRIGHT_LASTS` = 2 turns). The bolt
+  forgets where the threat was, so it doesn't bolt again off the same
+  sighting before the next look.
 
 Measured, same six seeds: 12 sheep of 12, every seed done inside four
 turns.

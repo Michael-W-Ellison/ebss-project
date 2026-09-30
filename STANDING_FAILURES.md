@@ -33,7 +33,8 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 runs in one piece), 2,717 tests. After the fixes that went with it, four are
 left:
 - The two multi-generation tests below.
-- Two ecology tests the walk at five kilometres an hour moved, below.
+- Two ecology tests the walk at five kilometres an hour moved. Both pass
+  since #280.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
 on this run; it is one of the two thresholds that flap (below).
@@ -42,8 +43,6 @@ on this run; it is one of the two thresholds that flap (below).
 |---|---|---|
 | `longevity_tests::a_settlement_still_raises_children_late_on` | (ignored; run with `--ignored`) | **A stated requirement: settlements must last generations.** Since #279: eight years on the 100 km2 map with seed 3 and the founders at the middle, and asks for someone born in the last four still alive. Over half an hour even in a release build. It used to ask for this at 9,000 turns, which is half a year and shorter than a pregnancy (#253). Births stay rare while the put-by gate (#264) stays shut, so expect it to fail until that is fixed. |
 | `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | (ignored; run with `--ignored`) | Same requirement. Since #279: four years on the big map, and asks for three children born there alive past their first birthday. Failed on its first run in release (seed 3), inside half an hour. It used to run 6,000 turns, which is four months. |
-| `ecology_tests::fourteen_wolves_take_two_sheep_inside_a_day` | 6 of 12 sheep over 6 seeds, against 9 | Animals now cover 25 times what they did in a turn (`world::pace::HOW_MUCH_FURTHER_ANIMALS_GO`): a sheep flees fifty cells and a wolf rushes only what is within `HOW_FAR_A_HUNT_REACHES`, eight, and looks for prey in blocks of eight. The hunt was built round animals that moved two cells a turn and wants reworking at the new pace. |
-| `ecology_tests::most_of_what_lived_here_still_lives_here` | 110 of 468 head after five years, against 117 | The same change, on the half-kilometre test map with nobody on it. |
 
 Measured over sixteen years (#259): four settlements of twelve still there,
 one to five founders each, and none of the forty-three children born in them

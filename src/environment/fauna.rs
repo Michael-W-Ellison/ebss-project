@@ -6451,21 +6451,11 @@ impl AnimalManager {
                 animal.state,
                 AnimalState::Fleeing { .. } | AnimalState::Attacking { .. }
             );
+            //
+            // For flight that is standing wary once the bolt is run: the bolt
+            // was the half hour's running (below), and running on every turn
+            // of the state took a sheep four kilometres.
             if already && animal.state_timer > 0 {
-                if let AnimalState::Fleeing { from_position } = animal.state {
-                    let away = (
-                        (animal.position.0 - from_position.0).signum(),
-                        (animal.position.1 - from_position.1).signum(),
-                    );
-                    animal.position.0 += away.0 * it_covers;
-                    animal.position.1 += away.1 * it_covers;
-                    // A run of fifty cells can go off the map, and nothing
-                    // stopped it when a run was two.
-                    if let Some((east, south)) = edge {
-                        animal.position.0 = animal.position.0.clamp(0, east);
-                        animal.position.1 = animal.position.1.clamp(0, south);
-                    }
-                }
                 return;
             }
 
@@ -6502,9 +6492,11 @@ impl AnimalManager {
                 // _UP`), and while a flight was two cells a turn a reading
                 // that old was a reading of the same field. At the new pace
                 // it sent a sheep on for four turns and two kilometres from
-                // a wolf it had left behind after the first. What it does
-                // next is decided by the next look.
-                animal.what_is_on_me = 0.0;
+                // a wolf it had left behind after the first. How much was on
+                // it stays - it did see the wolf - but not where from, so it
+                // does not bolt again off the same sighting; the next look
+                // decides that.
+                animal.what_is_on_me_from = None;
                 return;
             }
         }
