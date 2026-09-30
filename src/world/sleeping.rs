@@ -28,13 +28,14 @@ use crate::environment::seasons::Season;
 /// How far from every living person a node has to be before it sleeps, in
 /// cells either way.
 ///
-/// The furthest anybody looks for something they have not already been told
-/// of or seen is sixty cells - `HOW_FAR_A_PEOPLE_WILL_MOVE`, which is where a
-/// settlement looks for a new camp - and a person walks at most a cell a turn,
-/// forty-eight a day. A node is only brought up to date once a day, so what
-/// has to hold is that nobody can come within sixty of a node that slept
-/// through this morning's pass before the next one wakes it: sixty and
-/// forty-eight, and some over.
+/// This was reckoned when a person walked a cell a turn, forty-eight a day,
+/// so that nobody could come within reach of a node that slept through this
+/// morning's pass before the next one woke it. At five kilometres an hour a
+/// person crosses this whole margin in a quarter of an hour, so that no
+/// longer holds of itself: wherever a walk ends, the country round about is
+/// woken before anybody looks at it (`World::wake_the_nodes_near`, from
+/// `Simulation::walking`). This margin now only decides what gets its daily
+/// growth worked out as it happens rather than caught up later.
 ///
 /// A place somebody *remembers* can be further off than that - the search for
 /// the best food anywhere goes as far as a man's memory does - and a node that

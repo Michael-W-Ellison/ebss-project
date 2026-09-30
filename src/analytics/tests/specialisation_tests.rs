@@ -189,10 +189,21 @@ fn walking_past_a_field_does_not_make_a_farmer() {
         "he was being kept fed and watered; if he is gone this test measured nothing"
     );
 
+    // Unless he worked at it. Putting food by in a pit is husbandry in this
+    // model and practises farming (`Simulation::covering`), and once walking
+    // was walking he filled the store: forty pits covered in six hundred
+    // turns, and farming 2. What must not happen is the skill coming from
+    // being in sight of fields with none of that done.
+    let worked_at_it: u64 = ["Cover", "TillSoil", "SpreadMuck", "TendField", "TakeCutting", "PlantCutting"]
+        .iter()
+        .filter_map(|what| simulation.actions_taken.get(*what))
+        .sum();
     assert!(
-        farming < 0,
+        farming < 0 || worked_at_it > 0,
         "a hundred and forty fields in sight for six hundred turns should not \
-         make somebody a farmer; this one reached {farming}"
+         make somebody a farmer; this one reached {farming} without putting a \
+         hand to it: {:?}",
+        simulation.actions_taken
     );
 }
 

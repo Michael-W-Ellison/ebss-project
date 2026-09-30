@@ -227,6 +227,11 @@ fn nothing_interrupts_a_job_that_takes_one_turn() {
 }
 
 /// A walk is as long as the walk; a one-turn job is one turn.
+///
+/// At five kilometres an hour a turn is 250 cells: fourteen cells is a few
+/// minutes of one turn, and six hundred is two and a half turns, which is
+/// three to anybody counting in turns. It was fourteen turns for fourteen
+/// cells while a walk was a cell a turn - see `world::pace`.
 #[test]
 fn how_long_a_job_is_is_the_length_of_the_walk() {
     let simulation = one_person();
@@ -239,7 +244,15 @@ fn how_long_a_job_is_is_the_length_of_the_walk() {
             here,
             &Action::Move { target: (here.0 + 14, here.1, here.2) }
         ),
-        14
+        1
+    );
+    assert_eq!(
+        Simulation::how_long_this_would_take(
+            agent,
+            here,
+            &Action::Move { target: (here.0 + 600, here.1, here.2) }
+        ),
+        3
     );
 
     assert_eq!(

@@ -56,8 +56,178 @@ impl Simulation {
             ))
     }
 
-    /// `Action::Move`.
+    /// `Action::Move`: walk at five kilometres an hour for as much of the half
+    /// hour as is left, or until there.
+    ///
+    /// The whole way is planned first, round whatever is in the way
+    /// (`the_way_there`), and walked a cell at a time; a walk that cannot find
+    /// a way takes steps towards the target instead, as every walk used to.
+    /// On the way:
+    ///
+    /// - whatever is in any snare within reach is taken
+    ///   (`take_what_is_in_the_snares_about`);
+    /// - a beast that would frighten the walker, coming into sight, stops the
+    ///   walk, and the place is remembered as trouble;
+    /// - a place the walker remembers trouble at is not walked into, unless
+    ///   the walk began there - or unless the walker is hungry, thirsty or
+    ///   cold, in which case they go where the need is. A remembered fright
+    ///   was a wall at first, and it kept people out of reach of their own
+    ///   pits all winter (ISSUES_FOUND #276).
+    ///
+    /// The walk costs the minutes it took and leaves the rest of the half
+    /// hour for whatever is done on arriving (`everybody_takes_a_turn`). On
+    /// arriving the country round about is brought up to today and the
+    /// walker looks about.
     pub(in crate::analytics) fn walking(&mut self, target: &(i32, i32, i32), agent_index: usize) -> ActionResult {
+        use crate::world::pace;
+
+        let turn = crate::environment::seasons::MINUTES_PER_TURN as f32;
+        let cells_a_minute = pace::CELLS_IN_A_HALF_HOUR_OF_WALKING as f32 / turn;
+
+        // What is left of the half hour. Nothing left is the danger loop's
+        // minute at a time.
+        let left = {
+            let minutes = self.population.agents[agent_index].state.minutes_left_this_turn;
+            if minutes > 0.0 { minutes } else { 1.0 }
+        };
+        let can_cover = ((left * cells_a_minute).floor() as u32).max(1);
+
+        let mut last = self.a_step_toward(target, agent_index);
+        if !last.success {
+            // Going nowhere: the rest of the half hour goes on it.
+            self.population.agents[agent_index].state.minutes_left_this_turn = 0.0;
+            return last;
+        }
+        let start = self.population.agents[agent_index].state.position;
+        if (start.0, start.1) == (target.0, target.1) {
+            self.population.agents[agent_index].state.minutes_left_this_turn = 0.0;
+            return last;
+        }
+
+        let load = Self::what_this_load_costs(&self.population.agents[agent_index]);
+        let mut walked = 1u32;
+        self.take_what_is_in_the_snares_about(agent_index);
+
+        // What along the way would frighten this one, gathered once, and
+        // which of it was in sight when they set off. A walk that ends within
+        // sight of where it began passes nothing that was not in sight at the
+        // start, so there is nothing to gather.
+        let sees = Self::AS_FAR_AS_ANYBODY_SEES_A_BEAST;
+        let how_far = (target.0 - start.0).abs().max((target.1 - start.1).abs());
+        let dangers = if how_far > sees {
+            self.what_would_frighten(agent_index, (can_cover as i32).min(how_far) + sees)
+        } else {
+            Vec::new()
+        };
+        let in_sight_already: Vec<bool> = dangers
+            .iter()
+            .map(|(x, y)| (start.0 - x).abs().max((start.1 - y).abs()) <= sees)
+            .collect();
+
+        let now = self.current_turn;
+        let how_bad_is_it = |sim: &Self, at: (i32, i32, i32)| {
+            sim.population.agents[agent_index]
+                .exploration_knowledge
+                .how_bad_is_it_there(crate::world::Position::new(at.0, at.1), now)
+        };
+        let began_somewhere_bad = how_bad_is_it(self, start) > Self::BAD_ENOUGH_TO_GO_ROUND;
+        let in_need = {
+            let agent = &self.population.agents[agent_index];
+            let asking = |d: DriveType| agent.drives.get(d).is_some_and(|drive| drive.is_active());
+            asking(DriveType::Hunger)
+                || asking(DriveType::Thirst)
+                || agent.body_temperature.is_too_cold()
+                || agent.state.is_starving()
+        };
+
+        let mut the_way = self
+            .the_way_there((start.0, start.1), (target.0, target.1), Self::AS_FAR_AS_A_ROUTE_IS_LOOKED_FOR)
+            .map(|route| route.into_iter().collect::<std::collections::VecDeque<_>>());
+        let mut saw_trouble_at: Option<(i32, i32)> = None;
+
+        while walked < can_cover {
+            let here = self.population.agents[agent_index].state.position;
+            if here == *target {
+                break;
+            }
+            let step = match the_way.as_mut() {
+                Some(route) => match route.pop_front() {
+                    Some(cell) => {
+                        let agent = &mut self.population.agents[agent_index];
+                        agent.stepped_from = Some((here.0, here.1));
+                        agent.state.position = (cell.0, cell.1, here.2);
+                        ActionResult::success()
+                            .with_message(format!("Walked to ({}, {})", cell.0, cell.1))
+                    }
+                    None => break,
+                },
+                None => self.a_step_toward(target, agent_index),
+            };
+            if !step.success {
+                break;
+            }
+            walked += 1;
+            last = step;
+
+            if walked % Self::CLOSE_ENOUGH_TO_A_SNARE as u32 == 0 {
+                self.take_what_is_in_the_snares_about(agent_index);
+            }
+
+            let here = self.population.agents[agent_index].state.position;
+            if !in_need && !began_somewhere_bad && how_bad_is_it(self, here) > Self::BAD_ENOUGH_TO_GO_ROUND {
+                break;
+            }
+            if let Some(danger) = dangers.iter().enumerate().find_map(|(which, (x, y))| {
+                (!in_sight_already[which] && (here.0 - x).abs().max((here.1 - y).abs()) <= sees)
+                    .then_some((*x, *y))
+            }) {
+                saw_trouble_at = Some(danger);
+                break;
+            }
+        }
+        self.take_what_is_in_the_snares_about(agent_index);
+
+        if let Some((x, y)) = saw_trouble_at {
+            self.population.agents[agent_index]
+                .exploration_knowledge
+                .saw_danger(crate::world::Position::new(x, y), "something", 1.0, now);
+        }
+
+        let minutes = (walked as f32 / cells_a_minute).clamp(1.0, left);
+        let (id, at, sight) = {
+            let agent = &mut self.population.agents[agent_index];
+            agent.state.minutes_left_this_turn = (left - minutes).max(0.0);
+            agent.state.minutes_walked += minutes;
+            agent.state.walking_effort += minutes * pace::WHAT_WALKING_BURNS * load;
+            agent.state.walked_with_time_to_spare = agent.state.minutes_left_this_turn > 0.0;
+            (agent.id, agent.state.position, agent.sight_range())
+        };
+        // Whatever the rest of the half hour can reach from here is read as it
+        // stands today: as far as the walker sees, or as far as a turn of
+        // gathering reaches, whichever is further. Waking asks only after the
+        // nodes that are asleep, so it is cheap; looking about again is not,
+        // and is only worth it somewhere the turn's own sight pass did not
+        // already see from where the walk began.
+        let reach = (sight.max(1) as u32).max(Self::FORAGE_RADIUS) + 2;
+        self.world
+            .wake_the_nodes_near(crate::world::Position::new(at.0, at.1), reach);
+        let came = (at.0 - start.0).abs().max((at.1 - start.1).abs());
+        if came > sees {
+            self.population.process_exploration_of(&mut self.world, Some(id));
+        }
+
+        // Paid for by the minute in the body's bill, not as an action
+        last.energy_cost = 0.0;
+        last
+    }
+
+    /// How bad a remembered place has to look before a walk goes no further
+    /// into it.
+    pub(in crate::analytics) const BAD_ENOUGH_TO_GO_ROUND: f32 = 0.5;
+
+    /// One step towards `target`: the whole of what a walk was when a turn
+    /// was a cell.
+    pub(in crate::analytics) fn a_step_toward(&mut self, target: &(i32, i32, i32), agent_index: usize) -> ActionResult {
         use crate::world::grid::Position;
 
         // Get agent current position

@@ -499,10 +499,22 @@ fn a_long_walk_takes_supper_along() {
     pit.put_in(roots);
     simulation.world.pits.push(pit);
 
-    let far = (60, 20, 0);
+    // Four hundred cells, which is about three turns there and back at five
+    // kilometres an hour, set off on by somebody whose hunger will ask in
+    // one or two. Forty paces was a long walk while a walk was a cell a turn
+    // and is five minutes now - see `world::pace`.
+    let threshold = simulation.population.agents[0]
+        .drives
+        .get(DriveType::Hunger)
+        .map(|drive| drive.threshold)
+        .expect("hunger exists");
+    if let Some(hunger) = simulation.population.agents[0].drives.get_mut(DriveType::Hunger) {
+        hunger.value = threshold * 0.95;
+    }
+    let far = (420, 20, 0);
     assert!(
         matches!(simulation.what_to_take_along(0, far, DriveType::Thirst), Some(Action::PickUp { .. })),
-        "set off forty paces with nothing to eat, standing on a pit"
+        "set off four hundred paces with nothing to eat and hungry soon, standing on a pit"
     );
     assert_eq!(simulation.what_to_take_along(0, far, DriveType::Hunger), None, "a walk for food is its own answer");
     assert_eq!(simulation.what_to_take_along(0, (21, 20, 0), DriveType::Thirst), None, "and a step is not a journey");

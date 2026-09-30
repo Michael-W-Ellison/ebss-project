@@ -1490,6 +1490,69 @@ impl Simulation {
     /// And what walking the line costs, which is the walk rather than the work.
     pub(in crate::analytics) const WHAT_A_ROUND_COSTS: f32 = 3.0;
 
+    /// Take whatever is in any snare within reach of where this one stands.
+    ///
+    /// Anybody's snare: a line is the settlement's, and a catch left for its
+    /// owner is a catch the foxes have by morning. What this is for is the
+    /// walk. A person going two kilometres to the water passes the line on
+    /// the way, and "an agent should easily be capable of walking a kilometer
+    /// in half an hour while accomplishing other tasks such as checking
+    /// traps": a snare nobody walked to in particular is emptied by whoever
+    /// walked by it. Before, 93% of what went into a snare was robbed before
+    /// anybody came (ISSUES_FOUND #268).
+    ///
+    /// Stops at the first catch that will not go in the pack; the rest stay
+    /// where they are.
+    pub(in crate::analytics) fn take_what_is_in_the_snares_about(&mut self, agent_index: usize) {
+        if self.world.snares.is_empty() {
+            return;
+        }
+        let (grown, at) = {
+            let agent = &self.population.agents[agent_index];
+            (
+                agent.state.is_alive
+                    && agent.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL,
+                agent.state.position,
+            )
+        };
+        if !grown {
+            return;
+        }
+
+        let each = Self::WHAT_A_CATCH_WEIGHS;
+        let mut took = 0u32;
+        for snare in self.world.snares.iter_mut() {
+            if snare.caught_at.is_none() {
+                continue;
+            }
+            if (snare.at.0 - at.0).abs().max((snare.at.1 - at.1).abs()) > Self::CLOSE_ENOUGH_TO_A_SNARE {
+                continue;
+            }
+            if self.population.agents[agent_index].inventory.weight_capacity_remaining() < each {
+                break;
+            }
+            let mut catch = crate::agents::InventoryItem::new_with_weight("meat".to_string(), 1, each);
+            catch.food_data = self
+                .food_database
+                .create_food_data(&crate::world::inventory::ItemType::Meat, self.current_turn);
+            if !self.population.agents[agent_index].inventory.add_item(catch) {
+                break;
+            }
+            snare.caught_at = None;
+            took += 1;
+        }
+
+        if took > 0 {
+            self.world.animals.small_life.snare_tally.taken += took as u64;
+            self.population.agents[agent_index]
+                .lessons
+                .record(crate::agents::practices::Undertaking::Trapping, true);
+        }
+    }
+
+    /// What one head out of a snare weighs in the pack.
+    pub(in crate::analytics) const WHAT_A_CATCH_WEIGHS: f32 = 1.2;
+
     /// Set a snare where the agent is standing.
     ///
     /// This is the agent's way into the abstracted tier and there is no other:
@@ -1618,7 +1681,7 @@ impl Simulation {
         // defect as the store in #180, at the call site that entry named and
         // did not fix. What will not fit stays in the snare, where it is at
         // least still there when he comes back with room.
-        let each = 1.2f32;
+        let each = Self::WHAT_A_CATCH_WEIGHS;
         let _ = self.set_down_what_is_worth_less_than_food(agent_index, each * took as f32);
         let agent = &mut self.population.agents[agent_index];
         let room = agent.inventory.weight_capacity_remaining();

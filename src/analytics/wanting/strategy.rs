@@ -843,7 +843,7 @@ impl crate::analytics::Simulation {
         if let Action::Move { target } = doing {
             let here = agent.state.position;
             let steps = (target.0 - here.0).abs().max((target.1 - here.1).abs());
-            worth.turns += steps as f32;
+            worth.turns += crate::world::pace::turns_to_walk(steps as u32);
         }
 
         // What it is expected to cost, on any drive, going by what it has cost

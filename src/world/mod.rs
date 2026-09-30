@@ -74,6 +74,7 @@ pub mod soil;
 pub mod sleeping;
 pub mod node_index;
 pub mod belonging;
+pub mod pace;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
@@ -2886,6 +2887,25 @@ impl World {
                     today,
                 );
             }
+        }
+    }
+
+    /// Wake every sleeping node within `reach` of `at`.
+    ///
+    /// What is asleep was put to sleep for being out of everybody's reach at
+    /// the day's reckoning - `sleeping::FAR_ENOUGH_TO_SLEEP` - and a person
+    /// walking at five kilometres an hour can be standing among it an hour
+    /// later. So wherever a walk ends, the country round about is brought up
+    /// to today before anybody looks at it. See `Simulation::walking`.
+    pub fn wake_the_nodes_near(&mut self, at: Position, reach: u32) {
+        let asleep: Vec<Position> = self
+            .node_numbers_near(at, reach)
+            .into_iter()
+            .filter(|&number| self.resources[number].asleep_since.is_some())
+            .map(|number| self.resources[number].position)
+            .collect();
+        if !asleep.is_empty() {
+            self.wake_the_nodes_at(asleep);
         }
     }
 

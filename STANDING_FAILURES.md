@@ -28,24 +28,22 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #263): `cargo test --lib` - 2,709 passed,
-6 failed, 2 ignored, 56 minutes. After it, three are left:
+**Last full run** (ISSUES_FOUND #278): every test, module by module
+(a background run is stopped at about half an hour, so the suite no longer
+runs in one piece), 2,717 tests. After the fixes that went with it, four are
+left:
 - The two multi-generation tests below.
-- `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it`, one of
-  the two thresholds that flap (below).
+- Two ecology tests the walk at five kilometres an hour moved, below.
 
-The other three were fixed after the run:
-- Two were the recorded dice counts, which #261 to #263 moved; they are
-  re-recorded.
-- `anticipation_tests::two_people_do_not_get_the_same_answer` had failed on
-  every run since #260, which reads hunger's clock off the body rather than
-  off how long it has gone unanswered. It now asks the same question of
-  wanting company, which is still built that way.
+`relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
+on this run; it is one of the two thresholds that flap (below).
 
 | test | reports | what is known |
 |---|---|---|
 | `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **A stated requirement: settlements must last generations.** Nine thousand turns is half a year on today's calendar, and a pregnancy is nine months (#253), so as written this cannot pass whatever the model does; it wants rewriting against the calendar. After #255, twelve settlements over five years: 10 of 12 still standing at the end of year five, 59 people, 29 children born. |
 | `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same requirement, same calendar problem (6,000 turns is four months, not "four full years"). Its bound is sound: it counts by parentage. |
+| `ecology_tests::fourteen_wolves_take_two_sheep_inside_a_day` | 6 of 12 sheep over 6 seeds, against 9 | Animals now cover 25 times what they did in a turn (`world::pace::HOW_MUCH_FURTHER_ANIMALS_GO`): a sheep flees fifty cells and a wolf rushes only what is within `HOW_FAR_A_HUNT_REACHES`, eight, and looks for prey in blocks of eight. The hunt was built round animals that moved two cells a turn and wants reworking at the new pace. |
+| `ecology_tests::most_of_what_lived_here_still_lives_here` | 110 of 468 head after five years, against 117 | The same change, on the half-kilometre test map with nobody on it. |
 
 Measured over sixteen years (#259): four settlements of twelve still there,
 one to five founders each, and none of the forty-three children born in them

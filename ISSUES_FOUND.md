@@ -21200,3 +21200,93 @@ walker remembers, however far off, not only those within
 Now: a walk at the new pace plans the whole route once, by A* over passable
 cells (four ways, up to 200,000 cells looked at), and follows it. Only if
 there is no route does it fall back to the old step by step.
+
+### 277. Walking at 5 km/h, with whole routes planned, beats a cell a turn
+
+The A* route of #276, with everything from #272–#275 still in (the half-hour
+budget, walking at 2.45 times an ordinary rate, snares emptied on the way,
+animals at 25 times the pace, stopping for danger, backing away from what
+outweighs you, the hungry going where the need is). Twelve seeds on the big
+map, the **first three years** of each. A five-year seed now takes 28–37
+minutes and the background runner is stopped at about half an hour, so the
+later runs are cut to three, and every run is compared over its first three:
+
+| | a cell a turn | 5 km/h (#273) | + stop for danger (#274) | + back away (#275) | + whole routes |
+|---|---|---|---|---|---|
+| person-years | 405 | 344 | 343 | 363 | **425** |
+| alive at year 3 | 134 | 100 | 104 | 112 | **141** |
+| deaths | 12 | 44 | 42 | 32 | **4** |
+| of which in the winter | 11 | 22 | 25 | 29 | **2** |
+| conceptions | 4 | 6 | 5 | 1 | 5 |
+| damage fighting animals / beasts' attacks | 312 / 16 | 2,842 / 761 | 2,477 / 624 | 270 / 196 | **184 / 127** |
+| store a head at the year's end (median) | 241 | 524 | 406 | 366 | 263 |
+| cells walked | – | 3.5 M | 3.4 M | 5.1 M | 2.3 M |
+| snare catches taken in passing | – | 24,845 | 30,426 | 30,780 | **33,390** |
+
+Every seed had eleven to thirteen people alive at the end of year three.
+The dead: two by a blow, one of hunger, one of illness. With a cell a turn
+it was ten of hunger, nine of them in the winter. Seed 8 had 9 alive with a
+cell a turn and 13 at 5 km/h, one of them born there. Cells walked fell by
+more than half once the walkers were no longer shuffling behind water; a
+year takes about 400 seconds against 700–1,350.
+
+Almost nobody conceives in either: the gate of #264 is still shut.
+
+Still only in the analysis copy, behind `ZZ_HG` and `ZZ_BIG`. What it takes
+to put it into the model is the list in #272, the route of #276, the
+avoidance of #275, and the map: every long run and the multi-generation
+tests use `WorldConfig::default()`, which is 500 metres across.
+
+### 278. Walking at 5 km/h, in the model
+
+What #272–#277 measured, put in: `world::pace` holds the figures, and
+there are no switches.
+
+- **A turn is a half hour to spend.** Each person starts it with thirty
+  minutes (`minutes_left_this_turn`). A walk costs the minutes it takes, at
+  250 cells a half hour, and if it arrives with time to spare the person
+  decides again, up to six times (`everybody_takes_a_turn`).
+- **The body pays by the minute.** Walking burns 2.45 times an ordinary
+  day's rate (`pace::WHAT_WALKING_BURNS`) times the load, and the rest of
+  the half hour is billed as before (`Physiology::advance_at`).
+- **A walk** (`Simulation::walking`) plans the whole route round water
+  (`the_way_there`, A* over up to 200,000 cells, ordered maps). It empties
+  any snare within reach on the way (`take_what_is_in_the_snares_about`),
+  stops when a beast that outweighs the walker comes into sight
+  (`what_would_frighten`), and does not walk into remembered trouble unless
+  hungry, thirsty or cold. It wakes the country about the arrival as far as
+  a gather reaches, and looks about if it has left the start's sight. The
+  old one-cell step remains as `a_step_toward`, for a walk with no route.
+- **Trip estimates are in walking turns** (`pace::turns_to_walk`) in
+  `what_to_take_along`, the errand's give-up and turn-round,
+  `how_long_this_would_take`, `what_this_patch_is_worth` and
+  `what_this_way_is_worth`. Water, a trapline, curiosity and a new camp are
+  ten times as far (`pace::HOW_MUCH_FURTHER_IS_WORTH_WALKING`).
+- **Animals** cover 25 times what they did (`pace::HOW_MUCH_FURTHER_ANIMALS_GO`):
+  their pace, wandering, walking to graze, fleeing (now kept on the map),
+  shying, closing up with their own, ranging and bolting.
+- **Danger.** Somebody angry at a beast that outweighs them backs away if
+  they can, unless one of their own is in the way. Nothing under a quarter of
+  a grown person's weight strikes at anybody over twelve.
+
+Speed. A walk that ends within sight of where it began skips the danger
+reckoning and the look about, which the turn's own sight pass has already
+done; a small-map year was 1.6 times slower with them on every step. The
+32 worlds of `a_settlement_lives_through_a_winter` run four at a time (the
+dice are per thread), and still take 24 minutes.
+
+Tests the pace made stale, and how they were brought up to it:
+
+| test | what it assumed | now |
+|---|---|---|
+| `how_long_a_job_is_is_the_length_of_the_walk` | 14 cells is 14 turns | 14 cells is 1 turn, 600 is 3 |
+| `a_long_walk_takes_supper_along` | 40 paces is long | 400 cells, somebody nearly hungry |
+| `a_plant_known_to_be_food_can_be_gathered_and_eaten` | the fixture cleared five named foods | it clears everything edible; roots 20 cells off now beat the plant underfoot |
+| `walking_past_a_field_does_not_make_a_farmer` | no farming at all | no farming without the work: 40 pits were covered, which is husbandry here |
+| the errand tests | walks outlast a turn | on a 4 km map; kept-to-over-turns no longer asked |
+| `nothing_decides_anything_by_walking_an_unordered_table` | - | the route search used a `HashMap`; it uses `BTreeMap` |
+| `remembering_far_country_decides_the_same_as_if_it_never_slept` | - | a walk woke only as far as sight, a gather reaches 25; it wakes as far as either, after every walk |
+| the two recorded dice counts | 6,795 / 725,995 | 7,749 / 708,297 |
+
+Still failing: the two multi-generation tests, as before, and two ecology
+tests the animals' pace moved - see STANDING_FAILURES.

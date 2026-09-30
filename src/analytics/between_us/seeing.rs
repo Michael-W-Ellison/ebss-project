@@ -24,6 +24,44 @@ impl Simulation {
     /// odds looked at the time. Reading the odds rather than the species is
     /// what stops a man with a spear being as frightened of a wolf as a child
     /// with nothing.
+    /// Where anything stands within `reach` of this one that would frighten
+    /// them if they saw it: alive, meaning harm, and worth more in a fight
+    /// than they are. The same reckoning as the sight pass below, asked of one
+    /// person about a stretch of country, which is what a walk of a couple of
+    /// kilometres needs before it sets off. See `Simulation::walking`.
+    pub(in crate::analytics) fn what_would_frighten(&self, agent_index: usize, reach: i32) -> Vec<(i32, i32)> {
+        let agent = &self.population.agents[agent_index];
+        let at = agent.state.position;
+        let armed = agent
+            .what_i_have_to_work_with(crate::agents::SkillType::MeleeCombat)
+            .is_some();
+        let i_am_worth = Self::WHAT_A_PERSON_IS_WORTH_TO_A_BEAST
+            * if armed { Self::WHAT_A_SPEAR_ADDS } else { 1.0 };
+
+        self.world
+            .animals
+            .get_all()
+            .iter()
+            .filter(|animal| animal.is_alive())
+            .filter(|animal| {
+                (animal.position.0 - at.0).abs().max((animal.position.1 - at.1).abs()) <= reach
+            })
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                let menace = species.behavior.how_much_it_menaces_you();
+                if menace <= 0.0 {
+                    return None;
+                }
+                let worth = Self::what_a_beast_is_worth_in_a_fight(
+                    animal.current_health,
+                    species.health,
+                    species.attack_damage,
+                );
+                (worth * menace / i_am_worth.max(0.01) > 1.0).then_some(animal.position)
+            })
+            .collect()
+    }
+
     pub(in crate::analytics) fn what_everybody_saw_that_frightened_them(&mut self) {
         if self.current_turn % Self::HOW_OFTEN_ANYBODY_LOOKS_ROUND != 0 {
             return;

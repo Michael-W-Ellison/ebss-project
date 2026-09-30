@@ -132,7 +132,7 @@ impl Simulation {
 
     /// How far a frightened animal gets in one turn. Further than a person:
     /// a deer outruns anything on two legs.
-    pub(in crate::analytics) const HOW_FAR_A_FRIGHTENED_BEAST_GETS: i32 = 6;
+    pub(in crate::analytics) const HOW_FAR_A_FRIGHTENED_BEAST_GETS: i32 = 6 * crate::world::pace::HOW_MUCH_FURTHER_ANIMALS_GO;
 
     /// What that costs it.
     pub(in crate::analytics) const WHAT_BOLTING_COSTS_A_BEAST: f32 = 3.0;

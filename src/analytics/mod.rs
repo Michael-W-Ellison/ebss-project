@@ -562,8 +562,10 @@ impl Simulation {
     /// How far somebody will go out of their way for a handful of something
     /// they have no use for.
     ///
-    /// A detour, not an expedition. Curiosity does not outrank supper.
-    const AS_FAR_AS_CURIOSITY_WALKS: u32 = 12;
+    /// A detour, not an expedition. Curiosity does not outrank supper. Ten
+    /// times what it was while a walk was a cell a turn, which is still less
+    /// than a quarter of an hour - see `world::pace`.
+    const AS_FAR_AS_CURIOSITY_WALKS: u32 = 12 * crate::world::pace::HOW_MUCH_FURTHER_IS_WORTH_WALKING;
 
     fn something_worth_stooping_for(
         &self,

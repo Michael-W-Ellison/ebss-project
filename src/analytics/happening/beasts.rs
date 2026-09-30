@@ -13,6 +13,17 @@ use super::super::Simulation;
 use log::debug;
 
 impl Simulation {
+    /// What a grown person weighs, in kilogrammes, as a beast reckons prey.
+    pub(in crate::analytics) const WHAT_A_GROWN_PERSON_WEIGHS: f32 = 60.0;
+
+    /// How many times a beast's own weight a person can be before it will
+    /// not go for them. Four: a fifteen-kilogramme dog will; an eagle will
+    /// not.
+    pub(in crate::analytics) const HOW_MUCH_BIGGER_A_MAN_CAN_BE: f32 = 4.0;
+
+    /// From what age, in years, a person is too big for a small hunter.
+    pub(in crate::analytics) const TOO_BIG_FOR_A_SMALL_HUNTER: u32 = 12;
+
     /// The nearest living animal of a named kind, and how far off it is.
     ///
     /// An agent's fear and anger are held against a species name rather than
@@ -319,6 +330,17 @@ impl Simulation {
                 Some(target) => target,
                 None => continue,
             };
+
+            // Nothing strikes at a grown person several times its own
+            // weight. An eagle does not take a man; it struck six times in a
+            // year on four seeds once people walked the country (ISSUES_FOUND
+            // #274).
+            if species.mass_kg * Self::HOW_MUCH_BIGGER_A_MAN_CAN_BE < Self::WHAT_A_GROWN_PERSON_WEIGHS
+                && self.population.agents[*agent_index].state.years_old()
+                    >= Self::TOO_BIG_FOR_A_SMALL_HUNTER
+            {
+                continue;
+            }
 
             // A full belly makes a cautious animal. Hunger is what changes
             // its mind, and only really at the end of it.

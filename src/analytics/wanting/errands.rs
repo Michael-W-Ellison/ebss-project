@@ -142,6 +142,101 @@ impl Simulation {
     /// How far apart two people can be and still come to anything.
     pub(in crate::analytics) const CLOSE_ENOUGH_TO_COURT: i32 = 3;
 
+    /// The whole of a route from `from` to `target`, round whatever is in the
+    /// way.
+    ///
+    /// A* over passable cells, four ways, looking at no more than `budget`
+    /// cells. The route leaves out `from` and ends at `target`; `None` if
+    /// there is no way within the budget.
+    ///
+    /// `next_step_toward` finds one step by a breadth-first search capped at
+    /// 4,096 cells, which was plenty while a walk was a cell a turn and nobody
+    /// got far from camp. At five kilometres an hour people did, and a walker
+    /// with a lake between them and a pit two kilometres off took the sidestep
+    /// and then the step back, over and over, and ended every walk where it
+    /// began: measured, the winter's dead in #275 spent their last sixteen
+    /// decisions walking to the right pit without moving a cell. See
+    /// ISSUES_FOUND #276.
+    pub(in crate::analytics) fn the_way_there(
+        &self,
+        from: (i32, i32),
+        target: (i32, i32),
+        budget: usize,
+    ) -> Option<Vec<(i32, i32)>> {
+        use std::cmp::Reverse;
+        use std::collections::{BTreeMap, BinaryHeap};
+
+        if from == target {
+            return Some(Vec::new());
+        }
+
+        let wide = self.world.grid.width as i32;
+        let high = self.world.grid.height as i32;
+        let still_to_go =
+            |at: (i32, i32)| ((at.0 - target.0).abs() + (at.1 - target.1).abs()) as u32;
+
+        // Ordered by estimate, then by the way walked, then by position, so
+        // that ties always break the same way and a run is repeatable.
+        let mut open: BinaryHeap<Reverse<(u32, u32, i32, i32)>> = BinaryHeap::new();
+        let mut came_from: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
+        let mut walked: BTreeMap<(i32, i32), u32> = BTreeMap::new();
+        open.push(Reverse((still_to_go(from), 0, from.0, from.1)));
+        walked.insert(from, 0);
+
+        let mut looked_at = 0usize;
+        while let Some(Reverse((_, so_far, x, y))) = open.pop() {
+            let here = (x, y);
+            if walked.get(&here).is_some_and(|&best| best < so_far) {
+                continue;
+            }
+            if here == target {
+                let mut route = vec![here];
+                let mut at = here;
+                while let Some(&back) = came_from.get(&at) {
+                    if back == from {
+                        break;
+                    }
+                    route.push(back);
+                    at = back;
+                }
+                route.reverse();
+                return Some(route);
+            }
+
+            looked_at += 1;
+            if looked_at > budget {
+                return None;
+            }
+
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let next = (x + dx, y + dy);
+                if next.0 < 0 || next.1 < 0 || next.0 >= wide || next.1 >= high {
+                    continue;
+                }
+                // The target itself may be a building or a patch the walker
+                // is going to; only the way to it has to be walkable.
+                if next != target && !self.is_passable_tile(next.0, next.1) {
+                    continue;
+                }
+                let further = so_far + 1;
+                if walked.get(&next).is_some_and(|&best| best <= further) {
+                    continue;
+                }
+                walked.insert(next, further);
+                came_from.insert(next, here);
+                open.push(Reverse((further + still_to_go(next), further, next.0, next.1)));
+            }
+        }
+
+        None
+    }
+
+    /// How many cells a route search may look at before giving up.
+    ///
+    /// Enough to go round a lake a couple of kilometres across; a destination
+    /// that cannot be reached within it falls back to stepping towards it.
+    pub(in crate::analytics) const AS_FAR_AS_A_ROUTE_IS_LOOKED_FOR: usize = 200_000;
+
     /// First step of a route from `from` to `target`, routing around obstacles.
     ///
     /// A breadth-first search over passable tiles, bounded so a walled-off
@@ -304,7 +399,7 @@ impl Simulation {
         errand: &crate::agents::Errand,
         here: (i32, i32, i32),
     ) -> f32 {
-        let still_to_go = errand.how_far_it_was(here) as f32;
+        let still_to_go = crate::world::pace::turns_to_walk(errand.how_far_it_was(here));
         let already_walked = errand.turns_on_it as f32;
         let how_much_is_behind_me =
             already_walked / (already_walked + still_to_go).max(1.0);
@@ -384,8 +479,7 @@ impl Simulation {
                     }
                     None => true,
                 };
-            let a_long_walk = errand
-                .how_far_it_was(here)
+            let a_long_walk = crate::world::pace::whole_turns_to_walk(errand.how_far_it_was(here))
                 .max(crate::agents::Errand::AT_LEAST_THIS_MANY_TURNS)
                 * crate::agents::Errand::HOW_LONG_A_WALK_IS_WORTH;
             let given_up = errand.turns_on_it > a_long_walk;
@@ -553,7 +647,8 @@ impl Simulation {
 
         let here = agent.state.position;
         let paces = ((going_to.0 - here.0).abs() + (going_to.1 - here.1).abs()) as u32;
-        let there_and_back = paces * 2;
+        // In turns, at the walking pace: a pace used to be a turn.
+        let there_and_back = crate::world::pace::whole_turns_to_walk(paces * 2);
 
         let asks_in = agent.how_long_before_this_asks(DriveType::Hunger)?;
         if asks_in >= there_and_back {

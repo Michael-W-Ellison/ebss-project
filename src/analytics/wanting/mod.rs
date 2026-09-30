@@ -838,10 +838,11 @@ impl Simulation {
         action: &Action,
     ) -> u32 {
         match action {
-            Action::Move { target } => (target.0 - agent_position.0)
-                .abs()
-                .max((target.1 - agent_position.1).abs())
-                as u32,
+            Action::Move { target } => crate::world::pace::whole_turns_to_walk(
+                (target.0 - agent_position.0)
+                    .abs()
+                    .max((target.1 - agent_position.1).abs()) as u32,
+            ),
 
             Action::Craft { item_type } => {
                 let holding = |what: &str| agent.how_many_i_have(what);

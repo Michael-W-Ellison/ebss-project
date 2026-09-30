@@ -1049,6 +1049,26 @@ pub struct AgentState {
     /// the body reads it.
     #[serde(default)]
     pub effort_this_turn: f32,
+    /// How much of this half hour is still to spend, in minutes.
+    ///
+    /// A turn is half an hour, and a walk costs the minutes it takes rather
+    /// than the whole of it: somebody who walks four hundred metres to the
+    /// larder has most of the half hour left for what they went there to do.
+    /// Set to the whole half hour at the start of each person's turn by
+    /// `Simulation::everybody_takes_a_turn`.
+    #[serde(default)]
+    pub minutes_left_this_turn: f32,
+    /// How many of this half hour's minutes went on walking, and what they
+    /// cost - minutes times `pace::WHAT_WALKING_BURNS` times the load. Spent
+    /// when the body is billed for the turn.
+    #[serde(default)]
+    pub minutes_walked: f32,
+    #[serde(default)]
+    pub walking_effort: f32,
+    /// Whether the last thing done this turn was a walk that arrived with
+    /// time to spare, and so leaves the rest of the half hour to decide on.
+    #[serde(default)]
+    pub walked_with_time_to_spare: bool,
     pub turns_without_water: u32, // Count dehydration duration
     /// What this body has to pass, waiting to be left on the ground.
     ///
@@ -1134,6 +1154,10 @@ impl AgentState {
             winters_seen: provision::WintersSeen::default(),
             what_the_larder_says: None,
             effort_this_turn: 0.0,
+            minutes_left_this_turn: 0.0,
+            minutes_walked: 0.0,
+            walking_effort: 0.0,
+            walked_with_time_to_spare: false,
             turns_without_water: 0,
             waste_carried: 0.0,
             ailing: None,
@@ -1187,14 +1211,27 @@ impl AgentState {
         let reserve = self.what_i_eat_for_my_age();
         self.physiology.now_a_body_of(reserve);
 
-        // Two hours of living, at whatever the last turn's work cost. Water,
+        // Half an hour of living, at whatever the last turn's work cost. Water,
         // the stomach, the gut and the reserve all move on the body's own
         // clock; see `agents::physiology`. The turn counters above are kept
         // only for the interface and for older tests to read, and are derived
         // rather than counted so they cannot disagree with the body.
+        //
+        // The minutes spent walking at the walking rate, and the rest of the
+        // half hour at whatever the rest of it cost. A walk used to be priced
+        // as one light action whatever it covered, which with a cell a turn
+        // was a kilometre for two days' food; charged by the minute at what
+        // walking actually burns it is 2% of a day. See `world::pace`.
         let effort = std::mem::take(&mut self.effort_this_turn);
-        self.physiology
-            .advance(physiology::MINUTES_PER_TURN, effort * energy_multiplier);
+        let turn = physiology::MINUTES_PER_TURN as f32;
+        let walked = std::mem::take(&mut self.minutes_walked).min(turn);
+        let walking = std::mem::take(&mut self.walking_effort);
+        let the_rest =
+            (turn - walked) * physiology::what_the_work_costs(effort * energy_multiplier);
+        self.physiology.advance_at(
+            physiology::MINUTES_PER_TURN,
+            (walking * energy_multiplier + the_rest) / turn,
+        );
 
         // Going short of water is felt before it is fatal: the bands in
         // `Physiology::capability` take a quarter off everything the agent can
