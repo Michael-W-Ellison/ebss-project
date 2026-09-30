@@ -21200,3 +21200,39 @@ walker remembers, however far off, not only those within
 Now: a walk at the new pace plans the whole route once, by A* over passable
 cells (four ways, up to 200,000 cells looked at), and follows it. Only if
 there is no route does it fall back to the old step by step.
+
+### 277. Walking at 5 km/h, with whole routes planned, beats a cell a turn
+
+The A* route of #276, with everything from #272–#275 still in (the half-hour
+budget, walking at 2.45 times an ordinary rate, snares emptied on the way,
+animals at 25 times the pace, stopping for danger, backing away from what
+outweighs you, the hungry going where the need is). Twelve seeds on the big
+map, the **first three years** of each. A five-year seed now takes 28–37
+minutes and the background runner is stopped at about half an hour, so the
+later runs are cut to three, and every run is compared over its first three:
+
+| | a cell a turn | 5 km/h (#273) | + stop for danger (#274) | + back away (#275) | + whole routes |
+|---|---|---|---|---|---|
+| person-years | 405 | 344 | 343 | 363 | **425** |
+| alive at year 3 | 134 | 100 | 104 | 112 | **141** |
+| deaths | 12 | 44 | 42 | 32 | **4** |
+| of which in the winter | 11 | 22 | 25 | 29 | **2** |
+| conceptions | 4 | 6 | 5 | 1 | 5 |
+| damage fighting animals / beasts' attacks | 312 / 16 | 2,842 / 761 | 2,477 / 624 | 270 / 196 | **184 / 127** |
+| store a head at the year's end (median) | 241 | 524 | 406 | 366 | 263 |
+| cells walked | – | 3.5 M | 3.4 M | 5.1 M | 2.3 M |
+| snare catches taken in passing | – | 24,845 | 30,426 | 30,780 | **33,390** |
+
+Every seed had eleven to thirteen people alive at the end of year three.
+The dead: two by a blow, one of hunger, one of illness. With a cell a turn
+it was ten of hunger, nine of them in the winter. Seed 8 had 9 alive with a
+cell a turn and 13 at 5 km/h, one of them born there. Cells walked fell by
+more than half once the walkers were no longer shuffling behind water; a
+year takes about 400 seconds against 700–1,350.
+
+Almost nobody conceives in either: the gate of #264 is still shut.
+
+Still only in the analysis copy, behind `ZZ_HG` and `ZZ_BIG`. What it takes
+to put it into the model is the list in #272, the route of #276, the
+avoidance of #275, and the map: every long run and the multi-generation
+tests use `WorldConfig::default()`, which is 500 metres across.
