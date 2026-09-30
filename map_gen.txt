@@ -1,0 +1,1183 @@
+# Software Design Document  
+## Procedural World Streaming, Persistence, and Ecological Simulation
+
+**Status:** Design Guide  
+**Scope:** 100 km × 100 km simulation world (variable) 
+**Primary Objective:** Reduce memory consumption by procedurally generating unmodified world detail and retaining only meaningful persistent changes.
+
+---
+
+## 1. Purpose
+
+The simulation represents a world measuring approximately **100 km × 100 km** at one-meter cell resolution. This equates to approximately:
+
+\[
+100,000 \text{ m} \times 100,000 \text{ m} = 10^{10}
+\]
+
+or **10 billion potential cells**.
+
+The current map consumes approximately **2.5 GB**. This design reduces memory requirements by separating the world into:
+
+1. A deterministic, seed-generated baseline world.
+2. Low-detail regional ecological and settlement state.
+3. Temporarily loaded local terrain tiles near active agents.
+4. Sparse persistent records for agent-caused changes.
+
+The simulation shall not retain per-cell data for world areas that have not been materially changed.
+
+---
+
+## 2. Design Goals
+
+### 2.1 Primary Goals
+
+- Reduce memory use for terrain, vegetation, wildlife, and resources.
+- Support a 100 km × 100 km world without loading all cells simultaneously.
+- Ensure unmodified terrain can be recreated deterministically.
+- Preserve meaningful persistent changes caused by agents.
+- Allow inactive areas to progress over time through simplified ecological and degradation models.
+- Support local, detailed agent interaction near agents.
+- Prevent visible discontinuities at region and tile boundaries.
+- Allow future expansion from primitive technology through medieval technology.
+
+### 2.2 Secondary Goals
+
+- Support settlements, roads, farms, mines, buildings, and other long-term modifications.
+- Support resource depletion and gradual recovery.
+- Support wildlife population recovery and migration.
+- Support abandoned building degradation and terrain restoration.
+- Support long-distance movement without simulating every traversed cell at full detail.
+
+### 2.3 Non-Goals
+
+This design does not require:
+
+- Permanent storage of every unmodified plant, animal, rock, or terrain cell.
+- Individual simulation of all animals across the world.
+- Continuous tick-by-tick simulation of all regions.
+- Full terrain generation for a region merely because an agent enters it.
+- Exact physical erosion, hydrology, or ecological modeling for all terrain.
+
+---
+
+## 3. Architectural Overview
+
+The world shall use four simulation layers.
+
+| Layer | Purpose | Persistence | Detail |
+|---|---|---:|---|
+| Global World Layer | Defines deterministic geography and baseline terrain | Permanent seed/configuration | Low to medium |
+| Macro Region Layer | Tracks ecology, resources, settlements, and large changes | Persistent | Low |
+| Local Tile Layer | Supports nearby agent interaction | Temporary unless modified | High |
+| Persistent Override Layer | Stores deviations from generated baseline | Persistent | Variable |
+
+```text
+World Seed and Global Functions
+            │
+            ▼
+     Macro Region State
+            │
+            ▼
+  Local Tile Generation Cache
+            │
+            ▼
+Persistent Overrides Applied
+            │
+            ▼
+ Active Agents and Local Entities
+```
+
+---
+
+## 4. Spatial Partitioning
+
+## 4.1 World Coordinate System
+
+The simulation shall use global coordinates measured in meters.
+
+```text
+World dimensions:
+    Width:  100,000 m
+    Height: 100,000 m
+
+Valid coordinates:
+    x: 0 to 99,999
+    y: 0 to 99,999
+```
+
+All procedural terrain functions shall use global coordinates rather than local chunk-relative coordinates. This ensures terrain features remain continuous across boundaries.
+
+---
+
+## 4.2 Macro Regions
+
+The world shall be divided into **10 km × 10 km macro regions**.
+
+```text
+Macro region size:
+    10,000 m × 10,000 m
+
+Regions per axis:
+    100,000 m / 10,000 m = 10
+
+Total macro regions:
+    10 × 10 = 100
+```
+
+Each macro region contains:
+
+\[
+10,000 \text{ m} \times 10,000 \text{ m} = 100,000,000
+\]
+
+potential one-meter cells.
+
+Macro regions shall not store or instantiate all of these cells. They serve as low-detail accounting and persistence units.
+
+Example naming convention:
+
+```text
+Region (0, 0)
+Region (0, 1)
+Region (0, 2)
+...
+Region (9, 9)
+```
+
+An alphanumeric naming system may also be used:
+
+```text
+1-A, 1-B, 1-C
+2-A, 2-B, 2-C
+```
+
+The internal system should retain numeric coordinates even if user-facing names are alphanumeric.
+
+---
+
+## 4.3 Local Tiles
+
+Each macro region shall be divided into smaller local tiles for detailed simulation.
+
+Recommended default:
+
+```text
+Tile size: 128 m × 128 m
+```
+
+A 10 km macro region contains approximately:
+
+\[
+10,000 / 128 \approx 78
+\]
+
+tiles per axis.
+
+The exact tile size may vary by simulation need.
+
+| Tile Size | Recommended Use |
+|---:|---|
+| 32 m × 32 m | Dense construction, interiors, farming plots |
+| 64 m × 64 m | Settlements and detailed interaction |
+| 128 m × 128 m | Standard wilderness interaction |
+| 256 m × 256 m | Low-detail wilderness and travel |
+
+The simulation should use one standard tile size initially unless there is a demonstrated performance requirement for multiple levels of detail.
+
+---
+
+## 5. Deterministic World Generation
+
+## 5.1 World Seed
+
+The simulation shall use a persistent world seed.
+
+```text
+world_seed: integer or 64-bit value
+```
+
+The same seed and coordinates must always produce the same baseline result.
+
+```text
+GenerateCell(world_seed, x, y) -> baseline_cell_state
+```
+
+Unchanged terrain should not require disk or memory storage.
+
+---
+
+## 5.2 Global Terrain Functions
+
+The baseline world shall be generated from coordinate-based functions.
+
+Suggested functions:
+
+```text
+GetElevation(world_seed, x, y)
+GetTemperature(world_seed, x, y)
+GetRainfall(world_seed, x, y)
+GetMoisture(world_seed, x, y)
+GetWaterDistance(world_seed, x, y)
+GetSlope(world_seed, x, y)
+GetSoilType(world_seed, x, y)
+GetBiome(world_seed, x, y)
+GetBaseVegetation(world_seed, x, y)
+GetBaseWildlifeHabitat(world_seed, x, y)
+GetBaseResourcePresence(world_seed, x, y)
+```
+
+Example baseline generation flow:
+
+```text
+elevation = GetElevation(seed, x, y)
+temperature = GetTemperature(seed, x, y)
+rainfall = GetRainfall(seed, x, y)
+slope = GetSlope(seed, x, y)
+soil = GetSoilType(seed, x, y)
+biome = GetBiome(elevation, temperature, rainfall, soil)
+vegetation = GetBaseVegetation(seed, x, y, biome)
+```
+
+---
+
+## 5.3 Boundary Continuity Requirement
+
+The preferred approach is:
+
+```text
+terrain_value = TerrainFunction(world_seed, global_x, global_y)
+```
+
+Because each tile and region references the same global coordinate system, rivers, forests, slopes, and mountain ranges remain continuous across boundaries.
+
+---
+
+## 6. Macro Region Data Model
+
+Each macro region shall store aggregate state rather than detailed cell state.
+
+```text
+MacroRegion
+{
+    RegionCoordinate coordinate;
+    Time lastUpdatedTime;
+
+    BiomeSummary biomeSummary;
+    SoilSummary soilSummary;
+    HydrologySummary hydrologySummary;
+
+    EcologyState ecology;
+    ResourceState resources;
+    SettlementState settlements;
+
+    List<PersistentObjectID> persistentObjectReferences;
+    List<ModificationZoneID> modificationZoneReferences;
+}
+```
+
+---
+
+## 6.1 Biome and Terrain Summary
+
+```text
+BiomeSummary
+{
+    float forestPercent;
+    float grasslandPercent;
+    float wetlandPercent;
+    float rockyPercent;
+    float farmlandPercent;
+    float riverbankPercent;
+    float barrenPercent;
+
+    float averageElevation;
+    float averageSlope;
+    float averageMoisture;
+}
+```
+
+These values may be generated from the region’s world coordinates and only stored if modified by climate change, large-scale clearing, mining, construction, or other persistent events.
+
+---
+
+## 6.2 Resource State
+
+```text
+ResourceState
+{
+    float timberDepletion;
+    float forageDepletion;
+    float fishDepletion;
+    float gameDepletion;
+    float stoneDepletion;
+    float clayDepletion;
+    float soilFertilityModifier;
+
+    Time lastResourceUpdate;
+}
+```
+
+Values should generally represent deviation from the baseline resource state.
+
+Example:
+
+```text
+timberDepletion = 0.00    // No meaningful depletion
+timberDepletion = 0.25    // Approximately 25% below normal availability
+timberDepletion = 0.90    // Heavily depleted or cleared
+```
+
+---
+
+## 6.3 Ecological State
+
+```text
+EcologyState
+{
+    SpeciesPopulation deer;
+    SpeciesPopulation boar;
+    SpeciesPopulation wolves;
+    SpeciesPopulation rabbits;
+    SpeciesPopulation fish;
+
+    float predatorPressure;
+    float grazingPressure;
+    float vegetationRecoveryModifier;
+}
+```
+
+```text
+SpeciesPopulation
+{
+    float carryingCapacity;
+    float estimatedPopulation;
+    float reproductiveRate;
+    float mortalityRate;
+    float migrationModifier;
+    float huntingPressure;
+}
+```
+
+The simulation should track only species relevant to gameplay. Insects, small birds, and other background fauna may be represented through biome values rather than population records.
+
+---
+
+## 7. Local Tile Data Model
+
+Local tiles are temporary detailed representations of terrain near active agents.
+
+```text
+LocalTile
+{
+    TileCoordinate coordinate;
+    Time generatedAt;
+    Time lastAccessedAt;
+
+    TerrainCache terrain;
+    List<LocalVegetationInstance> vegetation;
+    List<LocalAnimalEntity> animals;
+    List<TemporaryObject> temporaryObjects;
+
+    List<PersistentOverrideID> appliedOverrides;
+
+    int activeAgentCount;
+    bool hasUnsavedChanges;
+}
+```
+
+A local tile should be removed from memory when:
+
+- No agent is within the configured activation radius.
+- No active process requires the tile.
+- Any persistent changes have been saved as overrides.
+- The tile has not been accessed for a configured timeout period.
+
+---
+
+## 8. Active Area Management
+
+## 8.1 Tile Activation
+
+The simulation shall activate tiles near agents.
+
+A standard activation model may use:
+
+```text
+Immediate active tile:
+    Tile containing the agent.
+
+Neighbor tiles:
+    Tiles adjacent to the active tile.
+
+Optional extended tiles:
+    Tiles in movement direction or line of sight.
+```
+
+For a 128 m tile size, a 3 × 3 local tile area covers:
+
+\[
+384 \text{ m} \times 384 \text{ m}
+\]
+
+This area is sufficient for many local interactions without generating an entire 10 km region.
+
+---
+
+## 8.2 Suggested Activation States
+
+| State | Condition | Simulation Detail |
+|---|---|---|
+| Active | Agent occupies or directly observes tile | Full detail |
+| Warm | Agent is nearby or approaching | Terrain and essential entities |
+| Cached | Recently active but no current agent | Retain temporarily |
+| Inactive | No relevant agent or event | Unloaded; represented by macro state |
+| Persistent-only | Contains no active simulation | Only stored overrides and summaries |
+
+---
+
+## 8.3 Tile Unloading
+
+Before a tile unloads, the simulation shall:
+
+1. Apply resource removal to the macro region.
+2. Convert persistent local changes into persistent overrides.
+3. Save building, road, field, and excavation changes.
+4. Aggregate local animal changes into regional population changes.
+5. Remove temporary entities that do not require persistence.
+6. Record the tile’s last update time if required.
+
+Example:
+
+```text
+UnloadTile(tile):
+    SavePersistentOverrides(tile)
+    ApplyResourceChangesToRegion(tile)
+    ApplyWildlifeChangesToRegion(tile)
+    RemoveTemporaryObjects(tile)
+    ReleaseTileMemory(tile)
+```
+
+---
+
+## 9. Persistent Override System
+
+## 9.1 Purpose
+
+Persistent overrides represent any meaningful difference between the generated baseline world and the current simulation state.
+
+```text
+FinalTileState =
+    GenerateBaselineTile(world_seed, tile_coordinate)
+    + ApplyPersistentOverrides(tile_coordinate)
+```
+
+---
+
+## 9.2 Persistent Override Types
+
+| Override Type | Examples |
+|---|---|
+| Vegetation removal | Felled trees, cleared forest, burned land |
+| Terrain modification | Ditches, pits, terraces, quarries |
+| Construction | Buildings, walls, fences, roads, bridges |
+| Land use | Farms, orchards, grazing land |
+| Resource extraction | Mines, clay pits, stone quarries |
+| Hydrology | Canals, dams, drained wetlands |
+| Settlement history | Ruins, foundations, abandoned villages |
+| Permanent objects | Graves, markers, shrines, wells |
+
+---
+
+## 9.3 Efficient Storage Rules
+
+The simulation should use the smallest representation capable of preserving the intended effect.
+
+| Change Type | Preferred Representation |
+|---|---|
+| Single tree cut down | Individual object or removal record |
+| Small campfire | Temporary object with expiry |
+| Cleared forest | Polygon or vegetation-density zone |
+| Farm field | Polygon plus crop and fertility state |
+| Road | Path spline, graph edge, or stamped corridor |
+| Building | Building object plus footprint |
+| Ditch or wall | Line, spline, or terrain feature |
+| Quarry | Extraction zone with depletion level |
+| Mine | Mine entrance plus underground graph |
+| Large excavation | Terrain-delta patch or shape volume |
+
+The simulation should avoid saving every modified cell individually unless the modified area is very small.
+
+---
+
+## 10. Wildlife and Ecology
+
+## 10.1 Population Model
+
+Animals shall be represented differently depending on proximity to agents.
+
+| Location/State | Representation |
+|---|---|
+| Distant or inactive area | Aggregate population value |
+| Nearby active tile | Individual local animal entities |
+| Agent interaction area | Individual behavior, movement, injury, and death state |
+
+Example regional animal state:
+
+```text
+Deer
+{
+    carryingCapacity: 500;
+    estimatedPopulation: 325;
+    reproductiveRate: 0.18;
+    mortalityRate: 0.10;
+    huntingPressure: 0.15;
+    migrationModifier: 0.05;
+}
+```
+
+---
+
+## 10.2 Local Animal Generation
+
+When a tile becomes active, local animals should be generated from:
+
+- Regional species population density.
+- Local habitat type.
+- Vegetation density.
+- Time of day.
+- Season.
+- Weather.
+- Distance from water.
+- Distance from settlements.
+- Recent hunting or disturbance.
+- Predation pressure.
+
+Example conceptual formula:
+
+```text
+local_spawn_chance =
+    regional_population_density
+    × habitat_quality
+    × season_modifier
+    × time_of_day_modifier
+    × disturbance_modifier
+```
+
+Individual animals generated in a tile should not be assumed to be permanent entities after the tile unloads unless they are uniquely important.
+
+---
+
+## 10.3 Wildlife Migration
+
+Inactive animal migration should be simulated as aggregate population flow between compatible neighboring regions.
+
+```text
+migration_flow =
+    migration_rate
+    × habitat_connectivity
+    × source_population_surplus
+    × destination_population_deficit
+```
+
+Migration should be reduced by:
+
+- Incompatible terrain.
+- Rivers or severe terrain barriers.
+- Dense settlements.
+- Roads and heavy traffic.
+- Walls and fortifications.
+- Lack of food or water.
+- Predator pressure.
+- Seasonal conditions.
+
+The simulation should not instantly refill an overhunted area. Recovery should depend on reproduction, habitat recovery, and gradual migration.
+
+---
+
+## 10.4 Fast-Forward Ecological Updates
+
+Inactive regions shall not be simulated every tick.
+
+Each region shall retain:
+
+```text
+lastUpdatedTime
+```
+
+When a region becomes relevant:
+
+```text
+elapsedTime = currentTime - region.lastUpdatedTime
+FastForwardRegion(region, elapsedTime)
+region.lastUpdatedTime = currentTime
+```
+
+The fast-forward process may update:
+
+- Animal population.
+- Vegetation density.
+- Timber recovery.
+- Forage recovery.
+- Fish stock recovery.
+- Soil fertility.
+- Grazing pressure.
+- Predation balance.
+- Resource depletion.
+
+A simple recovery model may be used initially:
+
+```text
+currentValue =
+    currentValue
+    + recoveryRate × elapsedTime
+```
+
+Values should be clamped to baseline or carrying-capacity limits.
+
+More important species or resources may use logistic growth:
+
+\[
+P(t) = \frac{K}{1 + \left(\frac{K-P_0}{P_0}\right)e^{-rt}}
+\]
+
+Where:
+
+- \(P_0\) is the starting population.
+- \(K\) is the carrying capacity.
+- \(r\) is the recovery or growth rate.
+- \(t\) is elapsed time.
+
+---
+
+## 11. Vegetation and Resource Regeneration
+
+## 11.1 Resource Categories
+
+Resources should have different persistence and recovery behavior.
+
+| Resource | Suggested Model |
+|---|---|
+| Grass | Rapid recovery |
+| Berries and small forage | Seasonal recovery |
+| Mushrooms | Seasonal and moisture-dependent |
+| Shrubs | Moderate recovery |
+| Young trees | Slow recovery |
+| Mature forest | Very slow recovery |
+| Fish | Population-based recovery |
+| Game animals | Population and migration recovery |
+| Clay | Very slow or non-renewable |
+| Stone | Non-renewable for practical purposes |
+| Metal ore | Non-renewable |
+| Soil fertility | Recoverable but affected by use and erosion |
+
+---
+
+## 11.2 Vegetation Representation
+
+Most baseline vegetation should be generated procedurally from:
+
+```text
+seed
+global coordinates
+biome
+soil
+moisture
+slope
+distance from water
+regional depletion values
+```
+
+The simulation should only store persistent records for vegetation that has been:
+
+- Harvested in a meaningful quantity.
+- Planted.
+- Burned.
+- Cleared for farming or construction.
+- Protected as an orchard, grove, or managed woodland.
+- Altered by disease, fire, or major environmental event.
+
+---
+
+## 12. Buildings, Roads, and Settlement Persistence
+
+## 12.1 Building Data Model
+
+```text
+Building
+{
+    BuildingID id;
+    Coordinate location;
+    Footprint geometry;
+
+    BuildingType type;
+    MaterialComposition materials;
+
+    float condition;
+    float roofIntegrity;
+    float wallIntegrity;
+    float foundationIntegrity;
+
+    OccupancyState occupancy;
+    MaintenanceState maintenance;
+    Time lastUpdatedTime;
+}
+```
+
+---
+
+## 12.2 Building Degradation
+
+Buildings in inactive areas shall degrade through time-based updates rather than continuous simulation.
+
+```text
+condition_loss =
+    base_degradation_rate
+    × weather_exposure
+    × material_vulnerability
+    × abandonment_modifier
+    × elapsed_time
+```
+
+Factors that may affect degradation:
+
+- Construction material.
+- Roof condition.
+- Climate and rainfall.
+- Freeze-thaw exposure.
+- Flooding.
+- Fire damage.
+- Occupancy.
+- Maintenance.
+- Vegetation encroachment.
+- Looting or material scavenging.
+
+Suggested state transitions:
+
+```text
+Maintained Building
+    ↓
+Neglected Building
+    ↓
+Abandoned Building
+    ↓
+Ruined Building
+    ↓
+Foundation / Rubble Site
+    ↓
+Naturalized Terrain
+```
+
+A fully degraded structure should generally convert into a low-memory ruin or terrain marker rather than retain complete building data indefinitely.
+
+---
+
+## 12.3 Roads and Paths
+
+Paths should be represented by use and persistence level.
+
+| Feature | Representation |
+|---|---|
+| Temporary footpath | Traffic-density value; fades if unused |
+| Maintained trail | Path spline or tile corridor |
+| Dirt road | Persistent path object |
+| Stone road | Persistent road object |
+| Bridge | Persistent construction object |
+| Trade route | High-level route graph plus local road segments |
+
+Road condition should improve with use and maintenance, and degrade with weather, vegetation growth, and neglect.
+
+---
+
+## 13. Terrain Modification and Restoration
+
+## 13.1 Terrain Change Categories
+
+| Modification | Persistence |
+|---|---|
+| Footprints | Temporary |
+| Campfire pit | Short-term |
+| Small shallow hole | Short-term to medium-term |
+| Grave | Long-term |
+| Field drainage ditch | Long-term |
+| Quarry | Very long-term |
+| Mine entrance | Very long-term |
+| Canal | Very long-term |
+| Earthwork or fortification | Long-term |
+| Major road embankment | Long-term |
+
+---
+
+## 13.2 Restoration Logic
+
+Inactive terrain modifications may restore based on:
+
+- Soil type.
+- Rainfall.
+- Slope.
+- Water flow.
+- Vegetation growth.
+- Time elapsed.
+- Continued human activity.
+
+Example behavior:
+
+```text
+Footprint:
+    disappears after weather event or short elapsed time.
+
+Shallow hole:
+    slowly fills through erosion and vegetation.
+
+Abandoned farm:
+    grass → shrubland → young forest → mature forest.
+
+Ditch:
+    accumulates sediment and may fill gradually.
+
+Quarry:
+    remains visible for long periods.
+
+Mine:
+    may collapse, flood, or become inaccessible.
+```
+
+---
+
+## 14. Long-Distance Travel
+
+The simulation should not require full local-tile simulation for all travel.
+
+## 14.1 Abstract Travel Mode
+
+When no meaningful event occurs, travel may be processed at low detail.
+
+```text
+TravelResult TravelAgent(agent, destination):
+    determine route
+    calculate travel time
+    apply terrain effects
+    apply weather effects
+    update hunger, thirst, fatigue, and morale
+    check for travel events
+    update location
+```
+
+Relevant factors include:
+
+- Distance.
+- Terrain slope.
+- Roads and trails.
+- Weather.
+- Season.
+- Load carried.
+- Agent health.
+- Navigation skill.
+- Known routes.
+- Safety conditions.
+
+---
+
+## 14.2 Local Detail Travel Mode
+
+Detailed tile generation should occur when the agent:
+
+- Hunts or gathers.
+- Encounters another agent.
+- Constructs or destroys something.
+- Travels through dangerous terrain.
+- Reaches a settlement.
+- Fights.
+- Mines or digs.
+- Crosses a river, bridge, or mountain pass.
+- Experiences a significant event.
+
+The active tile window should follow the traveler and unload tiles behind the traveler after state is saved.
+
+---
+
+## 15. Memory Management Rules
+
+## 15.1 Retain in Memory
+
+The simulation should retain:
+
+- World seed and global configuration.
+- Macro region summaries.
+- Active local tiles.
+- Persistent overrides.
+- Active agents.
+- Important historical entities.
+- Settlements and structures.
+- Active routes, projects, and events.
+
+## 15.2 Remove or Regenerate
+
+The simulation should regenerate or discard:
+
+- Untouched terrain tiles.
+- Baseline vegetation.
+- Background animals.
+- Temporary footprints.
+- Expired dropped items.
+- Minor visual debris.
+- Unmodified local resource distributions.
+- Unchanged cells outside active areas.
+
+---
+
+## 15.3 Temporary Object Expiry
+
+Temporary objects should have an expiry model.
+
+```text
+TemporaryObject
+{
+    ObjectType type;
+    Coordinate location;
+    Time createdAt;
+    Time expiresAt;
+    DecayState decay;
+}
+```
+
+Examples:
+
+| Object | Typical Persistence |
+|---|---|
+| Footprint | Hours to days |
+| Bloodstain | Hours to days |
+| Campfire | Hours to weeks |
+| Carcass | Days to weeks |
+| Bones | Weeks to years |
+| Dropped branch | Days to years, depending on relevance |
+| Small debris | Short-lived unless near settlement or construction |
+
+---
+
+## 16. Save and Load Strategy
+
+## 16.1 Persisted World Data
+
+The save system should store:
+
+```text
+World metadata
+World seed
+Current world time
+Macro region states
+Persistent object records
+Persistent modification zones
+Agent states
+Settlement states
+Historical event records, if required
+```
+
+## 16.2 Regenerated World Data
+
+The save system should not normally store:
+
+```text
+Unmodified terrain cells
+Unmodified vegetation positions
+Unmodified wildlife positions
+Unmodified rock placement
+Temporary local tile cache data
+```
+
+On load:
+
+```text
+Load world seed
+Load macro region data
+Load persistent overrides
+Generate local tiles only when required
+```
+
+---
+
+## 17. Core Processing Flows
+
+## 17.1 Loading a Local Tile
+
+```text
+LoadTile(tileCoordinate):
+
+    macroRegion = GetMacroRegion(tileCoordinate)
+
+    if macroRegion.lastUpdatedTime < currentTime:
+        FastForwardRegion(macroRegion, currentTime)
+
+    tile = GenerateBaselineTile(worldSeed, tileCoordinate)
+
+    overrides = GetPersistentOverrides(tileCoordinate)
+    ApplyOverrides(tile, overrides)
+
+    PopulateVegetation(tile, macroRegion)
+    PopulateLocalAnimals(tile, macroRegion)
+
+    AddTileToActiveCache(tile)
+
+    return tile
+```
+
+---
+
+## 17.2 Unloading a Local Tile
+
+```text
+UnloadTile(tile):
+
+    SaveMeaningfulChanges(tile)
+
+    UpdateMacroRegionResources(tile)
+    UpdateMacroRegionEcology(tile)
+
+    RemoveExpiredTemporaryObjects(tile)
+
+    if tile.hasUnsavedChanges:
+        PersistTileChanges(tile)
+
+    RemoveTileFromActiveCache(tile)
+```
+
+---
+
+## 17.3 Harvesting Resources
+
+```text
+HarvestResource(agent, resource, location):
+
+    tile = GetActiveTile(location)
+
+    remove or reduce local resource
+
+    if resource change is temporary:
+        create temporary local state
+
+    if resource change is meaningful:
+        create or update persistent override
+
+    update macro region depletion metric
+
+    update agent inventory
+```
+
+---
+
+## 17.4 Building Construction
+
+```text
+ConstructBuilding(agent, buildingPlan, location):
+
+    validate terrain and local conditions
+
+    create building record
+    create footprint override
+    remove conflicting baseline terrain or vegetation
+
+    add building reference to macro region
+    update local tile
+```
+
+---
+
+## 18. Performance Priorities
+
+The following order of optimization is recommended:
+
+1. Do not store unmodified cells.
+2. Do not fully generate inactive macro regions.
+3. Do not simulate distant animals individually.
+4. Do not update every region every tick.
+5. Use elapsed-time fast-forwarding for inactive regions.
+6. Use sparse persistent overrides for meaningful changes.
+7. Expire temporary objects.
+8. Generate only local tiles required by active agents.
+9. Use aggregate data for distant settlements and ecology.
+10. Profile memory and load times before adding more complex detail.
+
+---
+
+## 19. Key Design Constraints
+
+- A 10 km × 10 km macro region is too large to instantiate at one-meter resolution.
+- A local tile must be smaller than a macro region.
+- Terrain generation must use global coordinates to avoid seams.
+- Persistent state must represent differences from the procedural baseline.
+- Distant ecology must use aggregate populations and resource values.
+- Detailed animals and vegetation should exist only near agents or important events.
+- Large, permanent modifications must survive tile unloading.
+- Minor changes should decay and eventually be discarded.
+- Inactive regions should advance through elapsed-time calculations rather than continuous simulation.
+
+---
+
+## 20. Recommended Initial Implementation Sequence
+
+### Phase 1: Procedural Baseline
+
+- Implement fixed world seed.
+- Implement coordinate-based terrain generation.
+- Implement global elevation, moisture, soil, and biome functions.
+- Verify terrain continuity across tile and region boundaries.
+
+### Phase 2: Tile Streaming
+
+- Implement 128 m × 128 m local tiles.
+- Implement active tile loading around agents.
+- Implement tile cache and unloading behavior.
+- Confirm that unmodified tiles can be discarded and regenerated identically.
+
+### Phase 3: Macro Regions
+
+- Implement 10 km × 10 km macro regions.
+- Add resource depletion values.
+- Add simplified biome and ecological summaries.
+- Add elapsed-time regional updates.
+
+### Phase 4: Persistence
+
+- Implement persistent building records.
+- Implement harvested vegetation and cleared-area records.
+- Implement roads, farms, mines, and terrain modification records.
+- Apply persistent overrides during tile generation.
+
+### Phase 5: Wildlife and Regrowth
+
+- Add aggregate animal population models.
+- Generate local wildlife from regional conditions.
+- Add migration and carrying-capacity logic.
+- Add vegetation and resource recovery.
+
+### Phase 6: Settlement and Historical State
+
+- Add building degradation.
+- Add settlement development and abandonment.
+- Add ruins, road decay, and land-use transitions.
+- Add longer-term historical tracking where required.
+
+---
+
+## 21. Summary
+
+The simulation should treat the world as a persistent procedural baseline modified by sparse historical changes.
+
+```text
+Unchanged world:
+    Generated from seed.
+
+Nearby world:
+    Generated as local tiles.
+
+Distant world:
+    Represented by macro region summaries.
+
+Changed world:
+    Stored as persistent overrides.
+
+Temporary world detail:
+    Loaded near agents and discarded when no longer needed.
+```
+
+This model supports detailed local interaction while avoiding the memory cost of retaining all cells, vegetation, wildlife, and resources across the entire 100 km × 100 km map.
