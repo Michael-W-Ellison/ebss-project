@@ -4,9 +4,15 @@
 //! This executable provides easy testing and troubleshooting of the simulation
 //! with full visibility into agent death mechanics (aging, starvation, damage).
 //!
+//! Runs on the 100 km2 map with everyone starting in the middle, because a
+//! people who walk at 5 km/h and animals that roam as far as real ones empty
+//! the old 500 m map in weeks. `--small` puts it back on the 500 m map.
+//!
 //! Usage:
-//!   cargo run --bin test_simulation
-//!   cargo run --bin test_simulation -- --agents 20 --turns 5000
+//!   cargo run --release --bin test_simulation
+//!   cargo run --release --bin test_simulation -- --agents 12 --years 4 --seed 3
+//!   cargo run --release --bin test_simulation -- --turns 5000 --report 480
+//!   cargo run --release --bin test_simulation -- --small
 
 use ebss::prelude::*;
 use ebss::agents::PopulationConfig;
@@ -20,9 +26,19 @@ fn main() {
 
     // Parse command line arguments
     let args: Vec<String> = env::args().collect();
-    let num_agents = parse_arg(&args, "--agents").unwrap_or(10) as u32;
-    let num_turns = parse_arg(&args, "--turns").unwrap_or(1000) as u32;
-    let report_interval = parse_arg(&args, "--report").unwrap_or(100) as u32;
+    use ebss::environment::seasons::PLANNING_PERIODS_PER_YEAR;
+    let num_agents = parse_arg(&args, "--agents").unwrap_or(12) as u32;
+    let years = parse_arg(&args, "--years").unwrap_or(1) as u32;
+    let num_turns = parse_arg(&args, "--turns")
+        .map(|t| t as u32)
+        .unwrap_or(years * PLANNING_PERIODS_PER_YEAR);
+    let report_interval = parse_arg(&args, "--report")
+        .map(|r| r as u32)
+        .unwrap_or(PLANNING_PERIODS_PER_YEAR / 12);
+    let small = args.iter().any(|a| a == "--small");
+    if let Some(seed) = parse_arg(&args, "--seed") {
+        ebss::core::dice::seed(seed as u64);
+    }
 
     println!("╔════════════════════════════════════════════════════════════╗");
     println!("║   EBSS - Emergent Behavior Society Simulator              ║");
@@ -30,6 +46,7 @@ fn main() {
     println!("╚════════════════════════════════════════════════════════════╝");
     println!();
     println!("Configuration:");
+    println!("  • Map: {}", if small { "500 m (--small)" } else { "10 km x 10 km" });
     println!("  • Agents: {}", num_agents);
     println!("  • Turns: {}", num_turns);
     println!("  • Report Interval: {} turns", report_interval);
@@ -37,7 +54,11 @@ fn main() {
 
     // Create world
     println!("🌍 Creating world...");
-    let world = World::new(WorldConfig::default());
+    let world = World::new(if small {
+        WorldConfig::default()
+    } else {
+        WorldConfig::big_enough_for_an_ecology()
+    });
     println!("   ✓ World initialized");
 
     // Create population with configured settings
@@ -58,6 +79,10 @@ fn main() {
     println!();
     println!("⚙️  Initializing simulation...");
     let mut sim = Simulation::new(world, population);
+    if !small {
+        let (x, y) = sim.bring_everybody_to_the_middle();
+        println!("   ✓ Everybody starts at ({}, {})", x, y);
+    }
     println!("   ✓ Simulation ready");
     println!();
     println!("▶️  Starting simulation for {} turns...", num_turns);

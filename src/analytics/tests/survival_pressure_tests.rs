@@ -471,39 +471,54 @@ fn a_newborn_is_not_born_parched() {
     );
 }
 
-/// A settlement's second generation survives its first hour.
+/// A settlement's second generation lives past infancy.
+///
+/// On the hundred square kilometres, with the founders at the middle of it,
+/// and counted by the calendar. This ran six thousand turns on the
+/// half-kilometre test map and asked for five people born there; six thousand
+/// turns is four months, a pregnancy is nine (#253), so it could not pass
+/// whatever the model did. And a settlement on a quarter of a square
+/// kilometre is not the thing being asked about: every long run measured on
+/// it stripped the country bare (#272).
+///
+/// Four years: time for a first autumn's conceptions to be born and see their
+/// first birthday, and for another round after the nursing (#262). Long -
+/// about half an hour in a debug build - so it is run on request:
+/// `cargo test -- --ignored the_children_of_a_settlement_live_past_infancy`.
 #[test]
+#[ignore = "four years on the 100 km2 map, about half an hour; run with --ignored"]
 fn the_children_of_a_settlement_live_past_infancy() {
-    let world = World::new(WorldConfig::default());
+    use crate::environment::seasons::PLANNING_PERIODS_PER_YEAR;
+
+    crate::core::dice::seed(3);
+    let world = World::new(WorldConfig::big_enough_for_an_ecology());
     let mut population = Population::new();
     for _ in 0..12 {
         population.spawn_agent(AgentConfig::default());
     }
 
     let mut simulation = Simulation::new(world, population);
+    simulation.bring_everybody_to_the_middle();
 
-    // Five years, not ten. This asked for twelve thousand turns when a
-    // settlement of that age held under a hundred people; it now holds getting
-    // on for twice that, and the cost of a turn rises with the square of who
-    // is standing about, so the same claim was taking the best part of an hour
-    // to check in a debug build. Six thousand turns is four full years and is
-    // long enough over: a settlement that has not raised a child in four years
-    // is not going to.
-    for _ in 0..6_000 {
+    for _ in 0..(4 * PLANNING_PERIODS_PER_YEAR) {
         simulation.take_a_turn();
     }
 
-    let born_here = simulation
+    let born_here: Vec<u32> = simulation
         .population
         .agents
         .iter()
         .filter(|agent| agent.state.is_alive)
         .filter(|agent| !agent.parent_ids.is_empty())
-        .count();
+        .map(|agent| agent.state.years_old())
+        .collect();
+    let past_their_first_year = born_here.iter().filter(|&&years| years >= 1).count();
 
     assert!(
-        born_here >= 5,
-        "six thousand turns in, a settlement should hold people born into it, not {born_here}"
+        past_their_first_year >= 3,
+        "four years in, a settlement should hold children born into it who have \
+         seen a birthday; it holds {past_their_first_year} (ages of all born \
+         here and alive: {born_here:?})"
     );
 }
 

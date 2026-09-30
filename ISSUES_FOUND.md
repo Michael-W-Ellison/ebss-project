@@ -21290,3 +21290,32 @@ Tests the pace made stale, and how they were brought up to it:
 
 Still failing: the two multi-generation tests, as before, and two ecology
 tests the animals' pace moved - see STANDING_FAILURES.
+
+### 279. The long tests and the long run, on the big map
+
+#278 put the walk into the model but left every long run on
+`WorldConfig::default()`, 500 metres across: a people who cover a kilometre
+in a half hour, and animals that go twenty-five times as far as they did,
+strip a quarter of a square kilometre in weeks, and what a long run there
+measures is the map.
+
+- `Simulation::bring_everybody_to_the_middle` puts the living on the nearest
+  dry ground to the middle of the map. Spawning scatters them over the whole
+  of it, which on ten kilometres is a dozen strangers who never meet.
+- `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy`
+  runs four years on `big_enough_for_an_ecology()` with seed 3, and asks for
+  three children born there alive and past their first birthday.
+- `longevity_tests::a_settlement_still_raises_children_late_on` runs eight
+  years the same way, and asks for someone born in the last four still
+  alive.
+- Both were written against turn counts from before the calendar (6,000 and
+  9,000 turns, four and six months) and could not pass whatever the model
+  did (#253). Both now take half an hour to an hour in a debug build, so both
+  are `#[ignore]`d and run with `cargo test -- --ignored <name>`.
+- `test_simulation` runs on the big map with everybody at the middle, and
+  takes `--years`, `--seed`, and `--small` for the old map. It reports
+  monthly by default.
+
+The other 2,700 or so tests stay on the small map. They test one thing over
+a few days, and the big map costs about seven times as much per simulated
+year.

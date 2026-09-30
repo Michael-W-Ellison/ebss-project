@@ -1284,6 +1284,42 @@ impl Simulation {
             .find(|what| Self::gathered_as(*what) == Some(named))
     }
 
+    /// Bring everybody alive to the nearest dry ground to the middle of the
+    /// country, and say where that was.
+    ///
+    /// People are spawned standing at (0, 0), which on the half-kilometre test
+    /// map is a corner of a small country and on the hundred square
+    /// kilometres (`WorldConfig::big_enough_for_an_ecology`) is a corner five
+    /// kilometres from the middle, often in water. A people founding a
+    /// settlement on the big map starts here instead, with the whole country
+    /// round it. The nearest ground that can be stood on, looked for in rings
+    /// outward from the middle, so the answer is the same for the same map.
+    pub fn bring_everybody_to_the_middle(&mut self) -> (i32, i32) {
+        let middle = (
+            self.world.grid.width as i32 / 2,
+            self.world.grid.height as i32 / 2,
+        );
+        let furthest = middle.0.max(middle.1);
+        let mut at = middle;
+        'looking: for ring in 0..=furthest {
+            for dx in -ring..=ring {
+                for dy in -ring..=ring {
+                    if dx.abs() != ring && dy.abs() != ring {
+                        continue;
+                    }
+                    if self.is_passable_tile(middle.0 + dx, middle.1 + dy) {
+                        at = (middle.0 + dx, middle.1 + dy);
+                        break 'looking;
+                    }
+                }
+            }
+        }
+        for agent in self.population.agents.iter_mut().filter(|agent| agent.state.is_alive) {
+            agent.state.position = (at.0, at.1, agent.state.position.2);
+        }
+        at
+    }
+
     /// Whether an agent can stand on this tile
     /// Shout if somebody has just been put where there is no map.
     ///
@@ -1291,7 +1327,6 @@ impl Simulation {
     /// the model and every one of them is an agent standing off the grid.
     /// Four places move an agent and all four look guarded, so this asks them
     /// one at a time which is lying.
-
     fn is_passable_tile(&self, x: i32, y: i32) -> bool {
         use crate::world::Position;
 
