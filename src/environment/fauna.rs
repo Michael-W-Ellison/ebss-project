@@ -4229,22 +4229,29 @@ impl AnimalManager {
                 })
                 .collect();
 
-        // Who is standing where, in blocks the size of a hunt.
+        // Who is standing where, in blocks a hunter can cast about over.
         //
         // A predator used to look at every animal in the world to find one
         // within eight tiles of it, which is every predator against every
         // animal: on a hundred square kilometres carrying four thousand head
         // that is millions of comparisons a turn, most of them string
         // comparisons against a list of prey species, to find the handful of
-        // animals actually in front of it. Blocks of `HOW_FAR_A_HUNT_REACHES`
-        // mean a predator looks in the nine blocks around it and nowhere else.
+        // animals actually in front of it. Blocks mean a predator looks in
+        // the blocks its half hour reaches and nowhere else.
+        //
+        // **They were blocks of eight cells, and a hunter looked in the nine
+        // around it** - twenty-four cells at the most. That was three turns
+        // of a wolf's walk when a pace was two cells; at twenty-five times
+        // that (`world::pace`) a sheep grazes further than that in one move,
+        // and fourteen hungry wolves spent a day within 120 to 350 metres of
+        // two sheep without once seeing either. See ISSUES_FOUND #280.
         let mut who_is_about: BTreeMap<(i32, i32), Vec<usize>> = BTreeMap::new();
         for (idx, animal) in self.animals.iter().enumerate() {
             if !animal.is_alive() {
                 continue;
             }
             who_is_about
-                .entry(Self::which_block(animal.position))
+                .entry(Self::which_hunting_block(animal.position))
                 .or_default()
                 .push(idx);
         }
@@ -4313,6 +4320,8 @@ impl AnimalManager {
         // For each predator, look for nearby prey
         let mut kills = Vec::new();
         let mut stalking: Vec<(usize, (i32, i32))> = Vec::new();
+        // Who closed on something and rushed it, and where it was.
+        let mut closed_on: Vec<(usize, (i32, i32))> = Vec::new();
         let mut went_looking = 0u64;
         let mut saw_something = 0u64;
         let mut rushed = 0u64;
@@ -4328,19 +4337,19 @@ impl AnimalManager {
                 None => continue,
             };
 
-            // How many animals a hunter will look over before it picks one.
+            // How many animals a hunter will weigh up before it picks one.
             //
             // A hunter goes for what is in front of it, not for the best of a
-            // full census, and the difference matters for what this costs: the
-            // nine blocks around a predator hold every animal standing there,
-            // so on ground that has filled up this loop is every predator
-            // against every animal again and the whole point of blocking it
-            // was to stop that. A quarter of a square kilometre that ran away
-            // to five hundred and sixty head took a five-year run from three
-            // seconds to over two hundred.
-            const HOW_MANY_IT_LOOKS_OVER: usize = 8;
+            // full census, and the difference matters for what this costs: on
+            // ground that has filled up, the blocks round a predator hold
+            // every animal standing there and weighing them all is every
+            // predator against every animal again. A quarter of a square
+            // kilometre that ran away to five hundred and sixty head took a
+            // five-year run from three seconds to over two hundred. Weighing
+            // means a registry lookup and a list of names; only what is within
+            // sight gets that far, and no more than this many of those.
+            const HOW_MANY_IT_LOOKS_OVER: usize = 64;
 
-            let hereabouts = Self::which_block(pred_pos);
             let this_ground = Self::whose_ground(pred_pos);
 
             // What the ground itself yields, every turn.
@@ -4452,34 +4461,55 @@ impl AnimalManager {
                 continue;
             }
             went_looking += 1;
-            let nearby: Vec<usize> = [-1, 0, 1]
-                .iter()
-                .flat_map(|dy| [-1, 0, 1].iter().map(move |dx| (*dx, *dy)))
+
+            // **A hunt is a half hour, the same as everybody else's.**
+            //
+            // It used to be one look at what stood within eighty metres, a
+            // rush if something did, and otherwise a step towards the nearest
+            // thing in the nine blocks round it - and the rush waited for the
+            // next roll, a day later on average, by when the quarry had
+            // grazed off. On a clock where a wolf covers the best part of a
+            // kilometre in a turn that is not a hunt; it is a wolf that sees
+            // a sheep, walks up to it, and stands there for a day.
+            //
+            // Now it is what a hunter does with its half hour: cast about as
+            // far as it can wind or see something, and if what it finds is
+            // within what it can cover in the turn, close on it and make the
+            // rush. Something further off it walks towards, a turn's worth,
+            // and comes at it the next time it hunts. The odds of the rush
+            // itself are untouched: `what_a_hunt_between_these_two_comes_to`
+            // still decides whether it comes off.
+            let hunter_now = &self.animals[pred_idx];
+            let covers = hunter_now
+                .how_far_it_gets_in_a_turn(hunter)
+                .max(Self::HOW_FAR_A_HUNT_REACHES);
+            let sees = covers * Self::HOW_MUCH_FURTHER_A_HUNTER_FINDS_THAN_IT_GETS;
+            let blocks_out = (sees + Self::HOW_BIG_A_HUNTING_BLOCK_IS - 1)
+                / Self::HOW_BIG_A_HUNTING_BLOCK_IS;
+            let hereabouts = Self::which_hunting_block(pred_pos);
+            let apart = |at: (i32, i32)| (at.0 - pred_pos.0).abs().max((at.1 - pred_pos.1).abs());
+
+            let in_sight: Vec<usize> = (-blocks_out..=blocks_out)
+                .flat_map(|dy| (-blocks_out..=blocks_out).map(move |dx| (dx, dy)))
                 .filter_map(|(dx, dy)| {
                     who_is_about.get(&(hereabouts.0 + dx, hereabouts.1 + dy))
                 })
-                // **Eight of them, and not always the same eight.**
-                //
-                // `take(8)` is a prefix of the block, and a block is in the
-                // order the animals were created - so a hunter standing in a
-                // block whose first eight entries are its own kind sees
-                // nothing else, for ever, however close the dinner is.
-                // Measured on the plainest case there is: fourteen wolves and
-                // two sheep on one cell, the sheep spawned last, and over
-                // half a day of wolves looking at the block the tally of
-                // "saw something" was **nought** while a sheep stood one cell
-                // away from all fourteen of them.
-                //
-                // Starting each hunter at its own offset costs the same eight
-                // comparisons and means the block is actually sampled.
-                .flat_map(|block| {
-                    let from = if block.is_empty() { 0 } else { pred_idx % block.len() };
-                    block
-                        .iter()
-                        .cycle()
-                        .skip(from)
-                        .take(HOW_MANY_IT_LOOKS_OVER.min(block.len()))
-                })
+                .flatten()
+                .copied()
+                .filter(|&idx| idx != pred_idx && apart(self.animals[idx].position) <= sees)
+                .collect();
+
+            // **Not always the same few, either.** Blocks are in the order
+            // the animals were made, so a prefix of them is whatever was
+            // spawned first: fourteen wolves and two sheep, the sheep made
+            // last, and a hunter that only ever looked at the first eight saw
+            // nothing but wolves. Each starts at its own place in the list.
+            let from = if in_sight.is_empty() { 0 } else { pred_idx % in_sight.len() };
+            let nearby: Vec<usize> = in_sight
+                .iter()
+                .cycle()
+                .skip(from)
+                .take(HOW_MANY_IT_LOOKS_OVER.min(in_sight.len()))
                 .copied()
                 .collect();
 
@@ -4494,21 +4524,30 @@ impl AnimalManager {
 
             // How many of its own kind are hunting alongside it. A pack takes
             // what one of them could not.
-            let hunters_together = nearby
-                .iter()
-                .filter(|&&idx| {
-                    self.animals[idx].is_alive()
-                        && self.animals[idx].species_id == pred_species_id
-                        && (self.animals[idx].position.0 - pred_pos.0).abs()
-                            + (self.animals[idx].position.1 - pred_pos.1).abs()
-                            <= Self::HOW_FAR_A_HERD_STANDS_TOGETHER
-                })
-                .count()
-                .max(1);
+            //
+            // Whoever of the pack is within the hunter's half hour, which is
+            // how far off a packmate can be and still be in at the kill; it
+            // was the forty metres a herd stands in, which a pack that
+            // spreads out to graze its ground at the new pace is almost never
+            // inside. Only for something that hunts in packs: two bears on
+            // one hillside are not a pack.
+            let hunts_in_a_pack = hunter.group_size.1 >= Self::WHAT_COUNTS_AS_A_GROUP;
+            let hunters_together = if hunts_in_a_pack {
+                in_sight
+                    .iter()
+                    .filter(|&&idx| {
+                        self.animals[idx].is_alive()
+                            && self.animals[idx].species_id == pred_species_id
+                            && apart(self.animals[idx].position) <= covers
+                    })
+                    .count()
+                    + 1
+            } else {
+                1
+            };
 
-            // Find nearby prey, and the nearest thing worth walking to if
-            // none of it is within a rush.
-            let mut closest: Option<((i32, i32), i32)> = None;
+            // What it sees that it would try for, and the nearest of it.
+            let mut closest: Option<(usize, i32)> = None;
             let mut rushed_something = false;
 
             for prey_idx in nearby.iter().copied() {
@@ -4553,34 +4592,25 @@ impl AnimalManager {
                 }
                 saw_something += 1;
 
-                // Check proximity - the blocks are only a sieve, and a
-                // neighbouring block reaches further than a hunt does.
-                let distance = (pred_pos.0 - prey.position.0).abs()
-                    + (pred_pos.1 - prey.position.1).abs();
-                if distance > Self::HOW_FAR_A_HUNT_REACHES {
-                    // Too far to rush, and worth walking towards. **This is
-                    // the whole of why nothing in this world ever ate.**
-                    //
-                    // A hunt asked "is there something I would try for within
-                    // eighty metres of me, right now", and if there was not,
-                    // the turn was over. Nothing ever moved a hungry hunter
-                    // towards prey it could see. Measured over a year on a
-                    // hundred square kilometres: 176,125 hunts went looking,
-                    // 4,379 of them had something in the nine blocks around
-                    // them worth trying for, and **thirteen** of those were
-                    // close enough to rush. A wolf ranges tens of kilometres
-                    // in a day; this one stood in a field waiting for a deer
-                    // to walk into it.
-                    if closest.map(|(_, so_far)| distance < so_far).unwrap_or(true) {
-                        closest = Some((prey.position, distance));
-                    }
-                    continue;
+                let distance = apart(prey.position);
+                if closest.map(|(_, so_far)| distance < so_far).unwrap_or(true) {
+                    closest = Some((prey_idx, distance));
                 }
+            }
+
+            // Within its half hour: it closes, and it rushes.
+            let within_the_turn = closest.filter(|&(_, distance)| distance <= covers);
+            if let Some((prey_idx, _)) = within_the_turn {
+                let quarry = match registry.get(&self.animals[prey_idx].species_id) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let prey = &self.animals[prey_idx];
 
                 // How many of its own kind are standing with it.
                 let prey_pos = prey.position;
                 let prey_species_id = prey.species_id.clone();
-                let stands_with = nearby
+                let stands_with = in_sight
                     .iter()
                     .filter(|&&idx| {
                         idx != prey_idx
@@ -4609,20 +4639,20 @@ impl AnimalManager {
 
                 rushed += 1;
                 rushed_something = true;
+                closed_on.push((pred_idx, prey_pos));
                 if rng.gen::<f32>() < odds.comes_off {
                     came_off += 1;
                     kills.push((pred_idx, prey_idx, quarry.food_value));
                 } else if odds.what_it_costs > 0.0 {
                     hurts.push((pred_idx, odds.what_it_costs));
                 }
-                break; // One rush per predator per turn, come off or not.
             }
 
             // Nothing within a rush, but something worth walking to. A
             // predator's day is mostly the walk.
             if !rushed_something {
                 if let Some((towards, _)) = closest {
-                    stalking.push((pred_idx, towards));
+                    stalking.push((pred_idx, self.animals[towards].position));
                 }
             }
 
@@ -4794,6 +4824,14 @@ impl AnimalManager {
         let edge = (grid.width as i32 - 1, grid.height as i32 - 1);
         let mut already_moving: std::collections::BTreeSet<usize> =
             std::collections::BTreeSet::new();
+
+        // Whatever made its rush is standing where the quarry stood.
+        for (pred_idx, there) in closed_on {
+            already_moving.insert(pred_idx);
+            if let Some(hunter) = self.animals.get_mut(pred_idx) {
+                hunter.position = (there.0.clamp(0, edge.0), there.1.clamp(0, edge.1));
+            }
+        }
 
         for (pred_idx, towards) in stalking {
             already_moving.insert(pred_idx);
@@ -5376,8 +5414,22 @@ impl AnimalManager {
         reared
     }
 
-    /// How far a predator will chase, in cells.
+    /// How far a predator will chase, in cells: the rush at the end of a
+    /// hunt, once it has closed. A hunter that covers less than this in a
+    /// turn still reaches this far.
     const HOW_FAR_A_HUNT_REACHES: i32 = 8;
+
+    /// How much further off a hunter finds something than it can get to in
+    /// a turn - by sight on open ground, by the wind, by the noise of it.
+    /// Twice: a wolf that covers eight hundred metres in a half hour winds a
+    /// flock a kilometre and a half off, and walks towards it.
+    const HOW_MUCH_FURTHER_A_HUNTER_FINDS_THAN_IT_GETS: i32 = 2;
+
+    /// The blocks a hunter casts about over, in cells. Coarser than
+    /// `which_block`, because a hunter looks over a turn's walk and not a
+    /// rush: a wolf's two turns are 170 cells, which is six blocks each way
+    /// of these and twenty-two of eight.
+    const HOW_BIG_A_HUNTING_BLOCK_IS: i32 = 32;
 
     /// How far off one of its own kind still counts as standing with it.
     const HOW_FAR_A_HERD_STANDS_TOGETHER: i32 = 4;
@@ -6103,6 +6155,14 @@ impl AnimalManager {
 
     /// The block of country a position falls in, for finding what is near it
     /// without asking about everything that is not.
+    fn which_hunting_block(at: (i32, i32)) -> (i32, i32) {
+        (
+            at.0.div_euclid(Self::HOW_BIG_A_HUNTING_BLOCK_IS),
+            at.1.div_euclid(Self::HOW_BIG_A_HUNTING_BLOCK_IS),
+        )
+    }
+
+    /// The block of country a position falls in, at the size of a rush.
     fn which_block(at: (i32, i32)) -> (i32, i32) {
         (
             at.0.div_euclid(Self::HOW_FAR_A_HUNT_REACHES),
@@ -6316,6 +6376,12 @@ impl AnimalManager {
     /// How far an animal notices something that would eat it.
     const HOW_FAR_AN_ANIMAL_LOOKS: i32 = 10;
 
+    /// How many turns an animal stays in flight once something has put it
+    /// to flight: the bolt, and a turn of standing wary after it. It was
+    /// eight, which at two cells a turn was sixteen cells and at the pace of
+    /// `world::pace` is four kilometres.
+    const HOW_LONG_A_FRIGHT_LASTS: u32 = 2;
+
     /// How much has to be on an animal before it stops grazing about it.
     const WORTH_AN_ANIMAL_LEAVING_OFF: f32 = 0.2;
 
@@ -6413,7 +6479,7 @@ impl AnimalManager {
 
             if let Some(from) = animal.what_is_on_me_from {
                 animal.state = AnimalState::Fleeing { from_position: from };
-                animal.state_timer = 8;
+                animal.state_timer = Self::HOW_LONG_A_FRIGHT_LASTS;
 
                 // And actually go, rather than standing still in a state
                 // called fleeing.
@@ -6427,6 +6493,18 @@ impl AnimalManager {
                     animal.position.0 = animal.position.0.clamp(0, east);
                     animal.position.1 = animal.position.1.clamp(0, south);
                 }
+
+                // **And that bolt has taken it out of sight of what it saw.**
+                //
+                // A half hour flat out is five hundred metres for a sheep,
+                // and it notices a wolf at a hundred. The reading it ran on
+                // is only taken every other hour (`HOW_OFTEN_A_BEAST_LOOKS
+                // _UP`), and while a flight was two cells a turn a reading
+                // that old was a reading of the same field. At the new pace
+                // it sent a sheep on for four turns and two kilometres from
+                // a wolf it had left behind after the first. What it does
+                // next is decided by the next look.
+                animal.what_is_on_me = 0.0;
                 return;
             }
         }

@@ -21321,3 +21321,50 @@ measures is the map.
 The other 2,700 or so tests stay on the small map. They test one thing over
 a few days, and the big map costs about seven times as much per simulated
 year.
+
+### 280. A hunt is a half hour: predators close and rush in one turn
+
+#278 made animals go twenty-five times as far in a turn, and left the hunt
+built for two cells a turn. A hunter cast about over the nine blocks of
+eight cells round it, which is twenty-four cells at the most. It rushed only
+what was within eight cells. Anything further inside those blocks it walked
+towards, and then waited for its next one-in-twenty roll to rush. By then,
+at the new pace, the quarry had grazed off. Measured on
+`fourteen_wolves_take_two_sheep_inside_a_day` (six seeds): the wolves spent
+the day 120 to 350 metres from the sheep, looked 26 to 38 times per seed,
+saw something one to five times, and took 6 sheep of 12. Before the pace
+change they took 12 of 12 inside five turns.
+
+- **A hunter casts about over twice what it covers in a turn**
+  (`HOW_MUCH_FURTHER_A_HUNTER_FINDS_THAN_IT_GETS`), in blocks of 32 cells
+  (`which_hunting_block`). What it covers is its own pace,
+  `how_far_it_gets_in_a_turn`, and never less than the rush.
+- **Whatever it would try for within its turn, it closes on and rushes in
+  the same turn**, the nearest first, and ends the turn where the quarry
+  stood. What is further off it walks towards, a turn's worth. The odds of
+  the rush are untouched.
+- **A pack is whoever of its kind is within the hunter's turn**, for
+  animals that live in groups; it was the forty metres a herd stands in.
+- It weighs up to 64 animals within sight, starting at its own place in the
+  list, instead of the first 8 in each block.
+- **A bolt is one turn.** A frightened animal stayed in flight for eight
+  turns. At the new pace that is four kilometres. The reading it fled on is
+  only refreshed every four turns, so it kept fleeing from a wolf it had
+  left behind after the first turn. Now it bolts once
+  (`HOW_LONG_A_FRIGHT_LASTS` = 2 turns in the state), and the reading is
+  cleared after the bolt.
+
+Measured, same six seeds: 12 sheep of 12, every seed done inside four
+turns.
+
+`most_of_what_lived_here_still_lives_here` was put down to the hunt in
+STANDING_FAILURES, and that was wrong. Over its eight worlds, before the
+pace change, after it, and after this, the herbivores almost all
+**starve**: 4,600 or so starvations against no herbivore taken by a
+predator in any of the three. The hunters on a half-kilometre map are
+kestrels, hawks, owls, eagles, otters and seals. Head at year five, of 468:
+137 before the pace change, 110 after it, 117 after this, against a bar of
+117. Species kept: 37, 36 and 42 of 56. The head count at five years
+swings by tens between seeds and years (seed 8: 4, 9, 3, 0, 2). It is a
+question about grazing on a quarter of a square kilometre that an animal
+now crosses in a turn or two, not about hunting.
