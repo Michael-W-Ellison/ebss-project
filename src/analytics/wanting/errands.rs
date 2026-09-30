@@ -164,7 +164,7 @@ impl Simulation {
         budget: usize,
     ) -> Option<Vec<(i32, i32)>> {
         use std::cmp::Reverse;
-        use std::collections::{BinaryHeap, HashMap};
+        use std::collections::{BTreeMap, BinaryHeap};
 
         if from == target {
             return Some(Vec::new());
@@ -178,8 +178,8 @@ impl Simulation {
         // Ordered by estimate, then by the way walked, then by position, so
         // that ties always break the same way and a run is repeatable.
         let mut open: BinaryHeap<Reverse<(u32, u32, i32, i32)>> = BinaryHeap::new();
-        let mut came_from: HashMap<(i32, i32), (i32, i32)> = HashMap::new();
-        let mut walked: HashMap<(i32, i32), u32> = HashMap::new();
+        let mut came_from: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
+        let mut walked: BTreeMap<(i32, i32), u32> = BTreeMap::new();
         open.push(Reverse((still_to_go(from), 0, from.0, from.1)));
         walked.insert(from, 0);
 
