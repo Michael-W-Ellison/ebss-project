@@ -1712,7 +1712,10 @@ fn a_beast_slows_as_it_is_hurt_and_as_it_ages() {
 
     let mut grown = Animal::new("deer".to_string(), (0, 0), species);
     grown.age = grown.maturity_age.max(1);
-    grown.max_lifespan = 20_000;
+    // A lifespan well past maturity, whatever the table says maturity is: it
+    // was a bare 20,000 turns, which is under two years since the table went
+    // onto the calendar and short of a deer's 540 days to grow (#282).
+    grown.max_lifespan = grown.maturity_age.max(1) * 10;
     grown.current_health = grown.max_health;
     let prime = grown.how_fast_it_still_is();
     assert!(

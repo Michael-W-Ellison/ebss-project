@@ -21410,3 +21410,74 @@ table, hunters that stay fed only breed faster. The empty big map was no
 better (136 and 36). `most_of_what_lived_here_still_lives_here` fell to 84
 head of 468 against 117, and `the_predator_tiers_are_still_there_two_years
 _on` lost its small predators. It wants the life histories fixed first.
+
+### 282. Animal lives on the calendar, and an ecology that holds on the big map
+
+What #281 found, fixed, and what fixing it uncovered next. All measured over
+three years on the empty hundred square kilometres, seed 3, 1,003 head at the
+start:
+
+| | year 1 | year 2 | year 3 |
+|---|---|---|---|
+| #280's hunt | 135 | 44 | - |
+| + lives on the calendar | 354 | 51 | 31 |
+| + a pack shares its kill | 325 | 33 | 42 |
+| + top predators at a real density | 658 | 287 | 147 |
+| + a day's grazing is a walk | 907 | 780 | 653 |
+| + grazing walk by distance, hunters turn on hunters only when short | 898 | 791 | 674 |
+
+- **Lives on the calendar.** Every species' lifespan, maturity, pregnancy and
+  time between litters is written in `days()` and `years()` (built on
+  `PLANNING_PERIODS_PER_DAY`) instead of bare turns, from field figures for
+  wild animals. A wolf lives 8 to 13 years, grows up at 660 days, carries
+  63 days, and litters once a year; a sheep grows up in a year and lambs once
+  a year; a rabbit breeds at four months, every 72 days. Birds that laid one
+  egg at a time now lay clutches: duck 6 to 12, goose 4 to 8, chicken 2 to 4.
+  `BREEDING_INTERVAL_SCALE` is gone; the table is the interval. The figures
+  were set when a year was about 4,320 turns and never moved when it became
+  17,280. Wolves: 611 cubs in two years before, 8 in three after.
+- **A pack shares its kill, and the rest is gone back to.** Hungriest first,
+  each as far as it can eat, and whoever ate comes in to the kill. What is
+  left is `a_kill_to_go_back_to`, eaten as hunger rises, going off at about
+  2% a turn (`HOW_LONG_A_KILL_LASTS` = 3 days).
+- **Top predators at a real density.** `TopPredator` was 3% of head, thirty
+  on a hundred square kilometres (seventeen lions). It is 0.6%, six, which
+  is about a wolf pack or a pride; the rest goes to the grazers.
+- **A day's grazing is a walk.** The grazing pass fed each animal from the
+  nine cells under it, and moved it on only if those held nothing. It had
+  fifteen million of forage standing and took a tenth of it in two years,
+  while more than half the herbivores were hungry from the first summer and
+  about 7% of them starved each month: each got about a sixth of what it
+  reached for. Now an animal that has not had its fill moves to the nearest
+  ground with something left on it (`where_there_is_something_left`) and
+  crops that, until it has had its fill, has walked
+  `HOW_FAR_A_DAYS_GRAZING_GOES` (300 cells, three kilometres), or has made
+  `HOW_MANY_STOPS_A_DAYS_GRAZING_MAKES` (24) stops. Hungry herbivores went
+  from over half to about a third, and starvation to about 2% a month. A
+  year on the big map takes about 140 s in release against about 100 s.
+- **A hunter turns on smaller hunters only when it is short.** "Crowded"
+  counts herds per hunter and ignores the voles and fish the smaller
+  hunters live on, so on the big map nearly every ground was crowded for
+  everything. Taking another hunter now needs crowding on ground that does
+  not pay this hunter its keep (`hard_pressed`), or near-starvation.
+
+**Still wrong, and recorded rather than tuned:**
+
+- **Kestrels go.** 181 become none: 285 taken by eagles, herons, hawks,
+  owls and otters, and 106 starved. The raptors are genuinely short, so
+  `hard_pressed` lets them. The pre-pace code lost them too, to starvation
+  (775). The small-life larder and the raptor numbers want looking at
+  together.
+- **The biggest grazers still starve.** Over the three years, elk went from
+  85 to 12 (104 starved), cattle 42 to 9, camels 33 to 11, and mammoths 23
+  to 3 with no births. The pre-pace code starved them as well.
+- **`most_of_what_lived_here_still_lives_here`**: 104 head of 468 at year
+  five over its eight worlds, against a bar of 117. Species kept rose to 44
+  of 56 (37 before the pace change). Every world sheds in year one from an
+  over-stocked start of about 60 head, then holds: seed 5 ran 15, 12, 15,
+  21, 16 and seed 6 ran 11, 11, 11, 14, 12. It fails on where a quarter of a
+  square kilometre settles, not on an emptying.
+
+`a_beast_slows_as_it_is_hurt_and_as_it_ages` gave a deer a lifespan of a
+bare 20,000 turns and made it grown at maturity, which is now 25,920 turns;
+it gives the deer ten times its maturity instead.
