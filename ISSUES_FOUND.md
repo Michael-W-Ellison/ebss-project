@@ -21481,3 +21481,51 @@ start:
 `a_beast_slows_as_it_is_hurt_and_as_it_ages` gave a deer a lifespan of a
 bare 20,000 turns and made it grown at maturity, which is now 25,920 turns;
 it gives the deer ten times its maturity instead.
+
+### 283. Large grazers starved beside their food, and a mammoth faced down its own herd
+
+#282 left elk, cattle, camels and mammoths starving on the big map. A tally
+per kind (`WhatTheGrazingCameTo`: what each kind reached for, took and
+walked, and why its day ended) showed two separate faults.
+
+- **The walk went to trees that had nothing left to give.** A grown tree
+  offers a browser a flat 2.4 a day however big it is, shared by everything
+  browsing it. The walk of #282 asked whether a plant had health left, and a
+  tree always has 150 to 500. So a cow walked from one browsed-out oak to
+  the next: 21 stops a day at under half a unit each, past bushes carrying
+  18 apiece, and it got half its keep. Cattle, elk and camels took 0.51 to
+  0.76 of what they burn while grazing 58% to 75% of the time. Now there is
+  one answer, `what_there_is_to_take`, and both the bite and the walk read
+  it. Every grazer gets its full reach in one to four stops a day, and
+  hungry cattle and elk went from 39% and 47% to none.
+- **A mammoth faced down its own herd.** `what_the_beasts_make_of_us` treated
+  anything with a temper that menaces people as a threat to every other
+  beast in sight, its own kind included. Every mammoth (`Territorial`) faced
+  down the one beside it, stood in `Attacking` every turn of its life, and
+  never grazed: none born, all starved. A boar did the same three turns in
+  four. A beast is now a threat to another beast only when it eats meat and
+  is of another kind, which is what that pass's own comment said it looked
+  for.
+
+Measured on the empty big map, seed 3, three years: **no grazer starved**.
+Elk went 85 → 205, cattle 42 → 81, camels 33 → 46, and mammoths 23 → 30
+with 8 born. On the half-kilometre worlds, head at year five went from 104
+to 435 of 468, and species kept from 44 to 47 of 56, so
+`most_of_what_lived_here_still_lives_here` passes.
+
+`predator_prey_tests::the_land_will_only_carry_so_many` penned ten newborn
+sheep on one cell for 8,000 turns. On the calendar that is under six months,
+and neither herd grew. Once grazing became a walk, a penned sheep also grazed
+wherever a free one did. It now compares ten grown sheep over two years on
+16 × 16 cells and on 64 × 64.
+
+**What this uncovered: the country has no ceiling that is anywhere near
+real.** Five years on the empty big map, month by month: herbivores 720 →
+1,101 → 1,570 → 2,129 → 2,956 → 4,451, still rising about 50% a year, with
+about 1% hungry and the standing crop levelling at 11.8 million. A grown
+tree gives 2.4 a day for ever, and there are about 5.7 of them to the
+hectare. That alone feeds some 400 deer-sized grazers to the square
+kilometre, and the small maps settle at about 220. Temperate country
+carries 10 to 30. Nothing could get at the browse before, so it never
+showed. It wants the browse, and the regrowth of what is grazed, set to
+what real country yields.

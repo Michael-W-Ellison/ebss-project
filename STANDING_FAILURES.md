@@ -33,7 +33,8 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 runs in one piece). 2,717 tests run: 2,710 passed, 3 failed, 4 ignored.
 Two of the failures were the recorded dice counts, re-recorded since and
 passing. That leaves:
-- `ecology_tests::most_of_what_lived_here_still_lives_here`, below.
+- `ecology_tests::most_of_what_lived_here_still_lives_here`, which passes
+  since #283 (435 of 468 head).
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
@@ -43,7 +44,6 @@ on this run; it is one of the two thresholds that flap (below).
 |---|---|---|
 | `longevity_tests::a_settlement_still_raises_children_late_on` | (ignored; run with `--ignored`) | **A stated requirement: settlements must last generations.** Since #279: eight years on the 100 km2 map with seed 3 and the founders at the middle, and asks for someone born in the last four still alive. Over half an hour even in a release build. It used to ask for this at 9,000 turns, which is half a year and shorter than a pregnancy (#253). Births stay rare while the put-by gate (#264) stays shut, so expect it to fail until that is fixed. |
 | `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | (ignored; run with `--ignored`) | Same requirement. Since #279: four years on the big map, and asks for three children born there alive past their first birthday. Failed on its first run in release (seed 3), inside half an hour. It used to run 6,000 turns, which is four months. |
-| `ecology_tests::most_of_what_lived_here_still_lives_here` | 104 of 468 head after five years, against 117 | Since #282 (animal lives on the calendar, one litter a year). Species kept went up to 44 of 56, where the bar is 14. Each world falls in year one from an over-stocked start of about 60 head on a quarter of a square kilometre, then holds level: seed 6 ran 11, 11, 11, 14, 12. It is the level a pen settles at, not an emptying. |
 
 Measured over sixteen years (#259): four settlements of twelve still there,
 one to five founders each, and none of the forty-three children born in them

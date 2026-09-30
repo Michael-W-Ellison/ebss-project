@@ -801,6 +801,28 @@ pub struct WhatPassiveHuntingCameTo {
     pub caught_fish: u64,
 }
 
+/// What grazing came to for one kind of animal, since the world opened.
+///
+/// Every figure is summed over the passes where one of them was grazing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct WhatTheGrazingCameTo {
+    /// Animal-passes spent grazing.
+    pub passes: u64,
+    /// What they reached for, in forage.
+    pub reached_for: f64,
+    /// What they got.
+    pub took: f64,
+    /// Cells walked between patches.
+    pub walked: u64,
+    /// Stops made on the way.
+    pub stops: u64,
+    /// Passes that ended because the day's walk or its stops ran out, with
+    /// the animal still wanting.
+    pub ran_out_of_day: u64,
+    /// Passes that ended because there was nothing left within sight.
+    pub ran_out_of_ground: u64,
+}
+
 /// What carried the animals off, since the world opened.
 ///
 /// A running tally rather than a state anything reads: when a country empties
@@ -3058,6 +3080,10 @@ pub struct AnimalManager {
     mouths_fed: u64,
     #[serde(default)]
     mouths_that_tried: u64,
+    /// And the same kind by kind, which is how a grazer that cannot get
+    /// enough is told apart from one that is not trying.
+    #[serde(default)]
+    grazing_by_kind: BTreeMap<String, WhatTheGrazingCameTo>,
 
     groups: BTreeMap<Uuid, Vec<Uuid>>, // Group ID -> Animal IDs
 
@@ -3116,6 +3142,7 @@ impl AnimalManager {
             forage_taken: 0.0,
             mouths_fed: 0,
             mouths_that_tried: 0,
+            grazing_by_kind: BTreeMap::new(),
             carried_off: BTreeMap::new(),
             hunting: WhatTheHuntingCameTo::default(),
             small_life: crate::environment::SmallLife::default(),
@@ -3224,6 +3251,11 @@ impl AnimalManager {
 
     pub fn what_the_grazing_came_to(&self) -> (f64, u64, u64) {
         (self.forage_taken, self.mouths_fed, self.mouths_that_tried)
+    }
+
+    /// What the grazing came to for one kind. For measuring only.
+    pub fn what_the_grazing_came_to_for(&self, species_id: &str) -> WhatTheGrazingCameTo {
+        self.grazing_by_kind.get(species_id).copied().unwrap_or_default()
     }
 
     pub fn get_all(&self) -> &Vec<Animal> {
@@ -5148,6 +5180,7 @@ impl AnimalManager {
         let mut took_altogether = 0.0f64;
         let mut mouths = 0u64;
         let mut reached = 0u64;
+        let mut by_kind: BTreeMap<String, WhatTheGrazingCameTo> = BTreeMap::new();
 
         for animal in &mut self.animals {
             if !animal.is_alive() || animal.state != AnimalState::Grazing {
@@ -5181,6 +5214,8 @@ impl AnimalManager {
             // as a day's grazing covers. See ISSUES_FOUND #282.
             let mut walked = 0;
             let mut stops = 0;
+            let reached_for = wanted;
+            let mut out_of_ground = false;
             loop {
                 // Underfoot first, then a step in any direction. An animal that is
                 // grazing is standing still and eating what is around it, not
@@ -5230,30 +5265,10 @@ impl AnimalManager {
                         continue;
                     }
 
-                    // A grown tree is browse, not grazing. Nothing eats a trunk;
-                    // what a deer or a sheep gets off an oak is the shoots and
-                    // leaves it can reach, which is a mouthful or two and no more
-                    // however big the tree is - so what a tree offers is a flat
-                    // small amount rather than a share of its bulk, and cropping
-                    // it does not touch the tree.
-                    //
-                    // Excluding grown trees outright was the first cut and it is
-                    // wrong on a wooded map: most of what is standing on a fresh
-                    // map is timber, so twelve sheep on twenty-five hectares had
-                    // almost nothing in reach, overshot to thirty on the hunger
-                    // they were born with, and starved.
-                    let grown_tree = kind.is_tree
-                        && !matches!(
-                            plant.growth_stage,
-                            crate::environment::GrowthStage::Seedling
-                                | crate::environment::GrowthStage::Growing
-                        );
-
-                    let there_to_take = if grown_tree {
-                        standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_passes - already)
-                    } else {
-                        standing
-                    };
+                    // A grown tree is browse and offers a flat mouthful; see
+                    // `what_there_is_to_take`.
+                    let there_to_take =
+                        Self::what_there_is_to_take(plant, kind, already, grazing_passes);
 
                     if there_to_take <= 0.0 {
                         continue;
@@ -5281,10 +5296,26 @@ impl AnimalManager {
                 {
                     break;
                 }
+                // What the bite would take, asked the same way the bite asks
+                // it. This asked what was standing, and a grown tree is
+                // standing a hundred and more when a browser may take two
+                // and a half off it in a day - so a cow walked from one
+                // browsed-out oak to the next, twenty stops a day at under
+                // half a unit each, past bushes carrying eighteen apiece, and
+                // got half its keep (#283).
                 let left_on = |index: usize| {
-                    plants.all_plants()[index].current_health
-                        - cropped.get(&index).copied().unwrap_or(0.0)
-                        > 0.0
+                    let plant = &plants.all_plants()[index];
+                    flora
+                        .get(&plant.species_id)
+                        .map(|kind| {
+                            Self::what_there_is_to_take(
+                                plant,
+                                kind,
+                                cropped.get(&index).copied().unwrap_or(0.0),
+                                grazing_passes,
+                            ) > 0.0
+                        })
+                        .unwrap_or(false)
                 };
                 match Self::where_there_is_something_left(
                     animal.position,
@@ -5300,7 +5331,26 @@ impl AnimalManager {
                         animal.position = there;
                         stops += 1;
                     }
-                    None => break,
+                    None => {
+                        out_of_ground = true;
+                        break;
+                    }
+                }
+            }
+
+            {
+                let tally = by_kind.entry(animal.species_id.clone()).or_default();
+                tally.passes += 1;
+                tally.reached_for += reached_for as f64;
+                tally.took += taken as f64;
+                tally.walked += walked as u64;
+                tally.stops += stops as u64;
+                if wanted > 0.0 {
+                    if out_of_ground {
+                        tally.ran_out_of_ground += 1;
+                    } else {
+                        tally.ran_out_of_day += 1;
+                    }
                 }
             }
 
@@ -5348,6 +5398,16 @@ impl AnimalManager {
         self.forage_taken += took_altogether;
         self.mouths_fed += mouths;
         self.mouths_that_tried += reached;
+        for (kind, came_to) in by_kind {
+            let tally = self.grazing_by_kind.entry(kind).or_default();
+            tally.passes += came_to.passes;
+            tally.reached_for += came_to.reached_for;
+            tally.took += came_to.took;
+            tally.walked += came_to.walked;
+            tally.stops += came_to.stops;
+            tally.ran_out_of_day += came_to.ran_out_of_day;
+            tally.ran_out_of_ground += came_to.ran_out_of_ground;
+        }
 
         // The dead go back into the ground on the plants' own pass - see
         // `PlantManager::what_died`, which is what reads a plant at nothing.
@@ -5503,6 +5563,45 @@ impl AnimalManager {
         }
 
         None
+    }
+
+    /// What a grazing animal can take off this plant in this pass, when
+    /// `already` has been taken off it by others.
+    ///
+    /// A grown tree is browse, not grazing. Nothing eats a trunk; what a deer
+    /// or a sheep gets off an oak is the shoots and leaves it can reach, which
+    /// is a mouthful or two and no more however big the tree is - so what a
+    /// tree offers is a flat small amount rather than a share of its bulk,
+    /// and cropping it does not touch the tree.
+    ///
+    /// Excluding grown trees outright was the first cut and it is wrong on a
+    /// wooded map: most of what is standing on a fresh map is timber, so
+    /// twelve sheep on twenty-five hectares had almost nothing in reach,
+    /// overshot to thirty on the hunger they were born with, and starved.
+    ///
+    /// One answer, read both by the bite and by the walk that decides where
+    /// to take the next one.
+    fn what_there_is_to_take(
+        plant: &crate::environment::Plant,
+        kind: &crate::environment::PlantSpecies,
+        already: f32,
+        grazing_passes: f32,
+    ) -> f32 {
+        let standing = plant.current_health - already;
+        if standing <= 0.0 {
+            return 0.0;
+        }
+        let grown_tree = kind.is_tree
+            && !matches!(
+                plant.growth_stage,
+                crate::environment::GrowthStage::Seedling
+                    | crate::environment::GrowthStage::Growing
+            );
+        if grown_tree {
+            standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_passes - already)
+        } else {
+            standing
+        }
     }
 
     /// The nearest ground within sight with something still standing on it,

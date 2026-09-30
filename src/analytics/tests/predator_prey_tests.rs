@@ -170,25 +170,32 @@ fn wolves_take_sheep_and_the_grass_holds_the_rest() {
 /// never became the limit on a herd: it grew until it hit the hard population
 /// cap, however little ground it was standing on. Animals breed when there is
 /// room around them to.
+///
+/// **Two sizes of country rather than a pen.** The pen was the herd put back
+/// on one cell every turn, which stopped meaning anything once a day's
+/// grazing became a walk across the nearest patches (#282): a penned sheep
+/// grazed wherever a free one did and was only moved back afterwards. And it
+/// ran 8,000 turns from newborn lambs, which on the calendar is under six
+/// months - no sheep grows up or lambs in that - so both herds came out at
+/// exactly the ten they started with. Ten grown sheep now, for two years, on
+/// a patch of two and a half hectares and on forty.
 #[test]
 fn the_land_will_only_carry_so_many() {
-    fn herd_after(penned: bool, seed: u64) -> usize {
+    fn herd_after(across: usize, seed: u64) -> usize {
         crate::core::dice::seed(seed);
-        let mut world = World::new(WorldConfig::default());
+        let mut world = World::new(WorldConfig::default().with_size(across, across));
         world.animals.get_all_mut().clear();
 
+        let middle = (across / 2) as i32;
         for i in 0..10 {
-            let _ = world.spawn_animal("sheep".to_string(), (20 + i % 5, 20 + i / 5));
+            let _ = world.spawn_animal("sheep".to_string(), (middle - 2 + i % 5, middle - 1 + i / 5));
+        }
+        for animal in world.animals.get_all_mut() {
+            animal.age = animal.maturity_age;
         }
 
         let mut simulation = Simulation::new(world, Population::new());
-        for _ in 0..8000 {
-            if penned {
-                // All on one patch of ground, with nowhere to spread to
-                for animal in simulation.world.animals.get_all_mut() {
-                    animal.position = (25, 25);
-                }
-            }
+        for _ in 0..(2 * crate::environment::seasons::PLANNING_PERIODS_PER_YEAR) {
             simulation.take_a_turn();
         }
 
@@ -197,31 +204,27 @@ fn the_land_will_only_carry_so_many() {
             .animals
             .get_all()
             .iter()
-            .filter(|animal| animal.is_alive())
+            .filter(|animal| animal.is_alive() && animal.species_id == "sheep")
             .count()
     }
 
-    // A seed block rather than one world of each.
-    //
-    // **Ten sheep on a quarter of a square kilometre is a small number**, and
-    // a single pair of runs decides this on a handful of head: it came out
-    // three against five once the ecology moved under it, which is not a
-    // statement about ground at all. Summed over four worlds it is.
+    // A seed block rather than one world of each: ten sheep is a small
+    // number, and one pair of runs decides it on a handful of head.
     let mut penned = 0;
     let mut roaming = 0;
     for seed in 0..4 {
-        penned += herd_after(true, 61_000 + seed);
-        roaming += herd_after(false, 61_000 + seed);
+        penned += herd_after(16, 61_000 + seed);
+        roaming += herd_after(64, 61_000 + seed);
     }
 
     assert!(
         roaming > penned,
-        "a herd with the run of the map should outgrow one on a single patch, \
+        "a herd with forty hectares should outgrow one on two and a half, \
          over four worlds: {roaming} against {penned}"
     );
     assert!(
         penned <= 20 * 4,
-        "a herd penned on one patch should stop growing, ended at {penned} over four worlds"
+        "a herd on two and a half hectares should stop growing, ended at {penned} over four worlds"
     );
 }
 
