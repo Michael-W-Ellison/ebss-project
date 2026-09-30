@@ -242,10 +242,11 @@ fn a_settlement_lasts_thirty_thousand_turns() {
 /// the calendar: somebody born in the last four years of eight is alive at the
 /// end of the eighth. This asked for anybody under 6,500 turns old at 9,000
 /// turns on the half-kilometre test map, which is half a year - shorter than a
-/// pregnancy (#253). Eight years is most of an hour in a debug build, so it is
-/// run on request: `cargo test -- --ignored a_settlement_still_raises_children_late_on`.
+/// pregnancy (#253). Eight years takes over half an hour even in a release build,
+/// so it is run on request:
+/// `cargo test --release -- --ignored a_settlement_still_raises_children_late_on`.
 #[test]
-#[ignore = "eight years on the 100 km2 map, most of an hour; run with --ignored"]
+#[ignore = "eight years on the 100 km2 map, over half an hour even in release; cargo test --release -- --ignored"]
 fn a_settlement_still_raises_children_late_on() {
     use crate::environment::seasons::PLANNING_PERIODS_PER_YEAR;
 

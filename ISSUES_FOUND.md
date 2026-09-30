@@ -21310,8 +21310,10 @@ measures is the map.
   alive.
 - Both were written against turn counts from before the calendar (6,000 and
   9,000 turns, four and six months) and could not pass whatever the model
-  did (#253). Both now take half an hour to an hour in a debug build, so both
-  are `#[ignore]`d and run with `cargo test -- --ignored <name>`.
+  did (#253). Both are too long for every run, so both are `#[ignore]`d and
+  run with `cargo test --release -- --ignored <name>`. On the first release
+  run, the four-year test failed inside half an hour, and the eight-year
+  test had not finished when the run was stopped at half an hour.
 - `test_simulation` runs on the big map with everybody at the middle, and
   takes `--years`, `--seed`, and `--small` for the old map. It reports
   monthly by default.

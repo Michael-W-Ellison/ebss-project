@@ -482,11 +482,11 @@ fn a_newborn_is_not_born_parched() {
 /// it stripped the country bare (#272).
 ///
 /// Four years: time for a first autumn's conceptions to be born and see their
-/// first birthday, and for another round after the nursing (#262). Long -
-/// about half an hour in a debug build - so it is run on request:
-/// `cargo test -- --ignored the_children_of_a_settlement_live_past_infancy`.
+/// first birthday, and for another round after the nursing (#262). Too long
+/// for every run, so it is run on request:
+/// `cargo test --release -- --ignored the_children_of_a_settlement_live_past_infancy`.
 #[test]
-#[ignore = "four years on the 100 km2 map, about half an hour; run with --ignored"]
+#[ignore = "four years on the 100 km2 map, too long for every run; cargo test --release -- --ignored"]
 fn the_children_of_a_settlement_live_past_infancy() {
     use crate::environment::seasons::PLANNING_PERIODS_PER_YEAR;
 
