@@ -181,7 +181,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 7,749 for the walk at five kilometres an hour (#277): a walk
     // covers what a turn of walking covers, and the minutes it leaves over go
     // on another decision.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_749;
+    // Down to 7,501 for #280 to #282: a hunt closes and rushes in its half
+    // hour, a frightened beast bolts once, animals live by the calendar, and
+    // a day's grazing walks on across the nearest patches.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_501;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -340,7 +343,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // turns. Not traced to any one of those.
     // And down 2.4% for walking at five kilometres an hour, the animals on
     // the same clock, and backing away from what outweighs you (#277).
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 708_297;
+    // And up 0.2% for #280 to #282: the half-hour hunt, animal lives on the
+    // calendar, packs sharing a kill, and a day's grazing as a walk.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 710_012;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
