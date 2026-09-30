@@ -812,6 +812,9 @@ pub struct WhatTheGrazingCameTo {
     pub reached_for: f64,
     /// What they got.
     pub took: f64,
+    /// And how much of that was browse off grown trees.
+    #[serde(default)]
+    pub took_off_trees: f64,
     /// Cells walked between patches.
     pub walked: u64,
     /// Stops made on the way.
@@ -5216,6 +5219,7 @@ impl AnimalManager {
             let mut stops = 0;
             let reached_for = wanted;
             let mut out_of_ground = false;
+            let mut off_trees = 0.0f32;
             loop {
                 // Underfoot first, then a step in any direction. An animal that is
                 // grazing is standing still and eating what is around it, not
@@ -5278,6 +5282,9 @@ impl AnimalManager {
                     *cropped.entry(index).or_insert(0.0) += bite;
                     wanted -= bite;
                     taken += bite;
+                    if Self::is_a_grown_tree(plant, kind) {
+                        off_trees += bite;
+                    }
 
                     // A bear does not crop a root, it digs it up, and what has
                     // been dug up does not come back. Which animals do that is
@@ -5343,6 +5350,7 @@ impl AnimalManager {
                 tally.passes += 1;
                 tally.reached_for += reached_for as f64;
                 tally.took += taken as f64;
+                tally.took_off_trees += off_trees as f64;
                 tally.walked += walked as u64;
                 tally.stops += stops as u64;
                 if wanted > 0.0 {
@@ -5403,6 +5411,7 @@ impl AnimalManager {
             tally.passes += came_to.passes;
             tally.reached_for += came_to.reached_for;
             tally.took += came_to.took;
+            tally.took_off_trees += came_to.took_off_trees;
             tally.walked += came_to.walked;
             tally.stops += came_to.stops;
             tally.ran_out_of_day += came_to.ran_out_of_day;
@@ -5591,17 +5600,24 @@ impl AnimalManager {
         if standing <= 0.0 {
             return 0.0;
         }
-        let grown_tree = kind.is_tree
-            && !matches!(
-                plant.growth_stage,
-                crate::environment::GrowthStage::Seedling
-                    | crate::environment::GrowthStage::Growing
-            );
-        if grown_tree {
+        if Self::is_a_grown_tree(plant, kind) {
             standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_passes - already)
         } else {
             standing
         }
+    }
+
+    /// Whether this plant is a grown tree, which is browsed rather than grazed.
+    fn is_a_grown_tree(
+        plant: &crate::environment::Plant,
+        kind: &crate::environment::PlantSpecies,
+    ) -> bool {
+        kind.is_tree
+            && !matches!(
+                plant.growth_stage,
+                crate::environment::GrowthStage::Seedling
+                    | crate::environment::GrowthStage::Growing
+            )
     }
 
     /// The nearest ground within sight with something still standing on it,
@@ -5667,7 +5683,16 @@ impl AnimalManager {
     /// something on four legs is the same handful of shoots whether the tree
     /// is a birch or a sequoia. Enough that a wood will carry a few animals
     /// and nothing like what a meadow carries, which is the right way round.
-    const WHAT_A_TREE_OFFERS_A_BROWSER: f32 = 0.05;
+    ///
+    /// **Set from what a wood yields.** It was 0.05, 2.4 a day off every
+    /// grown tree, and a hundred square kilometres has five or six grown
+    /// trees to the hectare: browse alone for some four hundred deer to the
+    /// square kilometre. Temperate woodland gives deer about two hundred
+    /// kilos of browse a hectare in a year. A sixty-kilo sheep here needs
+    /// 2.9 a day and eats about a kilo and a half, so a unit is about half a
+    /// kilo, and two hundred kilos a hectare is about 1.1 a day across five
+    /// and a half trees: 0.2 a tree a day. See ISSUES_FOUND #284.
+    const WHAT_A_TREE_OFFERS_A_BROWSER: f32 = 0.004;
 
     /// How much over its own burn an animal eats when it can find it.
     ///

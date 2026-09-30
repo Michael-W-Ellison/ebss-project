@@ -21529,3 +21529,47 @@ kilometre, and the small maps settle at about 220. Temperate country
 carries 10 to 30. Nothing could get at the browse before, so it never
 showed. It wants the browse, and the regrowth of what is grazed, set to
 what real country yields.
+
+### 284. A country with a ceiling: browse at a real yield, and no grass in winter
+
+#283 let the grazers reach their food and found that nothing held them.
+Five years on the empty big map, month by month: herbivores 720 → 4,451,
+still rising by half a year, about 1% hungry, and the standing crop levelling
+at 11.8 million.
+
+- **Browse at what a wood yields.** `WHAT_A_TREE_OFFERS_A_BROWSER` was 0.05 a
+  turn, 2.4 a day off every grown tree. With five or six grown trees to the
+  hectare, that was browse for some four hundred deer-sized grazers to the
+  square kilometre. Temperate woodland gives deer about 200 kg of browse per
+  hectare a year. A 60 kg sheep here needs 2.9 a day and eats about 1.5 kg,
+  so a unit is about half a kilo, and 200 kg a hectare comes to about 0.2 a
+  tree a day. It is 0.004 a turn.
+- **Grass does not come back in winter** (`PlantManager::how_much_comes_back_in`:
+  winter 0, autumn 0.5, else 1). Growing conditions are water, light and the
+  ground, with no temperature, so a grazed sward came back in January at
+  better than half its summer rate. Only the putting-back of what was cropped
+  changes; how a plant grows up and holds its own is as it was. People
+  harvest through drops and regrow timers, not through this.
+
+Five years on the empty big map, seed 3, month by month: herbivores 714,
+900, 1,054, 1,049 in the first year, a peak of about 1,160 in the second
+winter, then 802 to 1,066 from year three on. That is 8 to 11 to the square
+kilometre, at the low end of the 10 to 30 temperate country carries.
+Hunger rises through each winter, and starvation comes at the end of it (85
+in the second one's last month) and falls away as the herd thins.
+
+On the half-kilometre worlds, every one sheds from its opening stock of about
+60 head to 11 to 13 in the first year, and then holds (seed 11: 10, 13, 11,
+13, 13). That is about 48 to the square kilometre. `most_of_what_lived_here
+_still_lives_here` compared year five against that opening and would fail
+every time for a reason that has nothing to do with emptying. It now asks
+that year five hold at least half of what year one held. The species check
+is unchanged (37 of 56 kept, against a bar of 14).
+
+**What it shows next: one kind takes the country.** Head is held, but over
+the five years goats went from 95 to 803, while elk went 85 → 0, cattle
+42 → 5, camels 33 → 2, reindeer 287 → 72 and mammoths 23 → 6. Every grazer
+draws on one pool, and the fastest breeder crowds the rest out: goats grow
+up in a year and litter one to three, elk take two years and have one or
+two. Real grazers and browsers live side by side because they eat different
+things in different places, and nothing here says so yet.

@@ -2547,7 +2547,11 @@ impl PlantManager {
                 // again out of the same water and light and nutrient
                 // everything else here runs on.
                 plant.current_health = (plant.current_health
-                    + species.health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
+                    + species.health
+                    * Self::HOW_FAST_A_PLANT_COMES_BACK
+                    * Self::how_much_comes_back_in(season)
+                    * living
+                    * ticks)
                     .min(species.health);
             }
 
@@ -2653,7 +2657,11 @@ impl PlantManager {
             plant.current_health -= Self::what_a_bad_pass_costs(species.health, living, ticks);
         } else {
             plant.current_health = (plant.current_health
-                + species.health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
+                + species.health
+                    * Self::HOW_FAST_A_PLANT_COMES_BACK
+                    * Self::how_much_comes_back_in(season)
+                    * living
+                    * ticks)
                 .min(species.health);
         }
     }
@@ -2719,6 +2727,30 @@ impl PlantManager {
     /// pass, which is the same 0.144 a day while a pass is a tick and thirty
     /// times that when it is not - see ISSUES_FOUND #217.
     const HOW_FAST_A_PLANT_COMES_BACK_IN_A_DAY: f32 = 0.144;
+
+    /// How much of that a plant puts back in this season.
+    ///
+    /// **Nothing grew back in winter only as far as the days were shorter.**
+    /// Growing conditions are water, light and the ground, and no
+    /// temperature, so a grazed sward came back in January at better than
+    /// half its summer rate, and nothing ever stood between a herd and all it
+    /// could eat. On the empty big map, grazers once they could reach their
+    /// food went from 720 to 4,451 in five years and were still rising by
+    /// half a year, where temperate country carries ten to thirty to the
+    /// square kilometre (#284). What holds a wild herd there is the winter: the
+    /// grass stops, and what the herd has is what stood at the end of the
+    /// summer and the browse off the trees.
+    ///
+    /// Half in the autumn, as the growth goes out of it. Nought in the winter.
+    /// Only the putting-back: what a plant needs to hold its own, and how it
+    /// grows up, are as they were.
+    pub fn how_much_comes_back_in(season: crate::environment::Season) -> f32 {
+        match season {
+            crate::environment::Season::Winter => 0.0,
+            crate::environment::Season::Fall => 0.5,
+            _ => 1.0,
+        }
+    }
 
     /// And the same in one tick.
     const HOW_FAST_A_PLANT_COMES_BACK: f32 = Self::HOW_FAST_A_PLANT_COMES_BACK_IN_A_DAY

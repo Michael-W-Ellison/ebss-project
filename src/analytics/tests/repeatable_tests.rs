@@ -348,7 +348,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // And up 0.2% for #280 to #282: the half-hour hunt, animal lives on the
     // calendar, packs sharing a kill, and a day's grazing as a walk.
     // And down 3.6% for #283: grazers fed and not facing down their own kind.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 684_741;
+    // And down 5.8% for #284: browse at what a wood yields, and no grass
+    // coming back in winter.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 644_753;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
