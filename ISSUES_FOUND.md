@@ -21369,3 +21369,44 @@ kestrels, hawks, owls, eagles, otters and seals. Head at year five, of 468:
 swings by tens between seeds and years (seed 8: 4, 9, 3, 0, 2). It is a
 question about grazing on a quarter of a square kilometre that an animal
 now crosses in a turn or two, not about hunting.
+
+### 281. Fed hunters breed like mice: animal lives are not on the calendar
+
+With the hunt of #280, fourteen wolves take two sheep inside a day again,
+and the half-kilometre ecology tests pass. On the hundred square kilometres,
+with nobody on it and seed 3, it empties the country:
+
+| two years, empty big map | year 1 head | year 2 head | taken by predators |
+|---|---|---|---|
+| before the pace change (#277) | 1,034 | 604 | 11 |
+| the pace change, the old hunt | 1,242 | 622 | 283 |
+| #280's hunt | 135 | 44 | about 1,830 |
+
+Neither of the first two is a working ecology either. The large herbivores
+go from starvation and old age in both, and goats and kestrels take over.
+Predators simply never ate.
+
+`WhatCarriedThemOff` now counts **born** and **took** per kind, which is
+what it needed to say why. With #280's hunt, over the two years:
+
+- The seven wolves bore **611** cubs and made **983** kills; 613 wolves
+  starved.
+- The seventeen lions bore 105 and made 308 kills.
+
+The cause is the life-history table. Its figures are bare turn counts that
+were never put on the calendar, which is noted as unfixed under #218. A
+wolf matures at 1,000 turns (21 days), carries for 500 (ten days), breeds
+again after 1,500 × `BREEDING_INTERVAL_SCALE` = 4,500 (three months), and
+lives 12,000 to 18,000 turns, which is under a year. A real wolf matures at
+two, carries for 63 days, has one litter a year, and lives six to eight
+years. Every species is out the same way. While hunters starved this didn't
+show; once they eat, they multiply until they have eaten everything, and
+then they starve.
+
+Tried and set aside: **a pack sharing its kill**, and a hunter lying up on
+what is left for up to three days, with about 2% of it going off each turn.
+It is how hunters feed, and it cuts the kills a pack needs. But on this
+table, hunters that stay fed only breed faster. The empty big map was no
+better (136 and 36). `most_of_what_lived_here_still_lives_here` fell to 84
+head of 468 against 117, and `the_predator_tiers_are_still_there_two_years
+_on` lost its small predators. It wants the life histories fixed first.

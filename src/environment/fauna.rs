@@ -804,6 +804,13 @@ pub struct WhatCarriedThemOff {
     pub starvation: u64,
     /// Taken by something that eats.
     pub taken: u64,
+    /// Born, or hatched. With the three above, the whole of what a tier did.
+    #[serde(default)]
+    pub born: u64,
+    /// Kills this kind made. `taken` says what was eaten; this says what ate
+    /// it, which a head count cannot tell apart from a tier starving.
+    #[serde(default)]
+    pub took: u64,
 }
 
 /// What a rush at one animal comes to - see
@@ -3181,6 +3188,8 @@ impl AnimalManager {
             all.old_age += one.old_age;
             all.starvation += one.starvation;
             all.taken += one.taken;
+            all.born += one.born;
+            all.took += one.took;
         }
         all
     }
@@ -3609,6 +3618,7 @@ impl AnimalManager {
                     if self.how_many_are_alive() >= self.max_population {
                         break;
                     }
+                    self.carried_off.entry(species_id.clone()).or_default().born += 1;
 
                     // Spawn near parent with some offset
                     let offset_x = rng.gen_range(-2..=2);
@@ -3776,6 +3786,7 @@ impl AnimalManager {
                     if self.how_many_are_alive() >= self.max_population {
                         break;
                     }
+                    self.carried_off.entry(species_id.clone()).or_default().born += 1;
                     let pos = self.animals[idx_a].position;
                     let offspring = Animal::new_offspring(
                         species_id.clone(),
@@ -4773,7 +4784,7 @@ impl AnimalManager {
         // in `what_a_hunt_comes_to`, where the cow's size, its herd and its
         // temperament are already counted, and where the answer for one wolf
         // and one cow is very near nought.
-        let mut taken: Vec<String> = Vec::new();
+        let mut taken: Vec<(String, String)> = Vec::new();
         for (pred_idx, prey_idx, food_value) in kills {
             let Some(prey) = self.animals.get_mut(prey_idx) else {
                 continue;
@@ -4785,15 +4796,18 @@ impl AnimalManager {
 
             prey.state = AnimalState::Dead;
             prey.current_health = 0.0;
-            taken.push(prey.species_id.clone());
+            let what_it_was = prey.species_id.clone();
+            let what_took_it = self.animals[pred_idx].species_id.clone();
+            taken.push((what_it_was, what_took_it));
 
             if let Some(predator) = self.animals.get_mut(pred_idx) {
                 predator.feed(food_value);
             }
         }
 
-        for which in taken {
+        for (which, by) in taken {
             self.carried_off.entry(which).or_default().taken += 1;
+            self.carried_off.entry(by).or_default().took += 1;
         }
 
         // What the small life fed.
