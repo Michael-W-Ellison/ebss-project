@@ -21171,3 +21171,32 @@ store in the ground, so the hungry are somewhere other than the store. Under
 `ZZ_HG`, `HOW_FAR_A_PEOPLE_WILL_MOVE` was scaled ten times with the other
 walking distances, so a people can move its camp six kilometres away from
 its pits. Being measured.
+
+### 276. At 5 km/h the winter's dead were stuck behind water
+
+Every winter death of #275, traced with each person's last sixteen actions
+and the pits they remembered. On seeds 1 and 2 in year one: the dead were
+starving and cold, carrying nothing, 50–270 cells from a pit with food in
+it. They remembered the right pit, and spent their last sixteen decisions
+walking to it, `Move ... ok`, **without moving**. One stood at (472, 744) for
+all sixteen, walking to the pit at (471, 511).
+
+`next_step_toward` is a breadth-first search capped at 4,096 cells. When the
+direct step is blocked and the target is further than that search reaches,
+the walker takes a sidestep and then the step back (`stepped_from` stops
+only an immediate reversal, not a two-step one). After an even number of
+steps they are where they started, and the Move still reports success. At a
+cell a turn nobody got far enough from camp to have a lake between them and
+home. At 5 km/h they do.
+
+Two things were tried first and did not help, because neither was the
+cause. Letting the hungry, thirsty or cold walk through a remembered bad
+place, and no longer spending the rest of the half hour when a beast comes
+into sight: seeds 1 and 2 still lost 6 and 5 in the first winter. And the
+store's reach: `something_out_of_the_store` already goes to any pit the
+walker remembers, however far off, not only those within
+`WORTH_WALKING_TO_THE_STORE`.
+
+Now: a walk at the new pace plans the whole route once, by A* over passable
+cells (four ways, up to 200,000 cells looked at), and follows it. Only if
+there is no route does it fall back to the old step by step.
