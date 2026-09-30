@@ -1140,6 +1140,9 @@ impl Population {
             .map(|(i, _)| i)
             .collect();
 
+        // Whose chance this cycle was spent in this pass, taken or not.
+        let mut tried_this_turn: Vec<usize> = Vec::new();
+
         // Attempt reproduction for each potential pair
         for i in 0..alive_agents.len() {
             for j in (i + 1)..alive_agents.len() {
@@ -1184,6 +1187,15 @@ impl Population {
                         let carrier = &self.agents[carrier_idx];
                         let other = &self.agents[other_idx];
 
+                        // One chance a cycle, on the carrier's own day of it,
+                        // and with one partner - see `DAYS_IN_A_CYCLE`.
+                        if tried_this_turn.contains(&carrier_idx)
+                            || !carrier.could_conceive_now(self.current_turn)
+                        {
+                            continue;
+                        }
+                        tried_this_turn.push(carrier_idx);
+
                         // Try to impregnate - this uses proper pregnancy system
                         let got = attempt_impregnation(carrier, other, self.current_turn);
                         *self
@@ -1203,13 +1215,22 @@ impl Population {
                             // Store pregnancy info to apply after iteration
                             new_offspring.push((carrier_idx, pregnancy, mother_id, father_id, pos));
 
-                            // Add cooldown (prevent immediate re-reproduction)
-                            self.reproduction_cooldown.insert(mother_id, 800); // Full pregnancy duration
-                            self.reproduction_cooldown.insert(father_id, 100); // Short cooldown for males
+                            // The one carrying is kept out of the next round by
+                            // the pregnancy itself, for as long as it lasts. The
+                            // `800` that stood here for it was sixteen days,
+                            // counted a turn at a time, against a pregnancy of
+                            // nine months - see `PREGNANCY_DURATION`. The other
+                            // is out of it for a couple of days.
+                            self.reproduction_cooldown.insert(father_id, 100);
                         }
                     }
                 }
             }
+        }
+
+        let this_cycle = Agent::the_cycle_at(self.current_turn);
+        for idx in tried_this_turn {
+            self.agents[idx].last_cycle_tried = Some(this_cycle);
         }
 
         // Apply pregnancies to female agents and emit pregnancy events
@@ -1841,8 +1862,7 @@ impl Population {
             // patch as a lie had agents concluding that four thousand honest
             // tips were falsehoods and half the settlement liars.
             let really_here: std::collections::BTreeSet<crate::world::Position> = world
-                .resources
-                .iter()
+                .nodes_near(agent_pos, vision_range)
                 .map(|resource| resource.position)
                 .filter(|where_it_is| {
                     (where_it_is.x - agent_pos.x).abs() <= range
@@ -1873,9 +1893,8 @@ impl Population {
                     // until now the only thing he took away was that it was
                     // there at all.
                     let how_much = world
-                        .resources
-                        .iter()
-                        .find(|resource| resource.position == *where_it_is)
+                        .nodes_on(*where_it_is)
+                        .next()
                         .map(|resource| resource.amount)
                         .unwrap_or(0);
 
@@ -1947,9 +1966,8 @@ impl Population {
                 agent.exploration_knowledge.who_told_me.remove(&where_it_is);
 
                 let how_much = world
-                    .resources
-                    .iter()
-                    .find(|resource| resource.position == where_it_is)
+                    .nodes_on(where_it_is)
+                    .next()
                     .map(|resource| resource.amount)
                     .unwrap_or(0);
                 agent
@@ -2026,8 +2044,7 @@ impl Population {
                 u32,
                 crate::core::memory::HowSteady,
             )> = world
-                .resources
-                .iter()
+                .nodes_near(agent_pos, vision_range)
                 .filter(|resource| resource.amount > 0)
                 .filter(|resource| {
                     let dx = resource.position.x - agent_pos.x;

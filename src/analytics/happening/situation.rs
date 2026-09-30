@@ -227,7 +227,7 @@ impl Simulation {
             let mut standing = 0u32;
             let mut patches = 0u32;
 
-            for resource in &self.world.resources {
+            for resource in self.world.nodes_near(here, Self::GROUND_ROUND_ABOUT) {
                 if !resource.resource_type.is_edible() {
                     continue;
                 }

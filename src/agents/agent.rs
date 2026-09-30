@@ -1210,7 +1210,19 @@ impl AgentState {
         if self.physiology.starved() {
             self.lose_health(self.health, Self::HUNGER);
         } else if self.physiology.is_wasting() {
-            self.lose_health(0.1 / reserve, Self::HUNGER);
+            // As deep as the body has gone past the line, and no deeper.
+            //
+            // A flat rate from the line down killed anybody who crossed it and
+            // then ate: at five health a day a body that fell to 0.45 of its
+            // reserve and was climbing back died on a clock of its own - three
+            // weeks, whatever it ate. Traced through a second winter: a parent
+            // standing on a pit of three hundred items, eating, the reserve
+            // going 0.38 to 0.49, health going 82 to nought in sixteen days.
+            // Nothing at the line and the whole rate at empty: going without
+            // altogether still ends at an empty reserve on the same day it
+            // always did. See ISSUES_FOUND #255.
+            let past_the_line = 1.0 - self.physiology.what_this_body_has_spare() / physiology::WASTING_BELOW;
+            self.lose_health(0.1 / reserve * past_the_line.clamp(0.0, 1.0), Self::HUNGER);
         }
 
         // Energy depletion (normal metabolism), made worse by working thirsty.
@@ -1694,6 +1706,11 @@ pub struct Agent {
     #[serde(default)]
     pub busy_until: u32,
 
+    /// The tile this one last stepped off, so that a walk does not turn
+    /// straight back onto it - see `Simulation::moving`.
+    #[serde(default)]
+    pub stepped_from: Option<(i32, i32)>,
+
     pub state: AgentState,
     pub drives: DriveState,
     pub behavior_trees: Vec<BehaviorTree>,
@@ -1729,6 +1746,16 @@ pub struct Agent {
     /// knowing - see `environment::making::Making::obvious`.
     #[serde(default)]
     found_out: std::collections::BTreeSet<String>,
+    /// What this one makes of each field it has seen a crop on.
+    ///
+    /// Nobody is told the grade of a piece of ground. What a farmer has is
+    /// what came up on it: a full stand of crop is as heavy as that ground
+    /// carries, and so says exactly what it is; a stand heavier than he
+    /// thought the ground could carry says it is better than he thought. What
+    /// he believes lags what the field is by one crop, which is how a farmer
+    /// finds out a field is tired - see `Agent::saw_a_stand_on`.
+    #[serde(default)]
+    what_i_make_of_the_fields: std::collections::BTreeMap<(i32, i32), crate::world::SoilGrade>,
     /// What has answered which need, and where it answered it.
     #[serde(default)]
     pub patterns: super::patterns::Patterns,
@@ -1738,6 +1765,13 @@ pub struct Agent {
     pub whereabouts: super::whereabouts::Whereabouts,
     pub storage_preferences: super::storage_management::StoragePreferences, // Storage management preferences
     pub parent_ids: Vec<Uuid>,
+
+    /// Which of its parents a small child is being carried by, when it has
+    /// been handed from one to the other. Nobody until the first handing
+    /// over, when it is with the first of its parents still living. See
+    /// `Simulation::who_a_small_child_is_kept_with`.
+    #[serde(default)]
+    pub carried_by: Option<Uuid>,
 
     /// Ways of working the agent has picked up rather than been born knowing.
     /// Nothing tells an agent to spread muck on a field: it tries it, sees what
@@ -1760,15 +1794,41 @@ pub struct Agent {
     /// coincidences to be reinforced.
     #[serde(default)]
     pub lately: std::collections::VecDeque<String>,
-    /// The way of answering the need that this turn's action was chosen under.
+    /// The way this turn's need was actually answered.
     ///
-    /// Set where the strategy is picked and read where the episode is written
-    /// down, which are two different layers a turn apart - see
-    /// `Element::By` and `analytics::wanting::strategy`. `None` for a drive
-    /// whose arm has no strategies yet, and for every action that comes from
-    /// somewhere other than a drive's own answer.
+    /// Set by whatever answered it - a meal out of the pack says whether the
+    /// food was carried or fetched from a store for it, a meal off a bush says
+    /// so - and read where the episode is written down as `Element::By`.
+    /// Cleared before every action, so it never outlives the turn it names.
+    ///
+    /// This was meant to be set where a strategy is picked and never was set
+    /// anywhere, so the one element that tells food about you from food in a
+    /// pit went down against nothing. See ISSUES_FOUND #259.
     #[serde(default)]
     pub by_what_way: Option<String>,
+
+    /// When this one last took food out of a store, which is what makes the
+    /// next meal out of the pack a meal from the store rather than one they
+    /// were already carrying.
+    #[serde(default)]
+    pub took_from_the_store_at: Option<u32>,
+
+    /// The small children of this one's own, alive and under six, counted by
+    /// what each eats against a grown body - carried by this one or by the
+    /// other parent. Set every turn by `Simulation::feed_the_small_children`.
+    #[serde(default)]
+    pub the_small_ones_i_answer_for: f32,
+
+    /// Whether this one is nursing a child of their own body, which keeps
+    /// them from conceiving another. Set every turn by
+    /// `Simulation::feed_the_small_children`. See `NURSED_UNTIL`.
+    #[serde(default)]
+    pub nursing_a_child: bool,
+
+    /// The cycle (see `DAYS_IN_A_CYCLE`) in which this one last had their
+    /// chance of conceiving, taken or not. A cycle gives one chance.
+    #[serde(default)]
+    pub last_cycle_tried: Option<u32>,
 
     /// How often this one does the things that have a how-often.
     ///
@@ -1835,6 +1895,17 @@ pub struct Agent {
     ///
     /// See `Errand`.
     pub errand: Option<Errand>,
+    /// A walk that got where it was going, kept until whatever it was for is
+    /// answered, so the answer is priced at the walk as well as the work.
+    ///
+    /// The errand itself is let go the turn somebody arrives - before they do
+    /// anything there - so the meal at the end of a nine-turn walk was
+    /// credited as one turn's work and a bearing nobody had walked, and going
+    /// for food cost the same as having it about you. That is the whole of
+    /// why the place memory had to be switched off (`somewhere_that_answered`).
+    /// See ISSUES_FOUND #259.
+    #[serde(default)]
+    pub the_walk_behind_me: Option<Errand>,
     pub current_plan: Option<ActionPlan>,
     /// Planning engine for generating and learning from plans
     pub planner: Planner,
@@ -1865,6 +1936,7 @@ impl Agent {
         let mut agent = Self {
             id: crate::core::dice::name(),
             busy_until: 0,
+            stepped_from: None,
             state: AgentState::new(),
             drives: if config.random_weights {
                 DriveState::with_random_weights()
@@ -1890,6 +1962,7 @@ impl Agent {
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             times_laid_up: std::collections::BTreeMap::new(),
             found_out: Self::what_anybody_is_born_knowing(),
+            what_i_make_of_the_fields: std::collections::BTreeMap::new(),
             wonderings: Vec::new(),
             food_i_ate: 0,
             food_that_rotted_on_me: 0,
@@ -1897,11 +1970,16 @@ impl Agent {
             whereabouts: super::whereabouts::Whereabouts::default(),
             storage_preferences: super::storage_management::StoragePreferences::default(),
             parent_ids: Vec::new(),
+            carried_by: None,
             practices: super::practices::Practices::new(),
             lessons: super::practices::Lessons::new(),
             rhythms: std::collections::BTreeMap::new(),
             lately: std::collections::VecDeque::new(),
             by_what_way: None,
+            took_from_the_store_at: None,
+            the_small_ones_i_answer_for: 0.0,
+            nursing_a_child: false,
+            last_cycle_tried: None,
             hands: [None, None],
             surroundings: crate::core::Surroundings::default(),
             goals: GoalManager::new(5), // Max 5 active goals
@@ -1909,6 +1987,7 @@ impl Agent {
             equipment: super::equipment::EquipmentManager::new(50.0), // 50kg max carry weight
             satisfaction_tracker: super::drive_satisfaction::SatisfactionTracker::new(),
             errand: None,
+            the_walk_behind_me: None,
             current_plan: None,
             planner: Planner::new(),
             plan_step_turns: 0,
@@ -2326,6 +2405,45 @@ impl Agent {
     }
 
     pub fn what_i_would_set_down(&self) -> Option<String> {
+        // Food that has gone past eating goes before anything else.
+        //
+        // Food was never set down, rotten or not, so a pack that filled with
+        // a harvest that turned stayed full of it. Traced through a
+        // settlement's winter: a man standing on a pit of three hundred fresh
+        // items with **seventy-eight spoiled legumes** filling all but three
+        // of his forty-two, nothing he would put down, and so no room for a
+        // handful of anything. Every turn the store branch passed over the
+        // pit under his feet and sent him to the next one, and the next one
+        // sent him back - he walked between two full larders a pace apart
+        // until he starved. People on the last quarter of their reserve spent
+        // **five turns in six walking**, almost all of it towards a pit.
+        //
+        // What cannot be eaten is worth less than anything else in the pack.
+        // It goes on the ground where he stands and rots into it, which is
+        // where a midden's worth of it was going to end up anyway; somebody
+        // who manures a field still has whatever of it he had no need to
+        // shed. See ISSUES_FOUND #252.
+        let past_eating = self
+            .inventory
+            .get_all_items()
+            .iter()
+            .filter(|(_, item)| item.quantity > 0)
+            .filter(|(_, item)| {
+                item.food_data
+                    .as_ref()
+                    .is_some_and(|food| food.is_spoiled() || food.is_harmful())
+            })
+            .max_by(|a, b| {
+                let load = |item: &InventoryItem| item.quantity as f32 * item.what_one_of_them_weighs();
+                load(a.1)
+                    .partial_cmp(&load(b.1))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(|(name, _)| name.clone());
+        if past_eating.is_some() {
+            return past_eating;
+        }
+
         self.inventory
             .get_all_items()
             .iter()
@@ -2776,9 +2894,18 @@ impl Agent {
             return;
         }
 
+        // Through `lose_health`, like every other drain on a body, so that it
+        // is booked under its own name and a body it empties is dead. It
+        // wrote the field directly: an illness took people without a word,
+        // their deaths went down to whatever had spoken last - "the weather",
+        // "a mishap" - and one that reached nought was not dead, because the
+        // turn's mending put a fraction back before anybody looked, and the
+        // illness took it off again. Traced, somebody with a wound that had
+        // turned walked about at nought health for two days. See
+        // ISSUES_FOUND #254.
         let severity = ailing.severity;
-        self.state.health =
-            (self.state.health - severity * Self::WHAT_A_TURN_OF_ILLNESS_COSTS).max(0.0);
+        self.state
+            .lose_health(severity * Self::WHAT_A_TURN_OF_ILLNESS_COSTS, AgentState::ILLNESS);
         self.state.energy =
             (self.state.energy - severity * Self::WHAT_ILLNESS_TAKES_OUT_OF_YOU).max(0.0);
     }
@@ -2946,7 +3073,20 @@ impl Agent {
     ///
     /// Small on purpose. A week of it at full severity comes to about a
     /// quarter of a healthy body, which is a bad illness and not a sentence.
-    const WHAT_A_TURN_OF_ILLNESS_COSTS: f32 = 0.25;
+    ///
+    /// **Said in weeks and converted now**, because it was `0.25` a turn,
+    /// written when a week was about a hundred turns. A week is 336 now, so a
+    /// week at full severity took 84 - and an illness lasts up to ten days, so
+    /// a wound that turned was very nearly a sentence after all: traced, a fed,
+    /// dry, sheltered man went from 39 health to nothing in four days. Over
+    /// three years of twelve settlements it was a leading cause of death among
+    /// grown people, booked to whatever else had last touched them. See
+    /// ISSUES_FOUND #254.
+    const WHAT_A_TURN_OF_ILLNESS_COSTS: f32 = Self::WHAT_A_WEEK_OF_ILLNESS_COSTS
+        / (7 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY) as f32;
+
+    /// A week at full severity: a quarter of a healthy body.
+    const WHAT_A_WEEK_OF_ILLNESS_COSTS: f32 = 25.0;
 
     /// And what it takes out of somebody's day.
     ///
@@ -3401,6 +3541,44 @@ impl Agent {
     pub fn is_that_plant_food(&self, kind: u8) -> bool {
         self.found_out
             .contains(&Self::what_i_call_that_plant(kind, true))
+    }
+
+    /// What this one makes of the field at `at`, if it has seen a crop on it.
+    pub fn what_i_make_of_the_field_at(&self, at: (i32, i32)) -> Option<crate::world::SoilGrade> {
+        self.what_i_make_of_the_fields.get(&at).copied()
+    }
+
+    /// Seen a stand of crop on the field at `at`, heavy enough to say the
+    /// ground is `it_says`.
+    ///
+    /// A full stand - the crop as heavy as it gets there - says exactly what
+    /// the ground is, and is believed whatever was believed before, better or
+    /// worse. A stand still filling only says the ground is *at least* that
+    /// good: it raises what he thought and never lowers it, and on a field he
+    /// has no opinion of yet it tells him nothing, since a crop half grown on
+    /// the best ground in the country looks like a crop on poor ground.
+    pub fn saw_a_stand_on(&mut self, at: (i32, i32), it_says: crate::world::SoilGrade, a_full_stand: bool) {
+        match self.what_i_make_of_the_fields.get(&at) {
+            _ if a_full_stand => {
+                self.what_i_make_of_the_fields.insert(at, it_says);
+            }
+            Some(thought) if it_says > *thought => {
+                self.what_i_make_of_the_fields.insert(at, it_says);
+            }
+            _ => {}
+        }
+    }
+
+    /// The strange plants this one knows to be poison, which is the first
+    /// thing anybody tells anybody about them.
+    pub fn the_plants_i_would_warn_about(&self) -> Vec<u8> {
+        self.found_out
+            .iter()
+            .filter_map(|known| {
+                let kind = known.strip_prefix("plant:")?.strip_suffix(":bad")?;
+                kind.parse().ok()
+            })
+            .collect()
     }
 
     /// Write down what that plant turned out to be.
@@ -4989,7 +5167,18 @@ impl Agent {
         self.take_health_down_to(body_condition);
 
         // Update energy (basic metabolism)
-        self.state.energy = (self.state.energy - 0.1).max(0.0);
+        //
+        // And not for anybody under six, for the reason
+        // `AgentState::age_turn_with_modifier` gives for its own drain: this
+        // pool is filled by `Action::Eat` and nothing else, and a child that
+        // young takes no turn and so never eats for itself - it is fed
+        // straight into its body. That drain was waived for them and this one
+        // was not, so every child a settlement bore ran dry in three weeks and
+        // died of exhaustion in six, fed and watered and full of milk. See
+        // ISSUES_FOUND #254.
+        if self.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL {
+            self.state.energy = (self.state.energy - 0.1).max(0.0);
+        }
     }
 
     /// Update agent with time progression (includes aging and survival mechanics)
@@ -5132,6 +5321,31 @@ impl Agent {
 
         if drive.is_active() {
             return Some(0);
+        }
+
+        // Hunger is not built up at a rate anybody chose: it rises at what the
+        // body's three tables say (`Physiology::how_fast_hunger_rises`), and
+        // not at all while the last meal is still in the stomach. This read the
+        // generic rate for it, which is not the rate hunger climbs at, and a
+        // body that had just eaten - rising at nought - was told it would
+        // never be hungry again. Now: the meal leaving the stomach, then the
+        // climb at an ordinary appetite. See ISSUES_FOUND #260.
+        if drive_type == crate::core::DriveType::Hunger {
+            use super::physiology::{AN_ORDINARY_APPETITE, TURNS_A_MEAL_HOLDS};
+            let body = &self.state.physiology;
+            let rising = body.how_fast_hunger_rises();
+            let (waiting, rate) = if rising > 0.0 {
+                (0.0, rising)
+            } else {
+                let still_in_me = body.energy_in_the_stomach()
+                    / body.what_a_sitting_is_for_whoever_it_feeds().max(1.0);
+                (still_in_me.min(1.0) * TURNS_A_MEAL_HOLDS, AN_ORDINARY_APPETITE)
+            };
+            let climbing = drive_type.base_accumulation_rate() * rate;
+            if climbing <= 0.0 {
+                return None;
+            }
+            return Some((waiting + (drive.threshold - drive.value).max(0.0) / climbing).ceil() as u32);
         }
 
         let climbing = drive_type.base_accumulation_rate() * drive.pressure();
@@ -6356,6 +6570,18 @@ impl Agent {
             return false;
         }
 
+        // Nor anybody nursing one. A body feeding an infant at the breast
+        // does not conceive, which is what spaces human children two to three
+        // years apart; the sixteen days of cooldown that stood in for it were
+        // taken out when pregnancy became nine months long, and nothing took
+        // their place - so a parent could conceive again the week after a
+        // birth, and a settlement of six grown people had eight or twelve
+        // small children by its fourth winter and starved in it. See
+        // ISSUES_FOUND #262.
+        if self.nursing_a_child {
+            return false;
+        }
+
         true
     }
 
@@ -6482,18 +6708,34 @@ impl Agent {
     /// appetite on the specification's own table.
     ///
     /// This is the whole of "do not breed until there is a surplus", and it is
-    /// deliberately a hard number rather than a feeling. The settlement store
-    /// is sized at exactly this stretch for one mouth (see the store's
-    /// `what_one_mouth_wants_put_by`), so the gate says: breed when you have
-    /// more put by than you need for yourself.
+    /// deliberately a hard number rather than a feeling: a parent's winter and
+    /// a newborn's, whenever the child is conceived.
+    ///
+    /// **It was timed for a while, and that was measured and undone.** A child
+    /// conceived in autumn is born after the winter its parent is putting by
+    /// for, so the gate was taught to charge the child only for the gap days
+    /// it would be alive through - which in autumn is none. Every adult in a
+    /// settlement then had enough on the same day: nine or eleven of twelve
+    /// conceived in the first autumn, and the next winter had a fifth again
+    /// as many mouths after nine months of pregnancy on top. Over twelve
+    /// seeds and five years, with the larder fixes of #255 in, the timed rule
+    /// left 7 settlements of 12 standing and 19 people; this one left 10 and
+    /// 59, with births spread out as the stores allowed. See ISSUES_FOUND
+    /// #255.
     ///
     /// Falls back to the pack alone before the first reckoning of the year has
     /// run, which is the only time `what_the_larder_says` is empty for a live
     /// agent.
     pub fn enough_put_by_for_a_child(&self) -> bool {
         let gap = super::provision::how_long_the_land_gives_nothing() as f32;
+        // And the children already here. This asked a parent for their own
+        // winter and one newborn's whatever they were feeding already, so a
+        // parent with two infants had a third on the same terms as somebody
+        // with none - and once children lived, a settlement of six grown
+        // people had twelve small ones by its fourth winter and starved in
+        // it. See ISSUES_FOUND #261.
         let for_the_two_of_them = self.state.physiology.what_i_burn_in_a_day
-            * (1.0 + what_a_body_this_age_eats(0));
+            * (1.0 + self.the_small_ones_i_answer_for.max(0.0) + what_a_body_this_age_eats(0));
 
         let put_by = match self.state.what_the_larder_says.as_ref() {
             Some(larder) => larder.units_put_by(),
@@ -6911,6 +7153,74 @@ impl Agent {
         }
     }
 
+    /// How long a child is nursed, in years, which is as long as the one who
+    /// bore it does not conceive again. Two years of it and nine months of
+    /// the next pregnancy puts children about three years apart.
+    pub const NURSED_UNTIL: u32 = 2;
+
+    /// How many days apart the chances of conceiving come. One day in each,
+    /// which day it is being this one's own - see `my_fertile_day`.
+    pub const DAYS_IN_A_CYCLE: u32 = 30;
+
+    /// The chance that a pair in their prime, well and wanting it, conceive
+    /// on the one day of a cycle it can happen. About a quarter, which is
+    /// what people manage; most couples take several months.
+    ///
+    /// What stood before was a roll every turn at the product of the two
+    /// fertilities, near 0.6 for a well-fed pair - every pair ready in the
+    /// same week conceived that week, and the first autumn's put-by opened
+    /// the gate for all of them at once. See ISSUES_FOUND #263.
+    pub const FECUNDABILITY: f32 = 0.25;
+
+    /// Which day of each cycle this one can conceive on. Their own, so the
+    /// chances in a settlement fall across the month and not on one day.
+    pub fn my_fertile_day(&self) -> u32 {
+        (self.id.as_u128() % Self::DAYS_IN_A_CYCLE as u128) as u32
+    }
+
+    /// Which cycle `now` falls in, counted from the start of the world.
+    pub fn the_cycle_at(now: u32) -> u32 {
+        now / crate::environment::seasons::TICKS_PER_DAY / Self::DAYS_IN_A_CYCLE
+    }
+
+    /// Whether `now` is this one's fertile day and their chance this cycle
+    /// is not already spent.
+    pub fn could_conceive_now(&self, now: u32) -> bool {
+        let day = now / crate::environment::seasons::TICKS_PER_DAY;
+        day % Self::DAYS_IN_A_CYCLE == self.my_fertile_day()
+            && self.last_cycle_tried != Some(Self::the_cycle_at(now))
+    }
+
+    /// The first tick at or after `from` on which `could_conceive_now` holds.
+    pub fn my_next_fertile_turn(&self, from: u32) -> u32 {
+        let a_day = crate::environment::seasons::TICKS_PER_DAY;
+        let mut day = from / a_day;
+        loop {
+            let at = (day * a_day).max(from);
+            if self.could_conceive_now(at) {
+                return at;
+            }
+            day += 1;
+        }
+    }
+
+    /// How a meal out of the pack was come by: carried about, or fetched out
+    /// of a store for it.
+    ///
+    /// Written as the way it was answered (`Element::By`), which is the one
+    /// thing that tells the two apart - both are `Did("eat")`. Without it the
+    /// pattern layer could not learn that food about you answers hunger better
+    /// than food in a pit an afternoon's walk off, because it could not tell
+    /// which it had eaten. See ISSUES_FOUND #259.
+    pub fn how_this_meal_was_come_by(&self, now: u32) -> crate::analytics::wanting::strategy::Strategy {
+        use crate::analytics::wanting::strategy::Strategy;
+        let a_day = crate::environment::seasons::TICKS_PER_DAY;
+        match self.took_from_the_store_at {
+            Some(at) if now.saturating_sub(at) <= a_day => Strategy::EatStoredFood,
+            _ => Strategy::EatCarriedFood,
+        }
+    }
+
     /// Link what was just done to the need it answered.
     ///
     /// The specification's pattern formation: "when an agent satisfies drive
@@ -6986,6 +7296,19 @@ impl Agent {
         if !answered_anything {
             self.patterns.it_did_not(aimed_at, &elements);
         }
+
+        // A walk is paid for once, by what it was for, and does not wait for
+        // ever for it.
+        if let Some(walk) = self.the_walk_behind_me.as_mut() {
+            let its_answer_came = action_result
+                .drive_changes
+                .iter()
+                .any(|(need, change)| *need == walk.for_drive && *change <= -Patterns::ENOUGH_TO_NOTICE);
+            walk.set_aside += 1;
+            if its_answer_came || walk.set_aside > Self::A_WALK_WAITS_FOR_ITS_ANSWER {
+                self.the_walk_behind_me = None;
+            }
+        }
     }
 
     /// The elements of what just happened: everything that was true of it
@@ -7038,7 +7361,7 @@ impl Agent {
 
         elements.push(Element::At(where_it_was));
 
-        if let Some(errand) = &self.errand {
+        if let Some(errand) = self.errand.as_ref().or(self.the_walk_behind_me.as_ref()) {
             if let Some(bearing) = Bearing::from_home(errand.set_out_from, where_it_was) {
                 elements.push(Element::Toward(bearing));
             }
@@ -7275,8 +7598,21 @@ impl Agent {
     fn how_long_that_took(&self) -> u32 {
         self.errand
             .as_ref()
+            .or(self.the_walk_behind_me.as_ref())
             .map(|errand| errand.turns_on_it.max(1))
             .unwrap_or(1)
+    }
+
+    /// How long a finished walk waits for the thing it was for.
+    ///
+    /// Long enough to take food out of a pit and eat it, or to fill a skin and
+    /// drink; not so long that an unrelated meal an afternoon later is charged
+    /// for the walk.
+    pub const A_WALK_WAITS_FOR_ITS_ANSWER: u32 = 4;
+
+    /// The walk just finished, while it is still waiting for its answer.
+    pub fn arrived_from(&mut self, walk: Errand) {
+        self.the_walk_behind_me = Some(Errand { set_aside: 0, ..walk });
     }
 
     /// Ground this agent would walk back to for a need, if any.

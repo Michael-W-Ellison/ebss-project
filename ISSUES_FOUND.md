@@ -19432,3 +19432,1771 @@ The blanket guard - "any `Move` to the tile underfoot is not an answer,
 return `None`" - was measured too and costs 0.8%, which is inside the noise
 but is the wrong shape: it catches the symptom everywhere instead of the two
 places that produce it, and it would hide the next one.
+
+### 244. A plant carried its own name, and a tile carried a fog of war nobody read
+
+The first two steps towards a map larger than a thousand cells a side. Both
+are bit-identical: a probe hashing the whole world, the dice-roll count, and
+every plant's full state - id, species, position, health, progress, shade,
+age, regrow timer, stage and flags - gives the same three numbers before and
+after, over 120 turns of seed 4242 and over a whole year of seed 0.
+
+#### `Tile`: 40 bytes to 32
+
+`last_seen_turn: Option<u32>` was never written and never read - every tile
+in every world held `None`. `explored: bool` was written once, in the
+exploration pass, and read only by its own unit test. What anybody has seen is
+kept by the one who saw it, in `ExplorationKnowledge::explored_tiles`, which
+is what every decision reads. The one reader outside the struct was
+`exploration_demo`, which now counts the union of what the agents have seen.
+
+Saves are JSON, so a save with the two fields in it still loads.
+
+#### `Plant`: 104 bytes and a heap allocation, to 56
+
+| field | was | now |
+|---|---|---|
+| `species_id` | `String`: 24 bytes, plus its own allocation of ~32 holding "oak_tree" again | `SpeciesId`: 2 bytes |
+| `planted_by: Option<Uuid>` | 17 bytes, `None` on every wild plant, written when a crop was sown and never read | gone |
+| `max_health` | 4 bytes, a copy of `PlantSpecies::health` | read from the species |
+
+`SpeciesId` is an interned name. It derefs to `&str`, compares equal to one,
+**orders by the name rather than the number** so that anything kept in order
+by species keeps its order, prints as the quoted string `Debug` gave before,
+and is written to a save as the name - so a save does not depend on the order
+species were first met in. Reading a name back takes no lock. `Seed` carried
+the same `String` and is now 16 bytes, from 40 and an allocation.
+
+On a 10,000-cell map at a quarter of a plant a tile, plants go from about
+**3.4 GB to 1.4 GB**, and tiles from 4.0 GB to 3.2 GB.
+
+#### What was not done, and why
+
+**The plant's `id: Uuid` stays**, at 16 of the 56 bytes. It is drawn from
+`core::dice::name()`, so replacing it with a counter would stop consuming a
+draw for every plant and move every later roll in the run. That is not a
+change to the model, but it would make this change impossible to verify as
+exact. It is the obvious next cut, and should be taken on its own and
+re-baselined.
+
+**The per-plant state stays at full width.** Health, progress and shade are
+`f32`, ages and timers `u32`. Packing them into eight and sixteen bits would
+take a plant to about 16 bytes, but it rounds: growth that adds less than one
+step per pass would stall, the same way woody litter would stop rotting at
+sixteen-bit resolution. That is a change to the model and wants the paired
+measurement. **An earlier estimate in conversation, "about 16 bytes with no
+change to behaviour", was wrong on the second half.** The exact pack is 56.
+
+### 245. The soil ladder, as decided
+
+Recorded before it is built, so that the decisions are in one place.
+
+Soil stops being a pool of nutrient and litter that decays everywhere every
+day, and becomes a **type** fixed by generation and a **grade** that only
+agents move.
+
+| grade | yield multiplier |
+|---|---|
+| very rich | x2 |
+| rich | x1.5 |
+| ordinary | x1 |
+| depleted | x0.5 |
+| exhausted | x0.25 |
+
+- **Wild plants yield a quarter of what the same plant yields on tilled
+  farmland**, and harvesting a wild plant never changes the grade.
+- **Farmland drops one grade once a full crop's worth of units has been
+  taken off it** - not per trip, since a crop comes off in armfuls of eight
+  to fourteen.
+- **A tile keeps its type and its original grade for ever.** Leaving it
+  fallow moves it one grade a year back towards the original, from either
+  side, and never past it.
+- **Beans and manure are the only ways to build soil past its original
+  grade.** A classic rotation - a bean crop after a cereal - holds a field
+  where it is while it still feeds people.
+- **Dung and buried waste raise the grade once they have rotted**, through a
+  short list of pending improvements rather than a daily pass. Animal dung
+  and the rest of the world's goings-on leave the soil alone.
+- **Agents learn a field's grade from what it produces**, not by being told
+  it: the decision to rest, rotate or manure has to come from what the
+  harvests have been.
+
+Still to settle when it is built: the rate at which beans and manure raise
+the grade, the ceiling, and whether abandoned farmland counts as fallow or
+goes back to wild terrain.
+
+### 246. The soil ladder: a kind and a grade, and only people move it
+
+Built as #245 set it out, with the last open questions settled: **beans raise
+the grade when they come to maturity; muck raises it a season after it goes
+on; the top is very rich, and the ladder is one list so a rung can be added;
+abandoned farmland lies fallow back to its natural grade, and a year at that
+grade with nobody working it and it is wild land again.**
+
+#### What replaced what
+
+Every tile carried a `Soil` of seven floats: a pool of nutrient, two pools of
+litter, and four things somebody might have left on it. Every leaf that fell,
+every beast that dunged and every plant that grew moved the pool, and one pass
+a day rotted the litter on every tile in the world into it. After a year three
+tiles in five had drifted from where they started, so none of it could be left
+unstored.
+
+Now a tile's ground has a **type** (loam, silt, peat, sand, stone, salt) and a
+**grade** on `SoilGrade::LADDER` - exhausted x0.25, depleted x0.5, ordinary
+x1, rich x1.5, very rich x2 - and the grade is a straight multiplier on what
+anything growing there yields. Wild ground's type and grade follow from its
+terrain and are never stored. Only a **field** has a record, `Field`, kept
+sparse on the grid, and only people change one:
+
+| what | does |
+|---|---|
+| a whole crop's worth taken off by hand | down a rung (a pod crop excepted) |
+| a bean crop coming to maturity | up a rung, once per stand |
+| muck, a rung's worth, a season on | up a rung |
+| a year with nothing taken off | a rung back towards natural, from either side, never past |
+| a year at natural with nobody working it | back to its old terrain, record dropped |
+
+Broken ground yields **four times** what the same ground does wild, for every
+crop. What wild ground yields is anchored to where the old pool actually
+settled - measured over two seeded years on a hundred-cell map, a riverbank or
+marsh at 0.94 of what ground could hold, a wood at 0.83, a meadow at 0.71,
+plains at 0.51 - so each terrain takes the rung nearest, and wild food stands
+about where it stood.
+
+A crop's units are counted as they leave by hand, on the node: `harvest` adds
+and `put_it_back` takes away, so every path nets itself and nothing but a hand
+counts. Beasts grazing, fruit falling and dung do nothing to the ground.
+
+What people leave on the ground - the midden's smell and seed, and a field's
+weeds and vermin - is unchanged and still on the tile. The daily pass that
+aired middens now runs over the ground register rather than the map.
+
+#### Agents learn a grade from what grows
+
+Nobody is told a grade. A farmer who sees a **full stand** - harvesting it,
+eating off it, weeding round it - reads the grade that would carry a stand that
+heavy; a stand still filling can only raise what he thought, and on a field he
+has no opinion of tells him nothing. What he believes lags the field by one
+crop. The two decisions that used to read the soil directly - what to sow, and
+what to plough under - read his belief now.
+
+Two gaps in the old farming had to close for rotation to be possible at all:
+
+- **A bare field could never be sown again.** Breaking ground was refused on
+  anything already a field, so a crop ploughed in left the field bare for ever.
+  A bare field is sown again now, and is preferred as nearer ground to break.
+- **A field carried its first crop for ever.** Nodes do not die, and nothing
+  but a pod row could be ploughed in. Now anything on a field its farmer
+  believes exhausted is ploughed in, and tired ground gets beans if he has them.
+
+#### Measured
+
+Twelve paired seeded settlement-years against the current HEAD:
+
+| | HEAD | ladder |
+|---|---|---|
+| person-turns | 2,017,697 | 1,985,610 (**-1.6%**) |
+| births | 6 | 4 |
+
+**No detectable effect on survival.** The per-seed pairs run from -24% to +20%,
+so the standard error of that mean is about 3.5%. What the fields did, summed
+over the twelve settlements at the year's end:
+
+| | |
+|---|---|
+| fields | 690, about 57 a settlement |
+| grades | very rich 68, rich 261, ordinary 174, depleted 64, exhausted 123 |
+| crops on them | berries 611, beans 66, grain 4, bare 9 |
+| farmer beliefs held about them | 83 |
+| actions over the year | spread muck 8,576, till 3,444, tend 794, plant a cutting 303 |
+
+So fields wear - 27% end the year depleted or exhausted - and are built up, 10%
+very rich. But **rotation rarely fires**: 83 beliefs across 690 fields means
+most farmers never see a full stand, because a crop is picked long before it
+fills. The rule is right and too strict to see much use. Reading a field from
+what it has yielded over a season, rather than from one full stand, is the
+likely next step, and wants its own measurement.
+
+**Grain is almost never sown** - 4 fields in 690 - because farmers sow what
+they carry, and they carry berries. The flat four-to-one for every crop replaced
+`takes_to_the_plough` (grain 3, flax 1.6, berries 1.15, herbs 1), which makes a
+field of berries three and a half times what it was. It also means **beans
+out-yield grain**: per unit of growing time a bean crop gives 0.035 x 45 of
+food energy against grain's 0.015 x 60, and beans build the ground while grain
+wears it. Grain's old plough factor hid that. Nothing measured here shows it
+biting yet, because nobody sows grain; it will when somebody does. The choice
+is whether the plough does the same for every crop or more for some.
+
+#### Memory and time
+
+`Tile` goes from 32 bytes to **20**, and `Soil` from 28 to 16: the four rare
+fields that remain. A field record is only where somebody has broken ground.
+
+**Time did not move.** An empty 400-cell world ran 3.2-3.5 ms a simulated day
+before and after, over three runs each. The daily rot pass cost well under a
+millisecond a day at 160,000 tiles; the cost of a day is the plants and the
+beasts. What the ladder buys is the memory and a model that says what it does.
+
+#### Tests
+
+Rewritten onto the ladder: `rotation_tests`, `land_tests`, `farming_tests`,
+`midden_tests`, `nutrient_loop_tests`, `husbandry_tests`, `bearing_tests`,
+`fishery_tests`, `calendar_tests`, `ecology_tests`, `ground_tests`,
+`salt_tests`, `scarcity_tests` and `survival_pressure_tests::the_crop_falls_with_the_ground`.
+Several asserted what the ladder reverses and now assert the new rule: that a
+beast's dung leaves the ground as it was, that food rotting where it lay is
+counted as waste rather than turned to litter, that a field outgrows the
+hedgerow on every grade, and that every crop takes the plough alike.
+
+**Deleted because what they tested is gone**: `what_rots_depends_on_where_it_fell`,
+`dense_matter_outlasts_soft`, `what_rots_feeds_the_ground`,
+`a_crop_draws_the_ground_down`, `a_wood_feeds_itself` (land);
+`what_nobody_picks_goes_back_into_the_ground` (bearing);
+`the_loop_turns_and_loses`, `the_farmed_ground_holds_up_longer` (nutrient loop);
+`a_fish_takes_nothing_out_of_the_bank` (fishery). New:
+`soil_ladder_tests`, 22 tests, one rule each, including how a farmer reads a
+field and the rotation it leads to.
+
+Both roll-count fingerprints moved and are re-baselined with their reasons: the
+120-turn count **up 37%**, since the world differs from turn nought, and the
+year **down 16%**.
+
+### 247. A field crop is picked ripe, a harvest is three quarters of it, and grain takes the plough best
+
+Three instructions: **"Fields should not be picked before being ripe. Crops
+must finish growing."** **"Field tiles reduce after 75% of the crop is
+harvested."** **"Give grain a larger multiplier for farmland."**
+
+#### Ripe or not at all
+
+A crop on a field ripens when it comes to its full stand, or on the last day
+of its season, when it has to be whatever it has come to. Until then
+`what_can_be_taken` is nought. Ripe, it stops growing, and a hand can take
+three quarters of what it ripened at - the harvest - and never the last
+quarter, which is the plant. When the harvest is in, the field goes down a rung
+(a pod crop's harvest excepted) and what is left grows on until it ripens
+again. A bean crop raises the ground when it ripens, which is once a crop
+because a ripe crop does not grow. A ripe crop that falls or is grazed before
+anybody brings it in wears nothing: nobody's hand took it.
+
+This replaced "a whole crop's worth taken off, by any number of trips", and
+with it the running count and the flag that stopped an unpicked bean stand
+counting twice. Fill time does not suffer: capacity and growth both scale with
+the grade and the plough, so a field fills as fast as a wild patch of the same
+plant - about twenty to forty-five days for grain against a season of ninety.
+
+**Nothing chooses a green field.** Nineteen places picked where to gather or
+eat by asking `amount > 0`, which says yes to a field of green wheat, and a
+decision that says yes to what the executor refuses is a walk for nothing -
+the defect this document keeps finding. There is one question now,
+`ResourceNode::anything_to_take`, and every place that chooses food asks it.
+Water keeps its own answer: a spring at its springline still gives a drink.
+Choosing a camp still counts a growing crop, since that is a season's decision.
+
+**And farmers read their fields.** A harvest is only taken ripe, so everybody
+who takes one reads a ripe stand. Beliefs held about fields at a year's end
+roughly doubled, 83 to 178.
+
+#### Grain
+
+`ResourceType::what_the_plough_does_for_it`: four for everything, ten for
+grain. Ten keeps what grain had over a berry bush in rows before the ladder
+(three against 1.15). It also makes rotation worth running: per day of growing,
+grain now gives 9.0 of food energy against beans' 6.3. At a flat four, beans
+gave more than grain and built the ground as well.
+
+**It does not change what is sown.** Grain stood on 3 fields of 691. A farmer
+sows what he is carrying, and grain comes first in his order of preference,
+so he is simply never carrying it when he breaks ground. The multiplier is in
+place for when he does; getting grain into a pack is the next lever.
+
+#### Measured
+
+Twelve paired seeded settlement-years, against the ladder of #246 on the same
+seeds:
+
+| | ladder | ripe, 75%, grain x10 |
+|---|---|---|
+| person-turns | 1,985,610 | **2,012,190 (+1.3%)** |
+| births | 4 | 7 |
+| fields at the year's end | 690 | 691 |
+| depleted or exhausted | 187 | 206 |
+| very rich | 68 | 68 |
+| beans / berries / grain / bare | 66 / 611 / 4 / 9 | 55 / 628 / 3 / 5 |
+| beliefs about fields | 83 | 178 |
+
+The per-seed pairs run from -10% to +25%, so +1.3% is no detectable effect. It
+puts the settlement back level with where it stood before the ladder
+(2,017,697).
+
+The year's roll count is down 1.6% and re-baselined. The 120-turn count does
+not move: no field ripens in two and a half days.
+
+### 248. Where the time goes, and what freezing far-off ground would buy
+
+> **Corrected at #249: resource nodes' daily regrowth is not where their time
+> goes.** The node column below was read by taking every node off the map,
+> which also took away every other loop that walks the node list. Timed
+> directly, regrowth is 12 ms a day of an empty 1,600-cell world; the rest is
+> `remove_depleted_resources` walking every node every turn, 37 ms. Freezing
+> nodes was built and is exact, and saves the 12.
+
+
+The proposal: ground far from any agent is frozen, and caught up to the season
+when somebody comes into range. Measured before answering, per simulated day
+on a quiet machine (release build), taking one system out at a time.
+
+**With nobody in the world, the animals first taken out:**
+
+| map | whole world | plants | resource nodes |
+|---|---|---|---|
+| 200 x 200 | 0.97 ms | 0.21 (9,926) | 0.55 (6,150) |
+| 400 x 400 | 3.60 ms | 0.54 (39,973) | 2.54 (24,538) |
+| 800 x 800 | 19.1 ms | 4.20 (159,281) | 15.1 (98,067) |
+| 1,600 x 1,600 | 108 ms | 18.9 (633,883) | 92.2 (392,204) |
+
+**With the animals in**, at 800 x 800: 256 ms a day, of which the 647 beasts
+are about 239. **With twelve people** on the default 50 x 50 map: 157 ms a
+day, of which the world is 8 and the people about 150.
+
+So, per simulated day:
+
+| | costs |
+|---|---|
+| a person | ~12.5 ms |
+| an animal | ~0.37 ms |
+| a resource node | ~0.24 us |
+| a plant | ~0.03 us |
+
+**What freezing would buy:**
+
+- **On the maps run today, nothing.** A settlement on 50 x 50 spends 95% of its
+  time in its people's decisions, and nothing is far from anybody.
+- **Plants are already frozen.** Each is worked out once in four months, when
+  its zone comes round, and brought up to date whenever something stands on it
+  (`PlantManager::grow_a_zone`, `catch_up_one`). That is the proposal already,
+  and it is why a plant costs a tenth of what a node does.
+- **Resource nodes are the real win among cells.** Every node regrows every day
+  wherever it is: 85% of an empty 1,600-cell world's time, rising in step with
+  its area - about 3.6 seconds a simulated day at 10,000 x 10,000. Nothing in
+  their regrowth is local except the tile's terrain and grade; the weather is
+  one value a day for the whole map. So a node far from anybody can sleep, and
+  on waking replay its missed days from a log of daily weather - 360 small
+  entries a year - rather than from a guess. That is exact, and costs a node
+  nothing while nobody is near it.
+- **The animals are most of the world's time, and freezing does not reach
+  them.** They move, so they are not cells, and the herds far from people are
+  what a big map exists for. The equivalent for them is a coarse model - herds
+  as numbers per region, played out in detail near people - which is a much
+  larger piece of work. Before that, a beast costing 0.37 ms a day is worth
+  profiling: it is likely searching for forage without a spatial index.
+- **It does not save memory.** A frozen node is still a node. Memory is the
+  next step's business: summarising what is far away, as #245 described.
+
+**Recommendation, in order:** freeze resource nodes with an exact catch-up
+from a weather log; profile the animal turn; and for the ordinary run, where
+people are 95% of the cost, look at the agent's decision loop.
+
+### 249. Ground nobody is near sleeps, and wakes exactly where it would have been
+
+Built as #248 proposed. A resource node further than `FAR_ENOUGH_TO_SLEEP`
+(128 cells either way) from every living person is not brought up to date.
+The distance is the longest any decision reads a node from (60, where a people
+looks for a new camp) plus a day's walk (48), and some over. When somebody
+comes within range, the node lives the days it missed over again, one at a
+time, through the same function the live pass uses.
+
+**The catch-up is exact, not an estimate.** Everything a wild node's day reads
+is either fixed for the node (its terrain and its ground's grade) or one value
+for the whole map that day. The air temperature and whether the water is ice
+come from the climate by kind of country alone: the position argument is
+ignored. So the world keeps an `AGrowingDay` for every day back to the oldest
+sleeping node - the rain, the season, and air and ice for each of the fourteen
+kinds of country - and throws away the days nobody needs any more. No
+randomness is involved anywhere in this.
+
+Field crops never sleep: they ripen, get brought in and wear their field, and
+there are only as many as a settlement farms. A world nobody has told where its
+people are - one run without a simulation over it - keeps everything awake,
+because not having been told is not the same as there being nobody there.
+
+#### Proved, not assumed
+
+`sleeping_tests` runs the same settlement twice on a 320-cell map for sixty
+days, once with sleeping and once without, and after waking the sleepers
+compares everything: the number of dice draws, every person's position,
+health and reserve, and every node's amount, carried inflow, flow and ripeness,
+to the bit. **They are identical**, with most of the map's nodes asleep most of
+the time. An empty world slept for a whole year - through every season's
+growth and fruit falling - also wakes identical. Neither roll-count fingerprint
+moved, since nothing on the default 50-cell map is ever far enough from anybody
+to sleep.
+
+#### What it saves, which is less than #248 said
+
+| per simulated day | awake | asleep |
+|---|---|---|
+| empty, no beasts, 400 cells | 2.5 ms | 2.1 ms |
+| empty, no beasts, 1,600 cells | 91 ms | 73 ms |
+| empty, with beasts, 800 cells | 220 ms | 217 ms |
+| twelve people, 400 cells | 669 ms | 670 ms (21,000 of 24,500 nodes asleep) |
+| twelve people, 800 cells | 4.6 s | 4.1 s (94,000 of 98,000 asleep) |
+
+At best 1.2 times. The reason is the correction added to #248: regrowth is
+cheap. Timed piece by piece on an empty 1,600-cell world with no beasts:
+`remove_depleted_resources` 37 ms a day, regrowth 12 ms, the animals' pass
+12 ms even with no animals in it, plants 9 ms. With beasts on an 800-cell map,
+the animals take 161 of about 175 ms.
+
+**The real cost is the people, and it grows with the map.** Twelve people
+cost about 110 ms a day on 50 cells, 670 ms on 400 and 4.6 s on 800. A person
+on the big map costs forty times what they do on the small one, and the map has
+240 times the nodes. Their decisions scan every node on the map, each turn,
+to find the ones within a few dozen cells.
+
+#### What would pay, in order
+
+1. **An index of nodes by patch of map**, so that a decision looking within
+   twenty cells asks twenty cells' worth of nodes and not the whole list. This
+   is where the time on a large map actually goes, and it grows with area times
+   people. The patches here in `WhoIsAwake` are the start of one.
+2. **`remove_depleted_resources` once when something runs out**, not a scan
+   every turn. Only a hand can empty a mineral seam, so the scan could be
+   restricted to where people are, or triggered by the harvest that emptied it.
+3. **The animals' turn**, which is most of the world's own time. At 0.37 ms a
+   beast a day it is likely searching for forage without an index too.
+
+### 250. Nobody reads the whole map to find a node, and nobody sets out for what they could not know is there
+
+"Agents should not be scanning the whole map. They should be relying on their
+memory and eye sight to find nodes."
+
+Two changes, committed separately because one is exact and the other is not.
+
+#### 1. The nodes are filed by where they stand (exact)
+
+Every agent-side question about the ground walked the whole node list and threw
+away what was too far off: the gather and forage executors, every "is there
+any X within reach" in the decision layer, the camp-moving search, fishing,
+field work, the sight pass that keeps memories current (three full walks per
+agent per turn), the exploration pass (a full walk **per newly seen tile**),
+and the smell pass (every smelling node on the map against every agent).
+
+`world::node_index` files node numbers by 8-cell patch. `World::nodes_near`
+and `nodes_on` read only the patches round the question and hand back nodes
+**in list order**, so every answer, down to which of two equal candidates
+comes first, is the one the whole-list walk gave. A year on seeds 0, 7 and
+4242 has the same fingerprint and the same dice-draw count before and after.
+
+Keeping the file right: a running world adds and removes nodes only through
+`World::put_a_node_down` / `take_a_node_up`; the world refiles after its own
+removals and at the start of every simulation turn. A list changed by hand (as
+tests do) no longer matches the file's count or last position, and questions
+fall back to walking the list until the next refiling - slower, still right.
+
+The smell pass now asks each nose only about ground within the reach of the
+strongest raw smell (`ResourceType::THE_STRONGEST_RAW_SMELL`), in the same
+order as before.
+
+#### 2. What an agent goes after is what it knows of (behaviour change)
+
+`Simulation::nodes_this_one_knows_of`: a node is somewhere to go only if the
+agent can **see** it (within `sight_range`, the circle the exploration pass
+looks over), **remembers** it (a place in `known_resources`, seen or told -
+which is what makes being told worth anything), **smells** it (the source of a
+food or water scent it is picking up) or has it **to hand** (its tile and the
+four beside it). Every search for somewhere to go uses it: both executors,
+`nearest_resource_within` and everything built on it, the best-food-anywhere
+search, the camp move, fishing, curiosity, strange plants.
+
+For a sighted agent this changes nothing inside 25 cells, since every
+25-step search fits inside the 25-cell sight circle. What changes:
+
+- **The best food anywhere** read the whole map. Now it reads what the agent
+  can see plus what it remembers - at most about a hundred places
+  (`WHAT_A_MAN_CAN_HOLD_IN_MIND`).
+- **Moving camp** (60 cells) and **clothing materials** (40) reach past sight,
+  so beyond 25 cells they go only to places somebody has seen or been told of.
+- **A blind agent** knew where everything within 25 cells was. It now knows
+  what it has been told, what it smells and what is under its hand.
+
+Measured on the usual 12 paired seeds, a year each, beasts out:
+
+| | person-turns | emptied |
+|---|---|---|
+| before (#247-#249, identical behaviour) | 2,012,190 | 3 of 12 |
+| now | 2,030,642 (+0.9%) | 6 of 12 |
+
+Within noise: seed-to-seed spread is about ±20%, so the total's standard error
+is about 3.5%, and "emptied" is noise (#239). Fields 663 against 691, gathers
+313,268 against 318,832. The year's roll count for seed 0 moves 586,618 ->
+625,350; the 120-turn count does not.
+
+#### What it bought
+
+Release build, 12 people unless stated, ms a simulated day, same machine and
+session:
+
+| map | before | index only | index + knowledge |
+|---|---|---|---|
+| 50 x 50 | 89.5 | 90.2 | 97.8 |
+| 400 x 400 | 694.5 | 356.3 | 359.0 |
+| 800 x 800 | 4,392 | 361.6 | 383.1 |
+| 800 x 800, 48 people | 16,219 | 1,026 | 1,219 |
+
+Twelve to sixteen times on the 800-cell map, and the cost of a person no longer
+grows with the map: 400 and 800 cells now cost the same. What is left there is
+mostly the world's own passes - the animals (about 160 ms a day at 800 cells,
+#249) and `remove_depleted_resources` walking every node every turn.
+
+#### One thing it does not make exact
+
+> **Fixed at #251:** everything a person remembers is woken before they decide.
+
+`world::sleeping` argued that nothing reads a node further than 60 cells from
+anybody. A remembered place can be further off than that: a trip's worth of
+roots pays for about four thousand paces of walking, so a place a man remembers
+can win the best-food search from any distance. If it is past
+`FAR_ENOUGH_TO_SLEEP` it may be asleep, and is read as it stood when it fell
+asleep. The old whole-map search did the same for every node on the map; now it
+is only remembered ones, and it happens only on maps over 128 cells. A sleeping
+node's amount is roughly what the man remembers of it. Still, it is the one way
+a sleeping node can make a decision come out differently from a world where
+nothing sleeps. The exact fix would be to wake a node when somebody decides to
+walk to it.
+
+#### Still to do, in order
+
+1. `remove_depleted_resources` only when a hand empties a seam, not a walk of
+   every node every turn.
+2. The animals' turn, which is now most of a big map's time.
+3. The standing reds are unchanged: `a_settlement_still_raises_children_late_on`
+   and `the_children_of_a_settlement_live_past_infancy`.
+
+### 251. A far place is read as it stands today, and worked-out seams are looked for only when one is worked out
+
+The two loose ends #250 left.
+
+#### A remembered place is woken before anybody makes up their mind about it
+
+#250 let a man remember a place any distance off, and a place further than
+`FAR_ENOUGH_TO_SLEEP` from everybody may be asleep - so the best-food search
+read it as it stood when it fell asleep. A patch stripped bare and then left
+alone through the weeks it would have borne again was still bare to him, and
+he would not set out for it; in a world where nothing slept, he would have.
+
+Now, before anybody decides anything, every place they remember is brought up
+to today (`Simulation::wake_what_this_one_remembers`, through
+`World::wake_the_nodes_at`). It is the same catch-up a node gets when somebody
+walks up to it, lived over from the weather log, so it is exact. Sight, smell
+and touch never reach a sleeping node - they are always near somebody - so
+memory is the only way a decision can read one, and waking what is remembered
+covers every one. If nobody goes near, the next day's pass puts it back to
+sleep from where it now stands.
+
+This wakes whatever the man *might* go to, not only what he picks, because
+choosing between places reads all of them: a stale reading of the one he
+passes over can decide the choice as much as the one he takes.
+
+`sleeping_tests::a_far_patch_he_remembers_is_read_as_it_stands_today` is the
+case above. A stripped patch 280 cells off sleeps through forty days of
+berry season. Asleep it is still bare and the search returns nothing. In a
+world with nothing asleep, the patch has borne and he sets out for it. Woken,
+it holds exactly what the awake world's patch holds, and he sets out for it. A
+second test gives a whole settlement memory of every edible node beyond the
+sleep distance on a 320-cell map and runs sixty days both ways: same dice,
+same people, same nodes.
+
+#### Worked-out seams are looked for when something is worked out
+
+`remove_depleted_resources` walked every node on the map every turn to find
+spent minerals: 37 ms of every simulated day on an empty 1,600-cell map
+(#249). What renews stays when emptied, so only something that does not come
+back is ever removed, and only a hand takes the last of one.
+
+So whatever takes from a node asks `World::did_that_empty_it` (the gather,
+forage, fishing, tasting and cutting executors, and the world's own harvest
+and help actions), and the world sweeps at the end of that turn only if the
+answer was yes. It also sweeps on its first turn, after being loaded, and
+after the list has been changed behind the node file's back, since any of
+those could have left something empty. A node put down already empty counts
+as having run out. In a debug build every turn that does not sweep checks that
+it had nothing to sweep, so a new way of emptying a seam that forgets to say
+so fails the test suite rather than leaving a spent seam on the map.
+
+#### Measured
+
+A year on seeds 0, 7 and 4242 has the same fingerprint and the same dice-draw
+count as #250: on a 50-cell map nothing ever sleeps, and a sweep that finds
+nothing changes nothing. Release build, ms a simulated day:
+
+| | before | after |
+|---|---|---|
+| empty, no beasts, 800 cells | 13.2 | 4.7 |
+| empty, no beasts, 1,600 cells | 66.4 | 23.8 |
+| 12 people, 50 cells | 95.6 | 98.5 |
+| 12 people, 800 cells | 375.9 | 368.7 |
+
+The empty map is 2.8 times quicker. A settled map does not move: at 800 cells
+its time is the animals and the people, not the sweep. The animals' turn is
+what is left to look at.
+
+### 252. Settlements came through their first winter with food still in the ground: rot in the pack, shelter before supper, and scaffolding walls
+
+"Can settlements exist over multiple generations? This is a requirement."
+
+They could not. Twelve seeded settlements of twelve, animals in, two years
+each (release build):
+
+| | end of year 1 | end of year 2 | empty by month 24 | births |
+|---|---|---|---|---|
+| before | 14 people | 5 | 7 of 12 | 8, none alive at the end |
+
+Every one of them died the same way. Population held at about twelve for six
+months, then starved in months 10 to 12 - **with 2,400 to 6,000 items still
+in the pits**. The pits fell by 400 to 1,000 items a month while ten people
+needed about 3,500; people ate 450 to 800 energy a day against a burn of
+1,440, and the reserve covered the gap for about forty days. The breeding gate
+("could not feed a child") refused about 90% of every adult turn, so almost
+nobody was born, and the few that were did not see the spring.
+
+Traced person by person, three separate faults stood between a starving body
+and a full larder.
+
+#### 1. Rotten food was never put down
+
+`Agent::what_i_would_set_down` never offered food, rotten or not. A harvest
+that turned in the pack stayed in the pack, and a full pack cannot take a
+handful out of a pit. So `could_i_take_another_handful` said no, the store
+branch passed over the pit underfoot and sent the man to the next pit he
+remembered - and that one sent him back. Traced: **seventy-eight spoiled
+legumes** in a 42-weight pack, a pit of three hundred fresh items under his
+feet, and a walk between two full pits a pace apart, every turn, until he
+starved. People under half their reserve spent **five decisions in six on
+`Move`**, nearly all of it towards a pit.
+
+Food past eating (spoiled or harmful) is now the first thing set down, heaviest
+first, by the same function the decision and the executor both ask. It lands
+where he stands and goes into the ground. A farmer who manures still has
+whatever rot he had no need to drop.
+
+#### 2. Shelter took every turn from a hungry man with supper in his pack
+
+The shelter override fires on being cold at all, and in the hungry gap
+everybody is cold every turn. The existing carve-out let a body reach the store
+only once it was on the last quarter of its reserve *and* had nothing to eat.
+Above that line the override took every turn - including from somebody with a
+meal in the pack, and huddling does not end the cold that chose it. Traced: a
+man on 28% of his reserve walked to a pit, arrived with room to spare, and was
+sent to the roof before he lifted anything out, turn after turn.
+
+Now a body whose Hunger drive is active eats what it carries, or with nothing
+to eat gets something out of a store it knows of (whose own rules still decide
+whether it is the season for opening it), and only then goes in out of the
+cold. The notes against narrowing the shelter rule (#228, #233) are kept: this
+does not narrow it. It puts eating, which is a single turn and can be done
+under a roof, in front of it for somebody hungry.
+
+#### 3. Unfinished buildings were walls
+
+`Simulation::is_passable_tile` refused any building site not yet finished, as
+scaffolding. A settlement starts shelters all round where it lives. Traced:
+somebody on a hillside between three begun-and-abandoned burrows and a river,
+**no way out of the tile they stood on**, refused a step 14,560 times towards a
+larder eight paces off. About 29,000 refused `Move`s a year across the twelve
+worlds were this. A site is somewhere you can walk across now.
+
+#### And a fourth that is not about winter: tasting while unwell
+
+A strange plant that is poison does 12 to 55 damage, "the high end kills
+somebody who was not in good condition to start with". Nothing asked what
+condition the taster was in, and a winter leaves everybody in poor condition:
+**eighteen people in twelve settlement-years died of a mouthful**, one and a
+half per settlement a year. Tasting now waits until the taster could take the
+worst plant there is and still stand (`WELL_ENOUGH_TO_RISK_IT` = 70 health), on
+both paths that choose it. Plant deaths went to nought.
+
+#### Measured
+
+Same twelve seeds, animals in, two years each, with #253's nine-month
+pregnancy:
+
+| | end of year 1 | end of year 2 | empty by month 24 |
+|---|---|---|---|
+| before | 14 | 5 | 7 of 12 |
+| after | 51 | 20 | 4 of 12 |
+
+Winter intake rose from 450-800 energy a day to 600-1,000, and draws from the
+store from 2.5-5 items a person-day to 4-15. **It is not enough.** People still
+starve through the gap, only more slowly; settlements still shrink every year;
+and nobody is yet born who lives. What is left, in order:
+
+- **Walking to far pits.** Most of a thin body's turns are still walks to pits
+  4 to 15+ paces off. `pits_i_remember` puts a man's own pit and his kin's
+  before a nearer stranger's, whatever the distance.
+- **The breeding gate.** It asks for enough put by to see a parent and a
+  newborn through the 75-day gap: about 130,000 units each. A settlement of
+  twelve peaks at 5,000 to 8,000 items in the ground, around half of that.
+  As decided, the gate stays and the food has to rise to meet it.
+
+#### "A blow" is not what killed them
+
+`process_deaths` names a death by `what_took_the_most` - whatever took the
+most health over the whole life - not by the final hit. A man mauled in the
+spring who starves in the winter is booked as "a blow". Tallied at the damage
+sites themselves, killing blows are about ten a year across the twelve worlds
+(fights with animals, and between people); the forty-odd "a blow" deaths a year
+were mostly hunger finishing people an earlier injury had worn down. Worth
+remembering before reading the death table as violence.
+
+### 253. A pregnancy lasted thirteen hours
+
+`PREGNANCY_DURATION` was `800`, compared against the population's clock, which
+counts ticks (thirty a turn). Eight hundred ticks is thirteen and a third
+hours: a pair conceived after breakfast and the child was born before dawn.
+The mother's `reproduction_cooldown` of `800`, "full pregnancy duration", is
+counted a turn at a time and so came to sixteen days. Neither was ever on the
+calendar; #218 listed the cooldown among the bare durations and left it.
+
+Decided: about nine months. `PREGNANCY_DURATION` is now
+`DAYS_A_PREGNANCY_LASTS` (270) days in ticks. The carrier's cooldown is gone,
+since the pregnancy itself keeps them out of the next round for as long as it
+lasts; the other parent keeps their couple of days. The pregnancy unit tests
+are written against the duration rather than against 800, and
+`a_pregnancy_lasts_about_nine_months` holds it there.
+
+What it costs a settlement is what a child should cost: a body carrying at
+1.3 times its burn and slowing in the last half, for most of a year, which
+means through a winter. Over the two-year runs of #252 every pregnancy that
+began ended with the carrier dead before term. That is #252's shortfall of food
+showing up in the one place that needs the most of it, not a fault in this
+number.
+
+### 254. Walks that bounced, a store one child short, children who ran dry, and an illness priced for the wrong calendar
+
+Continuing #252 towards "settlements must last generations". Each of these was
+found by tracing one person - a starving one, a newborn, a man dying of the
+weather in fine weather - turn by turn. Measured together at the end.
+
+#### 1. A walk bounced between two tiles
+
+`Simulation::moving` took the direct step whenever it was clear and asked the
+route search only when it was not. The two disagree about which way round a
+thing is: in a bay open behind somebody, the direct step walked them to the
+wall, the search sent them back a pace to go round, and the direct step walked
+them to the wall again. Traced: somebody on half their reserve going to a pit
+nine paces off, for two days, until they starved. A person now remembers the
+tile they last stepped off (`Agent::stepped_from`), and where the direct step
+would undo the last one the search decides - which it decides the same way
+from both tiles. `a_walk_does_not_bounce_off_the_end_of_a_bay` stays at
+(26, 6) for ever without it.
+
+#### 2. The store was sized one child short
+
+`does_the_store_still_want_filling` stopped at one winter a head. The breeding
+gate asks each parent for their winter *and a newborn's* - so a settlement that
+did everything asked of it filled its pits to exactly the point where nobody
+could breed, and stopped. The store is now filled to
+`what_a_store_is_filled_to_a_mouth`: a winter, a newborn's share on top, and a
+quarter again because it is counted in items (a unit of spring leaf is a
+quarter of anything else) and not all of it is still food by February. Loads
+are carried home to it from summer as well as autumn. Pits at month 9 rose
+from 5,000-8,900 to 6,000-12,800 on six seeds.
+
+#### 3. The first children ran dry
+
+Children were born and every one died at about six weeks of exhaustion, fed,
+watered and full of milk. Two things a body is kept up by only eating for
+yourself, and a child under six never eats for itself:
+
+- `Agent::take_a_turn` charged 0.1 energy a turn as basic metabolism, and
+  unlike the other metabolic drain it did not spare the under-sixes. Three
+  weeks to empty.
+- Felt energy is pulled towards `nutrition.energy_reserves`, and nutrition
+  (energy, protein, what only fresh food carries) was filled by
+  `Action::Eat` and nothing else. `feed_the_small_children` fed the child's
+  physiology and nothing more, so its nutrition ran down, energy followed it
+  to nought, and the rest died of "a poor diet".
+
+The drain now spares them, and a child fed by a grown person gets the same
+share of `what_a_turn_of_being_fed_is_worth` - a turn's metabolism at its
+busiest - into its nutrition. Children born now live until something else
+happens to their people.
+
+#### 4. An illness was a week's work in two days
+
+`WHAT_A_TURN_OF_ILLNESS_COSTS` was `0.25` a turn, beside a comment saying a
+week at full severity costs a quarter of a body. That was true on a calendar
+of about a hundred turns a week; a week is 336 turns now, so it cost 84, and an
+illness lasts up to ten days. A wound that turned killed a fed, dry man in four
+days. It is said in weeks and converted now (25 a week).
+
+It also wrote health directly instead of through `lose_health`, so an illness
+was never booked by name - its deaths went to whatever had last touched the
+body, very often "the weather", which is why well-fed people seemed to be dying
+of mild weather - and a body it emptied was not dead: the turn's mending put a
+fraction back before the death check, the illness took it off again, and
+somebody walked about at nought health for two days. It goes through
+`lose_health(ILLNESS)` now.
+
+#### Measured
+
+Twelve seeds, animals in, release build:
+
+| | end of year 1 | end of year 2 | end of year 3 | alive at year 3 |
+|---|---|---|---|---|
+| before #252 | 14 | 5 | - | - |
+| after #252/#253 | 51 | 20 | - | - |
+| after this | 117 | 75 | 60 | 9 of 12 settlements |
+
+One settlement (seed 4) is at fifteen people in year three, three of them born
+there and alive. The others that survive are stable at six to twelve and
+childless: in them "could not feed a child" is every adult's every turn. Their
+pits peak at 650 to 930 items a head each autumn, against the 1,040 the
+breeding gate asks - and eat it down to nearly nothing by spring. That is the
+next thing.
+
+The recorded dice counts move: 7,244 for the short run, 645,031 for the year.
+Two larder tests that pinned the old store size read the new one.
+
+### 255. Settlements starved beside full larders: a drive that woke on the first day of winter, stores kept shut to the wasting, parents who could not leave their children's side
+
+The requirement is that a settlement lasts generations. After #254 the
+surviving settlements were childless, because the breeding gate - a parent's
+winter and a newborn's share put by - never opened: pits peaked at 650 to 930
+items a head against about 1,040.
+
+#### The timed gate, tried and undone
+
+The first answer was to time the gate. A pregnancy is nine months, so a child
+conceived in autumn is born the next summer and never sees the winter its
+parent is putting by for; the gate was taught to charge the child only for
+the gap days it would be alive through. It opened - and every adult in a
+settlement had enough on the same day. Nine to eleven of twelve conceived in
+the first autumn, and the winter after the births (a fifth again as many
+mouths, after nine months of pregnancy at up to 1.3 times the burn) took the
+settlements. Every one of twelve was dead by year four.
+
+That was not the gate's fault alone: with no children at all the same
+settlements died in years three and four, their harvests shrinking every
+year. So the larder came first, and the gate was measured again at the end
+(below) and put back as it was.
+
+#### Why the harvest shrank
+
+Not the land. Wild ground never wears (only fields do), sleeping nodes catch up
+exactly (runs with every node kept awake came out within 0.1%), and doubling
+wild regrowth barely moved the pits: with it, 12,000 units stood ripe within
+thirty paces of seed 9 all summer while its pits peaked at 7,400. Year one is
+richer because the world starts with stock standing on it; after that the
+flow is what there is. The limit was what people did with their turns.
+
+Almost nothing a settlement gathers goes through `Gather` for the store: in
+year two, 1,200 food gathers against 21,800 for water, while roots, greens and
+legumes by the ten thousand were eaten at the bush. What fills a store is
+`putting_food_by`, only in autumn, only when Preparedness wins the turn - and
+it won one autumn turn in twenty.
+
+#### 1. The winter rung could not wake the drive before the winter
+
+The Preparedness drive wakes at 0.4. The winter rung ("enough for the month,
+not the winter") pressed at 0.4 times the nearness of the winter, and the
+nearness reaches one on the first day of winter - so the drive woke then, when
+there is nothing left on the land, and not an hour before. All autumn anybody
+with a month in hand laid in nothing more, and a settlement's pits topped out
+at a month a head.
+
+While the land still bears, a winter not put by now presses at 0.8 times the
+square root of the nearness, crossing the threshold about two months out; it
+never makes a shorter larder feel easier than a longer one, and once the land
+stops giving it is what it was. Pit peaks rose by 1,500 to 4,700 items a
+seed-year and autumn trips for the store roughly tripled.
+
+#### 2. The store was shut to the wasting
+
+While the hedgerows bear the store opens only to a body "eating itself", at a
+quarter of its reserve - but a body loses health from half
+(`Physiology::is_wasting`). Traced: two adults and five small children at 0.43
+to 0.69 of their reserve, losing health, beside 7,932 items that did not move
+by one from day 30 to day 210, both adults dead of hunger. A wasting body now
+opens the store in any season.
+
+#### 3. A child's water was a grown man's
+
+A small child's drink is taken from its parent as a share of the parent's
+skin, and the child's hydration is a share of its own. The same fraction was
+charged to both, so a parent with two infants dried out as though drinking for
+three grown people. The parent now pays in proportion to the child's size.
+
+#### 4. A parent holding a child was walked to their own feet
+
+`protective_action` sends a parent to a child with a predator near it. A small
+child is at its parent's feet, so this was a `Move` to the tile underfoot,
+which the walker books as done - and it sits above eating. Traced: eight days
+of nothing, the reserve falling 0.60 to 0.43, on top of a pit. A child already
+at the parent's tile is left out of that walk.
+
+#### 5. Wasting was a clock
+
+Wasting cost a flat five health a day anywhere under half the reserve, so a
+body that crossed the line and was climbing back died three weeks later
+whatever it ate. Traced: reserve 0.38 to 0.49 and eating, health 82 to nought
+in sixteen days, standing on a pit of 300 items. The loss now scales from
+nothing at the line to the whole rate at empty; a body with nothing to eat
+still reaches an empty reserve on the same day.
+
+#### 6. A parent eating for two was kept out of the larder
+
+A child under six is fed through its parent's body and gets less than a full
+share once the parent is under four-fifths of their reserve. The store is
+kept shut in the bearing season to anybody not wasting, so parents feeding
+children off the hedge sat at 0.69 to 0.76 all autumn beside 10,962 items and
+their children went into the winter on three-quarter rations. A parent with a
+small child going short now opens the store in any season.
+
+#### Measured
+
+Twelve seeds, five years, animals in, everything above in:
+
+| breeding gate | settlements standing at year 5 | people | born | hunger deaths, years 2-3 |
+|---|---|---|---|---|
+| timed | 7 of 12 | 19 | 54 | 115 |
+| a parent's winter and a newborn's, whenever conceived | **10 of 12** | **59** | 29 | 29 |
+
+Before any of it, with the timed gate, every settlement was gone by year four.
+The gate is back to charging a child its whole share whenever it is
+conceived.
+
+Pit peaks now run 900 to 1,700 items a head. What is left:
+
+- **Settlements shrink**, from 132 people to 59 over five years.
+- **Children mostly do not live to six.** Parents eat about 1,216 a day in
+  every season however far behind they are, where the childless eat what they
+  need (870 to 1,140). A parent is hungry whenever the stomach and gut do not
+  cover the reserve's deficit, which at two-thirds is always, so how much a
+  parent eats is how often they get to - enough for themselves and about one
+  small child. At two-thirds of their reserve a parent hands a small child
+  three-quarters of a feed, and the child runs down on it.
+- **Blows** - predators and quarrels - take ten to sixteen people a year
+  across the twelve, and in a small settlement that is the end of it.
+- A deer is worth about three person-days: 8 to 12 two-kilo lumps, each cut
+  into three portions of 150 units. Hunting brings a settlement 2 to 50 meat a
+  year, and meat and fish are the only food in the gap.
+- Fields are nearly all berries (grain gets ten times the plough and nobody
+  sows it, having none to sow) and a third are worn to the bottom two grades by
+  year three.
+
+The recorded dice count moves to 556,943 for the year (down 13.7%); not traced
+to any one of the changes.
+
+### 256. A small child was with both its parents, and a parent ate for one
+
+After #255, parents took in about 1,216 a day in every season - measured
+over four seeds and three years, 30-day windows, by energy absorbed from the
+gut - where the childless ate what they needed (870 to 1,140). Parents sat at
+two-thirds of their reserve, which hands a small child three-quarters of a
+feed, and most children did not live to six.
+
+#### 1. The other parent followed the child about
+
+A child under six is kept on the first of its parents still living
+(`the_small_stay_with_their_people`). `protective_action` counted it as with
+both, so to the other parent it was always wherever the first one was - past
+the eight-pace leash, or near something with teeth - and that parent walked
+after it. Tagged turn by turn, 24% of every parent's turns went on it; parents
+spent 49% of their turns walking against 19% for everybody else, and gathered
+and ate at half the rate. Only the parent a small child is kept with goes to
+it now (`Simulation::who_a_small_child_is_kept_with`); a child old enough to
+walk off still brings either. The straying-child test in `husbandry_tests`
+was on the old calendar - "4,000" and "700" were turns, and made both of them
+infants - and wants a child old enough to wander, which it now has.
+
+#### 2. A sitting was one body's supper
+
+Every sitting aimed at a third of a grown day and answered a hunger as though
+it had fed one body. A body now records what it passes on to small children
+(`Physiology::also_feeding`, set by the feeding each turn), and a sitting aims
+at a third of its day and theirs, answering a hunger in proportion. On its own
+this moved a parent's intake from 1,216 to 1,234 a day - the parent's time,
+not their appetite, was what was short - but it is what a parent eating for a
+child is.
+
+#### Measured
+
+Parents' reserves: 0.67 to 0.72 with one small child, 0.65 to 0.78 with two.
+
+Twelve seeds, five years, animals in:
+
+| | settlements at year 5 | people | born | children who died |
+|---|---|---|---|---|
+| #255 | 10 of 12 | 59 | 29 | 25 |
+| #256 | 9 of 12 | 55 | 41 | 33 |
+
+More are born and more live, and the settlements are not larger for it:
+individual seeds swing from run to run by more than the difference. What
+kills now is not a full larder nobody reaches. Of the hunger deaths in years
+three to five, 36 fall in the last month of winter and 28 in the first three
+of spring, and in nearly every one the settlement's pits hold one to twenty
+items a head: the store runs out before the land comes back, most often in a
+settlement that has grown from eleven to sixteen since it was laid in.
+
+### 257. Two levers that did not move the food: a longer winter, and a bigger carcass
+
+After #256 the hunger that is left falls in the last month of winter and the
+first three of spring, with the pits at one to twenty items a head. Pits
+peak at about 950 to 1,170 items per mouth, counting a small child as a fifth.
+Two ways of raising that were measured on twelve seeds over five years, in
+person-months lived (the same seeds in every arm; one seed can swing by a
+factor of two between arms, so a few per cent is inside the noise):
+
+| arm | person-months | years 3-5 | pit peak a head, years 1-3 |
+|---|---|---|---|
+| #256 | 7,020 | 3,675 | 1,082 / 1,172 / 1,174 |
+| lay in for the winter and a month | 7,059 | 3,690 | 1,171 / 1,129 / 1,034 |
+| meat by the beast's mass, at four times the worth | 6,421 | 3,154 | 997 / 969 / 833 |
+| meat at four times the worth, joints as the table has them | 6,584 | 3,361 | 1,020 / 1,102 / 829 |
+
+**Laying in for longer changed nothing.** Asking the Preparedness drive to be
+satisfied only at the winter and a month did not raise the pits at all: they
+stop where they stop because that is what an autumn's work brings home, not
+because anybody is content. Not kept.
+
+**A bigger carcass made things worse.** A deer was eight to twelve two-kilo
+joints whatever it weighed, and a portion of meat was priced at 30, hardly
+above a handful of berries - so a whole deer was three days of one person's
+eating, against the physiology's own sitting of "four of a fat carcass",
+which is about 120 a unit. Both were put right: joints off the beast's mass
+at 45%, and the meat template four times what it was. It was committed and
+reverted. Nobody hunted more for it - 156 kills against 182 over the
+settlement-years - so all a bigger carcass did was put a heavier load of
+joints in the hunter's pack, where they cannot be eaten until cut and turn in
+ten days, and the pits peaked lower. Keeping the value and the old joint
+counts came out between. Carcass size wants revisiting together with how
+often anybody hunts and how a kill too big to carry is brought home and kept,
+not on its own.
+
+### 258. Nobody told anybody which plant was poison
+
+"A blow" is the second cause of death after hunger, and most of it is not a
+blow. Split by where the damage came from, over four settlements and three
+years: tasting a strange plant that turned out to be poison 2,275 health,
+coming off worse fighting an animal 1,108, a hunted animal turning 132, a beast
+attacking unprovoked 104, one person against another nothing. Eating something
+gone harmful and a poison plant both go through `take_damage`, and so are
+booked as a blow.
+
+Only somebody standing close enough to watch a taster fall ill learned that a
+plant was poison, and it was never passed on - so every person, and every child
+as it grew, found each bad plant for themselves at 12 to 55 health a time.
+Whoever shares information now also passes on every plant they know to be
+poison (`Agent::the_plants_i_would_warn_about`); a good plant is still the
+listener's to find out. On the same four seeds, plant damage falls from 2,275
+to 1,285 - what is left is mostly the first taster of each kind, which is the
+point of there being strange plants.
+
+Over twelve seeds and five years: deaths booked as a blow 58 to 46, people at
+year five 55 to 59, settlements standing 9 and 9 - and person-months 7,020 to
+6,537, which says more about the measure than the change. One seed can halve or
+double between two arms that differ in nothing it touches; on twelve seeds over
+five years a difference of seven per cent either way is inside the noise.
+
+### 259. Sixteen years and no second generation; why parents could not eat enough; and what learning could not see
+
+#### Sixteen years
+
+Twelve seeds run for sixteen years after #258 (one seed a run, four at a
+time): four settlements are still there at year sixteen, of one to five
+people each, **every one of them a founder**. Forty-three children were born
+across the twelve and none reached five - twenty died of hunger in their first
+year, eight at one (hunger, and thirst once orphaned), seven at two to four of
+a poor diet. There are no grandchildren because there are no grown children.
+
+A small child is fed through its parent's body on the specification's bands -
+a whole share only while the parent is above four-fifths of their reserve -
+and parents feeding a child sat at 0.72 to 0.78. Why they did not eat more,
+measured turn by turn over two seeds and three years:
+
+| | parents | everybody else |
+|---|---|---|
+| turns hungry | 31% | 12% |
+| of those, with food on them | 15% | 19% |
+| of those, spent eating | 6% | 20% |
+| of those, spent walking | 58% | 39% |
+| of those, rest pressing harder than hunger | 55% | 40% |
+
+A hungry parent had nothing on them, so every meal was a walk at one tile a
+turn; and a quarter of the walking was the child-safety walk.
+
+#### What was changed
+
+- **A small child is handed between its parents** (`Agent::carried_by`,
+  `Simulation::hand_the_small_ones_over`): when the two are within a few paces
+  and the one carrying it is a tenth of a reserve worse off, it goes to the
+  other, who carries and feeds it. It had stayed six years with the first of
+  its parents still living, who ate for two while the other ate for one.
+- **A carried child is not walked after.** It catches up with its carrier at
+  the start of the next turn, so a step left it a pace behind and, with a wolf
+  about, the parent went back for it every turn - 14% of a hungry parent's
+  turns after #256. Only a child who can walk off is walked after.
+
+Neither helped on its own (twelve seeds, five years: 23 people at year five
+against 59, which is inside the noise but not better). What was left was
+walking: hungry parents walked on 57% of those turns and ate on 6%.
+
+#### Phase one: letting learning see what happened
+
+The direction from here is that survival should come from drives and from
+action patterns that have answered them, not from rules. Surveyed, twelve
+hard-coded branches sit above the drive ranking; a hungry man with supper
+about him never reaches it. The pattern layer records a great deal and changes
+little, because it could not see the things that make carrying food better
+than fetching it:
+
+- **The walk was not in the price.** The errand was let go the turn somebody
+  arrived, before they did anything there, so the meal at the end of a
+  nine-turn walk was credited as one turn's work with no bearing. A finished
+  walk is now kept (`Agent::the_walk_behind_me`) until the act that answers
+  its drive, or four turns, and prices that act and gives it its bearing.
+- **Taking food out of a pit was credited as eating** - a tenth off hunger,
+  exactly the size the pattern layer notices - and the meal after it credited
+  again. It answers no hunger now; it goes down as the step before the meal.
+- **How a meal was come by was never written down.** `by_what_way` was meant
+  to carry it and nothing ever set it, so food about you and food in a pit an
+  afternoon off were one `Did("eat")`. A meal now says whether it was carried
+  (`EatCarriedFood`), fetched from a store for it (`EatStoredFood`, food taken
+  out within the day) or picked off a bush (`GatherWildFood`). Water is not
+  labelled yet.
+
+**The place memory stays off.** `somewhere_that_answered` was switched off
+because walking to remembered ground cost a settlement a fifth of its people,
+with a note that it should come back once a walk is priced. With the walk
+priced, twelve seeds over three years:
+
+| | person-months | standing at year 3 | people | hunger deaths |
+|---|---|---|---|---|
+| off | 5,022 | 8 | 75 | 69 |
+| on | 4,446 | 6 | 60 | 73 |
+| on, each place worth what it paid over one more than the walk from here | 4,680 | 8 | 56 | 86 |
+
+Pricing the walk into what is learned is not enough to make walking to a
+remembered place pay: the choice itself takes somebody away from the
+settlement and the food about it, and the first version did not even ask how
+far the place was from where they stood. It stays off.
+
+### 260. Nobody ever took food anywhere
+
+Phase two of letting survival come from anticipation and learning rather than
+rules (#259).
+
+**A body could not tell when it would next be hungry.**
+`Agent::how_long_before_this_asks` - which calls itself the only
+forward-looking question in the model - read the generic rate a drive builds
+at, and hunger does not build at it: it rises at what the body's three tables
+say, and not at all while a meal is still in the stomach. So a body that had
+just eaten was told it would never be hungry again. It reads the body now: the
+meal leaving the stomach, then the climb at an ordinary appetite.
+
+**Nobody took food anywhere.** A hungry person had something on them 15% of
+the time and every meal was a walk; nothing in the model looked ahead to a meal
+on the way. Now somebody setting out on a walk that is not for food weighs when
+their hunger will ask against the walk there and back, and what is in their pack
+- only their pack - against the sittings the walk will outlast; if they will be
+hungry on the way with too little on them, they take food along first, from the
+pit underfoot or the hedge within reach, once, and go
+(`Simulation::what_to_take_along`).
+
+**It is a way, not a rule.** Every meal says how it was come by (#259), and a
+body that has learned carried meals answer its hunger worse than meals fetched
+or picked where they grow does not bother. Until it has found out either way,
+it tries.
+
+Twelve seeds, three years, against #259:
+
+| | person-months | standing at year 3 | people | hunger deaths | thirst deaths |
+|---|---|---|---|---|---|
+| #259 | 5,022 | 8 | 75 | 69 | 16 |
+| #260 | **5,274** | **12** | **120** | **47** | **0** |
+
+Every settlement standing at the end of year three, for the first time. What a
+hungry parent does has hardly moved (hungry on 28% of turns, walking on 62% of
+those); the gain is everybody else, carrying supper.
+
+The errand test asked for more turns kept to than walks set out, which reads how
+long walks are, not whether they finish; walks got shorter and 99% of them
+arrive (1,193 of 1,203, against 941 of 969), and it asks whether they arrive now.
+The recorded dice counts move to 6,909 and 610,769.
+
+#### Sixteen years with #260 in
+
+Twelve seeds, sixteen years: settlements last longer - most now run seven to
+fifteen years where most were gone by year four to eleven - but three are left
+at year sixteen, of one to three founders each, and **none of the forty-six
+children born reached five**: seventeen died of hunger in their first year, ten
+at one, fourteen of a poor diet at two to four. Taking food along reaches
+everybody but parents, because a parent's walks are mostly for food, and a walk
+for food is its own answer; parents are still hungry on 28% of their turns with
+nothing on them, and their children still live on three-quarter rations.
+
+### 261. A parent's needs did not include the children they feed
+
+After #260 a parent's hunger was still read off the parent's body alone, so
+somebody passing a fifth of every meal to a newborn got hungry, ate and fetched
+as though they fed one.
+
+- **Hunger rises for the household.** The gut reading asks for a day's food for
+  everybody the body feeds, and the rate climbs by the same share
+  (`Physiology::also_feeding`).
+- **A trip to the store brings back a day for the household**
+  (`Simulation::what_a_day_of_this_household_is`), where it was a flat eight
+  items - half a grown day and nothing for the child.
+
+Sixteen years, twelve seeds: **for the first time children grow up** - one born
+in seed 4 is alive and grown at year sixteen, one lived to nine, one to five.
+But settlements died sooner: eight of twelve were gone in years three to five,
+where after #260 most lasted seven to fifteen. With children living, a
+settlement of six grown people had eight or twelve small ones by its third or
+fourth winter, its pits peaked near 590 items a head, and it starved; the
+children, left without anybody to feed them, died of thirst (28 of 45 child
+deaths).
+
+- **A parent counts the children already here before another.** The breeding
+  gate asked for a parent's winter and one newborn's whatever they already fed,
+  so a parent with two infants had a third on the same terms as somebody with
+  none. It asks for the winters of the small ones they answer for as well now
+  (`Agent::the_small_ones_i_answer_for`, both parents, carried or not).
+
+#### Sixteen years with the household counted
+
+| sixteen years, twelve seeds | left at year 16 | who | born | oldest a child lived to | person-years |
+|---|---|---|---|---|---|
+| #260 | 3 | founders | 46 | 4 | 804 |
+| + hungry for the household, a day from the store | 2 | a grown child and founders | 46 | grown | 640 |
+| + the children already here counted before another | 3 | founders | 36 | 10 | 657 |
+
+Children live longer; settlements do not. Five of twelve still go in years
+three and four, straight after a first burst of births: the gate counts a child
+once it is born, and every adult who conceives in the first autumn does so
+before any child exists. What a settlement does is boom and bust - a few years
+of births outgrow what an autumn lays in, a winter takes most of it, and the
+children left die of thirst with nobody to feed them.
+
+### 262. Nothing spaced births
+
+A cooldown of sixteen days stood in for birth spacing until pregnancy became
+nine months long, and it was taken out as covered by the pregnancy - which
+covers the pregnancy and nothing after it. Whoever bore a child now nurses it
+while it lives and is under two (`Agent::NURSED_UNTIL`) and does not conceive
+meanwhile (`Agent::nursing_a_child`); a mother whose infant has died is not
+nursing.
+
+It is right and it moves almost nothing. Sixteen years, twelve seeds: eleven
+seeds came out exactly as they did without it; 703 person-years against 657,
+four settlements left against three, 35 born. Almost nobody bears a second
+child before their settlement fails, so spacing seldom binds. What takes the
+settlements that go in years three and four is the first autumn, in which many
+different couples each conceive once - and nothing a single mother's body does
+reaches that.
+
+### 263. Every ready couple conceived in the same week
+
+A pair rolled for conception every turn at the product of their two
+fertilities, near 0.6 for a well-fed pair, so a couple conceived within an
+hour or two of both being ready. The first autumn's put-by opened the gate
+for most couples in the same few weeks, and they all conceived at once:
+eight pregnancies at a time in a settlement of twelve. Now each person has
+one fertile day in every thirty (`Agent::DAYS_IN_A_CYCLE`). Which day it is
+comes from their id, so the days fall across the month. On that day they
+get one chance, with one partner (`last_cycle_tried`), at
+`FECUNDABILITY` (0.25) × both partners' fertility, about 15% for a healthy
+pair.
+
+Sixteen years, twelve seeds, against #262:
+
+| | #262 | #263 |
+|---|---|---|
+| person-years | 703 | **1,205** |
+| settlements standing at year 16 | 4 | **8** |
+| conceptions | 79 | 27 |
+| most carrying at once, any seed | 8 | 2 |
+| a child alive at year 16 | none | seed 4 (two) |
+
+The booms are gone. So are the busts they caused. The settlements that
+used to empty in years three and four mostly stand now with seven to eleven
+founders. But almost nobody in them conceives. The monthly chance is not
+what holds them back: `expects_to_be_able_to_feed_a_child` is. In seed 3,
+nine grown people stood "ready to breed" for 48 person-turns in year 1, 0 in
+years 3, 4, 6 and 9–14, and 2,119 at the most (year 8). That is a few
+person-days a year against 155,000 person-turns of "could not feed a child".
+A readiness window of a few days seldom meets a fertile day. Before this
+change the per-turn roll caught every such window. What decides whether
+children are born is now how rarely the put-by reaches what a household
+needs for a child through the gap.
+
+### 264. Why the stores stay short of what a child asks
+
+Measured on seeds 0, 3, 4 and 9 over six years, month by month, with each
+grown person's reason for not being ready to breed counted on every turn.
+The reasons are checked in this order: hungry, thirsty, tired, some other
+bodily need, gone short lately, not enough put by, no wish for a child.
+Years 2–6 of seeds 3, 4 and 9:
+
+| reason | share of adult-turns |
+|---|---|
+| not enough put by | **68.6%** |
+| hungry / thirsty / tired / other body | 29.3% |
+| no wish for a child | 0.6% |
+| gone short lately | 0.1% |
+| ready | 1.2% |
+
+The store follows the same curve every year. It is near empty at the end of
+the hungry gap (day 360). It rises slowly through spring (0–35% of what the
+gate asks by day 180). It climbs fast after harvest and peaks around day 270
+at **60–105%** of the gate's ask. It is drawn down through the gap, which
+begins on day 285 and runs 75 days. Rot is small, 300–850 items a year
+against 7,000–12,000 stored. The store is not being lost; it is eaten, and it
+is about the size of what the settlement eats in a winter.
+
+Three things keep the gate shut.
+
+**1. The gate asks for about 55% more than people eat.** The gate charges
+each adult `what_i_burn_in_a_day`. That is meant to be the body's own
+measure: `Physiology::tick` keeps a rolling daily average of what the body
+burned. But `Agent::age_turn` calls `Physiology::now_a_body_of` every turn,
+and that sets the figure back to the table's 1,440 units. Every adult in
+every month of every seed read exactly 1,440. Measured, adults burned
+**943 units a day and ate 1,041**. So a parent and newborn are asked for
+1,037 items through the gap, where their actual eating is about 680. The
+Preparedness drive reads the same figure, so it also over-counts what a
+winter takes.
+
+**2. The gate asks for a whole gap every day of the year.** From the end of
+one gap to midsummer the pits hold under a third of it. That is by design:
+the store has just been eaten. It shuts the gate for about seven months of
+every year whatever the harvest was. This is the timing #255 measured and
+chose to keep.
+
+**3. What is left is the autumn window.** Between day 240 and day 285 the
+median adult's share reaches 0.8–1.05 of the ask. Only in some years, and
+only for some days, does anyone get over 1.0. A monthly fertile day seldom
+falls inside that (#263).
+
+The filling is not stopped by the store's target. The target is 1,298 items
+a head; the pits peak at 700–1,000 a head and are still filling when the
+land stops bearing.
+
+### 265. The measured burn, tried and not taken
+
+This tested the fix #264 points to: stop `now_a_body_of` from resetting
+`what_i_burn_in_a_day` every turn, so each person's reckoning uses what
+their own body burns. It was tried in the analysis copy only. It works as
+written: within a month everybody's figure sits between 850 and 1,150
+instead of 1,440 for all. It makes the settlements worse.
+
+Sixteen years, twelve seeds, against #263:
+
+| | #263 | measured burn |
+|---|---|---|
+| person-years | 1,205 | **974** |
+| settlements standing at year 16 | 8 | **6** |
+| conceptions | 27 | 33 |
+| deaths from hunger | 36 | **65** |
+| peak store a head, years 1–5 (typical) | 1,000–1,200 | 750–900 |
+
+The gate does open. By day 270, 96% of seed-months had someone over it, and
+the median adult was at 1.25. But the same figure feeds Preparedness. With
+the winter reckoned at what the body burns, people feel provided for sooner
+and stop filling the pits about 20% earlier. A winter takes more out of the
+pits than the bodies burn: food sits in packs, is moved between pits, and
+rots, and the store is drawn on from day 270 though the land bears until
+day 285. #264 measured the pits falling by about 810 items a head over the
+last three months of the year, against about 680 burned. The table's 1,440
+was over-asking, and it was also, by accident, the margin that covered that
+difference. Take the margin away and the stores come up short in the
+winter.
+
+Not committed. What a winter costs a person is better learned from the
+store itself: how far it fell a head across the last gap. That would size
+the store and the gate alike.
+
+### 266. Why nobody hunts, fishes or traps in the winter
+
+Measured on seeds 0, 3 and 9 over three years: every action a grown person
+took, by month, and every adult's record of hunting, fishing and trapping
+at the end of each year.
+
+**They stop in the first spring, and never start again.** The Fish action
+is taken 50–70 times a settlement in the first three months of year one,
+and not once after that in either seed that stands. Snares are set 45–65
+times in those months, then a handful a year. Hunting is attempted almost
+never. In the hungry gap (days 285–360) the actions are SeekShelter
+(45–49%), Move (18–19%), Gather (10–11%, which brings in nearly nothing),
+Eat (5%) and PickUp from the pits (4–5%). The pits are the only food
+coming in.
+
+**Why they stop.** At the end of year one, every adult in both seeds had
+fishing and trapping marked as not worth trying (`Lessons::worth_trying`
+false). Examples: fish 0/5, 1/5, 6/13, 8/16; trap 4/10, 13/24, 26/45.
+Three things combine:
+
+1. **The record for a kind of undertaking never fades.**
+   `Lessons::record` keeps `belief` and `attempts` for ever;
+   `Lessons::fade` only touches the particular records. `worth_trying` is a
+   cliff: after five attempts, a belief at or under 0.2 means never again.
+   A way written off in the spring is written off for life, in every
+   season.
+2. **A way has to succeed nearly two times in three to survive.** A success
+   adds 0.06 and a failure takes 0.10. Starting at 0.5, anything that works
+   less than 62.5% of the time drifts down to the line. Catching a fish on
+   half your casts, or finding something in a snare on 26 rounds of 45, is
+   a good return on the time. It gets written off because it is judged by
+   whether each attempt worked, not by what it brought in against the
+   alternatives. The alternative in the spring is picking greens off a
+   bush, which never fails.
+3. **Hunting for food is not a way at all.** `hunting_action` only answers
+   a want for hides (`wants_to_hunt`: "Hunting for the meat as such does
+   not pay"). The only hunt for meat is `food_action`'s opportunistic one,
+   for prey within five tiles of somebody hungry. `hunt` was 0/0 for nearly
+   everybody.
+
+Also, Preparedness never leads to fishing or hunting, only to gathering
+(in the autumn) and to snares. And a strongly hungry person (pressure 0.6
+or more) considers only the immediate ways, and fishing, hunting and the
+trapline are not among them.
+
+### 267. Letting the undertaking record fade, tried and not taken
+
+This tried the first fix #266 points to, in the analysis copy only.
+`Lessons::fade` now drifts each undertaking's belief back toward `UNTRIED`,
+halving over a season, the same way the particular records already fade. A
+way written off comes back to worth trying in about five weeks. It works as
+written: fishing and trapping were taken up again in every month of every
+year, winter included.
+
+Sixteen years, twelve seeds, against #263:
+
+| | #263 | fading |
+|---|---|---|
+| person-years | 1,205 | **733** |
+| settlements standing at year 16 | 8 | **4** |
+| conceptions | 27 | 24 |
+| deaths from hunger / thirst | 36 / 2 | **52 / 10** |
+
+Seeds 3 and 9, years 2 and 3, compared with the same seeds and years from
+the #266 probe:
+
+- **Fishing:** 28–71 casts a month, against none. By the end of year 3 the
+  records read 1/32, 2/32, 4/35, 9/42, 14/51, 18/58: about one cast in five
+  lands, and a landed cast is `FISH_PER_CAST` = 2 fish.
+- **Snares:** rounds walked went from 1–29 a month to 4–93. `Meat snare`
+  and `Butchered meat` harvests were **nought** in years 2 and 3 either way.
+- **Walking:** `Move` went from 91,000 to 218,000 over the two years, and
+  in the last quarter from 33,000 to 109,000. Fishing means walking to water
+  up to 14 tiles off; a trapline round is up to 15. In the winter that is
+  walking in the cold for about 0.4 of a fish a cast, against a day's need
+  of seven or eight items.
+
+What people learned the first time was right, in this world as it stands:
+the water and the snares near a settlement give almost nothing, and in
+winter the trip costs more than it brings. Fading also reached the other
+undertakings, and fighting in the last quarter rose from 0–25 to 10–31 a
+month.
+
+The question under the question is the world, not the learning: whether
+winter water and winter snares near a settlement ought to feed people, and
+if so, why here they do not. Among the candidates: how thin the reaches
+near camp run after the first spring, since the odds are
+0.15 + 0.4 × (fish / 60); two fish a catch; and the animals, which yielded
+no meat by any route after year one.
+
+### 268. What walking costs, and what the winter country holds
+
+**Walking, per turn, is cheap.** A step is charged 2 energy
+(`Simulation::walking`, times the load on the back), which
+`physiology::what_the_work_costs` turns into **0.7** of an ordinary rate.
+Asleep is 0.5, ordinary work (5) is 1.0 and hard work is 1.5. Being cold
+costs health (`ExposureType::Hypothermia`), not energy.
+
+**Per distance it is ruinous, because a turn is thirty minutes and one
+step.** A cell is ten metres (`SmallLife::hectares_in_a_hunting_ground`),
+so a person walks 20 metres an hour, about 250 times slower than someone
+walking at 5 km/h. Fishing water up to 14 cells off is seven hours each
+way. A kilometre takes a hundred turns and burns about two days' food,
+where a real kilometre costs about 3% of one. The rate is not what needs
+adjusting; the distance a turn covers is. It is also why nobody can hunt:
+animals move 2–6 cells a turn and a person moves one.
+
+**The winter country near a settlement.** Seeds 3 and 9, three years,
+monthly, measured around the settlement's centre:
+
+- **Snares already work passively.** 58–78 snares stay set all year and
+  catch 10–34 head a month, winter included. Almost none are collected. In
+  years 2–3: **caught 393, robbed 366, taken home 26** (seed 3); caught 370,
+  robbed 319, taken 52 (seed 9). A catch waits four to ten days before a
+  fox has it, and nobody walks the line: trapping is written off (#266) and
+  a round is up to 15 cells, seven hours out. The ground under the
+  settlement stays at **6–18%** of what it carries from the first month
+  on. A catch is one item of `meat` weighing 1.2, about 150 energy, a
+  tenth of a day. A two-kilogramme rabbit would be most of a day.
+- **Fish near camp are gathered out.** Within 20 cells the reaches hold
+  5–30% of their stock in spring and summer and **0–8 of 1,400–2,200** from
+  day 300 to the new year. They are emptied bare-handed as forage: 770–1,240
+  a month are gathered off fish nodes in the first three months of the
+  year, and 3,800 in the month before the gap.
+- **Big game is there all winter and nobody hunts it for meat.** 1–20 cows,
+  deer, elk, goats and reindeer are within 30 cells in every month.
+  `hunting_action` only answers a want for hides, and a person at one cell
+  a turn cannot close on them.
+
+### 269. Walking five cells a turn, tried
+
+In the analysis copy only: `Action::Move` takes up to five cells in a turn
+(50 metres instead of 10). A turn of walking costs what one did, so the
+cost per cell is a fifth. The trip-time estimates are divided by the pace
+too: the walk behind `what_to_take_along`, the errand give-up and
+turn-round, `how_long_this_would_take`, `what_this_patch_is_worth` and
+`what_this_way_is_worth`. Five is about how far the animals move in a turn
+(2–6), so people and game keep about the same footing.
+
+Sixteen years, twelve seeds, against #263:
+
+| | #263 | five cells a turn |
+|---|---|---|
+| person-years | 1,205 | **1,017** |
+| settlements standing at year 16 | 8 | **9** |
+| people alive at year 16 | 43 | 30 |
+| conceptions | 27 | 28 |
+| deaths from hunger | 36 | **47** |
+| deaths in the last quarter (days 270–360) | 57 | **84** |
+
+The stores are no fuller: median peak a head is 1,058–1,337, against
+1,057–1,126. Seeds 0, 3 and 9, years 1–3, against the same from #266:
+
+- **Winter actions:** Move rose from 24% to **36%** and SeekShelter fell from
+  42% to **28%**. More walking about in the cold, and "the weather" killed 4
+  where it had killed none.
+- **Attacks on animals:** from 673 to **4,721**, with hardly more meat to
+  show: `cut:meat` 206 to 231, `Meat snare` 196 to 204. People can get
+  within reach of animals now, and mostly end up fighting them.
+- **Still no winter fishing** (0 casts either way): it was written off in
+  the first spring (#266). Snare rounds rose only from 98 to 135.
+
+Walking faster did not by itself bring in winter food. What stops that is
+still the write-offs of #266, and that nothing makes hunting for meat a way
+of answering hunger. Fading (#267) failed on the cost of the walk, and this
+failed without the fading, so the two are worth trying together.
+
+### 270. Walking five cells a turn and fading together, tried
+
+The two changes of #267 and #269 together, in the analysis copy. Sixteen
+years, twelve seeds:
+
+| | #263 | walk ×5 | fading | both |
+|---|---|---|---|---|
+| person-years | 1,205 | 1,017 | 733 | **949** |
+| settlements standing at year 16 | 8 | 9 | 4 | **7** |
+| deaths from hunger / thirst | 36 / 2 | 47 / 3 | 52 / 10 | **62 / 12** |
+
+People do go back to the water and the snares. Seeds 0, 3 and 9, years
+1–3, in the last quarter: 168 casts and 339 snare rounds (none and 98
+before). But **Move is 53% of winter actions** and SeekShelter 19%. Of 1,232
+head caught in snares in years 2–3, **83 were carried home** and 1,141 were
+robbed. Trying harder, or ranging further, costs more than the country
+gives back at a tenth of a day a rabbit and one cast in five. More effort
+is not the answer; a better return on less effort is. That is the passive
+trapping to try next.
+
+### 271. Passive snares, tried, and how much sixteen years vary between seeds
+
+**Passive snares**, in the analysis copy: whoever ends a turn within
+`CLOSE_ENOUGH_TO_A_SNARE` of a snare with something in it takes the catch,
+whoever set it, and counts it as trapping that worked. A head is six items
+of `meat`, two kilogrammes in all, instead of one item. Over twelve seeds
+and sixteen years, **11,632 head were carried home** (11,457 of them in
+passing) against about 80 before, and 15,922 were still robbed. Against
+#263: person-years 1,008 against 1,205, standing 7 against 8, hunger deaths
+39 against 36. The stores were no emptier. The loss was mostly blows in
+years 1–2 (43 against 28), and nothing ties that to the snares.
+
+**Seed-to-seed variation.** The current code on twelve new seeds (12–23):
+**1,348 person-years, 7 standing**, 41 conceptions, 11 born who lived to be
+counted. On seeds 0–11 it had 1,205, 8 standing and 27. So two sets of
+twelve differ by about 6% in person-years. The variants since #263
+(733–1,017) are below both, so they really were worse and not unlucky.
+
+The rerun of passive snares on seeds 12–23 was lost to a container
+restart. The next change replaces walking altogether, so it was not
+repeated.
+
+### 272. Every settlement has lived on a quarter of a square kilometre
+
+A cell is ten metres a side (`Grid::METRES_PER_CELL`), a hundred square
+metres. `WorldConfig::default()` is **50 × 50 cells: 500 metres across**.
+It is what every long run in this file has used, and what the multi-
+generation tests (`longevity_tests`, `survival_pressure_tests`), both GUIs
+and `test_simulation` build. `WorldConfig::big_enough_for_an_ecology()`, a
+thousand cells across and a hundred square kilometres, is checked for its
+size by one land test and has never had anyone living on it. So the rivers
+fished out and the ground trapped out within a month (#268) were the whole
+country, not the ground near camp. A band of hunter-gatherers lives off
+tens of square kilometres.
+
+**Walking at 5 km/h, first year.** In the analysis copy behind `ZZ_HG`:
+
+- A turn is half an hour to be spent. A walk goes up to 250 cells (2.5 km)
+  and costs the minutes it takes, and what is left of the half hour goes on
+  whatever is done on arriving.
+- Walking burns 2.45 times an ordinary day's rate for the minutes it lasts
+  (3.5 METs against a day's average of about 1.4). That is about 29 units a
+  kilometre, 2% of a day, times the load on the back.
+- Snares within reach of the route are emptied on the way. The ground
+  about the arrival is woken, and the walker looks about.
+- Animals cover 25 times what they did: a sheep about a kilometre an hour,
+  a wolf 1.7.
+- The distances that were really how far is worth walking are ten times
+  what they were: water, prey, a trapline, curiosity, a new camp.
+
+Seed 3, one year, founders started at the middle of the big map:
+
+| | walking a cell a turn | 5 km/h |
+|---|---|---|
+| alive at the year's end | 12 | 11 (one hunger) |
+| pits at the peak | 8,999 (day 270) | 9,380 (full by day 210) |
+| **pits at the year's end** | **18** | **4,789** |
+| snare catches taken in passing | – | 1,026 |
+| cells walked | – | 211,048 (about half a km a person a day) |
+| seconds for the year | 395 | 708 (53 on the small map) |
+
+A five-year comparison on twelve seeds is running.
+
+### 273. Five years on the big map, and what walking fast walked into
+
+Twelve seeds, five years, the founders at the middle of the hundred square
+kilometres (#272):
+
+| | small map (#263, years 1–5) | big map, a cell a turn | big map, 5 km/h |
+|---|---|---|---|
+| person-years | 513 | **667** | 534 |
+| settlements standing at year 5 | 12 | **12** | 12 |
+| deaths | 68 | **19** | 59 |
+| conceptions | – | 9 | 11 |
+| store a head at the year's end (median) | – | 270 | **662** |
+
+**The big map alone** takes deaths in five years from 68 to 19, 13 of them
+hunger in the winter. The country is big enough not to be stripped. Almost
+nobody conceives: the gate of #264 is still shut.
+
+**Walking at 5 km/h** kept two and a half times the store over the winter.
+It also walked people into animals. Damage summed over the runs:
+
+| | a cell a turn | 5 km/h |
+|---|---|---|
+| fighting an animal | 330 | 3,076 |
+| a beast's attack | 16 | 839 |
+| a hunted animal turning | 0 | 250 |
+| hunts (landed) | 5 (0) | 550 (115) |
+
+Blows killed 26, where they had killed 1, and nearly all of those were
+healthy, fed people outside the winter. Hunger in the winter killed 19
+against 13, with twice the store.
+
+Two causes. A walk went up to 2.5 km without looking, and the walker only
+saw what was about them on arriving. And the prey worth going after on the
+way (`AS_NEAR_AS_PREY_HAS_TO_BE_TO_BOTHER`, `HUNT_SEARCH_RADIUS`) had been
+scaled ten times with the rest of the walking distances, so a hungry person
+went for anything within half a kilometre. Now: a walk stops when anything
+that means harm and outweighs the walker comes within sight, the same
+reckoning as the sight pass, and the danger is remembered. The prey
+distances are back at 5 and 12 cells. The winter hunger is not yet
+explained.
+
+### 274. At 5 km/h, stopping for danger on the way is not enough
+
+This added a stop for danger (#273) and put the prey distances back, then
+ran the same twelve seeds for five years on the big map:
+
+| | a cell a turn | 5 km/h (#273) | 5 km/h, stopping for danger |
+|---|---|---|---|
+| person-years | 667 | 534 | 522 |
+| deaths by a blow / a wound | 1 / 0 | 16 / 8 | 19 / 14 |
+| hunger in the winter | 13 | 19 | **9** |
+| store a head at the year's end (median) | 270 | 662 | 483 |
+| hunts (landed) | 5 (0) | 550 (115) | 135 (40) |
+| walks stopped for a beast | – | – | 215 |
+
+The food works: the fewest winter hunger deaths of any run, and twice the
+store. What kills is fights. Two hundred and fifteen walks stopped short of
+something, and the damage from fighting animals hardly moved (3,934). One
+year on seeds 0–3, with every lost exchange counted by species and mood:
+lion 3 and bear 3, **all while the person was angry**, and an eagle striking
+six times. A lion or a bear takes about thirty health an exchange, and
+somebody angry stands and fights once a minute for what is left of the half
+hour. The deaths come at about one a settlement every two years, in every
+year alike.
+
+On the small map a lion hardly ever came near anybody. At 25 times the
+pace, and with random wandering scaled up with the rest, big animals come
+into a settlement's country every few days, and the people there have no
+answer to a lion but to stand.
+
+### 275. People back away from what outweighs them; the winter goes hungry instead
+
+Three changes, in the analysis copy behind `ZZ_HG`:
+
+- Somebody angry at a beast that outweighs them (the sight pass's
+  reckoning, with a spear counted) backs away if there is anywhere to go.
+  They still stand when cornered, or when one of their own is in the way
+  (`somebody_of_mine_is_in_the_way`).
+- Nothing strikes at a grown person unless it weighs at least a quarter of
+  one (15 kg). An eagle does not take a man.
+- A walk stops at the edge of anywhere the walker remembers trouble
+  (`how_bad_is_it_there` over 0.5), unless it started there. A beast seen on
+  the way is remembered as trouble at that place.
+
+Twelve seeds, five years, big map:
+
+| | a cell a turn | 5 km/h (#274) | 5 km/h, backing away |
+|---|---|---|---|
+| person-years | 667 | 522 | 576 |
+| deaths by a blow | 1 | 36 | **2** |
+| damage fighting animals / beasts' attacks | 330 / 16 | 3,934 / 957 | **354 / 270** |
+| hunger (all) | 17 | 26 | **42** |
+| winter deaths by hunger / weather / thirst | 13 / 2 / 0 | 9 / 6 / 0 | 20 / 7 / 5 |
+| store a head at the year's end (median) | 270 | 483 | 471 |
+
+People backed away 579 times, stopped 257 walks for a beast and 237 short
+of a bad place. The fights are back where they were on a cell a turn. But
+the winter now kills from hunger, cold and thirst, with nearly twice the
+store in the ground, so the hungry are somewhere other than the store. Under
+`ZZ_HG`, `HOW_FAR_A_PEOPLE_WILL_MOVE` was scaled ten times with the other
+walking distances, so a people can move its camp six kilometres away from
+its pits. Being measured.
+
+### 276. At 5 km/h the winter's dead were stuck behind water
+
+Every winter death of #275, traced with each person's last sixteen actions
+and the pits they remembered. On seeds 1 and 2 in year one: the dead were
+starving and cold, carrying nothing, 50–270 cells from a pit with food in
+it. They remembered the right pit, and spent their last sixteen decisions
+walking to it, `Move ... ok`, **without moving**. One stood at (472, 744) for
+all sixteen, walking to the pit at (471, 511).
+
+`next_step_toward` is a breadth-first search capped at 4,096 cells. When the
+direct step is blocked and the target is further than that search reaches,
+the walker takes a sidestep and then the step back (`stepped_from` stops
+only an immediate reversal, not a two-step one). After an even number of
+steps they are where they started, and the Move still reports success. At a
+cell a turn nobody got far enough from camp to have a lake between them and
+home. At 5 km/h they do.
+
+Two things were tried first and did not help, because neither was the
+cause. Letting the hungry, thirsty or cold walk through a remembered bad
+place, and no longer spending the rest of the half hour when a beast comes
+into sight: seeds 1 and 2 still lost 6 and 5 in the first winter. And the
+store's reach: `something_out_of_the_store` already goes to any pit the
+walker remembers, however far off, not only those within
+`WORTH_WALKING_TO_THE_STORE`.
+
+Now: a walk at the new pace plans the whole route once, by A* over passable
+cells (four ways, up to 200,000 cells looked at), and follows it. Only if
+there is no route does it fall back to the old step by step.

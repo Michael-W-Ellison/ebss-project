@@ -120,7 +120,7 @@ fn main() {
 
     for x in 45..55 {
         for y in 5..15 {
-            if let Ok(plant_id) = world.plant_crop("wheat".to_string(), (x, y), farmer_id) {
+            if let Ok(plant_id) = world.plant_crop("wheat".to_string(), (x, y)) {
                 farm_plants.push(plant_id);
             }
         }
@@ -142,7 +142,7 @@ fn main() {
                 _ => "cabbage",
             };
 
-            if world.plant_crop(crop.to_string(), (x, y), farmer_id).is_ok() {
+            if world.plant_crop(crop.to_string(), (x, y)).is_ok() {
                 vegetable_count += 1;
             }
         }

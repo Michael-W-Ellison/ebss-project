@@ -757,3 +757,80 @@ fn when_a_place_stops_working_the_next_one_is_one_like_it() {
         "and gathering is gathering wherever it is done"
     );
 }
+
+/// A meal at the end of a walk is paid for with the walk.
+///
+/// The errand was let go the turn somebody arrived, before they ate, so the
+/// meal was credited as one turn's work and going for food cost the same as
+/// having it about you. See ISSUES_FOUND #259.
+#[test]
+fn a_meal_at_the_end_of_a_walk_is_priced_at_the_walk() {
+    let eating = Action::Eat { food_type: "generic".to_string() };
+    let a_meal = || ActionResult::success().with_drive_change(DriveType::Hunger, -0.3);
+    let here = (20, 20, 0);
+
+    // One with supper about them.
+    let mut carried = Agent::new(AgentConfig::default());
+    carried.link_what_worked(&eating, &a_meal(), DriveType::Hunger, here, 100);
+
+    // One who walked nine turns to it.
+    let mut walked = Agent::new(AgentConfig::default());
+    walked.arrived_from(crate::agents::Errand {
+        going_to: here,
+        set_out_from: (11, 20, 0),
+        to_make: None,
+        for_drive: DriveType::Hunger,
+        pressed_this_hard: 1.0,
+        turns_on_it: 9,
+        set_aside: 0,
+    });
+    walked.link_what_worked(&eating, &a_meal(), DriveType::Hunger, here, 100);
+
+    let eat = Element::Did("eat".to_string());
+    let from_the_pack = carried.patterns.strength(DriveType::Hunger, &eat);
+    let after_the_walk = walked.patterns.strength(DriveType::Hunger, &eat);
+    assert!(
+        after_the_walk < from_the_pack / 5.0,
+        "a meal after nine turns of walking was worth {after_the_walk:.3} against {from_the_pack:.3} from the pack"
+    );
+    assert!(
+        walked.patterns.trail(DriveType::Hunger, &Element::Toward(Bearing::East)).is_some(),
+        "and the way it was walked goes down with it"
+    );
+    assert!(walked.the_walk_behind_me.is_none(), "and the walk is paid for once");
+}
+
+/// A meal out of the pack says whether the food was carried or fetched from a
+/// store for it.
+///
+/// Both are `Did("eat")`; only the way they were come by tells them apart,
+/// and that was never written down. See ISSUES_FOUND #259.
+#[test]
+fn a_meal_says_whether_it_was_carried_or_fetched() {
+    use crate::analytics::wanting::strategy::Strategy;
+
+    let mut agent = Agent::new(AgentConfig::default());
+    assert_eq!(agent.how_this_meal_was_come_by(10_000), Strategy::EatCarriedFood);
+
+    agent.took_from_the_store_at = Some(9_000);
+    assert_eq!(agent.how_this_meal_was_come_by(10_000), Strategy::EatStoredFood);
+
+    let a_week_on = 9_000 + 7 * crate::environment::seasons::TICKS_PER_DAY;
+    assert_eq!(
+        agent.how_this_meal_was_come_by(a_week_on),
+        Strategy::EatCarriedFood,
+        "what was taken out a week ago is simply what they carry"
+    );
+
+    // And it goes down with the meal.
+    agent.by_what_way = Some(format!("{:?}", Strategy::EatCarriedFood));
+    let eating = Action::Eat { food_type: "generic".to_string() };
+    agent.link_what_worked(
+        &eating,
+        &ActionResult::success().with_drive_change(DriveType::Hunger, -0.3),
+        DriveType::Hunger,
+        (5, 5, 0),
+        10_000,
+    );
+    assert!(agent.patterns.strength(DriveType::Hunger, &Element::By("EatCarriedFood".to_string())) > 0.0);
+}

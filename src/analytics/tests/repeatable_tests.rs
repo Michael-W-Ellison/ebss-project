@@ -160,7 +160,25 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // who cannot be walked into the water takes a different step on the few
     // turns of two and a half days that a coast comes into, and over a year
     // lives long enough to take a great many more of them.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_895;
+    // And **up 37%** for the soil ladder (#246). The largest move this count
+    // has taken, and in two and a half days, because it changes the world
+    // before anybody moves in it: what a patch opens carrying was read off a
+    // nutrient pool and is read off a grade now, what every wild plant grows
+    // on was a pool its neighbours drew down and is its terrain's grade, and
+    // no daily pass rots litter across the map. A different country from
+    // turn nought is a different set of draws from turn nought.
+    // And down a quarter for #252. Two and a half days is long enough to
+    // see it: a man who stepped round a half-built burrow now walks over it,
+    // somebody hungry eats before he huddles, and a pack of rot is emptied to
+    // make room for supper - each a different turn from the first morning.
+    // And up 3% for #254: a walk that will not turn straight back onto the
+    // tile it just left, and a store filled to what the breeding gate asks.
+    // Down to 6,909 for #260: somebody setting out on a walk that will
+    // outlast the meal in them takes food along first, and that is decided in
+    // the first two and a half days.
+    // Down to 6,795 for #261 to #263: a pair ready to conceive no longer
+    // rolls for it every turn, only on the one day a month it can happen.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_795;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -281,7 +299,43 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // settlement with more people in it at the end, and a living settlement
     // rolls. Gathering is up 3.9% across twelve seeds and person-turns are
     // flat, so what the turn bought was work rather than survival.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 711_032;
+    // And **down 16%** for the soil ladder (#246), which moved the short
+    // count above the other way. Over a year the settlement farms: fields
+    // yield four times the wild, wear a rung a crop, and are ploughed in and
+    // sown again - a different year's work, and a year in which the country
+    // round it no longer changes under its plants.
+    // And down 1.6% for #247, where a field crop is picked ripe or not at
+    // all and a harvest is three quarters of it. The short count does not
+    // move: no field ripens inside two and a half days. Over a year a farmer
+    // waits for the crop instead of picking at it green, and walks to fewer
+    // fields that have nothing on them he may take.
+    // And up 6.6% for #250, where nobody sets out for anything they cannot
+    // see, remember, smell or reach. The short count does not move: nothing
+    // in the first two and a half days is chosen from past what a man can
+    // see. Over a year the search for the best food anywhere is what moves,
+    // because it read the whole map and now reads a man's memory.
+    // And up 1.2% for #252 and #253: people get into the stores through the
+    // winter and out of the rot in their packs, fewer die of a strange plant,
+    // and a pregnancy lasts nine months rather than a night.
+    // And up 1.9% for #254: the store is filled for a child as well, from
+    // summer; walks leave pockets; small children are fed all through and
+    // live; and an illness costs a week what it says it does.
+    // And down 13.7% for #255: the store opens to a wasting body and to a
+    // parent whose child is short, the winter presses from two months out,
+    // a parent holding a child is not walked to their own feet, and wasting
+    // hurts by depth. Not traced to any one of those; the short count does
+    // not move.
+    // And up 22.7% for #256 to #259: a small child with one parent and handed
+    // between them, a parent eating for it, poison plants passed on in talk,
+    // the walk priced into what is learned. Not traced to any one of those.
+    // And down 10.6% for #260: food taken along on a walk that will outlast
+    // the meal in you, and a body that knows when it will next be hungry.
+    // And up 18.9% for #261 to #263: the winter pressed on whoever bears,
+    // births spaced by nursing, and conception once a month on each one's own
+    // day at a chance of about a quarter. Fewer rolls for conceiving, but a
+    // settlement no longer all pregnant at once, and more of it alive to take
+    // turns. Not traced to any one of those.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 725_995;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

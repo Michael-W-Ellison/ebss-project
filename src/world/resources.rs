@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use crate::environment::seasons::Season;
-use crate::world::{Position, Soil, TerrainType};
+use crate::world::{Position, TerrainType};
 
 /// Types of resources
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
@@ -239,6 +239,10 @@ impl ResourceType {
     ///
     /// So this asks `is_it_food` rather than keeping a second list. What is
     /// left here is only how far a thing carries.
+    /// The strongest smell anything lying on the ground gives off, which is
+    /// how far off it is worth asking what a nose can smell.
+    pub const THE_STRONGEST_RAW_SMELL: f32 = 0.24;
+
     pub fn raw_scent_strength(&self) -> f32 {
         // Damp ground and vegetation, faintly. Not food, and the one other
         // thing a nose is for in this world.
@@ -253,7 +257,7 @@ impl ResourceType {
 
         match self {
             // Flesh gives itself away from further off
-            ResourceType::Meat | ResourceType::Fish => 0.24,
+            ResourceType::Meat | ResourceType::Fish => Self::THE_STRONGEST_RAW_SMELL,
 
             // Barely detectable: you have to be standing among them
             _ => 0.08,
@@ -425,23 +429,37 @@ impl ResourceType {
 
     /// Whether growing this leaves the ground better than it found it.
     ///
-    /// Every other growing thing in this model is a withdrawal.
-    /// `regenerate_in_ground` ends by taking `NUTRIENT_PER_UNIT_GROWN` out of
-    /// the soil for every unit that came up, and the only deposits anywhere
-    /// are muck, litter and what people drop - so a field is a bank account
-    /// that one crop draws on and nothing much pays into. Measured over a
-    /// summer of cropping, the ground under a settlement's fields fell from
-    /// 0.60 to 0.27.
-    ///
-    /// A pod crop is the exception, and it is not a fudge: a legume fixes
-    /// nitrogen out of the air through the bacteria in its roots, so what it
-    /// builds itself out of did not come from the bank, and what is left in
-    /// the ground when it is done is more than was there before. This is the
-    /// one thing that makes rotation worth knowing.
+    /// Every other crop taken off a field wears it down a rung for each whole
+    /// crop's worth - see `Field::a_crop_came_off`. A pod crop is the
+    /// exception, and it is not a fudge: a legume fixes nitrogen out of the
+    /// air through the bacteria in its roots, so it takes nothing from the
+    /// ground, and a bean crop that comes to maturity raises the ground a
+    /// rung. This is the one thing that makes rotation worth knowing: a bean
+    /// crop after a cereal holds a field where it was.
     ///
     /// It is a fact about the plant, so it lives on the plant - and it is one
-    /// answer rather than a list repeated at each of the three places that
-    /// asks: the growing pass, the ploughing-in, and the sowing choice.
+    /// answer rather than a list repeated at each of the places that asks: the
+    /// day's field reckoning, the growing pass, the ploughing-in, and the
+    /// sowing choice.
+    /// How many times what the same plant yields wild, this yields on broken
+    /// ground.
+    ///
+    /// Four for everything - "wild plants produce yields 1/4th that of plants
+    /// in tilled farmland" - and ten for grain, which is the plant farming was
+    /// invented for. Ten keeps what grain had over a berry bush in rows before
+    /// the soil ladder, three against 1.15; and it is what makes a rotation
+    /// worth running. Per day of growing, a bean crop gives 0.035 x 45 of food
+    /// energy and grain 0.015 x 60, so on the same four-to-one beans out-yield
+    /// grain and build the ground while grain wears it, and nobody would ever
+    /// sow wheat. At ten, grain gives 9.0 to the beans' 6.3: the crop that
+    /// feeds you and the crop that feeds the ground. See ISSUES_FOUND #247.
+    pub fn what_the_plough_does_for_it(&self) -> f32 {
+        match self {
+            ResourceType::Grain => 10.0,
+            _ => crate::world::soil::WHAT_BROKEN_GROUND_YIELDS_OVER_WILD,
+        }
+    }
+
     pub fn feeds_the_ground(&self) -> bool {
         matches!(self, ResourceType::Legumes)
     }
@@ -892,9 +910,62 @@ pub struct ResourceNode {
     /// regenerated yet, in which case it is simply not yet a floor.
     #[serde(default)]
     pub flow: f32,
+
+    /// Units taken off this by somebody's hand and not yet reckoned against
+    /// the ground it stands on.
+    ///
+    /// A field goes down a rung once a whole crop's worth has been taken off
+    /// it, and crops are taken in four places - gathering, foraging a meal,
+    /// tasting, taking a cutting - three of which hand some of it straight
+    /// back. Counted here, where every one of them already goes through
+    /// `harvest` and `put_it_back`, the count nets itself whatever path took
+    /// it; the day's field pass reads it and clears it. Nothing but a hand
+    /// calls `harvest`, so a beast grazing or fruit falling never counts.
+    #[serde(default)]
+    pub taken_by_hand: u32,
+
+    /// Whether this is a crop in a field, which it is for as long as the
+    /// ground under it is one. Set by the day's field reckoning.
+    ///
+    /// A field crop is picked ripe or not at all: "crops must finish
+    /// growing". Wild growth is picked as it stands.
+    #[serde(default)]
+    pub on_a_field: bool,
+
+    /// What the crop stood at when it ripened, while it is ripe; nought while
+    /// it is still growing.
+    ///
+    /// A crop ripens when it comes to its full stand, or when its season is at
+    /// its last day and it has to be whatever it has come to. Ripe, it stops
+    /// growing, and three quarters of it is the harvest.
+    #[serde(default)]
+    pub ripe_stand: u32,
+
+    /// Units taken off this ripe crop by hand, net of what was handed back.
+    ///
+    /// When it comes to three quarters of the ripe stand the harvest is in:
+    /// nothing more comes off, the field goes down a rung, and what is left
+    /// grows on until it is ripe again. Counted apart from `taken_by_hand`,
+    /// which is cleared every day.
+    #[serde(default)]
+    pub taken_since_it_ripened: u32,
+
+    /// The first day this has not been brought up to date, if nobody is near
+    /// enough to need it - counted in the world's growing days. See
+    /// `world::sleeping`.
+    #[serde(default)]
+    pub asleep_since: Option<u32>,
 }
 
 impl ResourceNode {
+    /// What wild ground of ordinary grade carries of what a plant of this kind
+    /// could carry at most.
+    ///
+    /// Half, which is where the old nutrient model put open plains, so wild
+    /// food stands about where it stood. Everything else is a multiple of
+    /// this: very rich wild ground carries the whole of `max_amount`, and a
+    /// field four times what the same ground would carry wild.
+    pub const WHAT_ORDINARY_WILD_GROUND_CARRIES: f32 = 0.5;
 
     /// Put back what would not fit in somebody's pack.
     ///
@@ -902,8 +973,18 @@ impl ResourceNode {
     /// picking it has room, so this is how it goes back on. What you cannot
     /// carry stays where it fell - see ISSUES #165, which states the principle
     /// and never reached the gathering branch.
+    ///
+    /// Not clamped to `max_amount`. A field carries up to four times what the
+    /// same plant does wild, so a crop can stand well over it, and clamping
+    /// here would destroy whatever of an armful took it past. It used to be
+    /// clamped, and the clamp is what hid #238 - the crop handed back twice -
+    /// for as long as it stood. What comes back is what was taken.
     pub fn put_it_back(&mut self, how_much: u32) {
-        self.amount = (self.amount + how_much).min(self.max_amount);
+        self.amount += how_much;
+        self.taken_by_hand = self.taken_by_hand.saturating_sub(how_much);
+        if self.on_a_field && self.ripe_stand > 0 {
+            self.taken_since_it_ripened = self.taken_since_it_ripened.saturating_sub(how_much);
+        }
     }
     pub fn new(resource_type: ResourceType, position: Position, amount: u32) -> Self {
         Self {
@@ -914,6 +995,11 @@ impl ResourceNode {
             inflow_carried: 0.0,
             kind: 0,
             flow: 0.0,
+            taken_by_hand: 0,
+            on_a_field: false,
+            ripe_stand: 0,
+            taken_since_it_ripened: 0,
+            asleep_since: None,
         }
     }
 
@@ -934,6 +1020,10 @@ impl ResourceNode {
     pub fn harvest(&mut self, amount: u32) -> u32 {
         let harvested = amount.min(self.what_can_be_taken());
         self.amount -= harvested;
+        self.taken_by_hand += harvested;
+        if self.on_a_field && self.ripe_stand > 0 {
+            self.taken_since_it_ripened += harvested;
+        }
         harvested
     }
 
@@ -953,11 +1043,72 @@ impl ResourceNode {
     /// two units out of four hundred and left them there for the rest of the
     /// world's life. See ISSUES_FOUND #46 and #53.
     pub fn what_can_be_taken(&self) -> u32 {
+        // A field crop is picked ripe or not at all, and only the harvest of
+        // it: three quarters of what it ripened at. What is left is not
+        // gleanings to be scraped up - it is the plant, and it grows on.
+        if self.on_a_field {
+            if self.ripe_stand == 0 {
+                return 0;
+            }
+            // The harvest less what has come off it, and never into the
+            // quarter that is the plant - however the rest went, by hand or
+            // fallen or grazed.
+            let the_plant = self.ripe_stand - self.the_harvest();
+            return self
+                .the_harvest()
+                .saturating_sub(self.taken_since_it_ripened)
+                .min(self.amount.saturating_sub(the_plant));
+        }
+
         if self.resource_type != ResourceType::Water {
             return self.amount;
         }
 
         self.amount.saturating_sub(self.springline())
+    }
+
+    /// Whether a hand could take anything here at all.
+    ///
+    /// The one question for anything choosing where to gather or eat. It was
+    /// asked as `amount > 0` in a score of places, which says yes to a field
+    /// of green wheat - and a decision that says yes to what the executor will
+    /// refuse is a walk for nothing.
+    ///
+    /// Water keeps its own answer: a spring down to its springline still gives
+    /// a drink from what is coming out of the ground, which is why `harvest`
+    /// lets it, so anything standing in it at all is worth the walk.
+    pub fn anything_to_take(&self) -> bool {
+        if self.resource_type == ResourceType::Water {
+            return self.amount > 0;
+        }
+        self.what_can_be_taken() > 0
+    }
+
+    /// Three quarters of the ripe stand: what comes off a field before the
+    /// harvest is in.
+    pub fn the_harvest(&self) -> u32 {
+        self.ripe_stand * Self::THE_HARVEST_IS_IN_AT.0 / Self::THE_HARVEST_IS_IN_AT.1
+    }
+
+    /// Three quarters of a ripe crop is a harvest.
+    pub const THE_HARVEST_IS_IN_AT: (u32, u32) = (3, 4);
+
+    /// Whether three quarters of the ripe crop has come off by hand.
+    pub fn the_harvest_is_in(&self) -> bool {
+        self.ripe_stand > 0 && self.taken_since_it_ripened >= self.the_harvest()
+    }
+
+    /// The crop has ripened at what it stands at now.
+    pub fn it_has_ripened(&mut self) {
+        self.ripe_stand = self.amount;
+        self.taken_since_it_ripened = 0;
+    }
+
+    /// The crop is not ripe any more: harvested, or fallen, or no longer a
+    /// crop in a field at all. What stands grows on.
+    pub fn it_is_growing_again(&mut self) {
+        self.ripe_stand = 0;
+        self.taken_since_it_ripened = 0;
     }
 
     /// A drink taken from the flow itself, at a spring that is down to its
@@ -1015,23 +1166,11 @@ impl ResourceNode {
     /// Always takes at least one, so a patch actually empties rather than
     /// creeping down by fractions for ever.
     ///
-    /// And what falls goes into the ground it fell on. This was the hole in
-    /// the whole ecology: a crop nobody picked was simply **deleted**, so
-    /// every growing tile on the map was mined out by its own plants with
-    /// nobody near it. Measured on a world with no people in it at all, the
-    /// ground under the greens went from 0.60 fertility to 0.35 in nine
-    /// years, and because standing capacity follows fertility the map's
-    /// standing greens fell from 3,516 units to 2,260 - **five per cent a
-    /// year, compounding, for ever**. See ISSUES_FOUND.md #127.
-    ///
-    /// The arithmetic closes exactly, and it has to be `RESIDUE_PER_UNIT_GROWN`
-    /// for it to. Growing a unit draws `NUTRIENT_PER_UNIT_GROWN` and puts back
-    /// half of it at once as root and stalk; the other half is in the part
-    /// somebody carries away. Nobody carried this away, so the other half
-    /// falls here too, and the two halves are the same plant and the same
-    /// number. A patch nobody touches breaks even. A patch that is picked
-    /// still loses, which is what picking a patch means.
-    pub fn what_it_carries_falls_off(&mut self, share: f32, soil: &mut Soil) {
+    /// It falls and is gone. It used to go into the ground as litter, which
+    /// was what kept wild ground from being mined out by its own plants
+    /// (#127); wild ground neither gives nor takes now, so there is nothing to
+    /// balance. See ISSUES_FOUND #246.
+    pub fn what_it_carries_falls_off(&mut self, share: f32) {
         if self.amount == 0 {
             return;
         }
@@ -1040,13 +1179,6 @@ impl ResourceNode {
             .max(1)
             .min(self.amount);
         self.amount -= falling;
-
-        // What grew in the water fell in the water, and the bank is none the
-        // richer for it - the same exception `regenerate_in_ground` makes when
-        // it draws.
-        if !self.resource_type.grows_in_water() {
-            soil.add_leaf_litter(falling as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
-        }
     }
 
     /// Check if node is depleted
@@ -1091,64 +1223,24 @@ impl ResourceNode {
         }
     }
 
-    /// How readily a plant here can take up what is in the ground.
+    /// The most this can be carrying at once, on ground that yields
+    /// `what_the_ground_yields` - see `Grid::what_it_yields_here`.
     ///
-    /// This is what breaking ground actually buys. A field is weeded, watered
-    /// and worked, so the crop on it gets at far more of what the soil holds
-    /// than the same plant would growing wild - it reaches its natural best
-    /// pace on ground that would only half feed a hedgerow. What it does not do
-    /// is make a plant grow faster than its kind can grow: uptake enters the
-    /// rate as a factor that is capped at one.
-    pub fn uptake_multiplier(cultivated: bool) -> f32 {
-        if cultivated {
-            2.5
-        } else {
-            1.0
-        }
-    }
-
-    /// The most this patch can be carrying at once, given how well fed the
-    /// ground is.
+    /// A straight multiple: the grade's multiplier, times four on broken
+    /// ground, times what ordinary wild ground carries. So very rich wild
+    /// ground carries all of `max_amount`, ordinary wild ground half of it,
+    /// and a field of ordinary loam twice it.
     ///
-    /// The other half of what a field buys: yield. Rich ground carries a
-    /// heavier crop, thin ground a lighter one, and a field that has had muck
-    /// spread on it carries more than one that has not.
-    ///
-    /// The floor used to be four tenths of the full crop, which meant ground
-    /// worked down to nothing still nominally carried nearly half of what it
-    /// had when it was rich. Over a long run that hid the cost of farming: a
-    /// settlement's fields fell to a twentieth of their fertility while their
-    /// stated yield fell by four per cent. A worked-out field now carries
-    /// almost nothing, which is what a worked-out field does.
-    pub fn standing_capacity(&self, fertility: f32) -> u32 {
-        let share = Self::MIN_YIELD_SHARE
-            + (1.0 - Self::MIN_YIELD_SHARE) * fertility.clamp(0.0, 1.0);
-        ((self.max_amount as f32) * share).round() as u32
-    }
-
-    /// What ground with nothing left in it still carries: the odd volunteer
-    /// plant living off what blows in, and not a crop.
-    const MIN_YIELD_SHARE: f32 = 0.05;
-
-    /// The same, for ground that has been broken and sown.
-    ///
-    /// Breaking ground buys uptake and it buys this, and nothing else: a field
-    /// of grain stands far thicker than the same ground would carry wild,
-    /// because it is all one plant and all of it wanted. What it does not buy
-    /// is speed - a crop grows at the pace its kind grows at, worked or not.
-    ///
-    /// How much thicker depends on what was sown. This is where suitability
-    /// tells: a field of grain carries three times what the ground would
-    /// otherwise, a field of berry bushes barely more than the hedge it came
-    /// out of. See [`ResourceType::takes_to_the_plough`].
-    pub fn how_heavy_a_crop_it_carries(&self, fertility: f32, cultivated: bool) -> u32 {
-        let standing = self.standing_capacity(fertility) as f32;
-
-        if !cultivated {
-            return standing.round() as u32;
-        }
-
-        (standing * self.resource_type.takes_to_the_plough()).round() as u32
+    /// There used to be a floor here - "the odd volunteer plant living off
+    /// what blows in" - and a separate factor per crop for what the plough did
+    /// for it: three for grain, a little over one for berries. The ladder is
+    /// the floor now, exhausted ground carrying an eighth, and the plough does
+    /// the same for everything. See ISSUES_FOUND #246.
+    pub fn how_heavy_a_crop_it_carries(&self, what_the_ground_yields: f32) -> u32 {
+        ((self.max_amount as f32)
+            * Self::WHAT_ORDINARY_WILD_GROUND_CARRIES
+            * what_the_ground_yields.max(0.0))
+        .round() as u32
     }
 
     /// How fast this water refills, given the ground it sits on and the
@@ -1333,54 +1425,16 @@ impl ResourceNode {
     /// passes at one fish each, which is what this was.
     pub const WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON: f32 = 28.8;
 
-    /// Regenerate resources based on climate and weather conditions
-    /// Returns the amount regenerated
+    /// Regenerate on ordinary wild ground, over one pass of the length the
+    /// rates were fitted to. Returns the amount regenerated.
     pub fn regenerate(&mut self, temperature: f32, precipitation: f32, season_modifier: f32) -> u32 {
-        self.regenerate_on(temperature, precipitation, season_modifier, false)
-    }
-
-    /// Regenerate, saying whether this is growing on broken ground
-    pub fn regenerate_on(
-        &mut self,
-        temperature: f32,
-        precipitation: f32,
-        season_modifier: f32,
-        cultivated: bool,
-    ) -> u32 {
-        let mut nowhere = Soil::for_terrain(TerrainType::Plains);
-        self.regenerate_from_soil(
-            temperature,
-            precipitation,
-            season_modifier,
-            cultivated,
-            &mut nowhere,
-            Self::WHAT_THESE_RATES_WERE_FITTED_TO,
-        )
-    }
-
-    /// Regenerate, drawing on the ground it is growing in.
-    ///
-    /// Growth used to be a number per species multiplied by the weather, with
-    /// nothing taken out of the ground and nothing put back: a patch picked
-    /// bare regrew as fast on bare rock as in river silt. What it can manage
-    /// now is bounded by whichever of warmth, rain and nutrient is scarcest,
-    /// and what it grows with, it takes.
-    pub fn regenerate_from_soil(
-        &mut self,
-        temperature: f32,
-        precipitation: f32,
-        season_modifier: f32,
-        cultivated: bool,
-        soil: &mut Soil,
-        turns_this_pass_stands_for: f32,
-    ) -> u32 {
         self.regenerate_in_ground(
             temperature,
             precipitation,
             season_modifier,
-            cultivated,
-            soil,
-            turns_this_pass_stands_for,
+            crate::world::soil::SoilGrade::Ordinary.multiplier(),
+            1.0,
+            Self::WHAT_THESE_RATES_WERE_FITTED_TO,
         )
     }
 
@@ -1414,16 +1468,25 @@ impl ResourceNode {
     pub const WHAT_THESE_RATES_WERE_FITTED_TO: f32 =
         20.0 * crate::environment::seasons::MINUTES_PER_HOUR as f32;
 
+    /// `what_the_ground_yields` is `Grid::what_it_yields_here` for the tile
+    /// this stands on - the grade's multiplier, and four times it on broken
+    /// ground - and `kept` is what the weeds and vermin leave of it, which is
+    /// one off a field.
+    ///
+    /// Nothing is drawn from the ground and nothing put back. A field is worn
+    /// by what is taken off it and built by what is done to it, which is
+    /// counted elsewhere; growing is only growing.
     pub fn regenerate_in_ground(
         &mut self,
         temperature: f32,
         precipitation: f32,
         season_modifier: f32,
-        cultivated: bool,
-        soil: &mut Soil,
+        what_the_ground_yields: f32,
+        kept: f32,
         turns_this_pass_stands_for: f32,
     ) -> u32 {
-        if self.amount >= self.how_heavy_a_crop_it_carries(soil.fertility(), cultivated) {
+        let capacity = self.how_heavy_a_crop_it_carries(what_the_ground_yields);
+        if self.amount >= capacity {
             return 0; // As heavy a crop as this ground will carry
         }
 
@@ -1536,25 +1599,18 @@ impl ResourceNode {
             _ => 1.0,
         };
 
-        // What the ground can give, and how well this plant can get at it.
-        // Capped at one: uptake helps a crop reach the best pace its kind is
-        // capable of, it does not carry it past that.
-        let nutrient_factor =
-            (soil.fertility() * Self::uptake_multiplier(cultivated)).clamp(0.0, 1.0);
+        // What the ground makes of it. Ordinary wild ground grows at half the
+        // pace a plant of this kind can manage, which is where the old model
+        // had open plains; very rich wild ground at the whole of it; and a
+        // field at four times what the same ground does wild. That last is not
+        // capped at the plant's own best pace, as the old uptake factor was:
+        // "wild plants produce yields 1/4th that of plants in tilled farmland",
+        // and a yield is a crop over a season, which is the pace.
+        let ground_factor = Self::WHAT_ORDINARY_WILD_GROUND_CARRIES * what_the_ground_yields;
 
-        if nutrient_factor <= 0.0 {
+        if ground_factor <= 0.0 {
             return 0;
         }
-
-        // And what is taking it before the farmer does. A field is the best
-        // ground there is and everything else knows it: what a crop keeps is
-        // what the weeds and the vermin leave. On unbroken ground this is one -
-        // a meadow cannot get any weedier than it already is.
-        let kept = if cultivated {
-            soil.what_the_crop_keeps()
-        } else {
-            1.0
-        };
 
 
         // Calculate total regeneration
@@ -1565,7 +1621,7 @@ impl ResourceNode {
             * temp_modifier
             * precip_modifier
             * season_modifier
-            * nutrient_factor
+            * ground_factor
             * kept;
 
         // Carry the fraction over rather than rounding it away: wild food
@@ -1576,30 +1632,9 @@ impl ResourceNode {
         self.inflow_carried -= regen_units;
 
         // Add regenerated amount, capped at what this ground will carry
-        let capacity = self.how_heavy_a_crop_it_carries(soil.fertility(), cultivated);
         let headroom = capacity.saturating_sub(self.amount);
         let actual_regen = (regen_units as u32).min(headroom);
         self.amount += actual_regen;
-
-        // What grew, came out of the ground - and most of the plant stays in
-        // the ground it grew in. Roots, stalk and leaf go back into this same
-        // tile; only the part somebody carries away is gone from it.
-        //
-        // What grew in the water is a different matter: it takes nothing from
-        // the bank and leaves nothing on it.
-        if actual_regen > 0 && !self.resource_type.grows_in_water() {
-            // A pod crop is the one thing that goes the other way. It builds
-            // itself out of nitrogen it fixed from the air rather than out of
-            // the bank, so it takes nothing, and what its roots leave behind
-            // is a deposit - see `ResourceType::feeds_the_ground` and
-            // `Soil::WHAT_A_LEGUME_FIXES_PER_UNIT_GROWN`.
-            if self.resource_type.feeds_the_ground() {
-                soil.feed(actual_regen as f32 * Soil::WHAT_A_LEGUME_FIXES_PER_UNIT_GROWN);
-            } else {
-                soil.draw(actual_regen as f32 * Soil::NUTRIENT_PER_UNIT_GROWN);
-            }
-            soil.add_leaf_litter(actual_regen as f32 * Soil::RESIDUE_PER_UNIT_GROWN);
-        }
 
         actual_regen
     }

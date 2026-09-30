@@ -96,7 +96,7 @@ impl Simulation {
                     || self
                         .world
                         .get_resource_at(&here)
-                        .is_some_and(|node| node.amount > 0)
+                        .is_some_and(|node| node.anything_to_take())
                     || self.world.pit_at(here).is_some()
             }
 
@@ -161,7 +161,7 @@ impl Simulation {
             .iter()
             .map(|dropped| dropped.item.item_id.clone())
             .collect();
-        if let Some(node) = self.world.get_resource_at(&here).filter(|node| node.amount > 0) {
+        if let Some(node) = self.world.get_resource_at(&here).filter(|node| node.anything_to_take()) {
             if let Some(called) = Self::gathered_as(node.resource_type) {
                 underfoot.push(called.to_string());
             }
@@ -440,7 +440,10 @@ impl Simulation {
             "tendfield" => Action::TendField,
             "excavate" => Action::Excavate,
             "freeze" => Action::Freeze,
-            "taste" => Action::Taste,
+            // The same condition the tasting branch sets: well enough that
+            // the worst plant there is leaves you standing.
+            "taste" if agent.state.health >= Self::WELL_ENOUGH_TO_RISK_IT => Action::Taste,
+            "taste" => return None,
             "setsnare" => Action::SetSnare,
             "checksnares" => Action::CheckSnares,
             "spreadmuck" => Action::SpreadMuck,

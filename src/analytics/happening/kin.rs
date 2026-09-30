@@ -279,6 +279,14 @@ impl Simulation {
         child: &crate::agents::Agent,
         grown: &[(uuid::Uuid, (i32, i32, i32))],
     ) -> Option<(uuid::Uuid, (i32, i32, i32))> {
+        // Whoever it was last handed to, if they are still about.
+        if let Some(carrier) = child
+            .carried_by
+            .and_then(|id| grown.iter().find(|(who, _)| *who == id))
+        {
+            return Some(*carrier);
+        }
+
         if let Some(theirs) = child
             .parent_ids
             .iter()
@@ -300,6 +308,92 @@ impl Simulation {
                     .then_with(|| this_who.cmp(that_who))
             })
             .copied()
+    }
+
+    /// Which of its parents a small child is kept with: the first of them
+    /// still living and grown, which is where `the_small_stay_with_their_people`
+    /// puts it.
+    pub(in crate::analytics) fn who_a_small_child_is_kept_with(
+        &self,
+        child: &crate::agents::Agent,
+    ) -> Option<uuid::Uuid> {
+        let about = |id: &uuid::Uuid| {
+            self.population.agents.iter().any(|a| {
+                a.id == *id
+                    && a.state.is_alive
+                    && a.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+            })
+        };
+
+        child
+            .carried_by
+            .filter(|id| about(id))
+            .or_else(|| child.parent_ids.iter().copied().find(|id| about(id)))
+    }
+
+    /// How much better off the other parent has to be before a small child is
+    /// handed across: enough that it is worth the handing, and not so little
+    /// that it goes back and forth every time they pass.
+    pub(in crate::analytics) const WORTH_HANDING_OVER_AT: f32 = 0.1;
+
+    /// A small child is passed to its other parent when the two of them are
+    /// together and the one carrying it is the worse off.
+    ///
+    /// A child under six is fed through whichever parent carries it, and it
+    /// stayed with the same one for six years: the first of its parents still
+    /// living. That parent ate for two and never caught up - parents sat at
+    /// two-thirds of their reserve, which hands a child three-quarters of a
+    /// feed - while the other ate for one. Forty-three children were born over
+    /// sixteen years in twelve settlements and none reached five. The two of
+    /// them share it now, a handing over at a time. See ISSUES_FOUND #259.
+    pub(in crate::analytics) fn hand_the_small_ones_over(&mut self) {
+        let spare_of = |agents: &[crate::agents::Agent], id: uuid::Uuid| {
+            agents
+                .iter()
+                .find(|a| a.id == id && a.state.is_alive)
+                .map(|a| (a.state.physiology.what_this_body_has_spare(), a.state.position))
+        };
+
+        let mut handed: Vec<(usize, uuid::Uuid)> = Vec::new();
+        for (at, child) in self.population.agents.iter().enumerate() {
+            if !child.state.is_alive
+                || child.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+            {
+                continue;
+            }
+            let Some(carrier) = self.who_a_small_child_is_kept_with(child) else {
+                continue;
+            };
+            let Some((carrier_spare, carrier_at)) = spare_of(&self.population.agents, carrier) else {
+                continue;
+            };
+
+            let better_placed = child
+                .parent_ids
+                .iter()
+                .copied()
+                .filter(|id| *id != carrier)
+                .filter(|id| {
+                    self.population.agents.iter().any(|a| {
+                        a.id == *id
+                            && a.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+                    })
+                })
+                .filter_map(|id| spare_of(&self.population.agents, id).map(|(spare, stood)| (id, spare, stood)))
+                .filter(|(_, _, stood)| {
+                    Self::within((carrier_at.0, carrier_at.1), (stood.0, stood.1), Self::WITHIN_A_FEW_PACES)
+                })
+                .filter(|(_, spare, _)| *spare > carrier_spare + Self::WORTH_HANDING_OVER_AT)
+                .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            if let Some((to, _, _)) = better_placed {
+                handed.push((at, to));
+            }
+        }
+
+        for (at, to) in handed {
+            self.population.agents[at].carried_by = Some(to);
+        }
     }
 
     pub(in crate::analytics) fn the_small_stay_with_their_people(&mut self) {
@@ -344,6 +438,13 @@ impl Simulation {
             parent: uuid::Uuid,
             wants_food: f32,
             wants_water: f32,
+            /// How big a body the child's is beside the parent's.
+            ///
+            /// Water is kept as a share of each body's own skinful, so a
+            /// small child's day of water is a small share of a grown
+            /// person's. Food is not: it is counted in units, which are
+            /// already the child's size.
+            its_size_to_theirs: f32,
         }
 
         let grown: Vec<(uuid::Uuid, (i32, i32, i32))> = self
@@ -378,14 +479,104 @@ impl Simulation {
                     * MINUTES_PER_TURN as f32
                     / MINUTES_PER_DAY as f32;
 
+                // A body's water is sized as its eating is.
+                //
+                // This charged the parent a grown person's share of their own
+                // skin for every small child they held, because a child's
+                // hydration and a parent's are each a share of a different
+                // body: a parent with two infants dried out as though they
+                // were drinking for three grown people. See ISSUES_FOUND #255.
+                let its_size_to_theirs = self
+                    .population
+                    .agents
+                    .iter()
+                    .find(|a| a.id == parent)
+                    .map(|them| {
+                        crate::agents::agent::what_a_body_this_age_eats(child.state.years_old())
+                            / crate::agents::agent::what_a_body_this_age_eats(them.state.years_old())
+                    })
+                    .unwrap_or(1.0);
+
                 Some(AMouthToFeed {
                     child: child.id,
                     parent,
                     wants_food: a_turn,
                     wants_water: A_DRINK_IS_WORTH * MINUTES_PER_TURN as f32 / MINUTES_PER_DAY as f32,
+                    its_size_to_theirs,
                 })
             })
             .collect();
+
+        // What each grown body is feeding besides itself, counted afresh:
+        // a child that has grown out of it, wandered off or died is no longer
+        // eaten for.
+        for grown in self.population.agents.iter_mut() {
+            grown.state.physiology.also_feeding = 0.0;
+            grown.the_small_ones_i_answer_for = 0.0;
+            grown.nursing_a_child = false;
+        }
+
+        // And whoever bore an infant still at the breast is nursing it - the
+        // first of a child's parents is the one who carried it (`give_birth`).
+        // Only while it lives: a mother whose infant has died is not nursing.
+        let at_the_breast: Vec<uuid::Uuid> = self
+            .population
+            .agents
+            .iter()
+            .filter(|child| child.state.is_alive)
+            .filter(|child| child.state.years_old() < crate::agents::Agent::NURSED_UNTIL)
+            .filter_map(|child| child.parent_ids.first().copied())
+            .collect();
+        for bore_it in at_the_breast {
+            if let Some(mother) = self
+                .population
+                .agents
+                .iter_mut()
+                .find(|a| a.id == bore_it && a.state.is_alive)
+            {
+                mother.nursing_a_child = true;
+            }
+        }
+
+        // And the small ones each parent answers for, carried or not.
+        let small_ones: Vec<(Vec<uuid::Uuid>, f32)> = self
+            .population
+            .agents
+            .iter()
+            .filter(|child| child.state.is_alive)
+            .filter(|child| child.state.years_old() < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL)
+            .map(|child| {
+                (
+                    child.parent_ids.clone(),
+                    crate::agents::agent::what_a_body_this_age_eats(child.state.years_old()),
+                )
+            })
+            .collect();
+        for (parents, eats) in small_ones {
+            for parent in self
+                .population
+                .agents
+                .iter_mut()
+                .filter(|a| a.state.is_alive && parents.contains(&a.id))
+            {
+                parent.the_small_ones_i_answer_for += eats;
+            }
+        }
+        for mouth in &mouths {
+            if let Some(parent) = self
+                .population
+                .agents
+                .iter_mut()
+                .find(|a| a.id == mouth.parent && a.state.is_alive)
+            {
+                let their_turn = parent.state.physiology.what_i_burn_in_a_day
+                    * MINUTES_PER_TURN as f32
+                    / MINUTES_PER_DAY as f32;
+                if their_turn > 0.0 {
+                    parent.state.physiology.also_feeding += mouth.wants_food / their_turn;
+                }
+            }
+        }
 
         for mouth in &mouths {
             // The parent's own store decides the share
@@ -437,6 +628,27 @@ impl Simulation {
                     .min(child.state.physiology.reserve_capacity);
                 child.state.physiology.hydration =
                     (child.state.physiology.hydration + water).min(1.0);
+
+                // And the same share of a turn's worth of what the rest of
+                // the body is kept on.
+                //
+                // A body has two stores of what it has eaten: the physiology's
+                // reserve, which is what hunger is reckoned on and what this
+                // feeding has always filled, and `nutrition` - energy, protein
+                // and the things only fresh food carries - which only
+                // `Action::Eat` ever filled. A child this young never eats for
+                // itself, so its `nutrition` ran down from the day it was born:
+                // felt energy follows it (`Agent::turn_nutrition`) and went to
+                // nought, and the first children a settlement ever bore died of
+                // exhaustion and of a poor diet with their bellies full. What a
+                // parent feeds a small child is a whole diet, so it goes into
+                // both. See ISSUES_FOUND #254.
+                if mouth.wants_food > 0.0 {
+                    let share = (food / mouth.wants_food).clamp(0.0, 1.0);
+                    child
+                        .nutrition
+                        .consume(&crate::world::nutrition::what_a_turn_of_being_fed_is_worth().scale(share));
+                }
             }
 
             if let Some(parent) = self
@@ -448,7 +660,7 @@ impl Simulation {
                 parent.state.physiology.reserve =
                     (parent.state.physiology.reserve - food).max(0.0);
                 parent.state.physiology.hydration =
-                    (parent.state.physiology.hydration - water).max(0.0);
+                    (parent.state.physiology.hydration - water * mouth.its_size_to_theirs).max(0.0);
             }
         }
     }

@@ -27,6 +27,12 @@ use log::{debug, warn};
 impl Simulation {
     /// Execute one simulation turn
     pub fn take_a_turn(&mut self) {
+        // Every question about what is near somebody reads the nodes by where
+        // they stand, which is only right while the file agrees with the list.
+        // The world keeps it so as it goes; this catches a world just built or
+        // loaded, or a list somebody changed by hand. See `world::node_index`.
+        self.world.file_the_nodes();
+
         // Food does not sit on a fire forever: it is taken off, or it burns
         // away. Either way the smell of cooking is a passing thing, so old
         // contents are cleared before scents are worked out.
@@ -183,17 +189,27 @@ impl Simulation {
         // The small children are fed out of their parents before anybody
         // nurses, because for a child of five and under that is where the food
         // comes from: "child agents automatically receive their food/water
-        // from their parent agent's internal food energy and water". This also
-        // fills the hands of whoever is carrying somebody under two.
+        // from their parent agent's internal food energy and water".
         // And before that, the small ones are where their people are: the
         // specification makes "must remain with a parent agent at all times" a
         // fact about the child's position, and the feeding pass below reads
         // position. See `the_small_stay_with_their_people`.
+        self.hand_the_small_ones_over();
         self.the_small_stay_with_their_people();
         self.feed_the_small_children();
         self.process_nursing();
 
-        // Turn world (building construction progress, etc.)
+        // Turn world (building construction progress, etc.) - having told it
+        // where the living are, so that ground nobody is near can sleep. See
+        // `world::sleeping`.
+        let where_people_are = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| (agent.state.position.0, agent.state.position.1))
+            .collect();
+        self.world.people_are_at(where_people_are);
         self.world.take_a_turn();
 
         // And what the wild things do about the people in it. Nothing in the

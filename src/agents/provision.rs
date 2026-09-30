@@ -138,6 +138,47 @@ pub fn how_long_the_land_gives_nothing() -> u32 {
     })
 }
 
+/// The day of the year the hungry gap begins: the first day of the run
+/// `how_long_the_land_gives_nothing` measures.
+pub fn when_the_land_stops_giving() -> u32 {
+    use crate::environment::seasons::DAYS_PER_YEAR;
+    static ANSWER: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+
+    *ANSWER.get_or_init(|| {
+        let gap = how_long_the_land_gives_nothing();
+        let mut running = 0;
+        for day in 0..(DAYS_PER_YEAR * 2) {
+            running = if is_anything_bearing_on(day % DAYS_PER_YEAR) {
+                0
+            } else {
+                running + 1
+            };
+            if day >= DAYS_PER_YEAR && running == gap {
+                return (day + 1 + DAYS_PER_YEAR - gap) % DAYS_PER_YEAR;
+            }
+        }
+        0
+    })
+}
+
+/// The hungry gap ahead of somebody standing on this day of the year: how
+/// many days until it begins, and how many days of it are still to come.
+///
+/// Inside it, it has already begun and what is to come is what is left of
+/// it. Outside it, the whole of the next one is to come.
+pub fn the_gap_ahead(day_of_year: u32) -> (u32, u32) {
+    use crate::environment::seasons::DAYS_PER_YEAR;
+
+    let gap = how_long_the_land_gives_nothing();
+    let starts = when_the_land_stops_giving();
+    let since_it_started = (day_of_year % DAYS_PER_YEAR + DAYS_PER_YEAR - starts) % DAYS_PER_YEAR;
+    if since_it_started < gap {
+        (0, gap - since_it_started)
+    } else {
+        (DAYS_PER_YEAR - since_it_started, gap)
+    }
+}
+
 /// Whether anything a person can eat is growing anywhere on this day.
 pub fn is_anything_bearing_on(day_of_year: u32) -> bool {
     crate::world::ResourceType::all()
@@ -267,6 +308,10 @@ pub struct WhatIsPutBy {
     /// asking "what would still be here in a month" has to be able to take it
     /// back off again. Nought unless somebody says otherwise.
     pub units_in_the_body: f32,
+    /// The day of the year this was reckoned on, which is what anything
+    /// asking "how much of the hungry gap is still ahead" needs.
+    #[serde(default)]
+    pub day_of_year: u32,
 }
 
 impl WhatIsPutBy {
@@ -283,6 +328,7 @@ impl WhatIsPutBy {
             how_near_winter,
             rung: HowLongTheFoodLasts::reckon(days_in_hand, winter_days, how_near_winter),
             units_in_the_body: 0.0,
+            day_of_year,
         }
     }
 
@@ -313,13 +359,52 @@ impl WhatIsPutBy {
     /// The three near horizons press at what they are worth. The winter rung
     /// is scaled by how near the winter is, so an empty larder in spring is a
     /// thing to get on with and an empty larder in late autumn is a fright.
+    ///
+    /// **It was not a fright; it could not even be a worry.** The winter rung
+    /// was its own 0.4 times the nearness, and the drive it sets only wakes at
+    /// 0.4 - so it reached the threshold on the first day of winter and not
+    /// an hour before, when there is nothing left on the land to lay in. All
+    /// through the autumn a person with a month put by and not a winter felt
+    /// nothing, and laid in only while their share of the store was under a
+    /// month. Measured, a settlement's pits topped out at 400 to 600 items a
+    /// head against the 865 a winter takes: it chose Preparedness on one
+    /// autumn turn in twenty, and made 780 trips for the store in a year.
+    /// See ISSUES_FOUND #255.
+    ///
+    /// So while the land still bears the winter presses on everybody without
+    /// one put by, rising through the summer and crossing the drive's
+    /// threshold about two months out, in time to do something about it. It
+    /// does not press harder than the near horizons do on the same body - a
+    /// man short of a week is never easier than one short of a winter - and
+    /// once the land has stopped giving it is what it always was, because a
+    /// fright in January fills no pit.
     pub fn stress(&self) -> f32 {
+        let the_winter = if self.how_near_winter > 0.0 && self.days_in_hand < self.winter_days {
+            if is_anything_bearing_on(self.day_of_year) && the_gap_ahead(self.day_of_year).0 > 0 {
+                WHAT_A_WINTER_NOT_PUT_BY_COMES_TO * self.how_near_winter.sqrt()
+            } else {
+                HowLongTheFoodLasts::NotTheWinter.stress() * self.how_near_winter
+            }
+        } else {
+            0.0
+        };
+
         match self.rung {
-            HowLongTheFoodLasts::NotTheWinter => self.rung.stress() * self.how_near_winter,
-            other => other.stress(),
+            HowLongTheFoodLasts::NotTheWinter => the_winter,
+            HowLongTheFoodLasts::Enough => 0.0,
+            other => other.stress().max(the_winter),
         }
     }
 }
+
+/// How hard a winter not yet put by presses on the eve of it, while there is
+/// still something on the land to put by.
+///
+/// As hard as being short of the week: at the door of the winter a winter
+/// short is a week short, only slower. Along the way it crosses the
+/// Preparedness threshold of 0.4 at half the nearness, which is about two
+/// months before the winter.
+pub const WHAT_A_WINTER_NOT_PUT_BY_COMES_TO: f32 = 0.8;
 
 /// What a winter is, for somebody who has never seen one out.
 ///

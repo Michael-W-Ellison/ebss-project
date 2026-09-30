@@ -135,6 +135,29 @@ impl Simulation {
         )
     }
 
+    /// What a settlement fills its store to, for each mouth about it.
+    ///
+    /// One mouth's winter was the whole of it, and that leaves nothing over
+    /// for the child anybody needs to provide for: the breeding gate asks for a
+    /// parent's winter and a newborn's put by, `(1 + a newborn's share)` of
+    /// what this was sized at. A settlement that did everything asked of it
+    /// filled its pits to one winter a head, stopped, and could never breed
+    /// at all - whoever wanted a child had to be hoarding privately on top.
+    /// See ISSUES_FOUND #254.
+    ///
+    /// So the store is filled to a winter a head and a child's winter on top,
+    /// and a quarter again, because it is counted in items and an item of
+    /// spring leaf is a quarter of an item of anything else, and because what
+    /// is buried is not all still food by February.
+    pub(in crate::analytics) fn what_a_store_is_filled_to_a_mouth() -> u32 {
+        let a_winter = Self::what_one_mouth_wants_put_by() as f32;
+        let and_a_child = 1.0 + crate::agents::agent::what_a_body_this_age_eats(0);
+        (a_winter * and_a_child * Self::WHAT_A_STORE_LOSES_BY_FEBRUARY).ceil() as u32
+    }
+
+    /// The margin a store is filled with, over what it is meant to feed.
+    pub(in crate::analytics) const WHAT_A_STORE_LOSES_BY_FEBRUARY: f32 = 1.25;
+
     /// Whether burying this now would still be food when the land has nothing.
     ///
     /// Burying went ahead of every way of preserving a thing, on the reasoning
@@ -187,7 +210,7 @@ impl Simulation {
             .world
             .how_much_is_in_the_ground_near(here, Self::WORTH_WALKING_TO_THE_STORE);
 
-        put_by < mouths * Self::what_one_mouth_wants_put_by()
+        put_by < mouths * Self::what_a_store_is_filled_to_a_mouth()
     }
 
     /// How much more this settlement's pits could take, within reach.
@@ -258,6 +281,21 @@ impl Simulation {
     pub(in crate::analytics) fn is_the_body_eating_itself(agent: &crate::agents::Agent) -> bool {
         agent.state.physiology.what_this_body_has_spare()
             < Self::WHAT_IS_LEFT_WHEN_A_BODY_IS_LIVING_ON_ITSELF
+    }
+
+    /// Whether this one has a small child of their own, fed through their
+    /// body, getting less than a whole share of it.
+    pub(in crate::analytics) fn a_child_of_mine_is_going_short(&self, agent: &crate::agents::Agent) -> bool {
+        let belly = agent.state.physiology.what_this_body_has_spare();
+        if Self::what_share_a_small_child_gets(belly) >= 1.0 {
+            return false;
+        }
+
+        self.population.agents.iter().any(|child| {
+            child.state.is_alive
+                && child.parent_ids.contains(&agent.id)
+                && child.state.years_old() <= Self::FED_WITHOUT_ASKING_UNTIL
+        })
     }
 
     /// The share of a reserve below which a body is spending itself.
@@ -333,7 +371,7 @@ impl Simulation {
 
         if !matches!(
             self.world.climate.current_season(),
-            crate::environment::seasons::Season::Fall
+            crate::environment::seasons::Season::Fall | crate::environment::seasons::Season::Summer
         ) {
             return None;
         }
@@ -536,7 +574,7 @@ impl Simulation {
                 .world
                 .how_much_is_in_the_ground_near(here, Self::WORTH_WALKING_TO_THE_STORE)
                 + self.how_much_room_is_left_near(here)
-                >= self.how_many_mouths_about(here).max(1) * Self::what_one_mouth_wants_put_by();
+                >= self.how_many_mouths_about(here).max(1) * Self::what_a_store_is_filled_to_a_mouth();
 
             if enough_hole_for_the_winter {
                 if let Some((pit, _)) = self
@@ -715,8 +753,29 @@ impl Simulation {
         // these people are in trouble the hedgerows are already bare, so this
         // gate has already let them through and something else is taking the
         // turn. See ISSUES_FOUND #228.
+        //
+        // **And a body that is wasting is in trouble**, which is the line the
+        // physiology draws and this did not: under half its reserve a body
+        // loses health every turn (`Physiology::is_wasting`), and the store
+        // stayed shut to it until a quarter. Traced through a third summer:
+        // two adults feeding five small children between them, at 0.43 to
+        // 0.69 of their reserve and losing health, beside pits holding 7,932
+        // items that did not move by one from day 30 to day 210 - and both
+        // dead of hunger with them still full. See ISSUES_FOUND #255.
+        //
+        // **And nor is a parent whose small child is going short.** A child
+        // under six is fed through its parent's body and gets less than a
+        // full share as soon as the parent is under four-fifths of their own
+        // reserve (`what_share_a_small_child_gets`). A parent eating for two
+        // or three off the hedgerows sits there all autumn: traced, eleven
+        // adults with eleven small children between them at 0.69 to 0.76 of
+        // their reserve, beside 10,962 items in the ground, and the children
+        // on three-quarter rations dying of it through the winter. A larder
+        // is exactly what feeding a child is for. See ISSUES_FOUND #255.
         if self.are_the_hedgerows_bearing()
             && !Self::is_the_body_eating_itself(agent)
+            && !agent.state.physiology.is_wasting()
+            && !self.a_child_of_mine_is_going_short(agent)
             && !agent.state.is_starving()
             && !agent.nutrition.is_starving()
         {

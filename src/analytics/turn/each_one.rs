@@ -200,6 +200,10 @@ impl Simulation {
 
             self.keep_the_goals_and_the_plan_current(agent_index);
 
+            // Whatever far-off place this one might set out for is read as it
+            // stands today, not as it was when nobody was near it.
+            self.wake_what_this_one_remembers(agent_index);
+
             // Fleeing comes out as an ordinary `Move`, so without a note of why
             // it was chosen it is invisible to both the tally and the errand.
             let mut ran_for_it = false;
@@ -215,6 +219,9 @@ impl Simulation {
                 ran_for_it,
             );
 
+            // How this turn's need gets answered is said by whatever answers
+            // it, this turn - see `Agent::by_what_way`.
+            self.population.agents[agent_index].by_what_way = None;
             let action_result = self.execute_action(&action, agent_index);
 
             // And now he is busy with it until it is done.

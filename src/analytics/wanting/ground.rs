@@ -172,8 +172,7 @@ impl Simulation {
         // agent per turn
         let occupied: std::collections::BTreeSet<(i32, i32)> = self
             .world
-            .resources
-            .iter()
+            .nodes_near(from, radius as u32)
             .map(|resource| (resource.position.x, resource.position.y))
             .collect();
 
@@ -191,11 +190,14 @@ impl Simulation {
                     continue;
                 }
 
+                // Open grass, or a field with nothing standing on it: a crop
+                // ploughed in leaves ground that wants sowing again, and it
+                // is nearer and already broken.
                 let tillable = self
                     .world
                     .grid
                     .get_tile(&candidate)
-                    .map(|tile| tile.terrain.can_be_tilled())
+                    .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
                     .unwrap_or(false);
 
                 if !tillable {
@@ -357,7 +359,7 @@ impl Simulation {
         // would break ground at all is a man who would plough a crop in, and
         // because the ground he already has is nearer than the ground he has
         // not.
-        if let Some(under) = self.a_stand_worth_turning_under(agent_position) {
+        if let Some(under) = self.a_stand_worth_turning_under(agent, agent_position) {
             if under.x == agent_position.0 && under.y == agent_position.1 {
                 return Some(Action::TillSoil);
             }
@@ -378,40 +380,52 @@ impl Simulation {
         })
     }
 
-    /// The nearest stand of a ground-feeding crop standing on ground poor
-    /// enough to be worth giving it to.
+    /// The nearest stand worth turning under: a ground-feeding crop on a field
+    /// its farmer thinks poor, or anything at all on a field he thinks worn to
+    /// nothing.
     ///
-    /// Both halves matter. A pod row on good ground is food and should be
-    /// picked; a pod row on ground that will not carry a crop is worth more
-    /// under the plough than in a basket, and that is the whole judgement a
-    /// green manure asks for.
+    /// Both halves of the first matter. A pod row on good ground is food and
+    /// should be picked; a pod row on ground that will not carry a crop is
+    /// worth more under the plough than in a basket, and that is the whole
+    /// judgement a green manure asks for. The second is how a field changes
+    /// crop: what stands on ground at the bottom of the ladder is not worth
+    /// picking, and the ground wants something else in it.
+    ///
+    /// What he thinks, not what the ground is: the grade of a field is
+    /// something a farmer works out from what has come off it - see
+    /// `Agent::saw_a_stand_on` - and a field he has never seen a crop on he
+    /// has no opinion of, and leaves alone.
     pub(in crate::analytics) fn a_stand_worth_turning_under(
         &self,
+        agent: &crate::agents::Agent,
         position: (i32, i32, i32),
     ) -> Option<crate::world::Position> {
-        use crate::world::Position;
+        use crate::world::resources::ResourceNode;
+        use crate::world::{Position, SoilGrade};
 
         let from = Position::new(position.0, position.1);
         let mut best: Option<(Position, u32)> = None;
 
-        for resource in &self.world.resources {
-            if !resource.resource_type.feeds_the_ground() || resource.amount == 0 {
-                continue;
-            }
-
+        for resource in self.world.nodes_near(from, Self::FIELD_WALK_RADIUS) {
             let distance = from.distance_to(&resource.position);
             if distance > Self::FIELD_WALK_RADIUS {
                 continue;
             }
 
-            let poor = self
-                .world
-                .grid
-                .get_tile(&resource.position)
-                .map(|tile| tile.soil.fertility() < Self::TOO_POOR_FOR_A_HUNGRY_CROP)
-                .unwrap_or(false);
+            let Some(thought) =
+                agent.what_i_make_of_the_field_at((resource.position.x, resource.position.y))
+            else {
+                continue;
+            };
 
-            if !poor {
+            let poor = ResourceNode::WHAT_ORDINARY_WILD_GROUND_CARRIES * thought.multiplier()
+                < Self::TOO_POOR_FOR_A_HUNGRY_CROP;
+            let worn_to_nothing = thought == SoilGrade::LADDER[0];
+
+            let worth_it = (resource.resource_type.feeds_the_ground() && resource.amount > 0 && poor)
+                || worn_to_nothing;
+
+            if !worth_it {
                 continue;
             }
 
@@ -492,11 +506,7 @@ impl Simulation {
                 .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
                 .unwrap_or(false);
 
-            let taken = self
-                .world
-                .resources
-                .iter()
-                .any(|resource| resource.position == here);
+            let taken = self.world.nodes_on(here).next().is_some();
 
             if can_carry_it && !taken {
                 return Some(Action::PlantCutting);
@@ -525,11 +535,9 @@ impl Simulation {
         // plant nobody has tried standing on the same ground as a berry bush
         // was enough to hide the bush.
         self.world
-            .resources
-            .iter()
+            .nodes_on(here)
             .filter(|resource| {
-                resource.position == here
-                    && resource.amount > Self::WHAT_A_CUTTING_TAKES
+                resource.amount > Self::WHAT_A_CUTTING_TAKES
                     && resource.max_amount > Self::TOO_THIN_TO_DIG + Self::WHAT_A_CUTTING_TAKES
             })
             .find(|resource| {
@@ -568,6 +576,11 @@ impl Simulation {
     /// per turn of the walk and meant nobody in eight worlds ever arrived.
     pub(in crate::analytics) const HOW_OFTEN_ANYBODY_RISKS_IT: f64 = 0.06;
 
+    /// How well somebody has to be to try a strange plant: well enough that
+    /// the worst one there is leaves them standing.
+    pub(in crate::analytics) const WELL_ENOUGH_TO_RISK_IT: f32 =
+        Self::WHAT_A_BAD_PLANT_DOES.1 + 15.0;
+
     /// Trying an unknown plant.
     pub(in crate::analytics) fn tasting_action(
         &self,
@@ -581,6 +594,20 @@ impl Simulation {
         // plant is a different story and a worse one; this is the idle
         // curiosity that finds things out cheaply.
         if !agent.immediate_needs_met() {
+            return None;
+        }
+
+        // Nor by somebody who is not well. The worst a plant does is what
+        // `WHAT_A_BAD_PLANT_DOES` says, and it was written so that the top of
+        // it "kills somebody who was not in good condition to start with" -
+        // but nothing asked what condition the taster was in, and a winter
+        // leaves everybody in poor condition. Over twelve settlement-years,
+        // **eighteen people died of a mouthful of something strange**, one
+        // and a half a settlement a year: an eighth of a people of twelve,
+        // every year, to idle curiosity. Somebody well enough that the worst
+        // plant there is leaves them standing tries things; somebody who is
+        // not, waits. See ISSUES_FOUND #252.
+        if agent.state.health < Self::WELL_ENOUGH_TO_RISK_IT {
             return None;
         }
 
@@ -602,9 +629,7 @@ impl Simulation {
         // ever tried anything: sixteen tiles in ten thousand is not a thing
         // that happens by accident.
         let strange = self
-            .world
-            .resources
-            .iter()
+            .nodes_known_to(agent, here, Self::FORAGE_RADIUS)
             .filter(|resource| {
                 resource.resource_type == ResourceType::StrangePlant && resource.amount > 0
             })

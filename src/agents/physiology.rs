@@ -40,6 +40,10 @@ pub const MINUTES_TO_DIE_OF_THIRST: u32 = 3 * MINUTES_PER_DAY;
 /// Three weeks without food and an adult is dead.
 pub const MINUTES_TO_STARVE: u32 = 21 * MINUTES_PER_DAY;
 
+/// The share of its reserve below which a body is wasting: taking it out of
+/// itself, and losing health for it. Half of three weeks.
+pub const WASTING_BELOW: f32 = 0.5;
+
 /// What a body burns in a day at an ordinary level of activity.
 ///
 /// One unit a minute. That is where the figure comes from, and it is why a day
@@ -368,6 +372,12 @@ pub struct Physiology {
     /// The body's own clock, in minutes lived
     pub minute: u32,
 
+    /// What this body is passing on to small children it feeds, as a share of
+    /// its own day's eating. Nought for anybody not feeding one; a fifth for a
+    /// grown body with a newborn. Set each turn by the feeding itself.
+    #[serde(default)]
+    pub also_feeding: f32,
+
     /// One is watered, nought is dead of thirst
     pub hydration: f32,
 
@@ -445,6 +455,7 @@ impl Physiology {
         let share = share.clamp(0.05, 1.0);
         Self {
             minute: 0,
+            also_feeding: 0.0,
             hydration: 1.0,
             swallowed: Vec::new(),
             stomach: Vec::new(),
@@ -516,6 +527,26 @@ impl Physiology {
     }
 
     /// What is in the stomach now.
+    /// What a sitting down to eat aims at for a body feeding others through
+    /// itself: a third of its own day and a third of theirs.
+    ///
+    /// A parent of small children eats for them, and nothing said so. Every
+    /// sitting stopped at a third of a grown day and answered a hunger as
+    /// though it had fed one body, so a parent ate as often and as much as
+    /// anybody and passed a fifth of it on per child. Measured, parents took
+    /// in about 1,216 a day in every season however far behind they were,
+    /// sat at two-thirds of their reserve, and handed their children
+    /// three-quarters of a feed. See ISSUES_FOUND #256.
+    pub fn what_a_sitting_is_for_whoever_it_feeds(&self) -> f32 {
+        WHAT_A_SITTING_AIMS_AT * (1.0 + self.also_feeding.max(0.0))
+    }
+
+    /// How much of a hunger a meal of this much energy answers, for this
+    /// body - which is less of one for a body that is eating for others too.
+    pub fn what_this_meal_answers_here(&self, energy_in: f32) -> f32 {
+        (energy_in / self.what_a_sitting_is_for_whoever_it_feeds()).clamp(0.0, 1.0)
+    }
+
     pub fn in_the_stomach(&self) -> f32 {
         self.stomach.iter().map(|m| m.remaining).sum()
     }
@@ -767,7 +798,7 @@ impl Physiology {
     /// Half of three weeks. Going a day without food is not this; going ten
     /// days is.
     pub fn is_wasting(&self) -> bool {
-        self.reserve < self.reserve_capacity * 0.5
+        self.reserve < self.reserve_capacity * WASTING_BELOW
     }
 
     /// Put this body where it would be after this long without food.
@@ -926,7 +957,7 @@ impl Physiology {
         // energy, nineteen units of ordinary forage and eighty of spring leaf
         // are the same supper and only the energy can say so. Read as volume,
         // a body with a full supper of anything dense in it read as empty.
-        let belly = self.energy_in_the_stomach() / (WHAT_A_SITTING_AIMS_AT * out_of);
+        let belly = self.energy_in_the_stomach() / (self.what_a_sitting_is_for_whoever_it_feeds() * out_of);
 
         // How full is full enough to stop wanting more, for this body now.
         //
@@ -959,7 +990,12 @@ impl Physiology {
         // ordinary body, and a body that has been living off its reserve wants
         // more than a day's worth in hand before it stops looking for the next
         // meal.
-        let gut = self.energy_in_the_gut() / (UNITS_BURNED_IN_AN_ORDINARY_DAY * out_of);
+        // A day's food behind it for everybody this body feeds, not only for
+        // itself: a parent passing a fifth of every meal to a newborn has a
+        // day and a fifth to find. See ISSUES_FOUND #261.
+        let for_the_household = 1.0 + self.also_feeding.max(0.0);
+        let gut = self.energy_in_the_gut()
+            / (UNITS_BURNED_IN_AN_ORDINARY_DAY * out_of * for_the_household);
         let enough_behind_it = 1.0 + (1.0 - share_of_reserve);
         let by_gut = if gut >= enough_behind_it {
             0.0
@@ -1004,7 +1040,13 @@ impl Physiology {
             return 0.0;
         }
 
-        by_reserve * by_belly * by_gut
+        // And it rises for the household. A parent's hunger was read off the
+        // parent's body alone, so somebody feeding a child through themselves
+        // got hungry, ate and fetched as though they were feeding one, and
+        // sat at two-thirds of their reserve handing the child three-quarter
+        // rations. Forty-six children born over sixteen years in twelve
+        // settlements, and none reached five. See ISSUES_FOUND #261.
+        by_reserve * by_belly * by_gut * for_the_household
     }
 }
 

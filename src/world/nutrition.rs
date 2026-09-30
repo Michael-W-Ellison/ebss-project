@@ -225,6 +225,16 @@ pub fn what_an_untracked_mouthful_is_worth() -> NutritionalContent {
     NutritionalContent::new(20.0, 5.0, 5.0, 0.3)
 }
 
+/// A turn's worth of being fed by somebody else, whole.
+///
+/// What a small child gets from the grown person feeding it: enough of each
+/// thing `NutritionalState::turn_metabolism` takes out of a body in a turn at
+/// its busiest that a child fed in full holds steady, and one fed a share of
+/// it runs down by the rest. See `Simulation::feed_the_small_children`.
+pub fn what_a_turn_of_being_fed_is_worth() -> NutritionalContent {
+    NutritionalContent::new(0.05, 0.005, 0.002, 0.0)
+}
+
 /// Whether a thing with this name is food at all.
 ///
 /// The one answer for item ids, as `ItemType::is_it_food` is the one answer

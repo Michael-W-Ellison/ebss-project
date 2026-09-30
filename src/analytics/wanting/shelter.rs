@@ -619,6 +619,24 @@ impl Simulation {
             .filter(|child| {
                 matches!(child.state.life_stage, LifeStage::Infant | LifeStage::Child)
             })
+            // And a child too small to walk away is with whichever parent it
+            // is kept with, not with both. `the_small_stay_with_their_people`
+            // puts it on the first of its parents still living, so to the
+            // other parent it was always wherever that one was - more often
+            // than not past the leash, or near something with teeth - and
+            // that parent walked after it. Measured, a quarter of every
+            // parent's turns went on it, and parents gathered and ate at half
+            // the rate of anybody else. See ISSUES_FOUND #256.
+            //
+            // Nor to one in their own arms. A child being carried catches up
+            // with whoever carries it at the start of the next turn, so one
+            // step taken left it a pace behind - and with anything with teeth
+            // about, the parent was sent back for it, a step there and a step
+            // back, turn after turn. Measured after the first half of this, 14%
+            // of a hungry parent's turns still went on it. A small child is
+            // wherever its carrier is; only a child who can walk off can be
+            // walked after. See ISSUES_FOUND #259.
+            .filter(|child| child.state.years_old() >= LifeStage::KEPT_WITH_A_PARENT_UNTIL)
             .map(|child| child.state.position)
             .collect();
 
@@ -627,21 +645,30 @@ impl Simulation {
         }
 
         // Anything with teeth near one of them brings a parent at a run
-        let hunted = mine.iter().find(|child| {
-            self.world
-                .get_animals_in_radius((child.0, child.1), Self::DANGER_TO_A_CHILD as f32)
-                .into_iter()
-                .any(|animal| {
-                    animal.is_alive()
-                        && !animal.is_domesticated
-                        && self
-                            .world
-                            .animals
-                            .get_species(&animal.species_id)
-                            .map(|species| !species.prey_species.is_empty())
-                            .unwrap_or(false)
-                })
-        });
+        // A child already at this one's feet is as guarded as walking can
+        // make it. Going to it was a `Move` to the tile underfoot, which the
+        // walker books as done - and this branch sits above eating, so for as
+        // long as a wolf hung about, a parent did nothing else. Traced
+        // through a second winter: eight days of it, the reserve falling from
+        // 0.60 to 0.43, standing on a pit. See ISSUES_FOUND #255.
+        let hunted = mine
+            .iter()
+            .filter(|child| (child.0, child.1) != (agent_position.0, agent_position.1))
+            .find(|child| {
+                self.world
+                    .get_animals_in_radius((child.0, child.1), Self::DANGER_TO_A_CHILD as f32)
+                    .into_iter()
+                    .any(|animal| {
+                        animal.is_alive()
+                            && !animal.is_domesticated
+                            && self
+                                .world
+                                .animals
+                                .get_species(&animal.species_id)
+                                .map(|species| !species.prey_species.is_empty())
+                                .unwrap_or(false)
+                    })
+            });
 
         if let Some(child) = hunted {
             return Some(Action::Move {

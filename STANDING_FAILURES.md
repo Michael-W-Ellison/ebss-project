@@ -28,10 +28,39 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
+**Last full run** (ISSUES_FOUND #263): `cargo test --lib` - 2,709 passed,
+6 failed, 2 ignored, 56 minutes. After it, three are left:
+- The two multi-generation tests below.
+- `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it`, one of
+  the two thresholds that flap (below).
+
+The other three were fixed after the run:
+- Two were the recorded dice counts, which #261 to #263 moved; they are
+  re-recorded.
+- `anticipation_tests::two_people_do_not_get_the_same_answer` had failed on
+  every run since #260, which reads hunger's clock off the body rather than
+  off how long it has gone unanswered. It now asks the same question of
+  wanting company, which is still built that way.
+
 | test | reports | what is known |
 |---|---|---|
-| `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **#167's question, and it is moving.** It was 63,456 refusals of "could not feed a child" and no conception ever. After #227 the same fixture conceives and bears one child; after #228 the turns anybody is actually *in condition* to breed went 368 to **1,117**, hunger deaths 9 to 7, and the last founder lives out the year instead of dying on day 342. Leave red: a settlement of twelve still collapses over its first winter with six thousand units in its pits, and until that stops there is nothing to raise a child on. |
-| `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same question as the row above. Its bound is sound: it counts by parentage, which is the right predicate. Leave red. |
+| `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **A stated requirement: settlements must last generations.** Nine thousand turns is half a year on today's calendar, and a pregnancy is nine months (#253), so as written this cannot pass whatever the model does; it wants rewriting against the calendar. After #255, twelve settlements over five years: 10 of 12 still standing at the end of year five, 59 people, 29 children born. |
+| `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same requirement, same calendar problem (6,000 turns is four months, not "four full years"). Its bound is sound: it counts by parentage. |
+
+Measured over sixteen years (#259): four settlements of twelve still there,
+one to five founders each, and none of the forty-three children born in them
+reached five. With #260 in, settlements last years longer, three are left at
+year sixteen, and none of forty-six children reached five. Children are fed through a parent on the specification's bands,
+and a parent feeding one cannot eat enough: every meal is a walk. The work
+going on is to let people anticipate and learn that - see #259.
+
+What stood in the way before that, measured (#255): settlements now fill their pits past
+a winter a head and mostly come through, but they shrink - from 132 people to
+59 over five years - and most children born do not live to six. Parents eat
+about 1,216 a day in every season, however far behind they are, where the
+childless eat what they need; a parent at two-thirds of their reserve hands a
+small child three-quarters of a feed, and the child runs down on it. Blows -
+predators and quarrels - take ten to sixteen people a year across the twelve.
 
 ## The predator layer, and what it turned out to be
 

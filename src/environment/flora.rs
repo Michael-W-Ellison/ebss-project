@@ -1454,21 +1454,169 @@ fn seaweed() -> PlantSpecies {
 // PLANT INSTANCES AND MANAGEMENT
 // ============================================================================
 
+/// Which kind of plant this is: a small number standing for its name.
+///
+/// Every plant used to carry its species as a `String` - twenty-four bytes in
+/// the struct and its own allocation on the heap besides, holding "oak_tree"
+/// or "grass" over again for each of the tens of thousands of plants on a map.
+/// There are about fifty species. So the name is kept once, here, and a plant
+/// carries two bytes that say which one.
+///
+/// It reads as the name it stands for everywhere a name was read: it derefs to
+/// `&str`, compares equal to one, orders by it, and is written to a save as
+/// the name - so a save does not depend on the order species happened to be
+/// met in, and nothing downstream sees a difference.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SpeciesId(u16);
+
+impl SpeciesId {
+    /// Room for this many species. A few dozen exist.
+    const HOW_MANY_THERE_CAN_BE: usize = 4096;
+
+    fn names() -> &'static [std::sync::OnceLock<&'static str>; Self::HOW_MANY_THERE_CAN_BE] {
+        static NAMES: [std::sync::OnceLock<&'static str>; SpeciesId::HOW_MANY_THERE_CAN_BE] =
+            [const { std::sync::OnceLock::new() }; SpeciesId::HOW_MANY_THERE_CAN_BE];
+        &NAMES
+    }
+
+    /// The number for this name, handing out the next one if it is new.
+    ///
+    /// Names are only ever added, so reading one back needs no lock; only
+    /// adding does, and that happens once per species per run.
+    pub fn called(name: &str) -> Self {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static HOW_MANY: AtomicUsize = AtomicUsize::new(0);
+        static ADDING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+        let names = Self::names();
+        let known = |upto: usize| {
+            (0..upto).find(|&i| names[i].get().is_some_and(|known| *known == name))
+        };
+
+        if let Some(i) = known(HOW_MANY.load(Ordering::Acquire)) {
+            return Self(i as u16);
+        }
+
+        let _adding = ADDING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let upto = HOW_MANY.load(Ordering::Acquire);
+        if let Some(i) = known(upto) {
+            return Self(i as u16);
+        }
+
+        assert!(upto < Self::HOW_MANY_THERE_CAN_BE, "more plant species than there is room for");
+        let _ = names[upto].set(Box::leak(name.to_owned().into_boxed_str()));
+        HOW_MANY.store(upto + 1, Ordering::Release);
+        Self(upto as u16)
+    }
+
+    /// The name this stands for.
+    pub fn as_str(&self) -> &'static str {
+        Self::names()[self.0 as usize]
+            .get()
+            .expect("a species number is only ever handed out with its name")
+    }
+}
+
+impl std::ops::Deref for SpeciesId {
+    type Target = str;
+    fn deref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl From<&str> for SpeciesId {
+    fn from(name: &str) -> Self {
+        Self::called(name)
+    }
+}
+
+impl From<String> for SpeciesId {
+    fn from(name: String) -> Self {
+        Self::called(&name)
+    }
+}
+
+impl From<&String> for SpeciesId {
+    fn from(name: &String) -> Self {
+        Self::called(name)
+    }
+}
+
+impl PartialEq<str> for SpeciesId {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+
+impl PartialEq<&str> for SpeciesId {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+impl PartialEq<String> for SpeciesId {
+    fn eq(&self, other: &String) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+/// By name, not by number, so that anything kept in order by species is in
+/// the same order it was when this was a `String`.
+impl PartialOrd for SpeciesId {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for SpeciesId {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl std::fmt::Debug for SpeciesId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+impl std::fmt::Display for SpeciesId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Serialize for SpeciesId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for SpeciesId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+        Ok(Self::called(&name))
+    }
+}
+
 /// Individual plant instance in the world
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Plant {
     pub id: Uuid,
-    pub species_id: String,
+    pub species_id: SpeciesId,
     pub position: (i32, i32),
+    /// Out of `PlantSpecies::health`, which is the same for every plant of a
+    /// kind and so is not copied into each of them.
     pub current_health: f32,
-    pub max_health: f32,
     pub growth_stage: GrowthStage,
     pub growth_progress: f32, // 0.0 to 1.0 for current stage
     pub age_turns: u32,
     pub is_harvestable: bool,
     pub has_been_harvested: bool,
     pub regrow_timer: u32,
-    pub planted_by: Option<Uuid>, // Agent who planted it (for farming)
+    // `planted_by: Option<Uuid>` was here: seventeen bytes on every plant in
+    // the world, "nobody" on all the wild ones, written when a crop was sown
+    // and never once read.
     pub is_cultivated: bool, // Whether it's a farm plant vs wild
 
     /// The turn this plant has been grown up to.
@@ -1540,44 +1688,22 @@ impl GrowingConditions {
 
         water.min(light).min(nutrients)
     }
-
-    /// How much nutrient a plant growing here draws out of the ground, in one
-    /// tick.
-    ///
-    /// Per tick, because the growing pass multiplies this by the ticks since
-    /// that plant last grew. It was written as a rate per pass - 0.00015 - and
-    /// a pass and a tick were the same thing until a step began advancing the
-    /// clock by thirty of them, at which point every plant in the world began
-    /// drawing thirty times what it should. Stated per day here so that the
-    /// number means something a person can check. See ISSUES_FOUND #217.
-    pub fn draw_per_tick(&self) -> f32 {
-        // What a plant at its best pace takes out of the tile it stands on in
-        // a day: the old per-pass figure times the forty-eight passes that
-        // were in a day when it was measured.
-        const APPETITE_IN_A_DAY: f32 = 0.0072;
-
-        let appetite = APPETITE_IN_A_DAY / crate::environment::seasons::TICKS_PER_DAY as f32;
-
-        appetite * self.uptake.max(0.0) * self.growth_share()
-    }
 }
 
 impl Plant {
     /// Create a new plant instance
-    pub fn new(species_id: String, position: (i32, i32)) -> Self {
+    pub fn new(species_id: impl Into<SpeciesId>, position: (i32, i32)) -> Self {
         Self {
             id: crate::core::dice::name(),
-            species_id,
+            species_id: species_id.into(),
             position,
             current_health: 0.0, // Set from species
-            max_health: 0.0,
             growth_stage: GrowthStage::Seedling,
             growth_progress: 0.0,
             age_turns: 0,
             is_harvestable: false,
             has_been_harvested: false,
             regrow_timer: 0,
-            planted_by: None,
             is_cultivated: false,
             grown_up_to: 0,
             shade_on_it: 0.0,
@@ -1586,15 +1712,13 @@ impl Plant {
 
     /// Initialize with species data
     pub fn with_species(mut self, species: &PlantSpecies) -> Self {
-        self.max_health = species.health;
         self.current_health = species.health;
         self
     }
 
     /// Mark as cultivated/farmed
-    pub fn cultivated(mut self, planter_id: Uuid) -> Self {
+    pub fn cultivated(mut self) -> Self {
         self.is_cultivated = true;
-        self.planted_by = Some(planter_id);
         self
     }
 
@@ -1793,7 +1917,8 @@ impl PlantLedger {
 /// on a clock: see `PlantSpecies::seed_keeps_for_turns`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Seed {
-    pub species_id: String,
+    /// Two bytes rather than a copy of the name - see `SpeciesId`.
+    pub species_id: SpeciesId,
     pub position: (i32, i32),
 
     /// The turn it fell on.
@@ -1888,7 +2013,7 @@ impl PlantManager {
     /// So the turn is a parameter and every caller has to say which one.
     pub fn spawn_plant(
         &mut self,
-        species_id: String,
+        species_id: impl Into<SpeciesId>,
         position: (i32, i32),
         now: u32,
     ) -> Option<Uuid> {
@@ -1896,9 +2021,10 @@ impl PlantManager {
             return None;
         }
 
+        let species_id = species_id.into();
         let species = self.registry.as_ref()?.get(&species_id)?;
 
-        let mut plant = Plant::new(species_id.clone(), position).with_species(species);
+        let mut plant = Plant::new(species_id, position).with_species(species);
         plant.grown_up_to = now;
 
         let id = plant.id;
@@ -1909,20 +2035,20 @@ impl PlantManager {
     /// Spawn a cultivated plant (farmed)
     pub fn plant_crop(
         &mut self,
-        species_id: String,
+        species_id: impl Into<SpeciesId>,
         position: (i32, i32),
-        planter_id: Uuid,
         now: u32,
     ) -> Option<Uuid> {
         if self.plants.len() >= self.max_population {
             return None;
         }
 
+        let species_id = species_id.into();
         let species = self.registry.as_ref()?.get(&species_id)?;
 
-        let mut plant = Plant::new(species_id.clone(), position)
+        let mut plant = Plant::new(species_id, position)
             .with_species(species)
-            .cultivated(planter_id);
+            .cultivated();
         plant.grown_up_to = now;
 
         let id = plant.id;
@@ -2171,30 +2297,6 @@ impl PlantManager {
         }
     }
 
-    /// What a plant sheds, for what it has just drawn out of the ground.
-    ///
-    /// A plant that has finished growing gives back everything it takes: it
-    /// is not putting anything on, so what goes up the stem comes down again
-    /// as leaf and root and stalk. One that is still building itself keeps
-    /// half - the same half `Soil::RESIDUE_PER_UNIT_GROWN` holds back for a
-    /// crop node - and that half comes back when it dies. Both are grossed up
-    /// by `KEPT_FROM_ROT` the same way, because litter loses some of itself to
-    /// the air on the way to becoming soil again.
-    ///
-    /// This used to be two unrelated tables: an appetite that took no notice
-    /// of what kind of plant it was, and a leaf fall by size that took no
-    /// notice of what the plant had drawn. A small plant took two and a half
-    /// times out of its tile what it put back, and a meadow with nobody near
-    /// it lost a tenth of its fertility in a year. It is the third accounting
-    /// of the same physics in this model and it was the only one nobody had
-    /// balanced against itself.
-    fn what_a_plant_sheds_for_what_it_drew(drawn: f32, still_growing: bool) -> f32 {
-        use crate::world::soil::Soil;
-
-        let goes_back = if still_growing { 0.5 } else { 1.0 };
-        drawn * goes_back / Soil::KEPT_FROM_ROT
-    }
-
     /// How much leaf fall this plant puts on the ground each turn
     #[allow(dead_code)]
     fn leaf_fall_of(size: PlantSize) -> f32 {
@@ -2369,7 +2471,8 @@ impl PlantManager {
 
             let position = Position::new(plant.position.0, plant.position.1);
 
-            let tile = match grid.get_tile_mut(&position) {
+            let from_the_ground = grid.what_a_plant_gets_here(&position);
+            let tile = match grid.get_tile(&position) {
                 Some(tile) => tile,
                 None => continue,
             };
@@ -2409,16 +2512,16 @@ impl PlantManager {
             // up to date without the canopy having to be gathered again.
             plant.shade_on_it = (over_it - own).max(0.0);
 
-            // Nutrient: what is in the ground, and how readily this plant can
-            // get at it. Broken ground is worked, weeded and watered, so a crop
-            // on it takes up far more of what is there - it does not grow
-            // faster than its kind can grow.
+            // Nutrient: what the ground's grade gives a plant, and how readily
+            // this one can get at it. Broken ground is worked, weeded and
+            // watered, so a crop on it takes up far more of what is there - it
+            // does not grow faster than its kind can grow.
             let uptake = if tile.terrain.is_cultivated() { 2.5 } else { 1.0 };
 
             let conditions = GrowingConditions {
                 water,
                 light,
-                nutrients: tile.soil.fertility(),
+                nutrients: from_the_ground,
                 uptake,
             };
 
@@ -2435,7 +2538,7 @@ impl PlantManager {
             // depends on how far short the ground is falling.
             let living = conditions.growth_share();
             if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
-                plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, ticks);
+                plant.current_health -= Self::what_a_bad_pass_costs(species.health, living, ticks);
             } else {
                 // What it puts back on is what the ground and the sky give it,
                 // so a plant on poor ground comes back slowly and one in a
@@ -2444,42 +2547,17 @@ impl PlantManager {
                 // again out of the same water and light and nutrient
                 // everything else here runs on.
                 plant.current_health = (plant.current_health
-                    + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
-                    .min(plant.max_health);
+                    + species.health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
+                    .min(species.health);
             }
 
-            // What it grows with, it takes out of the ground
-            let wanted = conditions.draw_per_tick() * ticks;
-            if wanted > 0.0 {
-                tile.soil.draw(wanted);
-            }
-            let drawn = wanted;
-
-            // And what it sheds, it puts back.
-            //
-            // At every stage, not only once grown. A seedling drops leaves
-            // too, and only counting the grown ones left every young plant on
-            // the map drawing nutrient out of the ground and putting nothing
-            // back - which did not matter while nothing ever came up from
-            // seed, and matters now that most of what is standing on a tile
-            // in any given decade has come up from seed. A meadow nobody
-            // touched lost a tenth of its fertility in a year.
-            //
-            // What a young plant sheds is less than what a grown one does,
-            // in proportion to how much of the plant there is yet.
-            // A plant still building itself keeps half of what it draws; one
-            // that has finished growing is not putting on anything and gives
-            // back everything it takes.
-            let keeps_some_of_it = matches!(
-                plant.growth_stage,
-                GrowthStage::Seedling | GrowthStage::Growing
-            );
-            tile.soil
-                .add_leaf_litter(Self::what_a_plant_sheds_for_what_it_drew(drawn, keeps_some_of_it));
+            // Nothing is drawn out of the ground and nothing shed back onto
+            // it. Wild ground is what it was made; only people change a grade.
+            // See ISSUES_FOUND #246.
         }
 
         self.what_came_up_and_what_rotted(grid, &registry, &canopy, now, &band);
-        self.what_died(grid, &registry);
+        self.what_died(&registry);
     }
 
     /// The rows of the map a given zone stands for.
@@ -2539,7 +2617,8 @@ impl PlantManager {
         };
 
         let here = Position::new(plant.position.0, plant.position.1);
-        let Some(tile) = grid.get_tile_mut(&here) else {
+        let from_the_ground = grid.what_a_plant_gets_here(&here);
+        let Some(tile) = grid.get_tile(&here) else {
             return;
         };
 
@@ -2563,7 +2642,7 @@ impl PlantManager {
         let conditions = GrowingConditions {
             water,
             light,
-            nutrients: tile.soil.fertility(),
+            nutrients: from_the_ground,
             uptake,
         };
 
@@ -2571,48 +2650,11 @@ impl PlantManager {
 
         let living = conditions.growth_share();
         if living < Self::WHAT_A_PLANT_NEEDS_TO_HOLD_ITS_OWN {
-            plant.current_health -= Self::what_a_bad_pass_costs(plant.max_health, living, ticks);
+            plant.current_health -= Self::what_a_bad_pass_costs(species.health, living, ticks);
         } else {
             plant.current_health = (plant.current_health
-                + plant.max_health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
-                .min(plant.max_health);
-        }
-
-        let drawn = conditions.draw_per_tick() * ticks;
-        if drawn > 0.0 {
-            tile.soil.draw(drawn);
-        }
-
-        let still_growing = matches!(
-            plant.growth_stage,
-            GrowthStage::Seedling | GrowthStage::Growing
-        );
-        tile.soil
-            .add_leaf_litter(Self::what_a_plant_sheds_for_what_it_drew(drawn, still_growing));
-    }
-
-    /// What a plant leaves on the ground when it finally goes over.
-    ///
-    /// A tree is mostly wood, which lies for years; a herb is soft and gone
-    /// in a season. The two litters already break down at their own rates -
-    /// see `Soil::decay` - so all this has to decide is how much of which,
-    /// and that follows from how big the thing was. A dead oak is the largest
-    /// single thing that ever happens to a tile of soil in this model, which
-    /// is right: a fallen tree is what makes the ground under a wood.
-    fn what_a_dead_plant_leaves(size: PlantSize, is_tree: bool) -> (f32, f32) {
-        let bulk = match size {
-            PlantSize::Huge => 3.0,
-            PlantSize::Large => 2.0,
-            PlantSize::Medium => 0.8,
-            PlantSize::Small => 0.2,
-            PlantSize::Tiny => 0.05,
-        };
-
-        if is_tree {
-            // Mostly timber, some leaf
-            (bulk * 0.25, bulk * 0.75)
-        } else {
-            (bulk * 0.9, bulk * 0.1)
+                + species.health * Self::HOW_FAST_A_PLANT_COMES_BACK * living * ticks)
+                .min(species.health);
         }
     }
 
@@ -2704,10 +2746,7 @@ impl PlantManager {
     /// anything ever left the map was being harvested by somebody. So a map
     /// with nobody on it had exactly the vegetation it started with, for
     /// ever, and no room anywhere for anything new to come up.
-    fn what_died(&mut self, grid: &mut crate::world::Grid, registry: &FloraRegistry) {
-        use crate::world::Position;
-
-        let mut fell = Vec::new();
+    fn what_died(&mut self, registry: &FloraRegistry) {
         let mut tally = self.ledger.clone();
 
         self.plants.retain(|plant| {
@@ -2729,23 +2768,11 @@ impl PlantManager {
                 tally.died_of_the_ground[class] += 1;
             }
 
-            fell.push((
-                plant.position,
-                Self::what_a_dead_plant_leaves(species.size, species.is_tree),
-            ));
             false
         });
 
         self.ledger.died_of_age = tally.died_of_age;
         self.ledger.died_of_the_ground = tally.died_of_the_ground;
-
-        for (at, (soft, woody)) in fell {
-            let here = Position::new(at.0, at.1);
-            if let Some(tile) = grid.get_tile_mut(&here) {
-                tile.soil.add_leaf_litter(soft);
-                tile.soil.add_woody_litter(woody);
-            }
-        }
     }
 
     /// What dropped seed, and where it fell.
@@ -2887,7 +2914,6 @@ impl PlantManager {
 
         let mut rng = crate::core::dice::roll();
         let mut coming_up = Vec::new();
-        let mut rotted = Vec::new();
         let mut shaded_out = Vec::new();
 
         // The ledger cannot be borrowed inside the retain, which is holding
@@ -2950,7 +2976,6 @@ impl PlantManager {
                     standing[at] = species.how_much_ground_it_claims() + 1;
                     tally.seed_took[class] += 1;
                 } else {
-                    rotted.push((seed.position, Self::WHAT_A_SEED_IS_WORTH));
                     tally.seed_lost_its_throw[class] += 1;
                 }
                 return false;
@@ -2960,7 +2985,6 @@ impl PlantManager {
             // and it does not sit there for ever either: it keeps for its
             // season or two and then it has rotted.
             if now.saturating_sub(seed.dropped_at) >= species.seed_keeps_for_turns() {
-                rotted.push((seed.position, Self::WHAT_A_SEED_IS_WORTH));
                 tally.seed_rotted_on_wrong_ground[PlantLedger::which_class(species)] += 1;
                 return false;
             }
@@ -2978,41 +3002,21 @@ impl PlantManager {
         if !shaded_out.is_empty() {
             let gone: std::collections::BTreeSet<(i32, i32)> =
                 shaded_out.into_iter().collect();
-            let mut left_behind = Vec::new();
-
             self.plants.retain(|plant| {
                 if !gone.contains(&plant.position) {
                     return true;
                 }
                 if let Some(species) = registry.get(&plant.species_id) {
-                    left_behind.push((
-                        plant.position,
-                        Self::what_a_dead_plant_leaves(species.size, species.is_tree),
-                    ));
                     self.ledger.shaded_out[PlantLedger::which_class(species)] += 1;
                 }
                 false
             });
-
-            for (at, (soft, woody)) in left_behind {
-                let here = Position::new(at.0, at.1);
-                if let Some(tile) = grid.get_tile_mut(&here) {
-                    tile.soil.add_leaf_litter(soft);
-                    tile.soil.add_woody_litter(woody);
-                }
-            }
         }
 
         for (species_id, at) in coming_up {
             self.spawn_plant(species_id, at, now);
         }
 
-        for (at, worth) in rotted {
-            let here = Position::new(at.0, at.1);
-            if let Some(tile) = grid.get_tile_mut(&here) {
-                tile.soil.add_leaf_litter(worth);
-            }
-        }
     }
 
     /// How likely a seed on ground that would suit it is to actually take.
@@ -3036,12 +3040,6 @@ impl PlantManager {
         ON_OPEN_GROUND * sun * sun * sun
     }
 
-    /// How much a seed that came to nothing puts back into the ground.
-    ///
-    /// Almost nothing, which is the point: what is being closed here is the
-    /// loop, not the books. A seed that rots is a hundredth of what the plant
-    /// that dropped it will leave when it goes over.
-    const WHAT_A_SEED_IS_WORTH: f32 = 0.002;
 
     /// How much seed is lying in the ground.
     pub fn how_much_seed_is_waiting(&self) -> usize {
@@ -3261,19 +3259,13 @@ fn a_plant_knows_what_country_it_belongs_in() {
 #[test]
 fn a_plant_that_has_had_its_years_goes_over() {
     use crate::environment::seasons::TICKS_PER_YEAR;
-    use crate::world::{Grid, Position};
+    use crate::world::Grid;
 
     let mut grid = Grid::new(12, 12);
     grid.generate_terrain();
-    grid.settle_soil();
 
     let mut plants = PlantManager::new(100);
     plants.spawn_plant("grass".to_string(), (5, 5), 0);
-
-    let litter_before = grid
-        .get_tile(&Position::new(5, 5))
-        .map(|tile| tile.soil.litter())
-        .unwrap_or(0.0);
 
     // A grass lives two years. Three of them is well past it. Every zone in
     // its turn, because the plant is only looked at when its own comes round.
@@ -3290,14 +3282,8 @@ fn a_plant_that_has_had_its_years_goes_over() {
         "a grass three years old is still standing"
     );
 
-    let litter_after = grid
-        .get_tile(&Position::new(5, 5))
-        .map(|tile| tile.soil.litter())
-        .unwrap_or(0.0);
-    assert!(
-        litter_after > litter_before,
-        "and it left nothing behind: {litter_before:.4} to {litter_after:.4}"
-    );
+    // It used to be asserted here that it left litter behind. It leaves
+    // nothing now: wild ground is what it was made - see ISSUES_FOUND #246.
 }
 
 /// Seed on ground that will not carry it never comes up, and does not lie
@@ -3314,7 +3300,6 @@ fn seed_on_the_wrong_ground_rots_instead_of_waiting_for_ever() {
             grid.tiles[y][x].terrain = Terrain::new(TerrainType::Wetland);
         }
     }
-    grid.settle_soil();
 
     let mut plants = PlantManager::new(400);
 
@@ -3453,7 +3438,6 @@ fn ground_somebody_is_standing_on_is_brought_up_to_date() {
             tile.terrain = Terrain::new(TerrainType::Meadow);
         }
     }
-    grid.settle_soil();
 
     let mut plants = PlantManager::new(8);
     plants.spawn_plant("grass".to_string(), (4, 4), 0);
@@ -3506,12 +3490,14 @@ fn a_cropped_plant_takes_days_to_come_back_and_not_one_pass() {
             tile.terrain = Terrain::new(TerrainType::Meadow);
         }
     }
-    grid.settle_soil();
 
     let mut plants = PlantManager::new(8);
     plants.spawn_plant("grass".to_string(), (4, 4), 0);
 
-    let most = plants.all_plants()[0].max_health;
+    let most = plants
+        .get_species(&plants.all_plants()[0].species_id)
+        .expect("grass is a species")
+        .health;
     plants.all_plants_mut()[0].current_health = 0.0;
 
     // One day of the best ground this world has, in one pass.

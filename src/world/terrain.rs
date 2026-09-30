@@ -40,6 +40,49 @@ pub enum TerrainType {
     Farmland,
 }
 
+impl TerrainType {
+    /// Every kind of country there is.
+    ///
+    /// The match in `every_kind_is_listed` stops compiling if a kind is added
+    /// and not put here, so this cannot fall behind the enum.
+    pub const EVERY_KIND: [TerrainType; 14] = [
+        TerrainType::Plains,
+        TerrainType::Forest,
+        TerrainType::Mountain,
+        TerrainType::Water,
+        TerrainType::Desert,
+        TerrainType::Wetland,
+        TerrainType::Meadow,
+        TerrainType::Hills,
+        TerrainType::Beach,
+        TerrainType::Riverbank,
+        TerrainType::Sea,
+        TerrainType::SaltMarsh,
+        TerrainType::SaltFlat,
+        TerrainType::Farmland,
+    ];
+
+    #[allow(dead_code)]
+    fn every_kind_is_listed(kind: TerrainType) {
+        match kind {
+            TerrainType::Plains
+            | TerrainType::Forest
+            | TerrainType::Mountain
+            | TerrainType::Water
+            | TerrainType::Desert
+            | TerrainType::Wetland
+            | TerrainType::Meadow
+            | TerrainType::Hills
+            | TerrainType::Beach
+            | TerrainType::Riverbank
+            | TerrainType::Sea
+            | TerrainType::SaltMarsh
+            | TerrainType::SaltFlat
+            | TerrainType::Farmland => {}
+        }
+    }
+}
+
 /// Terrain with properties
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Terrain {
@@ -179,11 +222,19 @@ impl Default for Terrain {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tile {
     pub terrain: Terrain,
-    pub explored: bool, // Global exploration state (any agent has seen this)
-    pub last_seen_turn: Option<u32>, // When was this tile last observed
 
-    /// The ground itself: what plants can draw on, and what is lying on it
-    /// waiting to break down into more of the same
+    // `explored` and `last_seen_turn` used to be here, at nine of this
+    // struct's forty bytes. `last_seen_turn` was never written and never
+    // read, and `explored` was written once and read only by its own test:
+    // what anybody has seen is kept by the one who saw it, in
+    // `ExplorationKnowledge`, which is where every decision reads it. A
+    // global fog of war that nothing consulted cost 900 MB on a ten thousand
+    // cell map.
+
+    /// What somebody has left on this ground: muck, the seed in it, and on a
+    /// field its weeds and vermin. The ground's own kind and grade are not
+    /// here - wild ground's follow from its terrain, and a field's are on the
+    /// grid's record of it. See `world::soil`.
     #[serde(default)]
     pub soil: super::soil::Soil,
 }
@@ -192,18 +243,9 @@ impl Tile {
     pub fn new(terrain_type: TerrainType) -> Self {
         Self {
             terrain: Terrain::new(terrain_type),
-            explored: false, // Tiles start unexplored (fog of war)
-            last_seen_turn: None,
-            soil: super::soil::Soil::for_terrain(terrain_type),
+            soil: super::soil::Soil::default(),
         }
     }
-
-    /// Mark this tile as explored (globally)
-    pub fn mark_explored(&mut self) {
-        self.explored = true;
-    }
-
-
 
 }
 
@@ -264,11 +306,5 @@ mod tests {
     fn test_tile_creation() {
         let tile = Tile::new(TerrainType::Forest);
         assert_eq!(tile.terrain.terrain_type, TerrainType::Forest);
-        assert!(!tile.explored); // Tiles start unexplored (fog of war)
-
-        // Test marking as explored
-        let mut tile = tile;
-        tile.mark_explored();
-        assert!(tile.explored);
     }
 }

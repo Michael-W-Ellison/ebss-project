@@ -61,6 +61,25 @@ fn put_food(simulation: &mut Simulation, where_it_is: Position, how_much: u32) {
     simulation.world.resources.push(patch);
 }
 
+/// Where the valley is.
+const THE_VALLEY: (i32, i32) = (60, 20);
+
+/// Put the valley's berries down, and let the camp know of them.
+///
+/// Forty tiles is out of anybody's sight, and nobody sets out for somewhere
+/// they have no reason to think is there - see
+/// `Simulation::nodes_this_one_knows_of`. So somebody in this camp has been
+/// that way, or been told.
+fn a_valley_they_know_of(simulation: &mut Simulation, how_much: u32) {
+    let valley = Position::new(THE_VALLEY.0, THE_VALLEY.1);
+    put_food(simulation, valley, how_much);
+    for agent in &mut simulation.population.agents {
+        agent
+            .exploration_knowledge
+            .discover_resource(valley, ResourceType::Food, 0);
+    }
+}
+
 /// Picked-over ground and somewhere better a fortnight off: the camp moves.
 #[test]
 fn a_people_with_no_field_moves_off_ground_that_will_not_feed_it() {
@@ -68,7 +87,7 @@ fn a_people_with_no_field_moves_off_ground_that_will_not_feed_it() {
 
     // A handful of berries here, and a valley of them forty tiles away
     put_food(&mut simulation, Position::new(21, 20), 8);
-    put_food(&mut simulation, Position::new(60, 20), 400);
+    a_valley_they_know_of(&mut simulation, 400);
 
     let position = simulation.population.agents[0].state.position;
     let action = simulation.moving_on(&simulation.population.agents[0], position);
@@ -84,6 +103,24 @@ fn a_people_with_no_field_moves_off_ground_that_will_not_feed_it() {
     }
 }
 
+/// And a valley nobody has seen or heard of is not somewhere to go, however
+/// full it is.
+#[test]
+fn nobody_moves_to_a_valley_nobody_knows_of() {
+    let mut simulation = a_camp_at(bare_country(), (20, 20), 12);
+
+    put_food(&mut simulation, Position::new(21, 20), 8);
+    put_food(&mut simulation, Position::new(THE_VALLEY.0, THE_VALLEY.1), 400);
+
+    let position = simulation.population.agents[0].state.position;
+    assert!(
+        simulation
+            .moving_on(&simulation.population.agents[0], position)
+            .is_none(),
+        "the camp set out for a valley forty tiles off that nobody knew was there"
+    );
+}
+
 /// Ground that is still carrying enough is ground worth staying on.
 #[test]
 fn nobody_moves_off_ground_that_is_still_feeding_them() {
@@ -91,7 +128,7 @@ fn nobody_moves_off_ground_that_is_still_feeding_them() {
 
     // Well over what twelve people want standing
     put_food(&mut simulation, Position::new(21, 20), 2000);
-    put_food(&mut simulation, Position::new(60, 20), 4000);
+    a_valley_they_know_of(&mut simulation, 4000);
 
     let position = simulation.population.agents[0].state.position;
     assert!(
@@ -108,7 +145,7 @@ fn more_mouths_strip_the_ground_sooner() {
     fn would_move(mouths: usize, standing: u32) -> bool {
         let mut simulation = a_camp_at(bare_country(), (20, 20), mouths);
         put_food(&mut simulation, Position::new(21, 20), standing);
-        put_food(&mut simulation, Position::new(60, 20), 4000);
+        a_valley_they_know_of(&mut simulation, 4000);
 
         let position = simulation.population.agents[0].state.position;
         simulation
@@ -134,7 +171,7 @@ fn a_field_is_a_reason_to_stay() {
     let mut simulation = a_camp_at(bare_country(), (20, 20), 12);
 
     put_food(&mut simulation, Position::new(21, 20), 8);
-    put_food(&mut simulation, Position::new(60, 20), 400);
+    a_valley_they_know_of(&mut simulation, 400);
 
     let position = simulation.population.agents[0].state.position;
     assert!(
@@ -167,7 +204,7 @@ fn a_farmer_stops_wandering() {
     let mut simulation = a_camp_at(bare_country(), (20, 20), 12);
 
     put_food(&mut simulation, Position::new(21, 20), 8);
-    put_food(&mut simulation, Position::new(60, 20), 400);
+    a_valley_they_know_of(&mut simulation, 400);
 
     let position = simulation.population.agents[0].state.position;
     assert!(

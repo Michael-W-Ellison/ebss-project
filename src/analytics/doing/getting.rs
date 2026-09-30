@@ -193,14 +193,19 @@ impl Simulation {
                 .is_some_and(|tile| tile.terrain.is_the_water_salt())
         };
 
-        for (i, resource) in self.world.resources.iter().enumerate() {
+        for i in self.nodes_this_one_knows_of(
+            &self.population.agents[agent_index],
+            agent_pos,
+            Self::FORAGE_RADIUS,
+        ) {
+            let resource = &self.world.resources[i];
             let matches_request = (resource.resource_type == resource_type_enum
                 || (gathering_food
                     && (Self::edible_item_for(resource.resource_type).is_some()
                         || knows_it_is_food(resource))))
                 && a_drink_this_one_would_take(resource);
 
-            if matches_request && resource.amount > 0 {
+            if matches_request && resource.anything_to_take() {
                 let distance = agent_pos.distance_to(&resource.position);
                 if distance <= Self::FORAGE_RADIUS {
                     // A trip for food is worth what it brings back.
@@ -356,6 +361,10 @@ impl Simulation {
                 (whole as u32) + u32::from(rng.gen::<f32>() < worth - whole);
             let harvest_amount = harvest_amount.max(1);
 
+            // A look at the crop before it is picked, which is when a man can
+            // see how heavy it stands
+            self.looking_at_the_crop(agent_index, resource_index);
+
             // Harvest resource
             let where_it_grew = self.world.resources[resource_index].position;
             let harvested = {
@@ -372,13 +381,15 @@ impl Simulation {
                     taken
                 }
             };
+            self.world.did_that_empty_it(resource_index);
 
             // What everybody standing here can see about this patch.
             // Stripping the last of something is not a private fact:
             // whoever is near enough watches the ground go bare, and
             // that is what stops a settlement walking back to it every
             // morning for the rest of the season.
-            let picked_out = self.world.resources[resource_index].amount == 0;
+            // Nothing left a hand can take: bare, or a field whose harvest is in
+            let picked_out = !self.world.resources[resource_index].anything_to_take();
             let now = self.current_turn;
             if harvested > 0 {
                 self.population.agents[agent_index]
@@ -672,6 +683,10 @@ impl Simulation {
                         if let Some(kind) = Self::edible_item_for(resource_type_enum) {
                             let (eaten, went_in, nutrition) =
                                 self.a_sitting_from_the_hand(agent_index, kind, harvested);
+                            self.population.agents[agent_index].by_what_way = Some(format!(
+                                "{:?}",
+                                crate::analytics::wanting::strategy::Strategy::GatherWildFood
+                            ));
 
                             self.world.resources[resource_index]
                                 .put_it_back(harvested.saturating_sub(eaten));
@@ -680,7 +695,10 @@ impl Simulation {
                                 .with_drive_change(
                                     DriveType::Hunger,
                                     -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
-                                        * physiology::what_this_meal_answers(went_in),
+                                        * self.population.agents[agent_index]
+                                            .state
+                                            .physiology
+                                            .what_this_meal_answers_here(went_in),
                                 )
                                 .with_energy_cost(10.0)
                                 .with_message(format!(
@@ -1351,9 +1369,8 @@ impl Simulation {
 
         let standing = self
             .world
-            .resources
-            .iter()
-            .find(|resource| resource.position == reach)
+            .nodes_on(reach)
+            .next()
             .map(|resource| resource.amount)
             .unwrap_or(0);
 
@@ -1398,11 +1415,7 @@ impl Simulation {
         let caught = ((Self::FISH_PER_CAST as f32 * spear).round() as u32).max(1);
 
         let taken = {
-            let resource = self
-                .world
-                .resources
-                .iter_mut()
-                .find(|resource| resource.position == reach);
+            let resource = self.world.get_resource_at_mut(&reach);
             match resource {
                 Some(resource) => {
                     let taken = caught.min(resource.amount);
@@ -1412,6 +1425,9 @@ impl Simulation {
                 None => 0,
             }
         };
+        if let Some(&number) = self.world.node_numbers_on(reach).first() {
+            self.world.did_that_empty_it(number);
+        }
 
         if taken == 0 {
             return ActionResult::failure("The reach is empty".to_string());
@@ -1431,7 +1447,7 @@ impl Simulation {
         catch.food_data = food_data;
         agent.inventory.add_item(catch);
         agent.state.waste_carried +=
-            taken as f32 * crate::world::Soil::NUTRIENT_PER_FISH * Self::OFFAL_SHARE;
+            taken as f32 * crate::world::Soil::WHAT_A_FISH_LEAVES * Self::OFFAL_SHARE;
         agent
             .skills
             .practise(crate::agents::SkillType::Fishing, 12, turn_now);

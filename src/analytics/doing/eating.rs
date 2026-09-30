@@ -189,12 +189,13 @@ impl Simulation {
                     "Agent {} ate {} of carried {} ({:.0} energy), reset starvation timer",
                     agent.id, mouthfuls, item_id, energy_in
                 );
+                agent.by_what_way = Some(format!("{:?}", agent.how_this_meal_was_come_by(self.current_turn)));
 
                 return ActionResult::success()
                     .with_drive_change(
                         DriveType::Hunger,
                         -crate::analytics::WHAT_A_FULL_SITTING_ANSWERS
-                            * physiology::what_this_meal_answers(energy_in),
+                            * agent.state.physiology.what_this_meal_answers_here(energy_in),
                     )
                     .with_energy_cost(1.0) // Eating from inventory is cheap
                     .with_message(format!(
@@ -245,8 +246,13 @@ impl Simulation {
         // prices a trip.
         let mut nearest_food: Option<(usize, u32)> = None;
         let mut best_worth: f32 = 0.0;
-        for (i, resource) in self.world.resources.iter().enumerate() {
-            if Self::edible_item_for(resource.resource_type).is_some() && resource.amount > 0 {
+        for i in self.nodes_this_one_knows_of(
+            &self.population.agents[agent_index],
+            agent_pos,
+            Self::FORAGE_RADIUS,
+        ) {
+            let resource = &self.world.resources[i];
+            if Self::edible_item_for(resource.resource_type).is_some() && resource.anything_to_take() {
                 let distance = agent_pos.distance_to(&resource.position);
                 if distance <= Self::FORAGE_RADIUS {
                     let bad = remembers.how_bad_is_it_there(resource.position, now);
@@ -299,7 +305,9 @@ impl Simulation {
             let today = self.world.climate.calendar.day_of_year;
             let here = self.world.resources[food_index].resource_type;
             let armful = Self::what_a_trip_brings_back(here, today, rng);
+            self.looking_at_the_crop(agent_index, food_index);
             let harvested = self.world.resources[food_index].harvest(armful);
+            self.world.did_that_empty_it(food_index);
 
             if harvested > 0 {
                 let agent = &mut self.population.agents[agent_index];
@@ -328,7 +336,7 @@ impl Simulation {
                 let mut eaten_here = 0u32;
                 let mut energy_in = 0.0f32;
                 while eaten_here < harvested
-                    && energy_in < physiology::WHAT_A_SITTING_AIMS_AT
+                    && energy_in < agent.state.physiology.what_a_sitting_is_for_whoever_it_feeds()
                 {
                     let went_down = agent
                         .state
@@ -362,6 +370,10 @@ impl Simulation {
                     "Agent {} foraged and ate food, restored {:.1} energy, reset starvation timer",
                     agent.id, nutrition.energy
                 );
+                agent.by_what_way = Some(format!(
+                    "{:?}",
+                    crate::analytics::wanting::strategy::Strategy::GatherWildFood
+                ));
 
                 // One portion goes down here; the rest of the armful
                 // goes home in the pack. That is what turns a meal
@@ -809,9 +821,9 @@ impl Simulation {
         let agent_position = self.population.agents[agent_index].state.position;
         let here = Position::new(agent_position.0, agent_position.1);
 
-        let Some(index) = self.world.resources.iter().position(|resource| {
-            resource.position == here
-                && resource.resource_type == crate::world::ResourceType::StrangePlant
+        let Some(index) = self.world.node_numbers_on(here).into_iter().find(|&number| {
+            let resource = &self.world.resources[number];
+            resource.resource_type == crate::world::ResourceType::StrangePlant
                 && resource.amount > 0
         }) else {
             return ActionResult::failure("Nothing here to try".to_string());
@@ -821,6 +833,7 @@ impl Simulation {
         let feeds_you = self.world.does_this_one_feed_you(kind);
 
         self.world.resources[index].harvest(1);
+        self.world.did_that_empty_it(index);
 
         let agent = &mut self.population.agents[agent_index];
         agent.now_i_know_that_plant(kind, feeds_you);

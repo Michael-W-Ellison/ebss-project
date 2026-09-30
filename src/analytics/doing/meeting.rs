@@ -483,7 +483,22 @@ impl Simulation {
         let recipient_traits = self.population.agents[target_index].traits.clone();
 
         // Share the information with recipient
+        // And whatever the speaker knows will make you ill. Only somebody
+        // standing near enough to watch a taster fall sick used to learn a
+        // plant was poison, and nobody ever told anybody else - so every
+        // person, and every child as it grew, found each bad plant for
+        // themselves. Measured, a bad plant was the largest single thing
+        // booked as "a blow": 2,275 health over four settlements and three
+        // years, twice what every fight with an animal took. See
+        // ISSUES_FOUND #258.
+        let warnings = self.population.agents[agent_index].the_plants_i_would_warn_about();
+
         let target = &mut self.population.agents[target_index];
+        for kind in warnings {
+            if !target.have_i_tried_that_plant(kind) {
+                target.now_i_know_that_plant(kind, false);
+            }
+        }
         let target_id = target.id;
         target.knowledge.receive_information(
             info_to_share.clone(),
@@ -619,7 +634,13 @@ impl Simulation {
             let female = &self.population.agents[female_index];
             let current_turn = self.current_turn;
 
-            if let Some(pregnancy) = attempt_impregnation(female, male, current_turn) {
+            let its_chance_this_cycle = female.could_conceive_now(current_turn);
+            let got = attempt_impregnation(female, male, current_turn);
+            if its_chance_this_cycle {
+                self.population.agents[female_index].last_cycle_tried =
+                    Some(crate::agents::Agent::the_cycle_at(current_turn));
+            }
+            if let Some(pregnancy) = got {
                 // Pregnancy started!
                 let female = &mut self.population.agents[female_index];
                 female.pregnancy = Some(pregnancy);

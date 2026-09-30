@@ -71,11 +71,13 @@ pub mod territory;
 pub mod resource_spawning;
 pub mod nutrition;
 pub mod soil;
+pub mod sleeping;
+pub mod node_index;
 pub mod belonging;
 
 // Re-exports
 pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
-pub use soil::Soil;
+pub use soil::{Field, Soil, SoilGrade, SoilType};
 pub use belonging::{Access, Belongs};
 pub use resources::{Bearing, Resource, ResourceType, ResourceNode};
 pub use buildings::{Building, BuildingType, BuildingState};
@@ -216,6 +218,42 @@ pub struct World {
     pub food_that_rotted_where_it_lay: u64,
     #[serde(default)]
     pub food_that_rotted_in_the_ground: u64,
+
+    /// How many growing days have gone by: the day's regrowth pass counts
+    /// them, and a sleeping node remembers the first one it missed.
+    #[serde(default)]
+    pub days_gone_by: u32,
+
+    /// Each growing day's weather, from the first one any sleeping node has
+    /// missed. See `world::sleeping`.
+    #[serde(default)]
+    growing_days: std::collections::VecDeque<sleeping::AGrowingDay>,
+
+    /// Which growing day `growing_days` starts at.
+    #[serde(default)]
+    first_day_logged: u32,
+
+    /// Where the living are, as the simulation last said. Nobody has said is
+    /// not the same as nobody is there: a world run on its own, with no
+    /// simulation over it, has never been told, and keeps every node awake.
+    #[serde(skip)]
+    where_people_are: Option<Vec<(i32, i32)>>,
+
+    /// Keep every node awake whatever: for measuring what sleeping does.
+    #[serde(default)]
+    pub nobody_sleeps: bool,
+
+    /// The nodes filed by where they stand, so a question about somewhere
+    /// reads only what is near it. See `world::node_index`.
+    #[serde(skip)]
+    where_the_nodes_are: node_index::WhereTheNodesAre,
+
+    /// Whether anything is known to have run out since the list was last
+    /// swept for worked-out seams. Not having looked - a world just built or
+    /// loaded - counts as something having run out. See
+    /// `remove_depleted_resources`.
+    #[serde(skip)]
+    pub(crate) swept_since_anything_ran_out: bool,
 
     /// Which sorts of strange plant feed a person in this world, by kind.
     ///
@@ -995,7 +1033,6 @@ impl World {
 
     fn what_is_lying_about_weathers(&mut self) {
         let now = self.turn;
-        let mut back_to_the_ground: Vec<(Position, f32)> = Vec::new();
         let mut dried: Vec<(Position, String)> = Vec::new();
 
         // What is lying out in the weather goes off faster than what is in
@@ -1117,7 +1154,6 @@ impl World {
                 .as_ref()
                 .is_some_and(|food| food.freshness <= 0.0)
             {
-                back_to_the_ground.push((left.where_it_is, left.item.quantity as f32 * 0.05));
                 wasted += left.item.quantity as u64;
                 return false;
             }
@@ -1131,7 +1167,6 @@ impl World {
             };
 
             if gone && left.item.food_data.is_some() {
-                back_to_the_ground.push((left.where_it_is, left.item.quantity as f32 * 0.05));
                 wasted += left.item.quantity as u64;
             }
 
@@ -1140,12 +1175,6 @@ impl World {
 
         self.food_that_rotted_where_it_lay =
             self.food_that_rotted_where_it_lay.saturating_add(wasted);
-
-        for (where_it_is, worth) in back_to_the_ground {
-            if let Some(tile) = self.grid.get_tile_mut(&where_it_is) {
-                tile.soil.add_leaf_litter(worth);
-            }
-        }
     }
 
     /// How many different unknown plants grow in a world.
@@ -1228,10 +1257,15 @@ impl World {
             what_dried_in_the_sun: Vec::new(),
             food_that_rotted_where_it_lay: 0,
             food_that_rotted_in_the_ground: 0,
+            days_gone_by: 0,
+            growing_days: std::collections::VecDeque::new(),
+            first_day_logged: 0,
+            where_people_are: None,
+            nobody_sleeps: false,
+            where_the_nodes_are: node_index::WhereTheNodesAre::default(),
+            swept_since_anything_ran_out: false,
         };
 
-        // The ground under the terrain that was just generated
-        world.grid.settle_soil();
 
 
         // Place initial resources, as many of them as this much ground
@@ -1928,7 +1962,7 @@ impl World {
         }
 
         // Check resources
-        if self.resources.iter().any(|r| &r.position == pos) {
+        if self.nodes_on(*pos).next().is_some() {
             return true;
         }
 
@@ -1940,11 +1974,12 @@ impl World {
     }
 
     pub fn get_resource_at(&self, pos: &Position) -> Option<&ResourceNode> {
-        self.resources.iter().find(|r| &r.position == pos)
+        self.nodes_on(*pos).next()
     }
 
     pub fn get_resource_at_mut(&mut self, pos: &Position) -> Option<&mut ResourceNode> {
-        self.resources.iter_mut().find(|r| &r.position == pos)
+        let number = self.node_numbers_on(*pos).first().copied()?;
+        self.resources.get_mut(number)
     }
 
     pub fn get_building_at(&self, pos: &Position) -> Option<&Building> {
@@ -1966,6 +2001,129 @@ impl World {
             }
             keeping
         });
+
+        self.file_the_nodes();
+        self.swept_since_anything_ran_out = true;
+    }
+
+    /// Sweep for worked-out seams, if anything has run out since the last
+    /// sweep.
+    ///
+    /// The sweep walked every node on the map every turn - 37 ms of every
+    /// simulated day on a 1,600-cell map with nobody in it (ISSUES_FOUND #249)
+    /// - to find what can only be found where somebody has been digging. What
+    /// renews stays when it is emptied, and nothing but a pair of hands takes
+    /// the last of what does not: so the world is told when a hand empties
+    /// something (`did_that_empty_it`), and sweeps then.
+    fn sweep_if_anything_ran_out(&mut self) {
+        if !self.swept_since_anything_ran_out {
+            self.remove_depleted_resources();
+            return;
+        }
+
+        debug_assert!(
+            !self.resources.iter().any(|r| r.amount == 0 && !r.is_renewable()),
+            "something ran out that nobody told the world about - whatever \
+             emptied it has to ask `World::did_that_empty_it`"
+        );
+    }
+
+    /// Whether taking from this node just now took the last of something
+    /// that does not come back. If it did, the world sweeps for it at the
+    /// end of the turn. Asked by whatever takes from a node.
+    pub fn did_that_empty_it(&mut self, number: usize) -> bool {
+        let emptied = self
+            .resources
+            .get(number)
+            .is_some_and(|node| node.amount == 0 && !node.is_renewable());
+        if emptied {
+            self.swept_since_anything_ran_out = false;
+        }
+        emptied
+    }
+
+    // ===== Where the nodes are =====
+
+    /// Refile the nodes by where they stand, if the file has fallen out of
+    /// step with the list. See `world::node_index`.
+    ///
+    /// A list that has changed behind the file's back may have changed in any
+    /// way at all, including something in it having run out, so it is swept
+    /// as well at the end of the turn.
+    pub fn file_the_nodes(&mut self) {
+        if !self.where_the_nodes_are.is_it_up_to_date(&self.resources) {
+            self.refile();
+            self.swept_since_anything_ran_out = false;
+        }
+    }
+
+    fn refile(&mut self) {
+        self.where_the_nodes_are = node_index::WhereTheNodesAre::file(
+            &self.resources,
+            self.grid.width,
+            self.grid.height,
+        );
+    }
+
+    /// Put a new node on the map, and file it. Returns its number.
+    pub fn put_a_node_down(&mut self, node: ResourceNode) -> usize {
+        let up_to_date = self.where_the_nodes_are.is_it_up_to_date(&self.resources);
+        if up_to_date {
+            self.where_the_nodes_are.another(&node);
+        }
+        self.resources.push(node);
+        let number = self.resources.len() - 1;
+        self.did_that_empty_it(number);
+        number
+    }
+
+    /// Take a node off the map. Every node after it moves up one, so the file
+    /// is made again.
+    pub fn take_a_node_up(&mut self, number: usize) -> ResourceNode {
+        let node = self.resources.remove(number);
+        self.refile();
+        node
+    }
+
+    /// The number of every node within `reach` cells either way of `at`, in
+    /// list order.
+    ///
+    /// A square, not a walk: whoever asks applies its own measure of distance
+    /// to what comes back, as it did to the whole list.
+    pub fn node_numbers_near(&self, at: Position, reach: u32) -> Vec<usize> {
+        let reach = reach.min(i32::MAX as u32) as i32;
+        let within = |node: &ResourceNode| {
+            (node.position.x - at.x).abs() <= reach && (node.position.y - at.y).abs() <= reach
+        };
+
+        if self.where_the_nodes_are.is_it_up_to_date(&self.resources) {
+            self.where_the_nodes_are
+                .near(at.x, at.y, reach)
+                .into_iter()
+                .filter(|&number| within(&self.resources[number]))
+                .collect()
+        } else {
+            (0..self.resources.len())
+                .filter(|&number| within(&self.resources[number]))
+                .collect()
+        }
+    }
+
+    /// Every node within `reach` cells either way of `at`, in list order.
+    pub fn nodes_near(&self, at: Position, reach: u32) -> impl Iterator<Item = &ResourceNode> + '_ {
+        self.node_numbers_near(at, reach)
+            .into_iter()
+            .map(move |number| &self.resources[number])
+    }
+
+    /// The number of every node standing on `at`, in list order.
+    pub fn node_numbers_on(&self, at: Position) -> Vec<usize> {
+        self.node_numbers_near(at, 0)
+    }
+
+    /// Every node standing on `at`, in list order.
+    pub fn nodes_on(&self, at: Position) -> impl Iterator<Item = &ResourceNode> + '_ {
+        self.nodes_near(at, 0)
     }
 
     // ===== Heat Source Management =====
@@ -2203,7 +2361,6 @@ impl World {
         &mut self,
         species_id: String,
         position: (i32, i32),
-        planter_id: uuid::Uuid,
     ) -> Result<uuid::Uuid, String> {
         // Check if position is valid
         if position.0 < 0 || position.1 < 0 ||
@@ -2211,7 +2368,7 @@ impl World {
             return Err("Position out of bounds".to_string());
         }
 
-        self.plants.plant_crop(species_id, position, planter_id, self.turn)
+        self.plants.plant_crop(species_id, position, self.turn)
             .ok_or_else(|| "Failed to plant crop (max population reached or invalid species)".to_string())
     }
 
@@ -2449,7 +2606,7 @@ impl World {
 
         // Regenerate resources based on climate conditions (every 10 turns to reduce overhead)
         if self.turn % crate::environment::seasons::ONCE_A_DAY == 0 {
-            self.rot_what_is_lying_about();
+            self.a_day_goes_by_for_the_ground();
             self.regenerate_resources();
         }
 
@@ -2458,8 +2615,8 @@ impl World {
         // via World::get_completed_crafts_for_agent() to add items to their inventories
         self.crafting_manager.take_a_turn();
 
-        // Remove depleted resources
-        self.remove_depleted_resources();
+        // Remove depleted resources, if anything has been depleted
+        self.sweep_if_anything_ran_out();
 
         // And drop the ground that has gone bare again off the visiting list.
         // Once a turn rather than on every read, so a reader may see a tile
@@ -2468,168 +2625,386 @@ impl World {
         self.grid.forget_bare_ground();
     }
 
-    /// Regenerate renewable resources based on climate and weather conditions
-    /// Break down everything lying on the ground into nutrient.
+    /// A day goes by for the ground.
     ///
-    /// The rate is the ground's to decide: wet country turns leaf fall into
-    /// soil inside a season, and a desert holds what falls on it more or less
-    /// forever. Density does the rest - the leaves that come off a tree are
-    /// gone long before the tree is.
-    fn rot_what_is_lying_about(&mut self) {
-        use crate::world::soil::Soil;
-
-        // Rain reaches everywhere; the ground decides what it does with it
+    /// Middens air out, fields age, and what came off every crop by hand since
+    /// yesterday is reckoned against the field it grew on.
+    ///
+    /// This used to be every tile in the world, every day, rotting the leaf
+    /// litter each one was born with into nutrient. Wild ground does not
+    /// change now - only people change a grade - so the day costs what is
+    /// happening on the map rather than what the map is: the middens on the
+    /// ground register, and the fields. See ISSUES_FOUND #246.
+    fn a_day_goes_by_for_the_ground(&mut self) {
         let precipitation = self.climate.weather.weather_type.precipitation_intensity();
+        self.grid.a_day_of_air_for_the_middens(precipitation);
+        self.what_came_off_the_fields();
+        self.grid.a_day_goes_by_for_the_fields(self.turn);
+    }
 
-        // A pass stands for however long it has been since the last one, which
-        // is one number and not two. This read ten while the trigger in
-        // `World::take_a_turn` read ten separately, in another function - two
-        // spellings of one cadence, and shortening the turn would have moved
-        // one and not the other.
-        //
-        // Ticks, and named so. It was right as a span all along; what was
-        // wrong was at the other end, where `Soil::decay`'s rates were per
-        // pass and were being paid out per tick of it. See ISSUES_FOUND #218.
-        const TICKS_THIS_PASS_STANDS_FOR: f32 = crate::environment::seasons::ONCE_A_DAY as f32;
+    /// What came off each crop by hand since yesterday, reckoned against the
+    /// field it grew on - and whether its harvest is in.
+    ///
+    /// Every hand that takes a crop goes through `ResourceNode::harvest` and
+    /// every armful handed back through `put_it_back`, so the node's counts
+    /// are the net whichever path took it. Off wild ground it counts for
+    /// nothing: "harvesting from a wild plant should not change the grade of
+    /// the soil".
+    ///
+    /// This is also where a crop learns whether it is in a field, which it is
+    /// for as long as the ground under it is one: a field given back to the
+    /// wild gives its crop back to be picked as it stands.
+    fn what_came_off_the_fields(&mut self) {
+        let now = self.turn;
+        for resource in self.resources.iter_mut() {
+            // Asleep, it is wild ground nobody is near: nothing came off it
+            // and nothing about it is a field's business.
+            if resource.asleep_since.is_some() && resource.taken_by_hand == 0 {
+                continue;
+            }
 
-        // Every tile in the world, because every tile in the world has litter
-        // on it - `Soil::for_terrain` gives a forest floor 1.5 and a desert
-        // 0.02, and rot never quite takes the last of it. There is nothing to
-        // narrow here and the register would hold the whole map. One pass a
-        // day over a million tiles is about half a millisecond, which is a
-        // twentieth of what the two sweeps that *could* be narrowed were
-        // costing. See ISSUES_FOUND.md #128.
-        for row in &mut self.grid.tiles {
-            for tile in row.iter_mut() {
-                if tile.soil.litter() <= 0.0 {
-                    continue;
-                }
+            let taken = std::mem::take(&mut resource.taken_by_hand);
+            let at = resource.position;
 
-                let humidity = Soil::humidity(tile.terrain.terrain_type, precipitation);
-                tile.soil.decay(humidity, TICKS_THIS_PASS_STANDS_FOR);
+            resource.on_a_field = self.grid.field_at(&at).is_some();
+            if !resource.on_a_field {
+                resource.it_is_growing_again();
+                continue;
+            }
+
+            if taken > 0 {
+                self.grid.a_crop_came_off(&at, now);
+            }
+
+            if resource.the_harvest_is_in() {
+                // Three quarters of the ripe crop has come off by hand
+                self.grid
+                    .the_harvest_is_in(&at, resource.resource_type.feeds_the_ground(), now);
+                resource.it_is_growing_again();
+            } else if resource.ripe_stand > 0 && resource.what_can_be_taken() == 0 {
+                // Or it fell, or was eaten off, before anybody brought it in.
+                // Nobody's hand took it, so it wears nothing.
+                resource.it_is_growing_again();
             }
         }
     }
 
+    /// The simulation says where the living are, once a turn before the world
+    /// takes it. See `world::sleeping`.
+    pub fn people_are_at(&mut self, people: Vec<(i32, i32)>) {
+        self.where_people_are = Some(people);
+    }
+
+    /// Today's weather for the growing, as the whole map has it.
+    fn todays_growing_day(&mut self) -> sleeping::AGrowingDay {
+        let season = self.climate.current_season();
+        let mut by_terrain = vec![(0.0, false); TerrainType::EVERY_KIND.len()];
+        for terrain in TerrainType::EVERY_KIND {
+            // The climate reads no position, only the kind of country; any
+            // position will do.
+            let here = Position::new(0, 0);
+            by_terrain[terrain as usize] = (
+                self.climate.get_temperature(here, terrain),
+                self.climate.is_the_water_frozen(here, terrain),
+            );
+        }
+        sleeping::AGrowingDay {
+            today: self.climate.calendar.day_of_year,
+            this_year: self.climate.calendar.year,
+            season,
+            season_modifier: season.plant_growth_modifier(),
+            precipitation: self.climate.weather.weather_type.precipitation_intensity(),
+            by_terrain,
+        }
+    }
+
+    /// What a day does to a node, from what the ground is and the day's
+    /// weather - the part of the regrowth pass that is the same for a node
+    /// living its day now and one living over a day it slept through.
+    ///
+    /// `yields` is `Grid::what_it_yields_here_for`, and `kept` what the weeds
+    /// leave, which is one off a field. Returns whether it was a day for
+    /// growing: not water, not a fish run, and in its season - which is when
+    /// a field crop can ripen.
+    fn a_day_for_a_node(
+        resource: &mut ResourceNode,
+        terrain: TerrainType,
+        yields: f32,
+        kept: f32,
+        day: &sleeping::AGrowingDay,
+    ) -> bool {
+        let (temperature, frozen_water) = day.over(terrain);
+
+        // Water is fed by the ground it sits on and the weather over it,
+        // not by growing back the way a berry patch does
+        if resource.resource_type == ResourceType::Water {
+            let inflow = resource.water_inflow(terrain, day.precipitation, frozen_water);
+
+            // The rate is also the floor. What is standing in a spring is
+            // this pass's flow arriving, not a barrel somebody filled, so
+            // it is the one resource in this world that cannot be taken
+            // away - see `ResourceNode::what_can_be_taken`.
+            resource.flow = inflow;
+            resource.take_inflow(inflow);
+            return false;
+        }
+
+        // Fish come up the river rather than growing back out of what is
+        // left of them. What arrives is what the season is running, not
+        // what last year's fishing left behind, so a reach that was taken
+        // down to nothing fills again - see `fish_run`.
+        if resource.resource_type.grows_in_water() {
+            // How long this pass stands for, so that what a *season's* run
+            // is worth stays the fixed thing and the cadence is free to
+            // change - see `ResourceNode::WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON`.
+            let run = resource.fish_run(
+                terrain,
+                day.season,
+                frozen_water,
+                crate::environment::seasons::ONCE_A_DAY,
+            );
+            resource.take_inflow(run);
+            return false;
+        }
+
+        // A hedgerow out of season carries nothing. Growth was seasonal
+        // from the beginning and what was *standing* was not, so a berry
+        // bush that had grown all summer still had its berries on it in
+        // February - and a settlement that could pick fruit in the snow
+        // had no reason to put anything by, no lean season to be lean in,
+        // and no use for a store. What is on the plant now falls off it
+        // outside the weeks it bears, which is what fruit does.
+        if !resource.resource_type.is_it_bearing(day.today) {
+            resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TURN);
+            return false;
+        }
+
+        // What a plant drinks is what the ground holds, not whether it
+        // happens to be raining on it this hour
+        let ground_water = crate::world::soil::Soil::humidity(terrain, day.precipitation);
+
+        // A pass stands for exactly the ground it covers: however long it
+        // has been since the last one. The rates inside are per-pass
+        // numbers fitted when a pass was ten turns, and they are read
+        // against that - see `ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO`.
+        // A ripe crop has finished growing, and waits to be brought in.
+        let ripe = resource.on_a_field && resource.ripe_stand > 0;
+        if !ripe {
+            resource.regenerate_in_ground(
+                temperature,
+                ground_water,
+                day.season_modifier,
+                yields,
+                kept,
+                crate::environment::seasons::ONCE_A_DAY as f32,
+            );
+        }
+        true
+    }
+
+    /// And how good a year it is, which only the mast asks. A wood that stood
+    /// full last autumn stands nearly bare this one, and that is the first
+    /// thing in this model that makes one year different from another - see
+    /// `how_heavy_the_mast_is`.
+    fn the_mast(resource: &mut ResourceNode, day: &sleeping::AGrowingDay) {
+        if resource.resource_type.does_it_have_mast_years() {
+            let mast = ResourceType::how_heavy_the_mast_is(day.this_year);
+            let this_autumn = ((resource.max_amount as f32 * mast).round() as u32).max(1);
+            resource.amount = resource.amount.min(this_autumn);
+        }
+    }
+
+    /// Live over the days a node slept through, from the log, one at a time,
+    /// up to but not including today. It was wild ground the whole time -
+    /// nothing sleeps on a field - so what it yields is what it yielded.
+    fn catch_up(
+        resource: &mut ResourceNode,
+        terrain: TerrainType,
+        yields: f32,
+        log: &std::collections::VecDeque<sleeping::AGrowingDay>,
+        first_day_logged: u32,
+        today: u32,
+    ) {
+        let Some(since) = resource.asleep_since.take() else {
+            return;
+        };
+        for missed in since..today {
+            let day = &log[(missed - first_day_logged) as usize];
+            if Self::a_day_for_a_node(resource, terrain, yields, 1.0, day) {
+                Self::the_mast(resource, day);
+            }
+        }
+    }
+
+    /// Bring every sleeping node up to today, as though nobody had ever been
+    /// far from it. For anything that wants the whole map current at once.
+    pub fn wake_everything(&mut self) {
+        let today = self.days_gone_by;
+        for resource in &mut self.resources {
+            let terrain = self
+                .grid
+                .get_tile(&resource.position)
+                .map(|t| t.terrain.terrain_type)
+                .unwrap_or(TerrainType::Plains);
+            let yields = self.grid.what_it_yields_here_for(&resource.position, resource.resource_type);
+            Self::catch_up(resource, terrain, yields, &self.growing_days, self.first_day_logged, today);
+        }
+        self.growing_days.clear();
+        self.first_day_logged = today;
+    }
+
+    /// Bring whatever is asleep at these places up to today, as though
+    /// nobody had ever been far from it.
+    ///
+    /// For a node somebody is about to make up their mind about from a long
+    /// way off - a place they remember. It lives its missed days over from
+    /// the log exactly as it would on being walked up to, so what they decide
+    /// with it in mind is what they would have decided in a world where
+    /// nothing slept. If nobody comes near, the next day's pass puts it back
+    /// to sleep from there.
+    pub fn wake_the_nodes_at(&mut self, places: impl IntoIterator<Item = Position>) {
+        let today = self.days_gone_by;
+        for at in places {
+            for number in self.node_numbers_on(at) {
+                if self.resources[number].asleep_since.is_none() {
+                    continue;
+                }
+                let terrain = self
+                    .grid
+                    .get_tile(&at)
+                    .map(|t| t.terrain.terrain_type)
+                    .unwrap_or(TerrainType::Plains);
+                let yields = self
+                    .grid
+                    .what_it_yields_here_for(&at, self.resources[number].resource_type);
+                Self::catch_up(
+                    &mut self.resources[number],
+                    terrain,
+                    yields,
+                    &self.growing_days,
+                    self.first_day_logged,
+                    today,
+                );
+            }
+        }
+    }
+
+    /// How many nodes are asleep.
+    pub fn how_many_are_asleep(&self) -> usize {
+        self.resources.iter().filter(|r| r.asleep_since.is_some()).count()
+    }
+
     fn regenerate_resources(&mut self) {
-        let current_season = self.climate.current_season();
-        let today = self.climate.calendar.day_of_year;
-        let this_year = self.climate.calendar.year;
-        let season_modifier = current_season.plant_growth_modifier();
-        let precipitation = self.climate.weather.weather_type.precipitation_intensity(); // Scale to 0-1 range
+        let day = self.todays_growing_day();
+        let today = self.days_gone_by;
+
+        // Who is near what. A world nobody has told where its people are
+        // keeps everything awake - see `where_people_are`.
+        let awake = match (&self.where_people_are, self.nobody_sleeps) {
+            (Some(people), false) => Some(sleeping::WhoIsAwake::round(
+                people,
+                self.grid.width,
+                self.grid.height,
+            )),
+            _ => None,
+        };
+
+        let mut oldest_sleep = today;
 
         for resource in &mut self.resources {
-            // Get temperature at resource position
             let terrain_type = self.grid.get_tile(&resource.position)
                 .map(|t| t.terrain.terrain_type)
                 .unwrap_or(TerrainType::Plains);
 
-            let temperature = self.climate.get_temperature(resource.position, terrain_type);
-            // And how warm the water is, which is a different question and
-            // the one that decides ice. See `ClimateManager::water_temperature`.
-            let frozen_water = self.climate.is_the_water_frozen(resource.position, terrain_type);
-
-            // Water is fed by the ground it sits on and the weather over it,
-            // not by growing back the way a berry patch does
-            if resource.resource_type == ResourceType::Water {
-                let inflow = resource.water_inflow(
-                    terrain_type,
-                    precipitation,
-                    frozen_water,
-                );
-
-                // The rate is also the floor. What is standing in a spring is
-                // this pass's flow arriving, not a barrel somebody filled, so
-                // it is the one resource in this world that cannot be taken
-                // away - see `ResourceNode::what_can_be_taken`.
-                resource.flow = inflow;
-                resource.take_inflow(inflow);
-                continue;
-            }
-
-            // Fish come up the river rather than growing back out of what is
-            // left of them. What arrives is what the season is running, not
-            // what last year's fishing left behind, so a reach that was taken
-            // down to nothing fills again - see `fish_run`.
-            if resource.resource_type.grows_in_water() {
-                // How long this pass stands for, so that what a *season's* run
-                // is worth stays the fixed thing and the cadence is free to
-                // change - see `ResourceNode::WHAT_A_FULL_RUN_BRINGS_IN_A_SEASON`.
-                let run = resource.fish_run(
-                    terrain_type,
-                    current_season,
-                    frozen_water,
-                    crate::environment::seasons::ONCE_A_DAY,
-                );
-                resource.take_inflow(run);
-                continue;
-            }
-
-            // Everything else grows out of the ground it is standing in, and
-            // takes what it grows with. Broken ground gets at more of what is
-            // there and carries a heavier crop; it does not grow faster than
-            // the plant's kind can grow.
+            // Broken and sown ground gets at more of what is there and
+            // carries a heavier crop, and has its own day besides: weeds, and
+            // ripening. It never sleeps.
             let cultivated = terrain_type == TerrainType::Farmland;
 
-            // What a plant drinks is what the ground holds, not whether it
-            // happens to be raining on it this hour
-            let ground_water =
-                crate::world::soil::Soil::humidity(terrain_type, precipitation);
-
-            let soil = match self.grid.get_tile_mut(&resource.position) {
-                Some(tile) => &mut tile.soil,
-                None => continue,
-            };
-
-            // A field nobody has been near comes on in weeds and vermin. This
-            // runs on the same weather the crop wants, because weeds do best
-            // exactly when the wheat does.
-            if cultivated {
-                let growing = (season_modifier * ground_water).clamp(0.0, 1.0);
-                soil.nobody_weeded_this(growing, 1.0);
-            }
-
-            // A hedgerow out of season carries nothing. Growth was seasonal
-            // from the beginning and what was *standing* was not, so a berry
-            // bush that had grown all summer still had its berries on it in
-            // February - and a settlement that could pick fruit in the snow
-            // had no reason to put anything by, no lean season to be lean in,
-            // and no use for a store. What is on the plant now falls off it
-            // outside the weeks it bears, which is what fruit does.
-            if !resource.resource_type.is_it_bearing(today) {
-                resource.what_it_carries_falls_off(Self::WHAT_FALLS_OFF_A_TURN, soil);
+            // Nobody near: sleep through today, and catch up when somebody is.
+            let nobody_near = awake.as_ref().is_some_and(|awake| {
+                !awake.near_anybody(resource.position.x, resource.position.y)
+            });
+            if nobody_near && !cultivated && !resource.on_a_field {
+                let since = *resource.asleep_since.get_or_insert(today);
+                oldest_sleep = oldest_sleep.min(since);
                 continue;
             }
 
-            // A pass stands for exactly the ground it covers: however long it
-            // has been since the last one. The rates inside are per-pass
-            // numbers fitted when a pass was ten turns, and they are read
-            // against that - see `ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO`.
-            let _regen_amount = resource.regenerate_in_ground(
-                temperature,
-                ground_water,
-                season_modifier,
-                cultivated,
-                soil,
-                crate::environment::seasons::ONCE_A_DAY as f32,
+            // What the ground makes of it: its grade, and on a field what the
+            // plough does for this crop. Asked before the tile is borrowed for
+            // its weeds.
+            let what_the_ground_yields = self
+                .grid
+                .what_it_yields_here_for(&resource.position, resource.resource_type);
+
+            // Somebody is near: live over whatever it slept through first.
+            Self::catch_up(
+                resource,
+                terrain_type,
+                what_the_ground_yields,
+                &self.growing_days,
+                self.first_day_logged,
+                today,
             );
 
-            // And how good a year it is, which only the mast asks. A wood
-            // that stood full last autumn stands nearly bare this one, and
-            // that is the first thing in this model that makes one year
-            // different from another - see `how_heavy_the_mast_is`.
-            if resource.resource_type.does_it_have_mast_years() {
-                let mast = ResourceType::how_heavy_the_mast_is(this_year);
-                let this_autumn = ((resource.max_amount as f32 * mast).round() as u32).max(1);
-                resource.amount = resource.amount.min(this_autumn);
+            let kept = if cultivated {
+                let Some(tile) = self.grid.get_tile_mut(&resource.position) else {
+                    continue;
+                };
+                // A field nobody has been near comes on in weeds and vermin.
+                // This runs on the same weather the crop wants, because weeds
+                // do best exactly when the wheat does.
+                let ground_water =
+                    crate::world::soil::Soil::humidity(terrain_type, day.precipitation);
+                let growing = (day.season_modifier * ground_water).clamp(0.0, 1.0);
+                tile.soil.nobody_weeded_this(growing, 1.0);
+
+                // And what is taking it before the farmer does. A field is the
+                // best ground there is and everything else knows it: what a
+                // crop keeps is what the weeds and the vermin leave. On
+                // unbroken ground this is one - a meadow cannot get any
+                // weedier than it already is.
+                tile.soil.what_the_crop_keeps()
+            } else {
+                1.0
+            };
+
+            let ripe_before = resource.on_a_field && resource.ripe_stand > 0;
+            let a_growing_day =
+                Self::a_day_for_a_node(resource, terrain_type, what_the_ground_yields, kept, &day);
+
+            // And a field crop ripens when it comes to its full stand, or when
+            // its season is on its last day and it has to be whatever it has
+            // come to. A bean crop that ripens has matured, and raises the
+            // ground a rung.
+            if a_growing_day && resource.on_a_field && !ripe_before {
+                let a_full_stand = resource.how_heavy_a_crop_it_carries(what_the_ground_yields);
+                let the_last_day = !resource
+                    .resource_type
+                    .is_it_bearing((day.today + 1) % crate::environment::seasons::DAYS_PER_YEAR);
+                let come_to_it = (a_full_stand > 0 && resource.amount >= a_full_stand)
+                    || (the_last_day && resource.amount > 0);
+                if come_to_it {
+                    resource.it_has_ripened();
+                    if resource.resource_type.feeds_the_ground() {
+                        self.grid.a_bean_crop_came_in(&resource.position, self.turn);
+                    }
+                }
             }
 
-            // Debug log significant regeneration
-            // if regen_amount > 0 {
-            //     debug!("Resource {:?} at ({}, {}) regenerated {} units",
-            //         resource.resource_type, resource.position.x, resource.position.y, regen_amount);
-            // }
+            if a_growing_day {
+                Self::the_mast(resource, &day);
+            }
         }
+
+        // Keep the day, and let go of the days nobody asleep still needs.
+        self.growing_days.push_back(day);
+        while self.first_day_logged < oldest_sleep && !self.growing_days.is_empty() {
+            self.growing_days.pop_front();
+            self.first_day_logged += 1;
+        }
+        self.days_gone_by += 1;
     }
 
     /// Get statistics about the world
@@ -2736,10 +3111,7 @@ impl World {
                 if agent_exploration.explore_tile(explore_pos, current_turn) {
                     new_discoveries += 1;
 
-                    // Mark tile as globally explored
-                    if let Some(tile) = self.grid.get_tile_mut(&explore_pos) {
-                        tile.mark_explored();
-
+                    if let Some(tile) = self.grid.get_tile(&explore_pos) {
                         // Discover terrain type
                         agent_exploration.encounter_terrain(
                             tile.terrain.terrain_type,
@@ -2749,8 +3121,8 @@ impl World {
                     }
 
                     // Check for resources at this position
-                    for resource in &self.resources {
-                        if resource.position == explore_pos && resource.amount > 0 {
+                    for resource in self.nodes_on(explore_pos) {
+                        if resource.amount > 0 {
                             agent_exploration.discover_resource(
                                 explore_pos,
                                 resource.resource_type,

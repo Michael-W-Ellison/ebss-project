@@ -159,15 +159,13 @@ fn main() {
         }
     }
 
-    // Calculate total explored tiles globally
-    let mut globally_explored = 0;
-    for y in 0..world.grid.height {
-        for x in 0..world.grid.width {
-            if world.grid.tiles[y][x].explored {
-                globally_explored += 1;
-            }
-        }
-    }
+    // Calculate total explored tiles globally: everywhere anybody has seen
+    let globally_explored = population
+        .agents
+        .iter()
+        .flat_map(|agent| agent.exploration_knowledge.explored_tiles.iter())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
 
     println!("\n=== World Exploration Statistics ===");
     println!("Total tiles globally explored: {} / {} ({:.1}%)",

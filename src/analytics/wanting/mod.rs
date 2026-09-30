@@ -510,6 +510,41 @@ impl Simulation {
             }
         }
 
+        // And somebody hungry eats before he huddles.
+        //
+        // The line above waits for the last quarter of the reserve, and in the
+        // hungry gap everybody is cold every turn - so above that line the
+        // override below took every turn a body had, and it took them from a
+        // man with supper in his pack as readily as from one with nothing.
+        // Eating is a turn and it can be done under a roof; the cold does not
+        // go away while he waits. Traced through a settlement's winter after
+        // the rot was taken out of its packs (#252): a man on 28% of his
+        // reserve walked to a pit, arrived, and was sent to the roof before he
+        // could lift anything out of it, turn after turn, until the line
+        // above caught him three days from the end.
+        //
+        // So a body whose hunger is up eats what it carries, or, with nothing
+        // to eat, gets something out of a store it knows of - the store's own
+        // rules still decide whether it is the season for opening it - and
+        // only then goes in out of the cold. See ISSUES_FOUND #252.
+        let hungry = agent
+            .drives
+            .get(DriveType::Hunger)
+            .is_some_and(|hunger| hunger.is_active());
+        if hungry && agent.state.physiology.room_for_another_mouthful() {
+            if agent.has_edible_food() {
+                return (
+                    Action::Eat {
+                        food_type: "generic".to_string(),
+                    },
+                    false,
+                );
+            }
+            if let Some(from_the_store) = self.something_out_of_the_store(agent, agent_position) {
+                return (from_the_store, false);
+            }
+        }
+
         // And freezing, where there is a roof within reach.
         //
         // *Freezing*, not cold. This asked `needs_shelter`, which is

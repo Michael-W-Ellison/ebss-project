@@ -48,16 +48,19 @@ fn a_midden_underfoot(simulation: &mut Simulation) -> Position {
 
 // --- what a midden is -------------------------------------------------------
 
-/// Voiding leaves three things: litter, a smell, and seeds.
+/// Voiding leaves two things: a smell, and seeds.
+///
+/// It used to leave litter as well, which rotted into the ground's nutrient.
+/// People void where they happen to be, and only muck carried to a field on
+/// purpose builds one now - see `Field::somebody_mucked_it` and ISSUES_FOUND
+/// #246.
 #[test]
-fn what_somebody_passes_is_litter_a_smell_and_seed() {
-    let mut soil = Soil::for_terrain(TerrainType::Plains);
-    let litter_before = soil.litter();
+fn what_somebody_passes_is_a_smell_and_seed() {
+    let mut soil = Soil::default();
 
     soil.somebody_voided_here(1.0);
 
-    assert!(soil.litter() > litter_before, "it is matter on the ground");
-    assert!(soil.fouling > 0.0, "and it smells");
+    assert!(soil.fouling > 0.0, "it smells");
     assert!(soil.seeds_dropped > 0.0, "and there is seed in it");
 }
 
@@ -70,15 +73,19 @@ fn most_of_what_goes_in_does_not_come_out_able_to_grow() {
     );
 }
 
-/// The smell goes long before the matter does.
+/// The smell goes, and the seed in it stays.
+///
+/// This used to be "the smell goes long before the matter does", read off the
+/// litter. There is no litter now; what outlasts the smell is the seed, which
+/// is the half of a midden that matters to what comes up.
 #[test]
-fn a_midden_stops_smelling_before_it_stops_being_there() {
-    let mut soil = Soil::for_terrain(TerrainType::Plains);
+fn a_midden_stops_smelling_and_keeps_its_seed() {
+    let mut soil = Soil::default();
     soil.somebody_voided_here(2.0);
 
-    let litter_at_the_start = soil.litter();
+    let seed_at_the_start = soil.seeds_dropped;
     for _ in 0..200 {
-        soil.decay(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
+        soil.air_out(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
     }
 
     assert!(
@@ -86,18 +93,17 @@ fn a_midden_stops_smelling_before_it_stops_being_there() {
         "two hundred days of wet weather should take the smell off it: {}",
         soil.fouling
     );
-    assert!(
-        soil.litter() > litter_at_the_start * 0.1,
-        "but the matter is still there, working into the ground"
+    assert_eq!(
+        soil.seeds_dropped, seed_at_the_start,
+        "but the seed is still lying there"
     );
 }
 
 /// Nothing comes up out of a fresh midden.
 #[test]
 fn nothing_grows_out_of_a_fresh_midden() {
-    let mut soil = Soil::for_terrain(TerrainType::Plains);
+    let mut soil = Soil::default();
     soil.somebody_voided_here(Soil::AS_FOUL_AS_IT_GETS);
-    soil.nutrients = 0.5;
 
     assert!(
         !soil.ready_to_sprout(),
@@ -108,20 +114,19 @@ fn nothing_grows_out_of_a_fresh_midden() {
 /// And out of a broken-down one, it does.
 #[test]
 fn what_was_dropped_comes_up_once_the_ground_has_taken_it() {
-    let mut soil = Soil::for_terrain(TerrainType::Plains);
+    let mut soil = Soil::default();
     soil.somebody_voided_here(20.0);
     assert!(soil.seeds_dropped >= Soil::ENOUGH_TO_COME_UP);
 
     for _ in 0..400 {
-        soil.decay(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
+        soil.air_out(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
     }
 
     assert!(
         soil.ready_to_sprout(),
-        "seed {:.2}, fouling {:.3}, nutrients {:.3}",
+        "seed {:.2}, fouling {:.3}",
         soil.seeds_dropped,
-        soil.fouling,
-        soil.nutrients
+        soil.fouling
     );
 
     let seed = soil.it_came_up();
@@ -225,7 +230,7 @@ fn a_midden_left_alone_comes_up_in_food() {
     // And let it break down, which is what the seasons would do.
     if let Some(tile) = simulation.world.grid.get_tile_mut(&midden) {
         for _ in 0..400 {
-            tile.soil.decay(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
+            tile.soil.air_out(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
         }
     }
 
@@ -261,7 +266,7 @@ fn nothing_comes_up_where_something_already_grows() {
     simulation.world.grid.somebody_voided_on(&midden, 20.0);
     if let Some(tile) = simulation.world.grid.get_tile_mut(&midden) {
         for _ in 0..400 {
-            tile.soil.decay(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
+            tile.soil.air_out(1.0, crate::environment::seasons::ONCE_A_DAY as f32);
         }
     }
 

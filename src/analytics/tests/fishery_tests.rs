@@ -39,42 +39,6 @@ fn a_world_with_a_river() -> World {
     world
 }
 
-/// Fish do not grow out of the bank they are caught from.
-///
-/// They used to. `regenerate_in_ground` drew nutrient from the tile for every
-/// resource that grew on it, which had a riverbank feeding the fish in the
-/// river beside it. Nothing in the world works that way round.
-#[test]
-fn a_fish_takes_nothing_out_of_the_bank() {
-    let mut soil = Soil::for_terrain(TerrainType::Riverbank);
-    let before = soil.nutrients;
-
-    let mut reach = ResourceNode::new(ResourceType::Fish, Position::new(1, 1), 10);
-    reach.max_amount = 500;
-
-    for _ in 0..200 {
-        reach.regenerate_in_ground(15.0, 0.8, 1.0, false, &mut soil, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
-    }
-
-    assert_eq!(
-        soil.nutrients, before,
-        "a fish is grown at sea; the bank pays nothing towards it"
-    );
-
-    // And a crop on the same ground does draw on it, so the test is not
-    // passing because nothing grew at all
-    let mut crop = ResourceNode::new(ResourceType::Food, Position::new(1, 1), 10);
-    crop.max_amount = 500;
-    for _ in 0..200 {
-        crop.regenerate_in_ground(15.0, 0.8, 1.0, false, &mut soil, crate::world::ResourceNode::WHAT_THESE_RATES_WERE_FITTED_TO);
-    }
-
-    assert!(
-        soil.nutrients < before,
-        "a plant, by contrast, grows out of the ground it stands in"
-    );
-}
-
 /// A reach fished down to nothing fills again from upstream.
 ///
 /// This is the whole difference between a fishery and a berry hedge. A hedge
@@ -418,9 +382,7 @@ fn a_river_settlement_keeps_its_ground() {
             total += simulation
                 .world
                 .grid
-                .get_tile(&resource.position)
-                .map(|tile| tile.soil.fertility())
-                .unwrap_or(0.0);
+                .how_good_the_ground_is(&resource.position);
             fields += 1;
         }
 

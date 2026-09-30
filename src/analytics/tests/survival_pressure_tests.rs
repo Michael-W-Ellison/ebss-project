@@ -36,18 +36,26 @@ fn give_food(agent: &mut Agent, quantity: u32) {
 }
 
 /// Ground worked out carries a smaller crop, not merely a slower one.
+///
+/// On the soil ladder now: a field of ordinary loam worn to depleted and then
+/// to exhausted carries three quarters less than it did, which is most of it.
 #[test]
 fn the_crop_falls_with_the_ground() {
-    let field = ResourceNode::new(ResourceType::Grain, Position::new(5, 5), 80);
+    use crate::world::soil::{SoilGrade, WHAT_BROKEN_GROUND_YIELDS_OVER_WILD};
 
-    let fresh = field.standing_capacity(0.55);
-    let tired = field.standing_capacity(0.25);
-    let spent = field.standing_capacity(0.03);
+    let field = ResourceNode::new(ResourceType::Grain, Position::new(5, 5), 80);
+    let on = |grade: SoilGrade| {
+        field.how_heavy_a_crop_it_carries(grade.multiplier() * WHAT_BROKEN_GROUND_YIELDS_OVER_WILD)
+    };
+
+    let fresh = on(SoilGrade::Ordinary);
+    let tired = on(SoilGrade::Depleted);
+    let spent = on(SoilGrade::Exhausted);
 
     assert!(fresh > tired && tired > spent, "{fresh} {tired} {spent}");
     assert!(
-        spent < fresh / 4,
-        "ground worked from 0.55 to 0.03 should lose most of its yield: {fresh} to {spent}"
+        spent * 4 <= fresh,
+        "ground worked from ordinary to exhausted should lose most of its yield: {fresh} to {spent}"
     );
 }
 
@@ -144,6 +152,47 @@ fn a_child_waits_on_a_surplus_and_not_on_a_full_stomach() {
     assert!(
         !just_eaten.should_attempt_reproduction(),
         "a stretch of going short should still be telling"
+    );
+}
+
+/// The hungry gap ahead of somebody on a given day: how far off it is, and how
+/// much of it is still to come.
+#[test]
+fn the_gap_ahead_is_counted_from_where_you_stand() {
+    use crate::agents::provision::{how_long_the_land_gives_nothing, the_gap_ahead, when_the_land_stops_giving};
+    use crate::environment::seasons::DAYS_PER_YEAR;
+
+    let gap = how_long_the_land_gives_nothing();
+    let starts = when_the_land_stops_giving();
+    assert_eq!(the_gap_ahead(starts), (0, gap), "on its first day the whole gap is ahead");
+    assert_eq!(the_gap_ahead(starts + 10), (0, gap - 10), "and ten days in, ten are behind");
+    assert_eq!(
+        the_gap_ahead(starts + gap),
+        (DAYS_PER_YEAR - gap, gap),
+        "and the day it ends, the next is a year off its start"
+    );
+}
+
+/// A child is charged its whole share whenever it is conceived.
+///
+/// Charging only the gap days a child would be alive through let everybody in
+/// a settlement conceive in the same autumn, and the winter after the births
+/// took the settlement. See ISSUES_FOUND #255.
+#[test]
+fn a_child_is_charged_its_share_whenever_it_is_conceived() {
+    use crate::agents::provision::{how_long_the_land_gives_nothing, when_the_land_stops_giving, WhatIsPutBy};
+    use crate::environment::seasons::DAYS_PER_YEAR;
+
+    let gap = how_long_the_land_gives_nothing() as f32;
+    let a_day = fed_adult().state.physiology.what_i_burn_in_a_day;
+    let their_own_winter = a_day * gap;
+    let autumn = (when_the_land_stops_giving() + DAYS_PER_YEAR - 1) % DAYS_PER_YEAR;
+
+    let mut parent = fed_adult();
+    parent.state.what_the_larder_says = Some(WhatIsPutBy::reckon(their_own_winter * 1.01, a_day, 90.0, autumn));
+    assert!(
+        !parent.enough_put_by_for_a_child(),
+        "a parent's own winter and nothing for the child let a child be conceived"
     );
 }
 
@@ -455,5 +504,33 @@ fn the_children_of_a_settlement_live_past_infancy() {
     assert!(
         born_here >= 5,
         "six thousand turns in, a settlement should hold people born into it, not {born_here}"
+    );
+}
+
+/// A parent already feeding small children needs their winters put by as well
+/// before another.
+///
+/// The gate asked for a parent's winter and one newborn's whatever they were
+/// feeding already, and once children lived a settlement of six grown people
+/// had twelve small ones by its fourth winter and starved in it. See
+/// ISSUES_FOUND #261.
+#[test]
+fn a_parent_counts_the_children_already_here() {
+    use crate::agents::provision::{how_long_the_land_gives_nothing, WhatIsPutBy};
+
+    let gap = how_long_the_land_gives_nothing() as f32;
+    let a_day = fed_adult().state.physiology.what_i_burn_in_a_day;
+    let newborn = crate::agents::agent::what_a_body_this_age_eats(0);
+    let enough_for_one_more = a_day * (1.0 + newborn) * gap * 1.01;
+
+    let mut without = fed_adult();
+    without.state.what_the_larder_says = Some(WhatIsPutBy::reckon(enough_for_one_more, a_day, 90.0, 0));
+    assert!(without.enough_put_by_for_a_child());
+
+    let mut with_two = without.clone();
+    with_two.the_small_ones_i_answer_for = 2.0 * newborn;
+    assert!(
+        !with_two.enough_put_by_for_a_child(),
+        "a parent feeding two infants had a third on the same stores as somebody with none"
     );
 }

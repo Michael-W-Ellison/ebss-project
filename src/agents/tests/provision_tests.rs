@@ -233,3 +233,35 @@ fn a_trip_has_to_bring_back_more_than_a_meal() {
         "an armful should be at least a day's food: {armful} against {a_days_food}"
     );
 }
+
+/// A month put by and not a winter is something to act on in the autumn, not
+/// on the first day of the winter.
+///
+/// The winter rung reached the Preparedness threshold on the day the winter
+/// began and not before, so nobody with a month in hand laid in another
+/// thing all autumn. See ISSUES_FOUND #255.
+#[test]
+fn a_winter_not_put_by_is_worth_acting_on_while_there_is_still_time() {
+    let winter = DAYS_PER_SEASON as f32;
+    let a_month_and_more = DAYS_IN_A_MONTH as f32 + 5.0;
+    let threshold = crate::core::DriveType::Preparedness.default_threshold();
+    let on = |day: u32| WhatIsPutBy::reckon(a_month_and_more * 1440.0, 1440.0, winter, day);
+
+    let two_months_out = Season::Winter.first_day() - 55;
+    assert!(
+        on(two_months_out).stress() >= threshold,
+        "two months before the winter a month in hand pressed at {:.2}, under the drive's {threshold}",
+        on(two_months_out).stress()
+    );
+    assert_eq!(
+        on(Season::Spring.first_day() + 2).stress(),
+        0.0,
+        "and in spring the same larder is nothing to worry about"
+    );
+
+    // Never easier to be shorter.
+    let a_week_and_more = WhatIsPutBy::reckon(8.0 * 1440.0, 1440.0, winter, two_months_out);
+    assert!(a_week_and_more.stress() >= on(two_months_out).stress());
+    let a_winter = WhatIsPutBy::reckon((winter + 1.0) * 1440.0, 1440.0, winter, two_months_out);
+    assert_eq!(a_winter.stress(), 0.0, "and a winter put by is enough");
+}

@@ -206,7 +206,7 @@ fn main() {
 
     println!("Created wheat plant:");
     println!("  Position: ({}, {})", wheat_plant.position.0, wheat_plant.position.1);
-    println!("  Health: {}/{}", wheat_plant.current_health, wheat_plant.max_health);
+    println!("  Health: {}/{}", wheat_plant.current_health, wheat_species.health);
     println!("  Status: {}", wheat_plant.status());
     println!();
 
@@ -324,7 +324,7 @@ fn main() {
     let mut farm_plants = Vec::new();
     for x in 0..5 {
         for y in 0..5 {
-            if let Some(id) = manager.plant_crop("wheat".to_string(), (200 + x, 200 + y), farmer_id, 0) {
+            if let Some(id) = manager.plant_crop("wheat".to_string(), (200 + x, 200 + y), 0) {
                 farm_plants.push(id);
             }
         }
@@ -337,7 +337,6 @@ fn main() {
     if let Some(plant) = manager.get(&farm_plants[0]) {
         println!("Sample farm plant:");
         println!("  Cultivated: {}", plant.is_cultivated);
-        println!("  Planted by: {:?}", plant.planted_by);
         println!("  Status: {}", plant.status());
     }
     println!();

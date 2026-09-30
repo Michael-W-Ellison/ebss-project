@@ -1,17 +1,17 @@
 // src/analytics/tests/nutrient_loop_tests.rs
-//! Tests for matter that comes back.
+//! Tests for matter that comes back, as far as it still does.
 //!
-//! Everything a settlement grew used to leave the world for good. Food eaten
-//! was gone; food that spoiled in a pack was deleted outright, making a pack
-//! the one place in the world where matter could rot to nothing; and a body
-//! was buried nowhere. The soil was a stock being mined with no return at all,
-//! and the only thing that ever put anything back was an agent who had learned
-//! to tip a spoiled basket onto a field. Traced over thirty thousand turns,
-//! farmed ground went from 0.53 fertility to 0.03 and stayed there.
+//! This file was the nutrient loop: a meal eaten or spoiled, a body buried,
+//! all of it going into the ground as litter and rotting back into what the
+//! next crop drew on, three fifths of it at a time. The ground does not work
+//! that way now - wild ground is what it was made, and a field is worn by
+//! crops and built by beans, muck and rest - see ISSUES_FOUND #246.
 //!
-//! What a body takes in mostly comes out again, and what a body is comes back
-//! when it stops. Neither is free: rot keeps three fifths of what it works on
-//! and loses the rest, so the loop turns and loses on every turn.
+//! What is left is the part that was never about fertility: what a body takes
+//! in mostly comes out again, and what it leaves is a midden - a smell, and
+//! seed - on the ground it stands on. `the_loop_turns_and_loses` and
+//! `the_farmed_ground_holds_up_longer` were about the pool and have gone with
+//! it; what a field does is held in `soil_ladder_tests`.
 
 use crate::agents::{Agent, AgentConfig, InventoryItem, LifeStage, Population};
 use crate::analytics::Simulation;
@@ -37,23 +37,6 @@ fn a_meal_leaves_something_to_come_out() {
     assert!(voided > 0.0);
     assert_eq!(agent.state.waste_carried, 0.0);
     assert_eq!(agent.state.void_waste(), 0.0);
-}
-
-/// The loop loses on every turn: what comes back is less than what went in.
-#[test]
-fn the_loop_turns_and_loses() {
-    let taken = Soil::NUTRIENT_PER_UNIT_GROWN;
-    let returned = Soil::WASTE_PER_MEAL * Soil::KEPT_FROM_ROT;
-
-    assert!(
-        returned < taken,
-        "a closed loop would make farming free: {returned:.5} back against {taken:.5} taken"
-    );
-    assert!(
-        returned > taken * 0.4,
-        "and it should be worth having: only {:.0}% comes back",
-        returned / taken * 100.0
-    );
 }
 
 /// Food that spoils in a pack falls to the ground instead of vanishing.
@@ -108,7 +91,8 @@ fn a_body_comes_back_to_the_ground() {
     );
 }
 
-/// In a running simulation, what agents eat reaches the ground under them.
+/// In a running simulation, what agents eat reaches the ground under them -
+/// as a midden: a smell, and the seed that was in it.
 #[test]
 fn what_a_settlement_eats_reaches_the_ground_it_stands_on() {
     let world = World::new(WorldConfig::default());
@@ -129,8 +113,9 @@ fn what_a_settlement_eats_reaches_the_ground_it_stands_on() {
         .world
         .grid
         .get_tile(&here)
-        .map(|tile| tile.soil.litter())
-        .unwrap_or(0.0);
+        .map(|tile| tile.soil.has_somebody_left_something_here())
+        .unwrap_or(false);
+    assert!(!before, "the fixture's ground should start clean");
 
     for _ in 0..1500 {
         // Keep them there: this is about where what they leave ends up
@@ -144,64 +129,12 @@ fn what_a_settlement_eats_reaches_the_ground_it_stands_on() {
         .world
         .grid
         .get_tile(&here)
-        .map(|tile| tile.soil.litter())
-        .unwrap_or(0.0);
+        .map(|tile| tile.soil.has_somebody_left_something_here())
+        .unwrap_or(false);
 
     assert!(
-        after > before,
-        "a tile ten people lived on for fifteen hundred turns should have gained \
-         litter, not lost it: {before:.3} -> {after:.3}"
-    );
-}
-
-/// The ground a settlement farms holds up far better than it used to.
-#[test]
-fn the_farmed_ground_holds_up_longer() {
-    use crate::world::ResourceType;
-
-    let world = World::new(WorldConfig::default());
-    let mut population = Population::new();
-    for _ in 0..12 {
-        population.spawn_agent(AgentConfig::default());
-    }
-
-    let mut simulation = Simulation::new(world, population);
-
-    let farmed_fertility = |simulation: &Simulation| -> f32 {
-        let mut total = 0.0;
-        let mut patches = 0;
-        for resource in &simulation.world.resources {
-            if !matches!(
-                resource.resource_type,
-                ResourceType::Food | ResourceType::Grain
-            ) {
-                continue;
-            }
-            total += simulation
-                .world
-                .grid
-                .get_tile(&resource.position)
-                .map(|tile| tile.soil.fertility())
-                .unwrap_or(0.0);
-            patches += 1;
-        }
-        total / patches.max(1) as f32
-    };
-
-    let before = farmed_fertility(&simulation);
-
-    for _ in 0..10_000 {
-        simulation.take_a_turn();
-    }
-
-    let after = farmed_fertility(&simulation);
-
-    // Ten thousand turns of a settlement working the ground. Without anything
-    // coming back this was already most of the way down; the loop should keep
-    // it in the same country as where it started.
-    assert!(
-        after > before * 0.5,
-        "farmed ground should not have lost half its fertility in ten thousand \
-         turns: {before:.3} -> {after:.3}"
+        after,
+        "a tile ten people lived on for fifteen hundred turns should have \
+         something of theirs on it"
     );
 }

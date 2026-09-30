@@ -99,6 +99,21 @@ impl Simulation {
 
             let agent_pos = agent.state.position;
 
+            // What lies on the ground within reach of this nose, read off
+            // the patches round it rather than off the whole map: nothing on
+            // the ground smells stronger than the strongest raw smell, so
+            // nothing further off than that carries could be smelled.
+            let reach = (agent.senses.smell.smell_range.max(0.0)
+                * agent.senses.smell.sensitivity
+                * crate::world::ResourceType::THE_STRONGEST_RAW_SMELL)
+                .ceil() as u32
+                + 1;
+            let off_the_ground = Self::what_the_ground_gives_off(
+                &self.world,
+                crate::world::Position::new(agent_pos.0, agent_pos.1),
+                reach,
+            );
+
             // Scents are re-derived from the world every turn, so the previous
             // set is dropped first. Appending instead would pile up thousands
             // of duplicates, and stale ones would keep rebuilding memories of
@@ -110,7 +125,7 @@ impl Simulation {
                 )
             });
 
-            for (source_position, scent_type, strength) in &sources {
+            for (source_position, scent_type, strength) in off_the_ground.iter().chain(&sources) {
                 if agent.senses.smell.can_smell(agent_pos, *source_position, *strength) {
                     agent.senses.smell.detect_scent(Scent {
                         source_position: *source_position,
@@ -123,18 +138,22 @@ impl Simulation {
         }
     }
 
-    /// Everything in the world currently giving off a smell
-    pub(in crate::analytics) fn collect_scent_sources(
-        &self,
+    /// What lies on the ground within `reach` of somewhere, giving off a
+    /// smell, in list order.
+    ///
+    /// Berries on the bush are close to odourless, so an agent finds those by
+    /// looking rather than by sniffing.
+    pub(in crate::analytics) fn what_the_ground_gives_off(
+        world: &crate::world::World,
+        near: crate::world::Position,
+        reach: u32,
     ) -> Vec<((i32, i32, i32), crate::agents::senses::ScentType, f32)> {
         use crate::agents::senses::ScentType;
         use crate::world::ResourceType;
 
         let mut sources = Vec::new();
 
-        // What lies on the ground. Berries on the bush are close to odourless,
-        // so an agent finds those by looking rather than by sniffing.
-        for resource in &self.world.resources {
+        for resource in world.nodes_near(near, reach) {
             if resource.amount == 0 {
                 continue;
             }
@@ -156,6 +175,20 @@ impl Simulation {
                 strength,
             ));
         }
+
+        sources
+    }
+
+    /// Everything giving off a smell that is not lying on the ground: what
+    /// has turned in somebody's pack, middens and cooking fires. What lies on
+    /// the ground is asked for round each nose - see
+    /// `what_the_ground_gives_off`.
+    pub(in crate::analytics) fn collect_scent_sources(
+        &self,
+    ) -> Vec<((i32, i32, i32), crate::agents::senses::ScentType, f32)> {
+        use crate::agents::senses::ScentType;
+
+        let mut sources = Vec::new();
 
         // Food that has turned announces itself, wherever it is being carried.
         // This is decay rather than food: it says something is rotten here, and
