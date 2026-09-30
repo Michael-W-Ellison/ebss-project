@@ -202,12 +202,17 @@ impl Simulation {
             agent.state.walked_with_time_to_spare = agent.state.minutes_left_this_turn > 0.0;
             (agent.id, agent.state.position, agent.sight_range())
         };
-        // Looking about again is only worth it somewhere the turn's own sight
-        // pass did not already see from where the walk began.
+        // Whatever the rest of the half hour can reach from here is read as it
+        // stands today: as far as the walker sees, or as far as a turn of
+        // gathering reaches, whichever is further. Waking asks only after the
+        // nodes that are asleep, so it is cheap; looking about again is not,
+        // and is only worth it somewhere the turn's own sight pass did not
+        // already see from where the walk began.
+        let reach = (sight.max(1) as u32).max(Self::FORAGE_RADIUS) + 2;
+        self.world
+            .wake_the_nodes_near(crate::world::Position::new(at.0, at.1), reach);
         let came = (at.0 - start.0).abs().max((at.1 - start.1).abs());
         if came > sees {
-            self.world
-                .wake_the_nodes_near(crate::world::Position::new(at.0, at.1), sight.max(1) as u32 + 2);
             self.population.process_exploration_of(&mut self.world, Some(id));
         }
 

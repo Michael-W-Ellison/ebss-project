@@ -29,17 +29,14 @@ fn somebody_at_a_strange_plant(kind: u8, how_many_watching: usize) -> (Simulatio
 
     // Nothing else edible anywhere: these tests are about whether this
     // particular plant is picked, and a world full of berry bushes answers a
-    // request for food with berries every time
+    // request for food with berries every time. Everything edible, and not a
+    // list: the list here predated roots, greens, legumes and nuts, and once
+    // walking to the next patch cost a few minutes rather than a turn a pace,
+    // the roots twenty cells off were worth more than the plant underfoot.
     world.resources.retain(|resource| {
         resource.position != where_it_is
-            && !matches!(
-                resource.resource_type,
-                ResourceType::Food
-                    | ResourceType::Grain
-                    | ResourceType::Fish
-                    | ResourceType::Meat
-                    | ResourceType::StrangePlant
-            )
+            && !resource.resource_type.is_edible()
+            && resource.resource_type != ResourceType::StrangePlant
     });
 
     if let Some(tile) = world.grid.get_tile_mut(&where_it_is) {
