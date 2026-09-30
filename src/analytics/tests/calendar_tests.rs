@@ -419,18 +419,18 @@ fn a_settlement_lives_through_a_winter() {
     // sample was not.
     const WORLDS: u64 = 32;
 
-    let mut reached_winter = 0;
-    let mut came_out_of_it = 0;
-    let mut saw_the_second_spring = 0;
-    // What each world actually did, so that a failure names the seed instead
-    // of saying "none of thirty-two" and leaving half an hour of re-running to
+    // What each world did, so that a failure names the seed instead of
+    // saying "none of thirty-two" and leaving half an hour of re-running to
     // whoever reads it. The roll count is the instrument from
-    // `repeatable_tests`: two runs that part company on it took a branch on an
-    // input the seed does not fix, which is a different fault and a different
-    // place to look from a world that merely went badly.
-    let mut what_each_world_did: Vec<String> = Vec::new();
-
-    for seed in 0..WORLDS {
+    // `repeatable_tests`: two runs that part company on it took a branch on
+    // an input the seed does not fix, which is a different fault and a
+    // different place to look from a world that merely went badly.
+    //
+    // Four worlds at a time. The dice are per thread (`core::dice`), so a
+    // world run on its own thread rolls exactly what it would have rolled on
+    // the test's; thirty-two worlds one after another took half an hour once
+    // a person walked at five kilometres an hour.
+    let one_world = |seed: u64| -> (usize, usize, String) {
         crate::core::dice::seed(seed);
 
         let world = World::new(WorldConfig::default());
@@ -468,12 +468,41 @@ fn a_settlement_lives_through_a_winter() {
         );
 
         let after = alive(&simulation);
-        what_each_world_did.push(format!(
-            "seed {seed}: {at_the_gate} at the gate, {after} after, \
-             {} rolls",
-            crate::core::dice::draws_taken()
-        ));
+        (
+            at_the_gate,
+            after,
+            format!(
+                "seed {seed}: {at_the_gate} at the gate, {after} after, {} rolls",
+                crate::core::dice::draws_taken()
+            ),
+        )
+    };
 
+    const AT_ONCE: u64 = 4;
+    let mut worlds: Vec<(u64, (usize, usize, String))> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..AT_ONCE)
+            .map(|lane| {
+                scope.spawn(move || {
+                    (lane..WORLDS)
+                        .step_by(AT_ONCE as usize)
+                        .map(|seed| (seed, one_world(seed)))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|handle| handle.join().expect("a world panicked"))
+            .collect()
+    });
+    worlds.sort_by_key(|(seed, _)| *seed);
+
+    let mut reached_winter = 0;
+    let mut came_out_of_it = 0;
+    let mut saw_the_second_spring = 0;
+    let mut what_each_world_did: Vec<String> = Vec::new();
+    for (_, (at_the_gate, after, said)) in worlds {
+        what_each_world_did.push(said);
         if at_the_gate > 0 {
             reached_winter += 1;
             if after > 0 {
