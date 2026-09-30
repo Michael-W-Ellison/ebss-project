@@ -109,9 +109,16 @@ impl Simulation {
         self.take_what_is_in_the_snares_about(agent_index);
 
         // What along the way would frighten this one, gathered once, and
-        // which of it was in sight when they set off.
+        // which of it was in sight when they set off. A walk that ends within
+        // sight of where it began passes nothing that was not in sight at the
+        // start, so there is nothing to gather.
         let sees = Self::AS_FAR_AS_ANYBODY_SEES_A_BEAST;
-        let dangers = self.what_would_frighten(agent_index, can_cover as i32 + sees);
+        let how_far = (target.0 - start.0).abs().max((target.1 - start.1).abs());
+        let dangers = if how_far > sees {
+            self.what_would_frighten(agent_index, (can_cover as i32).min(how_far) + sees)
+        } else {
+            Vec::new()
+        };
         let in_sight_already: Vec<bool> = dangers
             .iter()
             .map(|(x, y)| (start.0 - x).abs().max((start.1 - y).abs()) <= sees)
@@ -195,9 +202,14 @@ impl Simulation {
             agent.state.walked_with_time_to_spare = agent.state.minutes_left_this_turn > 0.0;
             (agent.id, agent.state.position, agent.sight_range())
         };
-        self.world
-            .wake_the_nodes_near(crate::world::Position::new(at.0, at.1), sight.max(1) as u32 + 2);
-        self.population.process_exploration_of(&mut self.world, Some(id));
+        // Looking about again is only worth it somewhere the turn's own sight
+        // pass did not already see from where the walk began.
+        let came = (at.0 - start.0).abs().max((at.1 - start.1).abs());
+        if came > sees {
+            self.world
+                .wake_the_nodes_near(crate::world::Position::new(at.0, at.1), sight.max(1) as u32 + 2);
+            self.population.process_exploration_of(&mut self.world, Some(id));
+        }
 
         // Paid for by the minute in the body's bill, not as an action
         last.energy_cost = 0.0;
