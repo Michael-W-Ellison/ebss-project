@@ -97,6 +97,13 @@ impl PlantSpecies {
         }
     }
 
+    /// Whether a grazing animal takes this as browse rather than grazing:
+    /// a tree, or a bush - the same split `lives_for_years` makes, of what
+    /// is woody and what comes up and goes in a season or two.
+    pub fn is_woody(&self) -> bool {
+        self.is_tree || !matches!(self.size, PlantSize::Tiny | PlantSize::Small)
+    }
+
     /// The same, in turns, which is what a plant actually counts in.
     pub fn lives_for_turns(&self) -> u32 {
         (self.lives_for_years() * crate::environment::seasons::TICKS_PER_YEAR as f32) as u32

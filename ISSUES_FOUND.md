@@ -21573,3 +21573,79 @@ draws on one pool, and the fastest breeder crowds the rest out: goats grow
 up in a year and litter one to three, elk take two years and have one or
 two. Real grazers and browsers live side by side because they eat different
 things in different places, and nothing here says so yet.
+
+### 285. Grazers live side by side: niches, eating to the full, and a crown left on what is grazed
+
+After #284, goats took the big map (95 → 803 in five years) while elk,
+cattle and camels vanished. Four changes, each measured over five years on
+the empty big map (seed 3). The last one turned out to be the cause.
+
+- **Feeding niches** (`AnimalSpecies::how_much_of_it_is_browse`, and
+  `PlantSpecies::is_woody`). Each grazer takes a share of its appetite as
+  browse (trees and bushes) and the rest as grass and herbs, from the usual
+  wild figures: deer and camels 0.8, goats 0.6, elk 0.4, reindeer 0.3, sheep
+  and boar 0.2, cattle and mammoths 0.1. Held strictly to that, pure grazers
+  starved (sheep 112 → 4, reindeer 287 → 4). So when a day's walk ends with
+  one share unmet, an animal makes do with the other kind of growth at half
+  its worth (`WHAT_ANOTHER_KIND_OF_GROWTH_IS_WORTH`).
+- **Wild litters.** Goats and sheep 1 to 2, which were 1 to 3; elk 1, which
+  was 1 to 2.
+- **A big animal ranges further in its day.** The day's 300 cells and 24
+  stops now scale with mass to the 0.375 (from 0.5 to 6 times); an elk walks
+  about twice as far as a sheep and a mammoth 5.6 times. A cow had run out of
+  day with its appetite unmet on 37% of passes and a mammoth on 64%.
+- **An animal eats until it is full.** It took its full reach, three times
+  what it burns, whenever it was grazing; what passed a full belly was lost.
+
+None of these stopped the second-winter crash (1,103 head to 481) or the
+goats taking over. A month-by-month count of the plants did: **grazing was
+killing the plants.** A grazer cropped a herb or a bush to nothing, and a
+plant at nothing is removed. Herb plants on the big map went from 145,552 to
+600 in two years, and bushes from 37,095 to 1,557. The grazers crashed after
+them, and the browsers came through on the trees, which only ever give a
+mouthful. Grazing takes the leaf and leaves the crown and root; now a grazer
+leaves a quarter of a plant's full growth standing
+(`WHAT_GRAZING_LEAVES_OF_A_PLANT`). Diggers still pull a root up.
+
+Five years on the empty big map with all of it:
+
+| | start | year 5 | starved |
+|---|---|---|---|
+| elk | 85 | 225 | 8 |
+| cattle | 42 | 117 | 0 |
+| camels | 33 | 57 | 0 |
+| mammoths | 23 | 30 (9 born) | 1 |
+| deer | 50 | 181 | 20 |
+| reindeer | 287 | 552 | 94 |
+| sheep | 112 | 555 | 51 |
+| goats | 95 | 631 | 17 |
+
+Head by year: 979, 1,232, 1,539, 1,945, 2,385. That is 24 grazers to the
+square kilometre at year five, inside the 10 to 30 temperate country
+carries, but still rising about 20% a year. The winter's standing grass,
+bushes and browse would hold roughly 35 to 40. A year at that density takes
+about 300 s in release, against about 130 s at the start.
+
+On the half-kilometre worlds, each holds at about ten head after the first
+year. Year five is 79 head against 122 at year one, and 33 of 56 species
+are kept.
+
+**Found, not fixed:**
+
+- **Herbs do not replace themselves on the big map.** With no animals at
+  all, herb plants went from 145,000 to 92,500 in two years (about 1.9% a
+  month); with the herds and the crown left, 144,000 to 67,000 in thirty
+  months. Herbs live two years and their seedlings are not keeping up. That
+  is a flora question, and as it goes on it will lower the ceiling.
+
+**And a hunter takes another hunter only when it comes upon one.** With all
+of the above, `the_predator_tiers_are_still_there_two_years_on` lost its
+small predators: kestrels went 181 → 1 on the big map, 293 of them taken.
+A short-fed eagle or heron that could see two turns' walk off (#280) sought
+kestrels out from a kilometre and more. Taking another hunter now also needs
+it to be within the rush (`HOW_FAR_A_HUNT_REACHES`). Three years on the big
+map: kestrels 181 → 59 with 42 taken, and every grazer still rising (elk 85
+→ 142, cattle 42 → 79, mammoths 23 → 30). The kestrels' remaining losses are
+starvation (399), as for the eagles, owls, otters and seals that live off the
+same small game. The pre-pace code starved them too (#281). That is the
+small-life larder, still to look at.

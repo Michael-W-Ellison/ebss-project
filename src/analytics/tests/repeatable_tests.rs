@@ -186,7 +186,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // a day's grazing walks on across the nearest patches.
     // Down to 7,226 for #283: a mammoth no longer faces down its own herd,
     // and a grazer walks to what it can crop rather than to a browsed tree.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_226;
+    // Up to 7,490 for #285: a grazer eats until it is full, takes its share
+    // as browse or grass by its kind, and leaves a plant its crown; and a
+    // hunter takes another hunter only when it comes upon one.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_490;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -350,7 +353,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // And down 3.6% for #283: grazers fed and not facing down their own kind.
     // And down 5.8% for #284: browse at what a wood yields, and no grass
     // coming back in winter.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 644_753;
+    // And down 4.9% for #285: feeding niches, eating to the full, a crown
+    // left on what is grazed, big animals ranging further, and hunters
+    // taking other hunters only when they come upon them.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 613_112;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

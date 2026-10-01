@@ -435,6 +435,28 @@ impl AnimalSpecies {
     /// thrive - and it is applied at birth rather than played out, because
     /// playing it out means holding records for animals whose whole purpose is
     /// to die.
+    /// What share of what it eats is browse - shoots, twigs and leaves off
+    /// trees and bushes - rather than grass and herbs.
+    ///
+    /// Every grazer drew on one pool and the fastest breeder took the
+    /// country: over five years on the empty big map goats went from 95 to
+    /// 803 while elk went to none, cattle 42 to 5 and camels 33 to 2 (#284).
+    /// What lets real grazers live side by side is that they do not eat the
+    /// same things: a roe deer or a camel browses, a sheep or a cow grazes,
+    /// an elk and a goat take some of each. The figures are the usual ones
+    /// for each sort in the wild. Anything not named takes half and half.
+    pub fn how_much_of_it_is_browse(&self) -> f32 {
+        match self.id.as_str() {
+            "deer" | "camel" => 0.8,
+            "goat" => 0.6,
+            "elk" => 0.4,
+            "reindeer" => 0.3,
+            "sheep" | "boar" => 0.2,
+            "cow" | "mammoth" => 0.1,
+            _ => 0.5,
+        }
+    }
+
     pub fn how_many_of_a_litter_come_through(&self) -> f32 {
         match self.size {
             AnimalSize::Tiny => 0.35,
@@ -1562,7 +1584,7 @@ fn sheep() -> AnimalSpecies {
         maturity_age: days(360),
         breeding_cooldown: days(360),
         gestation_period: days(150),
-        litter_size: (1, 3),
+        litter_size: (1, 2),
         hunger_rate: 0.04,
         max_hunger: 180.0,
         food_value: 50.0,
@@ -1605,7 +1627,7 @@ fn goat() -> AnimalSpecies {
         maturity_age: days(360),
         breeding_cooldown: days(360),
         gestation_period: days(150),
-        litter_size: (1, 3),
+        litter_size: (1, 2),
         hunger_rate: 0.045,
         max_hunger: 170.0,
         food_value: 55.0,
@@ -2405,7 +2427,7 @@ fn elk_animal() -> AnimalSpecies {
         maturity_age: days(720),
         breeding_cooldown: days(360),
         gestation_period: days(245),
-        litter_size: (1, 2),
+        litter_size: (1, 1),
         hunger_rate: 0.045,
         max_hunger: 250.0,
         food_value: 90.0,
@@ -4684,7 +4706,16 @@ impl AnimalManager {
                     || (small_enough
                         && it_eats_meat
                         && (hard_pressed || desperate)
-                        && quarry.where_it_sits() < hunter.where_it_sits());
+                        && quarry.where_it_sits() < hunter.where_it_sits()
+                        // **And only one it comes upon.** A hunter is not
+                        // anybody's quarry: a hawk kills a kestrel it
+                        // happens on, it does not go looking for one. Once
+                        // a hunter could see two turns' walk off (#280),
+                        // every short-fed eagle and heron on the map sought
+                        // kestrels out from a kilometre and more, and
+                        // kestrels went 181 to 1 in five years, 293 of them
+                        // taken (#285). Within a rush, or not at all.
+                        && apart(prey.position) <= Self::HOW_FAR_A_HUNT_REACHES);
 
                 if !worth_trying {
                     continue;
@@ -5198,8 +5229,30 @@ impl AnimalManager {
                 continue;
             }
 
-            let mut wanted = Self::what_it_reaches_for(species) * grazing_passes;
+            // **As much as it has room for, and no more.** It reached for
+            // its full reach whenever it was grazing, three times what it
+            // burns, hungry or not, and what passed a full belly went
+            // nowhere. With grass that does not grow back in winter (#284),
+            // that stripped the autumn's standing growth at three times the
+            // herd's need, and the grazers starved by midwinter while the
+            // browsers lived on twigs (#285). An animal eats until it is
+            // full.
+            let has_room_for =
+                animal.hunger / Self::what_a_mouthful_is_worth_to(species).max(0.0001);
+            let mut wanted =
+                (Self::what_it_reaches_for(species) * grazing_passes).min(has_room_for);
+            if wanted <= 0.0 {
+                continue;
+            }
             let mut taken = 0.0;
+
+            // **What it reaches for is split between browse and grazing**,
+            // by what its kind eats - see `how_much_of_it_is_browse`. Each
+            // share is met only off its own kind of growth, so a deer lives
+            // in the woods and a cow in the open, and a goat does not eat
+            // every other grazer out of the country (#285).
+            let mut wanted_browse = wanted * species.how_much_of_it_is_browse();
+            let mut wanted_graze = wanted - wanted_browse;
 
             // **A day's grazing is a walk, not a spot.**
             //
@@ -5220,6 +5273,23 @@ impl AnimalManager {
             let reached_for = wanted;
             let mut out_of_ground = false;
             let mut off_trees = 0.0f32;
+            // **And a big animal ranges further in its day.** One day's walk
+            // for everything meant an elk, wanting four times what a sheep
+            // does, ran out of day with its appetite unmet two passes in
+            // five and a mammoth, wanting thirty-two times, two in three -
+            // and they starved where sheep and goats did well (#285). How far
+            // an animal goes in a day rises with its bulk to about three
+            // eighths: an elk twice as far as a sheep, a mammoth five or six
+            // times, an elephant's ten or fifteen kilometres.
+            let how_far_its_kind_ranges = (species.mass_kg.max(1.0)
+                / Self::WHAT_A_DAYS_GRAZING_IS_SET_FOR_KG)
+                .powf(0.375)
+                .clamp(0.5, 6.0);
+
+            // Whether it has gone over to the other kind of growth, and what
+            // it has taken of that since.
+            let mut making_do = false;
+            let mut off_its_own = 0.0f32;
             loop {
                 // Underfoot first, then a step in any direction. An animal that is
                 // grazing is standing still and eating what is around it, not
@@ -5245,6 +5315,13 @@ impl AnimalManager {
                     let Some(kind) = flora.get(&plant.species_id) else {
                         continue;
                     };
+
+                    // Only what it still wants of this kind of growth.
+                    let woody = kind.is_woody();
+                    let wants_here = if woody { wanted_browse } else { wanted_graze };
+                    if wants_here <= 0.0 {
+                        continue;
+                    }
 
                     // Bring it up to now before taking anything off it. Most of
                     // the vegetation waits four months for its zone to come round
@@ -5278,10 +5355,18 @@ impl AnimalManager {
                         continue;
                     }
 
-                    let bite = wanted.min(there_to_take);
+                    let bite = wants_here.min(there_to_take);
                     *cropped.entry(index).or_insert(0.0) += bite;
+                    if woody {
+                        wanted_browse -= bite;
+                    } else {
+                        wanted_graze -= bite;
+                    }
                     wanted -= bite;
                     taken += bite;
+                    if making_do {
+                        off_its_own += bite;
+                    }
                     if Self::is_a_grown_tree(plant, kind) {
                         off_trees += bite;
                     }
@@ -5297,11 +5382,29 @@ impl AnimalManager {
                     }
                 }
 
-                if wanted <= 0.0
-                    || walked >= Self::HOW_FAR_A_DAYS_GRAZING_GOES
-                    || stops >= Self::HOW_MANY_STOPS_A_DAYS_GRAZING_MAKES
-                {
+                // **And when its own kind of growth runs short, it makes do
+                // with the other.** Held strictly to its share, a sheep on
+                // ground whose grass was thin starved beside a hedge: over
+                // five years sheep went 112 to 4 and reindeer 287 to 4 while
+                // the browsers thrived. A grazer will browse and a browser
+                // graze when they must, and get less out of it - see
+                // `WHAT_ANOTHER_KIND_OF_GROWTH_IS_WORTH`. Whatever share is
+                // still unmet goes over to the other kind, once, and it goes
+                // on with what is left of the day.
+                let the_day_is_spent = walked as f32
+                    >= Self::HOW_FAR_A_DAYS_GRAZING_GOES as f32 * how_far_its_kind_ranges
+                    || stops as f32
+                        >= Self::HOW_MANY_STOPS_A_DAYS_GRAZING_MAKES as f32 * how_far_its_kind_ranges;
+                if wanted <= 0.0 {
                     break;
+                }
+                if the_day_is_spent {
+                    if making_do {
+                        break;
+                    }
+                    making_do = true;
+                    std::mem::swap(&mut wanted_browse, &mut wanted_graze);
+                    continue;
                 }
                 // What the bite would take, asked the same way the bite asks
                 // it. This asked what was standing, and a grown tree is
@@ -5310,12 +5413,14 @@ impl AnimalManager {
                 // browsed-out oak to the next, twenty stops a day at under
                 // half a unit each, past bushes carrying eighteen apiece, and
                 // got half its keep (#283).
+                let (still_browsing, still_grazing) = (wanted_browse > 0.0, wanted_graze > 0.0);
                 let left_on = |index: usize| {
                     let plant = &plants.all_plants()[index];
                     flora
                         .get(&plant.species_id)
                         .map(|kind| {
-                            Self::what_there_is_to_take(
+                            (if kind.is_woody() { still_browsing } else { still_grazing })
+                                && Self::what_there_is_to_take(
                                 plant,
                                 kind,
                                 cropped.get(&index).copied().unwrap_or(0.0),
@@ -5339,8 +5444,12 @@ impl AnimalManager {
                         stops += 1;
                     }
                     None => {
-                        out_of_ground = true;
-                        break;
+                        if making_do {
+                            out_of_ground = true;
+                            break;
+                        }
+                        making_do = true;
+                        std::mem::swap(&mut wanted_browse, &mut wanted_graze);
                     }
                 }
             }
@@ -5383,7 +5492,9 @@ impl AnimalManager {
                 continue;
             }
 
-            animal.feed(taken * Self::what_a_mouthful_is_worth_to(species));
+            let worth_having = taken - off_its_own
+                + off_its_own * Self::WHAT_ANOTHER_KIND_OF_GROWTH_IS_WORTH;
+            animal.feed(worth_having * Self::what_a_mouthful_is_worth_to(species));
             took_altogether += taken as f64;
             mouths += 1;
 
@@ -5603,7 +5714,15 @@ impl AnimalManager {
         if Self::is_a_grown_tree(plant, kind) {
             standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_passes - already)
         } else {
-            standing
+            // **Down to the crown and no further.** A grazer took a plant
+            // to nothing, and a plant at nothing is dead and gone - so every
+            // patch a herd cropped was a patch it killed. The herbs on the
+            // big map went from 145,552 to 600 in two years and the bushes
+            // from 37,095 to 1,557, the herds crashed after them, and the
+            // browsers came through on the trees, which only ever give up a
+            // mouthful (#285). Grazing takes the leaf and leaves the crown and
+            // the root, which is why a meadow comes back.
+            (standing - kind.health * Self::WHAT_GRAZING_LEAVES_OF_A_PLANT).max(0.0)
         }
     }
 
@@ -5658,6 +5777,19 @@ impl AnimalManager {
 
         None
     }
+
+    /// What share of a plant's full growth a grazer leaves standing: the
+    /// crown and the root, that it grows back from.
+    const WHAT_GRAZING_LEAVES_OF_A_PLANT: f32 = 0.25;
+
+    /// The animal the day's grazing walk is set for: a sixty-kilo sheep.
+    const WHAT_A_DAYS_GRAZING_IS_SET_FOR_KG: f32 = 60.0;
+
+    /// What a mouthful of the other kind of growth is worth to an animal
+    /// making do with it, against its own: a sheep eating twigs, a deer
+    /// eating grass. Half - it keeps them alive through a thin season and
+    /// does not let a grazer live in a wood as well as a deer does.
+    const WHAT_ANOTHER_KIND_OF_GROWTH_IS_WORTH: f32 = 0.5;
 
     /// How far a day's grazing goes, in cells, at most: three kilometres,
     /// which is a grazing day for most things on four legs. Measured in
