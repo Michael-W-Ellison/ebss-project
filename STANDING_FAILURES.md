@@ -28,13 +28,10 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #286): every test, module by module
+**Last full run** (ISSUES_FOUND #287): every test, module by module
 (a background run is stopped at about half an hour, so the suite no longer
-runs in one piece). 2,717 tests run: 2,712 passed, 1 failed, 4 ignored.
-The failure was `errand_tests::going_for_a_drink_is_not_a_change_of_mind`,
-which asked one unseeded world for an interrupted errand. At five
-kilometres an hour, errands almost all arrive inside a turn or two, so it
-now asks across seeds 1 to 4, and passes. That leaves:
+runs in one piece). 2,717 tests run: 2,713 passed, none failed, 4 ignored.
+That leaves:
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed

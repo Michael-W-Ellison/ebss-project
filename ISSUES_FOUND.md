@@ -21737,3 +21737,11 @@ Release build:
 The rest of the people's share is still the in-view pass: each person
 refreshes their memory of every patch in sight every turn, which is what
 keeps foraging current, and each refresh is still a search of a list.
+
+**What it did for the suite: little.** The full run afterwards was 2,713
+passed, none failed, in 4,698 s of test time against 4,454 before. The two
+runs were hours apart and the machine's load moves more than that. Side by
+side in release, `news_tests` took 1,195 s before and 1,048 s after, 12%
+less. The heavy modules are settlements of people on the half-kilometre map,
+where the animals' share is small. Most of their time is in what people do
+each turn rather than in any of the three things fixed here.
