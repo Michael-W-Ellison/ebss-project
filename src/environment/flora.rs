@@ -149,7 +149,19 @@ impl PlantSpecies {
         /// knife edge. What brings three back down to one is ground that is
         /// already taken, and after that it is whatever is eating the
         /// seedlings.
-        const WHAT_A_PLANT_LEAVES_IN_ITS_LIFE: f32 = 40.0;
+        ///
+        /// **Seventy, and it was forty.** It went to forty when grazing came
+        /// in (#129), on the half-kilometre map, and nothing said why. On the
+        /// hundred square kilometres forty is below replacement for the
+        /// herbs: about a successor in three short. With nothing on the map
+        /// they fell from 145,000 to 92,500 in two years - 6,100 dying of age
+        /// a month against 4,000 coming up - and the grazers' ceiling went
+        /// with them (#286). Measured over two years there: at sixty the herbs
+        /// hold with nothing eating them and slip by a tenth a year under the
+        /// herds; at seventy they hold under the herds, 140,500 to 134,400;
+        /// at a hundred they climb past 238,000 and are still climbing, which
+        /// is the map filling and every turn getting dearer for it.
+        const WHAT_A_PLANT_LEAVES_IN_ITS_LIFE: f32 = 70.0;
 
         let passes = (self.lives_for_turns() as f32 / 10.0).max(1.0);
         (WHAT_A_PLANT_LEAVES_IN_ITS_LIFE / passes).clamp(0.0, 1.0)

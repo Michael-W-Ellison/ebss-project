@@ -21649,3 +21649,41 @@ map: kestrels 181 → 59 with 42 taken, and every grazer still rising (elk 85
 starvation (399), as for the eagles, owls, otters and seals that live off the
 same small game. The pre-pace code starved them too (#281). That is the
 small-life larder, still to look at.
+
+### 286. Herbs replace themselves: seventy seed a life, not forty
+
+#285 found the herb layer falling on the big map whether or not anything ate
+it. `PlantLedger`, month by month, over two years with nothing on the map
+(seed 3):
+
+- About 6,100 herbs a month died of age and about 4,000 seedlings came up.
+  Herbs fell from 151,600 to 92,500.
+- Seed was not short: about 170,000 a month fell. Of the seed that landed on
+  ground its kind could live on, about one in twenty-seven took. The rest
+  lost its one throw to taken ground or to the light, or rotted on ground it
+  could not live on.
+
+So a herb leaves about two-thirds of a successor. `seeds_per_pass` gives
+every plant the same seed over its life, `WHAT_A_PLANT_LEAVES_IN_ITS_LIFE`.
+That was a hundred when it was written (#127, "a hundred a lifetime leaves
+about three, and what brings three back to one is ground that is already
+taken"). It went to forty in the commit that brought grazing in (#129),
+with no reason given. The herbs are hit first because they live two years;
+bushes were slipping too, 37,800 to 35,500.
+
+Measured over two years on the big map:
+
+| seed a life | no animals, herbs at months 6/12/18/24 | with the herds, herbs month 6 → 24 |
+|---|---|---|
+| 40 | 136k, 122k, 109k, 92.5k | 134k → 72k |
+| 60 | 141k, 138k, 138k, 139k | 138k → 113k |
+| 70 | | 140.5k → 134.4k |
+| 100 | 150k, 169k, 200k, 239k, still rising | |
+
+It is seventy. At sixty the herbs hold with nothing eating them, but a
+cropped plant that loses more in a winter pass than it has left still dies,
+so under the herds they slip by about a tenth a year. At seventy they hold
+under the herds. At a hundred the map fills, which is real succession, but
+every turn pays for each plant, and a hundred square kilometres already
+costs two minutes a year. Bushes hold at about 35,700 at sixty or seventy,
+and trees are level at all of them.

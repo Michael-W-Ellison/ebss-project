@@ -356,7 +356,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // And down 4.9% for #285: feeding niches, eating to the full, a crown
     // left on what is grazed, big animals ranging further, and hunters
     // taking other hunters only when they come upon them.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 613_112;
+    // And up 12.4% for #286: plants leave seventy seed a life rather than
+    // forty, and the herbs hold their ground.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 688_955;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
