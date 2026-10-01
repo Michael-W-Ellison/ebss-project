@@ -21691,8 +21691,7 @@ and trees are level at all of them.
 ### 287. What the runs were spending their time on
 
 Sampled with `gdb` over a settlement of twelve on the half-kilometre map, the
-empty hundred square kilometres, and twelve people on it. Four things, all
-put right here.
+empty hundred square kilometres, and twelve people on it.
 
 - **`AnimalSpecies::where_it_sits` built the whole registry every time it was
   asked.** For any hunter with a prey list it made a fresh `FaunaRegistry`,
@@ -21700,7 +21699,7 @@ put right here.
   It is asked several times a turn per hunter, and since #283 once a turn
   per animal in `what_the_beasts_make_of_us`. On the empty big map that was
   48% of samples, nearly all of it allocating. How big each kind is is now
-  read once and kept. Same animals, same counts.
+  read once and kept.
 - **Remembering what is in view walked the whole memory four times per
   thing.** `remember_what_kind_of_place_this_is` called a writer that called
   a writer that called a writer, each searching `spatial_memories` from the
@@ -21712,23 +21711,28 @@ put right here.
   spot at the same range can find nothing; it is skipped
   (`ExplorationKnowledge::looked_round_from`), and still counts as having
   looked.
-- **A walk opened with a single step that could search 4,096 cells.** When
-  `a_step_toward`'s straight step was barred - by water, or by being the
-  cell just left, which is every walk home - it ran a breadth-first search
-  for that one step, and then the walk planned its whole route anyway. The
-  walk now plans first and takes its first step off the route. The single
-  step is kept for standing on the target and for there being no route, and
-  a route that could not be found is not looked for twice. This one changes
-  which cell a walk starts on, so the dice counts moved (7,490 → 7,355 and
-  688,955 → 709,758).
 
-Release build, per simulated month:
+None of the three changes what happens: the same animals, plants and dice
+counts as before.
+
+**Tried and taken out: planning a walk before its first step.** A walk opens
+with `a_step_toward`, and when the straight step is barred that runs a
+breadth-first search of up to 4,096 cells for one step, about a fifth of the
+samples on the small map. Planning the route first and stepping off it was
+faster on that one map, but slower on everything else. `distrust_tests` took
+323 s in release against 199 s before, and 244 s when only a barred straight
+step planned first. A walk that could not step at all had stopped at once,
+and now searched two hundred thousand cells first. Without it,
+`distrust_tests` takes 166 s.
+
+Release build:
 
 | | before | after |
 |---|---|---|
-| twelve people, half-kilometre map (three months) | 24.5 s | 15.1 s |
-| empty big map | 13 to 18 s | 6 to 7 s |
-| twelve people on the big map | about 30 s | about 16 to 18 s |
+| twelve people, half-kilometre map, three months | 24.5 s | 19.3 s |
+| empty big map, a month | 13 to 18 s | 6 to 7 s |
+| twelve people on the big map, a month | about 30 s | 12 to 13 s |
+| `distrust_tests` | 199 s | 166 s |
 
 The rest of the people's share is still the in-view pass: each person
 refreshes their memory of every patch in sight every turn, which is what
