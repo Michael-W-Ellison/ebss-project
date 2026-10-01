@@ -76,6 +76,15 @@ pub struct ExplorationKnowledge {
     pub total_tiles_explored: usize,
     /// Last exploration turn
     pub last_exploration_turn: u32,
+    /// Where this one last looked round from, and how far it could see.
+    ///
+    /// Tiles once explored stay explored, so a look from the same spot at the
+    /// same range finds nothing new - see `World::process_exploration`, which
+    /// skips the sweep then. It was most of the time a settlement took on
+    /// the small map: two thousand tiles a person, every turn, standing
+    /// still (#287).
+    #[serde(default)]
+    pub looked_round_from: Option<(Position, u32)>,
     /// Curiosity-driven exploration count
     pub curiosity_driven_explorations: u32,
     /// Total curiosity satisfaction gained from discoveries
@@ -283,6 +292,7 @@ impl ExplorationKnowledge {
             discoveries: Vec::new(),
             total_tiles_explored: 0,
             last_exploration_turn: 0,
+            looked_round_from: None,
             curiosity_driven_explorations: 0,
             total_curiosity_satisfaction: 0.0,
             resource_discovery_turns: BTreeMap::new(),

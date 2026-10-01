@@ -605,11 +605,28 @@ impl AnimalSpecies {
         // species is, and a species does not carry one - so this is answered
         // from a fresh registry rather than from a field that could disagree
         // with the one the world is using.
-        let biggest_it_takes = FaunaRegistry::new()
-            .all_species()
-            .into_iter()
-            .filter(|other| self.prey_species.contains(&other.id))
-            .map(|other| other.size)
+        //
+        // **Built once, not every time it is asked.** This made a fresh
+        // registry - every species, with all its names and lists - for every
+        // hunter every time anything wanted to know where it sat, which is
+        // several times a turn per hunter and once a turn per animal in
+        // `what_the_beasts_make_of_us`. On the empty big map that was nearly
+        // half the time a turn took, nearly all of it allocating (#287). The
+        // registry is the same every time it is made, so how big each kind is
+        // is read once and kept.
+        static HOW_BIG_EACH_KIND_IS: std::sync::OnceLock<BTreeMap<String, AnimalSize>> =
+            std::sync::OnceLock::new();
+        let how_big = HOW_BIG_EACH_KIND_IS.get_or_init(|| {
+            FaunaRegistry::new()
+                .all_species()
+                .into_iter()
+                .map(|other| (other.id.clone(), other.size))
+                .collect()
+        });
+        let biggest_it_takes = self
+            .prey_species
+            .iter()
+            .filter_map(|prey| how_big.get(prey).copied())
             .max();
 
         match biggest_it_takes {

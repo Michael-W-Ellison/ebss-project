@@ -959,15 +959,33 @@ impl Memory {
         how_i_know: HowIKnow,
         how_steady: HowSteady,
     ) {
-        self.remember_this_here(memory_type.clone(), position, what_it_is, how_much);
-
-        if let Some(remembered) = self.spatial_memories.iter_mut().find(|m| {
+        // **Found once.** This was `remember_this_here` and then a search of
+        // its own, and `remember_this_here` was `remember_how_much_is_there`
+        // and a search, which was `remember_location` and a search - four
+        // walks of the whole list for one place, for every patch and spring
+        // in sight, for everybody, every turn. On the small map that was a
+        // fifth of a settlement's time (#287). The same four writes, in the
+        // same order, on the one record.
+        let found = self.spatial_memories.iter().position(|m| {
             std::mem::discriminant(&m.memory_type) == std::mem::discriminant(&memory_type)
                 && m.position == position
-        }) {
-            remembered.i_know_this_at_least_this_well(how_i_know);
-            remembered.how_steady = how_steady;
-        }
+        });
+        let at = match found {
+            Some(at) => {
+                self.spatial_memories[at].refresh(self.current_turn);
+                at
+            }
+            None => {
+                self.spatial_memories
+                    .push(SpatialMemory::new(memory_type, position, self.current_turn));
+                self.spatial_memories.len() - 1
+            }
+        };
+        let remembered = &mut self.spatial_memories[at];
+        remembered.value = how_much as f32;
+        remembered.what_it_is = what_it_is.or(remembered.what_it_is.take());
+        remembered.i_know_this_at_least_this_well(how_i_know);
+        remembered.how_steady = how_steady;
     }
 
     /// Note that he has had something out of a place he remembers.

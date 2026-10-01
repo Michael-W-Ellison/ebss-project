@@ -92,7 +92,45 @@ impl Simulation {
         };
         let can_cover = ((left * cells_a_minute).floor() as u32).max(1);
 
-        let mut last = self.a_step_toward(target, agent_index);
+        // **The route first, and the first step off it.** The walk opened
+        // with `a_step_toward`, and when its straight step was barred - by
+        // water, or by being the cell just left, which is every walk back -
+        // that ran its own breadth-first search of four thousand cells for
+        // the one step, before the route below was worked out anyway: a fifth
+        // of a small-map settlement's time (#287). The single step is kept
+        // for standing on the target and for there being no route.
+        let setting_off = self.population.agents[agent_index].state.position;
+        let mut the_way: Option<std::collections::VecDeque<(i32, i32)>> = None;
+        let mut looked_for_a_route = false;
+        let mut last = if (setting_off.0, setting_off.1) == (target.0, target.1) {
+            self.a_step_toward(target, agent_index)
+        } else {
+            let route = self
+                .the_way_there(
+                    (setting_off.0, setting_off.1),
+                    (target.0, target.1),
+                    Self::AS_FAR_AS_A_ROUTE_IS_LOOKED_FOR,
+                )
+                .map(|route| route.into_iter().collect::<std::collections::VecDeque<_>>());
+            looked_for_a_route = true;
+            let can_walk = {
+                let agent = &self.population.agents[agent_index];
+                agent.body.movement_speed_multiplier() * agent.transport.effective_speed_modifier()
+                    > 0.1
+            };
+            match route {
+                Some(mut route) if can_walk && !route.is_empty() => {
+                    let cell = route.pop_front().expect("a route that is not empty");
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.stepped_from = Some((setting_off.0, setting_off.1));
+                    agent.state.position = (cell.0, cell.1, setting_off.2);
+                    the_way = Some(route);
+                    ActionResult::success()
+                        .with_message(format!("Walked to ({}, {})", cell.0, cell.1))
+                }
+                _ => self.a_step_toward(target, agent_index),
+            }
+        };
         if !last.success {
             // Going nowhere: the rest of the half hour goes on it.
             self.population.agents[agent_index].state.minutes_left_this_turn = 0.0;
@@ -140,9 +178,13 @@ impl Simulation {
                 || agent.state.is_starving()
         };
 
-        let mut the_way = self
-            .the_way_there((start.0, start.1), (target.0, target.1), Self::AS_FAR_AS_A_ROUTE_IS_LOOKED_FOR)
-            .map(|route| route.into_iter().collect::<std::collections::VecDeque<_>>());
+        // Not a second search where the first found no way: a step off the
+        // start does not open one up that the budget could not reach.
+        if the_way.is_none() && !looked_for_a_route {
+            the_way = self
+                .the_way_there((start.0, start.1), (target.0, target.1), Self::AS_FAR_AS_A_ROUTE_IS_LOOKED_FOR)
+                .map(|route| route.into_iter().collect::<std::collections::VecDeque<_>>());
+        }
         let mut saw_trouble_at: Option<(i32, i32)> = None;
 
         while walked < can_cover {

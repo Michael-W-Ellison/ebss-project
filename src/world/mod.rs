@@ -3109,6 +3109,15 @@ impl World {
         let mut new_discoveries = 0;
         let range = vision_range as i32;
 
+        // Standing where it last looked round, seeing as far as it did then:
+        // every tile in sight is one it has already explored, so the sweep
+        // would find nothing. It still counts as having looked.
+        if agent_exploration.looked_round_from == Some((*agent_position, vision_range)) {
+            agent_exploration.last_exploration_turn = current_turn;
+            return 0;
+        }
+        agent_exploration.looked_round_from = Some((*agent_position, vision_range));
+
         // Explore all tiles in vision range
         for dx in -range..=range {
             for dy in -range..=range {

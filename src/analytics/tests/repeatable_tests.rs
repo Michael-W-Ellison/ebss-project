@@ -189,7 +189,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 7,490 for #285: a grazer eats until it is full, takes its share
     // as browse or grass by its kind, and leaves a plant its crown; and a
     // hunter takes another hunter only when it comes upon one.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_490;
+    // Down to 7,355 for #287: a walk takes its first step off the route it
+    // has planned rather than a step of its own.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_355;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -358,7 +360,8 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // taking other hunters only when they come upon them.
     // And up 12.4% for #286: plants leave seventy seed a life rather than
     // forty, and the herbs hold their ground.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 688_955;
+    // And up 3.0% for #287: a walk's first step comes off its planned route.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 709_758;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
