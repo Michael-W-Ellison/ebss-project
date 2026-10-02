@@ -21833,3 +21833,11 @@ pass (236).
 because the large cost was never the file of remembered places; it is the
 patches read for what lies in sight and in reach, which the other callers of
 `node_numbers_near` ask for.
+
+Remembering the last question (same spot, same reach) was considered and not
+done. `node_numbers_near` is asked 223 million times in one `news_tests` run,
+and only 0.66% of those asks repeat the one just before. Sampled after this
+change, `nodes_known_to` is about 8% of a turn and `node_numbers_near` from
+every caller about 10%. What is left is larger elsewhere: the exploration
+pass (`process_exploration_of`, 27%) and the step search when walking
+(`next_step_toward`, 19%).
