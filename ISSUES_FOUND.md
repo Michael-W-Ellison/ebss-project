@@ -21931,5 +21931,26 @@ Dice counts unchanged. `repeatable_tests`, `errand_tests`, the walking tests,
 `distrust_tests` and `world::tdd_tests` pass (119). `news_tests` in release,
 old and new run alternately: 271.4 / 279.1 s → 235.4 / 226.8 s, about 16%.
 
-Not looked into yet: why nine walks in ten are towards somewhere the walker
-cannot reach.
+**Why so many walks go nowhere: the goals are off the map.** Every pocket
+recorded over `news_tests` (a 50 by 50 map) was the whole walkable map,
+about 2,250 cells. Nearly every goal lay past its edge: (53, 12),
+(-11, 20), (0, -7), (64, 28) and the like. Several decisions add an offset
+to where somebody stands and never keep the result on the map:
+
+- `Simulation::search_leg` (wanting/camp.rs) strikes out 12 cells for food
+  or water when nothing is known, on a bearing that holds for 300 turns. The
+  function just above it clamps; this one does not.
+- `put_ground_between` (between_us/threat.rs) and the fear branch in
+  turn/each_one.rs both run 15 cells, which gives (64, 28) from x = 49.
+- `generate_action_for_drive` (wanting/mod.rs) moves up to 20 cells for
+  Curiosity, and up to 5 for Safety.
+- `generate_action_for_goal` (wanting/mod.rs) always moves +10, +10.
+- The percept-driven flight in the same file moves up to 15 cells.
+
+An errand keeps whatever target it was given (`errands.rs`), so one bad
+target means a walk at the edge of the map, searching it all at every step,
+until the errand is given up. This changes what people do, so it is left for
+its own change. A single clamp where an errand is set, or at the top of
+`a_step_toward`, would cover every source.
+
+Full suite: 2,713 passed, none failed, 4 ignored, in 1,566 s (1,941 s at #292).
