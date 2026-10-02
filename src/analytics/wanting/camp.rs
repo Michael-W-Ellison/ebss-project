@@ -372,6 +372,7 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
         current_turn: u32,
+        map: (usize, usize),
     ) -> Action {
         const SEARCH_LEG_TURNS: u32 = 300;
         const SEARCH_LEG_DISTANCE: i32 = 12;
@@ -389,15 +390,36 @@ impl Simulation {
 
         let leg = (current_turn / SEARCH_LEG_TURNS) as u64;
         let seed = (agent.id.as_u128() as u64) ^ leg.wrapping_mul(0x9E37_79B9_7F4A_7C15);
-        let (dx, dy) = directions[(seed % directions.len() as u64) as usize];
+        let first = (seed % directions.len() as u64) as usize;
 
-        Action::Move {
-            target: (
+        // **Not a bearing that goes nowhere.** The leg went twelve paces on
+        // its bearing wherever that landed, and on a bearing that held for
+        // 300 turns somebody near the edge was sent past it for the whole of
+        // them: they walked to the last tile, and every step after that was a
+        // route search over the whole map for somewhere that is not on it
+        // (#294). Where it ends is now kept on the map, on ground, by
+        // `kept_on_the_map` along with every other walk; and where this
+        // bearing has nowhere left to go - somebody standing hard against
+        // that edge already - it turns to the next bearing round that has,
+        // so somebody desperate still strikes out rather than standing still.
+        let (wide, high) = (map.0 as i32, map.1 as i32);
+        let leg = |(dx, dy): (i32, i32)| {
+            (
                 agent_position.0 + dx * SEARCH_LEG_DISTANCE,
                 agent_position.1 + dy * SEARCH_LEG_DISTANCE,
                 agent_position.2,
-            ),
-        }
+            )
+        };
+        let goes_somewhere = |target: &(i32, i32, i32)| {
+            (target.0.clamp(0, wide - 1), target.1.clamp(0, high - 1))
+                != (agent_position.0, agent_position.1)
+        };
+        let target = (0..directions.len())
+            .map(|turned| leg(directions[(first + turned) % directions.len()]))
+            .find(goes_somewhere)
+            .unwrap_or(agent_position);
+
+        Action::Move { target }
     }
 
     /// Where the camp is, from where this agent is standing.

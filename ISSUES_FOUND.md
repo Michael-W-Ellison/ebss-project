@@ -21954,3 +21954,56 @@ its own change. A single clamp where an errand is set, or at the top of
 `a_step_toward`, would cover every source.
 
 Full suite: 2,713 passed, none failed, 4 ignored, in 1,566 s (1,941 s at #292).
+
+### 294. Nobody walks off the edge of the map
+
+Found by #293: in `news_tests` nine route searches in ten were for goals
+past the edge of a 50 by 50 map, such as (53, 12), (-11, 20) and (64, 28).
+Several decisions say where to go as so many paces from where somebody
+stands, and none kept the result on the map: the twelve-pace leg for food or
+water, the fifteen-pace flights from a threat, twenty paces of curiosity,
+five of safety, and a goal that always went +10, +10. An errand holds the
+place it is given, so somebody sent past the edge walked to the last tile
+and searched the whole map at every step after that until they gave up.
+
+- **One rule for every walk:** `Simulation::kept_on_the_map`, applied where
+  an errand is set (`stick_to_the_errand`) and where a walk is carried out
+  (the `Action::Move` dispatch), since not every walk is an errand. A target
+  on the map is left exactly where it was put.
+- **To ground, not water:** a target past the edge is brought back to the
+  edge, then on towards the walker to the first tile a foot can go on.
+  Plain clamping was tried first. The edge is often sea, and the last pace
+  of a walk may be onto anything, so it walked people into the water. On
+  two worlds in sixteen it then left somebody stranded on a rock with water
+  all round for thousands of turns.
+- **`search_leg` turns instead of standing.** Its bearing holds for 300
+  turns. Where that bearing has nowhere left to go, because the walker is
+  already hard against that edge, it takes the next bearing round that has
+  somewhere to go. Its target goes through the same rule as the rest.
+
+Measured over a year on the small map, 16 seeds, against the build before:
+- **The seven seeds with nobody stranded in any build:**
+  - Person-days: 29,575 → 29,671.
+  - Alive at the end: 79 → 77.
+  - Errands given up: 514 → 27.
+  - Errands that got there: 76,449 → 84,559.
+  - Errands kept to: 7,714 → 2,478.
+- **All sixteen seeds:** person-days 54,694 → 56,848, and alive 132 → 127.
+
+Survival is even within the noise; walking is no longer wasted on the edge.
+
+**Not fixed: walking into water and getting stranded.** A route may end on
+its target whatever the target is (the goal tile is exempt from the walkable
+check, which is how somebody reaches a barn door). So a walk to a water tile
+leaves somebody standing in the water, and the next step off it can be onto
+a one-tile island they can never leave. Traced on seed 0: an errand to
+(24, 37), on the map, left somebody on water at (25, 40). From there they
+stepped onto desert at (25, 39), with sea and water on all four sides, and
+stood there for the rest of the run. It happens in the old build too (seeds
+5, 7 and 10), and which seeds it hits is chance. It is what "No passable
+route ... with 0 ways out" counts, and one stranded person can run that
+count up by tens of thousands.
+
+Dice counts: the 120-turn count does not move. Seed 0 over a year,
+688,955 → 672,266. `repeatable_tests`, `errand_tests`, the walking tests,
+`distrust_tests`, `news_tests` and `world::tdd_tests` pass (131).

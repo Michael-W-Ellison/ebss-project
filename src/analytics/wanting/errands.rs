@@ -604,13 +604,60 @@ impl Simulation {
         action
     }
 
+    /// Where somebody at `from` sent towards `target` can actually go.
+    ///
+    /// **Nobody walks off the edge of the world.** A good many decisions say
+    /// where to go as so many paces from where somebody stands - run fifteen
+    /// from a threat, wander twenty out of curiosity, strike out twelve for
+    /// food - and none of them asked whether that was still on the map. An
+    /// errand then holds the place it was given, so somebody sent past the
+    /// edge walked to it, stood on the last tile, and spent every step after
+    /// that searching the whole map for a way to somewhere that is not on
+    /// it, until the errand was given up. Over `news_tests` that was nine
+    /// route searches in ten (#293, #294). As far as the land goes is as far
+    /// as anybody can go in that direction, so that is where they go.
+    ///
+    /// **And to ground, not water.** The edge of the map is often sea, and
+    /// the last pace of a walk may be onto anything - it is how somebody
+    /// reaches a barn door - so pulling a target straight back onto the edge
+    /// walked people into the sea, and from there onto a spit of rock with
+    /// water all round it that they could never step off: two worlds in
+    /// sixteen measured, thousands of turns each of somebody boxed in on a
+    /// mountain tile (#294). A target pulled back is pulled on, towards the
+    /// walker, to the first ground a foot can go on. A target already on the
+    /// map is left exactly where it was put.
+    pub(in crate::analytics) fn kept_on_the_map(
+        &self,
+        from: (i32, i32, i32),
+        target: (i32, i32, i32),
+    ) -> (i32, i32, i32) {
+        let (wide, high) = (self.world.grid.width as i32, self.world.grid.height as i32);
+        let mut at = (target.0.clamp(0, wide - 1), target.1.clamp(0, high - 1));
+        if at == (target.0, target.1) {
+            return target;
+        }
+        while at != (from.0, from.1) && !self.is_passable_tile(at.0, at.1) {
+            at.0 += (from.0 - at.0).signum();
+            at.1 += (from.1 - at.1).signum();
+        }
+        (at.0, at.1, target.2)
+    }
+
     pub(in crate::analytics) fn stick_to_the_errand(
         &mut self,
         agent_index: usize,
         action: Action,
         running_away: bool,
     ) -> Action {
+        // Whatever the walk is to, it is to somewhere on the map - so that an
+        // errand set out on can be got to (#294).
         let here = self.population.agents[agent_index].state.position;
+        let action = match action {
+            Action::Move { target } => Action::Move {
+                target: self.kept_on_the_map(here, target),
+            },
+            other => other,
+        };
         let presses_hardest = self.population.agents[agent_index].what_presses_hardest();
 
         // Something frightened it, or the threat tree took the turn. Whatever
