@@ -21783,3 +21783,9 @@ Release build, `news_tests`: 1,048 s before, 325 s after. Sampled again:
 the step search is 17% and the in-view pass 26%, with the memory refresh at
 6%. The largest single thing left is `node_numbers_near`, gathering and
 sorting the nodes in reach (15%), now mostly for `what_this_drive_offers`.
+
+**The suite**: 2,713 passed, none failed, 4 ignored, in 2,072 s of test time
+against 4,698 s on the run before and 4,454 s on the one before that. The
+heaviest modules more than halved: `calendar_tests` 1,567 → 732 s,
+`news_tests` 1,139 → 421, `relationship_graph_tests` 549 → 169,
+`survival_loop_tests` 215 → 72 and `repeatable_tests` 228 → 78.
