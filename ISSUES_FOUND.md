@@ -21867,3 +21867,35 @@ Dice counts unchanged. `repeatable_tests`, `distrust_tests`,
 `knowing_where_things_are_tests` and the memory and exploration unit tests
 pass (59). `news_tests` in release, old and new back to back: 304.6 s → 289.7 s,
 about 5%.
+
+### 292. The exploration pass, again: lay out what is in sight instead of sorting it
+
+After #291 the pass was still about 26% of a `news_tests` turn (1,103
+samples, from a new sampler that stays attached and interrupts every 0.3 s,
+instead of attaching gdb afresh for each sample). It was spread thin, with
+nothing over 3%. The two pieces that could be cut without changing an answer:
+
+- **Sorting everything in sight by spot** (2.4%). The pass now lays the
+  nodes in sight out on the square in view, one slot a cell, filled by the
+  first node met on it. Read out column by column, west to east and north to
+  south, that is the same sorted list of spots, each with the same first
+  node.
+- **`just_found`** (about 2%). Picking out what was found this turn walked
+  everything the agent knows and looked up the turn each was found on. It
+  now walks the turns found and looks up only what was found this turn. Both
+  maps are keyed by spot, so the list and its order are the same.
+
+Tried and taken out: answering "known for himself, not told" and the two
+writes of `saw_it_again` by walking the maps a column at a time beside the
+spots in view, instead of searching them for each spot. It made no difference
+(284.8 s against 285.9 s), so the searches were not what they looked like in
+the samples.
+
+Dice counts unchanged; the same 59 tests pass. `news_tests` in release, the
+old and new builds run alternately: 297.7 / 297.0 s → 286.8 / 288.6 s, about
+3.4%.
+
+What is left of the pass has no single piece worth taking on alone. The
+largest are filing what is in view (3%), the node index look (2.4%),
+`saw_it_again` (2%) and the new-tile sweep in `World::process_exploration`
+(2%).

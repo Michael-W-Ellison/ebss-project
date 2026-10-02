@@ -1887,19 +1887,38 @@ impl Population {
             let in_sight: Vec<usize> = world.node_numbers_near(agent_pos, vision_range);
             // **And how much stands on each spot, from the same look.** Each
             // spot seen again asked the node index afresh for the first node
-            // on it (#291). The first in list order is the lowest number, so
-            // sorting by spot and then number and keeping the first of each
-            // spot gives the same node.
-            let mut what_stands_where: Vec<(crate::world::Position, usize)> = in_sight
+            // on it (#291). The look comes back in list order, so the first
+            // number met on a spot is the node `nodes_on` would give.
+            //
+            // **Laid out on the square in view, not sorted.** Sorting
+            // everything in sight by spot was most of what this cost (#292).
+            // One slot a cell, filled by the first node met on it, and read
+            // out a column at a time - west to east, and north to south down
+            // each column - is the same list in the same order.
+            let side = 2 * range as usize + 1;
+            let mut first_on = vec![u32::MAX; side * side];
+            for &number in &in_sight {
+                let where_it_is = world.resources[number].position;
+                let (across, down) = (where_it_is.x - agent_pos.x + range, where_it_is.y - agent_pos.y + range);
+                if (0..side as i32).contains(&across) && (0..side as i32).contains(&down) {
+                    let cell = &mut first_on[across as usize * side + down as usize];
+                    if *cell == u32::MAX {
+                        *cell = number as u32;
+                    }
+                }
+            }
+            let what_stands_where: Vec<(crate::world::Position, usize)> = first_on
                 .iter()
-                .map(|&number| (world.resources[number].position, number))
-                .filter(|(where_it_is, _)| {
-                    (where_it_is.x - agent_pos.x).abs() <= range
-                        && (where_it_is.y - agent_pos.y).abs() <= range
+                .enumerate()
+                .filter(|(_, &number)| number != u32::MAX)
+                .map(|(cell, &number)| {
+                    let (across, down) = ((cell / side) as i32, (cell % side) as i32);
+                    (
+                        crate::world::Position::new(agent_pos.x - range + across, agent_pos.y - range + down),
+                        number as usize,
+                    )
                 })
                 .collect();
-            what_stands_where.sort_unstable();
-            what_stands_where.dedup_by_key(|(where_it_is, _)| *where_it_is);
             let how_much_stands_on = |where_it_is: &crate::world::Position| {
                 what_stands_where
                     .binary_search_by(|(spot, _)| spot.cmp(where_it_is))
@@ -2036,19 +2055,24 @@ impl Population {
             // -9.2. Nobody had earned any of it.
             //
             // Recognising a plant is worth something and it is worth it once.
+            //
+            // **Walk the turns things were found on, and look up only what
+            // was found this turn.** This walked everything he knows and
+            // looked up the turn each was found on - a search for every place,
+            // every turn, to keep a handful (#292). Both are kept by spot, so
+            // it is the same list in the same order.
             let just_found: Vec<(crate::world::Position, crate::world::ResourceType)> = agent
                 .exploration_knowledge
-                .known_resources
+                .resource_discovery_turns
                 .iter()
-                .filter(|(pos, _)| {
+                .filter(|(_, &turn)| turn == current_turn)
+                .filter_map(|(pos, _)| {
                     agent
                         .exploration_knowledge
-                        .resource_discovery_turns
+                        .known_resources
                         .get(pos)
-                        .map(|&turn| turn == current_turn)
-                        .unwrap_or(false)
+                        .map(|resource_type| (*pos, *resource_type))
                 })
-                .map(|(pos, resource_type)| (*pos, *resource_type))
                 .collect();
 
             for (_, resource_type) in &just_found {
