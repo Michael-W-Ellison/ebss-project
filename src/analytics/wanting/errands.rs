@@ -14,6 +14,49 @@ use super::super::Simulation;
 use crate::environment::Action;
 use log::debug;
 
+/// Pockets of ground a route search has walked to every edge of without
+/// finding the way to where it was going.
+///
+/// **Most route searches end like this.** Counted over `news_tests`, nine
+/// searches in ten emptied the ground they could reach - about two thousand
+/// cells - without coming to the goal, and every step of the same walk asked
+/// again from a cell or two along and walked the same pocket to its edges
+/// once more: two thousand million cells looked at in five minutes of
+/// tests (#293).
+///
+/// A search that empties its pocket has looked at every cell it could reach
+/// and at every cell beside one of them, and the goal was none of those. Any
+/// search for the same goal that starts inside the pocket stays inside it so
+/// long as every cell that stopped this one - its edge - is still not ground a
+/// foot can go on, and so ends the same way, with no way there. So the pocket
+/// is kept with its edge, and asking again costs a look along the edge rather
+/// than a walk over the whole. If any of the edge has become walkable, the
+/// pocket is thrown away and searched afresh. Nothing is assumed about the
+/// world besides what the edge says now, so the answer is always the one a
+/// search would give.
+#[derive(Debug, Default)]
+pub struct ShutIn {
+    pockets: Vec<Pocket>,
+}
+
+#[derive(Debug)]
+struct Pocket {
+    goal: (i32, i32),
+    /// How big the map was: whether a cell is off it is part of the edge.
+    map: (usize, usize),
+    /// Every cell the search reached, sorted.
+    cells: Vec<(i32, i32)>,
+    /// Every cell on the map beside one of them that it could not step onto.
+    edge: Vec<(i32, i32)>,
+}
+
+impl ShutIn {
+    /// How many pockets are kept. A settlement is a few people walking to a
+    /// few places; the oldest goes first.
+    const AS_MANY_AS_ARE_KEPT: usize = 32;
+}
+
+
 impl Simulation {
     /// Whether a garment of this warmth is worth making, given what is already
     /// on that slot
@@ -260,6 +303,14 @@ impl Simulation {
             return None;
         }
 
+        let map = (self.world.grid.width, self.world.grid.height);
+        if self.is_this_shut_in(start, goal, map) {
+            return None;
+        }
+        // What this search reached and what stopped it, in case it is shut in.
+        let mut reached: Vec<(i32, i32)> = Vec::new();
+        let mut stopped_by: Vec<(i32, i32)> = Vec::new();
+
         let mut queue = VecDeque::new();
         // **Where each cell was reached from, in a flat window round the
         // start**, with an ordered map only for the odd cell a long corridor
@@ -267,30 +318,54 @@ impl Simulation {
         // in it was most of what this search cost; this search was seven
         // tenths of what `news_tests` cost (#288). The same cells are reached
         // in the same order, so it finds the same step.
+        //
+        // **And a byte a cell, not a place.** The window held where each cell
+        // was reached from as a pair of numbers: twelve bytes a cell, two
+        // hundred kilobytes to clear on every search and to look about in.
+        // Each cell is reached from one of its four neighbours, so which one
+        // is all it needs to say - a sixteenth of the room (#293).
         const ACROSS: i32 = 2 * WINDOW + 1;
         const WINDOW: i32 = 64;
-        let mut near: Vec<Option<(i32, i32)>> = vec![None; (ACROSS * ACROSS) as usize];
+        const NOT_REACHED: u8 = 0;
+        const THE_START: u8 = 5;
+        const WAYS: [(i32, i32); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+        let mut near: Vec<u8> = vec![NOT_REACHED; (ACROSS * ACROSS) as usize];
         let mut far: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
         let slot = |at: (i32, i32)| -> Option<usize> {
             let (dx, dy) = (at.0 - start.0 + WINDOW, at.1 - start.1 + WINDOW);
             (dx >= 0 && dy >= 0 && dx < ACROSS && dy < ACROSS)
                 .then(|| (dy * ACROSS + dx) as usize)
         };
-        let reached_from = |near: &Vec<Option<(i32, i32)>>,
+        let reached_from = |near: &Vec<u8>,
                             far: &BTreeMap<(i32, i32), (i32, i32)>,
                             at: (i32, i32)|
          -> Option<(i32, i32)> {
             match slot(at) {
-                Some(i) => near[i],
+                Some(i) => match near[i] {
+                    NOT_REACHED => None,
+                    THE_START => Some(at),
+                    way => {
+                        let (dx, dy) = WAYS[usize::from(way) - 1];
+                        Some((at.0 - dx, at.1 - dy))
+                    }
+                },
                 None => far.get(&at).copied(),
             }
         };
-        let mut reach = |near: &mut Vec<Option<(i32, i32)>>,
+        let mut reach = |near: &mut Vec<u8>,
                          far: &mut BTreeMap<(i32, i32), (i32, i32)>,
                          at: (i32, i32),
                          from: (i32, i32)| {
             match slot(at) {
-                Some(i) => near[i] = Some(from),
+                Some(i) => {
+                    near[i] = if at == from {
+                        THE_START
+                    } else {
+                        WAYS.iter()
+                            .position(|&(dx, dy)| (from.0 + dx, from.1 + dy) == at)
+                            .map_or(NOT_REACHED, |way| way as u8 + 1)
+                    }
+                }
                 None => {
                     far.insert(at, from);
                 }
@@ -307,8 +382,9 @@ impl Simulation {
             if visited > MAX_VISITED {
                 break;
             }
+            reached.push(current);
 
-            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            for (dx, dy) in WAYS {
                 let next = (current.0 + dx, current.1 + dy);
 
                 if reached_from(&near, &far, next).is_some() {
@@ -342,7 +418,11 @@ impl Simulation {
                     && next.1 >= 0
                     && next.0 < self.world.grid.width as i32
                     && next.1 < self.world.grid.height as i32;
-                if !on_the_map || (next != goal && !self.is_passable_tile(next.0, next.1)) {
+                if !on_the_map {
+                    continue;
+                }
+                if next != goal && !self.is_passable_tile(next.0, next.1) {
+                    stopped_by.push(next);
                     continue;
                 }
 
@@ -363,7 +443,50 @@ impl Simulation {
             }
         }
 
+        // Emptied, rather than given up on: everything it could reach has
+        // been looked at, so this ground is shut in.
+        if visited <= MAX_VISITED {
+            self.this_is_shut_in(goal, map, reached, stopped_by);
+        }
+
         None
+    }
+
+    /// Whether a search from `start` for `goal` has already been found to
+    /// end with no way there, and would end that way again. See [`ShutIn`].
+    fn is_this_shut_in(&self, start: (i32, i32), goal: (i32, i32), map: (usize, usize)) -> bool {
+        let mut shut_in = self.shut_in.borrow_mut();
+        let Some(which) = shut_in.pockets.iter().position(|pocket| {
+            pocket.goal == goal && pocket.map == map && pocket.cells.binary_search(&start).is_ok()
+        }) else {
+            return false;
+        };
+        let still_shut = shut_in.pockets[which]
+            .edge
+            .iter()
+            .all(|&(x, y)| !self.is_passable_tile(x, y));
+        if !still_shut {
+            shut_in.pockets.remove(which);
+        }
+        still_shut
+    }
+
+    /// Keep a pocket a search has just walked to every edge of. See [`ShutIn`].
+    fn this_is_shut_in(
+        &self,
+        goal: (i32, i32),
+        map: (usize, usize),
+        mut cells: Vec<(i32, i32)>,
+        mut edge: Vec<(i32, i32)>,
+    ) {
+        cells.sort_unstable();
+        edge.sort_unstable();
+        edge.dedup();
+        let mut shut_in = self.shut_in.borrow_mut();
+        if shut_in.pockets.len() >= ShutIn::AS_MANY_AS_ARE_KEPT {
+            shut_in.pockets.remove(0);
+        }
+        shut_in.pockets.push(Pocket { goal, map, cells, edge });
     }
 
     /// Replace a move toward somewhere the agent cannot actually reach.

@@ -202,6 +202,9 @@ pub struct Simulation {
     /// fires looks exactly like a run without it. See
     /// `Simulation::everybody_takes_a_turn`.
     pub minutes_spent_in_danger: u64,
+    /// Ground a route search has already found to be shut off from where it
+    /// was going. See `wanting::errands::ShutIn` (#293).
+    pub(crate) shut_in: std::cell::RefCell<wanting::errands::ShutIn>,
 }
 
 /// Configuration for simulation behavior and limits
@@ -363,6 +366,7 @@ impl Simulation {
             how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
+            shut_in: Default::default(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
@@ -1510,6 +1514,7 @@ impl Simulation {
             how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
+            shut_in: Default::default(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,

@@ -21899,3 +21899,37 @@ What is left of the pass has no single piece worth taking on alone. The
 largest are filing what is in view (3%), the node index look (2.4%),
 `saw_it_again` (2%) and the new-tile sweep in `World::process_exploration`
 (2%).
+
+### 293. The step search: remember ground already found to be shut in
+
+`next_step_toward` (the breadth-first search a walker falls back on when the
+direct step is blocked, or would undo the last one) was 15-19% of a
+`news_tests` turn. Counted over the module, it ran 1.06 million times, and
+**nine searches in ten emptied all the ground they could reach without
+coming to the goal**. None gave up at the 4,096-cell limit. They looked at
+about 2,000 cells each, 2.2 thousand million cells in all. Every step of the
+same walk searched the same pocket again, from a cell or two along.
+
+A search that empties its pocket has looked at every cell it could reach and
+every cell beside one of them, and the goal was none of them. A later search
+for the same goal, starting anywhere in that pocket, can only leave it over
+a cell that stopped the first search. While every one of those edge cells is
+still not walkable, it ends the same way: no way there. So `ShutIn` keeps up
+to 32 such pockets (the goal, the map size, the cells reached and the edge
+cells). A search that starts inside one checks the edge instead of walking
+the whole pocket again. If any edge cell has become walkable, the pocket is
+dropped and the search runs as before. Nothing about the world is assumed
+beyond what the edge says at that moment, so the answer is always the one
+the search would give, with terrain changes and test maps included.
+
+Also: the search's window of where each cell was reached from now holds one
+byte a cell (which of four neighbours) instead of a twelve-byte place,
+16 KB to clear per search instead of 200 KB. On its own this measured within
+noise (295.0 / 290.4 s against 289.3 / 290.1 s), but it costs nothing.
+
+Dice counts unchanged. `repeatable_tests`, `errand_tests`, the walking tests,
+`distrust_tests` and `world::tdd_tests` pass (119). `news_tests` in release,
+old and new run alternately: 271.4 / 279.1 s → 235.4 / 226.8 s, about 16%.
+
+Not looked into yet: why nine walks in ten are towards somewhere the walker
+cannot reach.
