@@ -21789,3 +21789,24 @@ against 4,698 s on the run before and 4,454 s on the one before that. The
 heaviest modules more than halved: `calendar_tests` 1,567 → 732 s,
 `news_tests` 1,139 → 421, `relationship_graph_tests` 549 → 169,
 `survival_loop_tests` 215 → 72 and `repeatable_tests` 228 → 78.
+
+### 289. Gathering the nodes in reach: throw out first, then sort
+
+After #288 the largest single cost left in `news_tests` was
+`World::node_numbers_near` (15% of samples). It asks the node index for
+everything in the patches its square touches - about 49 patches for somebody
+looking 25 cells about them. `WhereTheNodesAre::near` put every node in
+every one of those patches into one list and sorted it into list order, and
+only then did the asker throw out what lay outside the square, which was
+most of it.
+
+`near` is now `near_where`, which takes the asker's test and applies it while
+gathering, so only what is kept is sorted. A single patch read on its own is
+already in list order and is not sorted at all: every patch is filed in list
+order, and taking a node away refiles the lot. Same numbers, same order. The
+dice counts did not move, and the 230 tests under `world::` pass.
+
+`news_tests` in release: 325 s → 307 s. Sampled again: gathering is 10% (it
+was 15%), and sorting no longer shows. What is left of it is reading the
+patches, mostly from `nodes_known_to` as people weigh what each need could
+get them.

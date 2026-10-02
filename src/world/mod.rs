@@ -2099,10 +2099,7 @@ impl World {
 
         if self.where_the_nodes_are.is_it_up_to_date(&self.resources) {
             self.where_the_nodes_are
-                .near(at.x, at.y, reach)
-                .into_iter()
-                .filter(|&number| within(&self.resources[number]))
-                .collect()
+                .near_where(at.x, at.y, reach, |number| within(&self.resources[number]))
         } else {
             (0..self.resources.len())
                 .filter(|&number| within(&self.resources[number]))
