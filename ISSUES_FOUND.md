@@ -21810,3 +21810,26 @@ dice counts did not move, and the 230 tests under `world::` pass.
 was 15%), and sorting no longer shows. What is left of it is reading the
 patches, mostly from `nodes_known_to` as people weigh what each need could
 get them.
+
+### 290. What an agent knows of: read only the band it could reach
+
+`nodes_this_one_knows_of` (the heart of `nodes_known_to`) is asked about a
+dozen times a turn by everybody weighing what a need could get them. For the
+places it remembers, it read every place the agent had ever filed, however
+far off, tested each against the reach, and for each one in reach asked the
+world for the nodes on that tile in a list of its own, then copied that list
+into the answer.
+
+Places are filed by position, west to east, so the ones between the western
+and eastern edges of the reach are one run of the file: it now reads only
+that run (`range`) and applies the same test to it. The nodes on each tile go
+straight into the answer (`World::add_the_node_numbers_on`, which reads the
+one patch the tile is in) instead of through a list per tile. Scents use the
+same call. Same nodes, same order: the dice counts did not move, and the
+tests under `world::`, `repeatable_tests` and `knowing_where_things_are_tests`
+pass (236).
+
+`news_tests` in release: 316.8 s → 311.7 s, about 1.6%. It is a small gain
+because the large cost was never the file of remembered places; it is the
+patches read for what lies in sight and in reach, which the other callers of
+`node_numbers_near` ask for.

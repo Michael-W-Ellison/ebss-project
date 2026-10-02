@@ -905,14 +905,26 @@ impl Simulation {
             })
             .collect();
 
-        // What it remembers
+        // What it remembers.
+        //
+        // **Only the band it could reach, and straight into the list.** This
+        // read every place the agent had ever filed, near or far, and asked
+        // for each one in reach with a list of its own; it is asked a dozen
+        // times a turn by everybody weighing a need (#290). Places are filed
+        // west to east, so the ones between the near and far edges of the
+        // reach are one run of the file, and the rest of the run's test is
+        // the same test as before.
+        let reach_across = i64::from(reach).min(i64::from(i32::MAX));
+        let west = (i64::from(from.x) - reach_across).max(i64::from(i32::MIN)) as i32;
+        let east = (i64::from(from.x) + reach_across).min(i64::from(i32::MAX)) as i32;
         for at in agent
             .exploration_knowledge
             .known_resources
-            .keys()
+            .range(Position::new(west, i32::MIN)..=Position::new(east, i32::MAX))
+            .map(|(at, _)| at)
             .filter(|at| within_reach(at))
         {
-            known.extend(self.world.node_numbers_on(*at));
+            self.world.add_the_node_numbers_on(*at, &mut known);
         }
 
         // And what it can smell
@@ -921,7 +933,7 @@ impl Simulation {
         }) {
             let at = Position::new(scent.source_position.0, scent.source_position.1);
             if within_reach(&at) {
-                known.extend(self.world.node_numbers_on(at));
+                self.world.add_the_node_numbers_on(at, &mut known);
             }
         }
 

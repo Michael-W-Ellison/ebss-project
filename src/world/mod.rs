@@ -2107,6 +2107,18 @@ impl World {
         }
     }
 
+    /// The number of every node standing on `at`, added to `out` in list
+    /// order. `node_numbers_on` without a list of its own, for asking about
+    /// many tiles one after another (#290).
+    pub fn add_the_node_numbers_on(&self, at: Position, out: &mut Vec<usize>) {
+        let here = |number: usize| self.resources[number].position == at;
+        if self.where_the_nodes_are.is_it_up_to_date(&self.resources) {
+            self.where_the_nodes_are.on_into(at.x, at.y, here, out);
+        } else {
+            out.extend((0..self.resources.len()).filter(|&number| here(number)));
+        }
+    }
+
     /// Every node within `reach` cells either way of `at`, in list order.
     pub fn nodes_near(&self, at: Position, reach: u32) -> impl Iterator<Item = &ResourceNode> + '_ {
         self.node_numbers_near(at, reach)

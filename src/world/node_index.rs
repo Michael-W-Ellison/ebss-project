@@ -98,6 +98,16 @@ impl WhereTheNodesAre {
         (across < self.across && down < self.down).then_some(down * self.across + across)
     }
 
+    /// The numbers of every node in the patch holding `(x, y)` that `keep`
+    /// says yes to, added to `out` in list order: a question about one tile,
+    /// answered without a list of its own (#290).
+    pub fn on_into(&self, x: i32, y: i32, keep: impl Fn(usize) -> bool, out: &mut Vec<usize>) {
+        out.extend(self.off_the_map.iter().map(|&n| n as usize).filter(|&n| keep(n)));
+        if let Some(patch) = self.patch_of(x, y) {
+            out.extend(self.patches[patch].iter().map(|&n| n as usize).filter(|&n| keep(n)));
+        }
+    }
+
     /// The numbers of every node within `reach` cells either way of
     /// `(x, y)` that `keep` says yes to, in list order.
     ///
