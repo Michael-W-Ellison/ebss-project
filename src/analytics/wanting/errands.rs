@@ -261,10 +261,44 @@ impl Simulation {
         }
 
         let mut queue = VecDeque::new();
-        let mut came_from: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
+        // **Where each cell was reached from, in a flat window round the
+        // start**, with an ordered map only for the odd cell a long corridor
+        // carries outside it. It was all an ordered map, and looking cells up
+        // in it was most of what this search cost; this search was seven
+        // tenths of what `news_tests` cost (#288). The same cells are reached
+        // in the same order, so it finds the same step.
+        const ACROSS: i32 = 2 * WINDOW + 1;
+        const WINDOW: i32 = 64;
+        let mut near: Vec<Option<(i32, i32)>> = vec![None; (ACROSS * ACROSS) as usize];
+        let mut far: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
+        let slot = |at: (i32, i32)| -> Option<usize> {
+            let (dx, dy) = (at.0 - start.0 + WINDOW, at.1 - start.1 + WINDOW);
+            (dx >= 0 && dy >= 0 && dx < ACROSS && dy < ACROSS)
+                .then(|| (dy * ACROSS + dx) as usize)
+        };
+        let reached_from = |near: &Vec<Option<(i32, i32)>>,
+                            far: &BTreeMap<(i32, i32), (i32, i32)>,
+                            at: (i32, i32)|
+         -> Option<(i32, i32)> {
+            match slot(at) {
+                Some(i) => near[i],
+                None => far.get(&at).copied(),
+            }
+        };
+        let mut reach = |near: &mut Vec<Option<(i32, i32)>>,
+                         far: &mut BTreeMap<(i32, i32), (i32, i32)>,
+                         at: (i32, i32),
+                         from: (i32, i32)| {
+            match slot(at) {
+                Some(i) => near[i] = Some(from),
+                None => {
+                    far.insert(at, from);
+                }
+            }
+        };
 
         queue.push_back(start);
-        came_from.insert(start, start);
+        reach(&mut near, &mut far, start, start);
 
         let mut visited = 0usize;
 
@@ -277,7 +311,7 @@ impl Simulation {
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
                 let next = (current.0 + dx, current.1 + dy);
 
-                if came_from.contains_key(&next) {
+                if reached_from(&near, &far, next).is_some() {
                     continue;
                 }
 
@@ -312,12 +346,15 @@ impl Simulation {
                     continue;
                 }
 
-                came_from.insert(next, current);
+                reach(&mut near, &mut far, next, current);
 
                 if next == goal {
                     let mut step = next;
-                    while came_from[&step] != start {
-                        step = came_from[&step];
+                    while let Some(back) = reached_from(&near, &far, step) {
+                        if back == start {
+                            break;
+                        }
+                        step = back;
                     }
                     return Some((step.0, step.1, from.2));
                 }

@@ -21745,3 +21745,41 @@ side in release, `news_tests` took 1,195 s before and 1,048 s after, 12%
 less. The heavy modules are settlements of people on the half-kilometre map,
 where the animals' share is small. Most of their time is in what people do
 each turn rather than in any of the three things fixed here.
+
+### 288. What `news_tests` was spending its time on: a step search and a building list
+
+Sampled with `gdb`, 100 stacks, release build. Before:
+
+- **71% in `next_step_toward`**, the breadth-first search `a_step_toward`
+  falls back on when its straight step is barred. #287 tried to step round it
+  and made other tests slower; the search itself was the cost. It recorded
+  where each of up to 4,096 cells was reached from in an ordered map, and
+  looking cells up in it was most of the time. Now it is a flat window of
+  129 by 129 cells round the start, with the ordered map only for a cell a
+  long corridor carries outside it. The same cells are reached in the same
+  order, so it finds the same step.
+- **13% in `is_passable_tile`**, most of it `get_building_at`, which searches
+  the whole list of buildings. That check returned `true` if a building
+  stood there, and the function returns `true` if none does, so the lookup
+  decided nothing. It is gone.
+- **12% in the in-view pass** of `process_exploration_of`, and the in-view
+  memory refresh within it:
+  - **The memory refresh** is now one call for everything in view
+    (`Memory::remember_what_kinds_of_places_these_are`). It finds them all
+    in a single pass of the memory, passing over anything outside the
+    corners of the view on two comparisons, keeps the first record of each
+    as the one-at-a-time search would, and makes the same writes in the
+    same order.
+  - **The node lookup**: what is in sight is looked up in the node index
+    once for the pass instead of twice.
+  - **Naming**: what a person calls each kind of resource is worked out
+    once a kind per pass, not once per patch. It was a formatted string and
+    a familiarity check for every tree in a wood.
+
+The dice counts did not move (7,490 and 688,955), so nothing that happens
+changed.
+
+Release build, `news_tests`: 1,048 s before, 325 s after. Sampled again:
+the step search is 17% and the in-view pass 26%, with the memory refresh at
+6%. The largest single thing left is `node_numbers_near`, gathering and
+sorting the nodes in reach (15%), now mostly for `what_this_drive_offers`.

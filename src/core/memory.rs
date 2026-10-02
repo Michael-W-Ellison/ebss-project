@@ -196,6 +196,20 @@ pub enum SpatialMemoryType {
 }
 
 impl SpatialMemoryType {
+    /// Which kind this is, as a number to sort and look up by. The same
+    /// question the writers below ask with `mem::discriminant`.
+    fn which_kind(&self) -> u8 {
+        match self {
+            SpatialMemoryType::Food => 0,
+            SpatialMemoryType::Water => 1,
+            SpatialMemoryType::Shelter => 2,
+            SpatialMemoryType::Danger => 3,
+            SpatialMemoryType::Resource => 4,
+            SpatialMemoryType::Tool => 5,
+            SpatialMemoryType::Storage => 6,
+        }
+    }
+
     /// How much forgetting this place would cost.
     ///
     /// A spatial memory had no importance at all: `SpatialMemory::decay` took
@@ -986,6 +1000,76 @@ impl Memory {
         remembered.what_it_is = what_it_is.or(remembered.what_it_is.take());
         remembered.i_know_this_at_least_this_well(how_i_know);
         remembered.how_steady = how_steady;
+    }
+
+    /// `remember_what_kind_of_place_this_is`, for everything in sight at once.
+    ///
+    /// **One walk of the memory for the lot, not one for each.** Everybody
+    /// files every patch, spring and seam in view every turn, which is what
+    /// keeps foraging current; and finding each in the list was a search of
+    /// the whole of it from the start. This looks the places in view up in a
+    /// single pass, keeping the first record of each as the one-at-a-time
+    /// search would find, and then makes the same writes in the same order
+    /// (#288).
+    pub fn remember_what_kinds_of_places_these_are(
+        &mut self,
+        places: Vec<(SpatialMemoryType, (i32, i32, i32), Option<String>, u32, HowIKnow, HowSteady)>,
+    ) {
+        use std::collections::BTreeMap;
+
+        if places.is_empty() {
+            return;
+        }
+
+        let mut where_it_is: BTreeMap<(u8, (i32, i32, i32)), Option<usize>> = places
+            .iter()
+            .map(|(memory_type, position, ..)| ((memory_type.which_kind(), *position), None))
+            .collect();
+        // Only what lies within the corners of what is in view is worth
+        // looking up; everything else he remembers is passed over on two
+        // comparisons.
+        let (mut west, mut east, mut north, mut south) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
+        for (_, (x, y, _), ..) in &places {
+            west = west.min(*x);
+            east = east.max(*x);
+            north = north.min(*y);
+            south = south.max(*y);
+        }
+        for (at, remembered) in self.spatial_memories.iter().enumerate() {
+            let (x, y, _) = remembered.position;
+            if x < west || x > east || y < north || y > south {
+                continue;
+            }
+            if let Some(slot) =
+                where_it_is.get_mut(&(remembered.memory_type.which_kind(), remembered.position))
+            {
+                if slot.is_none() {
+                    *slot = Some(at);
+                }
+            }
+        }
+
+        for (memory_type, position, what_it_is, how_much, how_i_know, how_steady) in places {
+            let key = (memory_type.which_kind(), position);
+            let at = match where_it_is.get(&key).copied().flatten() {
+                Some(at) => {
+                    self.spatial_memories[at].refresh(self.current_turn);
+                    at
+                }
+                None => {
+                    self.spatial_memories
+                        .push(SpatialMemory::new(memory_type, position, self.current_turn));
+                    let at = self.spatial_memories.len() - 1;
+                    where_it_is.insert(key, Some(at));
+                    at
+                }
+            };
+            let remembered = &mut self.spatial_memories[at];
+            remembered.value = how_much as f32;
+            remembered.what_it_is = what_it_is.or(remembered.what_it_is.take());
+            remembered.i_know_this_at_least_this_well(how_i_know);
+            remembered.how_steady = how_steady;
+        }
     }
 
     /// Note that he has had something out of a place he remembers.

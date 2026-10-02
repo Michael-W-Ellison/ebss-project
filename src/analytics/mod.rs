@@ -1379,9 +1379,10 @@ impl Simulation {
         // towards a larder eight paces away until they starved. A half-dug
         // burrow is a hole you can climb across, and a half-built house is a
         // floor. See ISSUES_FOUND #252.
-        if self.world.get_building_at(&pos).is_some() {
-            return true;
-        }
+        //
+        // Which is why nothing here asks after buildings at all: it looked
+        // the tile up in the whole list of them, on every step of every
+        // search, to return `true` - the same answer as not asking (#288).
 
         // Resources sit on the ground rather than walling it off - a berry
         // patch or a stand of trees is somewhere to walk to, not around, and
