@@ -21841,3 +21841,29 @@ change, `nodes_known_to` is about 8% of a turn and `node_numbers_near` from
 every caller about 10%. What is left is larger elsewhere: the exploration
 pass (`process_exploration_of`, 27%) and the step search when walking
 (`next_step_toward`, 19%).
+
+### 291. The exploration pass: file what is in view without a sorted map
+
+Sampled over `news_tests` (149 samples), the exploration pass
+(`Population::process_exploration_of`) was 31% of a turn. A third of that
+was `Memory::remember_what_kinds_of_places_these_are`. It built a `BTreeMap`
+of every place in view, then asked it about every remembered place in that
+square, to find which of them were already filed. Most of the rest was
+noting what was seen again: for every spot in sight that the agent already
+knew, it asked the node index again for the first node on it, to read how
+much was there.
+
+- The places in view are chained into buckets by spot and kind, with fixed
+  hashing, instead of going into a `BTreeMap`. Same question, same answers,
+  same writes in the same order. The order of the buckets decides nothing,
+  so it repeats exactly.
+- How much stands on each spot is read from the look the pass has already
+  taken. The spots and node numbers in sight are sorted by spot, then
+  number, and the first of each spot is kept. The first node on a spot in
+  list order is the one with the lowest number, which is the node `nodes_on`
+  gave.
+
+Dice counts unchanged. `repeatable_tests`, `distrust_tests`,
+`knowing_where_things_are_tests` and the memory and exploration unit tests
+pass (59). `news_tests` in release, old and new back to back: 304.6 s → 289.7 s,
+about 5%.

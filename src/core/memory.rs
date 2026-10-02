@@ -1011,20 +1011,51 @@ impl Memory {
     /// single pass, keeping the first record of each as the one-at-a-time
     /// search would find, and then makes the same writes in the same order
     /// (#288).
+    ///
+    /// **Looked up by hashing, not by a sorted map.** Building a `BTreeMap`
+    /// of everything in view and asking it about every remembered place
+    /// nearby was a tenth of a settlement's turn on its own (#291). The places
+    /// are now chained into buckets by where they are and what kind, which
+    /// asks the same question - is this the same kind of place, on the same
+    /// spot - and gives the same answers. The hashing is fixed and nothing
+    /// depends on the order of the buckets, so it repeats exactly.
     pub fn remember_what_kinds_of_places_these_are(
         &mut self,
         places: Vec<(SpatialMemoryType, (i32, i32, i32), Option<String>, u32, HowIKnow, HowSteady)>,
     ) {
-        use std::collections::BTreeMap;
+        const NOTHING: u32 = u32::MAX;
 
         if places.is_empty() {
             return;
         }
 
-        let mut where_it_is: BTreeMap<(u8, (i32, i32, i32)), Option<usize>> = places
+        let buckets = (places.len() * 2).next_power_of_two();
+        let bucket_of = |kind: u8, (x, y, z): (i32, i32, i32)| {
+            let mut h = (x as u32).wrapping_mul(0x9E37_79B1)
+                ^ (y as u32).wrapping_mul(0x85EB_CA77)
+                ^ (z as u32).wrapping_mul(0xC2B2_AE3D)
+                ^ u32::from(kind).wrapping_mul(0x27D4_EB2F);
+            h ^= h >> 15;
+            h = h.wrapping_mul(0x2C1B_3C6D);
+            h ^= h >> 13;
+            h as usize & (buckets - 1)
+        };
+        let keys: Vec<(u8, (i32, i32, i32))> = places
             .iter()
-            .map(|(memory_type, position, ..)| ((memory_type.which_kind(), *position), None))
+            .map(|(memory_type, position, ..)| (memory_type.which_kind(), *position))
             .collect();
+        // The first place in each bucket, and the next place after each one.
+        let mut first = vec![NOTHING; buckets];
+        let mut next = vec![NOTHING; places.len()];
+        for (number, &(kind, position)) in keys.iter().enumerate().rev() {
+            let bucket = bucket_of(kind, position);
+            next[number] = first[bucket];
+            first[bucket] = number as u32;
+        }
+        // Where in the memory each place is already filed, if it is.
+        let mut where_it_is: Vec<Option<usize>> = vec![None; places.len()];
+        let same_as = |number: u32, key: (u8, (i32, i32, i32))| keys[number as usize] == key;
+
         // Only what lies within the corners of what is in view is worth
         // looking up; everything else he remembers is passed over on two
         // comparisons.
@@ -1040,27 +1071,37 @@ impl Memory {
             if x < west || x > east || y < north || y > south {
                 continue;
             }
-            if let Some(slot) =
-                where_it_is.get_mut(&(remembered.memory_type.which_kind(), remembered.position))
-            {
-                if slot.is_none() {
-                    *slot = Some(at);
+            let key = (remembered.memory_type.which_kind(), remembered.position);
+            let mut number = first[bucket_of(key.0, key.1)];
+            while number != NOTHING {
+                if same_as(number, key) && where_it_is[number as usize].is_none() {
+                    where_it_is[number as usize] = Some(at);
                 }
+                number = next[number as usize];
             }
         }
 
-        for (memory_type, position, what_it_is, how_much, how_i_know, how_steady) in places {
-            let key = (memory_type.which_kind(), position);
-            let at = match where_it_is.get(&key).copied().flatten() {
+        for (number, (memory_type, position, what_it_is, how_much, how_i_know, how_steady)) in
+            places.into_iter().enumerate()
+        {
+            let at = match where_it_is[number] {
                 Some(at) => {
                     self.spatial_memories[at].refresh(self.current_turn);
                     at
                 }
                 None => {
+                    let key = keys[number];
                     self.spatial_memories
                         .push(SpatialMemory::new(memory_type, position, self.current_turn));
                     let at = self.spatial_memories.len() - 1;
-                    where_it_is.insert(key, Some(at));
+                    // Any later sighting of the same place finds this one.
+                    let mut later = next[number];
+                    while later != NOTHING {
+                        if same_as(later, key) {
+                            where_it_is[later as usize] = Some(at);
+                        }
+                        later = next[later as usize];
+                    }
                     at
                 }
             };

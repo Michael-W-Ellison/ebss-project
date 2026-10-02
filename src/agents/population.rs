@@ -1885,15 +1885,29 @@ impl Population {
             // index for it, which gathers and sorts it afresh, and nothing
             // changes the nodes in between (#288).
             let in_sight: Vec<usize> = world.node_numbers_near(agent_pos, vision_range);
-            let really_here: std::collections::BTreeSet<crate::world::Position> = in_sight
+            // **And how much stands on each spot, from the same look.** Each
+            // spot seen again asked the node index afresh for the first node
+            // on it (#291). The first in list order is the lowest number, so
+            // sorting by spot and then number and keeping the first of each
+            // spot gives the same node.
+            let mut what_stands_where: Vec<(crate::world::Position, usize)> = in_sight
                 .iter()
-                .map(|&number| &world.resources[number])
-                .map(|resource| resource.position)
-                .filter(|where_it_is| {
+                .map(|&number| (world.resources[number].position, number))
+                .filter(|(where_it_is, _)| {
                     (where_it_is.x - agent_pos.x).abs() <= range
                         && (where_it_is.y - agent_pos.y).abs() <= range
                 })
                 .collect();
+            what_stands_where.sort_unstable();
+            what_stands_where.dedup_by_key(|(where_it_is, _)| *where_it_is);
+            let how_much_stands_on = |where_it_is: &crate::world::Position| {
+                what_stands_where
+                    .binary_search_by(|(spot, _)| spot.cmp(where_it_is))
+                    .map(|found| world.resources[what_stands_where[found].1].amount)
+                    .unwrap_or(0)
+            };
+            let really_here: std::collections::BTreeSet<crate::world::Position> =
+                what_stands_where.iter().map(|(where_it_is, _)| *where_it_is).collect();
 
             // Walking past a thing again is seeing it again.
             //
@@ -1917,11 +1931,7 @@ impl Population {
                     // seam knows whether it is a seam or the last of one, and
                     // until now the only thing he took away was that it was
                     // there at all.
-                    let how_much = world
-                        .nodes_on(*where_it_is)
-                        .next()
-                        .map(|resource| resource.amount)
-                        .unwrap_or(0);
+                    let how_much = how_much_stands_on(where_it_is);
 
                     agent
                         .exploration_knowledge
@@ -1990,11 +2000,7 @@ impl Population {
                 // stands there.
                 agent.exploration_knowledge.who_told_me.remove(&where_it_is);
 
-                let how_much = world
-                    .nodes_on(where_it_is)
-                    .next()
-                    .map(|resource| resource.amount)
-                    .unwrap_or(0);
+                let how_much = how_much_stands_on(&where_it_is);
                 agent
                     .exploration_knowledge
                     .saw_it_again(where_it_is, how_much, current_turn);
