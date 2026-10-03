@@ -22162,3 +22162,43 @@ Tests: `observational_learning::a_way_of_doing_a_thing_is_learned_once`
 627,310 → 653,035.
 
 Full suite: 2,716 passed, none failed, 4 ignored, in 1,160 s (1,251 s at #295).
+
+### 297. A wound turned four times as often as it was meant to
+
+Measured for the multi-generation goal with a new probe that tracks
+generations through 20-year runs (`zz_generations`). On the small map, 12
+seeds, 20 years, only 4 seeds had a grandchild born. Four seeds lost 8 or 9
+of their 12 founders in the first year. Recording what last took each dead
+person's health showed **a wound that turned** as the commonest first-year
+death: 5 of 9 dead on seed 4, and 5 of 8 on seed 5. They died through spring
+and summer, not in the winter.
+
+`HOW_OFTEN_A_WOUND_TURNS` was set at 0.0035 a turn when a day was 12 turns of
+two hours. Over the fortnight a worst wound takes to close, that is about a
+one-in-four chance of it turning. The comment says the intent: "rather better
+than an even chance of getting away with it". When a turn became half an
+hour, the healing was moved onto the calendar (`HOW_FAST_A_WOUND_CLOSES` is
+counted in planning periods) but the chance of turning was not. At four times
+the chances over the same fortnight, a worst wound turned about 7 times in
+10. `HOW_OFTEN_A_SOAKING_TELLS` (0.02 a turn, a chill from a cold soaking)
+came from the same commit and has the same fault.
+
+Both are now stated as a chance a day, the same as before the turn changed
+(0.042 and 0.24), and shared across the day's turns.
+
+First year, small map, before and after:
+
+| seed | alive at year 1 before | after |
+|---|---|---|
+| 4 | 3 | 8 |
+| 5 | 4 | 6 |
+| 7 | 4 | 6 |
+
+Other probability constants from the 12-turn era were checked. Raw flesh and
+food on the turn are chances a meal, not a turn. Foul ground is asked once a
+day. Exposure damage is already stated a day (`in_one_turn`). Fatigue build
+and recovery scale together, so where they settle is the same at any turn
+length. None of those was changed.
+
+Dice count: seed 0 over a year, 653,035 → 676,971. `sickness_tests` and
+`the_first_children_tests` pass.

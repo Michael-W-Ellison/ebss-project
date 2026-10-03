@@ -2865,17 +2865,30 @@ impl Agent {
 
     /// How often an open wound turns, in a turn, at its worst.
     ///
-    /// About one in three hundred, which over the fortnight a bad wound takes
-    /// to close comes to rather better than an even chance of getting away
-    /// with it. That is the shape of the thing: most people were all right,
-    /// and the ones who were not died of it.
-    const HOW_OFTEN_A_WOUND_TURNS: f64 = 0.0035;
+    /// About one in twenty-four a day, which over the fortnight a bad wound
+    /// takes to close comes to rather better than an even chance of getting
+    /// away with it - about one bad wound in four turns. That is the shape of
+    /// the thing: most people were all right, and the ones who were not died
+    /// of it.
+    ///
+    /// **On the calendar.** This was one in three hundred a turn, set when a
+    /// turn was two hours, and was never moved when a turn became half an
+    /// hour: four times the chances over the same fortnight, so a bad wound
+    /// turned about seven times in ten. It was the commonest death in a
+    /// settlement's first year - five of nine dead in one world, five of eight
+    /// in another (#297). Stated a day, and shared across the day's turns.
+    const HOW_OFTEN_A_WOUND_TURNS: f64 =
+        0.042 / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f64;
 
     /// And how often a soaking in the cold turns into a chill.
     ///
     /// Read against how much the weather is actually taking out of somebody,
     /// so a mild damp day is nothing and a January night in the open is not.
-    const HOW_OFTEN_A_SOAKING_TELLS: f64 = 0.02;
+    ///
+    /// The same fault as the wound's, from the same day: one in fifty a
+    /// two-hour turn, left at one in fifty a half hour (#297).
+    const HOW_OFTEN_A_SOAKING_TELLS: f64 =
+        0.24 / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f64;
 
     /// A wound closes, or it turns.
     fn turn_the_wound(&mut self, now: u32) {

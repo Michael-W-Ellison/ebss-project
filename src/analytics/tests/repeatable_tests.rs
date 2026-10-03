@@ -374,7 +374,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // everybody with everybody, and a fight is a bout rather than days of
     // blows, so fewer turns go on feuds and more people are about to take
     // them.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 653_035;
+    // And up 3.7% for #297: a wound turns and a soaking tells at their
+    // chances a day rather than four times them, so more of the settlement
+    // lives through its first year.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 676_971;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
