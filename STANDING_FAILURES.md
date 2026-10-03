@@ -28,11 +28,9 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #295): every test, module by module, in
-one piece. 2,719 tests run: 2,714 passed, 1 failed, 4 ignored, in 1,251 s of
-test time (1,222 s at #294). That leaves:
-- `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it`, red,
-  one of the two thresholds that flap (below). Measured, not re-baselined.
+**Last full run** (ISSUES_FOUND #296): every test, module by module, in
+one piece. 2,720 tests run: 2,716 passed, none failed, 4 ignored, in 1,160 s
+of test time (1,251 s at #295). That leaves:
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed

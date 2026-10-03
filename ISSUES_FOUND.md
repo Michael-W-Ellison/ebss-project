@@ -22160,3 +22160,5 @@ what turned it red.
 Tests: `observational_learning::a_way_of_doing_a_thing_is_learned_once`
 (new). Dice counts: 120 turns, 7,283 → 7,303; seed 0 over a year,
 627,310 → 653,035.
+
+Full suite: 2,716 passed, none failed, 4 ignored, in 1,160 s (1,251 s at #295).
