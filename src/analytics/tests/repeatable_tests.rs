@@ -189,7 +189,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 7,490 for #285: a grazer eats until it is full, takes its share
     // as browse or grass by its kind, and leaves a plant its crown; and a
     // hunter takes another hunter only when it comes upon one.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_490;
+    // Down to 7,283 for #295: a walk to the water ends on the bank it would
+    // reach it from, and the first walks to a river or a fish run are in the
+    // first two and a half days.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_283;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -360,7 +363,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // forty, and the herbs hold their ground.
     // And down 2.4% for #294: nobody is sent off the edge of the map, so
     // walks end somewhere and fewer errands are given up and chosen again.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 672_266;
+    // And down 6.7% for #295: a walk to the water ends on the bank, and a
+    // bolt may clear a river but not land on a rock in it, so nobody is left
+    // standing in the water or stranded on a spit of land for the year.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 627_310;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

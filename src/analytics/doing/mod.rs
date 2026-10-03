@@ -67,10 +67,10 @@ impl Simulation {
             Action::Build { structure_type, position } => self.building(structure_type, position, agent_index, turn_now),
             Action::Attack { target_agent_id, weapon } => self.attacking(target_agent_id, weapon, agent_index, &mut rng, turn_now),
             Action::Craft { item_type } => self.crafting(item_type, agent_index, turn_now),
-            // On the map, whoever chose it: not every walk goes through an
-            // errand (#294).
+            // On ground somebody can stand on, whoever chose it: not every
+            // walk goes through an errand (#294, #295).
             Action::Move { target } => self.walking(
-                &self.kept_on_the_map(self.population.agents[agent_index].state.position, *target),
+                &self.where_a_walk_can_end(self.population.agents[agent_index].state.position, *target),
                 agent_index,
             ),
             Action::Store { item_type, amount } => self.storing(item_type, amount, agent_index),

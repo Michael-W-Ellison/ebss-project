@@ -22009,3 +22009,72 @@ Dice counts: the 120-turn count does not move. Seed 0 over a year,
 `distrust_tests`, `news_tests` and `world::tdd_tests` pass (131).
 
 Full suite: 2,713 passed, none failed, 4 ignored, in 1,222 s (1,566 s at #293).
+
+### 295. Nobody is stranded in the water
+
+Left open by #294. Over a year on the small map, 16 seeds, the build before
+this had people standing on water for 613 person-days and boxed in, on
+ground with no walkable neighbour, for 625. It refused 156,750 steps as "No
+passable route ... 0 ways out", nearly all of them from a handful of people
+stuck for months. Two ways in:
+
+- **Walks to the water ended in it.** The route searches let the last pace
+  onto the goal whatever the goal is, which is how somebody reaches a barn
+  door. Fish nodes and the sea people drink from stand on water, and several
+  decisions walk to a node's exact place (`fishing_action`, `water_action`,
+  `go_and_live_where_it_is`, the food walks). From the water, the next step
+  could be onto a one-tile spit with water all round. Traced on seed 0:
+  onto water at (25, 40), onto desert at (25, 39), and there for the rest of
+  the year.
+- **Bolts cleared the water onto a rock.** `where_this_one_would_run` asked
+  only whether the landing was ground. On seeds 1 and 14 a bolt put somebody
+  on (49, 49), the corner of the map, with sea, water and the edge on every
+  side.
+
+Nothing anybody does at the water needs a foot in it. Drinking reaches a
+spring 25 paces off, and fishing casts a pace, diagonals included; the
+fishery tests already fish from the bank.
+
+- **`where_a_walk_can_end`** (was `kept_on_the_map`) now handles any target
+  no foot can go on, not only targets off the map. It finds the bank the way
+  the walk would: a route to the water, stopping one pace short. Picking the
+  walkable tile beside the water nearest the walker was tried first. It picks
+  the rock in the middle of a pool when that is the only ground touching that
+  water, and a new test caught it. Only where there is no route at all does
+  it fall back to that tile, and then the walk fails and is given up. A target
+  someone can stand on is left where it was put. It is applied where an
+  errand is set and where every walk is carried out.
+- **The step code never puts a foot on unwalkable ground.** This is a safety
+  net: the route-following walk stops before such a cell, and the search's
+  step is refused if it lands on one.
+- **A bolt may clear a river, but not land on a rock.** A landing must either
+  be in the ground the runner already stands in, or open out into at least
+  256 walkable cells (`can_this_be_walked_out_of`). Stopping every bolt at the
+  water was tried first, and also ends the stranding. It measured
+  54,535 / 54,407 person-days against 58,505 for the same build with bolts
+  over water, a gap not much bigger than the noise but in the direction you
+  would expect if putting a river between you and a wolf is worth something.
+- **Water verbs tried out of curiosity** (quench, fill, soak, leach, drink)
+  are now offered with water underfoot *or beside*, since nobody stands in it
+  any more.
+
+Measured over a year, 16 seeds, against the build before:
+
+| | before | after |
+|---|---|---|
+| person-days standing in water | 613 | 0 |
+| person-days boxed in | 625 | 0 |
+| "No passable route" refusals | 156,750 | 0 |
+| errands given up | 11,462 | 170 |
+| errands that got there | 169,012 | 171,550 |
+| alive at the end | 127 | 127 |
+| person-days | 56,848 | 55,728 |
+
+Survival is even within the noise: single seeds swing by a thousand
+person-days or more between builds that differ only in where a bank is
+chosen.
+
+Tests: `off_the_map_tests::a_walk_to_the_water_ends_on_the_bank` and
+`nobody_bolts_onto_a_rock_in_the_water`, both failing on the build before.
+Dice counts: 120 turns, 7,490 → 7,283; seed 0 over a year,
+672,266 → 627,310.

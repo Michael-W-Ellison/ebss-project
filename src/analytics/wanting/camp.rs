@@ -398,7 +398,7 @@ impl Simulation {
         // them: they walked to the last tile, and every step after that was a
         // route search over the whole map for somewhere that is not on it
         // (#294). Where it ends is now kept on the map, on ground, by
-        // `kept_on_the_map` along with every other walk; and where this
+        // `where_a_walk_can_end` along with every other walk; and where this
         // bearing has nowhere left to go - somebody standing hard against
         // that edge already - it turns to the next bearing round that has,
         // so somebody desperate still strikes out rather than standing still.

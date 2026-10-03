@@ -615,26 +615,62 @@ impl Simulation {
     /// that searching the whole map for a way to somewhere that is not on
     /// it, until the errand was given up. Over `news_tests` that was nine
     /// route searches in ten (#293, #294). As far as the land goes is as far
-    /// as anybody can go in that direction, so that is where they go.
+    /// as anybody can go in that direction, so that is where they go: to the
+    /// edge, and on towards the walker to the first ground a foot can go on,
+    /// because the edge is often sea.
     ///
-    /// **And to ground, not water.** The edge of the map is often sea, and
-    /// the last pace of a walk may be onto anything - it is how somebody
-    /// reaches a barn door - so pulling a target straight back onto the edge
-    /// walked people into the sea, and from there onto a spit of rock with
-    /// water all round it that they could never step off: two worlds in
-    /// sixteen measured, thousands of turns each of somebody boxed in on a
-    /// mountain tile (#294). A target pulled back is pulled on, towards the
-    /// walker, to the first ground a foot can go on. A target already on the
-    /// map is left exactly where it was put.
-    pub(in crate::analytics) fn kept_on_the_map(
+    /// **And nobody walks into the water.** A walk may end on anything - the
+    /// route searches let the last pace onto ground they would not cross,
+    /// which is how somebody reaches a barn door - and a fish run or the sea
+    /// someone wants to drink from stands on water. So a walk to one left
+    /// somebody standing in the river, and their next step off it could be
+    /// onto a spit of rock with water all round that nobody can step off.
+    /// Traced on one world: somebody walked onto water at (25, 40), stepped
+    /// onto desert at (25, 39), and stood there for the rest of the year
+    /// (#295). Nothing a person does at the water needs a foot in it -
+    /// drinking reaches a spring twenty-five paces off and a line is cast a
+    /// pace - so a walk to somewhere no foot can go ends on the bank.
+    ///
+    /// **The bank the walker can get to.** The ground beside the water that
+    /// is nearest the walker may be the rock in the middle of it, so the
+    /// bank is found the way the walk would find it: a route to the water,
+    /// stopping a pace short. Only where there is no route at all is it the
+    /// ground beside the water nearest the walker, square sides before
+    /// corners, and the walk will then find no way there and be given up. A
+    /// target a foot can go on is left exactly where it was put.
+    pub(in crate::analytics) fn where_a_walk_can_end(
         &self,
         from: (i32, i32, i32),
         target: (i32, i32, i32),
     ) -> (i32, i32, i32) {
         let (wide, high) = (self.world.grid.width as i32, self.world.grid.height as i32);
         let mut at = (target.0.clamp(0, wide - 1), target.1.clamp(0, high - 1));
+        if self.is_passable_tile(at.0, at.1) {
+            return (at.0, at.1, target.2);
+        }
         if at == (target.0, target.1) {
-            return target;
+            if let Some(route) =
+                self.the_way_there((from.0, from.1), at, Self::AS_FAR_AS_A_ROUTE_IS_LOOKED_FOR)
+            {
+                let bank = match route.len() {
+                    0 | 1 => (from.0, from.1),
+                    paces => route[paces - 2],
+                };
+                return (bank.0, bank.1, target.2);
+            }
+            const BESIDE: [(i32, i32); 8] =
+                [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)];
+            let paces = |(x, y): (i32, i32)| (x - from.0).abs() + (y - from.1).abs();
+            let bank = [&BESIDE[..4], &BESIDE[4..]].into_iter().find_map(|sides| {
+                sides
+                    .iter()
+                    .map(|(dx, dy)| (at.0 + dx, at.1 + dy))
+                    .filter(|&(x, y)| self.is_passable_tile(x, y))
+                    .min_by_key(|&beside| paces(beside))
+            });
+            if let Some(bank) = bank {
+                return (bank.0, bank.1, target.2);
+            }
         }
         while at != (from.0, from.1) && !self.is_passable_tile(at.0, at.1) {
             at.0 += (from.0 - at.0).signum();
@@ -649,12 +685,12 @@ impl Simulation {
         action: Action,
         running_away: bool,
     ) -> Action {
-        // Whatever the walk is to, it is to somewhere on the map - so that an
-        // errand set out on can be got to (#294).
+        // Whatever the walk is to, it is to ground somebody can stand on - so
+        // that an errand set out on can be got to (#294, #295).
         let here = self.population.agents[agent_index].state.position;
         let action = match action {
             Action::Move { target } => Action::Move {
-                target: self.kept_on_the_map(here, target),
+                target: self.where_a_walk_can_end(here, target),
             },
             other => other,
         };

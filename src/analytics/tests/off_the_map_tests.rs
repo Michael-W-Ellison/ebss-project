@@ -200,3 +200,117 @@ fn what_a_body_can_stand_on_has_one_answer() {
         );
     }
 }
+
+/// A walk to the water ends on the bank, and nobody is left on a rock.
+///
+/// The route searches let the last pace of a walk onto its goal whatever the
+/// goal is, and a fish run or the sea someone wants to drink from stands on
+/// water. So a walk to one left somebody standing in the river, and the next
+/// step off it could be onto a spit of land with water all round, which
+/// nobody can ever step off. Traced on one world: onto water at (25, 40),
+/// onto desert at (25, 39), and there for the rest of the year (#295).
+///
+/// The same shape here: a pool with a one-cell rock in the middle of it, and
+/// somebody sent to the water at its edge. They stop on the bank, and set foot
+/// on neither the water nor the rock.
+#[test]
+fn a_walk_to_the_water_ends_on_the_bank() {
+    use crate::world::{Position, TerrainType};
+
+    let mut simulation = somebody_in_the_corner();
+    let (cx, cy) = (
+        simulation.world.grid.width as i32 / 2,
+        simulation.world.grid.height as i32 / 2,
+    );
+    for x in cx - 15..=cx + 15 {
+        for y in cy - 15..=cy + 15 {
+            let ground = if (x - cx).abs() <= 2 && (y - cy).abs() <= 2 {
+                if (x, y) == (cx, cy) {
+                    TerrainType::Desert
+                } else {
+                    TerrainType::Water
+                }
+            } else {
+                TerrainType::Plains
+            };
+            simulation
+                .world
+                .grid
+                .get_tile_mut(&Position::new(x, y))
+                .expect("well inside the map")
+                .terrain
+                .terrain_type = ground;
+        }
+    }
+    simulation.population.agents[0].state.position = (cx - 10, cy, 0);
+    let the_water = (cx - 2, cy, 0);
+
+    for _ in 0..6 {
+        simulation.execute_action(&Action::Move { target: the_water }, 0);
+
+        let (x, y, _) = simulation.population.agents[0].state.position;
+        assert!(
+            simulation.is_passable_tile(x, y),
+            "walked into the water, to ({x}, {y})"
+        );
+        assert_ne!((x, y), (cx, cy), "walked across the water onto the rock");
+    }
+
+    let (x, y, _) = simulation.population.agents[0].state.position;
+    assert!(
+        (x - the_water.0).abs() <= 1 && (y - the_water.1).abs() <= 1
+            && [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+                .iter()
+                .any(|(dx, dy)| {
+                    simulation
+                        .world
+                        .grid
+                        .get_tile(&Position::new(x + dx, y + dy))
+                        .is_some_and(|tile| tile.terrain.terrain_type == TerrainType::Water)
+                }),
+        "ended at ({x}, {y}), which is not on the bank of the pool"
+    );
+}
+
+/// A bolt may clear the water; it may not land on a rock in it.
+///
+/// Somebody frightened runs over whatever is in the way, and a river between
+/// them and what is after them is worth having. But a landing with water all
+/// round it is somewhere nobody can walk off, and twice in sixteen worlds a
+/// bolt put somebody on a rock in the sea at the corner of the map for the
+/// rest of the year (#295). Here the only ground within a bolt is such a rock,
+/// so there is nowhere to run.
+#[test]
+fn nobody_bolts_onto_a_rock_in_the_water() {
+    use crate::world::{Position, TerrainType};
+
+    let mut simulation = somebody_in_the_corner();
+    let (cx, cy) = (
+        simulation.world.grid.width as i32 / 2,
+        simulation.world.grid.height as i32 / 2,
+    );
+    let bolt = crate::analytics::Simulation::HOW_FAR_A_FRIGHTENED_PERSON_GETS;
+    let rock = (cx + bolt, cy);
+    let reach = bolt + 2;
+    for x in cx - reach..=cx + reach {
+        for y in cy - reach..=cy + reach {
+            let ground = if (x, y) == (cx, cy) || (x, y) == rock {
+                TerrainType::Mountain
+            } else {
+                TerrainType::Water
+            };
+            if let Some(tile) = simulation.world.grid.get_tile_mut(&Position::new(x, y)) {
+                tile.terrain.terrain_type = ground;
+            }
+        }
+    }
+
+    let remembers = simulation.population.agents[0].exploration_knowledge.clone();
+    let landed = simulation.where_this_one_would_run(&remembers, (cx, cy, 0), (cx - 1, cy));
+
+    assert_ne!(
+        landed.map(|(x, y, _)| (x, y)),
+        Some(rock),
+        "bolted onto the rock, and nobody can walk off it"
+    );
+}
