@@ -2824,14 +2824,29 @@ impl Population {
                     // here. It is said out loud, to whoever is near enough to
                     // hear - see `say_it_out_loud`.
 
-                    // Strengthen relationship through gossip interaction
+                    // Strengthen relationship through gossip interaction.
+                    //
+                    // **As far as getting on, and no further.** This had no
+                    // ceiling, and talking is the commonest thing people do:
+                    // a quarter of a million exchanges in a settlement's first
+                    // quarter, half of everything that drew anybody closer,
+                    // so everybody talked their way to nearly 1.0 with
+                    // everybody (#296). Chatting with a man makes him
+                    // somebody you get on with; more than that is earned by
+                    // what you do for each other. See
+                    // `Relationship::GETTING_ON_WITH_SOMEBODY`.
                     let uuid_i = self.agents[i].id;
+                    let getting_on = crate::agents::emotions::Relationship::GETTING_ON_WITH_SOMEBODY;
                     if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&uuid_j) {
-                        rel.bond_strength = (rel.bond_strength + 0.001).min(1.0);
+                        if rel.bond_strength < getting_on {
+                            rel.bond_strength = (rel.bond_strength + 0.001).min(getting_on);
+                        }
                         rel.total_interactions += 1;
                     }
                     if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&uuid_i) {
-                        rel.bond_strength = (rel.bond_strength + 0.001).min(1.0);
+                        if rel.bond_strength < getting_on {
+                            rel.bond_strength = (rel.bond_strength + 0.001).min(getting_on);
+                        }
                         rel.total_interactions += 1;
                     }
                 }

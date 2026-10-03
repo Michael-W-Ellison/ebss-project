@@ -519,7 +519,7 @@ the last defect for a month.
 | test | now | threshold |
 |---|---|---|
 | `errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step` | green after #227, red after #224 | 50% |
-| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | red after #295; red after #227, green after #225 | somebody falls out |
+| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | **resolved by #296**: green; was red after #295 and #227, green after #225 | somebody falls out, in one of six worlds |
 
 **Both have now been on both sides of their lines, and the two swapped over.**
 The full run after #225 had the errand test red and the enemies test green;
@@ -557,6 +557,12 @@ test's three), the worlds with somebody fallen out went **from 3 of 12 before
 three worlds landed on the empty side, which at about one world in two is a
 one-in-eight chance. Same remedy as the first: a predicate over enough
 worlds to survive a change, not a new threshold.
+
+**Resolved by #296.** The cause under the coin was bonds inflated to nearly
+1.0 by sources with no ceiling, so nothing short of a long run of blows
+could sour one. With that fixed, 7 worlds in 12 have somebody fallen out,
+and the test now asks six worlds rather than three, so all of them coming up
+empty is about one chance in two hundred. The threshold is unchanged.
 
 For contrast, the same eight seeds on what #224 was actually for:
 

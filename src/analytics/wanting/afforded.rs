@@ -266,6 +266,16 @@ impl Simulation {
             // whole of what this drops is the walking verbs, whose
             // destinations belong to the travel layer - see `an_action_for`.
             .filter(|(verb, key)| self.an_action_for(verb, key, agent).is_some())
+            // **Nobody hits a neighbour to see what happens.** Raising a hand
+            // to somebody is a thing done for a reason - a grudge, a blow to
+            // answer - and those reasons have their own branches. Offered here
+            // it was just the next untried verb: in one settlement's first
+            // quarter, some three hundred blows that nobody bore anybody a
+            // grudge for, one man at one other until he was near dead (#296).
+            .filter(|(verb, _)| {
+                !(verb.family == crate::environment::verbs::Family::Combat
+                    && verb.targets == crate::environment::verbs::Targets::APerson)
+            })
             .max_by(|(_, left), (_, right)| {
                 let mine = agent.lessons.how_new_is_this(left);
                 let theirs = agent.lessons.how_new_is_this(right);

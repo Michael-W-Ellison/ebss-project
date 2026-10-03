@@ -5179,9 +5179,20 @@ impl Agent {
                         self.memory.remember_location(SpatialMemoryType::Danger, *pos);
                     }
                     Percept::AgentDetected { agent_id, .. } => {
-                        // Update social relationship (neutral interaction for just seeing them)
+                        // Update social relationship (neutral interaction for
+                        // just seeing them).
+                        //
+                        // **Up to a familiar face, as keeping company is.**
+                        // Seeing somebody added a hundredth with no ceiling,
+                        // so a man you only ever saw across the camp became a
+                        // dear friend in a hundred sightings - the very thing
+                        // `Relationship::keep_company` was capped to stop
+                        // (#296).
                         let rel = self.relationships.get_or_create_relationship(*agent_id, current_turn);
-                        rel.strengthen(0.01);
+                        let familiar = super::emotions::Relationship::A_FAMILIAR_FACE;
+                        if rel.bond_strength < familiar {
+                            rel.bond_strength = (rel.bond_strength + 0.01).min(familiar);
+                        }
                     }
                     _ => {}
                 }

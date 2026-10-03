@@ -22085,3 +22085,78 @@ the two thresholds that flap (see STANDING_FAILURES). It fails the same way
 alone and in both profiles. Over twelve worlds, worlds with somebody fallen
 out went from 3 of 12 before this change to 6 of 12 after, so it is the
 test's three worlds and not the model. Not re-baselined.
+
+### 296. Everybody loved everybody, so nobody could fall out
+
+`relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` went red
+after #295. It asks whether anybody in a settlement of 25 has a bond gone
+below nought by day 83, and only 3 of 12 such worlds had one. That was not
+chance. Bonds ran to nearly 1.0 with nearly everybody: the 5th-percentile
+bond in a settlement was 0.6 to 0.99, and the *lowest* was often 0.5 to 0.8.
+At that height even hundreds of blows (570 in one world) could not take a
+bond below nought.
+
+The model's own rule is that keeping company makes a familiar face (0.3),
+getting on makes a friend (0.5), and more than that is earned by what two
+people do for each other. Bond gains tallied by source over one world's
+first quarter (600 bonds):
+
+| source | events | total added |
+|---|---|---|
+| gossip, +0.001 each, no ceiling | 278,461 | 246 |
+| observational "teaching", +0.05 / +0.03, no ceiling | 5,302 | 208 |
+| keeping company (capped at 0.3) | 30,776 | 31 |
+| merely seeing somebody, +0.01, no ceiling | 3,564 | 15 |
+| gratitude and social interactions | | 7 |
+
+- **A way of doing a thing is learned once.** Each watcher-and-watched pair
+  was its own lesson, so everybody "adopted" crafting, mining and
+  pathfinding from all 24 others: 600 adoptions of each behaviour, each
+  paying its skill gain and a closer bond. Now a behaviour already adopted
+  from anybody is not adopted again (`ObservationalLearning::has_adopted`).
+  After that, practice is what improves it.
+- **Talk brings two people as far as getting on** (0.5), and no further.
+- **Seeing somebody brings them as far as a familiar face** (0.3), the same
+  ceiling keeping company already had.
+
+With bonds earned, grudges that the high bonds had masked showed through,
+and two faults in how people fight came out with them:
+
+- **Grudge attacks were made out of reach.** `round_on_whoever_angers_me`
+  allowed two paces, counting corners as one. The blow itself lands only
+  within the weapon's reach counting both ways, which is one for bare hands.
+  So somebody with a grudge stood two paces off, or one off on the slant,
+  swinging at the air: 899 refusals in one world, nearly all one man at one
+  other. The check now measures reach the way the blow does.
+- **Curiosity tried violence.** Choosing the least-tried verb could pick
+  "attack with" on whoever was near, about 300 blows in one world with no
+  grudge behind them, one man at one other until he was near dead. Curiosity
+  no longer offers combat verbs aimed at people. Grudges and blows to answer
+  still lead to fights, through their own branches.
+- **A fight never ended.** Every blow gave the other side a grudge and a blow
+  to answer, so two people who fell out traded blows turn after turn for
+  days, one pair 301 times. Now a fight is a bout: once somebody has struck a
+  person, they do not strike that person again for a day, whether from a
+  grudge or to answer a blow (`EmotionState::have_we_had_it_out`). The bond
+  stays soured and the grudge stays held.
+
+Over the same 12 worlds (25 people, 4,000 turns):
+- **Worlds with somebody fallen out:** 3 → 7.
+- **5th-percentile bond:** 0.6–0.99 → 0.27–0.49.
+- **Attacks between people:** most worlds now 0 to 6, the busiest 124.
+  Before, some worlds had none and some up to 1,089. Part-way through the
+  fixes, with curiosity attacks and endless feuds still in, they reached
+  1,646.
+
+Over 16 one-year runs on the small map, against #295: alive at the end
+127 → 132, and person-days 55,728 → 57,241. Nobody stranded, and no "No
+passable route" refusals.
+
+The test itself now asks six worlds instead of three, each on its own
+thread, so it takes no longer. At 7 worlds in 12, all six coming up empty
+is about one chance in two hundred. Three was one in eight, and that is
+what turned it red.
+
+Tests: `observational_learning::a_way_of_doing_a_thing_is_learned_once`
+(new). Dice counts: 120 turns, 7,283 → 7,303; seed 0 over a year,
+627,310 → 653,035.

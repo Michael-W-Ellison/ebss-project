@@ -192,7 +192,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Down to 7,283 for #295: a walk to the water ends on the bank it would
     // reach it from, and the first walks to a river or a fish run are in the
     // first two and a half days.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_283;
+    // Up to 7,303 for #296: a way of doing a thing is learned once by
+    // watching rather than once from every neighbour, talk and a glance
+    // bring nobody closer than getting on, and nobody hits a neighbour to see
+    // what happens.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_303;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -366,7 +370,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // And down 6.7% for #295: a walk to the water ends on the bank, and a
     // bolt may clear a river but not land on a rock in it, so nobody is left
     // standing in the water or stranded on a spit of land for the year.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 627_310;
+    // And up 4.1% for #296: bonds are earned rather than talked up to 1.0 by
+    // everybody with everybody, and a fight is a bout rather than days of
+    // blows, so fewer turns go on feuds and more people are about to take
+    // them.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 653_035;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

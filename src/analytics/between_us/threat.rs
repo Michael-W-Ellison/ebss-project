@@ -146,6 +146,10 @@ impl Simulation {
         if held < Self::ENOUGH_TO_ROUND_ON_SOMEBODY {
             return None;
         }
+        // Once a day, however much it still rankles (#296).
+        if agent.emotions.have_we_had_it_out(who, self.current_turn) {
+            return None;
+        }
 
         let them = self
             .population
@@ -162,10 +166,16 @@ impl Simulation {
             return None;
         }
 
-        let paces = (them.state.position.0 - agent_position.0)
-            .abs()
-            .max((them.state.position.1 - agent_position.1).abs());
-        if paces > Self::HUNT_REACH {
+        // **Within reach of a blow, measured the way the blow measures it.**
+        // This asked for two paces either way, corners counting as one; the
+        // blow itself lands within the weapon's reach counting both ways, and
+        // bare hands reach one. So somebody with a grudge stood two paces off,
+        // or one off on the slant, swinging at the air every turn: 899
+        // refusals of "Target too far away" in one settlement's first
+        // quarter, nearly all of them one man at one other (#296).
+        let paces = (them.state.position.0 - agent_position.0).abs()
+            + (them.state.position.1 - agent_position.1).abs();
+        if paces as f32 > agent.equipment.weapon_range() {
             return None;
         }
 
