@@ -22007,3 +22007,5 @@ count up by tens of thousands.
 Dice counts: the 120-turn count does not move. Seed 0 over a year,
 688,955 → 672,266. `repeatable_tests`, `errand_tests`, the walking tests,
 `distrust_tests`, `news_tests` and `world::tdd_tests` pass (131).
+
+Full suite: 2,713 passed, none failed, 4 ignored, in 1,222 s (1,566 s at #293).
