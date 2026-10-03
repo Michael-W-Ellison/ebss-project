@@ -22078,3 +22078,10 @@ Tests: `off_the_map_tests::a_walk_to_the_water_ends_on_the_bank` and
 `nobody_bolts_onto_a_rock_in_the_water`, both failing on the build before.
 Dice counts: 120 turns, 7,490 → 7,283; seed 0 over a year,
 672,266 → 627,310.
+
+Full suite: 2,714 passed, 1 failed, 4 ignored, in 1,251 s. The failure is
+`relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it`, one of
+the two thresholds that flap (see STANDING_FAILURES). It fails the same way
+alone and in both profiles. Over twelve worlds, worlds with somebody fallen
+out went from 3 of 12 before this change to 6 of 12 after, so it is the
+test's three worlds and not the model. Not re-baselined.

@@ -28,9 +28,11 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #294): every test, module by module, in
-one piece this time. 2,717 tests run: 2,713 passed, none failed, 4 ignored,
-in 1,222 s of test time (1,566 s at #293). That leaves:
+**Last full run** (ISSUES_FOUND #295): every test, module by module, in
+one piece. 2,719 tests run: 2,714 passed, 1 failed, 4 ignored, in 1,251 s of
+test time (1,222 s at #294). That leaves:
+- `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it`, red,
+  one of the two thresholds that flap (below). Measured, not re-baselined.
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
@@ -517,7 +519,7 @@ the last defect for a month.
 | test | now | threshold |
 |---|---|---|
 | `errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step` | green after #227, red after #224 | 50% |
-| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | red after #227, green after #225 | somebody falls out |
+| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | red after #295; red after #227, green after #225 | somebody falls out |
 
 **Both have now been on both sides of their lines, and the two swapped over.**
 The full run after #225 had the errand test red and the enemies test green;
@@ -545,6 +547,16 @@ it wants nearby scores badly for it.
 **Do not re-baseline it and do not delete it.** It wants a predicate that
 survives a change of seed - arrivals against abandonments would be one, and
 the counters for it are already kept. That is its own piece of work.
+
+The second went red again after #295, and that is measured too. It asks
+whether anybody in three particular worlds, 25 people and 4,000 turns each,
+has a bond gone below zero, and in those three worlds nobody has. Over twelve
+such worlds (seeded the same way, people spawned before the world, so not the
+test's three), the worlds with somebody fallen out went **from 3 of 12 before
+#295 to 6 of 12 after**. People fall out no less than they did; the test's
+three worlds landed on the empty side, which at about one world in two is a
+one-in-eight chance. Same remedy as the first: a predicate over enough
+worlds to survive a change, not a new threshold.
 
 For contrast, the same eight seeds on what #224 was actually for:
 
