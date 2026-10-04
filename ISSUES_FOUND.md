@@ -22436,7 +22436,19 @@ where they stood, and skipped that. Now:
 Dice counts: 949,046 a year on seed 0, and 7,392 in 120 turns on seed 4242.
 Test: `nobody_sleeps_on_foul_ground`.
 
-The weather deaths are still open.
+Seeds 0–3 over their first four years, with all of the above:
+
+| | #298 | night, before foul ground | night, as committed |
+|---|---|---|---|
+| conceived | 21 | 21 | 22 |
+| born | 14 | 16 | 19 |
+| adult deaths | 1 | 7 | 4 |
+| alive at the end of year 4 | 61 | 56 | 63 |
+
+The four adult deaths are 2 of hunger, 1 by mishap and 1 of the weather
+(off foul ground). The weather took 3 before this change, and 1 after it,
+on four seeds. That is too few to call. The 12-seed, 20-year run will say
+more.
 
 Tests in `night_tests` (5): when the night runs, a night is slept in
 stretches until first light, somebody far off heads home in the evening, the evening fire
