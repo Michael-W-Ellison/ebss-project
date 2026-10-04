@@ -158,6 +158,10 @@ impl Simulation {
             Some("night: let be, the weather")
         } else if matches!(action, Action::Eat { .. } | Action::Cook { .. } | Action::LightFire) {
             Some("night: let be, supper")
+        } else if matches!(action, Action::Treat { .. }) {
+            // The Rest drive's way to bed takes a remedy first, if there is
+            // one in the pack.
+            Some("night: let be, a remedy")
         } else if matches!(action, Action::Sleep { .. }) {
             Some("night: asleep already")
         } else {
@@ -208,7 +212,17 @@ impl Simulation {
             return action;
         }
 
-        let instead = if asleep {
+        // **Nobody lies down in it.** The Rest drive's own way to bed steps
+        // off foul ground first (see `somewhere_that_does_not_stink`); sent
+        // to bed by the clock, everybody slept where they stood, which was
+        // where everybody else had been all evening. Foul ground killed two
+        // in four settlements in four years, where it had killed none
+        // before (#299).
+        let off_the_midden = if asleep { self.somewhere_that_does_not_stink(here) } else { None };
+
+        let instead = if let Some(clean) = off_the_midden {
+            Action::Move { target: clean }
+        } else if asleep {
             // Until first light, a stretch at a time: a night is a sleep,
             // not scraps of one, but nothing wakes a sleeper but danger, and
             // rain or a frost that came on in the small hours went unanswered
@@ -243,6 +257,7 @@ impl Simulation {
             .what_a_threat_came_to
             .entry(
                 match (&instead, asleep) {
+                    (Action::Move { .. }, true) => "night: stepped off foul ground",
                     (_, true) => "night: slept",
                     (Action::Move { .. }, false) => "night: headed home",
                     (Action::Cook { .. }, _) => "night: cooked supper",

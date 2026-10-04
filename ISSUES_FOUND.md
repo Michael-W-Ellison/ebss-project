@@ -22420,8 +22420,23 @@ Conceptions are back to where they were. Adult deaths are not:
 - 1 from food on the turn;
 - 1 from a wound that turned.
 
-At #297, on all 12 seeds over four years, the weather took 2. Those deaths
-are open.
+At #297, on all 12 seeds over four years, the weather took 2.
+
+**Foul ground.** The ground is asked about once a day, at turn 0 of the
+day, which is midnight. Before there was a night, people were scattered at
+midnight. Now they are all asleep where the camp spends its evenings, which
+is where it voids. The Rest drive's own way to bed steps off foul ground
+first (`somewhere_that_does_not_stink`). The night rule sent people to bed
+where they stood, and skipped that. Now:
+- somebody standing on foul ground at bedtime steps off it first
+  (`night: stepped off foul ground`);
+- a `Treat` chosen at bedtime is let stand, as the Rest drive's way to bed
+  takes a remedy first.
+
+Dice counts: 949,046 a year on seed 0, and 7,392 in 120 turns on seed 4242.
+Test: `nobody_sleeps_on_foul_ground`.
+
+The weather deaths are still open.
 
 Tests in `night_tests` (5): when the night runs, a night is slept in
 stretches until first light, somebody far off heads home in the evening, the evening fire

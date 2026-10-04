@@ -200,8 +200,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // than through the day in snatches, so fewer of the 120 turns are taken.
     // Up to 8,422 for #299 again: a night is slept in two-hour stretches, and
     // each waking is a decision. Down to 7,343 when nobody goes to bed
-    // thirsty, or hungry with nothing to eat.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_343;
+    // thirsty, or hungry with nothing to eat. Up to 7,392 when somebody on
+    // foul ground at bedtime steps off it, and a remedy is taken before bed.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_392;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -394,8 +395,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // and each waking is a decision; and 833,642 when nobody goes to bed
     // thirsty, or hungry with nothing to eat; and 881,777 when a coupling
     // outside the fertile window dulls the wish for a child by a day's
-    // regrowth rather than a week's.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 881_777;
+    // regrowth rather than a week's; and 949,046 when somebody on foul
+    // ground at bedtime steps off it, and a remedy is taken before bed.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 949_046;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -166,3 +166,31 @@ fn a_nights_sleep_pays_back_the_night() {
         "eight hours asleep should repay more than two hours of eight owed, left {debt}"
     );
 }
+
+/// Sent to bed standing on a midden, somebody steps off it first, as the Rest
+/// drive's own way to bed always did.
+#[test]
+fn nobody_sleeps_on_foul_ground() {
+    let mut simulation = people(1);
+    let at = simulation.population.agents[0].state.position;
+    let here = crate::world::Position::new(at.0, at.1);
+    simulation
+        .world
+        .grid
+        .somebody_voided_on(&here, crate::world::Soil::AS_FOUL_AS_IT_GETS);
+    let dawn = first_light(&simulation);
+    set_the_clock(&mut simulation, dawn - 3.0);
+
+    let action = simulation.what_the_night_asks(
+        0,
+        Action::Gather { resource_type: "wood".to_string() },
+        false,
+    );
+    match action {
+        Action::Move { target } => assert!(
+            (target.0 - at.0).abs() + (target.1 - at.1).abs() > 0,
+            "the step is off the midden"
+        ),
+        other => panic!("somebody on foul ground at bedtime should step off it, got {other:?}"),
+    }
+}
