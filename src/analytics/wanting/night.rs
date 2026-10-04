@@ -22,6 +22,15 @@ impl Simulation {
     /// How long before bed people start back to where the others sleep.
     pub(in crate::analytics) const HEADING_HOME_FOR: f32 = 3.0;
 
+    /// The longest one sleep runs before the sleeper stirs, in turns.
+    ///
+    /// Only danger cuts a held action short (see `one_persons_turn`), so a
+    /// night slept in one piece left the weather that came on during it to
+    /// be met at first light. Two adults in four settlements died of the
+    /// weather in four years with the night slept whole, where none had
+    /// before (#299).
+    pub(in crate::analytics) const A_STRETCH_OF_SLEEP: u32 = 4;
+
     /// Near enough to the camp to sleep in it, in cells.
     pub(in crate::analytics) const NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS: i32 = 20;
 
@@ -178,8 +187,11 @@ impl Simulation {
         }
 
         let instead = if asleep {
-            // Until first light: a night is one sleep, not scraps of one.
-            Action::Sleep { duration: turns_left }
+            // Until first light, a stretch at a time: a night is a sleep,
+            // not scraps of one, but nothing wakes a sleeper but danger, and
+            // rain or a frost that came on in the small hours went unanswered
+            // until morning.
+            Action::Sleep { duration: turns_left.min(Self::A_STRETCH_OF_SLEEP) }
         } else {
             match self.where_the_people_sleep() {
                 Some(home)

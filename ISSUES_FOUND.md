@@ -22349,6 +22349,27 @@ Dice counts:
 | seed 0, a year | 726,154 | 770,996 |
 | seed 4242, 120 turns | 7,303 | 7,026 |
 
-Tests in `night_tests` (5): when the night runs, a night is one sleep until
-first light, somebody far off heads home in the evening, the evening fire
+**Slept in stretches.** Only danger cuts a held action short, so a night
+slept as one Sleep left weather that came on in the small hours unanswered
+until first light. Over four years on seeds 0–3, two adults died of the
+weather where none had at #298. A night is now slept two hours at a time
+(`A_STRETCH_OF_SLEEP`), and each waking is a decision. Dice counts with
+stretches: 822,314 a year on seed 0, 8,422 in 120 turns on seed 4242.
+
+**The cost, measured.** Seeds 0–3 over their first four years:
+
+| | #298 | night, one sleep |
+|---|---|---|
+| conceived | 21 | 10 |
+| born | 14 | 8 |
+| adult deaths | 1 | 6 |
+
+On fertile days, the blocks that grew were "immediate needs unmet" (34 → 88
+on seed 0 in year 2) and "reproduction drive not active" (17 → 119 on seed 1
+in year 2). "Not enough put by" did not grow. Both blocks read Hunger,
+Thirst and Rest, and the Reproduction drive builds only while those are
+quiet. That is under investigation.
+
+Tests in `night_tests` (5): when the night runs, a night is slept in
+stretches until first light, somebody far off heads home in the evening, the evening fire
 takes half the wood with tinder, and a night's sleep pays back the night.

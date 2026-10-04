@@ -60,7 +60,8 @@ fn the_night_runs_from_bedtime_to_first_light() {
     assert!(!asleep && heading_home, "the evening is for getting home");
 }
 
-/// Somebody at home at night is put to bed until first light, in one sleep.
+/// Somebody at home at night is put to bed until first light, a stretch at a
+/// time.
 #[test]
 fn a_person_at_night_sleeps_until_first_light() {
     let mut simulation = people(1);
@@ -73,9 +74,18 @@ fn a_person_at_night_sleeps_until_first_light() {
         false,
     );
     assert!(
-        matches!(action, Action::Sleep { duration: 6 }),
-        "three hours before first light should be six turns asleep, got {action:?}"
+        matches!(action, Action::Sleep { duration: 4 }),
+        "three hours before first light should be a two-hour stretch asleep, got {action:?}"
     );
+
+    // And the last stretch ends at first light.
+    set_the_clock(&mut simulation, dawn - 1.0);
+    let action = simulation.what_the_night_asks(
+        0,
+        Action::Gather { resource_type: "wood".to_string() },
+        false,
+    );
+    assert!(matches!(action, Action::Sleep { duration: 2 }), "got {action:?}");
 
     // Running for one's life is not put off for bed.
     let action = simulation.what_the_night_asks(
