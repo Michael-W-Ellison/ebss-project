@@ -22500,7 +22500,33 @@ was labelled the same way, at #298 as well. The excess deaths with a night
 are, at least in part, people starving at the end of winter. That is
 consistent with a third of the day no longer spent working.
 
-The probe now also prints the reckoned cause (`DIEDOF` lines). Still open.
+The probe now also prints the reckoned cause (`DIEDOF` lines).
+
+**With the reckoned cause.** Seeds 0–2 over nine years:
+
+| | #298 | night, as committed | night, hungry let be all evening |
+|---|---|---|---|
+| died of hunger | 7 | 13 | 9 |
+| conceived | 25 | 26 | 24 |
+| alive at the end of year 9 | 51 | 42 | 43 |
+
+- At #298 every hunger death is in year 9, a famine that the night has too.
+- The night adds starvation in years 1, 4 and 6.
+
+Traced on seed 2, these were people at the end of winter (days 300–354)
+holding 11–24 raw whole fish, with a larder reckoned at about 53,000 units.
+They sat at hunger 1.0 for days and walked to distant targets, eating about
+once a day. The food was there and it was not eaten. The way that cuts up a
+carcass sits inside `food_action` (Strategy::GatherWildFood), behind the
+ranker; `a_catch_at_my_feet` (Strategy::EatCarriedFood) only checks snares.
+
+Letting the hungry be through the evening as well as at bedtime was tried.
+It saved some from hunger and lost as many otherwise, and on seed 3 the
+year-9 famine took ten (5 hunger, 5 thirst). It is not kept.
+
+What the night costs, then, is that it brings on sooner a starvation the
+model already had: people who do not eat the food they hold. That fault is
+open, and it is the next thing for the grandchildren.
 
 Tests in `night_tests` (5): when the night runs, a night is slept in
 stretches until first light, somebody far off heads home in the evening, the evening fire
