@@ -22473,6 +22473,35 @@ function, `World::is_out_of_the_weather_at`. Under cover, a sleeper stays
 put even on foul ground. Dice counts: 912,501 a year on seed 0, and 9,667 in
 120 turns on seed 4242. Test: `a_sleeper_goes_in_out_of_the_weather`.
 
+**And then it turned out not to be the weather.** Seeds 0–3 over nine years
+with sleepers going in:
+
+| | #298 | night, before cover | night, with cover |
+|---|---|---|---|
+| conceived | 40 | 32 | 40 |
+| adult deaths labelled "the weather" | 5 | 15 | 14 |
+| all adult deaths | 11 | 21 | 20 |
+| alive at the end of year 9 | 69 | 55 | 59 |
+
+Going in barely moved it, so a new probe, `zz_weather_deaths`, traced the
+last two days of everybody who died.
+
+The generations probe labels a death by `what_last_took_health`. That is
+whatever nicked the body last, and in winter it is nearly always a cold
+tick. The population's own reckoning, `what_took_the_most`, gave a
+different answer. The first death traced, seed 1 in year 1, was:
+- a 31-year-old at hunger 1.0 for three days in winter;
+- hypothermic, out in the open, and not asleep;
+- killed at health 86 in one turn by `apply_starvation_damage`, which takes
+  all of a body's health when its reserve is empty.
+
+That death was starvation. Every "the weather" in this entry's tables above
+was labelled the same way, at #298 as well. The excess deaths with a night
+are, at least in part, people starving at the end of winter. That is
+consistent with a third of the day no longer spent working.
+
+The probe now also prints the reckoned cause (`DIEDOF` lines). Still open.
+
 Tests in `night_tests` (5): when the night runs, a night is slept in
 stretches until first light, somebody far off heads home in the evening, the evening fire
 takes half the wood with tinder, and a night's sleep pays back the night.
