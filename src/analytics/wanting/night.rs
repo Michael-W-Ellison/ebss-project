@@ -186,6 +186,28 @@ impl Simulation {
             return Action::Eat { food_type: "generic".to_string() };
         }
 
+        // **Nobody goes to bed thirsty**, nor hungry with nothing in hand
+        // to eat. A need left unanswered does not wait for morning: it puts
+        // every need that stands behind it to sleep as well (see
+        // `DriveState::tick`), and the wish for a child stands behind
+        // hunger, thirst, rest and safety. Sent to bed as they were, people
+        // on seeds 0 and 1 spent two to three times as many night turns
+        // thirsty in their second year as they had before there was a night,
+        // and fertile days that came all clear fell from 29 and 9 to 4 and 2
+        // (#299).
+        // They see to it, and then they sleep.
+        let thirsty = agent
+            .drives
+            .get(crate::core::DriveType::Thirst)
+            .is_some_and(|thirst| thirst.is_active());
+        if thirsty || (asleep && hungry) {
+            *self
+                .what_a_threat_came_to
+                .entry(if thirsty { "night: let be, thirsty" } else { "night: let be, hungry" }.to_string())
+                .or_insert(0) += 1;
+            return action;
+        }
+
         let instead = if asleep {
             // Until first light, a stretch at a time: a night is a sleep,
             // not scraps of one, but nothing wakes a sleeper but danger, and

@@ -22368,7 +22368,22 @@ On fertile days, the blocks that grew were "immediate needs unmet" (34 → 88
 on seed 0 in year 2) and "reproduction drive not active" (17 → 119 on seed 1
 in year 2). "Not enough put by" did not grow. Both blocks read Hunger,
 Thirst and Rest, and the Reproduction drive builds only while those are
-quiet. That is under investigation.
+quiet.
+
+**Nobody goes to bed thirsty.** A need left unanswered does not just pause
+the needs that stand behind it. `DriveState::tick` makes them fall quiet,
+and Reproduction stands behind hunger, thirst, rest and safety. On seeds 0
+and 1 in year 2:
+
+| | #298 | night, one sleep | night, stretches |
+|---|---|---|---|
+| night turns with Thirst on, seed 0 / seed 1 | 6.1k / 5.8k | 16.0k / 15.8k | 13.3k / 17.1k |
+| fertile days all clear | 29 / 9 | 0 / 4 | 4 / 2 |
+
+Stretches did cut hunger-on turns to about a third, and turns exposed or too
+cold by about half. The night now lets a thirsty person, or a hungry one
+with nothing in hand, see to it before bed. Dice counts: 833,642 a year on
+seed 0, and 7,343 in 120 turns on seed 4242.
 
 Tests in `night_tests` (5): when the night runs, a night is slept in
 stretches until first light, somebody far off heads home in the evening, the evening fire
