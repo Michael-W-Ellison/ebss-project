@@ -547,6 +547,13 @@ impl Simulation {
             .with_message(message)
     }
 
+    /// How far a coupling that did not take dulls the wish for a child, in
+    /// the carrier's fertile window and outside it. Outside, it is about a
+    /// day of the drive's regrowth, so that a pair does not try every turn
+    /// they are together; see `mating`.
+    pub(in crate::analytics) const A_FAILED_TRY_IN_THE_WINDOW: f32 = 0.3;
+    pub(in crate::analytics) const A_TRY_OUTSIDE_THE_WINDOW: f32 = 0.05;
+
     /// `Action::Mate`.
     pub(in crate::analytics) fn mating(&mut self, target_agent_id: &uuid::Uuid, agent_index: usize, rng: &mut rand::rngs::StdRng) -> ActionResult {
         use crate::agents::reproduction::{can_mate, MateSelectionCriteria};
@@ -706,19 +713,31 @@ impl Simulation {
                     initiator_id, target_id
                 );
 
-                // Still reduce drives somewhat
+                // Still reduce drives somewhat: by a good deal after a try
+                // in the carrier's one chance this cycle, and by about a
+                // day's regrowth after a try outside it. Once people slept
+                // together every night they coupled four to seven times as
+                // often, nearly always outside the window, and at 0.3 a time
+                // (a week to build back) the wish for a child was spent on
+                // the carrier's fertile day: fertile days lost to "drive not
+                // active" went from 29 and 17 to 85 and 139 (#299).
+                let dulled = if its_chance_this_cycle {
+                    Self::A_FAILED_TRY_IN_THE_WINDOW
+                } else {
+                    Self::A_TRY_OUTSIDE_THE_WINDOW
+                };
                 let agent = &mut self.population.agents[agent_index];
                 if let Some(repro_drive) = agent.drives.get_mut(DriveType::Reproduction) {
-                    repro_drive.decrease(0.3);
+                    repro_drive.decrease(dulled);
                 }
 
                 let target = &mut self.population.agents[target_index];
                 if let Some(repro_drive) = target.drives.get_mut(DriveType::Reproduction) {
-                    repro_drive.decrease(0.3);
+                    repro_drive.decrease(dulled);
                 }
 
                 ActionResult::success()
-                    .with_drive_change(DriveType::Reproduction, -0.3)
+                    .with_drive_change(DriveType::Reproduction, -dulled)
                     .with_energy_cost(10.0)
                     .with_message("Mating occurred but no conception".to_string())
             }

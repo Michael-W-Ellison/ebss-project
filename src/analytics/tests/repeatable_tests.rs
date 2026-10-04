@@ -392,8 +392,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // year's people are rested and take more turns between them. Then up
     // 6.7% more, to 822,314, when the night is slept in two-hour stretches
     // and each waking is a decision; and 833,642 when nobody goes to bed
-    // thirsty, or hungry with nothing to eat.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 833_642;
+    // thirsty, or hungry with nothing to eat; and 881,777 when a coupling
+    // outside the fertile window dulls the wish for a child by a day's
+    // regrowth rather than a week's.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 881_777;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

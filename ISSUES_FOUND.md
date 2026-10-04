@@ -22385,6 +22385,27 @@ cold by about half. The night now lets a thirsty person, or a hungry one
 with nothing in hand, see to it before bed. Dice counts: 833,642 a year on
 seed 0, and 7,343 in 120 turns on seed 4242.
 
+**Coupling outside the fertile window.** With thirst answered, the
+Reproduction drive was still off far more often than at #298. It was
+unlocked but low: in year 2, 42k and 69k grown-person turns at 0 to 0.2,
+against about 8.8k at #298. Sleeping together every night, couples tried
+four to seven times as often:
+
+| `Mate` in two years | #298 | night |
+|---|---|---|
+| seed 0 | 56 | 216 |
+| seed 1 | 76 | 524 |
+
+Nearly every try fell outside the carrier's one fertile day a month. A try
+that did not take cost both partners 0.3 of the drive, which takes a week to
+build back at 0.001 a turn. So on the fertile day the wish for a child was
+spent.
+
+A try outside the window now dulls the drive by 0.05
+(`A_TRY_OUTSIDE_THE_WINDOW`), about a day's regrowth, so a pair still does
+not try every turn. A failed try inside the window costs 0.3, as before.
+Dice count: 881,777 a year on seed 0.
+
 Tests in `night_tests` (5): when the night runs, a night is slept in
 stretches until first light, somebody far off heads home in the evening, the evening fire
 takes half the wood with tinder, and a night's sleep pays back the night.
