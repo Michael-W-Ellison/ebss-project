@@ -22406,6 +22406,23 @@ A try outside the window now dulls the drive by 0.05
 not try every turn. A failed try inside the window costs 0.3, as before.
 Dice count: 881,777 a year on seed 0.
 
+**Where it stands.** Seeds 0–3 over their first four years:
+
+| | #298 | night, one sleep | night, as committed |
+|---|---|---|---|
+| conceived | 21 | 10 | 21 |
+| born | 14 | 8 | 16 |
+| adult deaths | 1 | 6 | 7 |
+
+Conceptions are back to where they were. Adult deaths are not:
+- 3 from the weather;
+- 2 from illness off foul ground;
+- 1 from food on the turn;
+- 1 from a wound that turned.
+
+At #297, on all 12 seeds over four years, the weather took 2. Those deaths
+are open.
+
 Tests in `night_tests` (5): when the night runs, a night is slept in
 stretches until first light, somebody far off heads home in the evening, the evening fire
 takes half the wood with tinder, and a night's sleep pays back the night.
