@@ -130,10 +130,6 @@ impl FatigueState {
         let fatigue_decrease = recovery_rate;
         self.level = (self.level - fatigue_decrease).max(0.0);
 
-        // Reduce sleep debt (slower than fatigue recovery)
-        if self.sleep_debt > 0.0 {
-            self.sleep_debt = (self.sleep_debt - (recovery_rate * 0.5)).max(0.0);
-        }
 
         // Reset inadequate sleep counter if we've slept enough
         if self.last_sleep_duration > 300 { // ~5 hours minimum
@@ -141,6 +137,24 @@ impl FatigueState {
         }
 
         fatigue_decrease
+    }
+
+    /// Pay back sleep debt with the sleep actually had.
+    ///
+    /// **Hours for hours.** Debt is counted in hours - an hour owed for every
+    /// two kept awake past sixteen - and was paid back here in units of
+    /// fatigue: three thousandths of a point a step, ten steps to a half hour
+    /// asleep, so a half hour of sleep repaid a hundredth of an hour. A debt
+    /// run up in one long day stood for months, and the waking hours
+    /// tired people up to three and a half times as fast as they should
+    /// have the whole time: the median grown person on the big map carried
+    /// five and a half hours of it while never going more than eleven hours
+    /// without a sleep, and sat at nine tenths fatigued, which is what took
+    /// their fertility under the bar (#298). Now a half hour asleep pays back
+    /// a half hour owed, better or worse as the sleep was.
+    pub fn slept_for(&mut self, minutes: u32, sleep_quality: f32) {
+        self.sleep_debt =
+            (self.sleep_debt - minutes as f32 / 60.0 * sleep_quality.clamp(0.0, 1.0)).max(0.0);
     }
 
     /// Called when agent wakes up

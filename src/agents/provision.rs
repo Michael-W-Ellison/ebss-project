@@ -428,6 +428,17 @@ pub struct WintersSeen {
     pub in_one_now: bool,
     /// The last day of the year counted, so a day is not counted twice
     last_day_counted: Option<u32>,
+
+    /// What this one had put by on the day the land last stopped giving.
+    #[serde(default)]
+    put_by_going_in: Option<f32>,
+    /// What a hungry gap has taken out of this one's store, on average over
+    /// the gaps seen through: what was put by going in, less what was left
+    /// coming out. `None` before the first gap is out, and whenever the last
+    /// one ran the store dry - a store that ran out says only that the gap
+    /// took at least that much. See `WintersSeen::what_a_gap_takes`.
+    #[serde(default)]
+    what_a_gap_took: Option<f32>,
 }
 
 impl WintersSeen {
@@ -450,6 +461,46 @@ impl WintersSeen {
             }
             _ => {}
         }
+    }
+
+    /// Note what this one has put by today, so that what a hungry gap takes
+    /// can be counted rather than assumed. Call it once a day.
+    ///
+    /// **What a gap really takes.** The breeding gate asked for a whole gap's
+    /// eating for a parent and a newborn, as if nothing could be had in it but
+    /// what was in the pits. People fish, hunt and trap through it, and a
+    /// settlement on the big map came through its winters with the pits at
+    /// half of that and hardly a death - so the gate stayed shut on nine
+    /// fertile days in ten for years (#298). #265 put it plainly: what a winter
+    /// costs is better learned from the store itself, by how far it fell.
+    pub fn note_the_larder(&mut self, day_of_year: u32, put_by: f32) {
+        let gap = how_long_the_land_gives_nothing();
+        let starts = when_the_land_stops_giving();
+        let ends = (starts + gap) % crate::environment::seasons::DAYS_PER_YEAR;
+
+        if day_of_year == starts {
+            self.put_by_going_in = Some(put_by);
+        } else if day_of_year == ends {
+            if let Some(going_in) = self.put_by_going_in.take() {
+                // A store that ran dry has told us only a floor, and the gap
+                // is better sized by the calendar than by a floor.
+                self.what_a_gap_took = if put_by <= 0.0 {
+                    None
+                } else {
+                    let took = (going_in - put_by).max(0.0);
+                    Some(match self.what_a_gap_took {
+                        Some(before) => (before + took) / 2.0,
+                        None => took,
+                    })
+                };
+            }
+        }
+    }
+
+    /// What a hungry gap takes out of this one's store, as counted, if it has
+    /// been counted and the last gap did not run the store dry.
+    pub fn what_a_gap_takes(&self) -> Option<f32> {
+        self.what_a_gap_took
     }
 
     /// How long this agent expects a winter to be.

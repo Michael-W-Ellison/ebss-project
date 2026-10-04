@@ -415,6 +415,20 @@ pub struct Physiology {
     #[serde(default)]
     pub what_i_burn_in_a_day: f32,
 
+    /// What this body has actually been burning in a day lately, by its own
+    /// count, and kept.
+    ///
+    /// `what_i_burn_in_a_day` is meant to be that count, but
+    /// `now_a_body_of` resets it to the table every turn as the body is sized
+    /// for its age, so every grown body in every settlement reads the same
+    /// 1,440 - about half as much again as they burn (#264). The Preparedness
+    /// reckoning was tried on the real count and filled the pits too short for
+    /// the winter (#265), so that figure is left as it is and this one is kept
+    /// beside it, for what asks how much a body really gets through. Nought
+    /// until the first day has been counted.
+    #[serde(default)]
+    pub burned_lately: f32,
+
     /// How much has ever gone down, and how many sittings it took
     #[serde(default)]
     pub units_ever_eaten: f32,
@@ -467,6 +481,7 @@ impl Physiology {
             burned_today: 0.0,
             what_i_burn_in_a_day: UNITS_BURNED_IN_AN_ORDINARY_DAY
                 * what_a_body_this_size_burns(share),
+            burned_lately: 0.0,
             units_ever_eaten: 0.0,
             meals_ever_eaten: 0,
             spilled_at_the_brim: 0.0,
@@ -495,6 +510,16 @@ impl Physiology {
         // disagreed with themselves.
         self.what_i_burn_in_a_day =
             UNITS_BURNED_IN_AN_ORDINARY_DAY * what_a_body_this_size_burns(share);
+    }
+
+    /// What this body gets through in a day, by its own count where it has
+    /// one and from the table where it has not yet lived a day.
+    pub fn what_i_really_get_through_in_a_day(&self) -> f32 {
+        if self.burned_lately > 0.0 {
+            self.burned_lately
+        } else {
+            self.what_i_burn_in_a_day
+        }
     }
 
     /// Whether there is room for another mouthful.
@@ -699,6 +724,11 @@ impl Physiology {
                 self.what_i_burn_in_a_day =
                     self.what_i_burn_in_a_day * 0.75 + self.burned_today * 0.25;
             }
+            self.burned_lately = if self.burned_lately <= 0.0 {
+                self.burned_today
+            } else {
+                self.burned_lately * 0.75 + self.burned_today * 0.25
+            };
             self.burned_today = 0.0;
         }
 

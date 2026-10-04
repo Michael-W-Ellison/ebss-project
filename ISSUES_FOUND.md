@@ -22202,3 +22202,76 @@ length. None of those was changed.
 
 Dice count: seed 0 over a year, 653,035 → 676,971. `sickness_tests` and
 `the_first_children_tests` pass.
+
+### 298. Why the big map had almost no children
+
+With #297 in, settlements on the big map hardly die at all: 12 seeds, four
+years, one or two deaths a settlement. But they hardly breed either. Seeds
+0–3 at #297 conceived 2 children between them in three to four years. A
+grandchild needs a child born early enough to grow up and have one of their
+own, so nothing else matters until that changes.
+
+New probes:
+- `zz_breeding` reports each adult's reason every turn, food put by against
+  what the gate asks, and each factor in fertility.
+- `zz_chances` takes each grown person's fertile day (one a month) and finds
+  how far it got towards a conception: fed, drive, fertility, a ready
+  partner, a ready partner near.
+
+Three things stood between a settlement and its children, in this order.
+
+**1. The gate asked half as much again as a body eats.** The gate charged
+each adult `what_i_burn_in_a_day`, and `now_a_body_of` resets that to the
+table's 1,440 every turn (#264). #265 tried the body's own count everywhere,
+and it starved the winters, because the Preparedness drive reads the same
+figure. The body's own count is now kept in a field of its own,
+`Physiology::burned_lately`, which the turn does not reset. Only the gate
+reads it, through `what_i_really_get_through_in_a_day`. The pits are still
+filled to the table's figure.
+
+**2. Everybody was nine tenths fatigued, so fertility sat under the bar.**
+Median fatigue was 0.9 at the end of year 1. Fertility multiplies by 0.6 at
+moderate fatigue and 0.2 at severe, and the bar is 0.3. Sleep debt is
+counted in hours, an hour owed for every two kept awake past sixteen, but it
+was paid back in units of fatigue: 0.0015 a step, ten steps to a half-hour
+Sleep. The median adult carried five and a half hours of debt (the most,
+23.9) while never going more than eleven hours without sleeping, and the
+debt multiplies how fast waking hours tire. `FatigueState::slept_for` now
+pays back debt hour for hour: half an hour asleep repays half an hour owed,
+scaled by how good the sleep was. Median fertility went from about 0.3 to
+about 0.5. Fatigue still sits near 0.75, because people sleep only when the
+Rest drive wins, about 2.4 turns a day. Nothing makes anybody sleep at
+night, and that is left open.
+
+**3. The gate asked for a whole winter out of the pits.** Even at the
+body's own count, nine fertile days in ten failed on "not enough put by".
+It asked for the whole hungry gap's eating, for parent and newborn, from
+this person's share of the store, as if nothing could be had in the gap.
+People fish, hunt and trap through it, and come through their winters with
+the pits at about half of that and hardly a death. #265 named the remedy:
+learn what a winter costs from the store itself. `WintersSeen::note_the_larder`
+records each person's store when the land stops giving and when it starts
+again. The gate now asks for what the last gaps actually took out of their
+share, averaged, for them and the extra mouth. Before the first gap is out,
+or after a gap that ran the store dry (which only shows a floor), it asks
+for the whole gap, as before.
+
+Fertile days on seeds 0 and 2, big map:
+
+| | year 1 | year 2 | year 3 |
+|---|---|---|---|
+| all clear, before (seed 0) | 0 | 4 | 0 |
+| all clear, after (seed 0) | 0 | 29 | 0 |
+| all clear, after (seed 2) | 0 | 20 | 0 |
+
+In year 3 the gate closes again as the year-2 children arrive and take their
+shares. The pregnant and nursing are not counted as carriers, so the count
+of carrier-days falls too. That is the gate doing its job.
+
+The remaining blocks on a fertile day, in order: not enough put by;
+immediate needs unmet (mostly tiredness); a ready partner, but not within
+500 m that day; the reproduction drive not active.
+
+Dice count: seed 0 over a year, 676,971 → 726,154. The tests of the larders,
+sleeping, the first children, reproduction, fatigue, provisions, physiology
+and pregnancy pass (130).

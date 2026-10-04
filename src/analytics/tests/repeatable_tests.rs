@@ -377,7 +377,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // And up 3.7% for #297: a wound turns and a soaking tells at their
     // chances a day rather than four times them, so more of the settlement
     // lives through its first year.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 676_971;
+    // And up 7.3% for #298: the gate for a child asks what a body really
+    // gets through and what a winter really took out of the store, and sleep
+    // pays back sleep debt hour for hour, so children are conceived and there
+    // are more people about to take turns.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 726_154;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

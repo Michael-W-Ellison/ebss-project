@@ -6795,7 +6795,15 @@ impl Agent {
         // with none - and once children lived, a settlement of six grown
         // people had twelve small ones by its fourth winter and starved in
         // it. See ISSUES_FOUND #261.
-        let for_the_two_of_them = self.state.physiology.what_i_burn_in_a_day
+        // **At what this body really gets through, not the table's figure.**
+        // Every grown body read 1,440 a day here, half as much again as they
+        // burn, so the gate asked half as much again as a winter takes: on
+        // the big map the pits peaked at 0.5 to 1.0 of the ask, and in two
+        // years four settlements conceived twice between them (#298). The
+        // pits are still filled to the table's figure - that margin is what
+        // carries a winter's waste and rot (#265) - but whether there is
+        // enough for a child is asked of what the parent actually eats.
+        let for_the_two_of_them = self.state.physiology.what_i_really_get_through_in_a_day()
             * (1.0 + self.the_small_ones_i_answer_for.max(0.0) + what_a_body_this_age_eats(0));
 
         let put_by = match self.state.what_the_larder_says.as_ref() {
@@ -6803,7 +6811,20 @@ impl Agent {
             None => self.food_put_by() as f32 * super::provision::UNITS_IN_ONE_STORED_ITEM,
         };
 
-        put_by >= for_the_two_of_them * gap
+        // **What a gap has actually taken, where that has been counted.** The
+        // calendar's answer - every day of the gap eaten out of the pits - is
+        // what a first winter has to go on, and what a winter that ran the
+        // store dry goes back to. Once a gap has been seen through with food
+        // to spare, it is what that gap took out of this one's share, for
+        // them and for the extra mouth (#298).
+        let a_gap = match self.state.winters_seen.what_a_gap_takes() {
+            Some(took) => {
+                took * (1.0 + self.the_small_ones_i_answer_for.max(0.0) + what_a_body_this_age_eats(0))
+            }
+            None => for_the_two_of_them * gap,
+        };
+
+        put_by >= a_gap
     }
 
     /// Check if agent should attempt reproduction given current survival state
