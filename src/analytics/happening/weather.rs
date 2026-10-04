@@ -274,11 +274,8 @@ impl Simulation {
 
             let environmental_temp = climate.temperature;
 
-            // Check if agent has shelter
-            // Agent has shelter if they're in a completed building
-            let mut has_shelter = self.world.buildings.iter().any(|b| {
-                b.position == agent_pos && b.is_completed()
-            }) || matches!(terrain_type, crate::world::TerrainType::Forest); // Forest provides partial shelter
+            // Check if agent has shelter: a finished roof, or the trees
+            let mut has_shelter = self.world.is_out_of_the_weather_at(&agent_pos);
 
             // The young are kept warm by whoever is looking after them.
             //

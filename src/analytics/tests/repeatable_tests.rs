@@ -202,7 +202,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // each waking is a decision. Down to 7,343 when nobody goes to bed
     // thirsty, or hungry with nothing to eat. Up to 7,392 when somebody on
     // foul ground at bedtime steps off it, and a remedy is taken before bed.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_392;
+    // Up to 9,667 when sleepers go in under a roof or the trees first, the
+    // trees being near on this map.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 9_667;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -397,7 +399,8 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // outside the fertile window dulls the wish for a child by a day's
     // regrowth rather than a week's; and 949,046 when somebody on foul
     // ground at bedtime steps off it, and a remedy is taken before bed.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 949_046;
+    // Down to 912,501 when sleepers go in under a roof or the trees first.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 912_501;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -32,6 +32,18 @@ fn first_light(simulation: &Simulation) -> f32 {
     12.0 - simulation.world.climate.calendar.current_season().day_length() / 2.0
 }
 
+/// Stand somebody among trees, so that bed is where they are.
+fn under_the_trees(simulation: &mut Simulation, index: usize) {
+    let at = simulation.population.agents[index].state.position;
+    if let Some(tile) = simulation
+        .world
+        .grid
+        .get_tile_mut(&crate::world::Position::new(at.0, at.1))
+    {
+        tile.terrain.terrain_type = crate::world::TerrainType::Forest;
+    }
+}
+
 fn set_the_clock(simulation: &mut Simulation, hour: f32) {
     simulation.world.climate.calendar.time_of_day = hour.rem_euclid(24.0);
 }
@@ -65,6 +77,7 @@ fn the_night_runs_from_bedtime_to_first_light() {
 #[test]
 fn a_person_at_night_sleeps_until_first_light() {
     let mut simulation = people(1);
+    under_the_trees(&mut simulation, 0);
     let dawn = first_light(&simulation);
     set_the_clock(&mut simulation, dawn - 3.0);
 
@@ -193,4 +206,59 @@ fn nobody_sleeps_on_foul_ground() {
         ),
         other => panic!("somebody on foul ground at bedtime should step off it, got {other:?}"),
     }
+}
+
+/// Sent to bed out in the open with trees a short walk off, somebody goes in
+/// among them first; standing among them already, they sleep where they are.
+#[test]
+fn a_sleeper_goes_in_out_of_the_weather() {
+    let mut simulation = people(1);
+    let at = simulation.population.agents[0].state.position;
+    let wood = crate::world::Position::new(at.0 + 3, at.1);
+    for x in [at.0, wood.x] {
+        let tile = simulation
+            .world
+            .grid
+            .get_tile_mut(&crate::world::Position::new(x, at.1))
+            .expect("on the map");
+        tile.terrain.terrain_type = if x == at.0 {
+            crate::world::TerrainType::Plains
+        } else {
+            crate::world::TerrainType::Forest
+        };
+    }
+    // Nothing nearer than the wood: clear any trees closer in.
+    for dy in -3..=3 {
+        for dx in -3..=3 {
+            let p = crate::world::Position::new(at.0 + dx, at.1 + dy);
+            if p == wood {
+                continue;
+            }
+            if let Some(tile) = simulation.world.grid.get_tile_mut(&p) {
+                if matches!(tile.terrain.terrain_type, crate::world::TerrainType::Forest) {
+                    tile.terrain.terrain_type = crate::world::TerrainType::Plains;
+                }
+            }
+        }
+    }
+    let dawn = first_light(&simulation);
+    set_the_clock(&mut simulation, dawn - 3.0);
+
+    let action = simulation.what_the_night_asks(
+        0,
+        Action::Gather { resource_type: "wood".to_string() },
+        false,
+    );
+    match action {
+        Action::Move { target } => assert_eq!((target.0, target.1), (wood.x, wood.y)),
+        other => panic!("somebody in the open at bedtime should go in among the trees, got {other:?}"),
+    }
+
+    simulation.population.agents[0].state.position.0 = wood.x;
+    let action = simulation.what_the_night_asks(
+        0,
+        Action::Gather { resource_type: "wood".to_string() },
+        false,
+    );
+    assert!(matches!(action, Action::Sleep { .. }), "under the trees, they sleep: got {action:?}");
 }

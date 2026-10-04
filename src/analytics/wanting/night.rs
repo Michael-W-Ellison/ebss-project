@@ -90,6 +90,48 @@ impl Simulation {
         Some(roof.unwrap_or(middle))
     }
 
+    /// The nearest clean ground out of the weather within
+    /// `NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS`, for somebody about to sleep
+    /// where they are not: under a finished roof, or among trees.
+    ///
+    /// `None` when they are covered already, or there is no such ground in
+    /// reach. Foul ground is passed over, or a sleeper would be sent onto a
+    /// midden under a roof and straight off it again.
+    pub(in crate::analytics) fn somewhere_out_of_the_weather(
+        &self,
+        from: (i32, i32, i32),
+    ) -> Option<(i32, i32, i32)> {
+        use crate::world::Position;
+
+        let fit = |at: &Position| {
+            self.world.is_out_of_the_weather_at(at)
+                && self
+                    .world
+                    .grid
+                    .get_tile(at)
+                    .is_some_and(|tile| !tile.soil.is_foul() && tile.terrain.is_walkable())
+        };
+        if fit(&Position::new(from.0, from.1)) {
+            return None;
+        }
+
+        let reach = Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS;
+        let mut best: Option<((i32, i32), i32)> = None;
+        for dy in -reach..=reach {
+            for dx in -reach..=reach {
+                let how_far = dx.abs() + dy.abs();
+                if best.is_some_and(|(_, nearest)| how_far >= nearest) {
+                    continue;
+                }
+                let there = Position::new(from.0 + dx, from.1 + dy);
+                if fit(&there) {
+                    best = Some(((there.x, there.y), how_far));
+                }
+            }
+        }
+        best.map(|((x, y), _)| (x, y, from.2))
+    }
+
     /// An evening at home: a fire, and supper cooked on it.
     ///
     /// **Why the evening has a fire in it.** With a third of the day asleep,
@@ -218,9 +260,29 @@ impl Simulation {
         // where everybody else had been all evening. Foul ground killed two
         // in four settlements in four years, where it had killed none
         // before (#299).
-        let off_the_midden = if asleep { self.somewhere_that_does_not_stink(here) } else { None };
+        // Under cover, a sleeper stays put even on foul ground: the ground
+        // tells one day in twenty at its very worst, and the weather does not
+        // wait that long.
+        let under_cover = self
+            .world
+            .is_out_of_the_weather_at(&crate::world::Position::new(here.0, here.1));
+        let off_the_midden = if asleep && !under_cover {
+            self.somewhere_that_does_not_stink(here)
+        } else {
+            None
+        };
 
-        let instead = if let Some(clean) = off_the_midden {
+        // **And nobody sleeps out in the rain** when there is a roof or the
+        // trees within a short walk. Awake, people went in when the weather
+        // came on; asleep where they stood, the rain, the wind and the storm
+        // did their damage all night without a word, because none of them
+        // shows as a hurt until the body is cold. Over nine years on seeds
+        // 0-3 the weather killed fifteen where it had killed five (#299).
+        let out_of_the_weather = if asleep { self.somewhere_out_of_the_weather(here) } else { None };
+
+        let instead = if let Some(cover) = out_of_the_weather {
+            Action::Move { target: cover }
+        } else if let Some(clean) = off_the_midden {
             Action::Move { target: clean }
         } else if asleep {
             // Until first light, a stretch at a time: a night is a sleep,
@@ -257,6 +319,7 @@ impl Simulation {
             .what_a_threat_came_to
             .entry(
                 match (&instead, asleep) {
+                    (Action::Move { .. }, true) if out_of_the_weather.is_some() => "night: went in out of the weather",
                     (Action::Move { .. }, true) => "night: stepped off foul ground",
                     (_, true) => "night: slept",
                     (Action::Move { .. }, false) => "night: headed home",

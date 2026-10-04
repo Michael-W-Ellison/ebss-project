@@ -22447,8 +22447,31 @@ Seeds 0–3 over their first four years, with all of the above:
 
 The four adult deaths are 2 of hunger, 1 by mishap and 1 of the weather
 (off foul ground). The weather took 3 before this change, and 1 after it,
-on four seeds. That is too few to call. The 12-seed, 20-year run will say
-more.
+on four seeds. That is too few to call.
+
+**Nine years said more.** Seeds 0–3 over their first nine years:
+
+| | #298 | night, as above |
+|---|---|---|
+| conceived | 40 | 32 |
+| adult deaths of the weather | 5 | 15 |
+| alive at the end of year 9 | 69 | 55 |
+
+#298's five came in year 9, when the founders are getting on. The night
+added deaths in years 5, 6 and 8 as well.
+
+Rain, wind and storm do damage to anybody not under cover
+(`ExposureStatus::update`), and none of it shows in `active_exposures` until
+the body has gone cold. So the night's "let be, the weather" never fired
+for them, and people slept where they stood through it. Awake, they had
+gone in.
+
+Now somebody about to sleep goes in first, to the nearest clean ground out
+of the weather within 20 cells (`somewhere_out_of_the_weather`). That is a
+finished roof or the trees: what the weather code counts as cover, now one
+function, `World::is_out_of_the_weather_at`. Under cover, a sleeper stays
+put even on foul ground. Dice counts: 912,501 a year on seed 0, and 9,667 in
+120 turns on seed 4242. Test: `a_sleeper_goes_in_out_of_the_weather`.
 
 Tests in `night_tests` (5): when the night runs, a night is slept in
 stretches until first light, somebody far off heads home in the evening, the evening fire

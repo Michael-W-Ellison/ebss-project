@@ -1987,6 +1987,17 @@ impl World {
         self.buildings.iter().find(|b| &b.position == pos)
     }
 
+    /// Whether somebody standing here is out of the weather: under a
+    /// finished roof, or in among trees, which is partial shelter. What the
+    /// weather does to a body asks this, and so does where people bed down
+    /// for the night (#299).
+    pub fn is_out_of_the_weather_at(&self, pos: &Position) -> bool {
+        self.buildings.iter().any(|b| &b.position == pos && b.is_completed())
+            || self.grid.get_tile(pos).is_some_and(|tile| {
+                matches!(tile.terrain.terrain_type, crate::world::TerrainType::Forest)
+            })
+    }
+
     pub fn remove_depleted_resources(&mut self) {
         // A renewable node stays on the map when emptied so it can regrow;
         // deleting it would make berry patches and fish runs single-use and
