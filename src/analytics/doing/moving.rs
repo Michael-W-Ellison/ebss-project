@@ -44,9 +44,11 @@ impl Simulation {
         for _ in 0..(*duration).max(1) {
             fatigue_recovered += agent.sleep_turn(current_turn, &quality_factors);
         }
-        // Whatever the steps above, a Sleep is half an hour asleep (#298).
+        // A Sleep holds its sleeper a turn for each step above (see
+        // `AgentState::how_long_this_takes`), and all of it pays back what is
+        // owed (#298, #299).
         agent.fatigue.slept_for(
-            crate::environment::seasons::MINUTES_PER_TURN,
+            (*duration).max(1) * crate::environment::seasons::MINUTES_PER_TURN,
             quality_factors.calculate_quality(),
         );
         agent.wake_up(current_turn);

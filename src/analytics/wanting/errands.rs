@@ -583,7 +583,7 @@ impl Simulation {
     /// digging. He drinks, and goes back to it. What ends an errand is
     /// arriving, giving up on it, being frightened off it, or leaving it so
     /// long that the world has moved on - see `Errand::stale`.
-    fn set_the_errand_aside(&mut self, agent_index: usize, action: Action) -> Action {
+    pub(in crate::analytics) fn set_the_errand_aside(&mut self, agent_index: usize, action: Action) -> Action {
         let waited = {
             let Some(errand) = self.population.agents[agent_index].errand.as_mut() else {
                 return action;

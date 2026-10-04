@@ -22275,3 +22275,80 @@ immediate needs unmet (mostly tiredness); a ready partner, but not within
 Dice count: seed 0 over a year, 676,971 → 726,154. The tests of the larders,
 sleeping, the first children, reproduction, fatigue, provisions, physiology
 and pregnancy pass (130).
+
+### 299. Nobody slept at night
+
+#298 left this open: people slept only when the Rest drive won, about 2.4
+turns a day, scattered through the day and night alike. Median fatigue sat
+near 0.75, and fertility multiplies by 0.6 at moderate fatigue.
+
+`wanting/night.rs` is asked about the action already chosen each turn, after
+the errand has had its say, and can override it:
+
+- **Night.** First light is at `12 - day_length / 2`. The night's sleep is
+  24 hours less the day, less two, held between 7 and 9 hours, and ends at
+  first light. Somebody whose bedtime has come sleeps until first light: one
+  `Sleep` of that many turns, not half-hour snatches. A Sleep holds a person
+  for its length, so one action covers the night.
+- **Evening.** For three hours before bedtime, somebody more than 20 cells
+  from where the people sleep walks back there. That place is the nearest
+  finished building to the middle of the grown people, or the middle itself
+  if there is none. It is worked out from everybody, not from the asker,
+  because `where_the_camp_is` is relative to the asker and sent nobody home.
+- **Supper.** Somebody at home who is old enough to cook and holds something
+  worth cooking gets an evening fire:
+  - a lit fire beside them is cooked at;
+  - a lit fire nearby is walked to;
+  - with the wood in hand, a fire is lit;
+  - else wood is gathered if trees are near.
+  Somebody hungry at bedtime and carrying food eats first.
+- **Let be.** The night does not override:
+  - an infant;
+  - the starving or parched;
+  - somebody too cold, or in the weather;
+  - somebody running away;
+  - somebody already eating, cooking or lighting a fire.
+  Each reason is tallied as `night: let be, …`.
+
+Two things in the old code stopped this working:
+
+- **Sleep paid back half an hour however long it was.** `slept_for` was
+  given one turn's minutes for every Sleep. A night is a Sleep of 16 to 18
+  turns, so it repaid half an hour of debt. It now repays the whole length:
+  `duration × MINUTES_PER_TURN`.
+- **The evening fire asked for the full ten sticks.** It now asks
+  `wood_a_fire_here_takes`, which `lighting_a_fire` also uses: five with
+  tinder, or the fuel alone at an unlit hearth.
+  - The cooking test gives one person 40 wood, fish and a cook's hands. They
+    store 30 of the wood and can carry about eight sticks.
+  - Holding eight and tinder, they were told to gather until they had ten,
+    and set down whatever went over their load.
+  - Awake all night they had happened on a fire by day 2. Asleep at night,
+    nothing was lit in 25 days.
+  - With the shared figure, they light the evening fire on day 1 and cook
+    eight times in twelve days.
+
+Measured on the big map, seeds 0 and 1, one to two years:
+
+| | before | after |
+|---|---|---|
+| median fatigue | about 0.75 | 0.02–0.03 |
+| median fertility | about 0.5 | 0.65–0.91 |
+
+- Cooking roughly doubled: Cook 49 → 133 and 97 → 204 on seed 0, and
+  58 → 119 and 180 → 299 on seed 1.
+- Everybody sleeps every night.
+- A third of the day asleep is a third less time to work. In that two-seed,
+  two-year sample fewer were "ready to breed", because less food was put by,
+  and fewer children were conceived. The 12-seed numbers are below.
+
+Dice counts:
+
+| | before | after |
+|---|---|---|
+| seed 0, a year | 726,154 | 770,996 |
+| seed 4242, 120 turns | 7,303 | 7,026 |
+
+Tests in `night_tests` (5): when the night runs, a night is one sleep until
+first light, somebody far off heads home in the evening, the evening fire
+takes half the wood with tinder, and a night's sleep pays back the night.

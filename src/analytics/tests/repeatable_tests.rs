@@ -196,7 +196,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // watching rather than once from every neighbour, talk and a glance
     // bring nobody closer than getting on, and nobody hits a neighbour to see
     // what happens.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_303;
+    // Down to 7,026 for #299: people sleep from bedtime to first light rather
+    // than through the day in snatches, so fewer of the 120 turns are taken.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_026;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -381,7 +383,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // gets through and what a winter really took out of the store, and sleep
     // pays back sleep debt hour for hour, so children are conceived and there
     // are more people about to take turns.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 726_154;
+    // And up 6.2% for #299: people sleep at night and are home with the
+    // others by dark, cook supper on an evening fire, and the night's sleep
+    // pays back its whole length rather than its first half hour, so the
+    // year's people are rested and take more turns between them.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 770_996;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

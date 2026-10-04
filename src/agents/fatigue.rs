@@ -150,8 +150,8 @@ impl FatigueState {
     /// have the whole time: the median grown person on the big map carried
     /// five and a half hours of it while never going more than eleven hours
     /// without a sleep, and sat at nine tenths fatigued, which is what took
-    /// their fertility under the bar (#298). Now a half hour asleep pays back
-    /// a half hour owed, better or worse as the sleep was.
+    /// their fertility under the bar (#298). Now an hour asleep pays back an
+    /// hour owed, better or worse as the sleep was.
     pub fn slept_for(&mut self, minutes: u32, sleep_quality: f32) {
         self.sleep_debt =
             (self.sleep_debt - minutes as f32 / 60.0 * sleep_quality.clamp(0.0, 1.0)).max(0.0);

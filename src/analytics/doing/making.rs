@@ -859,6 +859,28 @@ impl Simulation {
             .with_message(format!("Crafted {} ({:?} quality)", recipe.name, quality))
     }
 
+    /// Wood it takes this person to get a fire going where they stand.
+    ///
+    /// An unlit hearth already here only wants feeding. Shavings catch where
+    /// a log will not, so a hearth laid with tinder under it takes half the
+    /// timber to get going. This is what scraping a stick is for - see
+    /// `making::SCRAPE_A_STICK`. Shared with the evening at home, which asked
+    /// for the full ten while the person stood holding eight and tinder, and
+    /// went on gathering what they could not carry (#299).
+    pub(in crate::analytics) fn wood_a_fire_here_takes(&self, agent_index: usize) -> u32 {
+        let agent = &self.population.agents[agent_index];
+        if self
+            .nearest_fire_from(agent.state.position, Self::FIRE_REACH, false)
+            .is_some()
+        {
+            Self::FIRE_FUEL_WOOD
+        } else if agent.how_many_i_have("tinder") > 0 {
+            (Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD).div_ceil(2)
+        } else {
+            Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
+        }
+    }
+
     /// `Action::LightFire`.
     pub(in crate::analytics) fn lighting_a_fire(&mut self, agent_index: usize) -> ActionResult {
         // A hearth is worth more than the wood in it, so an unlit fire
@@ -869,18 +891,7 @@ impl Simulation {
             .nearest_fire_from(agent_pos, Self::FIRE_REACH, false)
             .map(|(id, _)| id);
 
-        // Shavings catch where a log will not, so a hearth laid with
-        // tinder under it takes half the timber to get going. This is
-        // what scraping a stick is for - see `making::SCRAPE_A_STICK`.
-        let has_tinder = self.population.agents[agent_index].how_many_i_have("tinder") > 0;
-
-        let wood_needed = if existing.is_some() {
-            Self::FIRE_FUEL_WOOD
-        } else if has_tinder {
-            (Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD).div_ceil(2)
-        } else {
-            Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
-        };
+        let wood_needed = self.wood_a_fire_here_takes(agent_index);
 
         {
             let agent = &self.population.agents[agent_index];

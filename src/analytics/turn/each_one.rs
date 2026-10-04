@@ -690,6 +690,9 @@ impl Simulation {
         // agent can finish - see `Errand`.
         let action = self.stick_to_the_errand(agent_index, action, running_away);
 
+        // And at night, sleep (#299).
+        let action = self.what_the_night_asks(agent_index, action, running_away);
+
         // Drop travel plans toward places the agent cannot reach
         let action = self.retarget_unreachable_move(agent_index, action);
 
