@@ -1992,3 +1992,36 @@ fn what_is_carried_in_a_pot_keeps_better_than_what_is_carried_loose() {
         "six days in a pot should beat six days loose: {in_a_pot} against {carried_loose}"
     );
 }
+
+/// Nobody is sent to the pit they are standing on (#301).
+///
+/// Standing on a pit with room, with something not worth burying in it, the
+/// answer used to be a walk to the nearest pit with room - this one. Over a
+/// year of one settlement that was ten thousand walks to nowhere.
+#[test]
+fn nobody_walks_to_the_pit_underfoot() {
+    let mut simulation = a_digger();
+    let empty_pit = |at: Position| Pit {
+        where_it_is: at,
+        holds: Vec::new(),
+        covered: false,
+        dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
+    };
+    let here = Position::new(25, 25);
+    let over_there = Position::new(28, 25);
+
+    simulation.world.pits.push(empty_pit(over_there));
+    assert_eq!(
+        simulation.a_pit_worth_the_walk(here),
+        Some(over_there),
+        "with no room underfoot, the pit with room is worth the walk"
+    );
+
+    simulation.world.pits.push(empty_pit(here));
+    assert_eq!(
+        simulation.a_pit_worth_the_walk(here),
+        None,
+        "standing on a pit with room, there is nowhere better to walk to"
+    );
+}

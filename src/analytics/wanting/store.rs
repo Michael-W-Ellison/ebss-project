@@ -173,6 +173,32 @@ impl Simulation {
     /// when it is wanted", and where the answer is no there are several turns
     /// spare to make it yes - which is what the drying and salting branches
     /// below are for. See ISSUES_FOUND.md #124.
+    /// A pit with room to carry something spare to, if walking would help.
+    ///
+    /// **Not the one underfoot, and not past one with room in it.** This
+    /// asked for the nearest pit with room, which for somebody standing on
+    /// one is that pit, and the branch above has already declined to bury
+    /// the thing in it because it would not keep the winter there. So the
+    /// answer was a walk to the cell they stood on, and they took it, turn
+    /// after turn, for as long as putting by was the loudest thing they
+    /// wanted. Over a year of seed 1 that was **10,081 of 24,499 walks**, all
+    /// of them out of Preparedness, and through a winter it was what a
+    /// parent at a tenth of their reserve did beside a pit of legumes (#301).
+    /// A hole with room here and a thing not worth burying in it is a thing
+    /// not worth burying, and another hole further off will not change that.
+    pub(in crate::analytics) fn a_pit_worth_the_walk(
+        &self,
+        here: crate::world::Position,
+    ) -> Option<crate::world::Position> {
+        if self.world.pit_at(here).is_some_and(|pit| pit.has_room()) {
+            return None;
+        }
+        self.world
+            .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
+            .filter(|(_, paces)| *paces > 0)
+            .map(|(pit, _)| pit.where_it_is)
+    }
+
     pub(in crate::analytics) fn is_it_worth_burying(
         &self,
         agent: &crate::agents::Agent,
@@ -577,12 +603,9 @@ impl Simulation {
                 >= self.how_many_mouths_about(here).max(1) * Self::what_a_store_is_filled_to_a_mouth();
 
             if enough_hole_for_the_winter {
-                if let Some((pit, _)) = self
-                    .world
-                    .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
-                {
+                if let Some(pit) = self.a_pit_worth_the_walk(here) {
                     return Some(Action::Move {
-                        target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+                        target: (pit.x, pit.y, agent_position.2),
                     });
                 }
             }
@@ -596,12 +619,9 @@ impl Simulation {
                 return Some(Action::Excavate);
             }
 
-            if let Some((pit, _)) = self
-                .world
-                .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
-            {
+            if let Some(pit) = self.a_pit_worth_the_walk(here) {
                 return Some(Action::Move {
-                    target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+                    target: (pit.x, pit.y, agent_position.2),
                 });
             }
         }

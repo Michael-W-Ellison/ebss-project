@@ -205,8 +205,8 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 9,667 when sleepers go in under a roof or the trees first, the
     // trees being near on this map.
     // Up to 9,842 for #300: what comes off a fire keeps its cut, and can be
-    // eaten.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 9_842;
+    // eaten. Up to 9,894 for #301: nobody walks to the pit underfoot.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 9_894;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -408,7 +408,8 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // what comes off a fire keeps its cut, and can be eaten. Up 10.5% to
     // 869,212 for #301: a hungry man with a joint and no knife is offered
     // supper out of it, rather than walked about until his reserve runs out.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 869_212;
+    // Then 892,632 when nobody walks to the pit underfoot.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 892_632;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

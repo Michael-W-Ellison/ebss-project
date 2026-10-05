@@ -22681,3 +22681,38 @@ two-turn walk to a pit. All the hunger ways are ranked as giving the same
 relief, so a stomach full of leaf ranks with a stomach full of dried meat.
 
 Dice count: seed 0 over a year, 786,562 → 869,212.
+
+**And half of all walking was to the cell the walker stood on.** Traced
+with the action each one took, the dying of seed 1's ninth winter did not
+eat when they could. They walked, and mostly to where they already were. A
+parent at a tenth of his reserve stood on a pit of legumes. He was offered
+`Eat` and a handful from the pit, and for two days took "Move to (499,497)"
+from (499,497), until he died.
+
+Counted over seed 1's first year, by where in the decision each walk to
+one's own cell came from:
+
+| | walks |
+|---|---|
+| all walks | 24,499 |
+| to the walker's own cell | 10,081 |
+| of those, chosen by the drive loop | 10,081 |
+| of those, the drive Preparedness | 10,081 |
+
+`putting_food_by`, with something spare and a pit with room underfoot:
+- it asks whether the thing is worth burying here, which means whether it
+  would keep through the winter;
+- if not, it falls to "walk to the nearest pit with room", and that is this
+  pit.
+
+So it was a walk to nowhere, every turn that putting by was the loudest
+want. In a winter that is a parent holding rotten joints beside a pit of
+legumes, with Preparedness loudest because the store is falling.
+
+`a_pit_worth_the_walk` now answers both walks in that branch:
+- never to the cell underfoot;
+- not at all if the pit underfoot has room. A thing not worth burying here
+  is not worth burying in the next hole either.
+
+Test: `nobody_walks_to_the_pit_underfoot`. Dice counts: 892,632 a year on
+seed 0, and 9,894 in 120 turns on seed 4242.
