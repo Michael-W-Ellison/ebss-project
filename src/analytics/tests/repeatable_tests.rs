@@ -400,7 +400,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // regrowth rather than a week's; and 949,046 when somebody on foul
     // ground at bedtime steps off it, and a remedy is taken before bed.
     // Down to 912,501 when sleepers go in under a roof or the trees first.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 912_501;
+    // Down 18.5% to 743,470 for #300: with no knife, a whole fish or joint
+    // is pulled apart by hand and eaten, rather than carried about uneaten
+    // while its owner walks to the stores and back.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 743_470;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

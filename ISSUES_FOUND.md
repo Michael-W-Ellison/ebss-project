@@ -22531,3 +22531,48 @@ open, and it is the next thing for the grandchildren.
 Tests in `night_tests` (5): when the night runs, a night is slept in
 stretches until first light, somebody far off heads home in the evening, the evening fire
 takes half the wood with tinder, and a night's sleep pays back the night.
+
+### 300. People starved holding fish, because the knives had worn out
+
+#299 found people dying of hunger at the end of winter with food in hand.
+`zz_starving_choice` traced seed 2 into its fourth winter (days 1,365–1,387).
+It printed every grown person at hunger 0.9 or more, with:
+- what they held;
+- whether they had an edge;
+- the ways open to them for hunger, ranked.
+
+Every one of them, 160 samples across seven people:
+- had **no edge**: no knife, no tool for `Leatherworking`;
+- held **whole fish**, between 6 and 31, and some held a whole joint;
+- had nothing `find_best_food_to_eat` would offer, because a whole fish is
+  not supper until it is cut (`Piece::can_it_be_eaten`).
+
+`what_flesh_i_should_cut_up` wants an edge, so nothing in the pack could
+ever become a meal. The hunger ways still offered `Eat` first, which failed.
+What they did instead, 135 times in 160, was walk: to one store, then to
+another 80 cells off, then back, never reaching either. Some walked to the
+cell they stood on. They died with their reserve run out, carrying the food.
+
+The night (#299) made it come sooner, but the fault was there without it:
+at #298 the same famine took 7 in year 9 on seeds 0–2.
+
+**Fix.** Anybody can pull a fish apart with their hands, or tear at a
+joint. `Agent::pull_apart_by_hand` does that for `Eat`, when:
+- nothing in hand is edible;
+- there is no edge;
+- a sound whole fish or joint is held.
+
+It gives half of what a knife would, and never less than a piece
+(`WHAT_HANDS_SAVE_OF_A_CUT`). With an edge it does nothing, because the cut
+is the better way and `food_action` takes it first.
+
+`whole_flesh_that_comes_apart` is now the one place that asks which whole
+flesh comes apart, for the knife and for the hands.
+
+Tests in `by_hand_tests` (3):
+- a whole fish is eaten without a knife;
+- hands save half of what a knife does;
+- with a knife the fish is not torn.
+
+Dice count: seed 0 over a year, 912,501 → 743,470. Measurement on the big
+map follows.

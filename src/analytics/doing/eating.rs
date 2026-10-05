@@ -117,7 +117,17 @@ impl Simulation {
         // could eat an untracked stack called "food" and no other, and a pack
         // of untracked grain or fish went uneaten while counting towards what
         // the agent had put by. The search sees them now; see #231.
+        // Nothing in hand that will go in a mouth, but a whole fish or joint
+        // and no edge to cut it: hands will have to do (#300).
+        let current_turn = self.current_turn;
+        let database = &self.food_database;
         let agent = &mut self.population.agents[agent_index];
+        if agent
+            .pull_apart_by_hand(|as_food| database.create_food_data(&as_food, current_turn))
+            .is_some()
+        {
+            debug!("Agent {} pulled a whole one apart by hand to eat", agent.id);
+        }
         let carried_food = agent.find_best_food_to_eat();
 
         // A sitting down to eat, not a single berry.

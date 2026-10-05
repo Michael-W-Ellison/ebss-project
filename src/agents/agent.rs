@@ -3866,6 +3866,18 @@ impl Agent {
             return None;
         }
 
+        self.whole_flesh_that_comes_apart()
+            .map(|working| (working.verb.to_string(), working.to.to_string()))
+    }
+
+    /// A whole fish or joint in the pack, sound, and how it comes apart.
+    ///
+    /// What `what_flesh_i_should_cut_up` cuts with an edge, and what
+    /// `pull_apart_by_hand` tears without one.
+    pub fn whole_flesh_that_comes_apart(&self) -> Option<&'static crate::environment::making::Working> {
+        use crate::environment::making;
+        use crate::world::nutrition::Piece;
+
         self.inventory
             .items
             .iter()
@@ -3882,9 +3894,49 @@ impl Agent {
                 making::how_to_work("cut", id)
                     .filter(|working| working.obvious || self.found_out.contains(working.makes))
                     .filter(|working| item.quantity >= working.how_much)
-                    .map(|working| (working.verb.to_string(), working.to.to_string()))
             })
     }
+
+    /// Supper out of a whole fish or joint, with no edge to cut it.
+    ///
+    /// **Measured: people starved at the end of winter carrying thirty fish.**
+    /// A whole fish is not supper until it is cut, cutting wants an edge, and
+    /// by the end of a winter the knives had worn out. On seed 2 in its fourth
+    /// year, every grown person at hunger 1.0 for days on end was holding
+    /// whole fish or a joint and nothing to cut them with. `Eat` found nothing
+    /// it could put in a mouth and failed, and they walked back and forth to
+    /// the stores until the reserve ran out (#300).
+    ///
+    /// Anybody can pull a fish apart with their hands, or tear at a joint. It
+    /// is slow and it wastes what a knife would have saved, so it gives half
+    /// of what a cut would, and never less than one piece. Only without an
+    /// edge: with one, the cut is the better way, and `food_action` takes it
+    /// first. `Some(how many pieces)` when something came apart.
+    pub fn pull_apart_by_hand(
+        &mut self,
+        fresh: impl Fn(crate::world::ItemType) -> Option<crate::world::nutrition::FoodData>,
+    ) -> Option<u32> {
+        if self.find_best_food_to_eat().is_some()
+            || self
+                .what_i_have_to_work_with(super::SkillType::Leatherworking)
+                .is_some()
+        {
+            return None;
+        }
+        let working = self.whole_flesh_that_comes_apart()?;
+        let pieces = (working.how_many / Self::WHAT_HANDS_SAVE_OF_A_CUT).max(1);
+
+        let mut made = InventoryItem::new_with_weight(working.makes.to_string(), pieces, 1.0);
+        if let Some(as_food) = working.feeds {
+            made.food_data = fresh(as_food);
+        }
+        self.inventory.remove_item(working.to, working.how_much);
+        self.inventory.add_item(made);
+        Some(pieces)
+    }
+
+    /// What hands save of what a knife would, as a divisor: half.
+    pub const WHAT_HANDS_SAVE_OF_A_CUT: u32 = 2;
 
     /// A joint in the pack worth cutting down into strips, because it is not
     /// going to be eaten today.
