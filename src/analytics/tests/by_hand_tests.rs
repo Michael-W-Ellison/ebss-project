@@ -87,3 +87,45 @@ fn with_a_knife_the_fish_is_not_torn() {
     assert_eq!(agent.pull_apart_by_hand(|as_food| database.create_food_data(&as_food, 0)), None);
     assert_eq!(agent.how_many_i_have("fish"), 2);
 }
+
+/// One who has been laid up by raw flesh twice holds raw fish portions, and
+/// has a mouthful of something else in the gut.
+fn wary_of_raw_flesh(days_without_enough: f32) -> Simulation {
+    let mut simulation = hungry_with_fish(0, false);
+    let agent = &mut simulation.population.agents[0];
+    agent
+        .times_laid_up
+        .insert(crate::agents::Agent::OFF_RAW_FLESH.to_string(), 2);
+    let mut portions = InventoryItem::new_with_weight("fishportions".to_string(), 4, 0.5);
+    portions.food_data = FoodDatabase::new().create_food_data(&ItemType::Fish, 0);
+    agent.inventory.add_item(portions);
+
+    let physiology = &mut agent.state.physiology;
+    let a_day = crate::agents::physiology::UNITS_BURNED_IN_AN_ORDINARY_DAY;
+    physiology.reserve = (physiology.reserve_capacity - a_day * days_without_enough).max(0.0);
+    // A handful of legumes a day: never an empty gut.
+    physiology.eat(crate::agents::physiology::UNITS_IN_ONE_ITEM, 1.0);
+    simulation
+}
+
+/// Somebody who has been made ill by raw flesh will not eat it while they
+/// have a day or two of reserve gone - but three days into the reserve they
+/// will, whatever else is in the gut (#300).
+#[test]
+fn three_days_short_and_raw_fish_is_eaten() {
+    let simulation = wary_of_raw_flesh(1.0);
+    let agent = &simulation.population.agents[0];
+    assert!(agent.state.physiology.days_into_the_reserve() < 3.0);
+    assert!(!agent.state.is_starving(), "a mouthful in the gut is not starving");
+    assert_eq!(agent.find_best_food_to_eat(), None, "a day short, the raw fish is refused");
+
+    let simulation = wary_of_raw_flesh(4.0);
+    let agent = &simulation.population.agents[0];
+    assert!(agent.state.physiology.days_into_the_reserve() >= 3.0);
+    assert!(!agent.state.is_starving(), "still a mouthful in the gut");
+    assert_eq!(
+        agent.find_best_food_to_eat().as_deref(),
+        Some("fishportions"),
+        "four days into the reserve, the raw fish is eaten"
+    );
+}

@@ -8694,10 +8694,19 @@ impl Agent {
                 // Starving overrides it, as a strong enough survival drive
                 // overrides everything: a man three days without food eats
                 // what is in front of him and takes his chances.
+                //
+                // **Three days into the reserve, not three days with an empty
+                // gut.** `is_starving` wants both, and somebody living on a
+                // handful of legumes a day never has an empty gut: on seed 2
+                // in its fourth winter people sat at hunger 1.0 for a fortnight
+                // holding raw fish they would not touch, their reserve running
+                // down to nothing behind the legumes, and died of it (#300).
                 if food_data.preparation == crate::world::nutrition::PreparationState::Raw
                     && crate::world::nutrition::Piece::is_it_flesh(item_id)
                     && self.has_this_made_me_ill(Self::OFF_RAW_FLESH)
                     && !self.state.is_starving()
+                    && self.state.physiology.days_into_the_reserve()
+                        < physiology::DAYS_OF_RESERVE_BEFORE_IT_IS_STARVATION
                 {
                     continue;
                 }

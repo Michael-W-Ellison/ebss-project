@@ -22574,5 +22574,19 @@ Tests in `by_hand_tests` (3):
 - hands save half of what a knife does;
 - with a knife the fish is not torn.
 
-Dice count: seed 0 over a year, 912,501 → 743,470. Measurement on the big
-map follows.
+Dice count: seed 0 over a year, 912,501 → 743,470.
+
+**And then they would not eat what came apart.** Run again with fish pulled
+apart by hand, the same winter showed people at hunger 1.0 holding
+`fishportions` and `meatportions`, and still nothing `find_best_food_to_eat`
+would offer. Raw flesh is refused by somebody it has laid up twice, unless
+they are starving. `is_starving` wants an empty stomach, an empty gut and
+three days into the reserve. Somebody living on a handful of legumes a day
+never has an empty gut. So they refused the raw fish while their reserve ran
+down to nothing behind the legumes.
+
+The aversion now gives way three days into the reserve, whatever is in the
+gut. That is the same three days `is_starving` already counts. Test:
+`three_days_short_and_raw_fish_is_eaten`. Dice counts unchanged.
+
+Measurement on the big map follows.
