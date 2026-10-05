@@ -22615,3 +22615,23 @@ What the night cost is given back. The six hunger deaths left are all in
 year 9: four on seed 1 and two on seed 2. That is the same famine #298 has
 in the same year, and it is open. Seed 3, run alongside, ended year 9 with
 16 alive and no hunger deaths.
+
+**One test moved: `clothing_tests::a_cold_agent_ends_up_dressed`.** It went
+from passing to 6 of 24 worlds with the bar at 8, and bisects to the commit
+that lets cooked food be eaten. Asked of 96 worlds, the rate is the same
+either side:
+
+| | dressed, of 96 |
+|---|---|
+| before | 30 |
+| after | 29 |
+
+So the change did nothing to this test, and the block of 24 was too small.
+The bar of a third was the rate itself, which is why this test has flipped
+whenever anything upstream changed (#132, #165). It now asks 96 worlds, with
+the bar at a quarter.
+
+What the measurement says is worse than the test used to: in about seven
+worlds in ten, a freezing man with 200 flax in his pack and a flax patch
+three paces off never makes anything to wear in 600 turns. In the ones that
+dress, it happens in the first 60–160 turns or not at all. That is open.

@@ -266,11 +266,21 @@ fn a_cold_agent_ends_up_dressed() {
     // it. The threshold is a third, set under the measurement rather than at
     // it, and what it now guards is that the chain is *reachable* - which is
     // all this test was ever able to say.
-    let worlds = 24;
+    //
+    // **And a third was the rate, not under it.** Asked of 96 worlds, the
+    // rate is 30 of 96 before #300 and 29 of 96 after - about three in ten,
+    // the same behaviour either side. The block of 24 went from 9 to 6 on
+    // nothing but which worlds the dice dealt it, with the bar at 8: a test
+    // set at the rate it measures flips on every change upstream, which is
+    // what this one has been doing. It asks 96 worlds now, and the bar is a
+    // quarter, under the measurement. The worse news is the measurement: in
+    // seven worlds in ten a freezing man with flax in his pack never makes
+    // anything to wear (#300).
+    let worlds = 96;
     let dressed = (0..worlds).filter(|which| a_cold_man_dresses(9_140 + which)).count();
 
     assert!(
-        dressed * 3 >= worlds as usize,
+        dressed * 4 >= worlds as usize,
         "a cold man with flax to hand should end up wearing something in a \
          good few of the worlds he could be dropped into: {dressed} of {worlds}"
     );
