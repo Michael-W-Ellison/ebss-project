@@ -22716,3 +22716,10 @@ legumes, with Preparedness loudest because the store is falling.
 
 Test: `nobody_walks_to_the_pit_underfoot`. Dice counts: 892,632 a year on
 seed 0, and 9,894 in 120 turns on seed 4242.
+
+Counted again over seed 1's first year:
+
+| | before | after |
+|---|---|---|
+| all walks | 24,499 | 12,580 |
+| to the walker's own cell | 10,081 | 0 |
