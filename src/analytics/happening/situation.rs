@@ -453,6 +453,10 @@ impl Simulation {
             if let Some(drive) = agent.drives.get_mut(DriveType::Preparedness) {
                 drive.value = reckoning.stress();
             }
+            agent
+                .state
+                .winters_seen
+                .note_the_larder(day_of_year, reckoning.units_put_by());
             agent.state.what_the_larder_says = Some(reckoning);
         }
     }

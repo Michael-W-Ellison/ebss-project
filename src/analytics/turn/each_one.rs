@@ -610,7 +610,12 @@ impl Simulation {
                 // swung at a person who does not exist - **2,185 refusals of
                 // "Attack: Target agent not found"**. Standing up to the
                 // animal itself is the branch above.
-                else if let Some(attacker_id) = agent.emotions.whoever_struck_me(self.current_turn) {
+                // And not again today, if this bout is already fought (#296).
+                else if let Some(attacker_id) = agent
+                    .emotions
+                    .whoever_struck_me(self.current_turn)
+                    .filter(|&them| !agent.emotions.have_we_had_it_out(them, self.current_turn))
+                {
                     debug!(
                         "Agent {} RETALIATING against {} (anger={:.2}, fear={:.2})",
                         agent_id, attacker_id, agent.emotions.anger, agent.emotions.fear
@@ -684,6 +689,9 @@ impl Simulation {
         // step. This is what makes a walk to the river something an
         // agent can finish - see `Errand`.
         let action = self.stick_to_the_errand(agent_index, action, running_away);
+
+        // And at night, sleep (#299).
+        let action = self.what_the_night_asks(agent_index, action, running_away);
 
         // Drop travel plans toward places the agent cannot reach
         let action = self.retarget_unreachable_move(agent_index, action);

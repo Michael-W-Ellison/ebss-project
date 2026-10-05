@@ -146,6 +146,10 @@ impl Simulation {
         if held < Self::ENOUGH_TO_ROUND_ON_SOMEBODY {
             return None;
         }
+        // Once a day, however much it still rankles (#296).
+        if agent.emotions.have_we_had_it_out(who, self.current_turn) {
+            return None;
+        }
 
         let them = self
             .population
@@ -162,10 +166,16 @@ impl Simulation {
             return None;
         }
 
-        let paces = (them.state.position.0 - agent_position.0)
-            .abs()
-            .max((them.state.position.1 - agent_position.1).abs());
-        if paces > Self::HUNT_REACH {
+        // **Within reach of a blow, measured the way the blow measures it.**
+        // This asked for two paces either way, corners counting as one; the
+        // blow itself lands within the weapon's reach counting both ways, and
+        // bare hands reach one. So somebody with a grudge stood two paces off,
+        // or one off on the slant, swinging at the air every turn: 899
+        // refusals of "Target too far away" in one settlement's first
+        // quarter, nearly all of them one man at one other (#296).
+        let paces = (them.state.position.0 - agent_position.0).abs()
+            + (them.state.position.1 - agent_position.1).abs();
+        if paces as f32 > agent.equipment.weapon_range() {
             return None;
         }
 
@@ -564,7 +574,10 @@ impl Simulation {
 
                     let moved = landed.0 != from.0 || landed.1 != from.1;
 
-                    (moved && self.is_passable_tile(landed.0, landed.1)).then_some(landed)
+                    (moved
+                        && self.is_passable_tile(landed.0, landed.1)
+                        && self.can_this_be_walked_out_of((landed.0, landed.1), (from.0, from.1)))
+                    .then_some(landed)
                 })
             })
             .min_by(|one, other| {
@@ -572,6 +585,41 @@ impl Simulation {
                     .partial_cmp(&self.how_poor_a_way_out(remembers, from, away_from, *other))
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
+    }
+
+    /// Whether somebody landing at `at` could walk away from it again.
+    ///
+    /// **A bolt may clear a river; it may not land on a rock.** A frightened
+    /// person runs over whatever is in the way, water included, and that is
+    /// worth something: whatever was after them is on the other bank. But it
+    /// asked only whether the landing was ground, so somebody bolted onto a
+    /// rock in the sea at the corner of the map with water all round it,
+    /// which nobody can walk off - two worlds in sixteen, somebody stranded
+    /// there for the rest of the year (#295). Stopping every bolt at the water
+    /// instead measured a fifteenth fewer person-days over sixteen worlds -
+    /// not much more than the difference between two runs, but the way you
+    /// would expect if a river between you and the wolves is worth having.
+    ///
+    /// So the landing has to be somewhere with a way on: either it is the
+    /// ground the runner is already standing in, or it opens out into at
+    /// least `OPEN_GROUND` cells a foot can reach.
+    pub(in crate::analytics) fn can_this_be_walked_out_of(&self, at: (i32, i32), from: (i32, i32)) -> bool {
+        const OPEN_GROUND: usize = 256;
+
+        let mut seen = std::collections::BTreeSet::from([at]);
+        let mut to_look_at = std::collections::VecDeque::from([at]);
+        while let Some(here) = to_look_at.pop_front() {
+            if here == from || seen.len() >= OPEN_GROUND {
+                return true;
+            }
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let next = (here.0 + dx, here.1 + dy);
+                if (next == from || self.is_passable_tile(next.0, next.1)) && seen.insert(next) {
+                    to_look_at.push_back(next);
+                }
+            }
+        }
+        false
     }
 
     /// What is wrong with running that way.

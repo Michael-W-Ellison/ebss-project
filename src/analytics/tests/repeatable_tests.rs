@@ -181,7 +181,32 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 7,749 for the walk at five kilometres an hour (#277): a walk
     // covers what a turn of walking covers, and the minutes it leaves over go
     // on another decision.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_749;
+    // Down to 7,501 for #280 to #282: a hunt closes and rushes in its half
+    // hour, a frightened beast bolts once, animals live by the calendar, and
+    // a day's grazing walks on across the nearest patches.
+    // Down to 7,226 for #283: a mammoth no longer faces down its own herd,
+    // and a grazer walks to what it can crop rather than to a browsed tree.
+    // Up to 7,490 for #285: a grazer eats until it is full, takes its share
+    // as browse or grass by its kind, and leaves a plant its crown; and a
+    // hunter takes another hunter only when it comes upon one.
+    // Down to 7,283 for #295: a walk to the water ends on the bank it would
+    // reach it from, and the first walks to a river or a fish run are in the
+    // first two and a half days.
+    // Up to 7,303 for #296: a way of doing a thing is learned once by
+    // watching rather than once from every neighbour, talk and a glance
+    // bring nobody closer than getting on, and nobody hits a neighbour to see
+    // what happens.
+    // Down to 7,026 for #299: people sleep from bedtime to first light rather
+    // than through the day in snatches, so fewer of the 120 turns are taken.
+    // Up to 8,422 for #299 again: a night is slept in two-hour stretches, and
+    // each waking is a decision. Down to 7,343 when nobody goes to bed
+    // thirsty, or hungry with nothing to eat. Up to 7,392 when somebody on
+    // foul ground at bedtime steps off it, and a remedy is taken before bed.
+    // Up to 9,667 when sleepers go in under a roof or the trees first, the
+    // trees being near on this map.
+    // Up to 9,842 for #300: what comes off a fire keeps its cut, and can be
+    // eaten.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 9_842;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -340,7 +365,50 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // turns. Not traced to any one of those.
     // And down 2.4% for walking at five kilometres an hour, the animals on
     // the same clock, and backing away from what outweighs you (#277).
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 708_297;
+    // And up 0.2% for #280 to #282: the half-hour hunt, animal lives on the
+    // calendar, packs sharing a kill, and a day's grazing as a walk.
+    // And down 3.6% for #283: grazers fed and not facing down their own kind.
+    // And down 5.8% for #284: browse at what a wood yields, and no grass
+    // coming back in winter.
+    // And down 4.9% for #285: feeding niches, eating to the full, a crown
+    // left on what is grazed, big animals ranging further, and hunters
+    // taking other hunters only when they come upon them.
+    // And up 12.4% for #286: plants leave seventy seed a life rather than
+    // forty, and the herbs hold their ground.
+    // And down 2.4% for #294: nobody is sent off the edge of the map, so
+    // walks end somewhere and fewer errands are given up and chosen again.
+    // And down 6.7% for #295: a walk to the water ends on the bank, and a
+    // bolt may clear a river but not land on a rock in it, so nobody is left
+    // standing in the water or stranded on a spit of land for the year.
+    // And up 4.1% for #296: bonds are earned rather than talked up to 1.0 by
+    // everybody with everybody, and a fight is a bout rather than days of
+    // blows, so fewer turns go on feuds and more people are about to take
+    // them.
+    // And up 3.7% for #297: a wound turns and a soaking tells at their
+    // chances a day rather than four times them, so more of the settlement
+    // lives through its first year.
+    // And up 7.3% for #298: the gate for a child asks what a body really
+    // gets through and what a winter really took out of the store, and sleep
+    // pays back sleep debt hour for hour, so children are conceived and there
+    // are more people about to take turns.
+    // And up 6.2% for #299: people sleep at night and are home with the
+    // others by dark, cook supper on an evening fire, and the night's sleep
+    // pays back its whole length rather than its first half hour, so the
+    // year's people are rested and take more turns between them. Then up
+    // 6.7% more, to 822,314, when the night is slept in two-hour stretches
+    // and each waking is a decision; and 833,642 when nobody goes to bed
+    // thirsty, or hungry with nothing to eat; and 881,777 when a coupling
+    // outside the fertile window dulls the wish for a child by a day's
+    // regrowth rather than a week's; and 949,046 when somebody on foul
+    // ground at bedtime steps off it, and a remedy is taken before bed.
+    // Down to 912,501 when sleepers go in under a roof or the trees first.
+    // Down 18.5% to 743,470 for #300: with no knife, a whole fish or joint
+    // is pulled apart by hand and eaten, rather than carried about uneaten
+    // while its owner walks to the stores and back. Then up to 786,562 when
+    // what comes off a fire keeps its cut, and can be eaten. Up 10.5% to
+    // 869,212 for #301: a hungry man with a joint and no knife is offered
+    // supper out of it, rather than walked about until his reserve runs out.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 869_212;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

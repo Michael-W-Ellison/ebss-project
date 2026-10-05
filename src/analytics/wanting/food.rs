@@ -171,7 +171,12 @@ impl Simulation {
 
         // Nowhere known to drink: go looking, if it has come to that
         if desperate {
-            return Some(Self::search_leg(agent, agent_position, self.current_turn));
+            return Some(Self::search_leg(
+                agent,
+                agent_position,
+                self.current_turn,
+                (self.world.grid.width, self.world.grid.height),
+            ));
         }
 
         None
@@ -245,6 +250,12 @@ impl Simulation {
         // this he simply ate the deer.
         if let Some((verb, to)) = agent.what_flesh_i_should_cut_up() {
             return Some(Action::Work { verb, to });
+        }
+
+        // And with no edge to cut it, hands. `Eat` pulls it apart (#300), and
+        // nothing gets to `Eat` unless it is offered here (#301).
+        if agent.could_pull_apart_by_hand() {
+            return Some(Action::Eat { food_type: "generic".to_string() });
         }
 
         // A fire right here turns a third of what is in raw meat into nearly
@@ -516,7 +527,12 @@ impl Simulation {
 
             // And only then, with nothing standing anywhere that would pay
             // for the walk, strike out and hope.
-            return Some(Self::search_leg(agent, agent_position, self.current_turn));
+            return Some(Self::search_leg(
+                agent,
+                agent_position,
+                self.current_turn,
+                (self.world.grid.width, self.world.grid.height),
+            ));
         }
 
         // Merely hungry, with nothing in reach and nothing known: set out for

@@ -34,8 +34,18 @@ impl Simulation {
     ///
     /// `id_to_item_type` reads through these prefixes, so cooked fish is still
     /// fish to everything that asks what it is.
+    ///
+    /// **It keeps the cut.** This went through `base_item_id`, which strips
+    /// the `portions` and `strips` as well as an earlier cooking, so a joint
+    /// went on the fire as `meatportions` and came off as `cooked_meat` - and
+    /// `Piece::of` reads that as a whole carcass, which nobody will eat and
+    /// nothing will cut. Everything a person cooked, they could not then eat;
+    /// on seed 2 people at hunger 1.0 were carrying it (#300).
     pub(in crate::analytics) fn prepared_item_id(item_id: &str, cooked_well: bool) -> String {
-        let base = crate::agents::storage_integration::base_item_id(item_id);
+        let base = item_id
+            .strip_prefix("cooked_")
+            .or_else(|| item_id.strip_prefix("burnt_"))
+            .unwrap_or(item_id);
 
         if cooked_well {
             format!("cooked_{}", base)

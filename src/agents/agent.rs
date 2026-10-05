@@ -2865,17 +2865,30 @@ impl Agent {
 
     /// How often an open wound turns, in a turn, at its worst.
     ///
-    /// About one in three hundred, which over the fortnight a bad wound takes
-    /// to close comes to rather better than an even chance of getting away
-    /// with it. That is the shape of the thing: most people were all right,
-    /// and the ones who were not died of it.
-    const HOW_OFTEN_A_WOUND_TURNS: f64 = 0.0035;
+    /// About one in twenty-four a day, which over the fortnight a bad wound
+    /// takes to close comes to rather better than an even chance of getting
+    /// away with it - about one bad wound in four turns. That is the shape of
+    /// the thing: most people were all right, and the ones who were not died
+    /// of it.
+    ///
+    /// **On the calendar.** This was one in three hundred a turn, set when a
+    /// turn was two hours, and was never moved when a turn became half an
+    /// hour: four times the chances over the same fortnight, so a bad wound
+    /// turned about seven times in ten. It was the commonest death in a
+    /// settlement's first year - five of nine dead in one world, five of eight
+    /// in another (#297). Stated a day, and shared across the day's turns.
+    const HOW_OFTEN_A_WOUND_TURNS: f64 =
+        0.042 / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f64;
 
     /// And how often a soaking in the cold turns into a chill.
     ///
     /// Read against how much the weather is actually taking out of somebody,
     /// so a mild damp day is nothing and a January night in the open is not.
-    const HOW_OFTEN_A_SOAKING_TELLS: f64 = 0.02;
+    ///
+    /// The same fault as the wound's, from the same day: one in fifty a
+    /// two-hour turn, left at one in fifty a half hour (#297).
+    const HOW_OFTEN_A_SOAKING_TELLS: f64 =
+        0.24 / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f64;
 
     /// A wound closes, or it turns.
     fn turn_the_wound(&mut self, now: u32) {
@@ -3853,6 +3866,18 @@ impl Agent {
             return None;
         }
 
+        self.whole_flesh_that_comes_apart()
+            .map(|working| (working.verb.to_string(), working.to.to_string()))
+    }
+
+    /// A whole fish or joint in the pack, sound, and how it comes apart.
+    ///
+    /// What `what_flesh_i_should_cut_up` cuts with an edge, and what
+    /// `pull_apart_by_hand` tears without one.
+    pub fn whole_flesh_that_comes_apart(&self) -> Option<&'static crate::environment::making::Working> {
+        use crate::environment::making;
+        use crate::world::nutrition::Piece;
+
         self.inventory
             .items
             .iter()
@@ -3869,9 +3894,63 @@ impl Agent {
                 making::how_to_work("cut", id)
                     .filter(|working| working.obvious || self.found_out.contains(working.makes))
                     .filter(|working| item.quantity >= working.how_much)
-                    .map(|working| (working.verb.to_string(), working.to.to_string()))
             })
     }
+
+    /// Supper out of a whole fish or joint, with no edge to cut it.
+    ///
+    /// **Measured: people starved at the end of winter carrying thirty fish.**
+    /// A whole fish is not supper until it is cut, cutting wants an edge, and
+    /// by the end of a winter the knives had worn out. On seed 2 in its fourth
+    /// year, every grown person at hunger 1.0 for days on end was holding
+    /// whole fish or a joint and nothing to cut them with. `Eat` found nothing
+    /// it could put in a mouth and failed, and they walked back and forth to
+    /// the stores until the reserve ran out (#300).
+    ///
+    /// Anybody can pull a fish apart with their hands, or tear at a joint. It
+    /// is slow and it wastes what a knife would have saved, so it gives half
+    /// of what a cut would, and never less than one piece. Only without an
+    /// edge: with one, the cut is the better way, and `food_action` takes it
+    /// first. `Some(how many pieces)` when something came apart.
+    pub fn pull_apart_by_hand(
+        &mut self,
+        fresh: impl Fn(crate::world::ItemType) -> Option<crate::world::nutrition::FoodData>,
+    ) -> Option<u32> {
+        if !self.could_pull_apart_by_hand() {
+            return None;
+        }
+        let working = self.whole_flesh_that_comes_apart()?;
+        let pieces = (working.how_many / Self::WHAT_HANDS_SAVE_OF_A_CUT).max(1);
+
+        let mut made = InventoryItem::new_with_weight(working.makes.to_string(), pieces, 1.0);
+        if let Some(as_food) = working.feeds {
+            made.food_data = fresh(as_food);
+        }
+        self.inventory.remove_item(working.to, working.how_much);
+        self.inventory.add_item(made);
+        Some(pieces)
+    }
+
+    /// Whether supper would have to come out of a whole fish or joint by hand:
+    /// one held, nothing else to eat, and no edge to cut it.
+    ///
+    /// Asked by `Eat` before it tears, and by the way a hungry person picks
+    /// what to do, which has to know that eating is open to them. **Measured:
+    /// without the second, the first never ran.** On seed 1 in its ninth
+    /// winter a grown man carried six joints, then sixteen, for three days
+    /// with no edge; nothing offered him `Eat`, because nothing in his pack
+    /// counted as edible, and he walked between the pits and the patch he was
+    /// standing on until his reserve ran out (#301).
+    pub fn could_pull_apart_by_hand(&self) -> bool {
+        self.find_best_food_to_eat().is_none()
+            && self
+                .what_i_have_to_work_with(super::SkillType::Leatherworking)
+                .is_none()
+            && self.whole_flesh_that_comes_apart().is_some()
+    }
+
+    /// What hands save of what a knife would, as a divisor: half.
+    pub const WHAT_HANDS_SAVE_OF_A_CUT: u32 = 2;
 
     /// A joint in the pack worth cutting down into strips, because it is not
     /// going to be eaten today.
@@ -5179,9 +5258,20 @@ impl Agent {
                         self.memory.remember_location(SpatialMemoryType::Danger, *pos);
                     }
                     Percept::AgentDetected { agent_id, .. } => {
-                        // Update social relationship (neutral interaction for just seeing them)
+                        // Update social relationship (neutral interaction for
+                        // just seeing them).
+                        //
+                        // **Up to a familiar face, as keeping company is.**
+                        // Seeing somebody added a hundredth with no ceiling,
+                        // so a man you only ever saw across the camp became a
+                        // dear friend in a hundred sightings - the very thing
+                        // `Relationship::keep_company` was capped to stop
+                        // (#296).
                         let rel = self.relationships.get_or_create_relationship(*agent_id, current_turn);
-                        rel.strengthen(0.01);
+                        let familiar = super::emotions::Relationship::A_FAMILIAR_FACE;
+                        if rel.bond_strength < familiar {
+                            rel.bond_strength = (rel.bond_strength + 0.01).min(familiar);
+                        }
                     }
                     _ => {}
                 }
@@ -6771,7 +6861,15 @@ impl Agent {
         // with none - and once children lived, a settlement of six grown
         // people had twelve small ones by its fourth winter and starved in
         // it. See ISSUES_FOUND #261.
-        let for_the_two_of_them = self.state.physiology.what_i_burn_in_a_day
+        // **At what this body really gets through, not the table's figure.**
+        // Every grown body read 1,440 a day here, half as much again as they
+        // burn, so the gate asked half as much again as a winter takes: on
+        // the big map the pits peaked at 0.5 to 1.0 of the ask, and in two
+        // years four settlements conceived twice between them (#298). The
+        // pits are still filled to the table's figure - that margin is what
+        // carries a winter's waste and rot (#265) - but whether there is
+        // enough for a child is asked of what the parent actually eats.
+        let for_the_two_of_them = self.state.physiology.what_i_really_get_through_in_a_day()
             * (1.0 + self.the_small_ones_i_answer_for.max(0.0) + what_a_body_this_age_eats(0));
 
         let put_by = match self.state.what_the_larder_says.as_ref() {
@@ -6779,7 +6877,20 @@ impl Agent {
             None => self.food_put_by() as f32 * super::provision::UNITS_IN_ONE_STORED_ITEM,
         };
 
-        put_by >= for_the_two_of_them * gap
+        // **What a gap has actually taken, where that has been counted.** The
+        // calendar's answer - every day of the gap eaten out of the pits - is
+        // what a first winter has to go on, and what a winter that ran the
+        // store dry goes back to. Once a gap has been seen through with food
+        // to spare, it is what that gap took out of this one's share, for
+        // them and for the extra mouth (#298).
+        let a_gap = match self.state.winters_seen.what_a_gap_takes() {
+            Some(took) => {
+                took * (1.0 + self.the_small_ones_i_answer_for.max(0.0) + what_a_body_this_age_eats(0))
+            }
+            None => for_the_two_of_them * gap,
+        };
+
+        put_by >= a_gap
     }
 
     /// Check if agent should attempt reproduction given current survival state
@@ -8597,10 +8708,19 @@ impl Agent {
                 // Starving overrides it, as a strong enough survival drive
                 // overrides everything: a man three days without food eats
                 // what is in front of him and takes his chances.
+                //
+                // **Three days into the reserve, not three days with an empty
+                // gut.** `is_starving` wants both, and somebody living on a
+                // handful of legumes a day never has an empty gut: on seed 2
+                // in its fourth winter people sat at hunger 1.0 for a fortnight
+                // holding raw fish they would not touch, their reserve running
+                // down to nothing behind the legumes, and died of it (#300).
                 if food_data.preparation == crate::world::nutrition::PreparationState::Raw
                     && crate::world::nutrition::Piece::is_it_flesh(item_id)
                     && self.has_this_made_me_ill(Self::OFF_RAW_FLESH)
                     && !self.state.is_starving()
+                    && self.state.physiology.days_into_the_reserve()
+                        < physiology::DAYS_OF_RESERVE_BEFORE_IT_IS_STARVATION
                 {
                     continue;
                 }

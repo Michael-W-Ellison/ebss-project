@@ -38,15 +38,26 @@ pub fn terrain_to_climate_zone_in(
     region.on_this_ground(terrain).climate_zone()
 }
 
-/// How much longer an animal waits between litters than its species data says.
+/// A span of days, in turns. The life-history table is written in these.
 ///
-/// The species numbers give a sheep about eight litters in a lifetime and a
-/// wolf about seven. At that rate a herd of forty needs some thirty wolves to
-/// hold it level - an inverted pyramid, and one the spawn ratio of four prey
-/// groups to one predator group can never supply. Stretching the interval
-/// brings herd growth back within what a plausible number of predators can
-/// take.
-const BREEDING_INTERVAL_SCALE: f32 = 3.0;
+/// **It was written in bare turns, and the turn changed underneath it.**
+/// The figures were set when a year was some 4,320 turns: a wolf lived three
+/// or four years, carried for six weeks and, with the interval stretched
+/// three times (`BREEDING_INTERVAL_SCALE`, now gone), littered once a year.
+/// When a turn became half an hour, 17,280 to the year, nobody moved them,
+/// and every animal in the country lived four times too fast - a wolf grown
+/// at three weeks, littering every three months, dead of old age inside the
+/// year. While hunters starved it did not show. Once the hunt could close
+/// on what it saw (#280), seven wolves bore 611 cubs in two years and ate a
+/// hundred square kilometres bare. See ISSUES_FOUND #282.
+const fn days(n: u32) -> u32 {
+    n * crate::environment::seasons::PLANNING_PERIODS_PER_DAY
+}
+
+/// And of years.
+const fn years(n: u32) -> u32 {
+    days(n * crate::environment::seasons::DAYS_PER_YEAR)
+}
 
 /// What the sky is doing, for the plants a grazing animal brings up to date.
 ///
@@ -424,6 +435,28 @@ impl AnimalSpecies {
     /// thrive - and it is applied at birth rather than played out, because
     /// playing it out means holding records for animals whose whole purpose is
     /// to die.
+    /// What share of what it eats is browse - shoots, twigs and leaves off
+    /// trees and bushes - rather than grass and herbs.
+    ///
+    /// Every grazer drew on one pool and the fastest breeder took the
+    /// country: over five years on the empty big map goats went from 95 to
+    /// 803 while elk went to none, cattle 42 to 5 and camels 33 to 2 (#284).
+    /// What lets real grazers live side by side is that they do not eat the
+    /// same things: a roe deer or a camel browses, a sheep or a cow grazes,
+    /// an elk and a goat take some of each. The figures are the usual ones
+    /// for each sort in the wild. Anything not named takes half and half.
+    pub fn how_much_of_it_is_browse(&self) -> f32 {
+        match self.id.as_str() {
+            "deer" | "camel" => 0.8,
+            "goat" => 0.6,
+            "elk" => 0.4,
+            "reindeer" => 0.3,
+            "sheep" | "boar" => 0.2,
+            "cow" | "mammoth" => 0.1,
+            _ => 0.5,
+        }
+    }
+
     pub fn how_many_of_a_litter_come_through(&self) -> f32 {
         match self.size {
             AnimalSize::Tiny => 0.35,
@@ -572,11 +605,28 @@ impl AnimalSpecies {
         // species is, and a species does not carry one - so this is answered
         // from a fresh registry rather than from a field that could disagree
         // with the one the world is using.
-        let biggest_it_takes = FaunaRegistry::new()
-            .all_species()
-            .into_iter()
-            .filter(|other| self.prey_species.contains(&other.id))
-            .map(|other| other.size)
+        //
+        // **Built once, not every time it is asked.** This made a fresh
+        // registry - every species, with all its names and lists - for every
+        // hunter every time anything wanted to know where it sat, which is
+        // several times a turn per hunter and once a turn per animal in
+        // `what_the_beasts_make_of_us`. On the empty big map that was nearly
+        // half the time a turn took, nearly all of it allocating (#287). The
+        // registry is the same every time it is made, so how big each kind is
+        // is read once and kept.
+        static HOW_BIG_EACH_KIND_IS: std::sync::OnceLock<BTreeMap<String, AnimalSize>> =
+            std::sync::OnceLock::new();
+        let how_big = HOW_BIG_EACH_KIND_IS.get_or_init(|| {
+            FaunaRegistry::new()
+                .all_species()
+                .into_iter()
+                .map(|other| (other.id.clone(), other.size))
+                .collect()
+        });
+        let biggest_it_takes = self
+            .prey_species
+            .iter()
+            .filter_map(|prey| how_big.get(prey).copied())
             .max();
 
         match biggest_it_takes {
@@ -629,10 +679,10 @@ impl TrophicRole {
     /// distinction at all between a fox and a wolf.
     pub fn share_of_a_country(&self) -> f32 {
         match self {
-            TrophicRole::PrimaryConsumer => 0.70,
+            TrophicRole::PrimaryConsumer => 0.724,
             TrophicRole::SmallPredator => 0.18,
             TrophicRole::MidPredator => 0.09,
-            TrophicRole::TopPredator => 0.03,
+            TrophicRole::TopPredator => 0.006,
         }
     }
 
@@ -790,6 +840,31 @@ pub struct WhatPassiveHuntingCameTo {
     pub caught_fish: u64,
 }
 
+/// What grazing came to for one kind of animal, since the world opened.
+///
+/// Every figure is summed over the passes where one of them was grazing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct WhatTheGrazingCameTo {
+    /// Animal-passes spent grazing.
+    pub passes: u64,
+    /// What they reached for, in forage.
+    pub reached_for: f64,
+    /// What they got.
+    pub took: f64,
+    /// And how much of that was browse off grown trees.
+    #[serde(default)]
+    pub took_off_trees: f64,
+    /// Cells walked between patches.
+    pub walked: u64,
+    /// Stops made on the way.
+    pub stops: u64,
+    /// Passes that ended because the day's walk or its stops ran out, with
+    /// the animal still wanting.
+    pub ran_out_of_day: u64,
+    /// Passes that ended because there was nothing left within sight.
+    pub ran_out_of_ground: u64,
+}
+
 /// What carried the animals off, since the world opened.
 ///
 /// A running tally rather than a state anything reads: when a country empties
@@ -804,6 +879,13 @@ pub struct WhatCarriedThemOff {
     pub starvation: u64,
     /// Taken by something that eats.
     pub taken: u64,
+    /// Born, or hatched. With the three above, the whole of what a tier did.
+    #[serde(default)]
+    pub born: u64,
+    /// Kills this kind made. `taken` says what was eaten; this says what ate
+    /// it, which a head count cannot tell apart from a tier starving.
+    #[serde(default)]
+    pub took: u64,
 }
 
 /// What a rush at one animal comes to - see
@@ -1099,10 +1181,10 @@ fn stoat() -> AnimalSpecies {
         drops: vec![AnimalDrop::new("fur".to_string(), 1, 1)],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (3000, 5000),
-        maturity_age: 500,
-        breeding_cooldown: 800,
-        gestation_period: 300,
+        lifespan: (years(2), years(4)),
+        maturity_age: days(330),
+        breeding_cooldown: days(360),
+        gestation_period: days(28),
         litter_size: (3, 6),
         hunger_rate: 0.10,
         max_hunger: 80.0,
@@ -1134,9 +1216,9 @@ fn kestrel() -> AnimalSpecies {
         drops: vec![AnimalDrop::new("feathers".to_string(), 1, 2)],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (4000, 7000),
-        maturity_age: 600,
-        breeding_cooldown: 900,
+        lifespan: (years(3), years(8)),
+        maturity_age: days(360),
+        breeding_cooldown: days(360),
         gestation_period: 0,
         litter_size: (3, 5),
         hunger_rate: 0.10,
@@ -1170,9 +1252,9 @@ fn kingfisher() -> AnimalSpecies {
         drops: vec![AnimalDrop::new("feathers".to_string(), 1, 2)],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (3500, 6000),
-        maturity_age: 500,
-        breeding_cooldown: 900,
+        lifespan: (years(2), years(4)),
+        maturity_age: days(360),
+        breeding_cooldown: days(180),
         gestation_period: 0,
         litter_size: (3, 6),
         hunger_rate: 0.10,
@@ -1203,10 +1285,10 @@ fn adder() -> AnimalSpecies {
         drops: vec![AnimalDrop::new("leather".to_string(), 1, 1)],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (5000, 9000),
-        maturity_age: 900,
-        breeding_cooldown: 1200,
-        gestation_period: 500,
+        lifespan: (years(10), years(15)),
+        maturity_age: days(1260),
+        breeding_cooldown: days(720),
+        gestation_period: days(120),
         litter_size: (4, 9),
         hunger_rate: 0.05,
         max_hunger: 90.0,
@@ -1236,9 +1318,9 @@ fn heron() -> AnimalSpecies {
         drops: vec![AnimalDrop::new("feathers".to_string(), 2, 3)],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (8000, 14000),
-        maturity_age: 900,
-        breeding_cooldown: 1400,
+        lifespan: (years(8), years(15)),
+        maturity_age: days(720),
+        breeding_cooldown: days(360),
         gestation_period: 0,
         litter_size: (2, 4),
         hunger_rate: 0.08,
@@ -1274,10 +1356,10 @@ fn rabbit() -> AnimalSpecies {
         can_domesticate: true,
         living_products: vec![],
         // Lifecycle
-        lifespan: (8000, 12000),      // Short-lived
-        maturity_age: 500,             // Mature quickly
-        breeding_cooldown: 300,        // Breed often
-        gestation_period: 200,         // Quick gestation
+        lifespan: (years(2), years(4)),
+        maturity_age: days(120),
+        breeding_cooldown: days(72),
+        gestation_period: days(30),
         litter_size: (3, 8),           // Large litters
         hunger_rate: 0.15,             // High metabolism
         max_hunger: 100.0,
@@ -1310,10 +1392,10 @@ fn squirrel() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (6000, 10000),
-        maturity_age: 400,
-        breeding_cooldown: 500,
-        gestation_period: 250,
+        lifespan: (years(4), years(7)),
+        maturity_age: days(360),
+        breeding_cooldown: days(180),
+        gestation_period: days(38),
         litter_size: (2, 5),
         hunger_rate: 0.12,
         max_hunger: 80.0,
@@ -1352,11 +1434,11 @@ fn chicken() -> AnimalSpecies {
                 quantity: 1,
             },
         ],
-        lifespan: (5000, 8000),
-        maturity_age: 300,
-        breeding_cooldown: 200,
-        gestation_period: 0, // Egg layer
-        litter_size: (1, 1), // Eggs handled separately
+        lifespan: (years(5), years(8)),
+        maturity_age: days(150),
+        breeding_cooldown: days(60),
+        gestation_period: 0,
+        litter_size: (2, 4),
         hunger_rate: 0.1,
         max_hunger: 80.0,
         food_value: 12.0,
@@ -1393,10 +1475,10 @@ fn fox() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (10000, 15000),
-        maturity_age: 800,
-        breeding_cooldown: 1000,
-        gestation_period: 400,
+        lifespan: (years(3), years(6)),
+        maturity_age: days(300),
+        breeding_cooldown: days(360),
+        gestation_period: days(52),
         litter_size: (2, 5),
         hunger_rate: 0.08,
         max_hunger: 150.0,
@@ -1431,10 +1513,10 @@ fn wolf() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (12000, 18000),
-        maturity_age: 1000,
-        breeding_cooldown: 1500,
-        gestation_period: 500,
+        lifespan: (years(8), years(13)),
+        maturity_age: days(660),
+        breeding_cooldown: days(360),
+        gestation_period: days(63),
         litter_size: (3, 6),
         hunger_rate: 0.06,
         max_hunger: 200.0,
@@ -1472,10 +1554,10 @@ fn deer() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (15000, 25000),
-        maturity_age: 1200,
-        breeding_cooldown: 2000,
-        gestation_period: 800,
+        lifespan: (years(10), years(16)),
+        maturity_age: days(540),
+        breeding_cooldown: days(360),
+        gestation_period: days(200),
         litter_size: (1, 2),
         hunger_rate: 0.05,
         max_hunger: 200.0,
@@ -1515,11 +1597,11 @@ fn sheep() -> AnimalSpecies {
                 quantity: 4,
             },
         ],
-        lifespan: (12000, 18000),
-        maturity_age: 800,
-        breeding_cooldown: 1500,
-        gestation_period: 600,
-        litter_size: (1, 3),
+        lifespan: (years(10), years(14)),
+        maturity_age: days(360),
+        breeding_cooldown: days(360),
+        gestation_period: days(150),
+        litter_size: (1, 2),
         hunger_rate: 0.04,
         max_hunger: 180.0,
         food_value: 50.0,
@@ -1558,11 +1640,11 @@ fn goat() -> AnimalSpecies {
                 quantity: 1,
             },
         ],
-        lifespan: (14000, 20000),
-        maturity_age: 900,
-        breeding_cooldown: 1200,
-        gestation_period: 550,
-        litter_size: (1, 3),
+        lifespan: (years(10), years(15)),
+        maturity_age: days(360),
+        breeding_cooldown: days(360),
+        gestation_period: days(150),
+        litter_size: (1, 2),
         hunger_rate: 0.045,
         max_hunger: 170.0,
         food_value: 55.0,
@@ -1600,10 +1682,10 @@ fn boar() -> AnimalSpecies {
         ],
         can_domesticate: true,
         living_products: vec![],
-        lifespan: (12000, 18000),
-        maturity_age: 1000,
-        breeding_cooldown: 1500,
-        gestation_period: 500,
+        lifespan: (years(6), years(10)),
+        maturity_age: days(540),
+        breeding_cooldown: days(360),
+        gestation_period: days(115),
         litter_size: (4, 8),
         hunger_rate: 0.06,
         max_hunger: 220.0,
@@ -1648,10 +1730,10 @@ fn cow() -> AnimalSpecies {
                 quantity: 2,
             },
         ],
-        lifespan: (18000, 28000),
-        maturity_age: 1500,
-        breeding_cooldown: 2500,
-        gestation_period: 900,
+        lifespan: (years(15), years(20)),
+        maturity_age: days(720),
+        breeding_cooldown: days(360),
+        gestation_period: days(283),
         litter_size: (1, 1),
         hunger_rate: 0.04,
         max_hunger: 300.0,
@@ -1691,10 +1773,10 @@ fn bear() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (25000, 35000),
-        maturity_age: 2000,
-        breeding_cooldown: 4000,
-        gestation_period: 800,
+        lifespan: (years(20), years(30)),
+        maturity_age: days(1800),
+        breeding_cooldown: days(1080),
+        gestation_period: days(220),
         litter_size: (1, 3),
         hunger_rate: 0.03,
         max_hunger: 400.0,
@@ -1729,10 +1811,10 @@ fn lion() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (20000, 30000),
-        maturity_age: 1800,
-        breeding_cooldown: 3000,
-        gestation_period: 700,
+        lifespan: (years(12), years(16)),
+        maturity_age: days(1260),
+        breeding_cooldown: days(720),
+        gestation_period: days(110),
         litter_size: (1, 4),
         hunger_rate: 0.035,
         max_hunger: 350.0,
@@ -1770,10 +1852,10 @@ fn arctic_fox() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (8000, 12000),
-        maturity_age: 600,
-        breeding_cooldown: 800,
-        gestation_period: 350,
+        lifespan: (years(3), years(6)),
+        maturity_age: days(300),
+        breeding_cooldown: days(360),
+        gestation_period: days(52),
         litter_size: (3, 8),
         hunger_rate: 0.09,
         max_hunger: 140.0,
@@ -1814,10 +1896,10 @@ fn camel() -> AnimalSpecies {
                 quantity: 1,
             },
         ],
-        lifespan: (30000, 50000),
-        maturity_age: 2500,
-        breeding_cooldown: 4000,
-        gestation_period: 1000,
+        lifespan: (years(35), years(45)),
+        maturity_age: days(1440),
+        breeding_cooldown: days(720),
+        gestation_period: days(390),
         litter_size: (1, 1),
         hunger_rate: 0.02, // Low metabolism - desert adapted
         max_hunger: 400.0,
@@ -1853,10 +1935,10 @@ fn mammoth() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (50000, 80000),
-        maturity_age: 5000,
-        breeding_cooldown: 8000,
-        gestation_period: 2000,
+        lifespan: (years(60), years(80)),
+        maturity_age: days(4320),
+        breeding_cooldown: days(1620),
+        gestation_period: days(660),
         litter_size: (1, 1),
         hunger_rate: 0.025,
         max_hunger: 600.0,
@@ -1899,11 +1981,11 @@ fn duck() -> AnimalSpecies {
                 quantity: 1,
             },
         ],
-        lifespan: (5000, 8000),
-        maturity_age: 300,
-        breeding_cooldown: 200,
+        lifespan: (years(5), years(10)),
+        maturity_age: days(360),
+        breeding_cooldown: days(360),
         gestation_period: 0,
-        litter_size: (1, 1),
+        litter_size: (6, 12),
         hunger_rate: 0.1,
         max_hunger: 70.0,
         food_value: 10.0,
@@ -1941,11 +2023,11 @@ fn goose() -> AnimalSpecies {
                 quantity: 1,
             },
         ],
-        lifespan: (6000, 10000),
-        maturity_age: 350,
-        breeding_cooldown: 250,
+        lifespan: (years(10), years(20)),
+        maturity_age: days(720),
+        breeding_cooldown: days(360),
         gestation_period: 0,
-        litter_size: (1, 1),
+        litter_size: (4, 8),
         hunger_rate: 0.08,
         max_hunger: 90.0,
         food_value: 15.0,
@@ -1977,10 +2059,10 @@ fn pig() -> AnimalSpecies {
         ],
         can_domesticate: true,
         living_products: vec![],
-        lifespan: (12000, 18000),
-        maturity_age: 800,
-        breeding_cooldown: 1200,
-        gestation_period: 400,
+        lifespan: (years(10), years(15)),
+        maturity_age: days(210),
+        breeding_cooldown: days(180),
+        gestation_period: days(115),
         litter_size: (6, 12),
         hunger_rate: 0.07,
         max_hunger: 200.0,
@@ -2017,9 +2099,9 @@ fn crow() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (10000, 15000),
-        maturity_age: 400,
-        breeding_cooldown: 500,
+        lifespan: (years(7), years(14)),
+        maturity_age: days(720),
+        breeding_cooldown: days(360),
         gestation_period: 0,
         litter_size: (3, 6),
         hunger_rate: 0.12,
@@ -2054,9 +2136,9 @@ fn eagle() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (20000, 35000),
-        maturity_age: 1500,
-        breeding_cooldown: 3000,
+        lifespan: (years(20), years(30)),
+        maturity_age: days(1800),
+        breeding_cooldown: days(360),
         gestation_period: 0,
         litter_size: (1, 3),
         hunger_rate: 0.06,
@@ -2090,9 +2172,9 @@ fn hawk() -> AnimalSpecies {
         ],
         can_domesticate: true,
         living_products: vec![],
-        lifespan: (15000, 25000),
-        maturity_age: 1000,
-        breeding_cooldown: 2000,
+        lifespan: (years(10), years(20)),
+        maturity_age: days(720),
+        breeding_cooldown: days(360),
         gestation_period: 0,
         litter_size: (2, 4),
         hunger_rate: 0.07,
@@ -2126,9 +2208,9 @@ fn owl() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (12000, 20000),
-        maturity_age: 800,
-        breeding_cooldown: 1500,
+        lifespan: (years(8), years(15)),
+        maturity_age: days(360),
+        breeding_cooldown: days(360),
         gestation_period: 0,
         litter_size: (2, 5),
         hunger_rate: 0.08,
@@ -2162,9 +2244,9 @@ fn parrot() -> AnimalSpecies {
         ],
         can_domesticate: true,
         living_products: vec![],
-        lifespan: (30000, 60000), // Parrots live very long
-        maturity_age: 1500,
-        breeding_cooldown: 2000,
+        lifespan: (years(30), years(60)),
+        maturity_age: days(1080),
+        breeding_cooldown: days(360),
         gestation_period: 0,
         litter_size: (2, 4),
         hunger_rate: 0.09,
@@ -2203,10 +2285,10 @@ fn snake() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (15000, 25000),
-        maturity_age: 1000,
-        breeding_cooldown: 2000,
-        gestation_period: 0, // Egg layer
+        lifespan: (years(10), years(20)),
+        maturity_age: days(1080),
+        breeding_cooldown: days(360),
+        gestation_period: 0,
         litter_size: (5, 20),
         hunger_rate: 0.02, // Very low - can go long without eating
         max_hunger: 200.0,
@@ -2241,10 +2323,10 @@ fn tiger() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (18000, 28000),
-        maturity_age: 2000,
-        breeding_cooldown: 4000,
-        gestation_period: 700,
+        lifespan: (years(12), years(16)),
+        maturity_age: days(1440),
+        breeding_cooldown: days(800),
+        gestation_period: days(105),
         litter_size: (2, 4),
         hunger_rate: 0.04,
         max_hunger: 380.0,
@@ -2279,10 +2361,10 @@ fn crocodile() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (50000, 80000), // Crocodiles live very long
-        maturity_age: 3000,
-        breeding_cooldown: 5000,
-        gestation_period: 0, // Egg layer
+        lifespan: (years(50), years(70)),
+        maturity_age: days(4320),
+        breeding_cooldown: days(360),
+        gestation_period: 0,
         litter_size: (20, 50),
         hunger_rate: 0.015, // Very low metabolism
         max_hunger: 500.0,
@@ -2317,10 +2399,10 @@ fn polar_bear() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (25000, 40000),
-        maturity_age: 2500,
-        breeding_cooldown: 5000,
-        gestation_period: 900,
+        lifespan: (years(20), years(30)),
+        maturity_age: days(1800),
+        breeding_cooldown: days(1080),
+        gestation_period: days(240),
         litter_size: (1, 3),
         hunger_rate: 0.025,
         max_hunger: 450.0,
@@ -2358,11 +2440,11 @@ fn elk_animal() -> AnimalSpecies {
         ],
         can_domesticate: true,
         living_products: vec![],
-        lifespan: (18000, 28000),
-        maturity_age: 1500,
-        breeding_cooldown: 2500,
-        gestation_period: 850,
-        litter_size: (1, 2),
+        lifespan: (years(12), years(20)),
+        maturity_age: days(720),
+        breeding_cooldown: days(360),
+        gestation_period: days(245),
+        litter_size: (1, 1),
         hunger_rate: 0.045,
         max_hunger: 250.0,
         food_value: 90.0,
@@ -2396,10 +2478,10 @@ fn reindeer_animal() -> AnimalSpecies {
         ],
         can_domesticate: true,
         living_products: vec![],
-        lifespan: (15000, 22000),
-        maturity_age: 1200,
-        breeding_cooldown: 2000,
-        gestation_period: 750,
+        lifespan: (years(12), years(18)),
+        maturity_age: days(720),
+        breeding_cooldown: days(360),
+        gestation_period: days(225),
         litter_size: (1, 1),
         hunger_rate: 0.05,
         max_hunger: 200.0,
@@ -2436,10 +2518,10 @@ fn monkey() -> AnimalSpecies {
         ],
         can_domesticate: true,
         living_products: vec![],
-        lifespan: (20000, 35000),
-        maturity_age: 1500,
-        breeding_cooldown: 2000,
-        gestation_period: 500,
+        lifespan: (years(20), years(30)),
+        maturity_age: days(1440),
+        breeding_cooldown: days(720),
+        gestation_period: days(165),
         litter_size: (1, 2),
         hunger_rate: 0.1,
         max_hunger: 120.0,
@@ -2475,10 +2557,10 @@ fn fish() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (3000, 8000),
-        maturity_age: 200,
-        breeding_cooldown: 100,
-        gestation_period: 0, // Spawn eggs
+        lifespan: (years(4), years(8)),
+        maturity_age: days(720),
+        breeding_cooldown: days(360),
+        gestation_period: 0,
         litter_size: (50, 200), // Many eggs
         hunger_rate: 0.05,
         max_hunger: 50.0,
@@ -2511,10 +2593,10 @@ fn otter() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (12000, 18000),
-        maturity_age: 800,
-        breeding_cooldown: 1500,
-        gestation_period: 400,
+        lifespan: (years(8), years(12)),
+        maturity_age: days(720),
+        breeding_cooldown: days(360),
+        gestation_period: days(63),
         litter_size: (1, 4),
         hunger_rate: 0.1,
         max_hunger: 130.0,
@@ -2549,10 +2631,10 @@ fn seal() -> AnimalSpecies {
         ],
         can_domesticate: false,
         living_products: vec![],
-        lifespan: (25000, 40000),
-        maturity_age: 2000,
-        breeding_cooldown: 3000,
-        gestation_period: 800,
+        lifespan: (years(25), years(35)),
+        maturity_age: days(1800),
+        breeding_cooldown: days(360),
+        gestation_period: days(330),
         litter_size: (1, 1),
         hunger_rate: 0.04,
         max_hunger: 250.0,
@@ -2656,6 +2738,16 @@ pub struct Animal {
     pub what_is_on_me_from: Option<(i32, i32)>,
     #[serde(default)]
     pub what_is_on_me_id: Option<Uuid>,
+
+    /// What is left of a kill this one has lain up on, in what it feeds.
+    ///
+    /// A sheep is fifty and a wolf's belly is two hundred with the hunt
+    /// starting at thirty, so a kill filled it and the rest went nowhere:
+    /// the wolf was hunting again ten hours later, and every wolf in a pack
+    /// made its own kill. Lying up on a kill for a day or three is what a
+    /// hunter does. See `AnimalManager::HOW_LONG_A_KILL_LASTS`.
+    #[serde(default)]
+    pub a_kill_to_go_back_to: f32,
 }
 
 impl Animal {
@@ -2703,6 +2795,7 @@ impl Animal {
             could_face_it: false,
             what_is_on_me_from: None,
             what_is_on_me_id: None,
+            a_kill_to_go_back_to: 0.0,
         }
     }
 
@@ -3029,6 +3122,10 @@ pub struct AnimalManager {
     mouths_fed: u64,
     #[serde(default)]
     mouths_that_tried: u64,
+    /// And the same kind by kind, which is how a grazer that cannot get
+    /// enough is told apart from one that is not trying.
+    #[serde(default)]
+    grazing_by_kind: BTreeMap<String, WhatTheGrazingCameTo>,
 
     groups: BTreeMap<Uuid, Vec<Uuid>>, // Group ID -> Animal IDs
 
@@ -3087,6 +3184,7 @@ impl AnimalManager {
             forage_taken: 0.0,
             mouths_fed: 0,
             mouths_that_tried: 0,
+            grazing_by_kind: BTreeMap::new(),
             carried_off: BTreeMap::new(),
             hunting: WhatTheHuntingCameTo::default(),
             small_life: crate::environment::SmallLife::default(),
@@ -3181,6 +3279,8 @@ impl AnimalManager {
             all.old_age += one.old_age;
             all.starvation += one.starvation;
             all.taken += one.taken;
+            all.born += one.born;
+            all.took += one.took;
         }
         all
     }
@@ -3193,6 +3293,11 @@ impl AnimalManager {
 
     pub fn what_the_grazing_came_to(&self) -> (f64, u64, u64) {
         (self.forage_taken, self.mouths_fed, self.mouths_that_tried)
+    }
+
+    /// What the grazing came to for one kind. For measuring only.
+    pub fn what_the_grazing_came_to_for(&self, species_id: &str) -> WhatTheGrazingCameTo {
+        self.grazing_by_kind.get(species_id).copied().unwrap_or_default()
     }
 
     pub fn get_all(&self) -> &Vec<Animal> {
@@ -3342,6 +3447,12 @@ impl AnimalManager {
             Vec::new()
         };
 
+        // How much of a kill is still worth eating after a turn.
+        let what_a_kill_keeps_in_a_turn = Self::WHAT_IS_LEFT_WHEN_A_KILL_HAS_GONE.powf(
+            1.0 / (Self::HOW_LONG_A_KILL_LASTS
+                * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32),
+        );
+
         // First pass: basic updates and lifecycle
         let mut deaths_from_age = Vec::new();
         let mut starved: Vec<String> = Vec::new();
@@ -3362,6 +3473,19 @@ impl AnimalManager {
             // Hunger system
             let stood_up_to_it = animal.is_alive();
             animal.turn_hunger_burning(burning.get(idx).copied().unwrap_or(1.0));
+
+            // A kill it is lying up on feeds it before it thinks of hunting,
+            // and goes off meanwhile, to the weather and to whatever else
+            // comes to it.
+            if animal.a_kill_to_go_back_to > 0.0 {
+                let eaten = animal.a_kill_to_go_back_to.min(animal.hunger);
+                animal.feed(eaten);
+                animal.a_kill_to_go_back_to =
+                    (animal.a_kill_to_go_back_to - eaten) * what_a_kill_keeps_in_a_turn;
+                if animal.a_kill_to_go_back_to < Self::WHAT_IS_NOT_WORTH_GOING_BACK_TO {
+                    animal.a_kill_to_go_back_to = 0.0;
+                }
+            }
             if stood_up_to_it && !animal.is_alive() {
                 starved.push(animal.species_id.clone());
             }
@@ -3597,7 +3721,7 @@ impl AnimalManager {
                     a.position,
                     a.group_id,
                     litter_size,
-                    ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32,
+                    species.breeding_cooldown,
                 ))
             })
             .collect();
@@ -3609,6 +3733,7 @@ impl AnimalManager {
                     if self.how_many_are_alive() >= self.max_population {
                         break;
                     }
+                    self.carried_off.entry(species_id.clone()).or_default().born += 1;
 
                     // Spawn near parent with some offset
                     let offset_x = rng.gen_range(-2..=2);
@@ -3760,7 +3885,7 @@ impl AnimalManager {
             };
 
             let cooldown =
-                ((species.breeding_cooldown as f32) * BREEDING_INTERVAL_SCALE) as u32;
+                species.breeding_cooldown;
 
             if species.gestation_period > 0 {
                 // Mammal-style: one becomes pregnant
@@ -3776,6 +3901,7 @@ impl AnimalManager {
                     if self.how_many_are_alive() >= self.max_population {
                         break;
                     }
+                    self.carried_off.entry(species_id.clone()).or_default().born += 1;
                     let pos = self.animals[idx_a].position;
                     let offspring = Animal::new_offspring(
                         species_id.clone(),
@@ -4229,22 +4355,29 @@ impl AnimalManager {
                 })
                 .collect();
 
-        // Who is standing where, in blocks the size of a hunt.
+        // Who is standing where, in blocks a hunter can cast about over.
         //
         // A predator used to look at every animal in the world to find one
         // within eight tiles of it, which is every predator against every
         // animal: on a hundred square kilometres carrying four thousand head
         // that is millions of comparisons a turn, most of them string
         // comparisons against a list of prey species, to find the handful of
-        // animals actually in front of it. Blocks of `HOW_FAR_A_HUNT_REACHES`
-        // mean a predator looks in the nine blocks around it and nowhere else.
+        // animals actually in front of it. Blocks mean a predator looks in
+        // the blocks its half hour reaches and nowhere else.
+        //
+        // **They were blocks of eight cells, and a hunter looked in the nine
+        // around it** - twenty-four cells at the most. That was three turns
+        // of a wolf's walk when a pace was two cells; at twenty-five times
+        // that (`world::pace`) a sheep grazes further than that in one move,
+        // and fourteen hungry wolves spent a day within 120 to 350 metres of
+        // two sheep without once seeing either. See ISSUES_FOUND #280.
         let mut who_is_about: BTreeMap<(i32, i32), Vec<usize>> = BTreeMap::new();
         for (idx, animal) in self.animals.iter().enumerate() {
             if !animal.is_alive() {
                 continue;
             }
             who_is_about
-                .entry(Self::which_block(animal.position))
+                .entry(Self::which_hunting_block(animal.position))
                 .or_default()
                 .push(idx);
         }
@@ -4313,6 +4446,8 @@ impl AnimalManager {
         // For each predator, look for nearby prey
         let mut kills = Vec::new();
         let mut stalking: Vec<(usize, (i32, i32))> = Vec::new();
+        // Who closed on something and rushed it, and where it was.
+        let mut closed_on: Vec<(usize, (i32, i32))> = Vec::new();
         let mut went_looking = 0u64;
         let mut saw_something = 0u64;
         let mut rushed = 0u64;
@@ -4328,19 +4463,19 @@ impl AnimalManager {
                 None => continue,
             };
 
-            // How many animals a hunter will look over before it picks one.
+            // How many animals a hunter will weigh up before it picks one.
             //
             // A hunter goes for what is in front of it, not for the best of a
-            // full census, and the difference matters for what this costs: the
-            // nine blocks around a predator hold every animal standing there,
-            // so on ground that has filled up this loop is every predator
-            // against every animal again and the whole point of blocking it
-            // was to stop that. A quarter of a square kilometre that ran away
-            // to five hundred and sixty head took a five-year run from three
-            // seconds to over two hundred.
-            const HOW_MANY_IT_LOOKS_OVER: usize = 8;
+            // full census, and the difference matters for what this costs: on
+            // ground that has filled up, the blocks round a predator hold
+            // every animal standing there and weighing them all is every
+            // predator against every animal again. A quarter of a square
+            // kilometre that ran away to five hundred and sixty head took a
+            // five-year run from three seconds to over two hundred. Weighing
+            // means a registry lookup and a list of names; only what is within
+            // sight gets that far, and no more than this many of those.
+            const HOW_MANY_IT_LOOKS_OVER: usize = 64;
 
-            let hereabouts = Self::which_block(pred_pos);
             let this_ground = Self::whose_ground(pred_pos);
 
             // What the ground itself yields, every turn.
@@ -4452,34 +4587,55 @@ impl AnimalManager {
                 continue;
             }
             went_looking += 1;
-            let nearby: Vec<usize> = [-1, 0, 1]
-                .iter()
-                .flat_map(|dy| [-1, 0, 1].iter().map(move |dx| (*dx, *dy)))
+
+            // **A hunt is a half hour, the same as everybody else's.**
+            //
+            // It used to be one look at what stood within eighty metres, a
+            // rush if something did, and otherwise a step towards the nearest
+            // thing in the nine blocks round it - and the rush waited for the
+            // next roll, a day later on average, by when the quarry had
+            // grazed off. On a clock where a wolf covers the best part of a
+            // kilometre in a turn that is not a hunt; it is a wolf that sees
+            // a sheep, walks up to it, and stands there for a day.
+            //
+            // Now it is what a hunter does with its half hour: cast about as
+            // far as it can wind or see something, and if what it finds is
+            // within what it can cover in the turn, close on it and make the
+            // rush. Something further off it walks towards, a turn's worth,
+            // and comes at it the next time it hunts. The odds of the rush
+            // itself are untouched: `what_a_hunt_between_these_two_comes_to`
+            // still decides whether it comes off.
+            let hunter_now = &self.animals[pred_idx];
+            let covers = hunter_now
+                .how_far_it_gets_in_a_turn(hunter)
+                .max(Self::HOW_FAR_A_HUNT_REACHES);
+            let sees = covers * Self::HOW_MUCH_FURTHER_A_HUNTER_FINDS_THAN_IT_GETS;
+            let blocks_out = (sees + Self::HOW_BIG_A_HUNTING_BLOCK_IS - 1)
+                / Self::HOW_BIG_A_HUNTING_BLOCK_IS;
+            let hereabouts = Self::which_hunting_block(pred_pos);
+            let apart = |at: (i32, i32)| (at.0 - pred_pos.0).abs().max((at.1 - pred_pos.1).abs());
+
+            let in_sight: Vec<usize> = (-blocks_out..=blocks_out)
+                .flat_map(|dy| (-blocks_out..=blocks_out).map(move |dx| (dx, dy)))
                 .filter_map(|(dx, dy)| {
                     who_is_about.get(&(hereabouts.0 + dx, hereabouts.1 + dy))
                 })
-                // **Eight of them, and not always the same eight.**
-                //
-                // `take(8)` is a prefix of the block, and a block is in the
-                // order the animals were created - so a hunter standing in a
-                // block whose first eight entries are its own kind sees
-                // nothing else, for ever, however close the dinner is.
-                // Measured on the plainest case there is: fourteen wolves and
-                // two sheep on one cell, the sheep spawned last, and over
-                // half a day of wolves looking at the block the tally of
-                // "saw something" was **nought** while a sheep stood one cell
-                // away from all fourteen of them.
-                //
-                // Starting each hunter at its own offset costs the same eight
-                // comparisons and means the block is actually sampled.
-                .flat_map(|block| {
-                    let from = if block.is_empty() { 0 } else { pred_idx % block.len() };
-                    block
-                        .iter()
-                        .cycle()
-                        .skip(from)
-                        .take(HOW_MANY_IT_LOOKS_OVER.min(block.len()))
-                })
+                .flatten()
+                .copied()
+                .filter(|&idx| idx != pred_idx && apart(self.animals[idx].position) <= sees)
+                .collect();
+
+            // **Not always the same few, either.** Blocks are in the order
+            // the animals were made, so a prefix of them is whatever was
+            // spawned first: fourteen wolves and two sheep, the sheep made
+            // last, and a hunter that only ever looked at the first eight saw
+            // nothing but wolves. Each starts at its own place in the list.
+            let from = if in_sight.is_empty() { 0 } else { pred_idx % in_sight.len() };
+            let nearby: Vec<usize> = in_sight
+                .iter()
+                .cycle()
+                .skip(from)
+                .take(HOW_MANY_IT_LOOKS_OVER.min(in_sight.len()))
                 .copied()
                 .collect();
 
@@ -4492,23 +4648,44 @@ impl AnimalManager {
                 hunters_in.get(&this_ground).copied().unwrap_or(1),
             );
 
+            // **And crowded for this hunter**, which is whether the ground
+            // feeds it. Crowding counts the herds and not the voles and fish
+            // the smaller hunters live on, so on a hundred square kilometres
+            // almost every ground was crowded for everything, always - and a
+            // heron or a hawk that could see a kestrel took it, fed or not.
+            // Once a hunter could see a turn's walk off (#280) that was every
+            // kestrel on the map inside three years. The pressure the
+            // specification means comes from food running short, so it is
+            // crowding on ground that no longer pays this hunter its keep.
+            let hard_pressed = crowded && the_ground_pays < hunter.hunger_rate;
+
             // How many of its own kind are hunting alongside it. A pack takes
             // what one of them could not.
-            let hunters_together = nearby
-                .iter()
-                .filter(|&&idx| {
-                    self.animals[idx].is_alive()
-                        && self.animals[idx].species_id == pred_species_id
-                        && (self.animals[idx].position.0 - pred_pos.0).abs()
-                            + (self.animals[idx].position.1 - pred_pos.1).abs()
-                            <= Self::HOW_FAR_A_HERD_STANDS_TOGETHER
-                })
-                .count()
-                .max(1);
+            //
+            // Whoever of the pack is within the hunter's half hour, which is
+            // how far off a packmate can be and still be in at the kill; it
+            // was the forty metres a herd stands in, which a pack that
+            // spreads out to graze its ground at the new pace is almost never
+            // inside. Only for something that hunts in packs: two bears on
+            // one hillside are not a pack.
+            let hunts_in_a_pack = hunter.group_size.1 >= Self::WHAT_COUNTS_AS_A_GROUP;
+            let the_pack: Vec<usize> = if hunts_in_a_pack {
+                in_sight
+                    .iter()
+                    .copied()
+                    .filter(|&idx| {
+                        self.animals[idx].is_alive()
+                            && self.animals[idx].species_id == pred_species_id
+                            && apart(self.animals[idx].position) <= covers
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let hunters_together = the_pack.len() + 1;
 
-            // Find nearby prey, and the nearest thing worth walking to if
-            // none of it is within a rush.
-            let mut closest: Option<((i32, i32), i32)> = None;
+            // What it sees that it would try for, and the nearest of it.
+            let mut closest: Option<(usize, i32)> = None;
             let mut rushed_something = false;
 
             for prey_idx in nearby.iter().copied() {
@@ -4545,42 +4722,42 @@ impl AnimalManager {
                     // about.
                     || (small_enough
                         && it_eats_meat
-                        && (crowded || desperate)
-                        && quarry.where_it_sits() < hunter.where_it_sits());
+                        && (hard_pressed || desperate)
+                        && quarry.where_it_sits() < hunter.where_it_sits()
+                        // **And only one it comes upon.** A hunter is not
+                        // anybody's quarry: a hawk kills a kestrel it
+                        // happens on, it does not go looking for one. Once
+                        // a hunter could see two turns' walk off (#280),
+                        // every short-fed eagle and heron on the map sought
+                        // kestrels out from a kilometre and more, and
+                        // kestrels went 181 to 1 in five years, 293 of them
+                        // taken (#285). Within a rush, or not at all.
+                        && apart(prey.position) <= Self::HOW_FAR_A_HUNT_REACHES);
 
                 if !worth_trying {
                     continue;
                 }
                 saw_something += 1;
 
-                // Check proximity - the blocks are only a sieve, and a
-                // neighbouring block reaches further than a hunt does.
-                let distance = (pred_pos.0 - prey.position.0).abs()
-                    + (pred_pos.1 - prey.position.1).abs();
-                if distance > Self::HOW_FAR_A_HUNT_REACHES {
-                    // Too far to rush, and worth walking towards. **This is
-                    // the whole of why nothing in this world ever ate.**
-                    //
-                    // A hunt asked "is there something I would try for within
-                    // eighty metres of me, right now", and if there was not,
-                    // the turn was over. Nothing ever moved a hungry hunter
-                    // towards prey it could see. Measured over a year on a
-                    // hundred square kilometres: 176,125 hunts went looking,
-                    // 4,379 of them had something in the nine blocks around
-                    // them worth trying for, and **thirteen** of those were
-                    // close enough to rush. A wolf ranges tens of kilometres
-                    // in a day; this one stood in a field waiting for a deer
-                    // to walk into it.
-                    if closest.map(|(_, so_far)| distance < so_far).unwrap_or(true) {
-                        closest = Some((prey.position, distance));
-                    }
-                    continue;
+                let distance = apart(prey.position);
+                if closest.map(|(_, so_far)| distance < so_far).unwrap_or(true) {
+                    closest = Some((prey_idx, distance));
                 }
+            }
+
+            // Within its half hour: it closes, and it rushes.
+            let within_the_turn = closest.filter(|&(_, distance)| distance <= covers);
+            if let Some((prey_idx, _)) = within_the_turn {
+                let quarry = match registry.get(&self.animals[prey_idx].species_id) {
+                    Some(s) => s,
+                    None => continue,
+                };
+                let prey = &self.animals[prey_idx];
 
                 // How many of its own kind are standing with it.
                 let prey_pos = prey.position;
                 let prey_species_id = prey.species_id.clone();
-                let stands_with = nearby
+                let stands_with = in_sight
                     .iter()
                     .filter(|&&idx| {
                         idx != prey_idx
@@ -4609,20 +4786,20 @@ impl AnimalManager {
 
                 rushed += 1;
                 rushed_something = true;
+                closed_on.push((pred_idx, prey_pos));
                 if rng.gen::<f32>() < odds.comes_off {
                     came_off += 1;
-                    kills.push((pred_idx, prey_idx, quarry.food_value));
+                    kills.push((pred_idx, prey_idx, quarry.food_value, the_pack.clone()));
                 } else if odds.what_it_costs > 0.0 {
                     hurts.push((pred_idx, odds.what_it_costs));
                 }
-                break; // One rush per predator per turn, come off or not.
             }
 
             // Nothing within a rush, but something worth walking to. A
             // predator's day is mostly the walk.
             if !rushed_something {
                 if let Some((towards, _)) = closest {
-                    stalking.push((pred_idx, towards));
+                    stalking.push((pred_idx, self.animals[towards].position));
                 }
             }
 
@@ -4743,8 +4920,8 @@ impl AnimalManager {
         // in `what_a_hunt_comes_to`, where the cow's size, its herd and its
         // temperament are already counted, and where the answer for one wolf
         // and one cow is very near nought.
-        let mut taken: Vec<String> = Vec::new();
-        for (pred_idx, prey_idx, food_value) in kills {
+        let mut taken: Vec<(String, String)> = Vec::new();
+        for (pred_idx, prey_idx, food_value, the_pack) in kills {
             let Some(prey) = self.animals.get_mut(prey_idx) else {
                 continue;
             };
@@ -4755,15 +4932,51 @@ impl AnimalManager {
 
             prey.state = AnimalState::Dead;
             prey.current_health = 0.0;
-            taken.push(prey.species_id.clone());
+            let where_it_fell = prey.position;
+            let what_it_was = prey.species_id.clone();
+            let what_took_it = self.animals[pred_idx].species_id.clone();
+            taken.push((what_it_was, what_took_it));
 
-            if let Some(predator) = self.animals.get_mut(pred_idx) {
-                predator.feed(food_value);
+            // **The pack eats it, and what is left is gone back to.**
+            //
+            // It fed the one that made the rush, as far as that one's belly
+            // went, and the rest was lost. So a pack made a kill each where a
+            // pack makes one and shares it, and a wolf that had eaten its fill
+            // of a sheep was hunting again by nightfall.
+            //
+            // Hungriest first, each as far as it can eat. Whoever ate comes
+            // in to the kill, which is also what keeps a pack a pack.
+            let mut eaters: Vec<usize> = std::iter::once(pred_idx)
+                .chain(the_pack.into_iter().filter(|&idx| idx != pred_idx))
+                .filter(|&idx| self.animals[idx].is_alive())
+                .collect();
+            eaters.sort_by(|&a, &b| {
+                self.animals[b]
+                    .hunger
+                    .partial_cmp(&self.animals[a].hunger)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            let mut meat = food_value;
+            for idx in eaters {
+                if meat <= 0.0 {
+                    break;
+                }
+                let eater = &mut self.animals[idx];
+                let eaten = meat.min(eater.hunger);
+                if eaten > 0.0 {
+                    eater.feed(eaten);
+                    eater.position = where_it_fell;
+                    meat -= eaten;
+                }
+            }
+            if meat > 0.0 {
+                self.animals[pred_idx].a_kill_to_go_back_to += meat;
             }
         }
 
-        for which in taken {
+        for (which, by) in taken {
             self.carried_off.entry(which).or_default().taken += 1;
+            self.carried_off.entry(by).or_default().took += 1;
         }
 
         // What the small life fed.
@@ -4794,6 +5007,14 @@ impl AnimalManager {
         let edge = (grid.width as i32 - 1, grid.height as i32 - 1);
         let mut already_moving: std::collections::BTreeSet<usize> =
             std::collections::BTreeSet::new();
+
+        // Whatever made its rush is standing where the quarry stood.
+        for (pred_idx, there) in closed_on {
+            already_moving.insert(pred_idx);
+            if let Some(hunter) = self.animals.get_mut(pred_idx) {
+                hunter.position = (there.0.clamp(0, edge.0), there.1.clamp(0, edge.1));
+            }
+        }
 
         for (pred_idx, towards) in stalking {
             already_moving.insert(pred_idx);
@@ -5010,6 +5231,7 @@ impl AnimalManager {
         let mut took_altogether = 0.0f64;
         let mut mouths = 0u64;
         let mut reached = 0u64;
+        let mut by_kind: BTreeMap<String, WhatTheGrazingCameTo> = BTreeMap::new();
 
         for animal in &mut self.animals {
             if !animal.is_alive() || animal.state != AnimalState::Grazing {
@@ -5024,99 +5246,245 @@ impl AnimalManager {
                 continue;
             }
 
-            let mut wanted = Self::what_it_reaches_for(species) * grazing_passes;
+            // **As much as it has room for, and no more.** It reached for
+            // its full reach whenever it was grazing, three times what it
+            // burns, hungry or not, and what passed a full belly went
+            // nowhere. With grass that does not grow back in winter (#284),
+            // that stripped the autumn's standing growth at three times the
+            // herd's need, and the grazers starved by midwinter while the
+            // browsers lived on twigs (#285). An animal eats until it is
+            // full.
+            let has_room_for =
+                animal.hunger / Self::what_a_mouthful_is_worth_to(species).max(0.0001);
+            let mut wanted =
+                (Self::what_it_reaches_for(species) * grazing_passes).min(has_room_for);
+            if wanted <= 0.0 {
+                continue;
+            }
             let mut taken = 0.0;
 
-            // Underfoot first, then a step in any direction. An animal that is
-            // grazing is standing still and eating what is around it, not
-            // ranging - the ranging is what `update_animal_behavior_with_hunger`
-            // does when it is hungry and there is nothing here.
-            for (dx, dy) in Self::WHERE_AN_ANIMAL_CAN_REACH {
+            // **What it reaches for is split between browse and grazing**,
+            // by what its kind eats - see `how_much_of_it_is_browse`. Each
+            // share is met only off its own kind of growth, so a deer lives
+            // in the woods and a cow in the open, and a goat does not eat
+            // every other grazer out of the country (#285).
+            let mut wanted_browse = wanted * species.how_much_of_it_is_browse();
+            let mut wanted_graze = wanted - wanted_browse;
+
+            // **A day's grazing is a walk, not a spot.**
+            //
+            // It was the nine cells under the animal at the moment the pass
+            // came round, and a step on only if those held nothing at all. A
+            // grazer covers kilometres in a day, and at the pace of
+            // `world::pace` the animals here do too - but the pass never
+            // followed them. Measured over two years on a hundred square
+            // kilometres, the country stood at fifteen million of forage and
+            // lost a tenth of it, while more than half the herbivores were
+            // hungry from the first summer and a twentieth of them starved
+            // each month: they got about a sixth of what they reached for. Now
+            // an animal that has not had its fill moves on to the nearest
+            // ground with something left on it and crops that, as many times
+            // as a day's grazing covers. See ISSUES_FOUND #282.
+            let mut walked = 0;
+            let mut stops = 0;
+            let reached_for = wanted;
+            let mut out_of_ground = false;
+            let mut off_trees = 0.0f32;
+            // **And a big animal ranges further in its day.** One day's walk
+            // for everything meant an elk, wanting four times what a sheep
+            // does, ran out of day with its appetite unmet two passes in
+            // five and a mammoth, wanting thirty-two times, two in three -
+            // and they starved where sheep and goats did well (#285). How far
+            // an animal goes in a day rises with its bulk to about three
+            // eighths: an elk twice as far as a sheep, a mammoth five or six
+            // times, an elephant's ten or fifteen kilometres.
+            let how_far_its_kind_ranges = (species.mass_kg.max(1.0)
+                / Self::WHAT_A_DAYS_GRAZING_IS_SET_FOR_KG)
+                .powf(0.375)
+                .clamp(0.5, 6.0);
+
+            // Whether it has gone over to the other kind of growth, and what
+            // it has taken of that since.
+            let mut making_do = false;
+            let mut off_its_own = 0.0f32;
+            loop {
+                // Underfoot first, then a step in any direction. An animal that is
+                // grazing is standing still and eating what is around it, not
+                // ranging - the ranging is what `update_animal_behavior_with_hunger`
+                // does when it is hungry and there is nothing here.
+                for (dx, dy) in Self::WHERE_AN_ANIMAL_CAN_REACH {
+                    if wanted <= 0.0 {
+                        break;
+                    }
+
+                    let (x, y) = (animal.position.0 + dx, animal.position.1 + dy);
+                    if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                        continue;
+                    }
+
+                    let index = where_it_grows[y as usize * width + x as usize];
+                    if index == u32::MAX {
+                        continue;
+                    }
+                    let index = index as usize;
+
+                    let plant = &plants.all_plants()[index];
+                    let Some(kind) = flora.get(&plant.species_id) else {
+                        continue;
+                    };
+
+                    // Only what it still wants of this kind of growth.
+                    let woody = kind.is_woody();
+                    let wants_here = if woody { wanted_browse } else { wanted_graze };
+                    if wants_here <= 0.0 {
+                        continue;
+                    }
+
+                    // Bring it up to now before taking anything off it. Most of
+                    // the vegetation waits four months for its zone to come round
+                    // - see `PlantManager::grow_a_zone` - and a plant something is
+                    // standing on cannot wait that long, or it would lose
+                    // condition a hundred and forty-four times for every time it
+                    // gained any. This is the whole of what "unless there is
+                    // something within reach of it" means.
+                    plants.catch_up_one(
+                        index,
+                        grid,
+                        weather.precipitation,
+                        weather.now,
+                        weather.season,
+                    );
+
+                    let plant = &plants.all_plants()[index];
+
+                    let already = cropped.get(&index).copied().unwrap_or(0.0);
+                    let standing = plant.current_health - already;
+                    if standing <= 0.0 {
+                        continue;
+                    }
+
+                    // A grown tree is browse and offers a flat mouthful; see
+                    // `what_there_is_to_take`.
+                    let there_to_take =
+                        Self::what_there_is_to_take(plant, kind, already, grazing_passes);
+
+                    if there_to_take <= 0.0 {
+                        continue;
+                    }
+
+                    let bite = wants_here.min(there_to_take);
+                    *cropped.entry(index).or_insert(0.0) += bite;
+                    if woody {
+                        wanted_browse -= bite;
+                    } else {
+                        wanted_graze -= bite;
+                    }
+                    wanted -= bite;
+                    taken += bite;
+                    if making_do {
+                        off_its_own += bite;
+                    }
+                    if Self::is_a_grown_tree(plant, kind) {
+                        off_trees += bite;
+                    }
+
+                    // A bear does not crop a root, it digs it up, and what has
+                    // been dug up does not come back. Which animals do that is
+                    // which animals feed by digging: the big omnivores. It is the
+                    // manner of the feeding rather than a list of plants that
+                    // decides it, so nothing here has to keep a hand-written
+                    // vocabulary of what counts as a root.
+                    if Self::does_it_dig(species) && !kind.is_tree {
+                        pulled_up.insert(index);
+                    }
+                }
+
+                // **And when its own kind of growth runs short, it makes do
+                // with the other.** Held strictly to its share, a sheep on
+                // ground whose grass was thin starved beside a hedge: over
+                // five years sheep went 112 to 4 and reindeer 287 to 4 while
+                // the browsers thrived. A grazer will browse and a browser
+                // graze when they must, and get less out of it - see
+                // `WHAT_ANOTHER_KIND_OF_GROWTH_IS_WORTH`. Whatever share is
+                // still unmet goes over to the other kind, once, and it goes
+                // on with what is left of the day.
+                let the_day_is_spent = walked as f32
+                    >= Self::HOW_FAR_A_DAYS_GRAZING_GOES as f32 * how_far_its_kind_ranges
+                    || stops as f32
+                        >= Self::HOW_MANY_STOPS_A_DAYS_GRAZING_MAKES as f32 * how_far_its_kind_ranges;
                 if wanted <= 0.0 {
                     break;
                 }
-
-                let (x, y) = (animal.position.0 + dx, animal.position.1 + dy);
-                if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                if the_day_is_spent {
+                    if making_do {
+                        break;
+                    }
+                    making_do = true;
+                    std::mem::swap(&mut wanted_browse, &mut wanted_graze);
                     continue;
                 }
-
-                let index = where_it_grows[y as usize * width + x as usize];
-                if index == u32::MAX {
-                    continue;
-                }
-                let index = index as usize;
-
-                let plant = &plants.all_plants()[index];
-                let Some(kind) = flora.get(&plant.species_id) else {
-                    continue;
+                // What the bite would take, asked the same way the bite asks
+                // it. This asked what was standing, and a grown tree is
+                // standing a hundred and more when a browser may take two
+                // and a half off it in a day - so a cow walked from one
+                // browsed-out oak to the next, twenty stops a day at under
+                // half a unit each, past bushes carrying eighteen apiece, and
+                // got half its keep (#283).
+                let (still_browsing, still_grazing) = (wanted_browse > 0.0, wanted_graze > 0.0);
+                let left_on = |index: usize| {
+                    let plant = &plants.all_plants()[index];
+                    flora
+                        .get(&plant.species_id)
+                        .map(|kind| {
+                            (if kind.is_woody() { still_browsing } else { still_grazing })
+                                && Self::what_there_is_to_take(
+                                plant,
+                                kind,
+                                cropped.get(&index).copied().unwrap_or(0.0),
+                                grazing_passes,
+                            ) > 0.0
+                        })
+                        .unwrap_or(false)
                 };
-
-                // Bring it up to now before taking anything off it. Most of
-                // the vegetation waits four months for its zone to come round
-                // - see `PlantManager::grow_a_zone` - and a plant something is
-                // standing on cannot wait that long, or it would lose
-                // condition a hundred and forty-four times for every time it
-                // gained any. This is the whole of what "unless there is
-                // something within reach of it" means.
-                plants.catch_up_one(
-                    index,
-                    grid,
-                    weather.precipitation,
-                    weather.now,
-                    weather.season,
-                );
-
-                let plant = &plants.all_plants()[index];
-
-                let already = cropped.get(&index).copied().unwrap_or(0.0);
-                let standing = plant.current_health - already;
-                if standing <= 0.0 {
-                    continue;
+                match Self::where_there_is_something_left(
+                    animal.position,
+                    &where_it_grows,
+                    width,
+                    height,
+                    left_on,
+                ) {
+                    Some(there) => {
+                        walked += (there.0 - animal.position.0)
+                            .abs()
+                            .max((there.1 - animal.position.1).abs());
+                        animal.position = there;
+                        stops += 1;
+                    }
+                    None => {
+                        if making_do {
+                            out_of_ground = true;
+                            break;
+                        }
+                        making_do = true;
+                        std::mem::swap(&mut wanted_browse, &mut wanted_graze);
+                    }
                 }
+            }
 
-                // A grown tree is browse, not grazing. Nothing eats a trunk;
-                // what a deer or a sheep gets off an oak is the shoots and
-                // leaves it can reach, which is a mouthful or two and no more
-                // however big the tree is - so what a tree offers is a flat
-                // small amount rather than a share of its bulk, and cropping
-                // it does not touch the tree.
-                //
-                // Excluding grown trees outright was the first cut and it is
-                // wrong on a wooded map: most of what is standing on a fresh
-                // map is timber, so twelve sheep on twenty-five hectares had
-                // almost nothing in reach, overshot to thirty on the hunger
-                // they were born with, and starved.
-                let grown_tree = kind.is_tree
-                    && !matches!(
-                        plant.growth_stage,
-                        crate::environment::GrowthStage::Seedling
-                            | crate::environment::GrowthStage::Growing
-                    );
-
-                let there_to_take = if grown_tree {
-                    standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_passes - already)
-                } else {
-                    standing
-                };
-
-                if there_to_take <= 0.0 {
-                    continue;
-                }
-
-                let bite = wanted.min(there_to_take);
-                *cropped.entry(index).or_insert(0.0) += bite;
-                wanted -= bite;
-                taken += bite;
-
-                // A bear does not crop a root, it digs it up, and what has
-                // been dug up does not come back. Which animals do that is
-                // which animals feed by digging: the big omnivores. It is the
-                // manner of the feeding rather than a list of plants that
-                // decides it, so nothing here has to keep a hand-written
-                // vocabulary of what counts as a root.
-                if Self::does_it_dig(species) && !kind.is_tree {
-                    pulled_up.insert(index);
+            {
+                let tally = by_kind.entry(animal.species_id.clone()).or_default();
+                tally.passes += 1;
+                tally.reached_for += reached_for as f64;
+                tally.took += taken as f64;
+                tally.took_off_trees += off_trees as f64;
+                tally.walked += walked as u64;
+                tally.stops += stops as u64;
+                if wanted > 0.0 {
+                    if out_of_ground {
+                        tally.ran_out_of_ground += 1;
+                    } else {
+                        tally.ran_out_of_day += 1;
+                    }
                 }
             }
 
@@ -5141,7 +5509,9 @@ impl AnimalManager {
                 continue;
             }
 
-            animal.feed(taken * Self::what_a_mouthful_is_worth_to(species));
+            let worth_having = taken - off_its_own
+                + off_its_own * Self::WHAT_ANOTHER_KIND_OF_GROWTH_IS_WORTH;
+            animal.feed(worth_having * Self::what_a_mouthful_is_worth_to(species));
             took_altogether += taken as f64;
             mouths += 1;
 
@@ -5164,6 +5534,17 @@ impl AnimalManager {
         self.forage_taken += took_altogether;
         self.mouths_fed += mouths;
         self.mouths_that_tried += reached;
+        for (kind, came_to) in by_kind {
+            let tally = self.grazing_by_kind.entry(kind).or_default();
+            tally.passes += came_to.passes;
+            tally.reached_for += came_to.reached_for;
+            tally.took += came_to.took;
+            tally.took_off_trees += came_to.took_off_trees;
+            tally.walked += came_to.walked;
+            tally.stops += came_to.stops;
+            tally.ran_out_of_day += came_to.ran_out_of_day;
+            tally.ran_out_of_ground += came_to.ran_out_of_ground;
+        }
 
         // The dead go back into the ground on the plants' own pass - see
         // `PlantManager::what_died`, which is what reads a plant at nothing.
@@ -5321,6 +5702,123 @@ impl AnimalManager {
         None
     }
 
+    /// What a grazing animal can take off this plant in this pass, when
+    /// `already` has been taken off it by others.
+    ///
+    /// A grown tree is browse, not grazing. Nothing eats a trunk; what a deer
+    /// or a sheep gets off an oak is the shoots and leaves it can reach, which
+    /// is a mouthful or two and no more however big the tree is - so what a
+    /// tree offers is a flat small amount rather than a share of its bulk,
+    /// and cropping it does not touch the tree.
+    ///
+    /// Excluding grown trees outright was the first cut and it is wrong on a
+    /// wooded map: most of what is standing on a fresh map is timber, so
+    /// twelve sheep on twenty-five hectares had almost nothing in reach,
+    /// overshot to thirty on the hunger they were born with, and starved.
+    ///
+    /// One answer, read both by the bite and by the walk that decides where
+    /// to take the next one.
+    fn what_there_is_to_take(
+        plant: &crate::environment::Plant,
+        kind: &crate::environment::PlantSpecies,
+        already: f32,
+        grazing_passes: f32,
+    ) -> f32 {
+        let standing = plant.current_health - already;
+        if standing <= 0.0 {
+            return 0.0;
+        }
+        if Self::is_a_grown_tree(plant, kind) {
+            standing.min(Self::WHAT_A_TREE_OFFERS_A_BROWSER * grazing_passes - already)
+        } else {
+            // **Down to the crown and no further.** A grazer took a plant
+            // to nothing, and a plant at nothing is dead and gone - so every
+            // patch a herd cropped was a patch it killed. The herbs on the
+            // big map went from 145,552 to 600 in two years and the bushes
+            // from 37,095 to 1,557, the herds crashed after them, and the
+            // browsers came through on the trees, which only ever give up a
+            // mouthful (#285). Grazing takes the leaf and leaves the crown and
+            // the root, which is why a meadow comes back.
+            (standing - kind.health * Self::WHAT_GRAZING_LEAVES_OF_A_PLANT).max(0.0)
+        }
+    }
+
+    /// Whether this plant is a grown tree, which is browsed rather than grazed.
+    fn is_a_grown_tree(
+        plant: &crate::environment::Plant,
+        kind: &crate::environment::PlantSpecies,
+    ) -> bool {
+        kind.is_tree
+            && !matches!(
+                plant.growth_stage,
+                crate::environment::GrowthStage::Seedling
+                    | crate::environment::GrowthStage::Growing
+            )
+    }
+
+    /// The nearest ground within sight with something still standing on it,
+    /// for an animal that has cropped where it is and is still hungry.
+    ///
+    /// The same rings as `where_there_is_something_growing`, but it asks
+    /// what is left rather than what grows - an animal walking on across a
+    /// patch it has just eaten off is not grazing - and it goes there rather
+    /// than a step towards it, because a day's grazing covers far more than
+    /// the twenty cells it looks over.
+    fn where_there_is_something_left(
+        from: (i32, i32),
+        where_it_grows: &[u32],
+        width: usize,
+        height: usize,
+        left_on: impl Fn(usize) -> bool,
+    ) -> Option<(i32, i32)> {
+        const HOW_FAR_AN_ANIMAL_WILL_LOOK: i32 = 20;
+
+        for ring in 2..=HOW_FAR_AN_ANIMAL_WILL_LOOK {
+            for dy in -ring..=ring {
+                for dx in -ring..=ring {
+                    if dx.abs() != ring && dy.abs() != ring {
+                        continue;
+                    }
+                    let (x, y) = (from.0 + dx, from.1 + dy);
+                    if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
+                        continue;
+                    }
+                    let index = where_it_grows[y as usize * width + x as usize];
+                    if index == u32::MAX || !left_on(index as usize) {
+                        continue;
+                    }
+                    return Some((x, y));
+                }
+            }
+        }
+
+        None
+    }
+
+    /// What share of a plant's full growth a grazer leaves standing: the
+    /// crown and the root, that it grows back from.
+    const WHAT_GRAZING_LEAVES_OF_A_PLANT: f32 = 0.25;
+
+    /// The animal the day's grazing walk is set for: a sixty-kilo sheep.
+    const WHAT_A_DAYS_GRAZING_IS_SET_FOR_KG: f32 = 60.0;
+
+    /// What a mouthful of the other kind of growth is worth to an animal
+    /// making do with it, against its own: a sheep eating twigs, a deer
+    /// eating grass. Half - it keeps them alive through a thin season and
+    /// does not let a grazer live in a wood as well as a deer does.
+    const WHAT_ANOTHER_KIND_OF_GROWTH_IS_WORTH: f32 = 0.5;
+
+    /// How far a day's grazing goes, in cells, at most: three kilometres,
+    /// which is a grazing day for most things on four legs. Measured in
+    /// ground rather than in stops, so that something that needs a great
+    /// deal - an elk, a mammoth - crops on across more of it.
+    const HOW_FAR_A_DAYS_GRAZING_GOES: i32 = 300;
+
+    /// And how many stops it makes on the way. Without this an elk on thin
+    /// ground made a hundred hops of two cells, each behind a search of the
+    /// rings round it, and a year on the big map took four times as long.
+    const HOW_MANY_STOPS_A_DAYS_GRAZING_MAKES: u32 = 24;
+
     /// How far an animal moves in a grazing pass, in cells.
     ///
     /// Ten turns is most of a day and a cell is ten metres, so this is a few
@@ -5334,7 +5832,16 @@ impl AnimalManager {
     /// something on four legs is the same handful of shoots whether the tree
     /// is a birch or a sequoia. Enough that a wood will carry a few animals
     /// and nothing like what a meadow carries, which is the right way round.
-    const WHAT_A_TREE_OFFERS_A_BROWSER: f32 = 0.05;
+    ///
+    /// **Set from what a wood yields.** It was 0.05, 2.4 a day off every
+    /// grown tree, and a hundred square kilometres has five or six grown
+    /// trees to the hectare: browse alone for some four hundred deer to the
+    /// square kilometre. Temperate woodland gives deer about two hundred
+    /// kilos of browse a hectare in a year. A sixty-kilo sheep here needs
+    /// 2.9 a day and eats about a kilo and a half, so a unit is about half a
+    /// kilo, and two hundred kilos a hectare is about 1.1 a day across five
+    /// and a half trees: 0.2 a tree a day. See ISSUES_FOUND #284.
+    const WHAT_A_TREE_OFFERS_A_BROWSER: f32 = 0.004;
 
     /// How much over its own burn an animal eats when it can find it.
     ///
@@ -5376,8 +5883,34 @@ impl AnimalManager {
         reared
     }
 
-    /// How far a predator will chase, in cells.
+    /// How many days a kill is worth lying up on before what is left of it
+    /// has gone - to the flies, the weather, and the foxes and crows that come
+    /// to it.
+    const HOW_LONG_A_KILL_LASTS: f32 = 3.0;
+
+    /// What share of a kill is left when it has gone, which fixes how fast it
+    /// goes: a twentieth after three days is about two per cent a turn.
+    const WHAT_IS_LEFT_WHEN_A_KILL_HAS_GONE: f32 = 0.05;
+
+    /// Less than this and there is nothing to go back to.
+    const WHAT_IS_NOT_WORTH_GOING_BACK_TO: f32 = 0.5;
+
+    /// How far a predator will chase, in cells: the rush at the end of a
+    /// hunt, once it has closed. A hunter that covers less than this in a
+    /// turn still reaches this far.
     const HOW_FAR_A_HUNT_REACHES: i32 = 8;
+
+    /// How much further off a hunter finds something than it can get to in
+    /// a turn - by sight on open ground, by the wind, by the noise of it.
+    /// Twice: a wolf that covers eight hundred metres in a half hour winds a
+    /// flock a kilometre and a half off, and walks towards it.
+    const HOW_MUCH_FURTHER_A_HUNTER_FINDS_THAN_IT_GETS: i32 = 2;
+
+    /// The blocks a hunter casts about over, in cells. Coarser than
+    /// `which_block`, because a hunter looks over a turn's walk and not a
+    /// rush: a wolf's two turns are 170 cells, which is six blocks each way
+    /// of these and twenty-two of eight.
+    const HOW_BIG_A_HUNTING_BLOCK_IS: i32 = 32;
 
     /// How far off one of its own kind still counts as standing with it.
     const HOW_FAR_A_HERD_STANDS_TOGETHER: i32 = 4;
@@ -6103,6 +6636,14 @@ impl AnimalManager {
 
     /// The block of country a position falls in, for finding what is near it
     /// without asking about everything that is not.
+    fn which_hunting_block(at: (i32, i32)) -> (i32, i32) {
+        (
+            at.0.div_euclid(Self::HOW_BIG_A_HUNTING_BLOCK_IS),
+            at.1.div_euclid(Self::HOW_BIG_A_HUNTING_BLOCK_IS),
+        )
+    }
+
+    /// The block of country a position falls in, at the size of a rush.
     fn which_block(at: (i32, i32)) -> (i32, i32) {
         (
             at.0.div_euclid(Self::HOW_FAR_A_HUNT_REACHES),
@@ -6316,6 +6857,12 @@ impl AnimalManager {
     /// How far an animal notices something that would eat it.
     const HOW_FAR_AN_ANIMAL_LOOKS: i32 = 10;
 
+    /// How many turns an animal stays in flight once something has put it
+    /// to flight: the bolt, and a turn of standing wary after it. It was
+    /// eight, which at two cells a turn was sixteen cells and at the pace of
+    /// `world::pace` is four kilometres.
+    const HOW_LONG_A_FRIGHT_LASTS: u32 = 2;
+
     /// How much has to be on an animal before it stops grazing about it.
     const WORTH_AN_ANIMAL_LEAVING_OFF: f32 = 0.2;
 
@@ -6385,21 +6932,11 @@ impl AnimalManager {
                 animal.state,
                 AnimalState::Fleeing { .. } | AnimalState::Attacking { .. }
             );
+            //
+            // For flight that is standing wary once the bolt is run: the bolt
+            // was the half hour's running (below), and running on every turn
+            // of the state took a sheep four kilometres.
             if already && animal.state_timer > 0 {
-                if let AnimalState::Fleeing { from_position } = animal.state {
-                    let away = (
-                        (animal.position.0 - from_position.0).signum(),
-                        (animal.position.1 - from_position.1).signum(),
-                    );
-                    animal.position.0 += away.0 * it_covers;
-                    animal.position.1 += away.1 * it_covers;
-                    // A run of fifty cells can go off the map, and nothing
-                    // stopped it when a run was two.
-                    if let Some((east, south)) = edge {
-                        animal.position.0 = animal.position.0.clamp(0, east);
-                        animal.position.1 = animal.position.1.clamp(0, south);
-                    }
-                }
                 return;
             }
 
@@ -6413,7 +6950,7 @@ impl AnimalManager {
 
             if let Some(from) = animal.what_is_on_me_from {
                 animal.state = AnimalState::Fleeing { from_position: from };
-                animal.state_timer = 8;
+                animal.state_timer = Self::HOW_LONG_A_FRIGHT_LASTS;
 
                 // And actually go, rather than standing still in a state
                 // called fleeing.
@@ -6427,6 +6964,20 @@ impl AnimalManager {
                     animal.position.0 = animal.position.0.clamp(0, east);
                     animal.position.1 = animal.position.1.clamp(0, south);
                 }
+
+                // **And that bolt has taken it out of sight of what it saw.**
+                //
+                // A half hour flat out is five hundred metres for a sheep,
+                // and it notices a wolf at a hundred. The reading it ran on
+                // is only taken every other hour (`HOW_OFTEN_A_BEAST_LOOKS
+                // _UP`), and while a flight was two cells a turn a reading
+                // that old was a reading of the same field. At the new pace
+                // it sent a sheep on for four turns and two kilometres from
+                // a wolf it had left behind after the first. How much was on
+                // it stays - it did see the wolf - but not where from, so it
+                // does not bolt again off the same sighting; the next look
+                // decides that.
+                animal.what_is_on_me_from = None;
                 return;
             }
         }

@@ -294,52 +294,76 @@ fn a_grudge_reaches_the_bond_from_across_the_map() {
 
 /// A settlement ends up with people in it who dislike each other.
 ///
-/// Asked of three settlements rather than one. It was one unseeded world, and
+/// Asked of six settlements rather than one. It was one unseeded world, and
 /// whether a particular settlement of twenty-five has anybody at odds by day
 /// eighty-three is a coin: over six seeded worlds, three had a soured bond by
 /// then and three had none, both before and after #252. Which side the one
 /// world here fell on moved with every unrelated change. What the model
 /// claims is that people fall out, not that every settlement has done it by
 /// the end of its first quarter.
+///
+/// **Six, and why it was failing at three.** Three worlds is a one-in-eight
+/// chance of all of them coming up empty even when the model is sound, and
+/// it went red after #295 on exactly that. But it was a coin for a worse
+/// reason too: nearly everybody stood at nearly 1.0 with nearly everybody,
+/// talked and "taught" there by sources with no ceiling, so nothing short of
+/// a long run of blows could take a bond below nought (#296). With bonds
+/// earned, seven worlds in twelve have somebody fallen out by day
+/// eighty-three, and six worlds make all of them coming up empty about one
+/// chance in two hundred. Each world is built on its own thread, so asking
+/// twice as many costs no more time.
 #[test]
 fn a_settlement_ends_up_with_enemies_in_it() {
-    let (mut named, mut soured) = (0usize, 0usize);
-    for seed in 0..3u64 {
-        crate::core::dice::seed(seed);
-        let world = World::new(WorldConfig::default());
-        let mut population = Population::new();
-        for _ in 0..25 {
-            population.spawn_agent(AgentConfig::default());
-        }
-        let mut simulation = Simulation::new(world, population);
+    let worlds: Vec<(usize, usize)> = std::thread::scope(|scope| {
+        let built: Vec<_> = (0..6u64)
+            .map(|seed| {
+                scope.spawn(move || {
+                    crate::core::dice::seed(seed);
+                    let world = World::new(WorldConfig::default());
+                    let mut population = Population::new();
+                    for _ in 0..25 {
+                        population.spawn_agent(AgentConfig::default());
+                    }
+                    let mut simulation = Simulation::new(world, population);
 
-        for _ in 0..4000 {
-            simulation.take_a_turn();
-        }
+                    for _ in 0..4000 {
+                        simulation.take_a_turn();
+                    }
 
-        for agent in simulation
-            .population
-            .agents
-            .iter()
-            .filter(|a| a.state.is_alive)
-        {
-            for bond in agent.relationships.get_all().values() {
-                if matches!(
-                    bond.relationship_type,
-                    RelationshipType::Rival | RelationshipType::Enemy
-                ) {
-                    named += 1;
-                }
-                if bond.bond_strength < 0.0 {
-                    soured += 1;
-                }
-            }
-        }
-    }
+                    let (mut named, mut soured) = (0usize, 0usize);
+                    for agent in simulation
+                        .population
+                        .agents
+                        .iter()
+                        .filter(|a| a.state.is_alive)
+                    {
+                        for bond in agent.relationships.get_all().values() {
+                            if matches!(
+                                bond.relationship_type,
+                                RelationshipType::Rival | RelationshipType::Enemy
+                            ) {
+                                named += 1;
+                            }
+                            if bond.bond_strength < 0.0 {
+                                soured += 1;
+                            }
+                        }
+                    }
+                    (named, soured)
+                })
+            })
+            .collect();
+        built
+            .into_iter()
+            .map(|world| world.join().expect("a world ran to the end"))
+            .collect()
+    });
+    let named: usize = worlds.iter().map(|(named, _)| named).sum();
+    let soured: usize = worlds.iter().map(|(_, soured)| soured).sum();
 
     assert!(
         soured > 0,
-        "in four thousand turns, in one of three settlements, somebody should \
+        "in four thousand turns, in one of six settlements, somebody should \
          have fallen out with somebody"
     );
     assert!(

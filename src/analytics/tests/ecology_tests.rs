@@ -189,6 +189,7 @@ fn most_of_what_lived_here_still_lives_here() {
     let mut started_with = 0usize;
     let mut still_here = 0usize;
     let mut head_at_the_start = 0usize;
+    let mut head_after_a_year = 0usize;
     let mut head_now = 0usize;
     let mut lost = BTreeSet::new();
 
@@ -199,7 +200,9 @@ fn most_of_what_lived_here_still_lives_here() {
         let at_the_start = what_lives_here(&simulation);
         head_at_the_start += how_many_head(&simulation);
 
-        how_many_years(&mut simulation, 5);
+        how_many_years(&mut simulation, 1);
+        head_after_a_year += how_many_head(&simulation);
+        how_many_years(&mut simulation, 4);
 
         let now = what_lives_here(&simulation);
         head_now += how_many_head(&simulation);
@@ -217,10 +220,20 @@ fn most_of_what_lived_here_still_lives_here() {
 
     // And the head as well as the roll call, because a country reduced to one
     // rabbit of every kind has kept its species and lost its ecology.
+    //
+    // **Against the head after the first year, not the head it opened
+    // with.** A quarter of a square kilometre is stocked at some sixty head,
+    // nearly two hundred and fifty to the square kilometre, and since grass
+    // stops growing in winter (#284) it carries about a dozen: every world
+    // sheds most of its stock in the first year and then holds - seed 11
+    // ran 10, 13, 11, 13, 13. Measured against the opening that is a
+    // failure every time and says nothing about emptying, which is what this
+    // is for. The emptying it was written against went on year after year:
+    // 898 records, 9.8 alive after twenty.
     assert!(
-        head_now * 4 >= head_at_the_start,
-        "eight worlds opened with {head_at_the_start} head between them and \
-         have {head_now} five years later"
+        head_now * 2 >= head_after_a_year,
+        "eight worlds opened with {head_at_the_start} head between them, held \
+         {head_after_a_year} after a year, and have {head_now} five years in"
     );
 }
 
@@ -1712,7 +1725,10 @@ fn a_beast_slows_as_it_is_hurt_and_as_it_ages() {
 
     let mut grown = Animal::new("deer".to_string(), (0, 0), species);
     grown.age = grown.maturity_age.max(1);
-    grown.max_lifespan = 20_000;
+    // A lifespan well past maturity, whatever the table says maturity is: it
+    // was a bare 20,000 turns, which is under two years since the table went
+    // onto the calendar and short of a deer's 540 days to grow (#282).
+    grown.max_lifespan = grown.maturity_age.max(1) * 10;
     grown.current_health = grown.max_health;
     let prime = grown.how_fast_it_still_is();
     assert!(

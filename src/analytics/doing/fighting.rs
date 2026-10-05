@@ -49,6 +49,12 @@ impl Simulation {
             return ActionResult::failure(format!("Target too far away (distance: {}, weapon range: {})", distance, weapon_range));
         }
 
+        // The bout is on (#296).
+        let current_turn = self.current_turn;
+        self.population.agents[agent_index]
+            .emotions
+            .struck(*target_agent_id, current_turn);
+
         // Calculate weapon-based damage
         let attacker = &self.population.agents[agent_index];
         let weapon_damage = attacker.equipment.weapon_damage();

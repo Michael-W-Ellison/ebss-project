@@ -21290,3 +21290,1394 @@ Tests the pace made stale, and how they were brought up to it:
 
 Still failing: the two multi-generation tests, as before, and two ecology
 tests the animals' pace moved - see STANDING_FAILURES.
+
+### 279. The long tests and the long run, on the big map
+
+#278 put the walk into the model but left every long run on
+`WorldConfig::default()`, 500 metres across: a people who cover a kilometre
+in a half hour, and animals that go twenty-five times as far as they did,
+strip a quarter of a square kilometre in weeks, and what a long run there
+measures is the map.
+
+- `Simulation::bring_everybody_to_the_middle` puts the living on the nearest
+  dry ground to the middle of the map. Spawning scatters them over the whole
+  of it, which on ten kilometres is a dozen strangers who never meet.
+- `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy`
+  runs four years on `big_enough_for_an_ecology()` with seed 3, and asks for
+  three children born there alive and past their first birthday.
+- `longevity_tests::a_settlement_still_raises_children_late_on` runs eight
+  years the same way, and asks for someone born in the last four still
+  alive.
+- Both were written against turn counts from before the calendar (6,000 and
+  9,000 turns, four and six months) and could not pass whatever the model
+  did (#253). Both are too long for every run, so both are `#[ignore]`d and
+  run with `cargo test --release -- --ignored <name>`. On the first release
+  run, the four-year test failed inside half an hour, and the eight-year
+  test had not finished when the run was stopped at half an hour.
+- `test_simulation` runs on the big map with everybody at the middle, and
+  takes `--years`, `--seed`, and `--small` for the old map. It reports
+  monthly by default.
+
+The other 2,700 or so tests stay on the small map. They test one thing over
+a few days, and the big map costs about seven times as much per simulated
+year.
+
+### 280. A hunt is a half hour: predators close and rush in one turn
+
+#278 made animals go twenty-five times as far in a turn, and left the hunt
+built for two cells a turn. A hunter cast about over the nine blocks of
+eight cells round it, which is twenty-four cells at the most. It rushed only
+what was within eight cells. Anything further inside those blocks it walked
+towards, and then waited for its next one-in-twenty roll to rush. By then,
+at the new pace, the quarry had grazed off. Measured on
+`fourteen_wolves_take_two_sheep_inside_a_day` (six seeds): the wolves spent
+the day 120 to 350 metres from the sheep, looked 26 to 38 times per seed,
+saw something one to five times, and took 6 sheep of 12. Before the pace
+change they took 12 of 12 inside five turns.
+
+- **A hunter casts about over twice what it covers in a turn**
+  (`HOW_MUCH_FURTHER_A_HUNTER_FINDS_THAN_IT_GETS`), in blocks of 32 cells
+  (`which_hunting_block`). What it covers is its own pace,
+  `how_far_it_gets_in_a_turn`, and never less than the rush.
+- **Whatever it would try for within its turn, it closes on and rushes in
+  the same turn**, the nearest first, and ends the turn where the quarry
+  stood. What is further off it walks towards, a turn's worth. The odds of
+  the rush are untouched.
+- **A pack is whoever of its kind is within the hunter's turn**, for
+  animals that live in groups; it was the forty metres a herd stands in.
+- It weighs up to 64 animals within sight, starting at its own place in the
+  list, instead of the first 8 in each block.
+- **A bolt is one turn.** A frightened animal stayed in flight for eight
+  turns. At the new pace that is four kilometres. The reading it fled on is
+  only refreshed every four turns, so it kept fleeing from a wolf it had
+  left behind after the first turn. Now it bolts once and stands wary for
+  the rest of the state (`HOW_LONG_A_FRIGHT_LASTS` = 2 turns). The bolt
+  forgets where the threat was, so it doesn't bolt again off the same
+  sighting before the next look.
+
+Measured, same six seeds: 12 sheep of 12, every seed done inside four
+turns.
+
+`most_of_what_lived_here_still_lives_here` was put down to the hunt in
+STANDING_FAILURES, and that was wrong. Over its eight worlds, before the
+pace change, after it, and after this, the herbivores almost all
+**starve**: 1,392, 1,363 and 1,310 herbivores starved in the three runs,
+and not one herbivore was taken by a predator in any of them. The hunters on a half-kilometre map are
+kestrels, hawks, owls, eagles, otters and seals. Head at year five, of 468:
+137 before the pace change, 110 after it, 117 after this, against a bar of
+117. Species kept: 37, 36 and 42 of 56. The head count at five years
+swings by tens between seeds and years (seed 8: 4, 9, 3, 0, 2). It is a
+question about grazing on a quarter of a square kilometre that an animal
+now crosses in a turn or two, not about hunting.
+
+### 281. Fed hunters breed like mice: animal lives are not on the calendar
+
+With the hunt of #280, fourteen wolves take two sheep inside a day again,
+and the half-kilometre ecology tests pass. On the hundred square kilometres,
+with nobody on it and seed 3, it empties the country:
+
+| two years, empty big map | year 1 head | year 2 head | taken by predators |
+|---|---|---|---|
+| before the pace change (#277) | 1,034 | 604 | 11 |
+| the pace change, the old hunt | 1,242 | 622 | 283 |
+| #280's hunt | 135 | 44 | 1,813 |
+
+Neither of the first two is a working ecology either. The large herbivores
+go from starvation and old age in both, and goats and kestrels take over.
+Predators simply never ate.
+
+`WhatCarriedThemOff` now counts **born** and **took** per kind, which is
+what it needed to say why. With #280's hunt, over the two years:
+
+- The seven wolves bore **611** cubs and made **983** kills; 613 wolves
+  starved.
+- The seventeen lions bore 105 and made 308 kills.
+
+The cause is the life-history table. Its figures are bare turn counts that
+were never put on the calendar, which is noted as unfixed under #218. A
+wolf matures at 1,000 turns (21 days), carries for 500 (ten days), breeds
+again after 1,500 × `BREEDING_INTERVAL_SCALE` = 4,500 (three months), and
+lives 12,000 to 18,000 turns, which is under a year. A real wolf matures at
+two, carries for 63 days, has one litter a year, and lives six to eight
+years. Every species is out the same way. While hunters starved this didn't
+show; once they eat, they multiply until they have eaten everything, and
+then they starve.
+
+Tried and set aside: **a pack sharing its kill**, and a hunter lying up on
+what is left for up to three days, with about 2% of it going off each turn.
+It is how hunters feed, and it cuts the kills a pack needs. But on this
+table, hunters that stay fed only breed faster. The empty big map was no
+better (136 and 36). `most_of_what_lived_here_still_lives_here` fell to 84
+head of 468 against 117, and `the_predator_tiers_are_still_there_two_years
+_on` lost its small predators. It wants the life histories fixed first.
+
+### 282. Animal lives on the calendar, and an ecology that holds on the big map
+
+What #281 found, fixed, and what fixing it uncovered next. All measured over
+three years on the empty hundred square kilometres, seed 3, 1,003 head at the
+start:
+
+| | year 1 | year 2 | year 3 |
+|---|---|---|---|
+| #280's hunt | 135 | 44 | - |
+| + lives on the calendar | 354 | 51 | 31 |
+| + a pack shares its kill | 325 | 33 | 42 |
+| + top predators at a real density | 658 | 287 | 147 |
+| + a day's grazing is a walk | 907 | 780 | 653 |
+| + grazing walk by distance, hunters turn on hunters only when short | 898 | 791 | 674 |
+
+- **Lives on the calendar.** Every species' lifespan, maturity, pregnancy and
+  time between litters is written in `days()` and `years()` (built on
+  `PLANNING_PERIODS_PER_DAY`) instead of bare turns, from field figures for
+  wild animals. A wolf lives 8 to 13 years, grows up at 660 days, carries
+  63 days, and litters once a year; a sheep grows up in a year and lambs once
+  a year; a rabbit breeds at four months, every 72 days. Birds that laid one
+  egg at a time now lay clutches: duck 6 to 12, goose 4 to 8, chicken 2 to 4.
+  `BREEDING_INTERVAL_SCALE` is gone; the table is the interval. The figures
+  were set when a year was about 4,320 turns and never moved when it became
+  17,280. Wolves: 611 cubs in two years before, 8 in three after.
+- **A pack shares its kill, and the rest is gone back to.** Hungriest first,
+  each as far as it can eat, and whoever ate comes in to the kill. What is
+  left is `a_kill_to_go_back_to`, eaten as hunger rises, going off at about
+  2% a turn (`HOW_LONG_A_KILL_LASTS` = 3 days).
+- **Top predators at a real density.** `TopPredator` was 3% of head, thirty
+  on a hundred square kilometres (seventeen lions). It is 0.6%, six, which
+  is about a wolf pack or a pride; the rest goes to the grazers.
+- **A day's grazing is a walk.** The grazing pass fed each animal from the
+  nine cells under it, and moved it on only if those held nothing. It had
+  fifteen million of forage standing and took a tenth of it in two years,
+  while more than half the herbivores were hungry from the first summer and
+  about 7% of them starved each month: each got about a sixth of what it
+  reached for. Now an animal that has not had its fill moves to the nearest
+  ground with something left on it (`where_there_is_something_left`) and
+  crops that, until it has had its fill, has walked
+  `HOW_FAR_A_DAYS_GRAZING_GOES` (300 cells, three kilometres), or has made
+  `HOW_MANY_STOPS_A_DAYS_GRAZING_MAKES` (24) stops. Hungry herbivores went
+  from over half to about a third, and starvation to about 2% a month. A
+  year on the big map takes about 140 s in release against about 100 s.
+- **A hunter turns on smaller hunters only when it is short.** "Crowded"
+  counts herds per hunter and ignores the voles and fish the smaller
+  hunters live on, so on the big map nearly every ground was crowded for
+  everything. Taking another hunter now needs crowding on ground that does
+  not pay this hunter its keep (`hard_pressed`), or near-starvation.
+
+**Still wrong, and recorded rather than tuned:**
+
+- **Kestrels go.** 181 become none: 285 taken by eagles, herons, hawks,
+  owls and otters, and 106 starved. The raptors are genuinely short, so
+  `hard_pressed` lets them. The pre-pace code lost them too, to starvation
+  (775). The small-life larder and the raptor numbers want looking at
+  together.
+- **The biggest grazers still starve.** Over the three years, elk went from
+  85 to 12 (104 starved), cattle 42 to 9, camels 33 to 11, and mammoths 23
+  to 3 with no births. The pre-pace code starved them as well.
+- **`most_of_what_lived_here_still_lives_here`**: 104 head of 468 at year
+  five over its eight worlds, against a bar of 117. Species kept rose to 44
+  of 56 (37 before the pace change). Every world sheds in year one from an
+  over-stocked start of about 60 head, then holds: seed 5 ran 15, 12, 15,
+  21, 16 and seed 6 ran 11, 11, 11, 14, 12. It fails on where a quarter of a
+  square kilometre settles, not on an emptying.
+
+`a_beast_slows_as_it_is_hurt_and_as_it_ages` gave a deer a lifespan of a
+bare 20,000 turns and made it grown at maturity, which is now 25,920 turns;
+it gives the deer ten times its maturity instead.
+
+### 283. Large grazers starved beside their food, and a mammoth faced down its own herd
+
+#282 left elk, cattle, camels and mammoths starving on the big map. A tally
+per kind (`WhatTheGrazingCameTo`: what each kind reached for, took and
+walked, and why its day ended) showed two separate faults.
+
+- **The walk went to trees that had nothing left to give.** A grown tree
+  offers a browser a flat 2.4 a day however big it is, shared by everything
+  browsing it. The walk of #282 asked whether a plant had health left, and a
+  tree always has 150 to 500. So a cow walked from one browsed-out oak to
+  the next: 21 stops a day at under half a unit each, past bushes carrying
+  18 apiece, and it got half its keep. Cattle, elk and camels took 0.51 to
+  0.76 of what they burn while grazing 58% to 75% of the time. Now there is
+  one answer, `what_there_is_to_take`, and both the bite and the walk read
+  it. Every grazer gets its full reach in one to four stops a day, and
+  hungry cattle and elk went from 39% and 47% to none.
+- **A mammoth faced down its own herd.** `what_the_beasts_make_of_us` treated
+  anything with a temper that menaces people as a threat to every other
+  beast in sight, its own kind included. Every mammoth (`Territorial`) faced
+  down the one beside it, stood in `Attacking` every turn of its life, and
+  never grazed: none born, all starved. A boar did the same three turns in
+  four. A beast is now a threat to another beast only when it eats meat and
+  is of another kind, which is what that pass's own comment said it looked
+  for.
+
+Measured on the empty big map, seed 3, three years: **no grazer starved**.
+Elk went 85 → 205, cattle 42 → 81, camels 33 → 46, and mammoths 23 → 30
+with 8 born. On the half-kilometre worlds, head at year five went from 104
+to 435 of 468, and species kept from 44 to 47 of 56, so
+`most_of_what_lived_here_still_lives_here` passes.
+
+`predator_prey_tests::the_land_will_only_carry_so_many` penned ten newborn
+sheep on one cell for 8,000 turns. On the calendar that is under six months,
+and neither herd grew. Once grazing became a walk, a penned sheep also grazed
+wherever a free one did. It now compares ten grown sheep over two years on
+16 × 16 cells and on 64 × 64.
+
+**What this uncovered: the country has no ceiling that is anywhere near
+real.** Five years on the empty big map, month by month: herbivores 720 →
+1,101 → 1,570 → 2,129 → 2,956 → 4,451, still rising about 50% a year, with
+about 1% hungry and the standing crop levelling at 11.8 million. A grown
+tree gives 2.4 a day for ever, and there are about 5.7 of them to the
+hectare. That alone feeds some 400 deer-sized grazers to the square
+kilometre, and the small maps settle at about 220. Temperate country
+carries 10 to 30. Nothing could get at the browse before, so it never
+showed. It wants the browse, and the regrowth of what is grazed, set to
+what real country yields.
+
+### 284. A country with a ceiling: browse at a real yield, and no grass in winter
+
+#283 let the grazers reach their food and found that nothing held them.
+Five years on the empty big map, month by month: herbivores 720 → 4,451,
+still rising by half a year, about 1% hungry, and the standing crop levelling
+at 11.8 million.
+
+- **Browse at what a wood yields.** `WHAT_A_TREE_OFFERS_A_BROWSER` was 0.05 a
+  turn, 2.4 a day off every grown tree. With five or six grown trees to the
+  hectare, that was browse for some four hundred deer-sized grazers to the
+  square kilometre. Temperate woodland gives deer about 200 kg of browse per
+  hectare a year. A 60 kg sheep here needs 2.9 a day and eats about 1.5 kg,
+  so a unit is about half a kilo, and 200 kg a hectare comes to about 0.2 a
+  tree a day. It is 0.004 a turn.
+- **Grass does not come back in winter** (`PlantManager::how_much_comes_back_in`:
+  winter 0, autumn 0.5, else 1). Growing conditions are water, light and the
+  ground, with no temperature, so a grazed sward came back in January at
+  better than half its summer rate. Only the putting-back of what was cropped
+  changes; how a plant grows up and holds its own is as it was. People
+  harvest through drops and regrow timers, not through this.
+
+Five years on the empty big map, seed 3, month by month: herbivores 714,
+900, 1,054, 1,049 in the first year, a peak of about 1,160 in the second
+winter, then 802 to 1,066 from year three on. That is 8 to 11 to the square
+kilometre, at the low end of the 10 to 30 temperate country carries.
+Hunger rises through each winter, and starvation comes at the end of it (85
+in the second one's last month) and falls away as the herd thins.
+
+On the half-kilometre worlds, every one sheds from its opening stock of about
+60 head to 11 to 13 in the first year, and then holds (seed 11: 10, 13, 11,
+13, 13). That is about 48 to the square kilometre. `most_of_what_lived_here
+_still_lives_here` compared year five against that opening and would fail
+every time for a reason that has nothing to do with emptying. It now asks
+that year five hold at least half of what year one held. The species check
+is unchanged (37 of 56 kept, against a bar of 14).
+
+**What it shows next: one kind takes the country.** Head is held, but over
+the five years goats went from 95 to 803, while elk went 85 → 0, cattle
+42 → 5, camels 33 → 2, reindeer 287 → 72 and mammoths 23 → 6. Every grazer
+draws on one pool, and the fastest breeder crowds the rest out: goats grow
+up in a year and litter one to three, elk take two years and have one or
+two. Real grazers and browsers live side by side because they eat different
+things in different places, and nothing here says so yet.
+
+### 285. Grazers live side by side: niches, eating to the full, and a crown left on what is grazed
+
+After #284, goats took the big map (95 → 803 in five years) while elk,
+cattle and camels vanished. Four changes, each measured over five years on
+the empty big map (seed 3). The last one turned out to be the cause.
+
+- **Feeding niches** (`AnimalSpecies::how_much_of_it_is_browse`, and
+  `PlantSpecies::is_woody`). Each grazer takes a share of its appetite as
+  browse (trees and bushes) and the rest as grass and herbs, from the usual
+  wild figures: deer and camels 0.8, goats 0.6, elk 0.4, reindeer 0.3, sheep
+  and boar 0.2, cattle and mammoths 0.1. Held strictly to that, pure grazers
+  starved (sheep 112 → 4, reindeer 287 → 4). So when a day's walk ends with
+  one share unmet, an animal makes do with the other kind of growth at half
+  its worth (`WHAT_ANOTHER_KIND_OF_GROWTH_IS_WORTH`).
+- **Wild litters.** Goats and sheep 1 to 2, which were 1 to 3; elk 1, which
+  was 1 to 2.
+- **A big animal ranges further in its day.** The day's 300 cells and 24
+  stops now scale with mass to the 0.375 (from 0.5 to 6 times); an elk walks
+  about twice as far as a sheep and a mammoth 5.6 times. A cow had run out of
+  day with its appetite unmet on 37% of passes and a mammoth on 64%.
+- **An animal eats until it is full.** It took its full reach, three times
+  what it burns, whenever it was grazing; what passed a full belly was lost.
+
+None of these stopped the second-winter crash (1,103 head to 481) or the
+goats taking over. A month-by-month count of the plants did: **grazing was
+killing the plants.** A grazer cropped a herb or a bush to nothing, and a
+plant at nothing is removed. Herb plants on the big map went from 145,552 to
+600 in two years, and bushes from 37,095 to 1,557. The grazers crashed after
+them, and the browsers came through on the trees, which only ever give a
+mouthful. Grazing takes the leaf and leaves the crown and root; now a grazer
+leaves a quarter of a plant's full growth standing
+(`WHAT_GRAZING_LEAVES_OF_A_PLANT`). Diggers still pull a root up.
+
+Five years on the empty big map with all of it:
+
+| | start | year 5 | starved |
+|---|---|---|---|
+| elk | 85 | 225 | 8 |
+| cattle | 42 | 117 | 0 |
+| camels | 33 | 57 | 0 |
+| mammoths | 23 | 30 (9 born) | 1 |
+| deer | 50 | 181 | 20 |
+| reindeer | 287 | 552 | 94 |
+| sheep | 112 | 555 | 51 |
+| goats | 95 | 631 | 17 |
+
+Head by year: 979, 1,232, 1,539, 1,945, 2,385. That is 24 grazers to the
+square kilometre at year five, inside the 10 to 30 temperate country
+carries, but still rising about 20% a year. The winter's standing grass,
+bushes and browse would hold roughly 35 to 40. A year at that density takes
+about 300 s in release, against about 130 s at the start.
+
+On the half-kilometre worlds, each holds at about ten head after the first
+year. Year five is 79 head against 122 at year one, and 33 of 56 species
+are kept.
+
+**Found, not fixed:**
+
+- **Herbs do not replace themselves on the big map.** With no animals at
+  all, herb plants went from 145,000 to 92,500 in two years (about 1.9% a
+  month); with the herds and the crown left, 144,000 to 67,000 in thirty
+  months. Herbs live two years and their seedlings are not keeping up. That
+  is a flora question, and as it goes on it will lower the ceiling.
+
+**And a hunter takes another hunter only when it comes upon one.** With all
+of the above, `the_predator_tiers_are_still_there_two_years_on` lost its
+small predators: kestrels went 181 → 1 on the big map, 293 of them taken.
+A short-fed eagle or heron that could see two turns' walk off (#280) sought
+kestrels out from a kilometre and more. Taking another hunter now also needs
+it to be within the rush (`HOW_FAR_A_HUNT_REACHES`). Three years on the big
+map: kestrels 181 → 59 with 42 taken, and every grazer still rising (elk 85
+→ 142, cattle 42 → 79, mammoths 23 → 30). The kestrels' remaining losses are
+starvation (399), as for the eagles, owls, otters and seals that live off the
+same small game. The pre-pace code starved them too (#281). That is the
+small-life larder, still to look at.
+
+### 286. Herbs replace themselves: seventy seed a life, not forty
+
+#285 found the herb layer falling on the big map whether or not anything ate
+it. `PlantLedger`, month by month, over two years with nothing on the map
+(seed 3):
+
+- About 6,100 herbs a month died of age and about 4,000 seedlings came up.
+  Herbs fell from 151,600 to 92,500.
+- Seed was not short: about 170,000 a month fell. Of the seed that landed on
+  ground its kind could live on, about one in twenty-seven took. The rest
+  lost its one throw to taken ground or to the light, or rotted on ground it
+  could not live on.
+
+So a herb leaves about two-thirds of a successor. `seeds_per_pass` gives
+every plant the same seed over its life, `WHAT_A_PLANT_LEAVES_IN_ITS_LIFE`.
+That was a hundred when it was written (#127, "a hundred a lifetime leaves
+about three, and what brings three back to one is ground that is already
+taken"). It went to forty in the commit that brought grazing in (#129),
+with no reason given. The herbs are hit first because they live two years;
+bushes were slipping too, 37,800 to 35,500.
+
+Measured over two years on the big map:
+
+| seed a life | no animals, herbs at months 6/12/18/24 | with the herds, herbs month 6 → 24 |
+|---|---|---|
+| 40 | 136k, 122k, 109k, 92.5k | 134k → 72k |
+| 60 | 141k, 138k, 138k, 139k | 138k → 113k |
+| 70 | | 140.5k → 134.4k |
+| 100 | 150k, 169k, 200k, 239k, still rising | |
+
+It is seventy. At sixty the herbs hold with nothing eating them, but a
+cropped plant that loses more in a winter pass than it has left still dies,
+so under the herds they slip by about a tenth a year. At seventy they hold
+under the herds. At a hundred the map fills, which is real succession, but
+every turn pays for each plant, and a hundred square kilometres already
+costs two minutes a year. Bushes hold at about 35,700 at sixty or seventy,
+and trees are level at all of them.
+
+### 287. What the runs were spending their time on
+
+Sampled with `gdb` over a settlement of twelve on the half-kilometre map, the
+empty hundred square kilometres, and twelve people on it.
+
+- **`AnimalSpecies::where_it_sits` built the whole registry every time it was
+  asked.** For any hunter with a prey list it made a fresh `FaunaRegistry`,
+  every species with all its names and lists, to read how big its prey are.
+  It is asked several times a turn per hunter, and since #283 once a turn
+  per animal in `what_the_beasts_make_of_us`. On the empty big map that was
+  48% of samples, nearly all of it allocating. How big each kind is is now
+  read once and kept.
+- **Remembering what is in view walked the whole memory four times per
+  thing.** `remember_what_kind_of_place_this_is` called a writer that called
+  a writer that called a writer, each searching `spatial_memories` from the
+  start, for every patch and spring in sight, for everybody, every turn. It
+  now finds the place once and makes the same four writes on it.
+- **Looking round from where you last looked.** Every turn each person
+  swept the 2,000 tiles in sight against their explored set, whether or not
+  they had moved. Tiles once explored stay explored, so a look from the same
+  spot at the same range can find nothing; it is skipped
+  (`ExplorationKnowledge::looked_round_from`), and still counts as having
+  looked.
+
+None of the three changes what happens: the same animals, plants and dice
+counts as before.
+
+**Tried and taken out: planning a walk before its first step.** A walk opens
+with `a_step_toward`, and when the straight step is barred that runs a
+breadth-first search of up to 4,096 cells for one step, about a fifth of the
+samples on the small map. Planning the route first and stepping off it was
+faster on that one map, but slower on everything else. `distrust_tests` took
+323 s in release against 199 s before, and 244 s when only a barred straight
+step planned first. A walk that could not step at all had stopped at once,
+and now searched two hundred thousand cells first. Without it,
+`distrust_tests` takes 166 s.
+
+Release build:
+
+| | before | after |
+|---|---|---|
+| twelve people, half-kilometre map, three months | 24.5 s | 19.3 s |
+| empty big map, a month | 13 to 18 s | 6 to 7 s |
+| twelve people on the big map, a month | about 30 s | 12 to 13 s |
+| `distrust_tests` | 199 s | 166 s |
+
+The rest of the people's share is still the in-view pass: each person
+refreshes their memory of every patch in sight every turn, which is what
+keeps foraging current, and each refresh is still a search of a list.
+
+**What it did for the suite: little.** The full run afterwards was 2,713
+passed, none failed, in 4,698 s of test time against 4,454 before. The two
+runs were hours apart and the machine's load moves more than that. Side by
+side in release, `news_tests` took 1,195 s before and 1,048 s after, 12%
+less. The heavy modules are settlements of people on the half-kilometre map,
+where the animals' share is small. Most of their time is in what people do
+each turn rather than in any of the three things fixed here.
+
+### 288. What `news_tests` was spending its time on: a step search and a building list
+
+Sampled with `gdb`, 100 stacks, release build. Before:
+
+- **71% in `next_step_toward`**, the breadth-first search `a_step_toward`
+  falls back on when its straight step is barred. #287 tried to step round it
+  and made other tests slower; the search itself was the cost. It recorded
+  where each of up to 4,096 cells was reached from in an ordered map, and
+  looking cells up in it was most of the time. Now it is a flat window of
+  129 by 129 cells round the start, with the ordered map only for a cell a
+  long corridor carries outside it. The same cells are reached in the same
+  order, so it finds the same step.
+- **13% in `is_passable_tile`**, most of it `get_building_at`, which searches
+  the whole list of buildings. That check returned `true` if a building
+  stood there, and the function returns `true` if none does, so the lookup
+  decided nothing. It is gone.
+- **12% in the in-view pass** of `process_exploration_of`, and the in-view
+  memory refresh within it:
+  - **The memory refresh** is now one call for everything in view
+    (`Memory::remember_what_kinds_of_places_these_are`). It finds them all
+    in a single pass of the memory, passing over anything outside the
+    corners of the view on two comparisons, keeps the first record of each
+    as the one-at-a-time search would, and makes the same writes in the
+    same order.
+  - **The node lookup**: what is in sight is looked up in the node index
+    once for the pass instead of twice.
+  - **Naming**: what a person calls each kind of resource is worked out
+    once a kind per pass, not once per patch. It was a formatted string and
+    a familiarity check for every tree in a wood.
+
+The dice counts did not move (7,490 and 688,955), so nothing that happens
+changed.
+
+Release build, `news_tests`: 1,048 s before, 325 s after. Sampled again:
+the step search is 17% and the in-view pass 26%, with the memory refresh at
+6%. The largest single thing left is `node_numbers_near`, gathering and
+sorting the nodes in reach (15%), now mostly for `what_this_drive_offers`.
+
+**The suite**: 2,713 passed, none failed, 4 ignored, in 2,072 s of test time
+against 4,698 s on the run before and 4,454 s on the one before that. The
+heaviest modules more than halved: `calendar_tests` 1,567 → 732 s,
+`news_tests` 1,139 → 421, `relationship_graph_tests` 549 → 169,
+`survival_loop_tests` 215 → 72 and `repeatable_tests` 228 → 78.
+
+### 289. Gathering the nodes in reach: throw out first, then sort
+
+After #288 the largest single cost left in `news_tests` was
+`World::node_numbers_near` (15% of samples). It asks the node index for
+everything in the patches its square touches - about 49 patches for somebody
+looking 25 cells about them. `WhereTheNodesAre::near` put every node in
+every one of those patches into one list and sorted it into list order, and
+only then did the asker throw out what lay outside the square, which was
+most of it.
+
+`near` is now `near_where`, which takes the asker's test and applies it while
+gathering, so only what is kept is sorted. A single patch read on its own is
+already in list order and is not sorted at all: every patch is filed in list
+order, and taking a node away refiles the lot. Same numbers, same order. The
+dice counts did not move, and the 230 tests under `world::` pass.
+
+`news_tests` in release: 325 s → 307 s. Sampled again: gathering is 10% (it
+was 15%), and sorting no longer shows. What is left of it is reading the
+patches, mostly from `nodes_known_to` as people weigh what each need could
+get them.
+
+### 290. What an agent knows of: read only the band it could reach
+
+`nodes_this_one_knows_of` (the heart of `nodes_known_to`) is asked about a
+dozen times a turn by everybody weighing what a need could get them. For the
+places it remembers, it read every place the agent had ever filed, however
+far off, tested each against the reach, and for each one in reach asked the
+world for the nodes on that tile in a list of its own, then copied that list
+into the answer.
+
+Places are filed by position, west to east, so the ones between the western
+and eastern edges of the reach are one run of the file: it now reads only
+that run (`range`) and applies the same test to it. The nodes on each tile go
+straight into the answer (`World::add_the_node_numbers_on`, which reads the
+one patch the tile is in) instead of through a list per tile. Scents use the
+same call. Same nodes, same order: the dice counts did not move, and the
+tests under `world::`, `repeatable_tests` and `knowing_where_things_are_tests`
+pass (236).
+
+`news_tests` in release: 316.8 s → 311.7 s, about 1.6%. It is a small gain
+because the large cost was never the file of remembered places; it is the
+patches read for what lies in sight and in reach, which the other callers of
+`node_numbers_near` ask for.
+
+Remembering the last question (same spot, same reach) was considered and not
+done. `node_numbers_near` is asked 223 million times in one `news_tests` run,
+and only 0.66% of those asks repeat the one just before. Sampled after this
+change, `nodes_known_to` is about 8% of a turn and `node_numbers_near` from
+every caller about 10%. What is left is larger elsewhere: the exploration
+pass (`process_exploration_of`, 27%) and the step search when walking
+(`next_step_toward`, 19%).
+
+### 291. The exploration pass: file what is in view without a sorted map
+
+Sampled over `news_tests` (149 samples), the exploration pass
+(`Population::process_exploration_of`) was 31% of a turn. A third of that
+was `Memory::remember_what_kinds_of_places_these_are`. It built a `BTreeMap`
+of every place in view, then asked it about every remembered place in that
+square, to find which of them were already filed. Most of the rest was
+noting what was seen again: for every spot in sight that the agent already
+knew, it asked the node index again for the first node on it, to read how
+much was there.
+
+- The places in view are chained into buckets by spot and kind, with fixed
+  hashing, instead of going into a `BTreeMap`. Same question, same answers,
+  same writes in the same order. The order of the buckets decides nothing,
+  so it repeats exactly.
+- How much stands on each spot is read from the look the pass has already
+  taken. The spots and node numbers in sight are sorted by spot, then
+  number, and the first of each spot is kept. The first node on a spot in
+  list order is the one with the lowest number, which is the node `nodes_on`
+  gave.
+
+Dice counts unchanged. `repeatable_tests`, `distrust_tests`,
+`knowing_where_things_are_tests` and the memory and exploration unit tests
+pass (59). `news_tests` in release, old and new back to back: 304.6 s → 289.7 s,
+about 5%.
+
+### 292. The exploration pass, again: lay out what is in sight instead of sorting it
+
+After #291 the pass was still about 26% of a `news_tests` turn (1,103
+samples, from a new sampler that stays attached and interrupts every 0.3 s,
+instead of attaching gdb afresh for each sample). It was spread thin, with
+nothing over 3%. The two pieces that could be cut without changing an answer:
+
+- **Sorting everything in sight by spot** (2.4%). The pass now lays the
+  nodes in sight out on the square in view, one slot a cell, filled by the
+  first node met on it. Read out column by column, west to east and north to
+  south, that is the same sorted list of spots, each with the same first
+  node.
+- **`just_found`** (about 2%). Picking out what was found this turn walked
+  everything the agent knows and looked up the turn each was found on. It
+  now walks the turns found and looks up only what was found this turn. Both
+  maps are keyed by spot, so the list and its order are the same.
+
+Tried and taken out: answering "known for himself, not told" and the two
+writes of `saw_it_again` by walking the maps a column at a time beside the
+spots in view, instead of searching them for each spot. It made no difference
+(284.8 s against 285.9 s), so the searches were not what they looked like in
+the samples.
+
+Dice counts unchanged; the same 59 tests pass. `news_tests` in release, the
+old and new builds run alternately: 297.7 / 297.0 s → 286.8 / 288.6 s, about
+3.4%.
+
+What is left of the pass has no single piece worth taking on alone. The
+largest are filing what is in view (3%), the node index look (2.4%),
+`saw_it_again` (2%) and the new-tile sweep in `World::process_exploration`
+(2%).
+
+### 293. The step search: remember ground already found to be shut in
+
+`next_step_toward` (the breadth-first search a walker falls back on when the
+direct step is blocked, or would undo the last one) was 15-19% of a
+`news_tests` turn. Counted over the module, it ran 1.06 million times, and
+**nine searches in ten emptied all the ground they could reach without
+coming to the goal**. None gave up at the 4,096-cell limit. They looked at
+about 2,000 cells each, 2.2 thousand million cells in all. Every step of the
+same walk searched the same pocket again, from a cell or two along.
+
+A search that empties its pocket has looked at every cell it could reach and
+every cell beside one of them, and the goal was none of them. A later search
+for the same goal, starting anywhere in that pocket, can only leave it over
+a cell that stopped the first search. While every one of those edge cells is
+still not walkable, it ends the same way: no way there. So `ShutIn` keeps up
+to 32 such pockets (the goal, the map size, the cells reached and the edge
+cells). A search that starts inside one checks the edge instead of walking
+the whole pocket again. If any edge cell has become walkable, the pocket is
+dropped and the search runs as before. Nothing about the world is assumed
+beyond what the edge says at that moment, so the answer is always the one
+the search would give, with terrain changes and test maps included.
+
+Also: the search's window of where each cell was reached from now holds one
+byte a cell (which of four neighbours) instead of a twelve-byte place,
+16 KB to clear per search instead of 200 KB. On its own this measured within
+noise (295.0 / 290.4 s against 289.3 / 290.1 s), but it costs nothing.
+
+Dice counts unchanged. `repeatable_tests`, `errand_tests`, the walking tests,
+`distrust_tests` and `world::tdd_tests` pass (119). `news_tests` in release,
+old and new run alternately: 271.4 / 279.1 s → 235.4 / 226.8 s, about 16%.
+
+**Why so many walks go nowhere: the goals are off the map.** Every pocket
+recorded over `news_tests` (a 50 by 50 map) was the whole walkable map,
+about 2,250 cells. Nearly every goal lay past its edge: (53, 12),
+(-11, 20), (0, -7), (64, 28) and the like. Several decisions add an offset
+to where somebody stands and never keep the result on the map:
+
+- `Simulation::search_leg` (wanting/camp.rs) strikes out 12 cells for food
+  or water when nothing is known, on a bearing that holds for 300 turns. The
+  function just above it clamps; this one does not.
+- `put_ground_between` (between_us/threat.rs) and the fear branch in
+  turn/each_one.rs both run 15 cells, which gives (64, 28) from x = 49.
+- `generate_action_for_drive` (wanting/mod.rs) moves up to 20 cells for
+  Curiosity, and up to 5 for Safety.
+- `generate_action_for_goal` (wanting/mod.rs) always moves +10, +10.
+- The percept-driven flight in the same file moves up to 15 cells.
+
+An errand keeps whatever target it was given (`errands.rs`), so one bad
+target means a walk at the edge of the map, searching it all at every step,
+until the errand is given up. This changes what people do, so it is left for
+its own change. A single clamp where an errand is set, or at the top of
+`a_step_toward`, would cover every source.
+
+Full suite: 2,713 passed, none failed, 4 ignored, in 1,566 s (1,941 s at #292).
+
+### 294. Nobody walks off the edge of the map
+
+Found by #293: in `news_tests` nine route searches in ten were for goals
+past the edge of a 50 by 50 map, such as (53, 12), (-11, 20) and (64, 28).
+Several decisions say where to go as so many paces from where somebody
+stands, and none kept the result on the map: the twelve-pace leg for food or
+water, the fifteen-pace flights from a threat, twenty paces of curiosity,
+five of safety, and a goal that always went +10, +10. An errand holds the
+place it is given, so somebody sent past the edge walked to the last tile
+and searched the whole map at every step after that until they gave up.
+
+- **One rule for every walk:** `Simulation::kept_on_the_map`, applied where
+  an errand is set (`stick_to_the_errand`) and where a walk is carried out
+  (the `Action::Move` dispatch), since not every walk is an errand. A target
+  on the map is left exactly where it was put.
+- **To ground, not water:** a target past the edge is brought back to the
+  edge, then on towards the walker to the first tile a foot can go on.
+  Plain clamping was tried first. The edge is often sea, and the last pace
+  of a walk may be onto anything, so it walked people into the water. On
+  two worlds in sixteen it then left somebody stranded on a rock with water
+  all round for thousands of turns.
+- **`search_leg` turns instead of standing.** Its bearing holds for 300
+  turns. Where that bearing has nowhere left to go, because the walker is
+  already hard against that edge, it takes the next bearing round that has
+  somewhere to go. Its target goes through the same rule as the rest.
+
+Measured over a year on the small map, 16 seeds, against the build before:
+- **The seven seeds with nobody stranded in any build:**
+  - Person-days: 29,575 → 29,671.
+  - Alive at the end: 79 → 77.
+  - Errands given up: 514 → 27.
+  - Errands that got there: 76,449 → 84,559.
+  - Errands kept to: 7,714 → 2,478.
+- **All sixteen seeds:** person-days 54,694 → 56,848, and alive 132 → 127.
+
+Survival is even within the noise; walking is no longer wasted on the edge.
+
+**Not fixed: walking into water and getting stranded.** A route may end on
+its target whatever the target is (the goal tile is exempt from the walkable
+check, which is how somebody reaches a barn door). So a walk to a water tile
+leaves somebody standing in the water, and the next step off it can be onto
+a one-tile island they can never leave. Traced on seed 0: an errand to
+(24, 37), on the map, left somebody on water at (25, 40). From there they
+stepped onto desert at (25, 39), with sea and water on all four sides, and
+stood there for the rest of the run. It happens in the old build too (seeds
+5, 7 and 10), and which seeds it hits is chance. It is what "No passable
+route ... with 0 ways out" counts, and one stranded person can run that
+count up by tens of thousands.
+
+Dice counts: the 120-turn count does not move. Seed 0 over a year,
+688,955 → 672,266. `repeatable_tests`, `errand_tests`, the walking tests,
+`distrust_tests`, `news_tests` and `world::tdd_tests` pass (131).
+
+Full suite: 2,713 passed, none failed, 4 ignored, in 1,222 s (1,566 s at #293).
+
+### 295. Nobody is stranded in the water
+
+Left open by #294. Over a year on the small map, 16 seeds, the build before
+this had people standing on water for 613 person-days and boxed in, on
+ground with no walkable neighbour, for 625. It refused 156,750 steps as "No
+passable route ... 0 ways out", nearly all of them from a handful of people
+stuck for months. Two ways in:
+
+- **Walks to the water ended in it.** The route searches let the last pace
+  onto the goal whatever the goal is, which is how somebody reaches a barn
+  door. Fish nodes and the sea people drink from stand on water, and several
+  decisions walk to a node's exact place (`fishing_action`, `water_action`,
+  `go_and_live_where_it_is`, the food walks). From the water, the next step
+  could be onto a one-tile spit with water all round. Traced on seed 0:
+  onto water at (25, 40), onto desert at (25, 39), and there for the rest of
+  the year.
+- **Bolts cleared the water onto a rock.** `where_this_one_would_run` asked
+  only whether the landing was ground. On seeds 1 and 14 a bolt put somebody
+  on (49, 49), the corner of the map, with sea, water and the edge on every
+  side.
+
+Nothing anybody does at the water needs a foot in it. Drinking reaches a
+spring 25 paces off, and fishing casts a pace, diagonals included; the
+fishery tests already fish from the bank.
+
+- **`where_a_walk_can_end`** (was `kept_on_the_map`) now handles any target
+  no foot can go on, not only targets off the map. It finds the bank the way
+  the walk would: a route to the water, stopping one pace short. Picking the
+  walkable tile beside the water nearest the walker was tried first. It picks
+  the rock in the middle of a pool when that is the only ground touching that
+  water, and a new test caught it. Only where there is no route at all does
+  it fall back to that tile, and then the walk fails and is given up. A target
+  someone can stand on is left where it was put. It is applied where an
+  errand is set and where every walk is carried out.
+- **The step code never puts a foot on unwalkable ground.** This is a safety
+  net: the route-following walk stops before such a cell, and the search's
+  step is refused if it lands on one.
+- **A bolt may clear a river, but not land on a rock.** A landing must either
+  be in the ground the runner already stands in, or open out into at least
+  256 walkable cells (`can_this_be_walked_out_of`). Stopping every bolt at the
+  water was tried first, and also ends the stranding. It measured
+  54,535 / 54,407 person-days against 58,505 for the same build with bolts
+  over water, a gap not much bigger than the noise but in the direction you
+  would expect if putting a river between you and a wolf is worth something.
+- **Water verbs tried out of curiosity** (quench, fill, soak, leach, drink)
+  are now offered with water underfoot *or beside*, since nobody stands in it
+  any more.
+
+Measured over a year, 16 seeds, against the build before:
+
+| | before | after |
+|---|---|---|
+| person-days standing in water | 613 | 0 |
+| person-days boxed in | 625 | 0 |
+| "No passable route" refusals | 156,750 | 0 |
+| errands given up | 11,462 | 170 |
+| errands that got there | 169,012 | 171,550 |
+| alive at the end | 127 | 127 |
+| person-days | 56,848 | 55,728 |
+
+Survival is even within the noise: single seeds swing by a thousand
+person-days or more between builds that differ only in where a bank is
+chosen.
+
+Tests: `off_the_map_tests::a_walk_to_the_water_ends_on_the_bank` and
+`nobody_bolts_onto_a_rock_in_the_water`, both failing on the build before.
+Dice counts: 120 turns, 7,490 → 7,283; seed 0 over a year,
+672,266 → 627,310.
+
+Full suite: 2,714 passed, 1 failed, 4 ignored, in 1,251 s. The failure is
+`relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it`, one of
+the two thresholds that flap (see STANDING_FAILURES). It fails the same way
+alone and in both profiles. Over twelve worlds, worlds with somebody fallen
+out went from 3 of 12 before this change to 6 of 12 after, so it is the
+test's three worlds and not the model. Not re-baselined.
+
+### 296. Everybody loved everybody, so nobody could fall out
+
+`relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` went red
+after #295. It asks whether anybody in a settlement of 25 has a bond gone
+below nought by day 83, and only 3 of 12 such worlds had one. That was not
+chance. Bonds ran to nearly 1.0 with nearly everybody: the 5th-percentile
+bond in a settlement was 0.6 to 0.99, and the *lowest* was often 0.5 to 0.8.
+At that height even hundreds of blows (570 in one world) could not take a
+bond below nought.
+
+The model's own rule is that keeping company makes a familiar face (0.3),
+getting on makes a friend (0.5), and more than that is earned by what two
+people do for each other. Bond gains tallied by source over one world's
+first quarter (600 bonds):
+
+| source | events | total added |
+|---|---|---|
+| gossip, +0.001 each, no ceiling | 278,461 | 246 |
+| observational "teaching", +0.05 / +0.03, no ceiling | 5,302 | 208 |
+| keeping company (capped at 0.3) | 30,776 | 31 |
+| merely seeing somebody, +0.01, no ceiling | 3,564 | 15 |
+| gratitude and social interactions | | 7 |
+
+- **A way of doing a thing is learned once.** Each watcher-and-watched pair
+  was its own lesson, so everybody "adopted" crafting, mining and
+  pathfinding from all 24 others: 600 adoptions of each behaviour, each
+  paying its skill gain and a closer bond. Now a behaviour already adopted
+  from anybody is not adopted again (`ObservationalLearning::has_adopted`).
+  After that, practice is what improves it.
+- **Talk brings two people as far as getting on** (0.5), and no further.
+- **Seeing somebody brings them as far as a familiar face** (0.3), the same
+  ceiling keeping company already had.
+
+With bonds earned, grudges that the high bonds had masked showed through,
+and two faults in how people fight came out with them:
+
+- **Grudge attacks were made out of reach.** `round_on_whoever_angers_me`
+  allowed two paces, counting corners as one. The blow itself lands only
+  within the weapon's reach counting both ways, which is one for bare hands.
+  So somebody with a grudge stood two paces off, or one off on the slant,
+  swinging at the air: 899 refusals in one world, nearly all one man at one
+  other. The check now measures reach the way the blow does.
+- **Curiosity tried violence.** Choosing the least-tried verb could pick
+  "attack with" on whoever was near, about 300 blows in one world with no
+  grudge behind them, one man at one other until he was near dead. Curiosity
+  no longer offers combat verbs aimed at people. Grudges and blows to answer
+  still lead to fights, through their own branches.
+- **A fight never ended.** Every blow gave the other side a grudge and a blow
+  to answer, so two people who fell out traded blows turn after turn for
+  days, one pair 301 times. Now a fight is a bout: once somebody has struck a
+  person, they do not strike that person again for a day, whether from a
+  grudge or to answer a blow (`EmotionState::have_we_had_it_out`). The bond
+  stays soured and the grudge stays held.
+
+Over the same 12 worlds (25 people, 4,000 turns):
+- **Worlds with somebody fallen out:** 3 → 7.
+- **5th-percentile bond:** 0.6–0.99 → 0.27–0.49.
+- **Attacks between people:** most worlds now 0 to 6, the busiest 124.
+  Before, some worlds had none and some up to 1,089. Part-way through the
+  fixes, with curiosity attacks and endless feuds still in, they reached
+  1,646.
+
+Over 16 one-year runs on the small map, against #295: alive at the end
+127 → 132, and person-days 55,728 → 57,241. Nobody stranded, and no "No
+passable route" refusals.
+
+The test itself now asks six worlds instead of three, each on its own
+thread, so it takes no longer. At 7 worlds in 12, all six coming up empty
+is about one chance in two hundred. Three was one in eight, and that is
+what turned it red.
+
+Tests: `observational_learning::a_way_of_doing_a_thing_is_learned_once`
+(new). Dice counts: 120 turns, 7,283 → 7,303; seed 0 over a year,
+627,310 → 653,035.
+
+Full suite: 2,716 passed, none failed, 4 ignored, in 1,160 s (1,251 s at #295).
+
+### 297. A wound turned four times as often as it was meant to
+
+Measured for the multi-generation goal with a new probe that tracks
+generations through 20-year runs (`zz_generations`). On the small map, 12
+seeds, 20 years, only 4 seeds had a grandchild born. Four seeds lost 8 or 9
+of their 12 founders in the first year. Recording what last took each dead
+person's health showed **a wound that turned** as the commonest first-year
+death: 5 of 9 dead on seed 4, and 5 of 8 on seed 5. They died through spring
+and summer, not in the winter.
+
+`HOW_OFTEN_A_WOUND_TURNS` was set at 0.0035 a turn when a day was 12 turns of
+two hours. Over the fortnight a worst wound takes to close, that is about a
+one-in-four chance of it turning. The comment says the intent: "rather better
+than an even chance of getting away with it". When a turn became half an
+hour, the healing was moved onto the calendar (`HOW_FAST_A_WOUND_CLOSES` is
+counted in planning periods) but the chance of turning was not. At four times
+the chances over the same fortnight, a worst wound turned about 7 times in
+10. `HOW_OFTEN_A_SOAKING_TELLS` (0.02 a turn, a chill from a cold soaking)
+came from the same commit and has the same fault.
+
+Both are now stated as a chance a day, the same as before the turn changed
+(0.042 and 0.24), and shared across the day's turns.
+
+First year, small map, before and after:
+
+| seed | alive at year 1 before | after |
+|---|---|---|
+| 4 | 3 | 8 |
+| 5 | 4 | 6 |
+| 7 | 4 | 6 |
+
+Other probability constants from the 12-turn era were checked. Raw flesh and
+food on the turn are chances a meal, not a turn. Foul ground is asked once a
+day. Exposure damage is already stated a day (`in_one_turn`). Fatigue build
+and recovery scale together, so where they settle is the same at any turn
+length. None of those was changed.
+
+Dice count: seed 0 over a year, 653,035 → 676,971. `sickness_tests` and
+`the_first_children_tests` pass.
+
+### 298. Why the big map had almost no children
+
+With #297 in, settlements on the big map hardly die at all: 12 seeds, four
+years, one or two deaths a settlement. But they hardly breed either. Seeds
+0–3 at #297 conceived 2 children between them in three to four years. A
+grandchild needs a child born early enough to grow up and have one of their
+own, so nothing else matters until that changes.
+
+New probes:
+- `zz_breeding` reports each adult's reason every turn, food put by against
+  what the gate asks, and each factor in fertility.
+- `zz_chances` takes each grown person's fertile day (one a month) and finds
+  how far it got towards a conception: fed, drive, fertility, a ready
+  partner, a ready partner near.
+
+Three things stood between a settlement and its children, in this order.
+
+**1. The gate asked half as much again as a body eats.** The gate charged
+each adult `what_i_burn_in_a_day`, and `now_a_body_of` resets that to the
+table's 1,440 every turn (#264). #265 tried the body's own count everywhere,
+and it starved the winters, because the Preparedness drive reads the same
+figure. The body's own count is now kept in a field of its own,
+`Physiology::burned_lately`, which the turn does not reset. Only the gate
+reads it, through `what_i_really_get_through_in_a_day`. The pits are still
+filled to the table's figure.
+
+**2. Everybody was nine tenths fatigued, so fertility sat under the bar.**
+Median fatigue was 0.9 at the end of year 1. Fertility multiplies by 0.6 at
+moderate fatigue and 0.2 at severe, and the bar is 0.3. Sleep debt is
+counted in hours, an hour owed for every two kept awake past sixteen, but it
+was paid back in units of fatigue: 0.0015 a step, ten steps to a half-hour
+Sleep. The median adult carried five and a half hours of debt (the most,
+23.9) while never going more than eleven hours without sleeping, and the
+debt multiplies how fast waking hours tire. `FatigueState::slept_for` now
+pays back debt hour for hour: half an hour asleep repays half an hour owed,
+scaled by how good the sleep was. Median fertility went from about 0.3 to
+about 0.5. Fatigue still sits near 0.75, because people sleep only when the
+Rest drive wins, about 2.4 turns a day. Nothing makes anybody sleep at
+night, and that is left open.
+
+**3. The gate asked for a whole winter out of the pits.** Even at the
+body's own count, nine fertile days in ten failed on "not enough put by".
+It asked for the whole hungry gap's eating, for parent and newborn, from
+this person's share of the store, as if nothing could be had in the gap.
+People fish, hunt and trap through it, and come through their winters with
+the pits at about half of that and hardly a death. #265 named the remedy:
+learn what a winter costs from the store itself. `WintersSeen::note_the_larder`
+records each person's store when the land stops giving and when it starts
+again. The gate now asks for what the last gaps actually took out of their
+share, averaged, for them and the extra mouth. Before the first gap is out,
+or after a gap that ran the store dry (which only shows a floor), it asks
+for the whole gap, as before.
+
+Fertile days on seeds 0 and 2, big map:
+
+| | year 1 | year 2 | year 3 |
+|---|---|---|---|
+| all clear, before (seed 0) | 0 | 4 | 0 |
+| all clear, after (seed 0) | 0 | 29 | 0 |
+| all clear, after (seed 2) | 0 | 20 | 0 |
+
+In year 3 the gate closes again as the year-2 children arrive and take their
+shares. The pregnant and nursing are not counted as carriers, so the count
+of carrier-days falls too. That is the gate doing its job.
+
+The remaining blocks on a fertile day, in order: not enough put by;
+immediate needs unmet (mostly tiredness); a ready partner, but not within
+500 m that day; the reproduction drive not active.
+
+Dice count: seed 0 over a year, 676,971 → 726,154. The tests of the larders,
+sleeping, the first children, reproduction, fatigue, provisions, physiology
+and pregnancy pass (130).
+
+### 299. Nobody slept at night
+
+#298 left this open: people slept only when the Rest drive won, about 2.4
+turns a day, scattered through the day and night alike. Median fatigue sat
+near 0.75, and fertility multiplies by 0.6 at moderate fatigue.
+
+`wanting/night.rs` is asked about the action already chosen each turn, after
+the errand has had its say, and can override it:
+
+- **Night.** First light is at `12 - day_length / 2`. The night's sleep is
+  24 hours less the day, less two, held between 7 and 9 hours, and ends at
+  first light. Somebody whose bedtime has come sleeps until first light: one
+  `Sleep` of that many turns, not half-hour snatches. A Sleep holds a person
+  for its length, so one action covers the night.
+- **Evening.** For three hours before bedtime, somebody more than 20 cells
+  from where the people sleep walks back there. That place is the nearest
+  finished building to the middle of the grown people, or the middle itself
+  if there is none. It is worked out from everybody, not from the asker,
+  because `where_the_camp_is` is relative to the asker and sent nobody home.
+- **Supper.** Somebody at home who is old enough to cook and holds something
+  worth cooking gets an evening fire:
+  - a lit fire beside them is cooked at;
+  - a lit fire nearby is walked to;
+  - with the wood in hand, a fire is lit;
+  - else wood is gathered if trees are near.
+  Somebody hungry at bedtime and carrying food eats first.
+- **Let be.** The night does not override:
+  - an infant;
+  - the starving or parched;
+  - somebody too cold, or in the weather;
+  - somebody running away;
+  - somebody already eating, cooking or lighting a fire.
+  Each reason is tallied as `night: let be, …`.
+
+Two things in the old code stopped this working:
+
+- **Sleep paid back half an hour however long it was.** `slept_for` was
+  given one turn's minutes for every Sleep. A night is a Sleep of 16 to 18
+  turns, so it repaid half an hour of debt. It now repays the whole length:
+  `duration × MINUTES_PER_TURN`.
+- **The evening fire asked for the full ten sticks.** It now asks
+  `wood_a_fire_here_takes`, which `lighting_a_fire` also uses: five with
+  tinder, or the fuel alone at an unlit hearth.
+  - The cooking test gives one person 40 wood, fish and a cook's hands. They
+    store 30 of the wood and can carry about eight sticks.
+  - Holding eight and tinder, they were told to gather until they had ten,
+    and set down whatever went over their load.
+  - Awake all night they had happened on a fire by day 2. Asleep at night,
+    nothing was lit in 25 days.
+  - With the shared figure, they light the evening fire on day 1 and cook
+    eight times in twelve days.
+
+Measured on the big map, seeds 0 and 1, one to two years:
+
+| | before | after |
+|---|---|---|
+| median fatigue | about 0.75 | 0.02–0.03 |
+| median fertility | about 0.5 | 0.65–0.91 |
+
+- Cooking roughly doubled: Cook 49 → 133 and 97 → 204 on seed 0, and
+  58 → 119 and 180 → 299 on seed 1.
+- Everybody sleeps every night.
+- A third of the day asleep is a third less time to work. In that two-seed,
+  two-year sample fewer were "ready to breed", because less food was put by,
+  and fewer children were conceived. The 12-seed numbers are below.
+
+Dice counts:
+
+| | before | after |
+|---|---|---|
+| seed 0, a year | 726,154 | 770,996 |
+| seed 4242, 120 turns | 7,303 | 7,026 |
+
+**Slept in stretches.** Only danger cuts a held action short, so a night
+slept as one Sleep left weather that came on in the small hours unanswered
+until first light. Over four years on seeds 0–3, two adults died of the
+weather where none had at #298. A night is now slept two hours at a time
+(`A_STRETCH_OF_SLEEP`), and each waking is a decision. Dice counts with
+stretches: 822,314 a year on seed 0, 8,422 in 120 turns on seed 4242.
+
+**The cost, measured.** Seeds 0–3 over their first four years:
+
+| | #298 | night, one sleep |
+|---|---|---|
+| conceived | 21 | 10 |
+| born | 14 | 8 |
+| adult deaths | 1 | 6 |
+
+On fertile days, the blocks that grew were "immediate needs unmet" (34 → 88
+on seed 0 in year 2) and "reproduction drive not active" (17 → 119 on seed 1
+in year 2). "Not enough put by" did not grow. Both blocks read Hunger,
+Thirst and Rest, and the Reproduction drive builds only while those are
+quiet.
+
+**Nobody goes to bed thirsty.** A need left unanswered does not just pause
+the needs that stand behind it. `DriveState::tick` makes them fall quiet,
+and Reproduction stands behind hunger, thirst, rest and safety. On seeds 0
+and 1 in year 2:
+
+| | #298 | night, one sleep | night, stretches |
+|---|---|---|---|
+| night turns with Thirst on, seed 0 / seed 1 | 6.1k / 5.8k | 16.0k / 15.8k | 13.3k / 17.1k |
+| fertile days all clear | 29 / 9 | 0 / 4 | 4 / 2 |
+
+Stretches did cut hunger-on turns to about a third, and turns exposed or too
+cold by about half. The night now lets a thirsty person, or a hungry one
+with nothing in hand, see to it before bed. Dice counts: 833,642 a year on
+seed 0, and 7,343 in 120 turns on seed 4242.
+
+**Coupling outside the fertile window.** With thirst answered, the
+Reproduction drive was still off far more often than at #298. It was
+unlocked but low: in year 2, 42k and 69k grown-person turns at 0 to 0.2,
+against about 8.8k at #298. Sleeping together every night, couples tried
+four to seven times as often:
+
+| `Mate` in two years | #298 | night |
+|---|---|---|
+| seed 0 | 56 | 216 |
+| seed 1 | 76 | 524 |
+
+Nearly every try fell outside the carrier's one fertile day a month. A try
+that did not take cost both partners 0.3 of the drive, which takes a week to
+build back at 0.001 a turn. So on the fertile day the wish for a child was
+spent.
+
+A try outside the window now dulls the drive by 0.05
+(`A_TRY_OUTSIDE_THE_WINDOW`), about a day's regrowth, so a pair still does
+not try every turn. A failed try inside the window costs 0.3, as before.
+Dice count: 881,777 a year on seed 0.
+
+**Where it stands.** Seeds 0–3 over their first four years:
+
+| | #298 | night, one sleep | night, as committed |
+|---|---|---|---|
+| conceived | 21 | 10 | 21 |
+| born | 14 | 8 | 16 |
+| adult deaths | 1 | 6 | 7 |
+
+Conceptions are back to where they were. Adult deaths are not:
+- 3 from the weather;
+- 2 from illness off foul ground;
+- 1 from food on the turn;
+- 1 from a wound that turned.
+
+At #297, on all 12 seeds over four years, the weather took 2.
+
+**Foul ground.** The ground is asked about once a day, at turn 0 of the
+day, which is midnight. Before there was a night, people were scattered at
+midnight. Now they are all asleep where the camp spends its evenings, which
+is where it voids. The Rest drive's own way to bed steps off foul ground
+first (`somewhere_that_does_not_stink`). The night rule sent people to bed
+where they stood, and skipped that. Now:
+- somebody standing on foul ground at bedtime steps off it first
+  (`night: stepped off foul ground`);
+- a `Treat` chosen at bedtime is let stand, as the Rest drive's way to bed
+  takes a remedy first.
+
+Dice counts: 949,046 a year on seed 0, and 7,392 in 120 turns on seed 4242.
+Test: `nobody_sleeps_on_foul_ground`.
+
+Seeds 0–3 over their first four years, with all of the above:
+
+| | #298 | night, before foul ground | night, as committed |
+|---|---|---|---|
+| conceived | 21 | 21 | 22 |
+| born | 14 | 16 | 19 |
+| adult deaths | 1 | 7 | 4 |
+| alive at the end of year 4 | 61 | 56 | 63 |
+
+The four adult deaths are 2 of hunger, 1 by mishap and 1 of the weather
+(off foul ground). The weather took 3 before this change, and 1 after it,
+on four seeds. That is too few to call.
+
+**Nine years said more.** Seeds 0–3 over their first nine years:
+
+| | #298 | night, as above |
+|---|---|---|
+| conceived | 40 | 32 |
+| adult deaths of the weather | 5 | 15 |
+| alive at the end of year 9 | 69 | 55 |
+
+#298's five came in year 9, when the founders are getting on. The night
+added deaths in years 5, 6 and 8 as well.
+
+Rain, wind and storm do damage to anybody not under cover
+(`ExposureStatus::update`), and none of it shows in `active_exposures` until
+the body has gone cold. So the night's "let be, the weather" never fired
+for them, and people slept where they stood through it. Awake, they had
+gone in.
+
+Now somebody about to sleep goes in first, to the nearest clean ground out
+of the weather within 20 cells (`somewhere_out_of_the_weather`). That is a
+finished roof or the trees: what the weather code counts as cover, now one
+function, `World::is_out_of_the_weather_at`. Under cover, a sleeper stays
+put even on foul ground. Dice counts: 912,501 a year on seed 0, and 9,667 in
+120 turns on seed 4242. Test: `a_sleeper_goes_in_out_of_the_weather`.
+
+**And then it turned out not to be the weather.** Seeds 0–3 over nine years
+with sleepers going in:
+
+| | #298 | night, before cover | night, with cover |
+|---|---|---|---|
+| conceived | 40 | 32 | 40 |
+| adult deaths labelled "the weather" | 5 | 15 | 14 |
+| all adult deaths | 11 | 21 | 20 |
+| alive at the end of year 9 | 69 | 55 | 59 |
+
+Going in barely moved it, so a new probe, `zz_weather_deaths`, traced the
+last two days of everybody who died.
+
+The generations probe labels a death by `what_last_took_health`. That is
+whatever nicked the body last, and in winter it is nearly always a cold
+tick. The population's own reckoning, `what_took_the_most`, gave a
+different answer. The first death traced, seed 1 in year 1, was:
+- a 31-year-old at hunger 1.0 for three days in winter;
+- hypothermic, out in the open, and not asleep;
+- killed at health 86 in one turn by `apply_starvation_damage`, which takes
+  all of a body's health when its reserve is empty.
+
+That death was starvation. Every "the weather" in this entry's tables above
+was labelled the same way, at #298 as well. The excess deaths with a night
+are, at least in part, people starving at the end of winter. That is
+consistent with a third of the day no longer spent working.
+
+The probe now also prints the reckoned cause (`DIEDOF` lines).
+
+**With the reckoned cause.** Seeds 0–2 over nine years:
+
+| | #298 | night, as committed | night, hungry let be all evening |
+|---|---|---|---|
+| died of hunger | 7 | 13 | 9 |
+| conceived | 25 | 26 | 24 |
+| alive at the end of year 9 | 51 | 42 | 43 |
+
+- At #298 every hunger death is in year 9, a famine that the night has too.
+- The night adds starvation in years 1, 4 and 6.
+
+Traced on seed 2, these were people at the end of winter (days 300–354)
+holding 11–24 raw whole fish, with a larder reckoned at about 53,000 units.
+They sat at hunger 1.0 for days and walked to distant targets, eating about
+once a day. The food was there and it was not eaten. The way that cuts up a
+carcass sits inside `food_action` (Strategy::GatherWildFood), behind the
+ranker; `a_catch_at_my_feet` (Strategy::EatCarriedFood) only checks snares.
+
+Letting the hungry be through the evening as well as at bedtime was tried.
+It saved some from hunger and lost as many otherwise, and on seed 3 the
+year-9 famine took ten (5 hunger, 5 thirst). It is not kept.
+
+What the night costs, then, is that it brings on sooner a starvation the
+model already had: people who do not eat the food they hold. That fault is
+open, and it is the next thing for the grandchildren.
+
+Tests in `night_tests` (5): when the night runs, a night is slept in
+stretches until first light, somebody far off heads home in the evening, the evening fire
+takes half the wood with tinder, and a night's sleep pays back the night.
+
+### 300. People starved holding fish, because the knives had worn out
+
+#299 found people dying of hunger at the end of winter with food in hand.
+`zz_starving_choice` traced seed 2 into its fourth winter (days 1,365–1,387).
+It printed every grown person at hunger 0.9 or more, with:
+- what they held;
+- whether they had an edge;
+- the ways open to them for hunger, ranked.
+
+Every one of them, 160 samples across seven people:
+- had **no edge**: no knife, no tool for `Leatherworking`;
+- held **whole fish**, between 6 and 31, and some held a whole joint;
+- had nothing `find_best_food_to_eat` would offer, because a whole fish is
+  not supper until it is cut (`Piece::can_it_be_eaten`).
+
+`what_flesh_i_should_cut_up` wants an edge, so nothing in the pack could
+ever become a meal. The hunger ways still offered `Eat` first, which failed.
+What they did instead, 135 times in 160, was walk: to one store, then to
+another 80 cells off, then back, never reaching either. Some walked to the
+cell they stood on. They died with their reserve run out, carrying the food.
+
+The night (#299) made it come sooner, but the fault was there without it:
+at #298 the same famine took 7 in year 9 on seeds 0–2.
+
+**Fix.** Anybody can pull a fish apart with their hands, or tear at a
+joint. `Agent::pull_apart_by_hand` does that for `Eat`, when:
+- nothing in hand is edible;
+- there is no edge;
+- a sound whole fish or joint is held.
+
+It gives half of what a knife would, and never less than a piece
+(`WHAT_HANDS_SAVE_OF_A_CUT`). With an edge it does nothing, because the cut
+is the better way and `food_action` takes it first.
+
+`whole_flesh_that_comes_apart` is now the one place that asks which whole
+flesh comes apart, for the knife and for the hands.
+
+Tests in `by_hand_tests` (3):
+- a whole fish is eaten without a knife;
+- hands save half of what a knife does;
+- with a knife the fish is not torn.
+
+Dice count: seed 0 over a year, 912,501 → 743,470.
+
+**And then they would not eat what came apart.** Run again with fish pulled
+apart by hand, the same winter showed people at hunger 1.0 holding
+`fishportions` and `meatportions`, and still nothing `find_best_food_to_eat`
+would offer. Raw flesh is refused by somebody it has laid up twice, unless
+they are starving. `is_starving` wants an empty stomach, an empty gut and
+three days into the reserve. Somebody living on a handful of legumes a day
+never has an empty gut. So they refused the raw fish while their reserve ran
+down to nothing behind the legumes.
+
+The aversion now gives way three days into the reserve, whatever is in the
+gut. That is the same three days `is_starving` already counts. Test:
+`three_days_short_and_raw_fish_is_eaten`. Dice counts unchanged.
+
+**And what was cooked could not be eaten at all.** The same winter showed
+somebody at hunger 1.0 holding `cooked_meat`, which nothing would offer.
+`prepared_item_id` names what comes off a fire. It went through
+`base_item_id`, which strips the cut as well as an earlier cooking. So a
+joint went on as `meatportions` and came off as `cooked_meat`. `Piece::of`
+reads that as a whole carcass, which nobody will eat and nothing will cut.
+
+Every piece of flesh anybody ever cooked was lost the moment it was done.
+The tests already named a cooked portion `cooked_meatportions`; the one
+function that made them did not. It now keeps the cut and strips only an
+earlier cooking. Test: `what_comes_off_the_fire_can_be_eaten`.
+
+Dice counts: 786,562 a year on seed 0, and 9,842 in 120 turns on seed 4242.
+
+**Measured.** Seeds 0–2 over nine years, by the reckoned cause:
+
+| | #298, no night | night (#299) | night with #300 |
+|---|---|---|---|
+| died of hunger | 7 | 13 | 6 |
+| conceived | 25 | 26 | 25 |
+| alive at the end of year 9 | 51 | 42 | 50 |
+
+What the night cost is given back. The six hunger deaths left are all in
+year 9: four on seed 1 and two on seed 2. That is the same famine #298 has
+in the same year, and it is open. Seed 3, run alongside, ended year 9 with
+16 alive and no hunger deaths.
+
+**One test moved: `clothing_tests::a_cold_agent_ends_up_dressed`.** It went
+from passing to 6 of 24 worlds with the bar at 8, and bisects to the commit
+that lets cooked food be eaten. Asked of 96 worlds, the rate is the same
+either side:
+
+| | dressed, of 96 |
+|---|---|
+| before | 30 |
+| after | 29 |
+
+So the change did nothing to this test, and the block of 24 was too small.
+The bar of a third was the rate itself, which is why this test has flipped
+whenever anything upstream changed (#132, #165). It now asks 96 worlds, with
+the bar at a quarter.
+
+What the measurement says is worse than the test used to: in about seven
+worlds in ten, a freezing man with 200 flax in his pack and a flax patch
+three paces off never makes anything to wear in 600 turns. In the ones that
+dress, it happens in the first 60–160 turns or not at all. That is open.
+
+### 301. The famine from year 9: a joint and no knife, again
+
+The 20-year run with #300 in had hunger deaths in most years from year 9 on,
+on seeds 1 and 3. `zz_famine` fast-forwards seed 1 to day 3,080 and runs it
+170 days, through its ninth winter into spring. Each day it prints the
+settlement's food; at every death it prints the dead person's last thirty
+samples:
+- hunger, reserve and health;
+- what they held, and whether they had an edge;
+- what `find_best_food_to_eat` offered;
+- what they did;
+- the hunger ways open to them.
+
+The settlement was not short. Its mean reserve stayed above 0.84 all winter,
+and one person's share of the stores fell from about 70,000 to 7,000 units
+by spring. Three grown people died of hunger in it.
+
+**The first, on day 3,188, was #300 from the other side.** He carried six
+joints, then sixteen, for three days, with no edge. `Eat` pulls a joint apart
+by hand, but nothing offered him `Eat`. Nothing in his pack counted as
+edible, so the hunger ways offered only walks: to a pit, to a patch of
+ground, and three times to the cell he was standing on. He died at 0.07 of
+his reserve, holding sixteen joints. #300's fix ran only once `Eat` was
+chosen, and the way he chose what to do did not know `Eat` was open to him.
+
+`Agent::could_pull_apart_by_hand` now asks it in one place:
+- nothing edible in hand;
+- no edge;
+- a sound whole fish or joint held.
+
+`food_action` offers `Eat` on it straight after the knife's own step, and
+`pull_apart_by_hand` asks the same question before it tears. Test:
+`hunger_offers_supper_out_of_a_joint_with_no_knife`.
+
+**The other two, both on day 3,244, are a different thing**, and open:
+- the first spring days, both 18 to 20 days into a three-week reserve;
+- nothing in hand, and their larder share still reading about 6,700 units;
+- eating whatever the ground nearby gave, until "Too full to eat";
+- still running down.
+
+A bite off the ground counts as already in hand and is taken before the
+two-turn walk to a pit. All the hunger ways are ranked as giving the same
+relief, so a stomach full of leaf ranks with a stomach full of dried meat.
+
+Dice count: seed 0 over a year, 786,562 → 869,212.

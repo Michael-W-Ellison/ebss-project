@@ -97,7 +97,7 @@ impl Simulation {
             .collect();
 
         // And the beasts, which are a threat to each other
-        let beasts: Vec<((i32, i32), f32, uuid::Uuid, bool)> = self
+        let beasts: Vec<((i32, i32), f32, uuid::Uuid, bool, String)> = self
             .world
             .animals
             .get_all()
@@ -110,8 +110,19 @@ impl Simulation {
                     species.health,
                     species.attack_damage,
                 );
-                let hunts = species.behavior.how_much_it_menaces_you() >= 1.0;
-                Some((animal.position, worth, animal.id, hunts))
+                // **What menaces a person is not what hunts a beast.** This
+                // was temper alone, so a mammoth - `Territorial`, and a
+                // danger to anybody who walks up to it - was a threat to
+                // every animal in sight of it, its own herd included. Every
+                // mammoth faced down the one beside it, turn after turn,
+                // stood in `Attacking` for the whole of its life, and never
+                // grazed: twenty-three on the big map, none born, all starved
+                // (#283). A boar did the same three turns in four. A beast is
+                // a threat to another beast when it eats meat, which is what
+                // the line below has always said it was looking for.
+                let hunts = species.behavior.how_much_it_menaces_you() >= 1.0
+                    && species.where_it_sits() != crate::environment::TrophicRole::PrimaryConsumer;
+                Some((animal.position, worth, animal.id, hunts, animal.species_id.clone()))
             })
             .collect();
 
@@ -141,8 +152,10 @@ impl Simulation {
 
             let from_beasts = beasts
                 .iter()
-                .filter(|(_, _, who, hunts)| *hunts && *who != animal.id)
-                .map(|(at, worth, who, _)| (*at, *worth, *who))
+                .filter(|(_, _, who, hunts, kind)| {
+                    *hunts && *who != animal.id && *kind != animal.species_id
+                })
+                .map(|(at, worth, who, _, _)| (*at, *worth, *who))
                 .filter(|(at, _, _)| Self::within(*at, animal.position, Self::AS_FAR_AS_A_BEAST_LOOKS));
 
             let worst = from_people

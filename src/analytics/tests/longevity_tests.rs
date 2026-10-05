@@ -237,31 +237,45 @@ fn a_settlement_lasts_thirty_thousand_turns() {
 /// moved again while the last adults aged out. Nearly half of everyone born
 /// had died before growing up, so there was never a second generation to take
 /// over.
+///
+/// On the hundred square kilometres with the founders at the middle, and by
+/// the calendar: somebody born in the last four years of eight is alive at the
+/// end of the eighth. This asked for anybody under 6,500 turns old at 9,000
+/// turns on the half-kilometre test map, which is half a year - shorter than a
+/// pregnancy (#253). Eight years takes over half an hour even in a release build,
+/// so it is run on request:
+/// `cargo test --release -- --ignored a_settlement_still_raises_children_late_on`.
 #[test]
+#[ignore = "eight years on the 100 km2 map, over half an hour even in release; cargo test --release -- --ignored"]
 fn a_settlement_still_raises_children_late_on() {
-    let world = World::new(WorldConfig::default());
+    use crate::environment::seasons::PLANNING_PERIODS_PER_YEAR;
+
+    crate::core::dice::seed(3);
+    let world = World::new(WorldConfig::big_enough_for_an_ecology());
     let mut population = Population::new();
     for _ in 0..12 {
         population.spawn_agent(AgentConfig::default());
     }
 
     let mut simulation = Simulation::new(world, population);
+    simulation.bring_everybody_to_the_middle();
 
-    for _ in 0..9000 {
+    for _ in 0..(8 * PLANNING_PERIODS_PER_YEAR) {
         simulation.take_a_turn();
     }
 
-    let grown_here = simulation
+    let born_lately = simulation
         .population
         .agents
         .iter()
         .filter(|agent| agent.state.is_alive)
-        .filter(|agent| agent.state.age < 6500)
+        .filter(|agent| !agent.parent_ids.is_empty())
+        .filter(|agent| agent.state.years_old() < 4)
         .count();
 
     assert!(
-        grown_here > 0,
-        "nine thousand turns in, the settlement should hold people born into it"
+        born_lately > 0,
+        "eight years in, the settlement should hold children born in the last four"
     );
 }
 

@@ -268,6 +268,19 @@ impl ObservationalLearning {
             return (false, progress.confidence); // Already adopted
         }
 
+        // **Learned once, not once a teacher.** Watching somebody mine
+        // teaches you how mining is done; watching a second miner does not
+        // teach you again. Every pair was its own lesson, so in a settlement
+        // of twenty-five each person adopted crafting, mining and
+        // pathfinding from all twenty-four others - six hundred adoptions of
+        // each, each paying its skill gain and drawing teacher and pupil a
+        // twentieth closer, until everybody stood at nearly 1.0 with
+        // everybody and a blow could not sour anything (#296). Once a way of
+        // doing a thing is yours, practice is what improves it.
+        if self.has_adopted(action_type) {
+            return (false, progress.confidence);
+        }
+
         // Calculate learning threshold based on action difficulty
         let base_observations_needed = action_type.observations_to_learn();
 
@@ -303,6 +316,13 @@ impl ObservationalLearning {
         let should_adopt = enough_observations && high_quality && successful;
 
         (should_adopt, progress.confidence)
+    }
+
+    /// Whether this one has already taken up `action_type` from anybody.
+    pub fn has_adopted(&self, action_type: ActionType) -> bool {
+        self.observations
+            .iter()
+            .any(|((_, watched), progress)| *watched == action_type && progress.adopted)
     }
 
     /// Mark a behavior as adopted
@@ -445,6 +465,40 @@ mod tests {
 
         assert_eq!(learning.recent_observations.len(), 1);
         assert!(learning.get_progress(&performer, ActionType::Mining).is_some());
+    }
+
+    /// A way of doing a thing is learned once, not once from every neighbour.
+    ///
+    /// Every watcher-and-watched pair was its own lesson, so in a settlement of
+    /// twenty-five everybody adopted mining from all twenty-four others, with a
+    /// skill gain and a closer bond each time - six hundred adoptions of one
+    /// behaviour, and everybody at nearly 1.0 with everybody (#296).
+    #[test]
+    fn a_way_of_doing_a_thing_is_learned_once() {
+        let mut learning = ObservationalLearning::new(1.5);
+        let first = crate::core::dice::name();
+        let second = crate::core::dice::name();
+
+        for watched in [first, second] {
+            for i in 0..5 {
+                learning.observe_action(ObservedAction::new(
+                    watched,
+                    ActionType::Mining,
+                    true,
+                    format!("mined stone {}", i),
+                    i,
+                    3.0,
+                ));
+            }
+        }
+
+        assert!(learning.should_adopt_behavior(&first, ActionType::Mining, 0.9, 0.8).0);
+        learning.adopt_behavior(&first, ActionType::Mining);
+
+        assert!(
+            !learning.should_adopt_behavior(&second, ActionType::Mining, 0.9, 0.8).0,
+            "already mines; watching a second miner is not a second lesson"
+        );
     }
 
     #[test]

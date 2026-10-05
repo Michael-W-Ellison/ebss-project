@@ -104,16 +104,30 @@ fn an_errand_ends_by_arriving_rather_than_by_running_out_of_patience() {
 /// 1,401 of them were a primary need taking the turn from a secondary one -
 /// 1,062 a Preparedness errand cut short by hunger or thirst, which is every
 /// attempt at putting anything by, every time. See ISSUES_FOUND.md #122.
+///
+/// **Over a block of seeded worlds, and no longer one unseeded one.** At five
+/// kilometres an hour (#278) an errand on a four-kilometre map is a turn or
+/// two of walking and very little interrupts it: of 1,609 set out in one
+/// world, 1,604 arrived and none was set aside. Over seeds 1 to 4 the
+/// set-asides came to 0, 99, 1 and 0. Whether a single world happens to
+/// see one is a draw. That the mechanism is there to be seen is what this
+/// asks.
 #[test]
 fn going_for_a_drink_is_not_a_change_of_mind() {
-    let simulation = a_settlement(12, 600);
+    let mut set_out = 0;
+    let mut set_aside = 0;
+    let mut got_there = 0;
+    for seed in 1..=4u64 {
+        crate::core::dice::seed(seed);
+        let simulation = a_settlement(12, 600);
 
-    let set_out = how_often(&simulation, "errand: set out");
-    let set_aside = how_often(
-        &simulation,
-        "errand: set aside for something that would not wait",
-    );
-    let got_there = how_often(&simulation, "errand: got there");
+        set_out += how_often(&simulation, "errand: set out");
+        set_aside += how_often(
+            &simulation,
+            "errand: set aside for something that would not wait",
+        );
+        got_there += how_often(&simulation, "errand: got there");
+    }
 
     assert!(set_out > 0, "nobody ever set out anywhere");
     assert!(

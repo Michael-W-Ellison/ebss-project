@@ -78,6 +78,11 @@ pub struct EmotionState {
     pub what_last_struck_me: Option<EmotionSource>,
     /// Turn when last attacked (for recency)
     pub last_attack_turn: u32,
+    /// Who this one last raised a hand to, and when.
+    ///
+    /// A fight is a bout. See `EmotionState::have_we_had_it_out`.
+    #[serde(default)]
+    pub who_i_last_struck: Option<(Uuid, u32)>,
 }
 
 impl EmotionState {
@@ -97,6 +102,7 @@ impl EmotionState {
             curiosity_sources: BTreeMap::new(),
             what_last_struck_me: None,
             last_attack_turn: 0,
+            who_i_last_struck: None,
         }
     }
 
@@ -119,6 +125,28 @@ impl EmotionState {
     pub fn record_attack(&mut self, who: EmotionSource, current_turn: u32) {
         self.what_last_struck_me = Some(who);
         self.last_attack_turn = current_turn;
+    }
+
+    /// Note that this one has just raised a hand to `whom`.
+    pub fn struck(&mut self, whom: Uuid, current_turn: u32) {
+        self.who_i_last_struck = Some((whom, current_turn));
+    }
+
+    /// Whether this one has already had it out with `whom` today.
+    ///
+    /// **A fight is a bout, not a siege.** A grudge or a blow to answer was
+    /// acted on every time it came up, and every blow gave the other a grudge
+    /// and a blow to answer, so two people who fell out went at each other
+    /// turn after turn for days: one pair three hundred times over in a
+    /// settlement's first quarter, until one of them was near dead (#296). A
+    /// turn is half an hour, and half an hour is a whole fight. After it the
+    /// two of them are what the fight made them - the bond soured, the grudge
+    /// held - and the next time either raises a hand is another day.
+    pub fn have_we_had_it_out(&self, whom: Uuid, current_turn: u32) -> bool {
+        self.who_i_last_struck.is_some_and(|(struck, when)| {
+            struck == whom
+                && current_turn.saturating_sub(when) < crate::environment::seasons::TICKS_PER_DAY
+        })
     }
 
     /// What struck this one, if it was recent enough to still matter.

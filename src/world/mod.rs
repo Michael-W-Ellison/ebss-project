@@ -1987,6 +1987,17 @@ impl World {
         self.buildings.iter().find(|b| &b.position == pos)
     }
 
+    /// Whether somebody standing here is out of the weather: under a
+    /// finished roof, or in among trees, which is partial shelter. What the
+    /// weather does to a body asks this, and so does where people bed down
+    /// for the night (#299).
+    pub fn is_out_of_the_weather_at(&self, pos: &Position) -> bool {
+        self.buildings.iter().any(|b| &b.position == pos && b.is_completed())
+            || self.grid.get_tile(pos).is_some_and(|tile| {
+                matches!(tile.terrain.terrain_type, crate::world::TerrainType::Forest)
+            })
+    }
+
     pub fn remove_depleted_resources(&mut self) {
         // A renewable node stays on the map when emptied so it can regrow;
         // deleting it would make berry patches and fish runs single-use and
@@ -2099,14 +2110,23 @@ impl World {
 
         if self.where_the_nodes_are.is_it_up_to_date(&self.resources) {
             self.where_the_nodes_are
-                .near(at.x, at.y, reach)
-                .into_iter()
-                .filter(|&number| within(&self.resources[number]))
-                .collect()
+                .near_where(at.x, at.y, reach, |number| within(&self.resources[number]))
         } else {
             (0..self.resources.len())
                 .filter(|&number| within(&self.resources[number]))
                 .collect()
+        }
+    }
+
+    /// The number of every node standing on `at`, added to `out` in list
+    /// order. `node_numbers_on` without a list of its own, for asking about
+    /// many tiles one after another (#290).
+    pub fn add_the_node_numbers_on(&self, at: Position, out: &mut Vec<usize>) {
+        let here = |number: usize| self.resources[number].position == at;
+        if self.where_the_nodes_are.is_it_up_to_date(&self.resources) {
+            self.where_the_nodes_are.on_into(at.x, at.y, here, out);
+        } else {
+            out.extend((0..self.resources.len()).filter(|&number| here(number)));
         }
     }
 
@@ -3108,6 +3128,15 @@ impl World {
     ) -> usize {
         let mut new_discoveries = 0;
         let range = vision_range as i32;
+
+        // Standing where it last looked round, seeing as far as it did then:
+        // every tile in sight is one it has already explored, so the sweep
+        // would find nothing. It still counts as having looked.
+        if agent_exploration.looked_round_from == Some((*agent_position, vision_range)) {
+            agent_exploration.last_exploration_turn = current_turn;
+            return 0;
+        }
+        agent_exploration.looked_round_from = Some((*agent_position, vision_range));
 
         // Explore all tiles in vision range
         for dx in -range..=range {

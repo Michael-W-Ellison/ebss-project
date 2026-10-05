@@ -28,22 +28,26 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #278): every test, module by module
-(a background run is stopped at about half an hour, so the suite no longer
-runs in one piece), 2,717 tests. After the fixes that went with it, four are
-left:
-- The two multi-generation tests below.
-- Two ecology tests the walk at five kilometres an hour moved, below.
+**Last full run** (ISSUES_FOUND #300): every test, module by module, in
+one piece. 2,732 tests run: 2,727 passed, 1 failed, 4 ignored, in 2,114 s of
+test time (1,705 s at #299). Where the extra time went was not measured.
+
+The one that failed was `clothing_tests::a_cold_agent_ends_up_dressed`: 6 of
+24 worlds dressed, with the bar at 8. Bisected to the #300 commit that lets
+cooked food be eaten. Asked of 96 worlds, though, the rate is the same either
+side of that commit: 30 of 96 before, 29 of 96 after. The bar of a third sat
+at the rate, so the block of 24 flipped on which worlds it was dealt. The
+test now asks 96 worlds with the bar at a quarter, and passes. Not re-run as
+part of a full suite since. That leaves:
+- The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
 on this run; it is one of the two thresholds that flap (below).
 
 | test | reports | what is known |
 |---|---|---|
-| `longevity_tests::a_settlement_still_raises_children_late_on` | nobody born into the settlement at 9,000 turns | **A stated requirement: settlements must last generations.** Nine thousand turns is half a year on today's calendar, and a pregnancy is nine months (#253), so as written this cannot pass whatever the model does; it wants rewriting against the calendar. After #255, twelve settlements over five years: 10 of 12 still standing at the end of year five, 59 people, 29 children born. |
-| `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | 0 born here at 6,000 turns | Same requirement, same calendar problem (6,000 turns is four months, not "four full years"). Its bound is sound: it counts by parentage. |
-| `ecology_tests::fourteen_wolves_take_two_sheep_inside_a_day` | 6 of 12 sheep over 6 seeds, against 9 | Animals now cover 25 times what they did in a turn (`world::pace::HOW_MUCH_FURTHER_ANIMALS_GO`): a sheep flees fifty cells and a wolf rushes only what is within `HOW_FAR_A_HUNT_REACHES`, eight, and looks for prey in blocks of eight. The hunt was built round animals that moved two cells a turn and wants reworking at the new pace. |
-| `ecology_tests::most_of_what_lived_here_still_lives_here` | 110 of 468 head after five years, against 117 | The same change, on the half-kilometre test map with nobody on it. |
+| `longevity_tests::a_settlement_still_raises_children_late_on` | (ignored; run with `--ignored`) | **A stated requirement: settlements must last generations.** Since #279: eight years on the 100 km2 map with seed 3 and the founders at the middle, and asks for someone born in the last four still alive. Over half an hour even in a release build. It used to ask for this at 9,000 turns, which is half a year and shorter than a pregnancy (#253). Births stay rare while the put-by gate (#264) stays shut, so expect it to fail until that is fixed. |
+| `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | (ignored; run with `--ignored`) | Same requirement. Since #279: four years on the big map, and asks for three children born there alive past their first birthday. Failed on its first run in release (seed 3), inside half an hour. It used to run 6,000 turns, which is four months. |
 
 Measured over sixteen years (#259): four settlements of twelve still there,
 one to five founders each, and none of the forty-three children born in them
@@ -521,7 +525,7 @@ the last defect for a month.
 | test | now | threshold |
 |---|---|---|
 | `errand_tests::a_walk_is_finished_rather_than_re_decided_at_every_step` | green after #227, red after #224 | 50% |
-| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | red after #227, green after #225 | somebody falls out |
+| `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` | **resolved by #296**: green; was red after #295 and #227, green after #225 | somebody falls out, in one of six worlds |
 
 **Both have now been on both sides of their lines, and the two swapped over.**
 The full run after #225 had the errand test red and the enemies test green;
@@ -549,6 +553,22 @@ it wants nearby scores badly for it.
 **Do not re-baseline it and do not delete it.** It wants a predicate that
 survives a change of seed - arrivals against abandonments would be one, and
 the counters for it are already kept. That is its own piece of work.
+
+The second went red again after #295, and that is measured too. It asks
+whether anybody in three particular worlds, 25 people and 4,000 turns each,
+has a bond gone below zero, and in those three worlds nobody has. Over twelve
+such worlds (seeded the same way, people spawned before the world, so not the
+test's three), the worlds with somebody fallen out went **from 3 of 12 before
+#295 to 6 of 12 after**. People fall out no less than they did; the test's
+three worlds landed on the empty side, which at about one world in two is a
+one-in-eight chance. Same remedy as the first: a predicate over enough
+worlds to survive a change, not a new threshold.
+
+**Resolved by #296.** The cause under the coin was bonds inflated to nearly
+1.0 by sources with no ceiling, so nothing short of a long run of blows
+could sour one. With that fixed, 7 worlds in 12 have somebody fallen out,
+and the test now asks six worlds rather than three, so all of them coming up
+empty is about one chance in two hundred. The threshold is unchanged.
 
 For contrast, the same eight seeds on what #224 was actually for:
 

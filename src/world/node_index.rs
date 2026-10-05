@@ -98,21 +98,42 @@ impl WhereTheNodesAre {
         (across < self.across && down < self.down).then_some(down * self.across + across)
     }
 
+    /// The numbers of every node in the patch holding `(x, y)` that `keep`
+    /// says yes to, added to `out` in list order: a question about one tile,
+    /// answered without a list of its own (#290).
+    pub fn on_into(&self, x: i32, y: i32, keep: impl Fn(usize) -> bool, out: &mut Vec<usize>) {
+        out.extend(self.off_the_map.iter().map(|&n| n as usize).filter(|&n| keep(n)));
+        if let Some(patch) = self.patch_of(x, y) {
+            out.extend(self.patches[patch].iter().map(|&n| n as usize).filter(|&n| keep(n)));
+        }
+    }
+
     /// The numbers of every node within `reach` cells either way of
-    /// `(x, y)`, in list order - and possibly a few further off, from the
-    /// corners of the patches read, which the asker's own distance rule
-    /// throws out.
-    pub fn near(&self, x: i32, y: i32, reach: i32) -> Vec<usize> {
+    /// `(x, y)` that `keep` says yes to, in list order.
+    ///
+    /// **Throw out first, then sort.** `near` sorted everything in every
+    /// patch it read - some forty-nine patches for somebody looking twenty-five
+    /// cells about them - and the asker then threw away most of it as too far
+    /// off. Gathering and sorting nodes was the largest single thing left in
+    /// a settlement's turn (#289). What comes back is the same numbers in the
+    /// same order: each patch is filed in list order, so one patch read on
+    /// its own is in order already and is not sorted at all.
+    pub fn near_where(&self, x: i32, y: i32, reach: i32, keep: impl Fn(usize) -> bool) -> Vec<usize> {
         let reach = reach.max(0);
         let clamp_across = |v: i32| (v.max(0) / A_PATCH_OF_NODES).min(self.across as i32 - 1) as usize;
         let clamp_down = |v: i32| (v.max(0) / A_PATCH_OF_NODES).min(self.down as i32 - 1) as usize;
 
-        let mut found: Vec<usize> = self.off_the_map.iter().map(|&n| n as usize).collect();
+        let mut found: Vec<usize> = self
+            .off_the_map
+            .iter()
+            .map(|&n| n as usize)
+            .filter(|&n| keep(n))
+            .collect();
+        let mut patches_read = usize::from(!found.is_empty());
 
         let (west, east) = (x.saturating_sub(reach), x.saturating_add(reach));
         let (north, south) = (y.saturating_sub(reach), y.saturating_add(reach));
 
-        // Nothing on the map is that far out, whichever way.
         let clear_of_it = east < 0
             || south < 0
             || west >= self.across as i32 * A_PATCH_OF_NODES
@@ -120,16 +141,23 @@ impl WhereTheNodesAre {
         if !clear_of_it {
             for down in clamp_down(north)..=clamp_down(south) {
                 for across in clamp_across(west)..=clamp_across(east) {
+                    let before = found.len();
                     found.extend(
                         self.patches[down * self.across + across]
                             .iter()
-                            .map(|&n| n as usize),
+                            .map(|&n| n as usize)
+                            .filter(|&n| keep(n)),
                     );
+                    if found.len() > before {
+                        patches_read += 1;
+                    }
                 }
             }
         }
 
-        found.sort_unstable();
+        if patches_read > 1 {
+            found.sort_unstable();
+        }
         found
     }
 }

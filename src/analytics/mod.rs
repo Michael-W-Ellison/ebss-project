@@ -202,6 +202,9 @@ pub struct Simulation {
     /// fires looks exactly like a run without it. See
     /// `Simulation::everybody_takes_a_turn`.
     pub minutes_spent_in_danger: u64,
+    /// Ground a route search has already found to be shut off from where it
+    /// was going. See `wanting::errands::ShutIn` (#293).
+    pub(crate) shut_in: std::cell::RefCell<wanting::errands::ShutIn>,
 }
 
 /// Configuration for simulation behavior and limits
@@ -363,6 +366,7 @@ impl Simulation {
             how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
+            shut_in: Default::default(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
@@ -905,14 +909,26 @@ impl Simulation {
             })
             .collect();
 
-        // What it remembers
+        // What it remembers.
+        //
+        // **Only the band it could reach, and straight into the list.** This
+        // read every place the agent had ever filed, near or far, and asked
+        // for each one in reach with a list of its own; it is asked a dozen
+        // times a turn by everybody weighing a need (#290). Places are filed
+        // west to east, so the ones between the near and far edges of the
+        // reach are one run of the file, and the rest of the run's test is
+        // the same test as before.
+        let reach_across = i64::from(reach).min(i64::from(i32::MAX));
+        let west = (i64::from(from.x) - reach_across).max(i64::from(i32::MIN)) as i32;
+        let east = (i64::from(from.x) + reach_across).min(i64::from(i32::MAX)) as i32;
         for at in agent
             .exploration_knowledge
             .known_resources
-            .keys()
+            .range(Position::new(west, i32::MIN)..=Position::new(east, i32::MAX))
+            .map(|(at, _)| at)
             .filter(|at| within_reach(at))
         {
-            known.extend(self.world.node_numbers_on(*at));
+            self.world.add_the_node_numbers_on(*at, &mut known);
         }
 
         // And what it can smell
@@ -921,7 +937,7 @@ impl Simulation {
         }) {
             let at = Position::new(scent.source_position.0, scent.source_position.1);
             if within_reach(&at) {
-                known.extend(self.world.node_numbers_on(at));
+                self.world.add_the_node_numbers_on(at, &mut known);
             }
         }
 
@@ -1284,6 +1300,42 @@ impl Simulation {
             .find(|what| Self::gathered_as(*what) == Some(named))
     }
 
+    /// Bring everybody alive to the nearest dry ground to the middle of the
+    /// country, and say where that was.
+    ///
+    /// People are spawned standing at (0, 0), which on the half-kilometre test
+    /// map is a corner of a small country and on the hundred square
+    /// kilometres (`WorldConfig::big_enough_for_an_ecology`) is a corner five
+    /// kilometres from the middle, often in water. A people founding a
+    /// settlement on the big map starts here instead, with the whole country
+    /// round it. The nearest ground that can be stood on, looked for in rings
+    /// outward from the middle, so the answer is the same for the same map.
+    pub fn bring_everybody_to_the_middle(&mut self) -> (i32, i32) {
+        let middle = (
+            self.world.grid.width as i32 / 2,
+            self.world.grid.height as i32 / 2,
+        );
+        let furthest = middle.0.max(middle.1);
+        let mut at = middle;
+        'looking: for ring in 0..=furthest {
+            for dx in -ring..=ring {
+                for dy in -ring..=ring {
+                    if dx.abs() != ring && dy.abs() != ring {
+                        continue;
+                    }
+                    if self.is_passable_tile(middle.0 + dx, middle.1 + dy) {
+                        at = (middle.0 + dx, middle.1 + dy);
+                        break 'looking;
+                    }
+                }
+            }
+        }
+        for agent in self.population.agents.iter_mut().filter(|agent| agent.state.is_alive) {
+            agent.state.position = (at.0, at.1, agent.state.position.2);
+        }
+        at
+    }
+
     /// Whether an agent can stand on this tile
     /// Shout if somebody has just been put where there is no map.
     ///
@@ -1291,7 +1343,6 @@ impl Simulation {
     /// the model and every one of them is an agent standing off the grid.
     /// Four places move an agent and all four look guarded, so this asks them
     /// one at a time which is lying.
-
     fn is_passable_tile(&self, x: i32, y: i32) -> bool {
         use crate::world::Position;
 
@@ -1344,9 +1395,10 @@ impl Simulation {
         // towards a larder eight paces away until they starved. A half-dug
         // burrow is a hole you can climb across, and a half-built house is a
         // floor. See ISSUES_FOUND #252.
-        if self.world.get_building_at(&pos).is_some() {
-            return true;
-        }
+        //
+        // Which is why nothing here asks after buildings at all: it looked
+        // the tile up in the whole list of them, on every step of every
+        // search, to return `true` - the same answer as not asking (#288).
 
         // Resources sit on the ground rather than walling it off - a berry
         // patch or a stand of trees is somewhere to walk to, not around, and
@@ -1462,6 +1514,7 @@ impl Simulation {
             how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
+            shut_in: Default::default(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,

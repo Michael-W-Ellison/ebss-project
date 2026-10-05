@@ -14,6 +14,49 @@ use super::super::Simulation;
 use crate::environment::Action;
 use log::debug;
 
+/// Pockets of ground a route search has walked to every edge of without
+/// finding the way to where it was going.
+///
+/// **Most route searches end like this.** Counted over `news_tests`, nine
+/// searches in ten emptied the ground they could reach - about two thousand
+/// cells - without coming to the goal, and every step of the same walk asked
+/// again from a cell or two along and walked the same pocket to its edges
+/// once more: two thousand million cells looked at in five minutes of
+/// tests (#293).
+///
+/// A search that empties its pocket has looked at every cell it could reach
+/// and at every cell beside one of them, and the goal was none of those. Any
+/// search for the same goal that starts inside the pocket stays inside it so
+/// long as every cell that stopped this one - its edge - is still not ground a
+/// foot can go on, and so ends the same way, with no way there. So the pocket
+/// is kept with its edge, and asking again costs a look along the edge rather
+/// than a walk over the whole. If any of the edge has become walkable, the
+/// pocket is thrown away and searched afresh. Nothing is assumed about the
+/// world besides what the edge says now, so the answer is always the one a
+/// search would give.
+#[derive(Debug, Default)]
+pub struct ShutIn {
+    pockets: Vec<Pocket>,
+}
+
+#[derive(Debug)]
+struct Pocket {
+    goal: (i32, i32),
+    /// How big the map was: whether a cell is off it is part of the edge.
+    map: (usize, usize),
+    /// Every cell the search reached, sorted.
+    cells: Vec<(i32, i32)>,
+    /// Every cell on the map beside one of them that it could not step onto.
+    edge: Vec<(i32, i32)>,
+}
+
+impl ShutIn {
+    /// How many pockets are kept. A settlement is a few people walking to a
+    /// few places; the oldest goes first.
+    const AS_MANY_AS_ARE_KEPT: usize = 32;
+}
+
+
 impl Simulation {
     /// Whether a garment of this warmth is worth making, given what is already
     /// on that slot
@@ -260,11 +303,77 @@ impl Simulation {
             return None;
         }
 
+        let map = (self.world.grid.width, self.world.grid.height);
+        if self.is_this_shut_in(start, goal, map) {
+            return None;
+        }
+        // What this search reached and what stopped it, in case it is shut in.
+        let mut reached: Vec<(i32, i32)> = Vec::new();
+        let mut stopped_by: Vec<(i32, i32)> = Vec::new();
+
         let mut queue = VecDeque::new();
-        let mut came_from: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
+        // **Where each cell was reached from, in a flat window round the
+        // start**, with an ordered map only for the odd cell a long corridor
+        // carries outside it. It was all an ordered map, and looking cells up
+        // in it was most of what this search cost; this search was seven
+        // tenths of what `news_tests` cost (#288). The same cells are reached
+        // in the same order, so it finds the same step.
+        //
+        // **And a byte a cell, not a place.** The window held where each cell
+        // was reached from as a pair of numbers: twelve bytes a cell, two
+        // hundred kilobytes to clear on every search and to look about in.
+        // Each cell is reached from one of its four neighbours, so which one
+        // is all it needs to say - a sixteenth of the room (#293).
+        const ACROSS: i32 = 2 * WINDOW + 1;
+        const WINDOW: i32 = 64;
+        const NOT_REACHED: u8 = 0;
+        const THE_START: u8 = 5;
+        const WAYS: [(i32, i32); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+        let mut near: Vec<u8> = vec![NOT_REACHED; (ACROSS * ACROSS) as usize];
+        let mut far: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
+        let slot = |at: (i32, i32)| -> Option<usize> {
+            let (dx, dy) = (at.0 - start.0 + WINDOW, at.1 - start.1 + WINDOW);
+            (dx >= 0 && dy >= 0 && dx < ACROSS && dy < ACROSS)
+                .then(|| (dy * ACROSS + dx) as usize)
+        };
+        let reached_from = |near: &Vec<u8>,
+                            far: &BTreeMap<(i32, i32), (i32, i32)>,
+                            at: (i32, i32)|
+         -> Option<(i32, i32)> {
+            match slot(at) {
+                Some(i) => match near[i] {
+                    NOT_REACHED => None,
+                    THE_START => Some(at),
+                    way => {
+                        let (dx, dy) = WAYS[usize::from(way) - 1];
+                        Some((at.0 - dx, at.1 - dy))
+                    }
+                },
+                None => far.get(&at).copied(),
+            }
+        };
+        let mut reach = |near: &mut Vec<u8>,
+                         far: &mut BTreeMap<(i32, i32), (i32, i32)>,
+                         at: (i32, i32),
+                         from: (i32, i32)| {
+            match slot(at) {
+                Some(i) => {
+                    near[i] = if at == from {
+                        THE_START
+                    } else {
+                        WAYS.iter()
+                            .position(|&(dx, dy)| (from.0 + dx, from.1 + dy) == at)
+                            .map_or(NOT_REACHED, |way| way as u8 + 1)
+                    }
+                }
+                None => {
+                    far.insert(at, from);
+                }
+            }
+        };
 
         queue.push_back(start);
-        came_from.insert(start, start);
+        reach(&mut near, &mut far, start, start);
 
         let mut visited = 0usize;
 
@@ -273,11 +382,12 @@ impl Simulation {
             if visited > MAX_VISITED {
                 break;
             }
+            reached.push(current);
 
-            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            for (dx, dy) in WAYS {
                 let next = (current.0 + dx, current.1 + dy);
 
-                if came_from.contains_key(&next) {
+                if reached_from(&near, &far, next).is_some() {
                     continue;
                 }
 
@@ -308,16 +418,23 @@ impl Simulation {
                     && next.1 >= 0
                     && next.0 < self.world.grid.width as i32
                     && next.1 < self.world.grid.height as i32;
-                if !on_the_map || (next != goal && !self.is_passable_tile(next.0, next.1)) {
+                if !on_the_map {
+                    continue;
+                }
+                if next != goal && !self.is_passable_tile(next.0, next.1) {
+                    stopped_by.push(next);
                     continue;
                 }
 
-                came_from.insert(next, current);
+                reach(&mut near, &mut far, next, current);
 
                 if next == goal {
                     let mut step = next;
-                    while came_from[&step] != start {
-                        step = came_from[&step];
+                    while let Some(back) = reached_from(&near, &far, step) {
+                        if back == start {
+                            break;
+                        }
+                        step = back;
                     }
                     return Some((step.0, step.1, from.2));
                 }
@@ -326,7 +443,50 @@ impl Simulation {
             }
         }
 
+        // Emptied, rather than given up on: everything it could reach has
+        // been looked at, so this ground is shut in.
+        if visited <= MAX_VISITED {
+            self.this_is_shut_in(goal, map, reached, stopped_by);
+        }
+
         None
+    }
+
+    /// Whether a search from `start` for `goal` has already been found to
+    /// end with no way there, and would end that way again. See [`ShutIn`].
+    fn is_this_shut_in(&self, start: (i32, i32), goal: (i32, i32), map: (usize, usize)) -> bool {
+        let mut shut_in = self.shut_in.borrow_mut();
+        let Some(which) = shut_in.pockets.iter().position(|pocket| {
+            pocket.goal == goal && pocket.map == map && pocket.cells.binary_search(&start).is_ok()
+        }) else {
+            return false;
+        };
+        let still_shut = shut_in.pockets[which]
+            .edge
+            .iter()
+            .all(|&(x, y)| !self.is_passable_tile(x, y));
+        if !still_shut {
+            shut_in.pockets.remove(which);
+        }
+        still_shut
+    }
+
+    /// Keep a pocket a search has just walked to every edge of. See [`ShutIn`].
+    fn this_is_shut_in(
+        &self,
+        goal: (i32, i32),
+        map: (usize, usize),
+        mut cells: Vec<(i32, i32)>,
+        mut edge: Vec<(i32, i32)>,
+    ) {
+        cells.sort_unstable();
+        edge.sort_unstable();
+        edge.dedup();
+        let mut shut_in = self.shut_in.borrow_mut();
+        if shut_in.pockets.len() >= ShutIn::AS_MANY_AS_ARE_KEPT {
+            shut_in.pockets.remove(0);
+        }
+        shut_in.pockets.push(Pocket { goal, map, cells, edge });
     }
 
     /// Replace a move toward somewhere the agent cannot actually reach.
@@ -423,7 +583,7 @@ impl Simulation {
     /// digging. He drinks, and goes back to it. What ends an errand is
     /// arriving, giving up on it, being frightened off it, or leaving it so
     /// long that the world has moved on - see `Errand::stale`.
-    fn set_the_errand_aside(&mut self, agent_index: usize, action: Action) -> Action {
+    pub(in crate::analytics) fn set_the_errand_aside(&mut self, agent_index: usize, action: Action) -> Action {
         let waited = {
             let Some(errand) = self.population.agents[agent_index].errand.as_mut() else {
                 return action;
@@ -444,13 +604,96 @@ impl Simulation {
         action
     }
 
+    /// Where somebody at `from` sent towards `target` can actually go.
+    ///
+    /// **Nobody walks off the edge of the world.** A good many decisions say
+    /// where to go as so many paces from where somebody stands - run fifteen
+    /// from a threat, wander twenty out of curiosity, strike out twelve for
+    /// food - and none of them asked whether that was still on the map. An
+    /// errand then holds the place it was given, so somebody sent past the
+    /// edge walked to it, stood on the last tile, and spent every step after
+    /// that searching the whole map for a way to somewhere that is not on
+    /// it, until the errand was given up. Over `news_tests` that was nine
+    /// route searches in ten (#293, #294). As far as the land goes is as far
+    /// as anybody can go in that direction, so that is where they go: to the
+    /// edge, and on towards the walker to the first ground a foot can go on,
+    /// because the edge is often sea.
+    ///
+    /// **And nobody walks into the water.** A walk may end on anything - the
+    /// route searches let the last pace onto ground they would not cross,
+    /// which is how somebody reaches a barn door - and a fish run or the sea
+    /// someone wants to drink from stands on water. So a walk to one left
+    /// somebody standing in the river, and their next step off it could be
+    /// onto a spit of rock with water all round that nobody can step off.
+    /// Traced on one world: somebody walked onto water at (25, 40), stepped
+    /// onto desert at (25, 39), and stood there for the rest of the year
+    /// (#295). Nothing a person does at the water needs a foot in it -
+    /// drinking reaches a spring twenty-five paces off and a line is cast a
+    /// pace - so a walk to somewhere no foot can go ends on the bank.
+    ///
+    /// **The bank the walker can get to.** The ground beside the water that
+    /// is nearest the walker may be the rock in the middle of it, so the
+    /// bank is found the way the walk would find it: a route to the water,
+    /// stopping a pace short. Only where there is no route at all is it the
+    /// ground beside the water nearest the walker, square sides before
+    /// corners, and the walk will then find no way there and be given up. A
+    /// target a foot can go on is left exactly where it was put.
+    pub(in crate::analytics) fn where_a_walk_can_end(
+        &self,
+        from: (i32, i32, i32),
+        target: (i32, i32, i32),
+    ) -> (i32, i32, i32) {
+        let (wide, high) = (self.world.grid.width as i32, self.world.grid.height as i32);
+        let mut at = (target.0.clamp(0, wide - 1), target.1.clamp(0, high - 1));
+        if self.is_passable_tile(at.0, at.1) {
+            return (at.0, at.1, target.2);
+        }
+        if at == (target.0, target.1) {
+            if let Some(route) =
+                self.the_way_there((from.0, from.1), at, Self::AS_FAR_AS_A_ROUTE_IS_LOOKED_FOR)
+            {
+                let bank = match route.len() {
+                    0 | 1 => (from.0, from.1),
+                    paces => route[paces - 2],
+                };
+                return (bank.0, bank.1, target.2);
+            }
+            const BESIDE: [(i32, i32); 8] =
+                [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)];
+            let paces = |(x, y): (i32, i32)| (x - from.0).abs() + (y - from.1).abs();
+            let bank = [&BESIDE[..4], &BESIDE[4..]].into_iter().find_map(|sides| {
+                sides
+                    .iter()
+                    .map(|(dx, dy)| (at.0 + dx, at.1 + dy))
+                    .filter(|&(x, y)| self.is_passable_tile(x, y))
+                    .min_by_key(|&beside| paces(beside))
+            });
+            if let Some(bank) = bank {
+                return (bank.0, bank.1, target.2);
+            }
+        }
+        while at != (from.0, from.1) && !self.is_passable_tile(at.0, at.1) {
+            at.0 += (from.0 - at.0).signum();
+            at.1 += (from.1 - at.1).signum();
+        }
+        (at.0, at.1, target.2)
+    }
+
     pub(in crate::analytics) fn stick_to_the_errand(
         &mut self,
         agent_index: usize,
         action: Action,
         running_away: bool,
     ) -> Action {
+        // Whatever the walk is to, it is to ground somebody can stand on - so
+        // that an errand set out on can be got to (#294, #295).
         let here = self.population.agents[agent_index].state.position;
+        let action = match action {
+            Action::Move { target } => Action::Move {
+                target: self.where_a_walk_can_end(here, target),
+            },
+            other => other,
+        };
         let presses_hardest = self.population.agents[agent_index].what_presses_hardest();
 
         // Something frightened it, or the threat tree took the turn. Whatever

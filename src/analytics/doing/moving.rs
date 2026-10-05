@@ -44,6 +44,13 @@ impl Simulation {
         for _ in 0..(*duration).max(1) {
             fatigue_recovered += agent.sleep_turn(current_turn, &quality_factors);
         }
+        // A Sleep holds its sleeper a turn for each step above (see
+        // `AgentState::how_long_this_takes`), and all of it pays back what is
+        // owed (#298, #299).
+        agent.fatigue.slept_for(
+            (*duration).max(1) * crate::environment::seasons::MINUTES_PER_TURN,
+            quality_factors.calculate_quality(),
+        );
         agent.wake_up(current_turn);
 
         let energy_restored = agent.state.energy - energy_before;
@@ -152,6 +159,10 @@ impl Simulation {
             }
             let step = match the_way.as_mut() {
                 Some(route) => match route.pop_front() {
+                    // **Never a foot on ground nobody can stand on.** The
+                    // route may end on its goal whatever the goal is; a walk
+                    // to the water stops on the bank (#295).
+                    Some(cell) if !self.is_passable_tile(cell.0, cell.1) => break,
                     Some(cell) => {
                         let agent = &mut self.population.agents[agent_index];
                         agent.stepped_from = Some((here.0, here.1));
@@ -352,7 +363,12 @@ impl Simulation {
             .filter(|candidate| came_off != Some((candidate.0, candidate.1)));
 
         let step = direct_step
-            .or_else(|| self.next_step_toward(current_pos, *target))
+            // The search may offer its goal whatever the goal is; nobody is
+            // put on water by it (#295).
+            .or_else(|| {
+                self.next_step_toward(current_pos, *target)
+                    .filter(|step| self.is_passable_tile(step.0, step.1))
+            })
             .or_else(|| {
                 candidates
                     .iter()

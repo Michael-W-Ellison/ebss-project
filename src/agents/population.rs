@@ -1879,14 +1879,54 @@ impl Population {
             // renewable ones are kept when they are emptied. Reading an empty
             // patch as a lie had agents concluding that four thousand honest
             // tips were falsehoods and half the settlement liars.
-            let really_here: std::collections::BTreeSet<crate::world::Position> = world
-                .nodes_near(agent_pos, vision_range)
-                .map(|resource| resource.position)
-                .filter(|where_it_is| {
-                    (where_it_is.x - agent_pos.x).abs() <= range
-                        && (where_it_is.y - agent_pos.y).abs() <= range
+            //
+            // **What is in sight is looked up once for the whole pass.** This
+            // and the filing of what is in view below each asked the node
+            // index for it, which gathers and sorts it afresh, and nothing
+            // changes the nodes in between (#288).
+            let in_sight: Vec<usize> = world.node_numbers_near(agent_pos, vision_range);
+            // **And how much stands on each spot, from the same look.** Each
+            // spot seen again asked the node index afresh for the first node
+            // on it (#291). The look comes back in list order, so the first
+            // number met on a spot is the node `nodes_on` would give.
+            //
+            // **Laid out on the square in view, not sorted.** Sorting
+            // everything in sight by spot was most of what this cost (#292).
+            // One slot a cell, filled by the first node met on it, and read
+            // out a column at a time - west to east, and north to south down
+            // each column - is the same list in the same order.
+            let side = 2 * range as usize + 1;
+            let mut first_on = vec![u32::MAX; side * side];
+            for &number in &in_sight {
+                let where_it_is = world.resources[number].position;
+                let (across, down) = (where_it_is.x - agent_pos.x + range, where_it_is.y - agent_pos.y + range);
+                if (0..side as i32).contains(&across) && (0..side as i32).contains(&down) {
+                    let cell = &mut first_on[across as usize * side + down as usize];
+                    if *cell == u32::MAX {
+                        *cell = number as u32;
+                    }
+                }
+            }
+            let what_stands_where: Vec<(crate::world::Position, usize)> = first_on
+                .iter()
+                .enumerate()
+                .filter(|(_, &number)| number != u32::MAX)
+                .map(|(cell, &number)| {
+                    let (across, down) = ((cell / side) as i32, (cell % side) as i32);
+                    (
+                        crate::world::Position::new(agent_pos.x - range + across, agent_pos.y - range + down),
+                        number as usize,
+                    )
                 })
                 .collect();
+            let how_much_stands_on = |where_it_is: &crate::world::Position| {
+                what_stands_where
+                    .binary_search_by(|(spot, _)| spot.cmp(where_it_is))
+                    .map(|found| world.resources[what_stands_where[found].1].amount)
+                    .unwrap_or(0)
+            };
+            let really_here: std::collections::BTreeSet<crate::world::Position> =
+                what_stands_where.iter().map(|(where_it_is, _)| *where_it_is).collect();
 
             // Walking past a thing again is seeing it again.
             //
@@ -1910,11 +1950,7 @@ impl Population {
                     // seam knows whether it is a seam or the last of one, and
                     // until now the only thing he took away was that it was
                     // there at all.
-                    let how_much = world
-                        .nodes_on(*where_it_is)
-                        .next()
-                        .map(|resource| resource.amount)
-                        .unwrap_or(0);
+                    let how_much = how_much_stands_on(where_it_is);
 
                     agent
                         .exploration_knowledge
@@ -1983,11 +2019,7 @@ impl Population {
                 // stands there.
                 agent.exploration_knowledge.who_told_me.remove(&where_it_is);
 
-                let how_much = world
-                    .nodes_on(where_it_is)
-                    .next()
-                    .map(|resource| resource.amount)
-                    .unwrap_or(0);
+                let how_much = how_much_stands_on(&where_it_is);
                 agent
                     .exploration_knowledge
                     .saw_it_again(where_it_is, how_much, current_turn);
@@ -2023,19 +2055,24 @@ impl Population {
             // -9.2. Nobody had earned any of it.
             //
             // Recognising a plant is worth something and it is worth it once.
+            //
+            // **Walk the turns things were found on, and look up only what
+            // was found this turn.** This walked everything he knows and
+            // looked up the turn each was found on - a search for every place,
+            // every turn, to keep a handful (#292). Both are kept by spot, so
+            // it is the same list in the same order.
             let just_found: Vec<(crate::world::Position, crate::world::ResourceType)> = agent
                 .exploration_knowledge
-                .known_resources
+                .resource_discovery_turns
                 .iter()
-                .filter(|(pos, _)| {
+                .filter(|(_, &turn)| turn == current_turn)
+                .filter_map(|(pos, _)| {
                     agent
                         .exploration_knowledge
-                        .resource_discovery_turns
+                        .known_resources
                         .get(pos)
-                        .map(|&turn| turn == current_turn)
-                        .unwrap_or(false)
+                        .map(|resource_type| (*pos, *resource_type))
                 })
-                .map(|(pos, resource_type)| (*pos, *resource_type))
                 .collect();
 
             for (_, resource_type) in &just_found {
@@ -2054,6 +2091,10 @@ impl Population {
             // regrow. Foraging reads spatial memory rather than the
             // exploration record, so without this an agent would have a patch
             // catalogued and still starve walking past it.
+            let mut what_he_calls_it: std::collections::BTreeMap<
+                crate::world::ResourceType,
+                Option<String>,
+            > = std::collections::BTreeMap::new();
             let sight = vision_range as i32;
             let in_view: Vec<(
                 crate::world::Position,
@@ -2061,8 +2102,9 @@ impl Population {
                 Option<String>,
                 u32,
                 crate::core::memory::HowSteady,
-            )> = world
-                .nodes_near(agent_pos, vision_range)
+            )> = in_sight
+                .iter()
+                .map(|&number| &world.resources[number])
                 .filter(|resource| resource.amount > 0)
                 .filter(|resource| {
                     let dx = resource.position.x - agent_pos.x;
@@ -2095,10 +2137,16 @@ impl Population {
                     // fact about the rememberer. A man who has no use for
                     // cotton remembers a field; a man who spins remembers
                     // cotton. See `Agent::do_i_know_what_this_is_for`.
-                    let called = format!("{:?}", resource.resource_type).to_lowercase();
-                    let what_it_is = agent
-                        .do_i_know_what_this_is_for(&called)
-                        .then_some(called);
+                    //
+                    // Asked once a kind, not once a patch: a wood is a
+                    // hundred trees and they are all timber (#288).
+                    let what_it_is = what_he_calls_it
+                        .entry(resource.resource_type)
+                        .or_insert_with(|| {
+                            let called = format!("{:?}", resource.resource_type).to_lowercase();
+                            agent.do_i_know_what_this_is_for(&called).then_some(called)
+                        })
+                        .clone();
 
                     // **Only what he has a use for gets a place on the map.**
                     //
@@ -2152,37 +2200,37 @@ impl Population {
             // exactly as much as any other remembered place, so a man who left
             // camp for want of water walked to whichever waterhole was
             // furthest off rather than to the one he remembered as a spring.
-            for (pos, memory_type, what_it_is, how_much, how_steady) in in_view {
-                // **Seeing a thing he knows the use of is the middle footing.**
-                //
-                // Not the weakest - that is watching somebody else work, and
-                // is what he has for a place he has no use for himself. Not
-                // the firmest either: he has taken nothing out of here. It is
-                // "I know what this stuff is for, though I have not worked
-                // it", and the specification gives it a year. See `HowIKnow`.
-                //
-                // Water and food are filed whatever he can name, because
-                // everybody eats and drinks. A thing he could not name is a
-                // place he simply noticed - the fortnight every remembered
-                // place in this model had before the footings existed - and
-                // *not* the weakest footing: that one is for watching
-                // somebody else work, and using it here would have halved the
-                // life of every berry patch anybody walked past.
-                let footing = if what_it_is.is_some() {
-                    crate::core::memory::HowIKnow::UsedThisKind
-                } else {
-                    crate::core::memory::HowIKnow::JustNoticedIt
-                };
-
-                agent.memory.remember_what_kind_of_place_this_is(
-                    memory_type,
-                    (pos.x, pos.y, 0),
-                    what_it_is,
-                    how_much,
-                    footing,
-                    how_steady,
-                );
-            }
+            // All of it filed in one pass of the memory - see
+            // `Memory::remember_what_kinds_of_places_these_are`.
+            //
+            // **Seeing a thing he knows the use of is the middle footing.**
+            //
+            // Not the weakest - that is watching somebody else work, and
+            // is what he has for a place he has no use for himself. Not
+            // the firmest either: he has taken nothing out of here. It is
+            // "I know what this stuff is for, though I have not worked
+            // it", and the specification gives it a year. See `HowIKnow`.
+            //
+            // Water and food are filed whatever he can name, because
+            // everybody eats and drinks. A thing he could not name is a
+            // place he simply noticed - the fortnight every remembered
+            // place in this model had before the footings existed - and
+            // *not* the weakest footing: that one is for watching
+            // somebody else work, and using it here would have halved the
+            // life of every berry patch anybody walked past.
+            agent.memory.remember_what_kinds_of_places_these_are(
+                in_view
+                    .into_iter()
+                    .map(|(pos, memory_type, what_it_is, how_much, how_steady)| {
+                        let footing = if what_it_is.is_some() {
+                            crate::core::memory::HowIKnow::UsedThisKind
+                        } else {
+                            crate::core::memory::HowIKnow::JustNoticedIt
+                        };
+                        (memory_type, (pos.x, pos.y, 0), what_it_is, how_much, footing, how_steady)
+                    })
+                    .collect(),
+            );
 
             // And the larder, which is not a resource and so was in none of
             // the above.
@@ -2776,14 +2824,29 @@ impl Population {
                     // here. It is said out loud, to whoever is near enough to
                     // hear - see `say_it_out_loud`.
 
-                    // Strengthen relationship through gossip interaction
+                    // Strengthen relationship through gossip interaction.
+                    //
+                    // **As far as getting on, and no further.** This had no
+                    // ceiling, and talking is the commonest thing people do:
+                    // a quarter of a million exchanges in a settlement's first
+                    // quarter, half of everything that drew anybody closer,
+                    // so everybody talked their way to nearly 1.0 with
+                    // everybody (#296). Chatting with a man makes him
+                    // somebody you get on with; more than that is earned by
+                    // what you do for each other. See
+                    // `Relationship::GETTING_ON_WITH_SOMEBODY`.
                     let uuid_i = self.agents[i].id;
+                    let getting_on = crate::agents::emotions::Relationship::GETTING_ON_WITH_SOMEBODY;
                     if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&uuid_j) {
-                        rel.bond_strength = (rel.bond_strength + 0.001).min(1.0);
+                        if rel.bond_strength < getting_on {
+                            rel.bond_strength = (rel.bond_strength + 0.001).min(getting_on);
+                        }
                         rel.total_interactions += 1;
                     }
                     if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&uuid_i) {
-                        rel.bond_strength = (rel.bond_strength + 0.001).min(1.0);
+                        if rel.bond_strength < getting_on {
+                            rel.bond_strength = (rel.bond_strength + 0.001).min(getting_on);
+                        }
                         rel.total_interactions += 1;
                     }
                 }

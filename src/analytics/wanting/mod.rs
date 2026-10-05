@@ -28,6 +28,7 @@
 //! turns give byte-identical worlds either side of it.
 
 pub mod afforded;
+pub mod night;
 pub mod goal;
 pub mod strategy;
 pub mod camp;
