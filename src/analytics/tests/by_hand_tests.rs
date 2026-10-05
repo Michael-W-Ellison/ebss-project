@@ -129,3 +129,20 @@ fn three_days_short_and_raw_fish_is_eaten() {
         "four days into the reserve, the raw fish is eaten"
     );
 }
+
+/// A cooked joint is still a joint, and still supper (#300).
+#[test]
+fn what_comes_off_the_fire_can_be_eaten() {
+    use crate::world::nutrition::Piece;
+    for cut in ["meatportions", "fishportions", "fishstrips"] {
+        let cooked = Simulation::prepared_item_id(cut, true);
+        assert_eq!(cooked, format!("cooked_{cut}"));
+        assert!(Piece::of(&cooked).can_it_be_eaten(), "{cooked} should be supper");
+        assert_eq!(
+            crate::agents::storage_integration::id_to_item_type(&cooked),
+            crate::agents::storage_integration::id_to_item_type(cut),
+            "and still the same kind of food"
+        );
+    }
+    assert_eq!(Simulation::prepared_item_id("cooked_fishportions", false), "burnt_fishportions");
+}

@@ -22589,4 +22589,18 @@ The aversion now gives way three days into the reserve, whatever is in the
 gut. That is the same three days `is_starving` already counts. Test:
 `three_days_short_and_raw_fish_is_eaten`. Dice counts unchanged.
 
+**And what was cooked could not be eaten at all.** The same winter showed
+somebody at hunger 1.0 holding `cooked_meat`, which nothing would offer.
+`prepared_item_id` names what comes off a fire. It went through
+`base_item_id`, which strips the cut as well as an earlier cooking. So a
+joint went on as `meatportions` and came off as `cooked_meat`. `Piece::of`
+reads that as a whole carcass, which nobody will eat and nothing will cut.
+
+Every piece of flesh anybody ever cooked was lost the moment it was done.
+The tests already named a cooked portion `cooked_meatportions`; the one
+function that made them did not. It now keeps the cut and strips only an
+earlier cooking. Test: `what_comes_off_the_fire_can_be_eaten`.
+
+Dice counts: 786,562 a year on seed 0, and 9,842 in 120 turns on seed 4242.
+
 Measurement on the big map follows.
