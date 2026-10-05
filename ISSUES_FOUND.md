@@ -22603,4 +22603,15 @@ earlier cooking. Test: `what_comes_off_the_fire_can_be_eaten`.
 
 Dice counts: 786,562 a year on seed 0, and 9,842 in 120 turns on seed 4242.
 
-Measurement on the big map follows.
+**Measured.** Seeds 0–2 over nine years, by the reckoned cause:
+
+| | #298, no night | night (#299) | night with #300 |
+|---|---|---|---|
+| died of hunger | 7 | 13 | 6 |
+| conceived | 25 | 26 | 25 |
+| alive at the end of year 9 | 51 | 42 | 50 |
+
+What the night cost is given back. The six hunger deaths left are all in
+year 9: four on seed 1 and two on seed 2. That is the same famine #298 has
+in the same year, and it is open. Seed 3, run alongside, ended year 9 with
+16 alive and no hunger deaths.
