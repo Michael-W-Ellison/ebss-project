@@ -3916,11 +3916,7 @@ impl Agent {
         &mut self,
         fresh: impl Fn(crate::world::ItemType) -> Option<crate::world::nutrition::FoodData>,
     ) -> Option<u32> {
-        if self.find_best_food_to_eat().is_some()
-            || self
-                .what_i_have_to_work_with(super::SkillType::Leatherworking)
-                .is_some()
-        {
+        if !self.could_pull_apart_by_hand() {
             return None;
         }
         let working = self.whole_flesh_that_comes_apart()?;
@@ -3933,6 +3929,24 @@ impl Agent {
         self.inventory.remove_item(working.to, working.how_much);
         self.inventory.add_item(made);
         Some(pieces)
+    }
+
+    /// Whether supper would have to come out of a whole fish or joint by hand:
+    /// one held, nothing else to eat, and no edge to cut it.
+    ///
+    /// Asked by `Eat` before it tears, and by the way a hungry person picks
+    /// what to do, which has to know that eating is open to them. **Measured:
+    /// without the second, the first never ran.** On seed 1 in its ninth
+    /// winter a grown man carried six joints, then sixteen, for three days
+    /// with no edge; nothing offered him `Eat`, because nothing in his pack
+    /// counted as edible, and he walked between the pits and the patch he was
+    /// standing on until his reserve ran out (#301).
+    pub fn could_pull_apart_by_hand(&self) -> bool {
+        self.find_best_food_to_eat().is_none()
+            && self
+                .what_i_have_to_work_with(super::SkillType::Leatherworking)
+                .is_none()
+            && self.whole_flesh_that_comes_apart().is_some()
     }
 
     /// What hands save of what a knife would, as a divisor: half.

@@ -146,3 +146,26 @@ fn what_comes_off_the_fire_can_be_eaten() {
     }
     assert_eq!(Simulation::prepared_item_id("cooked_fishportions", false), "burnt_fishportions");
 }
+
+/// A hungry man with joints in his pack and no edge is offered supper: the
+/// way he picks what to do knows hands will do (#301).
+#[test]
+fn hunger_offers_supper_out_of_a_joint_with_no_knife() {
+    let mut simulation = hungry_with_fish(0, false);
+    simulation.world.resources.clear();
+    {
+        let agent = &mut simulation.population.agents[0];
+        let mut joints = InventoryItem::new_with_weight("meat".to_string(), 6, 2.0);
+        joints.food_data = FoodDatabase::new().create_food_data(&ItemType::Meat, 0);
+        agent.inventory.add_item(joints);
+    }
+    let agent = &simulation.population.agents[0];
+    assert!(agent.find_best_food_to_eat().is_none(), "a joint is not supper as it stands");
+    assert!(agent.could_pull_apart_by_hand());
+
+    let at = agent.state.position;
+    assert!(
+        matches!(simulation.food_action(agent, at, false), Some(Action::Eat { .. })),
+        "hunger should offer to eat what is in the pack"
+    );
+}

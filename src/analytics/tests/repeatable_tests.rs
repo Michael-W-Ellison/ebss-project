@@ -405,8 +405,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 18.5% to 743,470 for #300: with no knife, a whole fish or joint
     // is pulled apart by hand and eaten, rather than carried about uneaten
     // while its owner walks to the stores and back. Then up to 786,562 when
-    // what comes off a fire keeps its cut, and can be eaten.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 786_562;
+    // what comes off a fire keeps its cut, and can be eaten. Up 10.5% to
+    // 869,212 for #301: a hungry man with a joint and no knife is offered
+    // supper out of it, rather than walked about until his reserve runs out.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 869_212;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

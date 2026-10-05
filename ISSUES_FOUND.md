@@ -22635,3 +22635,49 @@ What the measurement says is worse than the test used to: in about seven
 worlds in ten, a freezing man with 200 flax in his pack and a flax patch
 three paces off never makes anything to wear in 600 turns. In the ones that
 dress, it happens in the first 60–160 turns or not at all. That is open.
+
+### 301. The famine from year 9: a joint and no knife, again
+
+The 20-year run with #300 in had hunger deaths in most years from year 9 on,
+on seeds 1 and 3. `zz_famine` fast-forwards seed 1 to day 3,080 and runs it
+170 days, through its ninth winter into spring. Each day it prints the
+settlement's food; at every death it prints the dead person's last thirty
+samples:
+- hunger, reserve and health;
+- what they held, and whether they had an edge;
+- what `find_best_food_to_eat` offered;
+- what they did;
+- the hunger ways open to them.
+
+The settlement was not short. Its mean reserve stayed above 0.84 all winter,
+and one person's share of the stores fell from about 70,000 to 7,000 units
+by spring. Three grown people died of hunger in it.
+
+**The first, on day 3,188, was #300 from the other side.** He carried six
+joints, then sixteen, for three days, with no edge. `Eat` pulls a joint apart
+by hand, but nothing offered him `Eat`. Nothing in his pack counted as
+edible, so the hunger ways offered only walks: to a pit, to a patch of
+ground, and three times to the cell he was standing on. He died at 0.07 of
+his reserve, holding sixteen joints. #300's fix ran only once `Eat` was
+chosen, and the way he chose what to do did not know `Eat` was open to him.
+
+`Agent::could_pull_apart_by_hand` now asks it in one place:
+- nothing edible in hand;
+- no edge;
+- a sound whole fish or joint held.
+
+`food_action` offers `Eat` on it straight after the knife's own step, and
+`pull_apart_by_hand` asks the same question before it tears. Test:
+`hunger_offers_supper_out_of_a_joint_with_no_knife`.
+
+**The other two, both on day 3,244, are a different thing**, and open:
+- the first spring days, both 18 to 20 days into a three-week reserve;
+- nothing in hand, and their larder share still reading about 6,700 units;
+- eating whatever the ground nearby gave, until "Too full to eat";
+- still running down.
+
+A bite off the ground counts as already in hand and is taken before the
+two-turn walk to a pit. All the hunger ways are ranked as giving the same
+relief, so a stomach full of leaf ranks with a stomach full of dried meat.
+
+Dice count: seed 0 over a year, 786,562 → 869,212.

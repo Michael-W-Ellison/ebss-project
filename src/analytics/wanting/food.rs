@@ -252,6 +252,12 @@ impl Simulation {
             return Some(Action::Work { verb, to });
         }
 
+        // And with no edge to cut it, hands. `Eat` pulls it apart (#300), and
+        // nothing gets to `Eat` unless it is offered here (#301).
+        if agent.could_pull_apart_by_hand() {
+            return Some(Action::Eat { food_type: "generic".to_string() });
+        }
+
         // A fire right here turns a third of what is in raw meat into nearly
         // all of it, so one turn spent cooking buys back several meals' worth.
         // Not when starving: then the difference between a poor meal now and a
