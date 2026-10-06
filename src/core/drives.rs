@@ -145,7 +145,17 @@ impl DriveType {
                         * crate::agents::physiology::AN_ORDINARY_APPETITE)
             }
             DriveType::Thirst => 0.012,  // Slightly faster than hunger
-            DriveType::Rest => 0.008,
+            // Nothing on the clock either, since there has been a night. This
+            // was 0.008 a turn whatever the body had done, which was the only
+            // thing that ever sent anybody to bed while nothing else did; once
+            // people slept at night (#299) it went on asking for a five-hour
+            // sleep most afternoons besides. Measured over a year of seed 1:
+            // 3,756 of them, about one a day for every grown person, a fifth
+            // of all their turns, with the median body fatigued 0.02. What a
+            // body owes in sleep is `FatigueState`, which counts the hours
+            // awake and the sleep debt, and feeds this drive from them in
+            // `Agent::process_survival_turn` (#302).
+            DriveType::Rest => 0.0,
             DriveType::Shelter => 0.005,
             DriveType::Safety => 0.02,  // Spikes with threats
             // Nothing at all on the clock. Nobody grows angrier for time

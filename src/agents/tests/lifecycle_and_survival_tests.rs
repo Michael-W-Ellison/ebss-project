@@ -372,20 +372,28 @@ fn test_multiple_survival_needs_simultaneous() {
     assert!(thirst >= 0.75, "Thirst should be critical");
 }
 
+/// Tiredness is what makes a body want to sleep, not the clock (#302): a
+/// rested body left awake does not want its bed, and a tired one does.
 #[test]
 fn test_rest_drive_accumulates_from_activity() {
-    let mut agent = Agent::new(AgentConfig::default());
-
-    // Deplete energy through activity
-    agent.consume_energy(60.0);
-
-    // Update rest drive based on fatigue
+    let mut rested = Agent::new(AgentConfig::default());
+    rested.fatigue.level = 0.0;
     for _ in 0..100 {
-        agent.drives.take_a_turn();
+        rested.drives.take_a_turn();
     }
+    assert_eq!(
+        rested.drives.get(DriveType::Rest).unwrap().value,
+        0.0,
+        "a body that is not tired should not want to sleep"
+    );
 
-    let rest_drive = agent.drives.get(DriveType::Rest).unwrap().value;
-    assert!(rest_drive > 0.0, "Rest drive should increase with fatigue");
+    let mut tired = Agent::new(AgentConfig::default());
+    tired.fatigue.level = 0.8;
+    tired.process_survival_turn(30);
+    assert!(
+        tired.drives.get(DriveType::Rest).unwrap().value > 0.0,
+        "Rest drive should increase with fatigue"
+    );
 }
 
 #[test]

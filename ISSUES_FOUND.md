@@ -22723,3 +22723,61 @@ Counted again over seed 1's first year:
 |---|---|---|
 | all walks | 24,499 | 12,580 |
 | to the walker's own cell | 10,081 | 0 |
+
+### 302. Half of a grown person's life went on sleep
+
+After #301 the famine from year 9 was still there, so `zz_economy` followed
+seed 1 for ten years. Each season it records:
+- heads and reserve for each age band;
+- what each band spent its turns on;
+- the food in the pits and in hand.
+
+Not what was expected:
+- **Children aged 6–10 do help.** They spent 22–40% of their turns
+  gathering food in fall and spring.
+- **The pits stop growing.** They peaked at 17,000–18,000 items every winter
+  from year 5 to year 9, while the under-sixes went from 2 to 10 against
+  the same 12 grown people.
+- **Grown people were asleep on 35–56% of their turns.** Gathering food took
+  6–8%, and fetching water 11–13%.
+
+The nights #299 set are 7–9 hours, 29–37% of the day. What was the rest?
+Split by how long a sleep was, over seed 1's first two years:
+
+| grown people's turns | share |
+|---|---|
+| night, in the night rule's two-hour stretches | 16–28% |
+| five-hour sleeps (`Sleep { duration: 10 }`) by day | 5–24% |
+| five-hour sleeps by night | 6–15% |
+
+Every five-hour sleep came from the Rest drive: 3,756 of them in a year,
+about one a day for every grown person.
+
+The Rest drive built on the clock, at 0.008 a turn whatever the body had
+done. Before #299 that clock was the only thing that ever sent anybody to
+bed. Once people slept at night it went on asking for an afternoon's sleep
+besides, though the median body was fatigued 0.02.
+
+What a body owes in sleep is already counted in `FatigueState`: hours
+awake, and sleep debt past sixteen of them. `Agent::process_survival_turn`
+feeds it into this drive (fatigue × 0.02 a turn awake). So Rest is off the
+clock now (base rate 0.0), and tiredness alone builds it.
+
+Four tests used Rest as their example of a drive that builds with time:
+- `test_rest_drive_accumulates_from_activity` claimed fatigue and never
+  made the agent tired. It now asks that a rested body does not want its
+  bed and a tired one does.
+- `the_needs_of_the_body_still_run_on_the_clock` now says hunger and thirst
+  run on the clock, and asks that Rest does not.
+- `a_denied_drive_builds_faster_the_longer_it_waits` and
+  `test_multiple_drives_accumulate_independently` are about drive mechanics
+  and use Social instead, which still builds with time.
+
+Dice counts:
+
+| | before | after |
+|---|---|---|
+| seed 0, a year | 892,632 | 1,115,135 |
+| seed 4242, 120 turns | 9,894 | 9,333 |
+
+Measurement on the big map follows.

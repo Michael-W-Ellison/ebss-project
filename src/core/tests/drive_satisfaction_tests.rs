@@ -117,31 +117,32 @@ fn test_partial_drive_satisfaction() {
 fn test_multiple_drives_accumulate_independently() {
     let mut hunger = Drive::new(DriveType::Hunger);
     let mut thirst = Drive::new(DriveType::Thirst);
-    let mut rest = Drive::new(DriveType::Rest);
+    let mut social = Drive::new(DriveType::Social);
 
     // Accumulate for 100 turns
     for _ in 0..100 {
         hunger.take_a_turn();  // 0.01/turn
         thirst.take_a_turn();  // 0.012/turn
-        rest.take_a_turn();    // 0.008/turn
+        social.take_a_turn();  // 0.006/turn
     }
 
     // Each should accumulate at its own rate
     assert!((hunger.value - 1.0).abs() < EPSILON, "Hunger expected ~1.0, got {}", hunger.value);  // Capped at 1.0
     assert!((thirst.value - 1.0).abs() < 0.01, "Thirst expected ~1.0, got {}", thirst.value); // Should be at cap
 
-    // Rest passes its threshold of 0.6 around turn 75 and builds faster from
-    // there, because a drive that is asking and not being answered presses
-    // harder the longer it waits. So it ends above the 0.8 a flat rate would
-    // give, but nowhere near the cap the two faster drives reach.
+    // Social passes its threshold of 0.5 around turn 83 and builds faster
+    // from there, because a drive that is asking and not being answered
+    // presses harder the longer it waits. So it ends above the 0.6 a flat rate
+    // would give, but short of the cap the two faster drives reach. (This was
+    // Rest, which no longer builds on the clock - see #302.)
     assert!(
-        rest.value > 0.8 && rest.value < 1.0,
-        "Rest expected between the flat 0.8 and the cap, got {}",
-        rest.value
+        social.value > 0.6 && social.value < 1.0,
+        "Social expected between the flat 0.6 and the cap, got {}",
+        social.value
     );
     assert!(
-        rest.value < hunger.value && rest.value < thirst.value,
-        "Rest should still be the slowest of the three"
+        social.value < hunger.value && social.value < thirst.value,
+        "Social should still be the slowest of the three"
     );
 }
 
