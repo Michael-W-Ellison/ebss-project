@@ -28,17 +28,10 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #300): every test, module by module, in
-one piece. 2,732 tests run: 2,727 passed, 1 failed, 4 ignored, in 2,114 s of
-test time (1,705 s at #299). Where the extra time went was not measured.
-
-The one that failed was `clothing_tests::a_cold_agent_ends_up_dressed`: 6 of
-24 worlds dressed, with the bar at 8. Bisected to the #300 commit that lets
-cooked food be eaten. Asked of 96 worlds, though, the rate is the same either
-side of that commit: 30 of 96 before, 29 of 96 after. The bar of a third sat
-at the rate, so the block of 24 flipped on which worlds it was dealt. The
-test now asks 96 worlds with the bar at a quarter, and passes. Not re-run as
-part of a full suite since. That leaves:
+**Last full run** (ISSUES_FOUND #303): every test, module by module, in
+one piece. 2,737 tests run: 2,733 passed, none failed, 4 ignored, in 2,667 s
+of test time (2,114 s at #300). The suite shared the machine with two
+13-year big-map runs, so the time is not comparable. That leaves:
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
