@@ -677,8 +677,31 @@ impl Simulation {
         }
 
         // Otherwise, the one that has wandered furthest off
+        // **A hungry parent with supper in hand eats it first.** A child that
+        // has only wandered, and is not near anything with teeth, will still
+        // be there in half an hour. Measured over seed 0's first eight
+        // years, this branch was what a grown person at hunger 0.9 or more
+        // did on 15,707 turns, 3,254 of them holding something to eat; it
+        // stood above eating, and in a famine winter a parent trailed a
+        // child foraging out at the edge of the leash until they died
+        // (#303).
+        let hungry_with_supper = agent
+            .drives
+            .get(crate::core::DriveType::Hunger)
+            .is_some_and(|hunger| hunger.is_active())
+            && agent.has_edible_food();
+        if hungry_with_supper {
+            return None;
+        }
+
+        // **And a child with somebody grown beside it is minded.** The child's
+        // own rule (`keeping_close_to_somebody_grown`) is content with any
+        // grown person within reach, or a roof; this one sent the parent
+        // after it regardless, so a child foraging beside its aunt drew its
+        // father off his work. The two now agree.
         let strayed = mine
             .iter()
+            .filter(|child| !self.is_this_child_minded(**child))
             .map(|child| {
                 let distance = (child.0 - agent_position.0)
                     .abs()
@@ -694,6 +717,19 @@ impl Simulation {
     }
 
     /// How far an agent will walk to break new ground
+    /// Whether a child standing here has somebody grown within a leash of it,
+    /// or a roof: the same as the child's own rule for being close enough
+    /// (`keeping_close_to_somebody_grown`), so that parent and child agree.
+    pub(in crate::analytics) fn is_this_child_minded(&self, at: (i32, i32, i32)) -> bool {
+        let near = |x: i32, y: i32| (x - at.0).abs().max((y - at.1).abs()) <= Self::CHILD_LEASH;
+        self.world.buildings.iter().any(|roof| near(roof.position.x, roof.position.y))
+            || self.population.agents.iter().any(|them| {
+                them.state.is_alive
+                    && Self::how_far_from_a_grown_person_this_one_may_be(them.state.life_stage).is_none()
+                    && near(them.state.position.0, them.state.position.1)
+            })
+    }
+
     pub(in crate::analytics) const FIELD_WALK_RADIUS: u32 = 12;
 
     /// How many fields a settlement wants within reach of where it is standing

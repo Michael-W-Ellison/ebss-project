@@ -22781,3 +22781,54 @@ Dice counts:
 | seed 4242, 120 turns | 9,894 | 9,333 |
 
 Measurement on the big map follows.
+
+### 303. A hungry parent went after a wandering child instead of eating
+
+After #302 every settlement still grew to about 20 people and crashed. Seed
+0 went from 20 to 11 in the winter of year 8. The land was not the limit
+(`zz_carrying`):
+- food within 50 cells of camp grew back to 21,000–25,000 every fall;
+- the pits filled to 17,000–18,000 every winter;
+- the pits still held 13,000–15,700 items while people died.
+
+The animals crowding the camp that winter were sheep, reindeer, goats and
+deer, so fear of beasts was not it either. So the decision ladder itself was
+instrumented. For every turn on which a grown person was at hunger 0.9 or
+more, it records which branch or drive answered, and what with. Over seed
+0's first eight years:
+
+| branch | answer | turns |
+|---|---|---|
+| `protective_action` | Move | 12,453 |
+| `protective_action` | Move, holding something to eat | 3,254 |
+| larder branch (`something_out_of_the_store`) | Move | 10,589 |
+| larder branch | PickUp | 2,276 |
+| hungry, with food in hand | Eat | 3,898 |
+| the Hunger drive | Eat | 1,033 |
+
+`protective_action` is the first thing a person is asked, above eating. Past
+a sick child or a bare one, it sends a parent after any child of six or more
+who is more than `CHILD_LEASH` (8) cells off. Children that age go out
+foraging; #302's probe had them gathering on 22–40% of their turns. So a
+hungry parent spent the day trailing a child at the edge of the leash, even
+holding supper. In a famine winter that is what they did until they died.
+
+Two rules now hold it back. Neither touches a child in danger, which still
+comes first:
+- **A hungry parent with supper in hand eats first.** The child that has
+  only wandered will still be there in half an hour.
+- **A child with somebody grown beside it is minded.**
+  `keeping_close_to_somebody_grown` already took any grown person within
+  reach, or a roof, as close enough; the parent's rule did not, and sent a
+  father after a child foraging beside its aunt. Both now read the same
+  question (`is_this_child_minded`).
+
+Tests in `minding_tests` (3):
+- a child alone past the leash is fetched;
+- a child beside somebody grown is minded;
+- a hungry parent eats before fetching a child who has only wandered.
+
+The larder branch's 10,589 walks against 2,276 handfuls are open. A walk to
+a pit that a parent's leash kept turning back would show up exactly so.
+
+Dice counts unchanged: the one-year runs have no children past six.
