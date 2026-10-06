@@ -22832,3 +22832,22 @@ The larder branch's 10,589 walks against 2,276 handfuls are open. A walk to
 a pit that a parent's leash kept turning back would show up exactly so.
 
 Dice counts unchanged: the one-year runs have no children past six.
+
+**Measured.** The same tally over seed 0's first eight years, after:
+
+| turns at hunger 0.9 or more | before | after |
+|---|---|---|
+| `protective_action` | 15,707 | 221 |
+| all of them, about | 38,000 | 19,700 |
+
+Seeds 0–3 run toward thirteen years, alongside the same seeds at #302:
+
+| seed | #302 | #303 (so far) |
+|---|---|---|
+| 0 | peak 20, down to 11 in year 8 (7 hunger) | 21 at year 9, no hunger deaths |
+| 1 | peak 23, down to 9 by year 11 (15 hunger and thirst) | 30 at year 11, one hunger death |
+| 2 | 13 at year 10 | 16 at year 10 |
+| 3 | peak 23, down to 9 by year 12 | peak 26, 20 at year 13 (3 hunger, 1 thirst) |
+
+The crash at about twenty people is gone on three seeds, and on the fourth
+it is a dip, not a collapse. Conceived across the four: 58.
