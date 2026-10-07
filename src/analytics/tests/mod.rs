@@ -121,3 +121,7 @@ pub mod planning_period_tests;
 pub mod planning_reach_tests;
 pub mod crafting_composition_tests;
 pub mod strategy_tests;
+pub mod night_tests;
+pub mod by_hand_tests;
+pub mod minding_tests;
+pub mod young_parents_tests;

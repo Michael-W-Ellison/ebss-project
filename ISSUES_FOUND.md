@@ -22851,3 +22851,49 @@ Seeds 0–3 run toward thirteen years, alongside the same seeds at #302:
 
 The crash at about twenty people is gone on three seeds, and on the fourth
 it is a dip, not a collapse. Conceived across the four: 58.
+
+### 304. A young parent's infant was kept beside them and fed by nobody
+
+Seed 1 at #303 lost three infants to thirst in year 13. Year 13 is when the
+first children of the founders, now eleven to fifteen, begin to have
+children of their own.
+
+A child under six takes no turns. Two passes look after it each turn:
+- `the_small_stay_with_their_people` puts it where its people stand;
+- `feed_the_small_children` gives it food and water out of whoever is within
+  a few paces (`WITHIN_A_FEW_PACES`, 2).
+
+Each pass picked the child's people out of a different list. Keeping took
+anybody six or over (`KEPT_WITH_A_PARENT_UNTIL`). Feeding took sixteen or
+over (`KEPT_WITHIN_AN_HOUR_UNTIL`). So:
+- **A parent of thirteen** was not in the feeding list. The child was put at
+  that parent's feet. Feeding looked past the parent for the nearest grown
+  body, found it far off, and gave nothing. The same was true of a parent of
+  eleven to fifteen. Water runs out in three days, so these infants died of
+  thirst, not hunger.
+- **An orphan** was kept with the nearest body six or over, which could be a
+  brother of nine. Feeding looked for the nearest of sixteen or over. That is
+  a different person, nowhere near.
+
+Both passes now ask one question, `whoever_looks_after`, of one list,
+`who_could_look_after_a_small_child`:
+- the child's carrier or parent, if alive and six or over;
+- failing those, the nearest living body sixteen or over.
+
+A parent is always eleven or over. A child is only ever handed to a parent.
+
+Tests in `young_parents_tests` (3):
+- a grown parent waters their infant;
+- a parent of thirteen does too (failed before);
+- an orphan is kept with and fed by the same grown stranger, not the
+  nine-year-old beside it (failed before).
+
+**Also found.** `src/analytics/tests/mod.rs` had been flagged
+assume-unchanged in this working copy, to keep a local probe's `mod` line
+out of commits. That also kept out the lines that register `night_tests`
+(#299), `by_hand_tests` (#300) and `minding_tests` (#303). Those files were
+pushed, but a fresh checkout never compiled or ran them. They are registered
+now. All of them pass.
+
+Dice counts unchanged: the one-year runs have no children of young parents
+and no orphans under six.
