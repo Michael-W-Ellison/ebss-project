@@ -840,7 +840,6 @@ impl Simulation {
         position: &crate::world::Position,
         which: WhoseRoof,
     ) -> bool {
-        use crate::world::belonging::{Access, Belongs};
         use crate::world::TerrainType;
 
         let roof = self
@@ -855,18 +854,33 @@ impl Simulation {
                 .get_tile(position)
                 .is_some_and(|tile| matches!(tile.terrain.terrain_type, TerrainType::Forest)),
 
-            WhoseRoof::HisOwn => roof
-                .is_some_and(|building| building.belongs() == Belongs::To(agent.id)),
+            _ => roof.is_some_and(|building| Self::is_this_building_mine_to_use(agent, building, which)),
+        }
+    }
 
-            WhoseRoof::AKinsmans => roof.is_some_and(|building| {
+    /// Whether this finished building is a roof of the kind asked for, to
+    /// this agent. `Natural` is never a building.
+    fn is_this_building_mine_to_use(
+        agent: &crate::agents::Agent,
+        building: &crate::world::Building,
+        which: WhoseRoof,
+    ) -> bool {
+        use crate::world::belonging::{Access, Belongs};
+
+        match which {
+            WhoseRoof::Natural => false,
+
+            WhoseRoof::HisOwn => building.belongs() == Belongs::To(agent.id),
+
+            WhoseRoof::AKinsmans => {
                 matches!(agent.may_i_use(&building.belongs()), Access::ByKinship(_))
-            }),
+            }
 
             // Nobody's and everybody's are one case here: an unclaimed roof
             // and the settlement's own are the same thing to walk into.
-            WhoseRoof::TheSettlements => roof.is_some_and(|building| {
+            WhoseRoof::TheSettlements => {
                 matches!(building.belongs(), Belongs::ToUsAll | Belongs::ToNobody)
-            }),
+            }
         }
     }
 
@@ -885,6 +899,21 @@ impl Simulation {
         use std::collections::{BTreeSet, VecDeque};
 
         const MAX_VISITED: usize = 4096;
+
+        // A roof that is a building can only be found if there is such a
+        // building somewhere. Most people have no roof of their own and no
+        // kinsman's, and each asking walked four thousand cells to learn it,
+        // every turn they were cold. See ISSUES_FOUND #306.
+        if !matches!(which, WhoseRoof::Natural)
+            && !self
+                .world
+                .buildings
+                .iter()
+                .filter(|building| building.is_completed())
+                .any(|building| Self::is_this_building_mine_to_use(agent, building, which))
+        {
+            return None;
+        }
 
         let start = (position.0, position.1);
         let mut queue = VecDeque::new();

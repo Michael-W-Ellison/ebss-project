@@ -124,11 +124,21 @@ impl Simulation {
                     && species.where_it_sits() != crate::environment::TrophicRole::PrimaryConsumer;
                 Some((animal.position, worth, animal.id, hunts, animal.species_id.clone()))
             })
+            // Only what hunts is a threat to another beast. Every animal
+            // looked through every other for the few that hunt, which with
+            // three thousand head on the big map was nine million looks a
+            // turn. Dropping the rest here keeps the hunters in the order
+            // they were, so the worst is chosen exactly as it was. See
+            // ISSUES_FOUND #306.
+            .filter(|(_, _, _, hunts, _)| *hunts)
             .collect();
 
-        let mut made_up_their_minds: Vec<(uuid::Uuid, AnimalState)> = Vec::new();
+        // Where in the list each one stands, kept with what it decided, so the
+        // deciding is applied without looking anybody up. See ISSUES_FOUND
+        // #306.
+        let mut made_up_their_minds: Vec<(usize, AnimalState)> = Vec::new();
 
-        for animal in self.world.animals.get_all().iter() {
+        for (at, animal) in self.world.animals.get_all().iter().enumerate() {
             if !animal.is_alive() || !animal.is_wild() {
                 continue;
             }
@@ -171,7 +181,7 @@ impl Simulation {
             let stands = nerve > 0.0 && mine * nerve >= coming * Self::WHAT_IT_TAKES_TO_TURN_AND_FACE;
 
             made_up_their_minds.push((
-                animal.id,
+                at,
                 if stands {
                     AnimalState::Attacking { target_id: who }
                 } else {
@@ -182,14 +192,8 @@ impl Simulation {
             ));
         }
 
-        for (which, made_up) in made_up_their_minds {
-            if let Some(animal) = self
-                .world
-                .animals
-                .get_all_mut()
-                .iter_mut()
-                .find(|animal| animal.id == which)
-            {
+        for (at, made_up) in made_up_their_minds {
+            if let Some(animal) = self.world.animals.get_all_mut().get_mut(at) {
                 animal.state = made_up;
                 animal.state_timer = Self::HOW_LONG_A_BEAST_KEEPS_ITS_NERVE;
             }
@@ -207,9 +211,9 @@ impl Simulation {
         let width = self.world.grid.width as i32;
         let height = self.world.grid.height as i32;
 
-        let mut bolted: Vec<(uuid::Uuid, (i32, i32))> = Vec::new();
+        let mut bolted: Vec<(usize, (i32, i32))> = Vec::new();
 
-        for animal in self.world.animals.get_all().iter() {
+        for (at, animal) in self.world.animals.get_all().iter().enumerate() {
             let AnimalState::Fleeing { from_position } = animal.state else {
                 continue;
             };
@@ -234,18 +238,12 @@ impl Simulation {
             );
 
             if self.is_passable_tile(landed.0, landed.1) {
-                bolted.push((animal.id, landed));
+                bolted.push((at, landed));
             }
         }
 
-        for (which, to) in bolted {
-            if let Some(animal) = self
-                .world
-                .animals
-                .get_all_mut()
-                .iter_mut()
-                .find(|animal| animal.id == which)
-            {
+        for (at, to) in bolted {
+            if let Some(animal) = self.world.animals.get_all_mut().get_mut(at) {
                 animal.position = to;
                 animal.use_stamina(Self::WHAT_BOLTING_COSTS_A_BEAST);
             }

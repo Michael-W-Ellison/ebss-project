@@ -22949,3 +22949,51 @@ before the fix.
 
 A resumed run also does not continue the dice stream. So a resumed run is a
 fair run of the same world, but not the run that would have happened.
+
+### 306. Each simulated year cost more than the last
+
+On the big map, seed 3 took 8 minutes for its first year and 86 for its
+thirteenth. Over the same years the people only doubled, from 12 to 25. What
+grew was the wild (`zz_growth`, from the yearly checkpoints):
+
+| year | animals | plants | one winter day |
+|---|---|---|---|
+| 1 | 852 | 229,000 | 0.7 s |
+| 5 | 1,236 | 325,000 | 1.0 s |
+| 9 | 2,725 | 425,000 | 2.4 s |
+| 11 | 3,550 | 426,000 | 3.1 s |
+
+Stack samples of a late year put about half the turn in the animals. Four
+things cost more with every head, and none of them changes what happens:
+- **`PlantManager::catch_up_one` cloned the whole book of plant species**, with
+  its names and lists, on every call. It is called for every cell every
+  grazer reaches. It borrows the book now.
+- **The grazing walk looked up each plant's kind by name** in that book, once
+  for each cell it searched and each it bit. It reads the kind from a table
+  laid out by species number (`FloraRegistry::by_number`,
+  `SpeciesId::number`), built once a pass.
+- **`what_the_beasts_make_of_us` checked every animal against every other** to
+  find the few that hunt: nine million checks a turn at three thousand head.
+  The list keeps only the hunters now, in the order they were, so the worst
+  threat is picked exactly as before. And each decision found its animal by
+  walking the herd; it now carries the animal's place in the list. The same
+  goes for bolting, in `the_beasts_act_on_it`.
+- **`nearest_roof_of_this_kind` searched up to 4,096 cells** for a roof that
+  did not exist. Most people own no roof and have no kinsman's. It now looks
+  first for any finished building of that kind, and stops if there is none.
+
+**Measured.** Seed 3 run on from the year-11 checkpoint with 3,550 animals:
+
+| run | before | after |
+|---|---|---|
+| 30 winter days, CPU | 96 s | 58 s |
+| 180 days into summer, CPU | 581 s | 337 s |
+
+Both runs end in the same place: the same animals at the same spots, the
+same people, the same plants, and the same number of dice rolled (2,337,269
+over the 180 days). So the change is a speed-up and nothing else, and the
+dice counts in `repeatable_tests` hold.
+
+What is left is spread out. In the profile after, the animals' turn is about
+a fifth, people's decisions about a seventh, and exploration about a seventh.
+The herds still grow, so a later year still costs more than an earlier one.

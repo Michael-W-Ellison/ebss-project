@@ -5219,6 +5219,11 @@ impl AnimalManager {
         };
 
         let flora = crate::environment::FloraRegistry::new();
+        // Each plant's kind read out of a slot by its number. Matching the
+        // name in the book for every cell every grazer looked over was most
+        // of what a late-year grazing pass cost. See ISSUES_FOUND #306.
+        let kinds = flora.by_number();
+        let kind_of = |plant: &crate::environment::Plant| kinds.get(plant.species_id.number()).copied().flatten();
 
         // Where the standing growth is. Built once for the pass, and laid out
         // flat rather than as a map keyed by position: asking each animal to
@@ -5340,7 +5345,7 @@ impl AnimalManager {
                     let index = index as usize;
 
                     let plant = &plants.all_plants()[index];
-                    let Some(kind) = flora.get(&plant.species_id) else {
+                    let Some(kind) = kind_of(plant) else {
                         continue;
                     };
 
@@ -5444,8 +5449,7 @@ impl AnimalManager {
                 let (still_browsing, still_grazing) = (wanted_browse > 0.0, wanted_graze > 0.0);
                 let left_on = |index: usize| {
                     let plant = &plants.all_plants()[index];
-                    flora
-                        .get(&plant.species_id)
+                    kind_of(plant)
                         .map(|kind| {
                             (if kind.is_woody() { still_browsing } else { still_grazing })
                                 && Self::what_there_is_to_take(

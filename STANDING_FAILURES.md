@@ -28,12 +28,9 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #304): every test, module by module, in
-one piece. 2,740 tests run: 2,736 passed, none failed, 4 ignored, in 2,844 s
-of test time. The suite shared the machine with a 13-year big-map probe. It
-is the first run of the committed tree to include `night_tests`,
-`by_hand_tests` and `minding_tests`, which were pushed at #299, #300 and #303
-but never registered (#304). That leaves:
+**Last full run** (ISSUES_FOUND #306): every test, module by module, in
+one piece. 2,741 tests run: 2,737 passed, none failed, 4 ignored, in 3,179 s
+of test time. The suite shared the machine with four 20-year big-map runs. That leaves:
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
