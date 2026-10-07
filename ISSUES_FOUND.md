@@ -22898,6 +22898,23 @@ now. All of them pass.
 Dice counts unchanged: the one-year runs have no children of young parents
 and no orphans under six.
 
+**Measured.** Seed 1 was run unbroken to year 13 on the build before this
+fix. Its probe kept each infant's last day and a half. Three infants died of
+thirst on day 4584, aged 2, 4 and 5:
+- all three were orphans; both parents had died a few days before;
+- the nearest body of sixteen or over stood 7–9 paces off the whole time,
+  never within the 2 the feeding reads;
+- hydration fell evenly, 0.66 to 0.02 over three and a half days, with food
+  to spare (reserve 0.8–0.9).
+
+That is the orphan half above. They were kept with somebody of six to
+fifteen, and fed by nobody.
+
+The same year was replayed from the day-4320 checkpoint on both builds, once
+#305 let a loaded world run. Neither replay lost an infant. Off a checkpoint
+the dice run differently, and the parents who died near day 4580 lived, so
+there were no orphans to compare.
+
 ### 305. A world read back from a save had no living animals or plants
 
 `Simulation::save` skips the books of species, the `FaunaRegistry` and the
