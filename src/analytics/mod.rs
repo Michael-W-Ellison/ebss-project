@@ -1498,9 +1498,15 @@ impl Simulation {
         population.stats.total_deaths = state.population_stats.total_deaths;
         population.stats.total_abandonments = state.population_stats.total_abandonments;
 
+        // What is not saved and has to be put back: without the books of
+        // species no animal or plant takes a turn. See ISSUES_FOUND #305.
+        let mut world = state.world;
+        world.animals.the_registry_back();
+        world.plants.the_registry_back();
+
         // Reconstruct Simulation
         let sim = Simulation {
-            world: state.world,
+            world,
             population,
             current_turn: state.current_turn,
             renderer: None,

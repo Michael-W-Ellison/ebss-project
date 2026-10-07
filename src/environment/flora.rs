@@ -2163,6 +2163,16 @@ impl PlantManager {
         self.registry.as_ref()?.get(species_id)
     }
 
+    /// Put the book of species back after a load.
+    ///
+    /// It is not saved (`#[serde(skip)]`), and without it nothing grows,
+    /// seeds or dies back. See ISSUES_FOUND #305.
+    pub fn the_registry_back(&mut self) {
+        if self.registry.is_none() {
+            self.registry = Some(FloraRegistry::new());
+        }
+    }
+
     /// Turn all plants (growth, regrowth)
     pub fn take_a_turn(&mut self) {
         let registry = match &self.registry {

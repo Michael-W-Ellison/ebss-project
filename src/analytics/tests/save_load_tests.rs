@@ -307,3 +307,26 @@ fn test_inventory_preserved_across_save_load() {
     assert!(wood.is_some());
     assert_eq!(wood.unwrap().quantity, 5);
 }
+
+/// A world read back still has its animals and plants alive in it.
+///
+/// The books of species are not saved, and nothing put them back: a loaded
+/// world had every beast standing still and nothing growing. See
+/// ISSUES_FOUND #305.
+#[test]
+fn a_loaded_world_still_knows_its_species() {
+    let temp_dir = TempDir::new().unwrap();
+    let save_path = temp_dir.path().join("simulation.dat");
+
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let simulation = Simulation::new(world, population);
+    assert!(simulation.world.animals.get_species("deer").is_some());
+    assert!(simulation.world.plants.get_species("oak_tree").is_some());
+
+    simulation.save(&save_path).unwrap();
+    let loaded = Simulation::load(&save_path).unwrap();
+    assert!(loaded.world.animals.get_species("deer").is_some(), "the animals forgot what they are");
+    assert!(loaded.world.plants.get_species("oak_tree").is_some(), "the plants forgot what they are");
+}

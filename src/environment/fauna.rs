@@ -3379,6 +3379,17 @@ impl AnimalManager {
         self.registry.as_ref()?.get(species_id)
     }
 
+    /// Put the book of species back after a load.
+    ///
+    /// It is not saved (`#[serde(skip)]`), and without it no beast grazes,
+    /// breeds or dies: a world read back from a checkpoint had every animal
+    /// standing still. See ISSUES_FOUND #305.
+    pub fn the_registry_back(&mut self) {
+        if self.registry.is_none() {
+            self.registry = Some(FaunaRegistry::new());
+        }
+    }
+
 
 
 

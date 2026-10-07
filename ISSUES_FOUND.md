@@ -22897,3 +22897,38 @@ now. All of them pass.
 
 Dice counts unchanged: the one-year runs have no children of young parents
 and no orphans under six.
+
+### 305. A world read back from a save had no living animals or plants
+
+`Simulation::save` skips the books of species, the `FaunaRegistry` and the
+`FloraRegistry` (`#[serde(skip)]`). `Simulation::load` never put them back.
+Every animal and plant turn opens with a guard that returns at once without
+a registry. So in a loaded world:
+- nothing grazed, bred, aged or died;
+- nothing grew or seeded.
+
+The people went on living in a world that had stopped. The GUIs' load and
+the autosave checkpoints read saves back this way.
+
+It came to light at #304. A year-13 run resumed from a checkpoint finished
+in 600 s. The same year run without stopping took about six hours.
+
+`load` now puts both books back (`AnimalManager::the_registry_back`,
+`PlantManager::the_registry_back`). The other skipped parts already come
+back right:
+- the tech tree, crafting, combat and smelting managers default to their
+  `new()`;
+- the node index rebuilds itself on first use.
+
+Test: `save_load_tests::a_loaded_world_still_knows_its_species`. It failed
+before the fix.
+
+**Still not saved.** These `Population` fields start empty after a load:
+- `shared_knowledge`;
+- `technology_registry`, the world-firsts;
+- `unhappiness_tracker`;
+- `how_it_went`, the tally;
+- `bodies_where_they_fell` and `what_the_dead_left`.
+
+A resumed run also does not continue the dice stream. So a resumed run is a
+fair run of the same world, but not the run that would have happened.
