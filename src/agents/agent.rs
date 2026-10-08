@@ -8490,11 +8490,16 @@ impl Agent {
         };
 
         // Check if food is harmful (severely spoiled)
+        //
+        // Booked as an illness, which is what it is. It went down as "a blow",
+        // and a death that blows hold the most of is reckoned a death in
+        // combat: a man who ate rotten meat was killed in a fight, by
+        // whoever last struck him. See ISSUES_FOUND #309.
         if food_data.is_harmful() {
             self.inventory.remove_item(item_id, 1);
             self.food_i_ate = self.food_i_ate.saturating_add(1);
             let damage = 10.0;
-            self.state.lose_health(damage, AgentState::A_BLOW);
+            self.state.lose_health(damage, AgentState::ILLNESS);
             return EatResult::MadeSick(damage);
         }
 

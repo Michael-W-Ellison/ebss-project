@@ -23168,3 +23168,46 @@ with the same dice:
 
 The two left are one adult whom raw flesh finished on day 146, and one
 whose hunger took them in midwinter.
+
+### 309. Poison and rotten food were booked as blows
+
+Two ways of being made ill by what you eat went into the ledger as "a blow".
+A death that blows hold the most of is reckoned a death in combat
+(`DeathCause::Combat`), with whoever last struck the person named as the
+killer:
+- **Eating food past harm** (`Agent::eat`, `is_harmful`) cost 10 health,
+  booked as "a blow".
+- **Tasting a bad plant** (`Simulation::tasting`) cost 12–55 health through
+  `Agent::take_damage`, the door a blow comes in by. So it did everything a
+  blow does:
+  - it was booked as "a blow";
+  - it opened a wound in proportion to its weight, so that a bad plant of 25
+    or more left a wound fully open, as a hard blow does, to go bad like one;
+  - it was divided by the defence bonus of nearby buildings, as though walls
+    kept poison out;
+  - and it gave a Masochist pleasure.
+
+Both now go straight to the body as `AgentState::ILLNESS`, which is what an
+ailment's turns are already booked as. A bad plant leaves no wound and is
+not softened by a roof.
+
+The labels only ever reached the death reckoning: the cause recorded for a
+death, the `died of` tallies, and the GUI's event timeline, where the killer
+named is decoration that nothing acts on. The wound, the roof and the
+Masochist were behaviour.
+
+How much it mattered: in seed 1's thirteenth year, replayed with every blow
+named (#308), neither path booked anything, and none of that year's "blow"
+deaths came from it. #258 measured bad plants as the largest single thing
+booked as "a blow" before people warned each other about them: 2,275 health
+over four settlements and three years. So in a world where people are still
+learning their plants, these were what most of the "blow" figures were.
+
+Tests:
+- `tasting_tests::a_bad_plant_is_an_illness_and_not_a_blow`: booked as
+  illness, and no wound opened (failed before);
+- `nutrition_integration_tests::test_spoiled_food_harmful` now also asks
+  that rotten food is booked as illness (failed before).
+
+**Dice.** Seed 0's year rolls 1,164,176, down 0.5%: a bad plant is tried
+in its first year, and no longer leaves a wound to go bad.

@@ -875,7 +875,14 @@ impl Simulation {
             let harm = rng.gen_range(
                 Self::WHAT_A_BAD_PLANT_DOES.0..=Self::WHAT_A_BAD_PLANT_DOES.1,
             );
-            agent.take_damage(harm);
+            // **A poisoning, not a blow.** This came in by `take_damage`,
+            // which is the door a blow comes in by, and did everything a blow
+            // does: booked as "a blow", so a death of a bad plant was reckoned
+            // a death in combat; opened a wound as a blow of that weight
+            // would, which could go bad; and was softened by standing near a
+            // building, as though walls kept poison out. It is an illness, and
+            // it goes straight to the body. See ISSUES_FOUND #309.
+            agent.state.lose_health(harm, crate::agents::AgentState::ILLNESS);
 
             debug!(
                 "Agent {} was poisoned by plant {kind} ({harm:.0} damage, {:.0} health left)",
