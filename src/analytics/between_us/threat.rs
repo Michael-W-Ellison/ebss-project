@@ -490,6 +490,18 @@ impl Simulation {
                     .max((them.state.position.1 - where_it_is.1).abs())
                     <= Self::STANDING_OVER_THEM
             })
+            // **And not one this agent carries off with them.** A child under
+            // six is kept wherever its keeper is (`the_small_stay_with_their_people`),
+            // so a parent who runs takes the child along, and there is nobody
+            // left standing in the thing's way. Read as in the way, an infant
+            // in arms made every lion that came within two paces of its
+            // parent a fight the parent had to have: on one big-map seed a
+            // mother of forty-three stood over hers thirty-three times in an
+            // afternoon at the same two paces. See ISSUES_FOUND #308.
+            .filter(|them| {
+                them.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+                    || self.who_a_small_child_is_kept_with(them) != Some(agent.id)
+            })
             // And unable to do anything about it. Somebody who can fight it
             // themselves is not being protected, they are being joined
             .any(|them| !them.could_i_fight_at_all(coming))
@@ -545,7 +557,21 @@ impl Simulation {
         let dy = from.1 - away_from.1;
         let span = (((dx * dx + dy * dy) as f32).sqrt()).max(1.0);
 
-        let straight = (dx as f32 / span, dy as f32 / span);
+        // **And when the thing is standing on you, any way is away.** Away
+        // was worked out from where it stood, and from the very tile you are
+        // on there is no away: all eight ways out came to nought, every
+        // landing was the tile itself, and there was nowhere to run on open
+        // ground. On one big-map seed that froze people 28,622 turns in a
+        // year, mostly with a lion or a camel underfoot - and a frozen child
+        // is a child its parent stands over, so four parents fought a lion
+        // and died of it. Any one of the eight is as far from the thing as
+        // another, so where to land is left to the scoring below. See
+        // ISSUES_FOUND #308.
+        let straight = if dx == 0 && dy == 0 {
+            (1.0, 0.0)
+        } else {
+            (dx as f32 / span, dy as f32 / span)
+        };
 
         // Straight away, then an eighth-turn either side, then a quarter,
         // and so round to behind. Listed nearest-to-away first, so that

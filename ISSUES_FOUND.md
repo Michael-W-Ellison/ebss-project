@@ -23089,3 +23089,82 @@ The food gate has stopped being what binds. What binds now is the drive. A
 mating outside the fertile day dulls it by `A_TRY_OUTSIDE_THE_WINDOW` (0.05,
 #299), and with the gate open people couple often, so on the fertile day the
 wish is spent. That is open.
+
+### 308. With a beast on your own tile there was nowhere to run
+
+Seed 1 went from 30 people to 23 in its thirteenth year, all within about
+six weeks of late autumn. Five of the seven deaths were reckoned "a blow".
+There were no wolves on that map.
+
+The year was replayed from the year-12 checkpoint with every source of "a
+blow" booked under its own name. The replay matched the recorded run: the
+same 23 left, and the same illnesses on the same days. What held the health
+of the dead:
+- **four adults: a lion,** two or three bites of about 25 each, often taken
+  at 20–40 health, then raw flesh or food on the turn finished them inside a
+  week;
+- **one: a camel, fought four times** and down to nought, before hunger;
+- **one: thirst,** and the child: illness and hunger.
+
+The fights came out of the threat tree as "stands over one of its own": 3
+times by day 239, 29 by the year's end. That branch is the one place a
+person knowingly takes the worse option, for somebody of theirs who cannot
+deal with the thing. And who could not deal with it was everybody. **The
+year's fear came to 42,208 turns, and 28,622 of them ended in a freeze.**
+Every freeze, adult or child, had legs and energy to spare, and was told
+there was nowhere to run: 11,527 from the lion, 8,814 more by children from
+the lion, and 8,169 from a camel.
+
+`where_this_one_would_run` worked out "away" from where the thing stood. With
+the thing on the runner's own tile, away is (0, 0). All eight rotations of it
+are (0, 0), every landing is the tile itself, and nothing counts as moving. So
+a lion or a grazing camel that walked onto somebody's tile pinned them there.
+A pinned child is somebody of theirs who cannot fight, so the parent stood
+over the child and fought the lion.
+
+Two changes:
+- **Something underfoot can be run from.** With no direction to run from,
+  the eight ways out start from east; each one gains the same ground, so the
+  scoring picks among them by what the runner remembers of where they would
+  land.
+- **An infant in arms is carried off, not stood over.** A child under six is
+  kept on its keeper's tile (`the_small_stay_with_their_people`) and goes
+  where they go. So it is not left in the way of anything its keeper runs
+  from. In the replay with only the first change, the lion fights went on:
+  a mother of 43 stood over hers 33 times at the same two paces. A child
+  who keeps itself (six or over) is still stood over, as before.
+
+Tests:
+- `cornered_tests::something_on_your_own_tile_can_still_be_run_from` (failed
+  before);
+- `sacrifice_tests::a_parent_runs_with_the_infant_in_arms`.
+
+`sacrifice_tests`' parent-and-child fixture set `LifeStage::Child` on a child
+of age nought. It is given eight years now, which is what that stage means,
+so its tests still ask about a child who stands on its own feet.
+
+**Dice.** Seed 0's year rolls 1,169,903, up 4.9%. People run where they
+froze.
+
+**`news_reaches_everybody_within_earshot`.** The rate itself moved, from 37 of
+48 worlds before to 31 after. Frightened people used to stay frozen where they
+stood, among the others; now they run nineteen paces at a bolt, so a
+settlement spreads a little more. The bar goes from two-thirds to three-fifths,
+with the measurement written beside it. 31 of 48 is still a clear majority,
+which is the claim the test makes.
+
+**Measured.** Seed 1's thirteenth year, replayed from the same checkpoint
+with the same dice:
+
+| | as recorded | something underfoot can be run from | and infants are carried off |
+|---|---|---|---|
+| deaths | 7 | 3 | 2 |
+| alive at the year's end | 23 | 27 | 28 |
+| died of a lion | 4 | 1 | 0 |
+| freezes | 28,622 | 0 | 0 |
+| runs | 41 | 824 | 217 |
+| lion bites taken, health | 280 | 308 | 56 |
+| boar strikes taken, health | 210 | 30 | 30 |
+
+The two left are one adult whom raw flesh finished on day 146, and one
+whose hunger took them in midwinter.

@@ -310,13 +310,21 @@ fn news_reaches_everybody_within_earshot() {
     // A block wide enough to be a rate has to be wide enough to stay one when
     // the settlement's habits change, and habits change every time anything
     // in the decision layer does.
+    //
+    // And the bar is three in five, down from two in three, because the rate
+    // itself moved, and for a reason that is not about talking. Somebody with
+    // a beast on their own tile had nowhere to run and froze there, among
+    // the others; now they run, nineteen paces at a bolt, and a settlement is
+    // a little more spread out for it. The same 48 worlds read 37 before
+    // that and 31 after (#308). A clear majority is the claim, and 31 of 48
+    // is one.
     let worlds = 48;
     let heard_by_more_than_one = (0..worlds)
         .filter(|world_number| widest_a_teller_reached(4_101 + world_number) > 1)
         .count();
 
     assert!(
-        heard_by_more_than_one * 3 >= worlds as usize * 2,
+        heard_by_more_than_one * 5 >= worlds as usize * 3,
         "somebody saying where the food is should be heard by more than one \
          person in most settlements: it happened in \
          {heard_by_more_than_one} of {worlds}"
