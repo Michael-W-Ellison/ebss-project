@@ -23060,3 +23060,32 @@ The existing gate tests, which have no winter seen, are unchanged and pass.
 
 The dice counts in `repeatable_tests` are unchanged. Their runs are a year
 long, so no winter has been seen through and the gate asks the old question.
+
+**Measured, early.** Seeds 0–3 resumed from their latest checkpoints on the
+new gate. Old checkpoints carry no winter's leftover, so the old question
+applies until the first gap after resuming is over.
+
+| seed | under the old gate | under the new gate, so far |
+|---|---|---|
+| 0 | 1 conceived in year 10 | 2 conceived in year 11 |
+| 1 | 0 conceived in year 13 | 0 conceived in year 14 (4 grown founders left) |
+| 2 | 0 conceived in year 12 | 1 conceived in year 13, 0 in year 14 |
+| 3 | 0, 0, 1 conceived in years 15–17 | 3 conceived in year 19, 1 in year 20 |
+
+On seed 3 the year-19 conceptions were born in year 20: **three
+grandchildren, the first second generation on any big-map seed**. No
+hunger deaths came with them.
+
+The same 180 days from midwinter on seed 3 (`zz_why_no_births`), from the
+year-20 checkpoint:
+
+| person-turns aged 11+ | old gate, year 15 | new gate, year 20 |
+|---|---|---|
+| not enough put by | 70,590 | 11,572 |
+| reproduction drive not active | 3,170 | 69,615 |
+| ready to breed | 2,302 | 7,479 |
+
+The food gate has stopped being what binds. What binds now is the drive. A
+mating outside the fertile day dulls it by `A_TRY_OUTSIDE_THE_WINDOW` (0.05,
+#299), and with the gate open people couple often, so on the fertile day the
+wish is spent. That is open.
