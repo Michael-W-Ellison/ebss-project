@@ -22997,3 +22997,66 @@ dice counts in `repeatable_tests` hold.
 What is left is spread out. In the profile after, the animals' turn is about
 a fifth, people's decisions about a seventh, and exploration about a seventh.
 The herds still grow, so a later year still costs more than an earlier one.
+
+### 307. The breeding gate asked for a full winter in store on the day
+
+By year 15 on the big map, births had fallen to about one a year per
+settlement. The reproduction drive was at its peak (1.0) in every grown
+person. What turned them away was `enough_put_by_for_a_child`, nearly every
+turn (`zz_why_no_births`, 180 days from midwinter):
+
+| person-turns aged 11+ | seed 3, year 15 | seed 1, year 12 |
+|---|---|---|
+| not enough put by | 70,590 | 69,394 |
+| nursing | 7,307 | 11,187 |
+| needs not met just then | 2,804 | 5,753 |
+| ready to breed | 2,302 | 0 |
+
+The gate asked whether a person's share of the stores held a whole hungry
+gap's eating for them, their small children and a newborn, **on the day**. A
+store is full in autumn and drawn down to its bottom by spring, whatever kind
+of year it was. So the gate opened only from late summer into autumn: about
+days 210–300 on seed 3 and days 140–340 on seed 1. Each person gets a fertile
+day a month, and each chance is about one in ten. That came to roughly a
+conception a year per settlement.
+
+Yet neither settlement was short (`zz_put_by`, a year each, the pits against
+the whole settlement's winter):
+
+| | bottom of the year | top of the year |
+|---|---|---|
+| seed 1 | 0.66 | 2.24 |
+| seed 3 | 0.62 | 1.71 |
+
+Even at the bottom of the year the pits held about two-thirds of a full
+winter. That is a surplus, and the gate could not see it.
+
+**What a surplus is, is what is still there when the winter is over.**
+`WintersSeen` already noted a person's share going into the gap and coming
+out, to learn what a gap takes (#298). It now keeps what the gap left as well
+(`what_a_gap_leaves`), averaged the same way. Once a winter has been seen
+through without the store running dry, the gate asks whether that leftover
+covers the winter cost of this person's children: the small ones already
+here, and one more. That is `took × (small ones + a newborn)`.
+- **The answer is the same all year.** So each person's chance falls on
+  their own fertile day, spread across the year, and not all in one autumn as
+  the timed gate of #255 had them.
+- **It limits itself.** More mouths eat more of the store, the next winter
+  leaves less, and the gate closes again.
+- **It falls back when there is nothing to count.** Before any winter has
+  been seen through, or after one that ran the store dry, the strict
+  whole-winter-in-store question still applies.
+- **Children already here still space the next.** They are charged against
+  the leftover.
+
+Tests in `survival_pressure_tests` (4):
+- a winter that left food over lets a child be conceived in spring (failed
+  before);
+- a winter that left almost nothing keeps the gate shut;
+- a winter that ran the store dry asks the old question;
+- the children already here are charged against the surplus.
+
+The existing gate tests, which have no winter seen, are unchanged and pass.
+
+The dice counts in `repeatable_tests` are unchanged. Their runs are a year
+long, so no winter has been seen through and the gate asks the old question.

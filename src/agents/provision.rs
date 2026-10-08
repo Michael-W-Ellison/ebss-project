@@ -439,6 +439,12 @@ pub struct WintersSeen {
     /// took at least that much. See `WintersSeen::what_a_gap_takes`.
     #[serde(default)]
     what_a_gap_took: Option<f32>,
+    /// And what was still put by when it was over: the surplus a year's
+    /// getting and keeping came to, at the bottom of the year. Averaged the
+    /// same way, and `None` on the same terms. See
+    /// `WintersSeen::what_a_gap_leaves`.
+    #[serde(default)]
+    what_a_gap_left: Option<f32>,
 }
 
 impl WintersSeen {
@@ -493,6 +499,14 @@ impl WintersSeen {
                         None => took,
                     })
                 };
+                self.what_a_gap_left = if put_by <= 0.0 {
+                    None
+                } else {
+                    Some(match self.what_a_gap_left {
+                        Some(before) => (before + put_by) / 2.0,
+                        None => put_by,
+                    })
+                };
             }
         }
     }
@@ -501,6 +515,18 @@ impl WintersSeen {
     /// been counted and the last gap did not run the store dry.
     pub fn what_a_gap_takes(&self) -> Option<f32> {
         self.what_a_gap_took
+    }
+
+    /// What was still put by when a hungry gap was over, as counted, if it has
+    /// been counted and the last gap did not run the store dry.
+    ///
+    /// This is the surplus: what a year's getting and keeping left over at
+    /// the bottom of the year, after the winter has been eaten. A store that
+    /// is full in autumn and empty by spring has none, however full it looks
+    /// in autumn; a store that comes through the winter with food in it has
+    /// that much to spare. See ISSUES_FOUND #307.
+    pub fn what_a_gap_leaves(&self) -> Option<f32> {
+        self.what_a_gap_left
     }
 
     /// How long this agent expects a winter to be.

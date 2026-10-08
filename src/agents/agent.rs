@@ -6854,6 +6854,35 @@ impl Agent {
     /// run, which is the only time `what_the_larder_says` is empty for a live
     /// agent.
     pub fn enough_put_by_for_a_child(&self) -> bool {
+        // **A surplus, once there is one to count.** What follows asks for a
+        // whole winter's eating to be in the store on the day of conceiving.
+        // A store is full in autumn and drawn down to its bottom by spring
+        // whether or not the year was a good one, so that question shut the
+        // gate for every grown person from midwinter to late summer, every
+        // year, in settlements whose stores never once ran short: measured on
+        // two big-map seeds, the pits stood at 0.6 to 0.7 of the whole
+        // settlement's winter even at the bottom of the year, and in 180 days
+        // from midwinter nobody on one of them was ever let breed. A child a
+        // year was what came of it.
+        //
+        // What a surplus is, is what is still there when the winter is over.
+        // Once a winter has been seen through without the store running dry,
+        // the question is whether what it left over would have carried what
+        // this one's children cost a winter: the small ones already here and
+        // the one more. It is the same answer all year, so the chances fall
+        // across the year on each one's own fertile day rather than all in
+        // one autumn (#255). And it limits itself: more mouths eat more of the
+        // store, what the winter leaves shrinks, and the gate closes again. A
+        // winter that ran the store dry leaves nothing counted, and the
+        // stricter question below comes back. See ISSUES_FOUND #307.
+        let theirs = self.the_small_ones_i_answer_for.max(0.0) + what_a_body_this_age_eats(0);
+        if let (Some(took), Some(left)) = (
+            self.state.winters_seen.what_a_gap_takes(),
+            self.state.winters_seen.what_a_gap_leaves(),
+        ) {
+            return left >= took * theirs;
+        }
+
         let gap = super::provision::how_long_the_land_gives_nothing() as f32;
         // And the children already here. This asked a parent for their own
         // winter and one newborn's whatever they were feeding already, so a

@@ -28,9 +28,9 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #306): every test, module by module, in
-one piece. 2,741 tests run: 2,737 passed, none failed, 4 ignored, in 3,179 s
-of test time. The suite shared the machine with four 20-year big-map runs. That leaves:
+**Last full run** (ISSUES_FOUND #307): every test, module by module, in
+one piece. 2,745 tests run: 2,741 passed, none failed, 4 ignored, in 2,677 s
+of test time. The suite shared the machine with four big-map runs. That leaves:
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
