@@ -202,6 +202,12 @@ impl Simulation {
                 } else if agent.busy_until > now {
                     return;
                 }
+
+                // Free to decide, so awake: the night is over, or something
+                // has broken it (#310).
+                if agent.fatigue.is_sleeping {
+                    agent.wake_up(now);
+                }
             }
 
             // What is pressing hardest, and where this one is standing.

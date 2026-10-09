@@ -51,7 +51,15 @@ impl Simulation {
             (*duration).max(1) * crate::environment::seasons::MINUTES_PER_TURN,
             quality_factors.calculate_quality(),
         );
-        agent.wake_up(current_turn);
+        // **And asleep until the night is over, not until this turn is.** The
+        // sleep is reckoned here all at once, and this woke the sleeper on the
+        // spot, so through every turn of the night that followed the body
+        // was awake to everything that asked: it mended at a waking man's
+        // rate, a fifth of a sleeper's, and tired as though it were up and
+        // about. Measured on a big-map seed, not one turn in 71,852 of grown
+        // people's had anybody asleep in it. They wake when the hold the
+        // sleep put on them is over, or when danger breaks it - see
+        // `one_persons_turn`. See ISSUES_FOUND #310.
 
         let energy_restored = agent.state.energy - energy_before;
 

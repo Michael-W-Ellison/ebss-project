@@ -262,3 +262,43 @@ fn a_sleeper_goes_in_out_of_the_weather() {
     );
     assert!(matches!(action, Action::Sleep { .. }), "under the trees, they sleep: got {action:?}");
 }
+
+/// Somebody put to bed is asleep for the night, and mends as a sleeper does.
+///
+/// The night's sleep was reckoned all at once and the sleeper woken on the
+/// spot, so through every turn of the stretch that followed the body was
+/// awake to everything that asked: on a big-map seed, not one grown person's
+/// turn in 71,852 had anybody asleep in it, and the wounded mended at a
+/// waking man's rate, a fifth of a sleeper's. See ISSUES_FOUND #310.
+#[test]
+fn a_sleeper_sleeps_through_the_stretch_and_mends() {
+    let mut simulation = people(1);
+    under_the_trees(&mut simulation, 0);
+    simulation.population.agents[0].state.health = 50.0;
+
+    simulation.execute_action(&Action::Sleep { duration: 4 }, 0);
+    assert!(
+        simulation.population.agents[0].fatigue.is_sleeping,
+        "woken the moment the sleep was reckoned"
+    );
+
+    let now = simulation.current_turn;
+    let before = simulation.population.agents[0].state.health;
+    for step in 1..=4 {
+        simulation.population.agents[0].process_survival_turn(now + step * 30);
+    }
+    let asleep = simulation.population.agents[0].state.health - before;
+
+    let mut awake = people(1);
+    awake.population.agents[0].state.health = 50.0;
+    let before = awake.population.agents[0].state.health;
+    for step in 1..=4 {
+        awake.population.agents[0].process_survival_turn(now + step * 30);
+    }
+    let up_and_about = awake.population.agents[0].state.health - before;
+
+    assert!(
+        asleep > up_and_about * 2.0,
+        "two hours asleep mended {asleep:.2}, against {up_and_about:.2} up and about"
+    );
+}

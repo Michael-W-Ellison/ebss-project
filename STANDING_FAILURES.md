@@ -28,8 +28,8 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #309): every test, module by module, in
-one piece. 2,748 tests run: 2,744 passed, none failed, 4 ignored, in 1,253 s
+**Last full run** (ISSUES_FOUND #310): every test, module by module, in
+one piece. 2,749 tests run: 2,745 passed, none failed, 4 ignored, in 1,331 s
 of test time; the yearly dice count was then brought up to date. That leaves:
 - The two multi-generation tests below, which are ignored long runs.
 

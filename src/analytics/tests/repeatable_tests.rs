@@ -417,7 +417,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // has somewhere to run, and runs, where they used to freeze on the spot.
     // Down 0.5% to 1,164,176 for #309: a bad plant is an illness, and no
     // longer opens a wound that goes bad.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_164_176;
+    // Up 14.0% to 1,327,438 for #310: a sleeper is asleep until the night's
+    // stretch is over, rather than woken the turn it began, so nobody tires
+    // through the night as though they were up, and the wounded mend.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_327_438;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

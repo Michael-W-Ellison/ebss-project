@@ -23211,3 +23211,66 @@ Tests:
 
 **Dice.** Seed 0's year rolls 1,164,176, down 0.5%: a bad plant is tried
 in its first year, and no longer leaves a wound to go bad.
+
+### 310. Nobody was ever asleep, so nobody mended as a sleeper does
+
+The adults who died of a lion on seed 1 (#308) did not die of the bites.
+They died a few days to a week later, when raw flesh or food on the turn
+made them ill: two or three bites had left them at 20–40 health, and they
+were still there when the illness came. So the question was how fast a
+wounded body mends.
+
+`Agent::regenerate_health` mends at 0.1 a turn, times what the body has
+spare, for somebody asleep (`fatigue.is_sleeping`), and at 0.02 otherwise.
+Over 150 days of seed 1 from its year-12 checkpoint (`zz_mending`):
+
+| grown people's turns | all | under 60 health |
+|---|---|---|
+| asleep | 0.0% of 71,852 | 0.0% of 10,718 |
+| short of water (no mending at all) | 0.1% | 0.0% |
+
+The water gate was not it: people stand at nine-tenths of their water nearly
+all the time. **Nobody was ever asleep.** `Simulation::sleeping` reckons a
+night's stretch all at once: the fatigue it pays back, and the debt. Then it
+called `wake_up` on the spot. The stretch holds the sleeper out of deciding
+for the rest of its length (`busy_until`), but every turn of that, the body's
+own turn (`process_survival_turn`) found them awake. So:
+- they mended at a waking person's rate, a fifth of a sleeper's, through
+  the night as well as the day. For somebody with their reserve whole that
+  is about 1.0 health a day, where sixteen half-hours asleep and the rest
+  awake come to about 2.2;
+- and they tired through the night as if they were up and about.
+
+So a lion bite of 25 took about 26 days to mend rather than about 11. Anything
+in those extra two weeks (a cold snap, a short week, an illness) found the
+wound still there.
+
+Now a sleeper stays asleep until the hold is over, or until danger breaks it,
+and is woken at the moment they are free to decide again
+(`one_persons_turn`). Nothing reads `is_sleeping` while somebody decides
+except the decisions that guard on it, and those now always find them awake.
+
+Test: `night_tests::a_sleeper_sleeps_through_the_stretch_and_mends`. After a
+Sleep the sleeper is still asleep, and two hours of their body's own turns
+mend more than twice what two hours up and about do. It failed before, on
+"woken the moment the sleep was reckoned".
+
+**Measured.** Sixty days of seed 1 from the year-12 checkpoint: grown people
+asleep 36.5% of their turns, about seventeen half-hours in forty-eight, and
+the wounded (under 60 health) 33.2%. Before, both were nought.
+
+A year each, from the same checkpoints, before and after:
+
+| | before | after |
+|---|---|---|
+| seed 1, year 13: deaths | 2 | 0 |
+| seed 1, year 13: alive at the end | 28 | 30 |
+| seed 3, year 16: deaths | 0 | 0 |
+
+Seed 1's two were the case this was about: the adult a camel had hurt, taken
+by raw flesh on day 142, and one to the weather. Both lived. Two settlements
+and a year each is a small sample, so this says the mechanism is gone, not
+how many lives it costs across the map.
+
+**Dice.** Seed 0's year rolls 1,327,438, up 14.0%. Nobody tires through
+the night as if awake, so the rested take more turns between them.
