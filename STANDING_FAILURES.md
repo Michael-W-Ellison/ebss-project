@@ -28,9 +28,10 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #310): every test, module by module, in
-one piece. 2,749 tests run: 2,745 passed, none failed, 4 ignored, in 1,331 s
-of test time; the yearly dice count was then brought up to date. That leaves:
+**Last full run** (ISSUES_FOUND #311): every test, module by module, in
+one piece. 2,753 tests run: 2,748 passed, 1 failed, 4 ignored, in 3,254 s of
+test time; the one was the yearly dice count, brought up to date after. The
+suite shared the machine with four year-long runs. That leaves:
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed

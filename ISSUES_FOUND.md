@@ -23274,3 +23274,78 @@ how many lives it costs across the map.
 
 **Dice.** Seed 0's year rolls 1,327,438, up 14.0%. Nobody tires through
 the night as if awake, so the rested take more turns between them.
+
+### 311. The wish for a child was spent by other people's asking
+
+At #307 the food gate stopped being what held births back, and "reproduction
+drive not active" took its place: 69,615 of 180 days' grown-person turns on
+seed 3. The record put it down to couplings outside the fertile day each
+dulling the drive by `A_TRY_OUTSIDE_THE_WINDOW` (0.05).
+
+**Not much locking.** The drive also falls quiet while Hunger, Thirst, Rest
+or Safety is unanswered. Over 180 days of seed 3 from the year-20 checkpoint
+(`zz_drive_spent`), that was 1.4% of eligible person-turns. The drive sat
+below 0.1 in 52% of them, and at 1.0 in another 12%.
+
+Per person over 90 days (`zz_drive_people`), of the 13 eligible grown people:
+- **eight sat below 0.1 most of the time,** most of them 11 to 18 years
+  old. Their drops were the small dulls a person loses when *asked* (0.05),
+  from 0.01–0.13 down to nothing. Being asked cost them whether or not they
+  had any wish of their own.
+- **When a young person's wish did reach 1.0, they spent it in a burst.**
+  Seven tries in one day, each costing them 0.10.
+- **Three people in their 50s sat at 1.0** nearly all the time.
+
+The 0.10 was a second fault: `mating` took the dull off the one who asked,
+then reported the same amount as the action's drive change, which
+`apply_feedback` took off again. So a failed try on the fertile day cost the
+one who asked 0.6, which is the whole threshold and about 12 days of
+regrowth. The same was true of a try that took.
+
+So on a carrier's fertile day the wish was nearly always somewhere else:
+of 25 fertile days in those 90, the drive never once stood at the threshold
+on 17.
+
+Three changes, in `Simulation::mating`:
+- **Off the fertile day, a coupling answers the wish of whoever was asking,
+  for the day.** It leaves an active drive a day's regrowth short of its
+  threshold (`after_a_try_outside_the_window`). The person asks again about a
+  day later, not seven times today.
+- **And spends nobody else's.** A partner whose wish was not active is left
+  where it was. The first version of this capped the partner too, and most
+  grown people then sat between 0.5 and 0.6, put back a day short every time
+  somebody else asked, just before they would have asked themselves.
+- **The one who asked loses what they lose once**, through the result, at the
+  amount the drive actually fell, so the learning layer is credited with what
+  happened. A failed try on the fertile day costs 0.3, as it was meant to.
+
+Tests in `coupling_tests` (4, the first three failed before):
+- a try off the fertile day leaves both a day short;
+- being asked does not spend a wish you did not have;
+- a failed try on the fertile day costs the one who asked once;
+- being asked does not set back a wish that was nearly there.
+
+**Measured.** A year from the same checkpoints, before and after; seed 3 was
+then carried on a second year down each line:
+
+| | before | after |
+|---|---|---|
+| seed 3, year 21: conceived / born | 1 / 1 | 6 / 3 |
+| seed 3, year 21: alive at the end | 24 | 27 |
+| seed 3, year 22: conceived / born | 3 / 2 | 5 / 3 |
+| seed 3, year 22: alive at the end | 26 | 29 |
+| seed 0, year 12: conceived / born | 2 / 2 | 3 / 2 |
+| seed 0, year 12: alive at the end | 23 | 24 |
+
+14 conceptions against 6 over three settlement-years. Deaths were 3 before
+and 2 after. One of the two after was a child of hunger on seed 3 in year 22,
+the first hunger death in these runs. Worth watching as the settlements grow.
+
+**What is left.** The carrier of a pair is the lower id, so a person's
+fertile day only counts when they are with somebody of a higher id, and the
+highest id in a settlement never carries. Each person's chance a month is
+their own; whether a pair's should be one or two is a design question and is
+left alone here.
+
+**Dice.** Seed 0's year rolls 1,397,816, up 5.3%: fewer people coupling
+seven times a day, and the turns go on other things.

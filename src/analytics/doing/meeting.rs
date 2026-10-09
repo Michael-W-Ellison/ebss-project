@@ -548,11 +548,41 @@ impl Simulation {
     }
 
     /// How far a coupling that did not take dulls the wish for a child, in
-    /// the carrier's fertile window and outside it. Outside, it is about a
-    /// day of the drive's regrowth, so that a pair does not try every turn
-    /// they are together; see `mating`.
+    /// the carrier's fertile window: a week's regrowth, and the cycle's one
+    /// chance is spent besides; see `mating`.
     pub(in crate::analytics) const A_FAILED_TRY_IN_THE_WINDOW: f32 = 0.3;
-    pub(in crate::analytics) const A_TRY_OUTSIDE_THE_WINDOW: f32 = 0.05;
+
+    /// Where a coupling outside the carrier's fertile window leaves the wish
+    /// for a child: for somebody who was asking, a day's regrowth short of
+    /// asking again; for somebody who was not, where it was.
+    ///
+    /// **Answered for the day, not spent.** This took 0.05 off both partners
+    /// a try, and the one who asked lost it twice, once here and once more
+    /// through the result. Measured over 90 days of seed 3 (#311):
+    /// - somebody whose wish stood at 1.0 tried again and again inside a day,
+    ///   seven times in one, at 0.10 a time, and came out far below wanting
+    ///   anything;
+    /// - and whoever they asked lost 0.05 each time, whether or not they had
+    ///   any wish of their own. Eight of thirteen grown people, most of them
+    ///   eleven to eighteen, spent most of those 90 days below 0.1, held
+    ///   there by the tries of others.
+    ///
+    /// So on a carrier's one fertile day a month the wish was nearly always
+    /// somewhere else: on 17 of 25 fertile days it never once stood at the
+    /// threshold. Now a try puts the wish of anybody who was asking just
+    /// under the threshold, so the same person asks again about a day later
+    /// and not seven times today. Anybody who was not asking is left where
+    /// they are, whether that is nowhere near it or nearly there: answering
+    /// those who were nearly there as well kept them a day short for as long
+    /// as somebody else kept asking.
+    pub(in crate::analytics) fn after_a_try_outside_the_window(drive: &crate::core::Drive) -> f32 {
+        if !drive.is_active() {
+            return drive.value;
+        }
+        let a_days_wish = DriveType::Reproduction.base_accumulation_rate()
+            * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
+        (drive.threshold - a_days_wish).max(0.0)
+    }
 
     /// `Action::Mate`.
     pub(in crate::analytics) fn mating(&mut self, target_agent_id: &uuid::Uuid, agent_index: usize, rng: &mut rand::rngs::StdRng) -> ActionResult {
@@ -691,19 +721,22 @@ impl Simulation {
                     }
                 }
 
-                // Update reproduction drives for both parents
-                let male = &mut self.population.agents[male_index];
-                if let Some(repro_drive) = male.drives.get_mut(DriveType::Reproduction) {
-                    repro_drive.decrease(0.5); // Male drive reduces moderately
-                }
-
-                let female = &mut self.population.agents[female_index];
-                if let Some(repro_drive) = female.drives.get_mut(DriveType::Reproduction) {
-                    repro_drive.decrease(0.9); // Female drive significantly reduces (pregnant)
+                // Update reproduction drives for both parents: a good deal
+                // for the one carrying, less for the other. The one who
+                // asked has theirs taken off through the result, and only
+                // there; this took it here as well (#311).
+                let (initiators, targets) = if agent_index == female_index {
+                    (0.9, 0.5)
+                } else {
+                    (0.5, 0.9)
+                };
+                let target = &mut self.population.agents[target_index];
+                if let Some(repro_drive) = target.drives.get_mut(DriveType::Reproduction) {
+                    repro_drive.decrease(targets);
                 }
 
                 ActionResult::success()
-                    .with_drive_change(DriveType::Reproduction, -0.7)
+                    .with_drive_change(DriveType::Reproduction, -initiators)
                     .with_energy_cost(15.0)
                     .with_message("Mating successful - pregnancy started!".to_string())
             } else {
@@ -714,27 +747,36 @@ impl Simulation {
                 );
 
                 // Still reduce drives somewhat: by a good deal after a try
-                // in the carrier's one chance this cycle, and by about a
-                // day's regrowth after a try outside it. Once people slept
-                // together every night they coupled four to seven times as
-                // often, nearly always outside the window, and at 0.3 a time
-                // (a week to build back) the wish for a child was spent on
-                // the carrier's fertile day: fertile days lost to "drive not
-                // active" went from 29 and 17 to 85 and 139 (#299).
-                let dulled = if its_chance_this_cycle {
-                    Self::A_FAILED_TRY_IN_THE_WINDOW
-                } else {
-                    Self::A_TRY_OUTSIDE_THE_WINDOW
+                // in the carrier's one chance this cycle, and outside it to a
+                // day short of wanting it again. Once people slept together
+                // every night they coupled four to seven times as often,
+                // nearly always outside the window, and at 0.3 a time (a week
+                // to build back) the wish for a child was spent on the
+                // carrier's fertile day: fertile days lost to "drive not
+                // active" went from 29 and 17 to 85 and 139 (#299). See
+                // `after_a_try_outside_the_window` for what the 0.05 that
+                // replaced it did in turn (#311).
+                let after = |drive: &crate::core::Drive| {
+                    if its_chance_this_cycle {
+                        (drive.value - Self::A_FAILED_TRY_IN_THE_WINDOW).max(0.0)
+                    } else {
+                        Self::after_a_try_outside_the_window(drive)
+                    }
                 };
-                let agent = &mut self.population.agents[agent_index];
-                if let Some(repro_drive) = agent.drives.get_mut(DriveType::Reproduction) {
-                    repro_drive.decrease(dulled);
-                }
 
                 let target = &mut self.population.agents[target_index];
                 if let Some(repro_drive) = target.drives.get_mut(DriveType::Reproduction) {
-                    repro_drive.decrease(dulled);
+                    repro_drive.value = after(repro_drive);
                 }
+
+                // The one who asked has theirs taken off through the result,
+                // by what it actually came to, and only there. It was taken
+                // here as well, so every failed try cost them twice (#311).
+                let dulled = self.population.agents[agent_index]
+                    .drives
+                    .get(DriveType::Reproduction)
+                    .map(|drive| drive.value - after(drive))
+                    .unwrap_or(0.0);
 
                 ActionResult::success()
                     .with_drive_change(DriveType::Reproduction, -dulled)
