@@ -422,7 +422,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // through the night as though they were up, and the wounded mend.
     // Up 5.3% to 1,397,816 for #311: a coupling off the fertile day answers
     // the wish of whoever was asking for the day, and spends nobody else's.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_397_816;
+    // Down 1.6% to 1,374,948 for #312: whichever of a pair is on their
+    // fertile day carries, so a pair's chance comes twice a cycle.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_374_948;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

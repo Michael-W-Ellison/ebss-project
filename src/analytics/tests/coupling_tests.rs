@@ -76,7 +76,7 @@ fn a_try_that_did_not_take(wishes: [f32; 2], fertile: bool) -> Option<(Simulatio
         simulation.current_turn = if fertile {
             fertile_turn
         } else {
-            fertile_turn + 5 * crate::environment::seasons::TICKS_PER_DAY
+            neither_ones_day(&simulation)
         };
 
         let them = simulation.population.agents[1].id;
@@ -88,6 +88,43 @@ fn a_try_that_did_not_take(wishes: [f32; 2], fertile: bool) -> Option<(Simulatio
         return Some((simulation, carrier));
     }
     None
+}
+
+/// A turn that is neither partner's fertile day.
+fn neither_ones_day(simulation: &Simulation) -> u32 {
+    let a_day = crate::environment::seasons::TICKS_PER_DAY;
+    (1..)
+        .map(|day| day * a_day)
+        .find(|&turn| {
+            simulation
+                .population
+                .agents
+                .iter()
+                .all(|agent| !agent.could_conceive_now(turn))
+        })
+        .unwrap()
+}
+
+/// A turn that is `index`'s fertile day and not the other's, if they do not
+/// share one.
+fn only_their_day(simulation: &Simulation, index: usize) -> Option<u32> {
+    let a_day = crate::environment::seasons::TICKS_PER_DAY;
+    (0..Agent::DAYS_IN_A_CYCLE)
+        .map(|day| day * a_day)
+        .find(|&turn| {
+            simulation.population.agents[index].could_conceive_now(turn)
+                && !simulation.population.agents[1 - index].could_conceive_now(turn)
+        })
+}
+
+/// A couple whose fertile days are different days.
+fn a_couple_on_different_days(wishes: [f32; 2]) -> (Simulation, usize) {
+    loop {
+        let (simulation, lower) = a_couple(wishes);
+        if only_their_day(&simulation, lower).is_some() {
+            return (simulation, lower);
+        }
+    }
 }
 
 fn a_days_wish() -> f32 {
@@ -160,4 +197,61 @@ fn a_failed_try_on_the_fertile_day_costs_the_one_who_asked_once() {
             wish(&simulation, index)
         );
     }
+}
+
+/// Whichever partner is on their own fertile day carries, whatever their ids.
+///
+/// It was always the lower id, so a person's fertile day counted only with a
+/// partner of a higher id, and the highest id in a settlement never carried
+/// (#312).
+#[test]
+fn whoever_is_on_their_fertile_day_carries() {
+    use crate::agents::reproduction::does_this_one_carry;
+
+    let (simulation, lower) = a_couple_on_different_days([1.0, 1.0]);
+    let higher = 1 - lower;
+    let agents = &simulation.population.agents;
+
+    let theirs = only_their_day(&simulation, higher).unwrap();
+    assert!(does_this_one_carry(&agents[higher], &agents[lower], theirs));
+    assert!(!does_this_one_carry(&agents[lower], &agents[higher], theirs));
+
+    let ours = only_their_day(&simulation, lower).unwrap();
+    assert!(does_this_one_carry(&agents[lower], &agents[higher], ours));
+
+    // On a day that is neither's, the lower id, so it does not matter who asks
+    let neither = neither_ones_day(&simulation);
+    assert!(does_this_one_carry(&agents[lower], &agents[higher], neither));
+    assert!(!does_this_one_carry(&agents[higher], &agents[lower], neither));
+}
+
+/// And so a coupling on the higher id's fertile day is their chance for the
+/// cycle, and can make them the one carrying.
+#[test]
+fn the_higher_ids_fertile_day_is_a_chance_too() {
+    let mut carried_by_the_higher = 0;
+    for _ in 0..400 {
+        let (mut simulation, lower) = a_couple_on_different_days([1.0, 1.0]);
+        let higher = 1 - lower;
+        simulation.current_turn = only_their_day(&simulation, higher).unwrap();
+
+        let them = simulation.population.agents[1].id;
+        let result = simulation.execute_action(&Action::Mate { target_agent_id: them }, 0);
+        if !result.success {
+            continue;
+        }
+
+        assert!(
+            simulation.population.agents[higher].last_cycle_tried.is_some(),
+            "the higher id's fertile day went by without counting as their chance"
+        );
+        assert!(
+            simulation.population.agents[lower].pregnancy.is_none(),
+            "the one not on their fertile day conceived"
+        );
+        if simulation.population.agents[higher].pregnancy.is_some() {
+            carried_by_the_higher += 1;
+        }
+    }
+    assert!(carried_by_the_higher > 0, "nobody of the higher id ever conceived");
 }

@@ -23349,3 +23349,53 @@ left alone here.
 
 **Dice.** Seed 0's year rolls 1,397,816, up 5.3%: fewer people coupling
 seven times a day, and the turns go on other things.
+
+### 312. Whichever partner is on their fertile day carries
+
+There is no gender in this model, so which of a pair carries a child was
+decided by id: always the lower one, in both `Population::process_reproduction`
+and `Simulation::mating`. Each person has one fertile day a cycle, but under
+that rule it counted only when they were with somebody of a higher id. A
+pair's chance came once a month, on the lower id's day. The other partner's
+day went by with the wrong one of them carrying, and the person with the
+highest id in a settlement could never carry at all.
+
+Now whichever of the two is on their own fertile day carries
+(`reproduction::does_this_one_carry`). If both are, or neither is, it is the
+lower id, so a pair gets the same answer whoever asks. Each person still has
+exactly one chance a cycle, their own, and `last_cycle_tried` still spends it
+whether or not it takes. What changes is that every person's chance is a real
+one, with whoever they are with. A pair's chances go from one a month to two.
+
+Tests in `coupling_tests`:
+- `whoever_is_on_their_fertile_day_carries`;
+- `the_higher_ids_fertile_day_is_a_chance_too`: a coupling on the higher id's
+  fertile day spends their chance for the cycle and can leave them carrying.
+
+Both failed under the lower-id rule. The helper that sets up a coupling "off
+the fertile day" now picks a day that is neither partner's.
+
+**Measured.** A year from the same checkpoints, the #311 build against this
+one. The #311 runs of seed 3 and seed 0 came out exactly as they did at #311,
+so the comparison is like for like.
+
+| | #311 | whoever is fertile carries |
+|---|---|---|
+| seed 3, year 21: conceived / born | 6 / 3 | 8 / 4 |
+| seed 3, year 21: alive at the end | 27 | 28 |
+| seed 0, year 12: conceived / born | 3 / 2 | 3 / 3 |
+| seed 0, year 12: alive at the end | 24 | 25 |
+| seed 2, year 15: conceived / born | 0 / 0 | 0 / 0 |
+
+Deaths were the same in both: one elderly person on seed 3, of food on the
+turn. 11 conceptions against 9, and 7 births against 5. That is modest, and
+what the change should give: it doubles the chances of pairs who were
+already trying, and does nothing where nobody gets that far.
+
+Seed 2 is such a place. Over 180 days from its year-14 checkpoint
+(`zz_why_no_births`), every grown person's wish stood at 1.0 at some point,
+and every one of 86,400 person-turns failed the food gate: "not enough put
+by" 74,357 times, nursing 8,640, needs not met just then 3,361. That
+settlement's stores are a separate question.
+
+**Dice.** Seed 0's year rolls 1,374,948, down 1.6%.

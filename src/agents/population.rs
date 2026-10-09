@@ -1162,23 +1162,20 @@ impl Population {
                         .unwrap_or(false);
 
                     if drive1 && drive2 {
-                        // Which of the two carries it.
+                        // Which of the two carries it: whichever is on their
+                        // own fertile day - see `does_this_one_carry`. Each
+                        // person still has one chance a cycle, their own.
                         //
-                        // There is no gender in this model - "agents are
-                        // gender neutral; there are no male/female agents,
-                        // merely child and adult agents" - so this is not a
-                        // property of either of them and something has to
-                        // decide. The lower id, which is a coin that always
-                        // lands the same way for the same pair: a settlement
-                        // that fails to conceive on a Tuesday does not get a
-                        // second roll on the Wednesday by swapping who is
-                        // carrying.
-                        //
-                        // What this replaces refused the pair outright unless
-                        // one was male and one female, which threw away about
-                        // half of every candidate pairing in a model that
-                        // manages two births in 308,000 turns of action.
-                        let (carrier_idx, other_idx) = if agent1.id <= agent2.id {
+                        // What stood before this was the lower id, and before
+                        // that a refusal unless one was male and one female,
+                        // which threw away about half of every candidate
+                        // pairing in a model that manages two births in
+                        // 308,000 turns of action.
+                        let (carrier_idx, other_idx) = if crate::agents::reproduction::does_this_one_carry(
+                            agent1,
+                            agent2,
+                            self.current_turn,
+                        ) {
                             (idx1, idx2)
                         } else {
                             (idx2, idx1)

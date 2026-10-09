@@ -7,6 +7,29 @@ use crate::agents::{Agent, AgentConfig};
 use crate::agents::pregnancy::PregnancyState;
 use crate::core::{DriveState, DriveType, BehaviorTree};
 
+/// Whether `one`, rather than `other`, carries a child the two of them
+/// conceive at `now`.
+///
+/// There is no gender in this model - "agents are gender neutral; there are
+/// no male/female agents, merely child and adult agents" - so this is not a
+/// property of either of them, and it is whichever of the two is on their own
+/// fertile day: each person's one chance a cycle is theirs, with whoever they
+/// are with. If neither is, nobody conceives whoever carries; if both are, the
+/// lower id, so the answer is the same whichever of them asks.
+///
+/// It was always the lower id. So a person's fertile day counted only with a
+/// partner of a higher id, half the fertile days in a settlement went by with
+/// the wrong one of the pair carrying, and whoever had the highest id never
+/// carried at all (#312).
+pub fn does_this_one_carry(one: &Agent, other: &Agent, now: u32) -> bool {
+    let can = |agent: &Agent| agent.can_carry_a_child() && agent.could_conceive_now(now);
+    match (can(one), can(other)) {
+        (true, false) => true,
+        (false, true) => false,
+        _ => one.id <= other.id,
+    }
+}
+
 /// Mate selection criteria
 #[derive(Debug, Clone)]
 pub struct MateSelectionCriteria {

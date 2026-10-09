@@ -656,11 +656,15 @@ impl Simulation {
             let initiator = &self.population.agents[agent_index];
             let target = &self.population.agents[target_index];
 
-            // Which of the two carries it. There is no gender in this model,
-            // so this is not a property of either of them: the lower id, the
-            // same rule the population's own pairing pass uses, so that a pair
-            // gets the same answer whichever of them started it.
-            let (female_index, male_index) = if initiator.id <= target.id {
+            // Which of the two carries it: whichever is on their own fertile
+            // day, the same rule the population's own pairing pass uses, so
+            // that a pair gets the same answer whichever of them started it.
+            // See `does_this_one_carry`.
+            let (female_index, male_index) = if crate::agents::reproduction::does_this_one_carry(
+                initiator,
+                target,
+                self.current_turn,
+            ) {
                 (agent_index, target_index)
             } else {
                 (target_index, agent_index)
