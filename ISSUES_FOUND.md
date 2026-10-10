@@ -23399,3 +23399,63 @@ by" 74,357 times, nursing 8,640, needs not met just then 3,361. That
 settlement's stores are a separate question.
 
 **Dice.** Seed 0's year rolls 1,374,948, down 1.6%.
+
+### 313. Seed 2's stores were just short of the gate, and then were not
+
+At #312 seed 2 conceived nobody in a year, and every grown person-turn in
+180 days failed the food gate. That looked like a settlement whose stores
+could never clear it. It was not.
+
+**It is the surplus question that shuts it.** Everybody on seed 2 had seen
+a winter through, so `enough_put_by_for_a_child` asked whether what the last
+winter left would carry the children: `left ≥ took × theirs`, where a newborn
+is 0.20 of a grown body. The hungry gap runs from day 285 to day 0, and the
+checkpoints are saved on day 0, so each one holds exactly what the last
+winter left (`zz_winters_recorded`). As a share of what that winter took:
+
+| | left ÷ took | gate open |
+|---|---|---|
+| seed 2, year 13 | 0.10–0.20 | 0 of 9 |
+| seed 2, year 14 | 0.15–0.18 | 0 of 10 |
+| seed 1, year 14 | 0.13–0.18 | 0 of 5 |
+| seed 0, year 11 | 0.19–0.24 | 3 of 12 |
+| seed 3, years 19–21 | 0.66, 0.36, 0.27 | 19 of 20, 13 of 19, 11 of 17 |
+
+For somebody with no small children, the line is 0.20. Seed 2's winters
+came out a little under it: in year 14, about 1,400 units a head short, or
+some 165 stored items for the whole settlement.
+
+**Not a poor producer.** Over a year from the year-14 checkpoint
+(`zz_food_year`), seed 2 put 2.95 items into its pits per person-day,
+against 1.82 on seed 3 from its year-20 checkpoint. Seed 3 took out as much
+as it put in; seed 2 took out 9,126 of 15,764.
+
+**And the next winter clears it.** Three runs of year 15 from the same
+checkpoint, with different dice, all ended the winter far above the line:
+
+| year-15 run | pits at the end of the winter |
+|---|---|
+| `zz_generations` | 382,750 (25,500 a head) |
+| `zz_food_year` | 970,500 (64,700 a head) |
+| `zz_put_by` | 435,250 on day 345, still falling |
+
+In the first of those, the recorded leftover came to 0.35–0.43 of a winter
+(averaged with year 14's), and the gate stood open for 9 of 11 grown people
+going into year 16.
+
+So "never" was one year, seen through the gate's lag: the surplus is
+measured once a year, at the end of the winter, and averaged with the year
+before. A good autumn opens the gate only once the winter after it is over.
+That lag is deliberate (#307): it is what makes the answer the same all year
+and keeps a settlement from breeding on the strength of a full pit in
+October.
+
+Whether years 13–14 were thin by chance or because of faults fixed since
+(#308–#312; their checkpoints were made before those) is not settled here.
+The year-15 runs were all on the current code.
+
+**Year 16, on from that run:** 5 conceived and 4 born, two of them seed 2's
+first grandchildren. The settlement went from 15 to 18. One adolescent died:
+the run's own tally put it to hunger, and the ledger to a blow.
+
+No change to the code: the gate is reading the stores correctly.
