@@ -23459,3 +23459,140 @@ first grandchildren. The settlement went from 15 to 18. One adolescent died:
 the run's own tally put it to hunger, and the ledger to a blow.
 
 No change to the code: the gate is reading the stores correctly.
+
+### 314. Home was the middle of everybody, so there could only be one camp
+
+"Home tonight" (`where_the_people_sleep`) was the middle of every grown person
+in the world, or a finished roof near it. Each evening anybody more than 20
+cells from it walked there, however far that was. So a settlement was one
+group by construction: anybody who went off for water or better ground was
+walked back to the others that evening, and no second camp could form.
+
+**Each person has a hearth now** (`Agent::hearth`), the place they live:
+- **Set when they lie down to sleep at home:** it becomes wherever their camp
+  is that night (`settle_the_hearth`).
+- **Moved when their camp moves.**
+- **Defines the camp:** a camp is the grown people whose hearths are within
+  reach of each other (`THE_REACH_OF_A_CAMP`, 40 cells).
+
+`where_this_one_sleeps` replaces the world-wide home:
+- **Tonight's spot** is the middle of where that camp's people actually are,
+  or a finished roof near it. With one camp in the world, that is exactly
+  the old answer.
+- **Just after a move,** with the middle of the camp's people still out of
+  reach of their new hearth, tonight's spot is the new place itself.
+- **Somebody who lives alone,** with nothing standing in a field and no fresh
+  move of their own to wait out, sleeps at the nearest camp. Otherwise
+  whoever was off on their own the first night hearths were kept made a camp
+  of one there and stayed in it: one sat 115 cells from the others for
+  months on seed 0.
+- **A child not yet grown** sleeps where a parent does.
+
+**Camps move as groups** (`the_camp_moves`). The decision layer only proposes
+a move (`propose_moving_camp`); the turn carries it out once the person who
+decided actually sets off. The move takes:
+- the one who decided;
+- and everybody who lives with them, most trusted by the decider first, as
+  many as the new ground will feed (`CampMove::feeds`: a forager's move counts
+  4 a head standing; a move for water takes everybody);
+- but nobody with a crop standing in a field by the camp;
+- and children go with a parent who goes.
+
+Anybody left over stays where they were. That is how one camp becomes two.
+
+A camp moves for two reasons, both judged from where the person lives:
+- **water** they keep going short of (`go_and_live_where_it_is`);
+- **thin ground**, for people who do not farm (`moving_on`).
+
+It does not move again within a week (`A_CAMP_STAYS_AT_LEAST`), and a camp
+with food in a pit within a forage of it does not move on for ground at all
+(`food_in_store_near`).
+
+**When the camp does not move, the person still goes, as before.** Both
+decisions are asked twice:
+- **for the camp, from the hearth;**
+- **for the person, from where they stand:** a day's trip to the best
+  ground they know, or a walk to water, and back to the camp at night.
+
+Before there were hearths, that trip was all `moving_on` ever did, and it
+fed people.
+
+**Farmers move toward ploughland** (`moving_to_farmland`, first in the
+Sustenance ladder after cooking and muck). Somebody who has taken up farming
+weighs the ground around where they live against places they have seen wild
+grain or wild pulses growing. Those grow only on Plains and Meadow, the
+ground a plough takes. The worth of a place is the sum of what every
+tillable tile within a field's walk carries (`what_this_ground_is_worth_to_a_farmer`).
+The camp goes to the best of them if it is half as good again
+(`FARMLAND_WORTH_MOVING_FOR`). They think about this for a few half-hours a
+day, each at their own time.
+
+**Getting there: three wrong turns, each measured on four fresh big-map worlds
+over two years (seeds 5–8, 12 founders each):**
+
+| | births | camp moves |
+|---|---|---|
+| before (one home for everybody) | 30 | n/a |
+| first cut: the forager's move became a camp move | 17 | 7, 0, 13, 11 |
+| plus: no camp move away from food in store | 10 | 0 |
+| plus: the day's trip and the walk to water kept when the camp stays | 12 | 5, 0, 0, 0 |
+| plus: tonight's spot from where the camp's people within reach are | 9 on three seeds | 0 |
+| tonight's spot from where all the camp's people are | **29** | 0 |
+
+- **The forager's move.** Every winter many people's farming confidence falls
+  below "established" (12 farmers to 4–8). That makes them foragers, so
+  `moving_on` fired, and in the first cut it moved the whole camp, up to
+  weekly, away from the pits holding the winter.
+- **The day's trip.** Stopping those moves stopped births worse, because
+  before hearths `moving_on` was really the long foraging trip.
+- **Home was a fixed point.** Taken from the hearths alone, home was where the
+  hearths were and the hearths were set to home, so a camp that started by
+  the longhouse slept there for good. The old world-wide middle of where
+  people actually were had let it drift toward the ground it foraged. On
+  seed 7 the old camp sat 20–30 cells east of the longhouse for most of a
+  year. A variant with only the old night rule restored reproduced the old
+  run exactly, which is how this was found.
+
+Tests:
+- `camp_tests` (9): who goes and who stays, trust, crops, children; farmers
+  moving to known ploughland, foragers not, good ground kept, unknown ground
+  not sought.
+- `night_tests` (6 new): two camps are two homes; camps within reach are one;
+  sleeping at home sets the hearth; a roof among them is home; nobody lives
+  alone by accident; a camp sleeps where its people are.
+- `nomad_tests` (3 new): `moving_on` proposes a move for as many as the valley
+  feeds; a camp that just moved stays a week; no camp moves away from food in
+  store, though its people still go out for the day.
+- `somebody_far_off_heads_home_in_the_evening` is rewritten for hearths.
+
+**What it does now.** With one camp in the world it is exactly the old
+behaviour: the yearly dice count in `repeatable_tests` did not move, and the
+four fresh worlds came out at 29 births against 30. Over a year from mature
+checkpoints:
+
+| | before: births / deaths / camps at the end | after |
+|---|---|---|
+| seed 3, year 22 | 2 / 1 / 2 | 2 / 0 / 4, after one move of 16 people a kilometre west |
+| seed 0, year 12 | 3 / 0 / 2 | 3 / 0 / 4 |
+| seed 2, year 15 | n/a | 0 / 0 / 3 (the food gate, #313) |
+
+"Camps" there are knots of sleepers on one night, counting anybody sleeping
+away on their own. No fresh world moved a camp in its first two years, because
+people take up farming within a few months and fill pits soon after, and a
+camp with food in store stays. More than one settlement can form now, and
+does when a camp moves and some stay; on these maps, in these spans, it is
+rare.
+
+**The map gives farmers almost nothing to move for.** Terrain is made by
+`Grid::generate_terrain` from a hash, not smooth noise (`simple_noise`,
+`sin(sin(x) * 43758.5453 + cos(y) * 12345.6789)`), with no seed. So it has no
+regions, and it is the same in every world. Measured on the big map:
+- tillable ground is 16–19% of every 100×100 block;
+- neighbouring tiles share a terrain only 20% of the time, about what random
+  tiles would;
+- 40% of the map is Mountain;
+- the ploughland within a field's walk of a point averages 72.5, with a
+  spread of 7.0, so ground half as good again as anywhere else hardly exists.
+
+The farmers' move is written and tested, but on this map it will almost
+never fire. Coherent terrain (valleys, plains, uplands) is what it needs.

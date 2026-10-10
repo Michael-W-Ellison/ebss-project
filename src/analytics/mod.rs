@@ -205,6 +205,11 @@ pub struct Simulation {
     /// Ground a route search has already found to be shut off from where it
     /// was going. See `wanting::errands::ShutIn` (#293).
     pub(crate) shut_in: std::cell::RefCell<wanting::errands::ShutIn>,
+    /// A move of camp the decision layer has just proposed, waiting to be
+    /// carried out if the person actually sets off. The decision layer reads
+    /// the world and does not write to it, and moving a camp moves other
+    /// people's hearths; see `Simulation::the_camp_moves` (#314).
+    pub(crate) camp_move_proposed: std::cell::RefCell<Option<wanting::camp::CampMove>>,
 }
 
 /// Configuration for simulation behavior and limits
@@ -367,6 +372,7 @@ impl Simulation {
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
             shut_in: Default::default(),
+            camp_move_proposed: Default::default(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
@@ -1521,6 +1527,7 @@ impl Simulation {
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
             shut_in: Default::default(),
+            camp_move_proposed: Default::default(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,

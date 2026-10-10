@@ -1,4 +1,5 @@
 mod afforded_tests;
+mod camp_tests;
 mod coupling_tests;
 mod workings_tests;
 pub mod save_load_tests;

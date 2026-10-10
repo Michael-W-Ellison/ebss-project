@@ -378,3 +378,76 @@ fn hunger_still_sends_a_man_to_food() {
         "a hungry man walks to the berries: {answer:?}"
     );
 }
+
+/// Deciding to move proposes a move of the whole camp, with room for as many
+/// as the valley will feed; and the turn carries it out once the one who
+/// decided sets off (#314).
+#[test]
+fn moving_on_takes_as_many_as_the_valley_feeds() {
+    let mut simulation = a_camp_at(bare_country(), (20, 20), 12);
+    simulation.world.buildings.clear();
+    put_food(&mut simulation, Position::new(21, 20), 8);
+    a_valley_they_know_of(&mut simulation, 40);
+
+    let position = simulation.population.agents[0].state.position;
+    let _ = simulation.moving_on(&simulation.population.agents[0], position);
+    let proposed = simulation.camp_move_proposed.borrow_mut().take().expect("a move of camp is proposed");
+    assert_eq!(proposed.feeds, Some(40 / Simulation::WHAT_A_CAMP_WANTS_STANDING));
+
+    simulation.the_camp_moves(proposed);
+    let gone = simulation.population.agents.iter().filter(|a| a.hearth == Some(THE_VALLEY)).count();
+    assert_eq!(gone, 10, "ten of the twelve go to a valley that feeds ten");
+}
+
+/// A camp that has just moved does not move again for a week, however thin
+/// the ground it reached; its people still go out for the day.
+#[test]
+fn a_camp_that_just_moved_stays_a_while() {
+    let mut simulation = a_camp_at(bare_country(), (20, 20), 12);
+    put_food(&mut simulation, Position::new(21, 20), 8);
+    a_valley_they_know_of(&mut simulation, 400);
+    simulation.current_turn = 100_000;
+    for agent in simulation.population.agents.iter_mut() {
+        agent.hearth = Some((20, 20));
+        agent.hearth_moved_at = simulation.current_turn - 30;
+    }
+
+    let position = simulation.population.agents[0].state.position;
+    assert!(
+        simulation.moving_on(&simulation.population.agents[0], position).is_some(),
+        "a day's trip to the valley"
+    );
+    assert!(simulation.camp_move_proposed.borrow_mut().take().is_none(), "but the camp stays");
+
+    simulation.current_turn += Simulation::A_CAMP_STAYS_AT_LEAST;
+    assert!(simulation.moving_on(&simulation.population.agents[0], position).is_some());
+    assert!(simulation.camp_move_proposed.borrow_mut().take().is_some(), "and after a week, the camp goes");
+}
+
+/// And no camp moves off and leaves food in store behind it, though its
+/// people still go out for the day.
+///
+/// Every winter, when farming lapsed, camps went back to ranging, away from
+/// the pits holding the winter; over four fresh worlds the more a camp moved
+/// the fewer were born (#314).
+#[test]
+fn nobody_moves_on_from_food_in_store() {
+    let mut simulation = a_camp_at(bare_country(), (20, 20), 12);
+    put_food(&mut simulation, Position::new(21, 20), 8);
+    a_valley_they_know_of(&mut simulation, 400);
+    simulation.world.pits.clear();
+    let position = simulation.population.agents[0].state.position;
+    assert!(simulation.moving_on(&simulation.population.agents[0], position).is_some());
+    assert!(simulation.camp_move_proposed.borrow_mut().take().is_some(), "with nothing put by, the camp goes");
+
+    simulation.world.pits.push(crate::world::Pit {
+        where_it_is: Position::new(24, 22),
+        holds: vec![crate::agents::InventoryItem::new_with_weight("food".to_string(), 5, 0.1)],
+        covered: false,
+        dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
+    });
+    assert!(simulation.food_in_store_near((20, 20)), "five of food is in store");
+    assert!(simulation.moving_on(&simulation.population.agents[0], position).is_some(), "a day's trip");
+    assert!(simulation.camp_move_proposed.borrow_mut().take().is_none(), "with food in store, the camp stays");
+}

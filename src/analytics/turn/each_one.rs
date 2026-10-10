@@ -257,6 +257,7 @@ impl Simulation {
             // Fleeing comes out as an ordinary `Move`, so without a note of why
             // it was chosen it is invisible to both the tally and the errand.
             let mut ran_for_it = false;
+            self.camp_move_proposed.borrow_mut().take();
             let (action, is_plan_action) =
                 self.choose_what_to_do(agent_index, agent_position, &mut ran_for_it);
 
@@ -273,6 +274,16 @@ impl Simulation {
             // it, this turn - see `Agent::by_what_way`.
             self.population.agents[agent_index].by_what_way = None;
             let action_result = self.execute_action(&action, agent_index);
+
+            // A move of camp proposed while deciding is carried out only if
+            // this is the walk it proposed: anything that overruled it (the
+            // night, an errand, danger) leaves the camp where it is (#314).
+            let proposed = self.camp_move_proposed.borrow_mut().take();
+            if let (Some(decided), crate::environment::Action::Move { target }) = (proposed, &action) {
+                if decided.who == agent_id && (target.0, target.1) == decided.to {
+                    self.the_camp_moves(decided);
+                }
+            }
 
             // And now he is busy with it until it is done.
             //

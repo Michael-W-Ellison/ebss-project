@@ -1966,6 +1966,26 @@ pub struct Agent {
     pub cached_healing_bonus: f32,
     /// Cached defense bonus from nearby religious buildings
     pub cached_defense_bonus: f32,
+
+    /// Where this one lives: the middle of the camp they last slept in, or the
+    /// place their camp last moved to. `None` until the first night.
+    ///
+    /// Home was the middle of every grown person in the world, so there could
+    /// only ever be one camp: anybody who went off for water or better ground
+    /// was walked back to the others that evening, however far it was. Each
+    /// person keeps their own now, and the camp is whoever lives near it
+    /// (`Simulation::where_this_one_sleeps`). See ISSUES_FOUND #314.
+    ///
+    /// Last in the struct, with a default, because saves are positional: a
+    /// checkpoint written before it existed reads it as `None`.
+    #[serde(default)]
+    pub hearth: Option<(i32, i32)>,
+
+    /// The tick the hearth was last moved to somewhere new, as against
+    /// settling where the camp already was. A camp that has just moved does
+    /// not move again for a while (`Simulation::A_CAMP_STAYS_AT_LEAST`).
+    #[serde(default)]
+    pub hearth_moved_at: u32,
 }
 
 impl Agent {
@@ -2037,6 +2057,8 @@ impl Agent {
             fatigue: super::fatigue::FatigueState::new(),
             cached_healing_bonus: 1.0,
             cached_defense_bonus: 1.0,
+            hearth: None,
+            hearth_moved_at: 0,
         };
 
         // Initialize default behavior trees for each drive type
