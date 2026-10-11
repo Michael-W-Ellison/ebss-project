@@ -1364,6 +1364,14 @@ impl Simulation {
     /// river forty cells off filled a quarter of the store a riverside people
     /// did by midsummer, and never once opened the gate for a child in its
     /// first year.
+    ///
+    /// **And with a living in reach.** Woods and water tiles nearby were not
+    /// enough: what a people needs from the country round it is wood, stone,
+    /// plant food, fish and springs, all within a forage. So the place is the
+    /// nearest open ground with all of those
+    /// (`WHAT_A_LIVING_NEEDS_IN_REACH`). Where nowhere has all of it, it is
+    /// the place with most of what it is shortest of. The rules above only
+    /// come back on a map with no open ground at all (#316).
     pub fn bring_everybody_to_the_middle(&mut self) -> (i32, i32) {
         let middle = (
             self.world.grid.width as i32 / 2,
@@ -1416,12 +1424,16 @@ impl Simulation {
             }
             return at;
         }
-        let at = nearest(self, &|s, x, y| {
-            open_country(s, x, y)
-                && s.is_passable_tile(x, y)
-                && woods_in_reach(s, x, y)
-                && water_in_reach(s, x, y)
-        })
+        let at = self
+            .where_a_living_is_in_reach(middle)
+            .or_else(|| {
+                nearest(self, &|s, x, y| {
+                    open_country(s, x, y)
+                        && s.is_passable_tile(x, y)
+                        && woods_in_reach(s, x, y)
+                        && water_in_reach(s, x, y)
+                })
+            })
         .or_else(|| {
             nearest(self, &|s, x, y| {
                 open_country(s, x, y) && s.is_passable_tile(x, y) && woods_in_reach(s, x, y)
@@ -1434,6 +1446,113 @@ impl Simulation {
             agent.state.position = (at.0, at.1, agent.state.position.2);
         }
         at
+    }
+
+    /// What a people arriving needs within a forage of where it stops, as
+    /// counts of what grows or lies there: wood, stone, plant food, fish and
+    /// fresh water.
+    ///
+    /// About half of what lay within a forage of anywhere on the old
+    /// scattered map, where every kind of ground was a few paces from every
+    /// other: 14-26 wood, 9-15 stone, 230-300 plant food, 34-47 fish and
+    /// 10-20 springs, on four fresh worlds. Smooth country gathers each of
+    /// those into its own region, and a people put down on open grass with
+    /// none of the first two in reach wore out the handaxe it arrived with
+    /// and could not make another: no stone for the edge, no wood for the
+    /// haft. After that nobody could cut wood, dig a pit or raise a roof, and
+    /// on four worlds of four the store never reached half of what the gate
+    /// for a child asks (#316).
+    pub(crate) const WHAT_A_LIVING_NEEDS_IN_REACH: [(&'static str, u32); 5] = [
+        ("wood", 10),
+        ("stone", 5),
+        ("plants", 120),
+        ("fish", 15),
+        ("springs", 5),
+    ];
+
+    /// The nearest open, dry ground to `middle` with everything in
+    /// `WHAT_A_LIVING_NEEDS_IN_REACH` within a forage of it; or, if nowhere
+    /// has all of it, the place with most of what it is shortest of.
+    /// `None` only on a map with no open ground at all.
+    fn where_a_living_is_in_reach(&self, middle: (i32, i32)) -> Option<(i32, i32)> {
+        use crate::world::ResourceType;
+
+        let (w, h) = (self.world.grid.width as i32, self.world.grid.height as i32);
+        let kind = |what: ResourceType| -> Option<usize> {
+            match what {
+                ResourceType::Wood => Some(0),
+                ResourceType::Stone => Some(1),
+                ResourceType::Fish => Some(3),
+                ResourceType::Water => Some(4),
+                other if other.is_it_food() && other != ResourceType::Meat => Some(2),
+                _ => None,
+            }
+        };
+        // A running total over the map for each, so any square's count is
+        // four lookups.
+        let side = (w + 1) as usize;
+        let mut sums = vec![vec![0u32; side * (h + 1) as usize]; 5];
+        for node in &self.world.resources {
+            let (x, y) = (node.position.x, node.position.y);
+            if x < 0 || y < 0 || x >= w || y >= h {
+                continue;
+            }
+            if let Some(k) = kind(node.resource_type) {
+                sums[k][(y + 1) as usize * side + (x + 1) as usize] += 1;
+            }
+        }
+        for table in sums.iter_mut() {
+            for y in 1..=h as usize {
+                for x in 1..=w as usize {
+                    table[y * side + x] +=
+                        table[(y - 1) * side + x] + table[y * side + x - 1] - table[(y - 1) * side + x - 1];
+                }
+            }
+        }
+        let reach = Self::FORAGE_RADIUS as i32;
+        let in_reach = |k: usize, x: i32, y: i32| -> u32 {
+            let (x0, y0) = ((x - reach).max(0) as usize, (y - reach).max(0) as usize);
+            let (x1, y1) = ((x + reach + 1).min(w) as usize, (y + reach + 1).min(h) as usize);
+            let t = &sums[k];
+            t[y1 * side + x1] + t[y0 * side + x0] - t[y0 * side + x1] - t[y1 * side + x0]
+        };
+        // How well a place answers the need it answers worst: 1 or more is
+        // all of it.
+        let how_well = |x: i32, y: i32| -> f32 {
+            Self::WHAT_A_LIVING_NEEDS_IN_REACH
+                .iter()
+                .enumerate()
+                .map(|(k, (_, wanted))| in_reach(k, x, y) as f32 / *wanted as f32)
+                .fold(f32::MAX, f32::min)
+        };
+
+        let mut best: Option<((i32, i32), f32)> = None;
+        for ring in 0..=middle.0.max(middle.1) {
+            for dx in -ring..=ring {
+                for dy in -ring..=ring {
+                    if dx.abs() != ring && dy.abs() != ring {
+                        continue;
+                    }
+                    let (x, y) = (middle.0 + dx, middle.1 + dy);
+                    let open = self
+                        .world
+                        .grid
+                        .get_tile(&crate::world::Position::new(x, y))
+                        .is_some_and(|tile| tile.terrain.can_be_tilled());
+                    if !open || !self.is_passable_tile(x, y) {
+                        continue;
+                    }
+                    let score = how_well(x, y);
+                    if score >= 1.0 {
+                        return Some((x, y));
+                    }
+                    if best.is_none_or(|(_, so_far)| score > so_far) {
+                        best = Some(((x, y), score));
+                    }
+                }
+            }
+        }
+        best.map(|(at, _)| at)
     }
 
     /// Whether an agent can stand on this tile
