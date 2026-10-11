@@ -218,3 +218,74 @@ fn most_ploughland_has_woods_in_reach() {
     let share = near_woods as f32 / ploughland as f32;
     assert!(share > 0.5, "only {share:.2} of ploughland has woods within {reach} cells");
 }
+
+/// Out in open country, the rivers are where wood and stone are found: trees
+/// along the banks and cobbles on them. About a third of each lies by the
+/// water on smooth country, and none of it on scattered ground, where the
+/// woods and hills were always near.
+#[test]
+fn stone_and_wood_lie_by_the_rivers() {
+    use crate::world::{ResourceType, World, WorldConfig};
+
+    let share_by_the_water = |smooth: bool, what: ResourceType, grounds: &[TerrainType]| {
+        crate::core::dice::seed(11);
+        let mut config = WorldConfig::default();
+        if smooth {
+            config = config.with_smooth_terrain();
+        }
+        config.size = (200, 200);
+        let world = World::new(config);
+        let all: Vec<_> = world.resources.iter().filter(|node| node.resource_type == what).collect();
+        let by = all
+            .iter()
+            .filter(|node| world.grid.get_tile(&node.position).is_some_and(|t| grounds.contains(&t.terrain.terrain_type)))
+            .count();
+        by as f32 / all.len().max(1) as f32
+    };
+
+    let river_stone = [TerrainType::Riverbank, TerrainType::Beach];
+    let waterside_trees = [TerrainType::Riverbank, TerrainType::Wetland];
+    let stone = share_by_the_water(true, ResourceType::Stone, &river_stone);
+    let wood = share_by_the_water(true, ResourceType::Wood, &waterside_trees);
+    assert!((0.25..0.5).contains(&stone), "{stone:.2} of the stone is by the water");
+    assert!((0.25..0.5).contains(&wood), "{wood:.2} of the wood is by the water");
+    assert_eq!(share_by_the_water(false, ResourceType::Stone, &river_stone), 0.0, "and on scattered ground it is in the hills");
+}
+
+/// And where they stop, everything a living needs is within a forage: wood
+/// and stone for tools and roofs, plants, fish and springs.
+#[test]
+fn a_people_arrives_with_a_living_in_reach() {
+    use crate::agents::{AgentConfig, Population};
+    use crate::analytics::Simulation;
+    use crate::world::{ResourceType, World, WorldConfig};
+
+    for seed in 0..3 {
+        crate::core::dice::seed(seed);
+        let mut config = WorldConfig::default().with_smooth_terrain();
+        config.size = (300, 300);
+        let mut population = Population::new();
+        population.spawn_agent(AgentConfig::default());
+        let mut simulation = Simulation::new(World::new(config), population);
+        let at = simulation.bring_everybody_to_the_middle();
+        let count = |is: &dyn Fn(ResourceType) -> bool| {
+            simulation
+                .world
+                .resources
+                .iter()
+                .filter(|node| is(node.resource_type))
+                .filter(|node| (node.position.x - at.0).abs().max((node.position.y - at.1).abs()) <= 18)
+                .count() as u32
+        };
+        let found = [
+            count(&|r| r == ResourceType::Wood),
+            count(&|r| r == ResourceType::Stone),
+            count(&|r| r.is_it_food() && r != ResourceType::Fish && r != ResourceType::Meat),
+            count(&|r| r == ResourceType::Fish),
+            count(&|r| r == ResourceType::Water),
+        ];
+        for ((what, wanted), got) in Simulation::WHAT_A_LIVING_NEEDS_IN_REACH.iter().zip(found) {
+            assert!(got >= *wanted, "seed {seed}: {got} {what} in reach of {at:?}, wanting {wanted}");
+        }
+    }
+}

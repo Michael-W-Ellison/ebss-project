@@ -1452,20 +1452,18 @@ impl Simulation {
     /// counts of what grows or lies there: wood, stone, plant food, fish and
     /// fresh water.
     ///
-    /// About half of what lay within a forage of anywhere on the old
-    /// scattered map, where every kind of ground was a few paces from every
-    /// other: 14-26 wood, 9-15 stone, 230-300 plant food, 34-47 fish and
-    /// 10-20 springs, on four fresh worlds. Smooth country gathers each of
-    /// those into its own region, and a people put down on open grass with
-    /// none of the first two in reach wore out the handaxe it arrived with
-    /// and could not make another: no stone for the edge, no wood for the
-    /// haft. After that nobody could cut wood, dig a pit or raise a roof, and
-    /// on four worlds of four the store never reached half of what the gate
-    /// for a child asks (#316).
+    /// About what lay within a forage of anywhere on the old scattered map,
+    /// where every kind of ground was a few paces from every other. Smooth
+    /// country gathers each of those into a region of its own. A people put
+    /// down on open grass with little of the first two in reach wore out the
+    /// handaxes it arrived with and could not make more: no stone for the
+    /// edge, no wood for the haft. After that nobody could cut wood, dig a pit
+    /// or raise a roof, and on four worlds of four the store never reached
+    /// half of what the gate for a child asks (#316).
     pub(crate) const WHAT_A_LIVING_NEEDS_IN_REACH: [(&'static str, u32); 5] = [
         ("wood", 10),
-        ("stone", 5),
-        ("plants", 120),
+        ("stone", 6),
+        ("plants", 100),
         ("fish", 15),
         ("springs", 5),
     ];
@@ -1509,7 +1507,10 @@ impl Simulation {
                 }
             }
         }
-        let reach = Self::FORAGE_RADIUS as i32;
+        // A forage is a walk of `FORAGE_RADIUS` paces, a diamond on the grid.
+        // A square of the same area stands in for it, so the running totals
+        // can count it.
+        let reach = (Self::FORAGE_RADIUS as f32 / std::f32::consts::SQRT_2).round() as i32;
         let in_reach = |k: usize, x: i32, y: i32| -> u32 {
             let (x0, y0) = ((x - reach).max(0) as usize, (y - reach).max(0) as usize);
             let (x1, y1) = ((x + reach + 1).min(w) as usize, (y + reach + 1).min(h) as usize);

@@ -1577,9 +1577,27 @@ impl World {
         rng: &mut impl Rng,
         taken: &mut std::collections::BTreeSet<(i32, i32)>,
     ) {
+        // On smooth country, one in three of each by the water (#316): see
+        // `somewhere_by_the_water`.
+        let smooth = self.terrain_style == TerrainStyle::Smooth;
+        let by_the_water = |n: usize| smooth && n % 3 == 0;
+        let (mut waterside_trees, mut river_stone) = if smooth {
+            (
+                self.every_tile_of(&[TerrainType::Riverbank, TerrainType::Wetland]),
+                self.every_tile_of(&[TerrainType::Riverbank, TerrainType::Beach]),
+            )
+        } else {
+            (Vec::new(), Vec::new())
+        };
+
         // Generate wood nodes (in forest areas)
-        for _ in 0..config.wood_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Forest, taken);
+        for n in 0..config.wood_nodes {
+            let pos = if by_the_water(n) {
+                Self::somewhere_by_the_water(&mut waterside_trees, taken)
+            } else {
+                None
+            }
+            .unwrap_or_else(|| self.find_random_terrain_position(TerrainType::Forest, taken));
             self.resources.push(ResourceNode::new(
                 ResourceType::Wood,
                 pos,
@@ -1588,13 +1606,18 @@ impl World {
         }
 
         // Generate stone nodes (in mountain and hills areas)
-        for _ in 0..config.stone_nodes {
+        for n in 0..config.stone_nodes {
             let terrain = if rng.gen::<f32>() < 0.7 {
                 TerrainType::Mountain
             } else {
                 TerrainType::Hills
             };
-            let pos = self.find_random_terrain_position(terrain, taken);
+            let pos = if by_the_water(n) {
+                Self::somewhere_by_the_water(&mut river_stone, taken)
+            } else {
+                None
+            }
+            .unwrap_or_else(|| self.find_random_terrain_position(terrain, taken));
             self.resources.push(ResourceNode::new(
                 ResourceType::Stone,
                 pos,
@@ -1971,6 +1994,54 @@ impl World {
             }
         }
         None
+    }
+
+    /// A free tile of one of these grounds, for wood and stone laid by the
+    /// water on smooth country.
+    ///
+    /// Out in open country, wood and stone are found along the rivers. Trees
+    /// grow in a belt along the banks and in the wet ground, and a river
+    /// leaves cobbles on its banks and beaches, which was where most of the
+    /// stone people knapped came from. On scattered ground, every kind of
+    /// country was a few paces from every other, so the woods and the
+    /// mountains were always near. On smooth country they are regions of
+    /// their own. A people settled on open grass by a river, with fish and
+    /// springs, wore out the handaxes they came with inside two months. With
+    /// one stone node and no wood within a forage, nobody made another, and
+    /// on two worlds of four nobody could dig a pit all year (#316).
+    ///
+    /// `grounds` is every free tile of those grounds, listed once by the
+    /// caller, so a rare ground costs one pass over the map rather than one
+    /// per node. `None` when none of them is left free.
+    fn somewhere_by_the_water(
+        grounds: &mut Vec<(i32, i32)>,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) -> Option<Position> {
+        let mut rng = crate::core::dice::roll();
+        while !grounds.is_empty() {
+            let at = grounds.swap_remove(rng.gen_range(0..grounds.len()));
+            if taken.insert(at) {
+                return Some(Position::new(at.0, at.1));
+            }
+        }
+        None
+    }
+
+    /// Every tile of these grounds, in order.
+    fn every_tile_of(&self, grounds: &[TerrainType]) -> Vec<(i32, i32)> {
+        let mut found = Vec::new();
+        for y in 0..self.grid.height as i32 {
+            for x in 0..self.grid.width as i32 {
+                if self
+                    .grid
+                    .get_tile(&Position::new(x, y))
+                    .is_some_and(|tile| grounds.contains(&tile.terrain.terrain_type))
+                {
+                    found.push((x, y));
+                }
+            }
+        }
+        found
     }
 
     fn find_random_terrain_position(
