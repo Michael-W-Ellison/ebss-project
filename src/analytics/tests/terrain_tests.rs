@@ -289,3 +289,51 @@ fn a_people_arrives_with_a_living_in_reach() {
         }
     }
 }
+
+/// A people is not put down on an island it cannot walk off.
+///
+/// Smooth country's rivers can close round an island with no ford. One world
+/// put its founders on one, and they could only leave it by bolting across
+/// the water from danger (#317).
+#[test]
+fn a_people_does_not_arrive_on_an_island() {
+    use crate::agents::{AgentConfig, Population};
+    use crate::analytics::Simulation;
+    use crate::world::{World, WorldConfig};
+
+    crate::core::dice::seed(3);
+    let mut config = WorldConfig::default().with_smooth_terrain();
+    config.size = (120, 120);
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(World::new(config), population);
+    // Open grass everywhere, and a moat round the middle
+    let (cx, cy) = (60, 60);
+    for x in 0..120 {
+        for y in 0..120 {
+            let ring = (x - cx as i32).abs().max((y - cy as i32).abs());
+            let ground = if (12..=14).contains(&ring) { TerrainType::Water } else { TerrainType::Plains };
+            simulation.world.grid.get_tile_mut(&Position::new(x, y)).unwrap().terrain = crate::world::Terrain::new(ground);
+        }
+    }
+
+    // And everything a living needs on the island, and nothing off it
+    use crate::world::{ResourceNode, ResourceType};
+    simulation.world.resources.clear();
+    let mut spots = (cx - 11..=cx + 11).flat_map(|x| (cy - 11..=cy + 11).map(move |y| Position::new(x, y)));
+    for (what, how_many) in [
+        (ResourceType::Wood, 12),
+        (ResourceType::Stone, 8),
+        (ResourceType::Greens, 120),
+        (ResourceType::Fish, 20),
+        (ResourceType::Water, 8),
+    ] {
+        for _ in 0..how_many {
+            simulation.world.resources.push(ResourceNode::new(what, spots.next().unwrap(), 50));
+        }
+    }
+
+    let at = simulation.bring_everybody_to_the_middle();
+    let ring = (at.0 - cx).abs().max((at.1 - cy).abs());
+    assert!(ring > 14, "put down at {at:?}, on the island");
+}

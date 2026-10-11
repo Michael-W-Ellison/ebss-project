@@ -586,6 +586,7 @@ impl Simulation {
         });
 
         let bolt = Self::HOW_FAR_A_FRIGHTENED_PERSON_GETS;
+        let a_way_back = self.where_a_walk_gets_from((from.0, from.1), bolt + Self::A_WAY_ROUND);
 
         ways.iter()
             .filter_map(|(wx, wy)| {
@@ -600,10 +601,7 @@ impl Simulation {
 
                     let moved = landed.0 != from.0 || landed.1 != from.1;
 
-                    (moved
-                        && self.is_passable_tile(landed.0, landed.1)
-                        && self.can_this_be_walked_out_of((landed.0, landed.1), (from.0, from.1)))
-                    .then_some(landed)
+                    (moved && a_way_back((landed.0, landed.1))).then_some(landed)
                 })
             })
             .min_by(|one, other| {
@@ -613,39 +611,55 @@ impl Simulation {
             })
     }
 
-    /// Whether somebody landing at `at` could walk away from it again.
-    ///
-    /// **A bolt may clear a river; it may not land on a rock.** A frightened
-    /// person runs over whatever is in the way, water included, and that is
-    /// worth something: whatever was after them is on the other bank. But it
-    /// asked only whether the landing was ground, so somebody bolted onto a
-    /// rock in the sea at the corner of the map with water all round it,
-    /// which nobody can walk off - two worlds in sixteen, somebody stranded
-    /// there for the rest of the year (#295). Stopping every bolt at the water
-    /// instead measured a fifteenth fewer person-days over sixteen worlds -
-    /// not much more than the difference between two runs, but the way you
-    /// would expect if a river between you and the wolves is worth having.
-    ///
-    /// So the landing has to be somewhere with a way on: either it is the
-    /// ground the runner is already standing in, or it opens out into at
-    /// least `OPEN_GROUND` cells a foot can reach.
-    pub(in crate::analytics) fn can_this_be_walked_out_of(&self, at: (i32, i32), from: (i32, i32)) -> bool {
-        const OPEN_GROUND: usize = 256;
+    /// How far out of their way a runner will go to get back to where they
+    /// bolted from: see `where_a_walk_gets_from`.
+    pub(in crate::analytics) const A_WAY_ROUND: i32 = 16;
 
-        let mut seen = std::collections::BTreeSet::from([at]);
-        let mut to_look_at = std::collections::VecDeque::from([at]);
+    /// The ground a walk from `from` reaches without going further than
+    /// `reach` from it, as a question: can this cell be walked back from?
+    ///
+    /// **A bolt may not clear a river it cannot walk back over.** A frightened
+    /// person used to run over whatever was in the way, water included, and
+    /// the landing only had to open onto 256 cells of ground: whatever was
+    /// after them was on the other bank, and stopping every bolt at the water
+    /// measured a fifteenth fewer person-days over sixteen worlds (#295). On
+    /// scattered ground a river was a tile or two and the way back was a few
+    /// paces round it. On smooth country a river runs for kilometres, and
+    /// some close on themselves round an island with no ford. Ten of a people
+    /// put down on such an island bolted off it and dug their pits on the far
+    /// bank; the two who did not, and one who bolted back, walked at the
+    /// water for days on the way to those pits and starved (#317).
+    ///
+    /// So a runner lands only where they could walk back to where they stood,
+    /// going no further than `reach` from it. A river with a way round inside
+    /// that is still a river between you and the wolves. It also keeps
+    /// anybody off the rock in the sea that #295 found.
+    pub(in crate::analytics) fn where_a_walk_gets_from(
+        &self,
+        from: (i32, i32),
+        reach: i32,
+    ) -> impl Fn((i32, i32)) -> bool {
+        let side = 2 * reach + 1;
+        let mut reached = vec![false; (side * side) as usize];
+        let slot = move |at: (i32, i32)| -> Option<usize> {
+            let (x, y) = (at.0 - from.0 + reach, at.1 - from.1 + reach);
+            (x >= 0 && y >= 0 && x < side && y < side).then(|| (y * side + x) as usize)
+        };
+        if let Some(i) = slot(from) {
+            reached[i] = true;
+        }
+        let mut to_look_at = std::collections::VecDeque::from([from]);
         while let Some(here) = to_look_at.pop_front() {
-            if here == from || seen.len() >= OPEN_GROUND {
-                return true;
-            }
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
                 let next = (here.0 + dx, here.1 + dy);
-                if (next == from || self.is_passable_tile(next.0, next.1)) && seen.insert(next) {
+                let Some(i) = slot(next) else { continue };
+                if !reached[i] && self.is_passable_tile(next.0, next.1) {
+                    reached[i] = true;
                     to_look_at.push_back(next);
                 }
             }
         }
-        false
+        move |at| slot(at).is_some_and(|i| reached[i])
     }
 
     /// What is wrong with running that way.

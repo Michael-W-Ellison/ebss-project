@@ -1527,6 +1527,44 @@ impl Simulation {
                 .fold(f32::MAX, f32::min)
         };
 
+        // **And on the mainland.** Smooth country's rivers can close on
+        // themselves round an island with no ford. On one world the middle's
+        // best ground was on an island of 1,179 cells, and the people put
+        // down there could only leave it by bolting from danger across the
+        // water. Two never did, and starved walking at the river towards the
+        // pits the others had dug on the far bank (#317). So a people
+        // arrives on the largest piece of ground a foot can cross.
+        let mainland = {
+            let mut piece = vec![0u32; (w * h) as usize];
+            let mut sizes = vec![0usize];
+            for start in 0..(w * h) {
+                let (sx, sy) = (start % w, start / w);
+                if piece[start as usize] != 0 || !self.is_passable_tile(sx, sy) {
+                    continue;
+                }
+                let id = sizes.len() as u32;
+                sizes.push(0);
+                piece[start as usize] = id;
+                let mut to_look_at = vec![(sx, sy)];
+                while let Some((x, y)) = to_look_at.pop() {
+                    sizes[id as usize] += 1;
+                    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                        let (nx, ny) = (x + dx, y + dy);
+                        if nx < 0 || ny < 0 || nx >= w || ny >= h {
+                            continue;
+                        }
+                        let i = (ny * w + nx) as usize;
+                        if piece[i] == 0 && self.is_passable_tile(nx, ny) {
+                            piece[i] = id;
+                            to_look_at.push((nx, ny));
+                        }
+                    }
+                }
+            }
+            let largest = (1..sizes.len()).max_by_key(|id| sizes[*id]).unwrap_or(0) as u32;
+            move |x: i32, y: i32| piece[(y * w + x) as usize] == largest
+        };
+
         let mut best: Option<((i32, i32), f32)> = None;
         for ring in 0..=middle.0.max(middle.1) {
             for dx in -ring..=ring {
@@ -1540,7 +1578,7 @@ impl Simulation {
                         .grid
                         .get_tile(&crate::world::Position::new(x, y))
                         .is_some_and(|tile| tile.terrain.can_be_tilled());
-                    if !open || !self.is_passable_tile(x, y) {
+                    if !open || !self.is_passable_tile(x, y) || !mainland(x, y) {
                         continue;
                     }
                     let score = how_well(x, y);

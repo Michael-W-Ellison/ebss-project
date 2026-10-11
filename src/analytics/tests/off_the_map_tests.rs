@@ -314,3 +314,58 @@ fn nobody_bolts_onto_a_rock_in_the_water() {
         "bolted onto the rock, and nobody can walk off it"
     );
 }
+
+/// Ground with water across it: a river from one edge of the map to the
+/// other, or a pond three cells long, a few paces east of somebody frightened
+/// from the west.
+fn somebody_by_the_water(the_water_runs_the_whole_way: bool) -> (crate::analytics::Simulation, (i32, i32)) {
+    use crate::world::{Position, TerrainType};
+
+    let mut simulation = somebody_in_the_corner();
+    let (w, h) = (simulation.world.grid.width as i32, simulation.world.grid.height as i32);
+    let (cx, cy) = (w / 2, h / 2);
+    for x in 0..w {
+        for y in 0..h {
+            let in_the_water = (cx + 3..=cx + 5).contains(&x)
+                && (the_water_runs_the_whole_way || (cy - 1..=cy + 1).contains(&y));
+            simulation
+                .world
+                .grid
+                .get_tile_mut(&Position::new(x, y))
+                .expect("on the map")
+                .terrain
+                .terrain_type = if in_the_water { TerrainType::Water } else { TerrainType::Plains };
+        }
+    }
+    (simulation, (cx, cy))
+}
+
+/// A bolt does not clear a river it could not walk back over.
+///
+/// On smooth country a river runs for kilometres, and some close round an
+/// island with no ford. People who bolted across one were on the far bank
+/// for good, and two who could not get to the pits on the other side starved
+/// walking at the water (#317).
+#[test]
+fn a_bolt_does_not_clear_a_river_with_no_way_back() {
+    let (simulation, (cx, cy)) = somebody_by_the_water(true);
+    let remembers = simulation.population.agents[0].exploration_knowledge.clone();
+    let landed = simulation
+        .where_this_one_would_run(&remembers, (cx, cy, 0), (cx - 1, cy))
+        .expect("there is ground to run to on this bank");
+
+    assert!(landed.0 < cx + 3, "bolted across the river to {landed:?}");
+}
+
+/// But a pond with a way round it is still worth putting between you and
+/// whatever is after you.
+#[test]
+fn a_bolt_still_clears_a_pond() {
+    let (simulation, (cx, cy)) = somebody_by_the_water(false);
+    let remembers = simulation.population.agents[0].exploration_knowledge.clone();
+    let landed = simulation
+        .where_this_one_would_run(&remembers, (cx, cy, 0), (cx - 1, cy))
+        .expect("there is ground to run to");
+
+    assert!(landed.0 > cx + 5, "stopped short of the pond at {landed:?}");
+}
