@@ -4732,13 +4732,19 @@ impl Agent {
             return None;
         }
 
-        // One of them is finished. If there is another in the pack it comes
-        // out fresh; if there is not, what is left is a broken tool. The
-        // finished one goes through `remove_item` rather than having its
-        // count knocked down in place, so that what the agent is carrying
-        // gets lighter along with it.
+        // One of them is finished, and it is thrown away. It goes through
+        // `remove_item` rather than having its count knocked down in place,
+        // so that what the agent is carrying gets lighter along with it. If
+        // there is another in the pack it comes out fresh.
+        //
+        // **The last one used to stay in the pack, broken.** Nothing could
+        // use it - every reader of a tool asks for durability above nothing,
+        // and nothing mends one - and only making another of the same thing
+        // threw it out. So a people whose handaxes wore out in their first
+        // two months carried them for the rest of the year (#316), in a pack
+        // the load already filled.
+        self.inventory.remove_item(tool.called, 1);
         if how_many > 1 {
-            self.inventory.remove_item(tool.called, 1);
             let fresh = crate::environment::making::how_long_this_one_lasts(&tool, hand);
             if let Some(item) = self.inventory.get_item_mut(tool.called) {
                 item.current_durability = Some(fresh);
@@ -4746,7 +4752,6 @@ impl Agent {
             }
             None
         } else {
-            self.inventory.get_item_mut(tool.called)?.current_durability = Some(0.0);
             Some(tool.called.to_string())
         }
     }

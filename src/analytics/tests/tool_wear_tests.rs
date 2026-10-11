@@ -247,6 +247,33 @@ fn enough_work_wears_a_tool_out() {
     );
 }
 
+/// And a worn-through tool is thrown away, not carried.
+///
+/// Nothing can use a broken one and nothing mends one. The last handaxe a
+/// people wore out used to stay in the pack all year, weighing what a whole
+/// one weighs (#319).
+#[test]
+fn a_worn_through_tool_is_thrown_away() {
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let agent = &mut population.agents[0];
+    let carrying_before = agent.inventory.current_weight();
+
+    while agent
+        .wear_what_i_worked_with(SkillType::Woodcutting)
+        .is_none()
+    {}
+
+    assert!(
+        agent.inventory.get_item("handaxe").is_none(),
+        "the broken axe is still in the pack"
+    );
+    assert!(
+        agent.inventory.current_weight() < carrying_before,
+        "and the pack is lighter for it"
+    );
+}
+
 /// A worn-through tool is a reason to make another.
 #[test]
 fn a_broken_tool_is_a_reason_to_make_a_new_one() {

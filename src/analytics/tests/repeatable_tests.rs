@@ -430,7 +430,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // thing its tools are made of.
     // Up 12.1% to 1,476,142 for #318: worlds are made on smooth ground by
     // default.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_476_142;
+    // Up 5.8% to 1,561,205 for #319: a worn-through tool is thrown away
+    // rather than carried for the rest of the year.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_561_205;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
