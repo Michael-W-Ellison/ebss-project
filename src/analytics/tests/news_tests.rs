@@ -219,6 +219,52 @@ fn a_thirsty_man_keeps_the_waterholes_and_lets_the_flax_go() {
     );
 }
 
+/// A head full of fishing spots still holds on to where the stone is.
+///
+/// Stone answers no need that presses, so it was the first thing let go, and
+/// a forgotten seam beside the camp was never seen again. Once the handaxes
+/// wore out, nobody could make another (#316).
+#[test]
+fn a_hungry_man_still_remembers_where_the_nearest_stone_is() {
+    let mut agent = somebody();
+    agent.state.position = (0, 0, 0);
+    if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
+        hunger.value = 0.9;
+    }
+
+    for n in 0..Agent::WHAT_A_MAN_CAN_HOLD_IN_MIND {
+        agent.exploration_knowledge.discover_resource(
+            Position::new(n as i32, 1),
+            ResourceType::Fish,
+            10,
+        );
+    }
+    for n in 0..6 {
+        agent.exploration_knowledge.discover_resource(
+            Position::new(0, 10 + 10 * n),
+            ResourceType::Stone,
+            10,
+        );
+    }
+
+    agent.forget_what_does_not_matter(20);
+
+    let mut stones: Vec<i32> = agent
+        .exploration_knowledge
+        .known_resources
+        .iter()
+        .filter(|(_, what)| **what == ResourceType::Stone)
+        .map(|(at, _)| at.y)
+        .collect();
+    stones.sort();
+    assert_eq!(
+        stones,
+        vec![10, 20, 30],
+        "he keeps the nearest {} stones in mind, whatever else is pressing",
+        Agent::NEAREST_MAKINGS_KEPT_IN_MIND
+    );
+}
+
 /// And nothing is forgotten while there is room for it.
 #[test]
 fn nothing_is_forgotten_while_there_is_room_for_it() {
@@ -456,3 +502,4 @@ fn nobody_carries_the_whole_map_in_their_head() {
         );
     }
 }
+

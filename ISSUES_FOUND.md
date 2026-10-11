@@ -23708,3 +23708,111 @@ Tests: `terrain_tests` (8):
 Also:
 - `camp_tests::a_farmer_does_not_leave_food_in_store_for_ploughland`;
 - `larder_tests::a_surplus_in_the_woods_means_walking_to_open_ground_to_dig`.
+
+### 316. Smooth terrain: nobody could make a tool, so nobody could dig
+
+The first step of recalibrating the smooth terrain (#315). On it, four fresh
+worlds had no births in two years. The child gate was what stayed shut: every
+grown person had their immediate needs met, but the store never reached half
+of what the gate asks for a child.
+
+**What was short was tools, not food.** A year on seeds 5–8 (`zz_gate_why`),
+old terrain against smooth:
+
+| | old | smooth |
+|---|---|---|
+| pits at the end of the year | 54–89 | 5–20 |
+| store at its autumn peak, share of the gate's ask | 100–200% | 15–50% |
+| `Excavate` refused, "nothing in hand that is any use for Mining" | 226–398 | 2,767–5,935 |
+| turns spent building | 185–5,210 | 0–339 |
+
+Pits are dug with a tool, or under a roof that takes one to raise. The
+founders arrive with a handaxe each, and all twelve were worn out within 30 to
+60 days. A new one takes wood, two stone and a lashing. Three things stood
+between the smooth-terrain people and a new one.
+
+**1. They arrived where there was no stone or wood.** The arrival rule asked
+for open ground with woods and water tiles within 20 cells. On smooth country
+that put three of the four peoples on open grass or a coast with 0–12 stone
+nodes and 0–28 wood nodes within a forage, where every spot on the old map had
+both. The founders now go to the nearest open ground with wood, stone, plant
+food, fish and springs all within a forage (`WHAT_A_LIVING_NEEDS_IN_REACH`);
+where nowhere has all of them, to the place with most of what it is shortest
+of. With that alone, seeds 5 and 8 opened the gate in their first autumn and
+seeds 6 and 7 still could not dig.
+
+**2. Stone and wood were only in the hills and the woods.** Out in open
+country, people found both along the rivers: cobbles on the banks and beaches,
+and trees along the water. On smooth terrain one stone node in three now goes
+on riverbanks and beaches, and one wood node in three on riverbanks and
+wetland (`somewhere_by_the_water`). The arrival check now counts a square the
+size of a real forage (a walk of `FORAGE_RADIUS` paces), not the 51-cell square
+it first counted. Every people then arrived with 7–28 stone and 10–17 wood in
+reach. Seed 7 now filled its pits to twice the gate's ask; seed 6 still made no
+tools, with 79 stone nodes within 25 cells of its camp.
+
+**3. Nobody remembered where the stone was.** A person keeps at most 96
+places in mind (`WHAT_A_MAN_CAN_HOLD_IN_MIND`). What they let go first is what
+answers no pressing need, and stone is filed under Shelter, which rarely
+presses. A place is only discovered the first time its tile comes into view,
+so a forgotten stone node is never seen again. A riverside camp on smooth
+terrain has 100–200 fish and plant nodes in sight, so the stone was forgotten
+within days: on seed 6, nobody sampled at any point in the first 150 days had
+ever "seen" stone, including people holding some. `how_i_would_come_by` only
+fetches what has been seen, so no errand for stone could start.
+
+Now a person always keeps the nearest three places they know of each raw thing
+the tools of their work are made of (`NEAREST_MAKINGS_KEPT_IN_MIND`): every
+tool they know how to make for hunting, woodcutting, leatherworking, crafting
+and digging, whether or not they carry one, because the one they carry wears
+out. Those places are left out of the forgetting altogether. A bonus to their
+score was tried first; when a person is hungry, a fishing spot scores about
+500, and no fixed bonus held.
+
+**This rule applies on both terrains.**
+
+**Two years from 12 founders** (`zz_gate_why`; the same dice on both
+terrains):
+
+| seed | smooth, at #315 | smooth, now | old terrain, now |
+|---|---|---|---|
+| 1 | | 5 births, 0 deaths | 4, 0 |
+| 2 | | 2, **9** (8 of hunger, 1 a blow) | 4, 0 |
+| 3 | | 2, 0 | 7, 1 |
+| 4 | | 5, 0 | 11, 0 |
+| 5 | 0, 0 | 5, 0 | 5, 0 |
+| 6 | 0, 6 | 5, 0 | 5, 0 |
+| 7 | 0, 0 | 7, 0 | 4, 0 |
+| 8 | 0, 10 | 9, 0 | 6, 0 |
+| **all** | **0, 16 on seeds 5–8** | **40, 9** | **46, 1** |
+
+**Seed 2 on smooth terrain starved with food in the ground.** Four died before
+day 360 and four more by day 420, all of hunger, while the pits held about
+6,500 units. The four left alive then had more than twice the gate's ask each.
+That looks like the late-winter famine of #41 (people starving beside full
+stores), and is not followed up here.
+
+On old terrain the memory rule made no difference that eight seeds can
+measure: the people alive after two years went up by 47 without it and by 45
+with it (46 births and 1 death), with seeds swinging from 0 to 11 births
+either way. Keeping one place per material, not three, did worse on both
+terrains (16 and 18 births on seeds 5–8).
+
+The yearly dice count for seed 0 moved from 1,374,948 to 1,317,154 (−4.2%).
+The 120-turn count for seed 4242 did not move.
+
+Tests:
+- `terrain_tests::stone_and_wood_lie_by_the_rivers`
+- `terrain_tests::a_people_arrives_with_a_living_in_reach`
+- `news_tests::a_hungry_man_still_remembers_where_the_nearest_stone_is`
+
+**Still to do before smooth terrain is the default:**
+- **Worn-out tools stay in the pack.** A handaxe at 0% still weighs two units,
+  and most packs on seed 6 held one.
+- **Packs fill with fish.** Packs held 30–47 fish each while pits stood half
+  empty. A pack with no room left cannot take the stone for a new tool unless
+  its owner is already on an errand to make one.
+- **Seed 2's famine**, above.
+- **Wider testing.** Switching the default would also move the repeatable dice
+  counts and the handful of tests that were written against scattered ground
+  (#315).

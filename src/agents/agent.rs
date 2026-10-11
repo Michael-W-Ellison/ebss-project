@@ -10762,6 +10762,10 @@ impl Agent {
     /// be; the scale only has to separate a seam from the last of one.
     const A_PLACE_WORTH_REMEMBERING: u32 = 12;
 
+    /// How many of the places he knows of each of his tools' makings a man
+    /// keeps in mind, nearest first. See `forget_what_does_not_matter`.
+    pub const NEAREST_MAKINGS_KEPT_IN_MIND: usize = 3;
+
     pub fn forget_what_does_not_matter(&mut self, current_turn: u32) {
         if self.exploration_knowledge.known_resources.len()
             <= Self::WHAT_A_MAN_CAN_HOLD_IN_MIND
@@ -10772,6 +10776,50 @@ impl Agent {
         // Asked once rather than once per place: the sweep runs every turn for
         // every living agent, and a lookup per place per need is real time.
         let what_the_trails_say = self.patterns.what_every_place_is_worth();
+
+        // **Where the makings of a missing tool are.** Stone answers no drive
+        // that presses: it is filed under Shelter, which is quiet most of the
+        // time. So a head full of fishing spots and berry patches let every
+        // stone it knew go first. A place is only discovered the first time
+        // its tile comes into view, so a forgotten seam beside the camp was
+        // never seen again. On smooth country, with a hundred and more fish
+        // and plants in sight of a riverside camp, a whole people had
+        // forgotten every stone within days. When the handaxes they arrived
+        // with wore out, nobody could take a step towards another, and on two
+        // worlds of four nobody could dig a pit all year (#316).
+        //
+        // So a man keeps the nearest few places he knows of each raw thing the
+        // tools of his work are made of: "retained longer if an agent has an
+        // interest in the topic". Every tool he knows how to make, whether or
+        // not he carries one now, because the one he carries wears out.
+        let to_keep: std::collections::BTreeSet<crate::world::Position> = {
+            let holding_none = |_: &str| 0;
+            let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
+            let makings: std::collections::BTreeSet<crate::world::ResourceType> =
+                Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
+                    .iter()
+                    .flat_map(|trade| crate::environment::making::what_helps_with(*trade))
+                    .filter(|tool| self.knows_how_to_make(tool.called))
+                    .flat_map(|tool| {
+                        crate::environment::making::everything_wanting_knowing(tool.called, &holding_none, &knows)
+                    })
+                    .filter_map(crate::world::ResourceType::called)
+                    .collect();
+            let here = crate::world::Position::new(self.state.position.0, self.state.position.1);
+            let mut keep = std::collections::BTreeSet::new();
+            for making in makings {
+                let mut places: Vec<crate::world::Position> = self
+                    .exploration_knowledge
+                    .known_resources
+                    .iter()
+                    .filter(|(_, what)| **what == making)
+                    .map(|(where_it_is, _)| *where_it_is)
+                    .collect();
+                places.sort_by_key(|where_it_is| here.distance_to(where_it_is));
+                keep.extend(places.into_iter().take(Self::NEAREST_MAKINGS_KEPT_IN_MIND));
+            }
+            keep
+        };
 
         let mut worth: Vec<(crate::world::Position, f32)> = self
             .exploration_knowledge
@@ -10868,7 +10916,11 @@ impl Agent {
         worth.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let to_forget = worth.len() - Self::WHAT_A_MAN_CAN_HOLD_IN_MIND;
-        for (where_it_is, _) in worth.into_iter().take(to_forget) {
+        for (where_it_is, _) in worth
+            .into_iter()
+            .filter(|(where_it_is, _)| !to_keep.contains(where_it_is))
+            .take(to_forget)
+        {
             self.exploration_knowledge.known_resources.remove(&where_it_is);
             self.exploration_knowledge.who_told_me.remove(&where_it_is);
             self.exploration_knowledge

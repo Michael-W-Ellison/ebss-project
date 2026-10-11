@@ -28,9 +28,9 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #315): `cargo test --lib` in one piece.
-2,783 tests run: 2,779 passed, none failed, 4 ignored, in 1,422 s. The
-repeatable dice counts are unchanged on the default (scattered) terrain. That leaves:
+**Last full run** (ISSUES_FOUND #316): `cargo test --lib` in one piece.
+2,786 tests run: 2,782 passed, none failed, 4 ignored, in 2,142 s. The
+seed-0 yearly dice count is now 1,317,154 (#316). That leaves:
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
