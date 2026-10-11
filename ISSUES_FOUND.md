@@ -23946,3 +23946,64 @@ everything everywhere; one was my own test, from #316.
 - A walk to somewhere it has no route to wastes its turns on the bank (#317).
 - The weather deaths of #315 have not come back in any run since #316, but
   have not been looked into either.
+
+### 319. Worn-out tools stayed in the pack
+
+When the last tool of a kind wore through, `wear_what_i_worked_with` left it
+in the pack at zero durability. Nothing could use it: every reader of a tool
+asks for durability above nothing, and nothing in the model mends one. The
+only thing that ever threw a broken one out was making another of the same
+kind (`making.rs`).
+
+**How much it was.** A year on seeds 1–8 (smooth terrain, 12 founders each,
+`zz_gate_why`) found:
+- 17–45 broken tools among the 12 adults: two to four each, from day 60;
+- 2.0–6.5 units of weight a head, in packs that hold 30–42;
+- most packs within five units of full by midsummer.
+
+**Fix.** A finished tool is thrown away, whether or not another of the same
+kind is in the pack. Afterwards no broken tool was found in any pack at any
+sample.
+
+**And a tool with no working life recorded is not worn at all.** Wearing one
+read "nothing recorded" as zero, so its first use "broke" it. It then stayed
+in the pack and, with nothing recorded, read as whole for ever after. With
+broken tools thrown away it would vanish on first use instead. That is what
+`portion_tests::a_hungry_agent_with_a_deer_ends_up_with_joints` caught: the
+test hands its butcher a bare knife. Now an untracked tool is simply not
+worn, which is how `durability_percentage` already treats it. Every tool
+anybody makes or arrives with has a working life recorded, and the dice
+counts did not move for this half.
+
+**Two years from 12 founders, seeds 1–8:**
+
+| | births, deaths before | after |
+|---|---|---|
+| smooth | 43, 0 | 46, 1 (illness) |
+| scattered | 46, 1 | 41, 1 |
+
+That is within the spread between seeds, which runs from 0 to 11 births
+either way. The pack room broken tools took was not what limited anybody.
+
+The seed-0 yearly dice count moved from 1,476,142 to 1,561,205. Seed 4242's
+120-turn count did not move.
+
+Test: `tool_wear_tests::a_worn_through_tool_is_thrown_away`.
+
+**What does fill the packs: legumes, past what a pack can hold.** Listing
+what the adults carried on seed 1 (`PACKMIX`):
+
+| day | carried a head | over their pack's limit |
+|---|---|---|
+| 30–90 | wood, stoneware and fish, about 25 units | none |
+| 150 | 30 units of legumes | 8 of 12 |
+| 180 | 52 units of legumes | 11 of 12, up to 94 against a limit of 42 |
+
+Everything that puts a thing in a pack checks its weight first, so the
+excess must come from something that changes weight once it is in.
+`InventoryItem::absorb` blends freshness, quality and durability when two
+stacks merge, and a food's weight per unit depends on how it was prepared:
+drying makes it lighter. The likely way in is dried food passing the weight
+check at its dried weight, then merging into a fresh stack and being weighed
+as fresh. Not confirmed or fixed here. The fish noted at #316 was the same
+packs at a different season.

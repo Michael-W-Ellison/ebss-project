@@ -4722,9 +4722,16 @@ impl Agent {
         let tool = *self.what_i_have_to_work_with(trade)?;
         let hand = self.skills.hand_for(tool.helps);
 
+        // A tool with no working life recorded is not one this can wear: it
+        // reads as whole (`durability_percentage`), and it used to be read
+        // here as already finished, "broken" on its first use and then whole
+        // again for ever after, because the broken one stayed in the pack.
+        // Now that a finished tool is thrown away it would simply vanish
+        // (#319). Every tool anybody makes or arrives with has one recorded
+        // (`a_tool_fresh_from_these_hands`).
         let (left, how_many) = {
             let item = self.inventory.get_item(tool.called)?;
-            (item.current_durability.unwrap_or(0.0) - 1.0, item.quantity)
+            (item.current_durability? - 1.0, item.quantity)
         };
 
         if left > 0.0 {
