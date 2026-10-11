@@ -550,7 +550,7 @@ fn a_surplus_and_a_pit_means_burying() {
         .expect("he has more than he can eat and a hole to put it in");
 
     assert!(
-        matches!(&answer, Action::Cover { what } if what == "food"),
+        matches!(&answer, Action::Cover { what } if what == "dried_food"),
         "he buries it: {answer:?}"
     );
 }
@@ -620,7 +620,7 @@ fn a_surplus_in_the_hand_gets_buried_in_any_season() {
         .expect("he is carrying more than he can eat");
 
     assert!(
-        matches!(&answer, Action::Cover { what } if what == "food"),
+        matches!(&answer, Action::Cover { what } if what == "dried_food"),
         "a thing in your hands that will go off is buried whatever month it is: {answer:?}"
     );
 }

@@ -811,7 +811,22 @@ impl Simulation {
 
         food.set_preparation(how, turn_now);
 
+        // **And carried under its own name from now on**, as what comes off
+        // a fire is (`prepared_item_id`). One stack holds one preparation,
+        // and a merge takes the one that spoils faster. Dried in place, the
+        // first raw handful gathered after it turned the whole stack raw
+        // again: it spoiled at the raw rate, and weighed what raw food weighs.
+        // It had gone into the pack at its dried weight, a third of that, so
+        // by midsummer eleven people in twelve carried more than their packs
+        // could hold, up to 94 against 42 (#320).
         let how_many = item.quantity;
+        let prefix = if how == PreparationState::Smoked { "smoked_" } else { "dried_" };
+        let named = format!("{prefix}{what}");
+        if let Some(mut dried) = agent.inventory.remove_item(what, how_many) {
+            // Lighter than it went in, so there is room for it
+            dried.item_id = named;
+            agent.inventory.add_item(dried);
+        }
         agent
             .skills
             .practise(crate::agents::SkillType::Cooking, 14, turn_now);

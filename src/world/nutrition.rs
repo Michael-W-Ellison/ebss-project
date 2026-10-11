@@ -133,10 +133,7 @@ impl Piece {
     /// sites that want to know.
     pub fn is_it_flesh(item_id: &str) -> bool {
         let id = item_id.to_lowercase();
-        let base = id
-            .strip_prefix("cooked_")
-            .or_else(|| id.strip_prefix("burnt_"))
-            .unwrap_or(&id);
+        let base = crate::agents::storage_integration::without_preparation(&id);
 
         // And a joint of it is still flesh, which the first cut of this got
         // wrong: it stripped the cooking prefix and not the cutting suffix,

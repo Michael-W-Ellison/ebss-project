@@ -447,8 +447,20 @@ impl Inventory {
             return false; // No room for new item type
         }
 
-        // Check weight limit
-        let item_weight = item.total_weight();
+        // Check weight limit, against what the pack would weigh afterwards.
+        //
+        // Not just against what the newcomer weighs: a stack that takes it in
+        // blends the two (`absorb`), and what the blend weighs a unit can
+        // differ from either. A third of a stack's weight went in as dried
+        // food and came out as raw, and nothing here saw it (#320).
+        let item_weight = match self.items.get(&item.item_id) {
+            Some(existing) => {
+                let mut merged = existing.clone();
+                merged.absorb(item.clone());
+                merged.total_weight() - existing.total_weight()
+            }
+            None => item.total_weight(),
+        };
         if self.current_weight() + item_weight > self.effective_max_weight() {
             // What will not go in is not carried, and something ought to know
             // it happened - see `what_would_not_go_in`.
