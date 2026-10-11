@@ -1128,7 +1128,7 @@ mod tests {
 
     #[test]
     fn test_move_action() {
-        let mut world = World::new(WorldConfig::default());
+        let mut world = World::new(WorldConfig::default()).all_open_grass();
         let agent_id = crate::core::dice::name();
 
         let mut agent_pos = Position::new(10, 10);
@@ -1173,7 +1173,7 @@ mod tests {
 
     #[test]
     fn test_construct_building_action() {
-        let mut world = World::new(WorldConfig::default());
+        let mut world = World::new(WorldConfig::default()).all_open_grass();
         let agent_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let build_pos = Position::new(15, 15);
@@ -1199,7 +1199,7 @@ mod tests {
 
     #[test]
     fn test_construct_building_duplicate_position() {
-        let mut world = World::new(WorldConfig::default());
+        let mut world = World::new(WorldConfig::default()).all_open_grass();
         let agent_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);
         let build_pos = Position::new(15, 15);
@@ -1304,7 +1304,7 @@ mod tests {
 
     #[test]
     fn test_seek_social_interaction_moves_towards_target() {
-        let mut world = World::new(WorldConfig::default());
+        let mut world = World::new(WorldConfig::default()).all_open_grass();
         let agent_id = crate::core::dice::name();
         let target_id = crate::core::dice::name();
         let mut agent_pos = Position::new(10, 10);

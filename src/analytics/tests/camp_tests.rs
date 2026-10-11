@@ -47,7 +47,7 @@ fn living_there(simulation: &Simulation) -> usize {
 fn a_camp_moving_for_water_goes_together() {
     let mut simulation = a_camp(5);
     let who = simulation.population.agents[0].id;
-    simulation.the_camp_moves(CampMove { who, to: THERE, feeds: None });
+    simulation.the_camp_moves(CampMove { who, to: THERE, feeds: None, why: "water" });
     assert_eq!(living_there(&simulation), 5);
     assert!(simulation.population.agents.iter().all(|agent| agent.hearth_moved_at == 1000));
 }
@@ -58,7 +58,7 @@ fn a_camp_moving_for_water_goes_together() {
 fn as_many_go_as_the_new_ground_will_feed() {
     let mut simulation = a_camp(6);
     let who = simulation.population.agents[0].id;
-    simulation.the_camp_moves(CampMove { who, to: THERE, feeds: Some(4) });
+    simulation.the_camp_moves(CampMove { who, to: THERE, feeds: Some(4), why: "better ground" });
 
     assert_eq!(living_there(&simulation), 4);
     assert_eq!(simulation.population.agents[0].hearth, Some(THERE), "the one who decided goes");
@@ -84,7 +84,7 @@ fn the_most_trusted_go_first() {
     simulation.population.agents[0].relationships.add_relationship(friend);
 
     let who = simulation.population.agents[0].id;
-    simulation.the_camp_moves(CampMove { who, to: THERE, feeds: Some(2) });
+    simulation.the_camp_moves(CampMove { who, to: THERE, feeds: Some(2), why: "better ground" });
     assert_eq!(simulation.population.agents[3].hearth, Some(THERE));
     assert_eq!(living_there(&simulation), 2);
 }
@@ -102,7 +102,7 @@ fn a_crop_standing_keeps_its_farmer() {
     simulation.world.resources.push(ResourceNode::new(ResourceType::Grain, field, 40));
     // The one who decided goes; nobody else leaves a crop in the ground
     let who = simulation.population.agents[0].id;
-    simulation.the_camp_moves(CampMove { who, to: THERE, feeds: None });
+    simulation.the_camp_moves(CampMove { who, to: THERE, feeds: None, why: "water" });
     assert_eq!(living_there(&simulation), 1, "only the one who decided");
 }
 
@@ -118,7 +118,7 @@ fn a_child_goes_with_its_parent() {
     child.parent_ids = vec![parent];
     child.hearth = Some(HERE);
 
-    simulation.the_camp_moves(CampMove { who: parent, to: THERE, feeds: Some(1) });
+    simulation.the_camp_moves(CampMove { who: parent, to: THERE, feeds: Some(1), why: "better ground" });
     assert_eq!(simulation.population.agents[0].hearth, Some(THERE));
     assert_eq!(simulation.population.agents[1].hearth, Some(HERE), "no room for the other grown one");
     assert_eq!(simulation.population.agents[2].hearth, Some(THERE), "the child goes with its parent");
@@ -219,6 +219,23 @@ fn a_farmer_on_good_ground_stays() {
 fn nobody_moves_for_ploughland_they_do_not_know_of() {
     let mut simulation = a_camp_on_poor_ground(1);
     simulation.population.agents[0].exploration_knowledge.known_resources.clear();
+    their_time_to_think(&mut simulation, 0);
+    let position = simulation.population.agents[0].state.position;
+    assert!(simulation.moving_to_farmland(&simulation.population.agents[0], position).is_none());
+}
+
+/// Nor with the winter in a pit by the camp: a farmer moves between harvests,
+/// not the week before the frost (#315).
+#[test]
+fn a_farmer_does_not_leave_food_in_store_for_ploughland() {
+    let mut simulation = a_camp_on_poor_ground(1);
+    simulation.world.pits.push(crate::world::Pit {
+        where_it_is: crate::world::Position::new(HERE.0 + 2, HERE.1),
+        holds: vec![crate::agents::InventoryItem::new_with_weight("food".to_string(), 5, 0.1)],
+        covered: false,
+        dug: 0,
+        belongs: crate::world::Belongs::ToNobody,
+    });
     their_time_to_think(&mut simulation, 0);
     let position = simulation.population.agents[0].state.position;
     assert!(simulation.moving_to_farmland(&simulation.population.agents[0], position).is_none());

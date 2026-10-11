@@ -207,7 +207,7 @@ impl Simulation {
         budget: usize,
     ) -> Option<Vec<(i32, i32)>> {
         use std::cmp::Reverse;
-        use std::collections::{BTreeMap, BinaryHeap};
+        use std::collections::BinaryHeap;
 
         if from == target {
             return Some(Vec::new());
@@ -218,24 +218,59 @@ impl Simulation {
         let still_to_go =
             |at: (i32, i32)| ((at.0 - target.0).abs() + (at.1 - target.1).abs()) as u32;
 
+        // **The bookkeeping in flat tables, kept between searches.** It was
+        // two ordered maps built afresh for every search, and in smooth
+        // country, where a lake is a kilometre across and a walk round it
+        // looks at a hundred thousand cells, that was nearly all of what a
+        // year cost: one fresh world took an hour for its first thirty days
+        // (#315). The tables are the size of the map and are cleared by
+        // stamping, not by writing them out; the order things are looked at
+        // in is exactly what it was, so every route is the same route.
+        let mut scratch = self.route_scratch.borrow_mut();
+        scratch.ready_for(wide as usize * high as usize);
+        let stamp = scratch.stamp;
+        let cell = |at: (i32, i32)| at.1 as usize * wide as usize + at.0 as usize;
+        struct Book<'a> {
+            stamps: &'a mut Vec<u32>,
+            walked: &'a mut Vec<u32>,
+            came_from: &'a mut Vec<u32>,
+            stamp: u32,
+        }
+        impl Book<'_> {
+            fn walked(&self, at: usize) -> Option<u32> {
+                (self.stamps[at] == self.stamp).then(|| self.walked[at])
+            }
+            fn set(&mut self, at: usize, so_far: u32, back: u32) {
+                self.stamps[at] = self.stamp;
+                self.walked[at] = so_far;
+                self.came_from[at] = back;
+            }
+        }
+        let crate::analytics::RouteScratch { stamps, walked, came_from, .. } = &mut *scratch;
+        let mut book = Book { stamps, walked, came_from, stamp };
+        let none = u32::MAX;
+
         // Ordered by estimate, then by the way walked, then by position, so
         // that ties always break the same way and a run is repeatable.
         let mut open: BinaryHeap<Reverse<(u32, u32, i32, i32)>> = BinaryHeap::new();
-        let mut came_from: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
-        let mut walked: BTreeMap<(i32, i32), u32> = BTreeMap::new();
         open.push(Reverse((still_to_go(from), 0, from.0, from.1)));
-        walked.insert(from, 0);
+        book.set(cell(from), 0, none);
 
         let mut looked_at = 0usize;
         while let Some(Reverse((_, so_far, x, y))) = open.pop() {
             let here = (x, y);
-            if walked.get(&here).is_some_and(|&best| best < so_far) {
+            if book.walked(cell(here)).is_some_and(|best| best < so_far) {
                 continue;
             }
             if here == target {
                 let mut route = vec![here];
                 let mut at = here;
-                while let Some(&back) = came_from.get(&at) {
+                loop {
+                    let back = book.came_from[cell(at)];
+                    if back == none {
+                        break;
+                    }
+                    let back = ((back % wide as u32) as i32, (back / wide as u32) as i32);
                     if back == from {
                         break;
                     }
@@ -262,11 +297,10 @@ impl Simulation {
                     continue;
                 }
                 let further = so_far + 1;
-                if walked.get(&next).is_some_and(|&best| best <= further) {
+                if book.walked(cell(next)).is_some_and(|best| best <= further) {
                     continue;
                 }
-                walked.insert(next, further);
-                came_from.insert(next, here);
+                book.set(cell(next), further, cell(here) as u32);
                 open.push(Reverse((further + still_to_go(next), further, next.0, next.1)));
             }
         }

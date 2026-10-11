@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 fn test_world_generates_all_resource_types() {
     let config = WorldConfig {
         size: (100, 100),
+        terrain: crate::world::TerrainStyle::Scattered,
         initial_resources: ResourceConfig::default(),
     };
 
@@ -37,6 +38,7 @@ fn test_world_generates_all_resource_types() {
 fn test_resources_in_appropriate_terrain() {
     let config = WorldConfig {
         size: (100, 100),
+        terrain: crate::world::TerrainStyle::Scattered,
         initial_resources: ResourceConfig::default(),
     };
 
@@ -83,6 +85,7 @@ fn test_resources_in_appropriate_terrain() {
 fn test_terrain_diversity() {
     let config = WorldConfig {
         size: (100, 100),
+        terrain: crate::world::TerrainStyle::Scattered,
         initial_resources: ResourceConfig::default(),
     };
 
@@ -110,6 +113,7 @@ fn test_terrain_diversity() {
 fn test_resource_clustering() {
     let config = WorldConfig {
         size: (100, 100),
+        terrain: crate::world::TerrainStyle::Scattered,
         initial_resources: ResourceConfig {
             clay_clusters: 5,
             ..Default::default()
@@ -152,6 +156,7 @@ fn test_resource_clustering() {
 fn test_naturalistic_spawning_disabled() {
     let config = WorldConfig {
         size: (50, 50),
+        terrain: crate::world::TerrainStyle::Scattered,
         initial_resources: ResourceConfig {
             use_naturalistic_spawning: false,
             ..Default::default()
@@ -182,6 +187,7 @@ fn test_naturalistic_spawning_disabled() {
 fn test_technology_progression_resources_available() {
     let config = WorldConfig {
         size: (100, 100),
+        terrain: crate::world::TerrainStyle::Scattered,
         initial_resources: ResourceConfig::default(),
     };
 
@@ -216,6 +222,7 @@ fn test_technology_progression_resources_available() {
 fn test_resource_amounts_reasonable() {
     let config = WorldConfig {
         size: (50, 50),
+        terrain: crate::world::TerrainStyle::Scattered,
         initial_resources: ResourceConfig::default(),
     };
 

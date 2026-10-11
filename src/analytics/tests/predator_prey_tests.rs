@@ -232,7 +232,9 @@ fn the_land_will_only_carry_so_many() {
 /// usual menu.
 #[test]
 fn a_starving_predator_takes_what_it_can_get() {
-    let mut world = World::new(WorldConfig::default());
+    // On open grass: the hunt is held at (25, 25), and each world's own
+    // ground can put a lake there (#315)
+    let mut world = World::new(WorldConfig::default()).all_open_grass();
     world.animals.get_all_mut().clear();
 
     // Squirrels are not on a wolf's list of prey, and are well inside the

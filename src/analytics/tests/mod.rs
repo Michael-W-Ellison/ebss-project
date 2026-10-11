@@ -1,4 +1,5 @@
 mod afforded_tests;
+mod terrain_tests;
 mod camp_tests;
 mod coupling_tests;
 mod workings_tests;

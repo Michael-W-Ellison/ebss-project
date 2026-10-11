@@ -23596,3 +23596,115 @@ regions, and it is the same in every world. Measured on the big map:
 
 The farmers' move is written and tested, but on this map it will almost
 never fire. Coherent terrain (valleys, plains, uplands) is what it needs.
+
+### 315. Smooth seeded terrain, as an opt-in world setting
+
+#314 found that the map gives farmers almost nothing to move for. Terrain came
+from an unseeded hash, so it had no regions and was the same in every world.
+This adds a second generator, `Grid::generate_smooth_terrain`, chosen by
+`WorldConfig::terrain` (`TerrainStyle::Smooth`, or
+`WorldConfig::with_smooth_terrain()`). **The old generator is still the
+default.** On the new terrain, settlements do much worse than on the old (see
+below), and the model was tuned on the old.
+
+**How the country is made** (`Relief`, value noise with a quintic ease, four
+octaves, seeded from the world's dice):
+- **Elevation and moisture fields.** The bands are cut by rank, so the mix of
+  ground comes out as before:
+  - sea is the lowest 3.6%;
+  - mountain is the highest 40%;
+  - the middle band is meadow or plains by moisture.
+- **Lakes:** low ground where a separate lake field is low.
+- **Rivers:** a narrow contour of a river field (`HOW_WIDE_A_RIVER_RUNS`),
+  broken by a ford field (`WHERE_A_RIVER_RUNS_DEEP`) so every river can be
+  crossed somewhere.
+- **Woods:** copses laid over the low and middle country by a woods field
+  (`HOW_MUCH_OF_THE_COUNTRY_IS_WOODED`). Forest did not grow only on the
+  slopes, where nobody lives.
+- **Riverbanks:** run two cells back from the water.
+
+**Measured on the 1000×1000 map** (seeds 1–3; old terrain in brackets):
+- neighbouring tiles share a terrain 0.967–0.969 of the time (0.20);
+- the tillable share of a 100×100 block runs from 0 to 0.79–0.995, with a
+  median of 0.16–0.23 (0.16–0.19 everywhere);
+- the ploughland within a field's walk of a point is 0 at the 10th
+  percentile, 300–312 at the 90th, and 469 at most (mean 72.5, spread 7.0);
+- mountain 40%, hills 10%, plains 14–18%, meadow 7–9%, forest 6–7%, water
+  5–6%, sea 3.6%;
+- each seed gives a different country.
+
+So there is good country and bad now, and a farmer's move has somewhere to go.
+
+**What the new country needed. Each item was found as a failure on fresh
+worlds, and each is gated on `TerrainStyle::Smooth` unless it says otherwise:**
+- **Springs on shores.** Water was in lakes and rivers, but springs were still
+  scattered anywhere, so people died of thirst on day 3–4. Now two springs in
+  three go on a lake or river shore (`find_random_shore_position`), and sea
+  water goes on the coast.
+- **Arriving on open country.** The middle of the map can be a mountain or the
+  sea. The founders now stop on the nearest tillable ground with woods and
+  water within 20 cells (`bring_everybody_to_the_middle`). If there is none,
+  they take tillable ground with woods, then tillable ground, then any ground
+  they can stand on.
+- **Pits in the woods.** The forest floor will not take a pit. People who
+  lived in a copse put nothing by. They now walk to the nearest ground that
+  will take one, up to a field's walk away (`ground_a_pit_will_go_in_near`).
+- **The farmland move had no brake.** With real ploughland to go to, it fired
+  53–84 times a season. `moving_to_farmland` no longer moves anybody with a
+  crop standing, or a camp with food in store nearby. **This brake applies on
+  both terrains**, and so does the reason now recorded on each camp move
+  (`camp moved for water` / `better ground` / `ploughland`).
+- **Route search.** Smooth country has long detours, and `the_way_there`
+  became the slowest thing in a run. It now keeps its tables in flat arrays
+  cleared by a stamp (`RouteScratch`), not maps. **This applies on both
+  terrains.** The routes are the same: the dice counts were identical with
+  and without it (7,557 and 1,505,547 on a smooth build).
+
+**Settlements on the new terrain: four fresh big-map worlds over two years**
+(seeds 5–8, 12 founders each, the #314 probe):
+
+| seed | births | deaths | alive at the end | camp moves |
+|---|---|---|---|---|
+| 5 | 0 | 0 | 12 | 1, for better ground |
+| 6 | 0 | 6 (5 weather, 1 hunger) | 6 | 0 |
+| 7 | 0 | 0 | 12 | 0 |
+| 8 | 0 | 10 (9 hunger, 1 weather) | 2, in two camps | 1, for better ground |
+| **old terrain (#314)** | **29** | | | 0 |
+
+The child gate is what stays shut. Over the two years on seeds 5 and 7, which
+kept all 12 people, it answered "could not feed" 414,204 times each and
+"ready" never.
+Stores stay low: fewer fish within reach than on a map where a strip of water
+was never far off, and the winter shelter and firewood are further away too.
+Seed 8's founders arrived on thin ground and starved in the first winter.
+
+**Why it is behind a switch.** Everything the model does was tuned on the old
+terrain: forage, fish, wood, the child gate. Making the new terrain the default
+would have changed every repeatable run and left fresh worlds with no births.
+On the default (scattered) terrain:
+- every gated change above is off;
+- the dice counts in `repeatable_tests` are unchanged (seed 4242: 9,333;
+  seed 0, a year: 1,374,948);
+- the suite passes as before.
+
+**What switching the default will take.** Recalibrate on smooth terrain one
+step at a time, measuring births on the same four worlds:
+1. food in store, which the gate turns on: fish and the pit near camp;
+2. firewood and shelter, for the weather deaths;
+3. the founders' choice of ground, so they arrive with a living around them.
+
+Then make it the default once births match the old terrain.
+
+Tests: `terrain_tests` (8):
+- `the_country_is_smooth`
+- `every_world_has_its_own_country`
+- `the_mix_of_ground_is_what_it_was`
+- `there_is_good_country_and_bad`
+- `springs_are_where_the_water_is`
+- `a_people_arrives_on_open_country`
+- `a_river_can_be_crossed`
+- `most_ploughland_has_woods_in_reach`
+
+Also:
+- `camp_tests::a_farmer_does_not_leave_food_in_store_for_ploughland`;
+- `larder_tests::a_surplus_in_the_woods_means_walking_to_open_ground_to_dig`.

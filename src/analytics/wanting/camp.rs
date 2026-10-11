@@ -26,6 +26,8 @@ pub struct CampMove {
     /// How many people the ground there will feed, counting the decider; or
     /// `None` for a move to something that does not run out, such as water.
     pub feeds: Option<u32>,
+    /// What it is for, for the tally: "water", "better ground", "ploughland".
+    pub why: &'static str,
 }
 
 impl Simulation {
@@ -250,8 +252,14 @@ impl Simulation {
     }
 
     /// Note a move of camp for the turn to carry out if the person sets off.
-    pub(in crate::analytics) fn propose_moving_camp(&self, agent: &crate::agents::Agent, to: (i32, i32), feeds: Option<u32>) {
-        *self.camp_move_proposed.borrow_mut() = Some(CampMove { who: agent.id, to, feeds });
+    pub(in crate::analytics) fn propose_moving_camp(
+        &self,
+        agent: &crate::agents::Agent,
+        to: (i32, i32),
+        feeds: Option<u32>,
+        why: &'static str,
+    ) {
+        *self.camp_move_proposed.borrow_mut() = Some(CampMove { who: agent.id, to, feeds, why });
     }
 
     /// The camp moves: the one who decided it, and as many of the people who
@@ -301,6 +309,7 @@ impl Simulation {
 
         let stats = &mut self.population.stats.how_it_went;
         *stats.entry("camp moved".to_string()).or_insert(0) += 1;
+        *stats.entry(format!("camp moved for {}", decided.why)).or_insert(0) += 1;
         *stats.entry("went with the camp".to_string()).or_insert(0) += mates.len() as u64;
         if stayed > 0 {
             *stats.entry("camp split: some stayed".to_string()).or_insert(0) += 1;
@@ -402,7 +411,7 @@ impl Simulation {
         let lives = Self::where_this_one_lives(agent);
         if !self.moved_lately(agent) {
             if let Some(there) = answer_from((lives.0, lives.1, agent_position.2)) {
-                self.propose_moving_camp(agent, (there.x, there.y), None);
+                self.propose_moving_camp(agent, (there.x, there.y), None, "water");
                 return Some(Action::Move {
                     target: (there.x, there.y, agent_position.2),
                 });
@@ -510,6 +519,7 @@ impl Simulation {
                     agent,
                     (there.x, there.y),
                     Some((carrying / Self::WHAT_A_CAMP_WANTS_STANDING).max(1)),
+                    "better ground",
                 );
                 return Some(Action::Move {
                     target: (there.x, there.y, agent_position.2),
@@ -649,7 +659,17 @@ impl Simulation {
             return None;
         }
 
+        // **Not with a crop in the ground or the winter in a pit.** A farmer
+        // moves between harvests, with the stores eaten, not the week before
+        // the frost. Without this, once smooth country gave farmers somewhere
+        // better to go, camps on two fresh worlds moved 53 and 84 times in a
+        // season, chasing ploughland away from their pits, and one of them
+        // died out in its first winter (#315).
         let lives = Self::where_this_one_lives(agent);
+        if self.tied_to_this_ground(agent) || self.food_in_store_near(lives) {
+            return None;
+        }
+
         let home = Position::new(lives.0, lives.1);
         let here = self.what_this_ground_is_worth_to_a_farmer(lives);
 
@@ -677,7 +697,7 @@ impl Simulation {
             return None;
         }
 
-        self.propose_moving_camp(agent, (there.x, there.y), None);
+        self.propose_moving_camp(agent, (there.x, there.y), None, "ploughland");
         Some(Action::Move {
             target: (there.x, there.y, agent_position.2),
         })

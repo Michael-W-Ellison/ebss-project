@@ -615,8 +615,15 @@ impl Simulation {
             // somebody happened to be standing, and the executor refused most
             // of them: measured at 100 attempts a world for 1.7 pits, which is
             // ninety-eight turns spent trying to dig a hole in a lake.
-            if self.is_ground_a_pit_will_go_in(here) && !self.is_there_a_hole_going_spare(here) {
-                return Some(Action::Excavate);
+            if !self.is_there_a_hole_going_spare(here) {
+                if self.is_ground_a_pit_will_go_in(here) {
+                    return Some(Action::Excavate);
+                }
+                if let Some(ground) = self.ground_a_pit_will_go_in_near(here) {
+                    return Some(Action::Move {
+                        target: (ground.x, ground.y, agent_position.2),
+                    });
+                }
             }
 
             if let Some(pit) = self.a_pit_worth_the_walk(here) {
@@ -665,6 +672,11 @@ impl Simulation {
         // Autumn with nowhere to put anything is reason enough to dig.
         if self.is_ground_a_pit_will_go_in(here) {
             return Some(Action::Excavate);
+        }
+        if let Some(ground) = self.ground_a_pit_will_go_in_near(here) {
+            return Some(Action::Move {
+                target: (ground.x, ground.y, agent_position.2),
+            });
         }
 
         // And with nothing at all to put by, the trip is still worth making
@@ -1019,6 +1031,38 @@ impl Simulation {
             .get_tile(&here)
             .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
             .unwrap_or(false)
+    }
+
+    /// The nearest ground a pit will go in, within a short walk of here.
+    ///
+    /// Digging asked only of the ground underfoot. While every kind of ground
+    /// lay within a pace or two of every other, that was always near enough;
+    /// in smooth country a camp sleeps under the trees, the forest floor will
+    /// not take a hole, and a settlement on one fresh world dug eight pits in
+    /// its first two months and none in the next ten, with sixteen thousand
+    /// of food standing round it and a store too small to breed on (#315).
+    ///
+    /// On smooth ground only for now; on the scattered ground everything was
+    /// tuned on, digging asks of the ground underfoot as it always did
+    /// (`TerrainStyle`).
+    pub(in crate::analytics) fn ground_a_pit_will_go_in_near(
+        &self,
+        here: crate::world::Position,
+    ) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        if self.world.terrain_style != crate::world::TerrainStyle::Smooth {
+            return None;
+        }
+
+        let reach = Self::FIELD_WALK_RADIUS as i32;
+        (1..=reach).find_map(|ring| {
+            (-ring..=ring)
+                .flat_map(|dx| (-ring..=ring).map(move |dy| (dx, dy)))
+                .filter(|(dx, dy)| dx.abs() == ring || dy.abs() == ring)
+                .map(|(dx, dy)| Position::new(here.x + dx, here.y + dy))
+                .find(|there| self.is_ground_a_pit_will_go_in(*there))
+        })
     }
 
     /// Salt water close enough to dip a pot in.

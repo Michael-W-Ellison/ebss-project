@@ -210,6 +210,35 @@ pub struct Simulation {
     /// the world and does not write to it, and moving a camp moves other
     /// people's hearths; see `Simulation::the_camp_moves` (#314).
     pub(crate) camp_move_proposed: std::cell::RefCell<Option<wanting::camp::CampMove>>,
+    /// The route search's bookkeeping, kept between searches; see
+    /// `the_way_there` (#315).
+    pub(crate) route_scratch: std::cell::RefCell<RouteScratch>,
+}
+
+/// Flat tables for the route search, the size of the map, cleared by stamp.
+#[derive(Debug, Default)]
+pub(crate) struct RouteScratch {
+    pub(crate) stamp: u32,
+    pub(crate) stamps: Vec<u32>,
+    pub(crate) walked: Vec<u32>,
+    pub(crate) came_from: Vec<u32>,
+}
+
+impl RouteScratch {
+    /// Ready for a fresh search over a map of this many cells.
+    pub(crate) fn ready_for(&mut self, cells: usize) {
+        if self.stamps.len() != cells {
+            self.stamps = vec![0; cells];
+            self.walked = vec![0; cells];
+            self.came_from = vec![0; cells];
+            self.stamp = 0;
+        }
+        self.stamp = self.stamp.wrapping_add(1);
+        if self.stamp == 0 {
+            self.stamps.iter_mut().for_each(|stamp| *stamp = 0);
+            self.stamp = 1;
+        }
+    }
 }
 
 /// Configuration for simulation behavior and limits
@@ -373,6 +402,7 @@ impl Simulation {
             minutes_spent_in_danger: 0,
             shut_in: Default::default(),
             camp_move_proposed: Default::default(),
+            route_scratch: Default::default(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
@@ -1314,28 +1344,92 @@ impl Simulation {
     /// kilometres (`WorldConfig::big_enough_for_an_ecology`) is a corner five
     /// kilometres from the middle, often in water. A people founding a
     /// settlement on the big map starts here instead, with the whole country
-    /// round it. The nearest ground that can be stood on, looked for in rings
-    /// outward from the middle, so the answer is the same for the same map.
+    /// round it. The nearest open grass or meadow, looked for in rings outward
+    /// from the middle, so the answer is the same for the same map; or, on a
+    /// map with none, the nearest ground that can be stood on.
+    ///
+    /// **Open country, not merely dry ground.** While terrain was drawn tile
+    /// by tile at random, every kind of ground was within a few paces of
+    /// every other and any dry tile would do. Smooth country has mountain
+    /// ranges kilometres across, and the middle of the big map fell in one on
+    /// four seeds of five: a people put down there would start a long walk
+    /// from anything that grows. Grass and meadow are where food grows and
+    /// what a plough takes, so that is where a people arriving would stop
+    /// (#315). With woods in reach, too - trees to sleep under out of the
+    /// rain, within the walk a sleeper takes to get under them, and wood to
+    /// burn: on one fresh world a people that stopped in the middle of a plain
+    /// died of the weather the month winter came, eleven of twelve. And with
+    /// fresh water in reach, for drinking and for fish: fish is what dries
+    /// and keeps, and a people put down among greens and roots with the
+    /// river forty cells off filled a quarter of the store a riverside people
+    /// did by midsummer, and never once opened the gate for a child in its
+    /// first year.
     pub fn bring_everybody_to_the_middle(&mut self) -> (i32, i32) {
         let middle = (
             self.world.grid.width as i32 / 2,
             self.world.grid.height as i32 / 2,
         );
         let furthest = middle.0.max(middle.1);
-        let mut at = middle;
-        'looking: for ring in 0..=furthest {
-            for dx in -ring..=ring {
-                for dy in -ring..=ring {
-                    if dx.abs() != ring && dy.abs() != ring {
-                        continue;
-                    }
-                    if self.is_passable_tile(middle.0 + dx, middle.1 + dy) {
-                        at = (middle.0 + dx, middle.1 + dy);
-                        break 'looking;
+        let open_country = |simulation: &Self, x: i32, y: i32| {
+            simulation
+                .world
+                .grid
+                .get_tile(&crate::world::Position::new(x, y))
+                .map(|tile| tile.terrain.can_be_tilled())
+                .unwrap_or(false)
+        };
+        let nearest = |simulation: &Self, will_do: &dyn Fn(&Self, i32, i32) -> bool| {
+            for ring in 0..=furthest {
+                for dx in -ring..=ring {
+                    for dy in -ring..=ring {
+                        if dx.abs() != ring && dy.abs() != ring {
+                            continue;
+                        }
+                        if will_do(simulation, middle.0 + dx, middle.1 + dy) {
+                            return Some((middle.0 + dx, middle.1 + dy));
+                        }
                     }
                 }
             }
+            None
+        };
+        let in_reach = |simulation: &Self, x: i32, y: i32, kind: crate::world::TerrainType| {
+            let reach = Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS;
+            (-reach..=reach).any(|dx| {
+                (-reach..=reach).any(|dy| {
+                    simulation
+                        .world
+                        .grid
+                        .get_tile(&crate::world::Position::new(x + dx, y + dy))
+                        .is_some_and(|tile| tile.terrain.terrain_type == kind)
+                })
+            })
+        };
+        let woods_in_reach = |s: &Self, x: i32, y: i32| in_reach(s, x, y, crate::world::TerrainType::Forest);
+        let water_in_reach = |s: &Self, x: i32, y: i32| in_reach(s, x, y, crate::world::TerrainType::Water);
+        // On scattered ground, where everything is within a pace or two, the
+        // nearest dry ground, as it always was (`TerrainStyle`).
+        if self.world.terrain_style == crate::world::TerrainStyle::Scattered {
+            let at = nearest(self, &|s, x, y| s.is_passable_tile(x, y)).unwrap_or(middle);
+            for agent in self.population.agents.iter_mut().filter(|agent| agent.state.is_alive) {
+                agent.state.position = (at.0, at.1, agent.state.position.2);
+            }
+            return at;
         }
+        let at = nearest(self, &|s, x, y| {
+            open_country(s, x, y)
+                && s.is_passable_tile(x, y)
+                && woods_in_reach(s, x, y)
+                && water_in_reach(s, x, y)
+        })
+        .or_else(|| {
+            nearest(self, &|s, x, y| {
+                open_country(s, x, y) && s.is_passable_tile(x, y) && woods_in_reach(s, x, y)
+            })
+        })
+        .or_else(|| nearest(self, &|s, x, y| open_country(s, x, y) && s.is_passable_tile(x, y)))
+        .or_else(|| nearest(self, &|s, x, y| s.is_passable_tile(x, y)))
+        .unwrap_or(middle);
         for agent in self.population.agents.iter_mut().filter(|agent| agent.state.is_alive) {
             agent.state.position = (at.0, at.1, agent.state.position.2);
         }
@@ -1528,6 +1622,7 @@ impl Simulation {
             minutes_spent_in_danger: 0,
             shut_in: Default::default(),
             camp_move_proposed: Default::default(),
+            route_scratch: Default::default(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,

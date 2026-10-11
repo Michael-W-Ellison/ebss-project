@@ -23,6 +23,13 @@ use crate::world::{Position, ResourceNode, ResourceType, TerrainType, World, Wor
 fn a_world_with_a_river() -> World {
     let mut world = World::new(WorldConfig::default());
 
+    // Whatever the world put on this ground goes with it: springs sit on
+    // shores now, and the shore this river is laid over may have had one
+    // (#315)
+    world
+        .resources
+        .retain(|r| !(r.position.x < 6 && r.position.y < 3));
+
     for x in 0..6 {
         for y in 0..3 {
             let here = Position::new(x, y);

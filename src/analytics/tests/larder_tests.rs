@@ -486,6 +486,39 @@ fn a_surplus_and_no_pit_means_digging() {
     );
 }
 
+/// And standing in a wood, he walks to ground that will take a hole.
+///
+/// Digging asked only of the ground underfoot. In smooth country a camp
+/// sleeps under the trees, and a settlement on one fresh world dug eight pits
+/// in its first two months and none in the next ten (#315).
+#[test]
+fn a_surplus_in_the_woods_means_walking_to_open_ground_to_dig() {
+    let mut simulation = a_digger();
+    simulation.world.terrain_style = crate::world::TerrainStyle::Smooth;
+    if let Some(tile) = simulation.world.grid.get_tile_mut(&Position::new(25, 25)) {
+        tile.terrain = Terrain::new(TerrainType::Forest);
+    }
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(supper(30, 0));
+    simulation.population.agents[0]
+        .found_out_how_to(Simulation::THAT_LAYING_IT_OUT_KEEPS_IT);
+    simulation.execute_action(&Action::Dry { what: "food".to_string() }, 0);
+
+    let here = simulation.population.agents[0].state.position;
+    let answer = simulation
+        .putting_food_by(&simulation.population.agents[0], here)
+        .expect("he has more than he can eat");
+
+    match answer {
+        Action::Move { target } => {
+            let paces = (target.0 - 25).abs().max((target.1 - 25).abs());
+            assert_eq!(paces, 1, "to the open ground beside the wood, not {target:?}");
+        }
+        other => panic!("the forest floor will not take a hole, so he walks to ground that will: {other:?}"),
+    }
+}
+
 /// And with a pit under him, buries it - once it is a thing that will keep.
 ///
 /// The `Dry` here used to be decoration: the digger had never watched anything

@@ -264,6 +264,11 @@ pub struct World {
     /// health or their life. See `ResourceType::StrangePlant`.
     #[serde(default)]
     pub what_the_strange_plants_are: Vec<bool>,
+
+    /// How this world's ground was laid out; see `TerrainStyle`. Last, with a
+    /// default, because saves are positional.
+    #[serde(default)]
+    pub terrain_style: TerrainStyle,
 }
 
 /// Something lying on the ground where somebody left it.
@@ -600,6 +605,28 @@ impl Pit {
 pub struct WorldConfig {
     pub size: (usize, usize), // Width, Height (no Z for simplicity)
     pub initial_resources: ResourceConfig,
+    /// How the ground is laid out; see `TerrainStyle`.
+    pub terrain: TerrainStyle,
+}
+
+/// How a world's ground is laid out.
+///
+/// **Scattered** is the generator every world has been made with: each tile
+/// read from a hash, so every kind of ground lies within a pace or two of
+/// every other and every world has the same ground. Everything in this model
+/// was tuned on it, and it is the default.
+///
+/// **Smooth** is seeded relief: country a couple of kilometres across, lakes
+/// and rivers with banks and fords, a coast, woods in copses, so there is
+/// good land and bad and a reason to be in one place rather than another.
+/// It is opt-in while the model is recalibrated on it; on four fresh big-map
+/// worlds it bore no children in two years where the scattered ground bore
+/// 29. See ISSUES_FOUND #315.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum TerrainStyle {
+    #[default]
+    Scattered,
+    Smooth,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -724,6 +751,7 @@ impl Default for WorldConfig {
         Self {
             size: (50, 50),
             initial_resources: ResourceConfig::default(),
+            terrain: TerrainStyle::Scattered,
         }
     }
 }
@@ -747,8 +775,15 @@ impl WorldConfig {
         let side = Grid::HOW_MANY_CELLS_ACROSS_A_COUNTRY;
         Self {
             size: (side, side),
+            terrain: crate::world::TerrainStyle::Scattered,
             initial_resources: ResourceConfig::default(),
         }
+    }
+
+    /// The same world on smooth, seeded ground; see `TerrainStyle`.
+    pub fn with_smooth_terrain(mut self) -> Self {
+        self.terrain = TerrainStyle::Smooth;
+        self
     }
 
     /// Set world size
@@ -1218,7 +1253,10 @@ impl World {
     /// [`World::let_the_country_come_up`] starts from.
     fn made_with(config: WorldConfig, fauna: Option<AnimalSpawnConfig>) -> Self {
         let mut grid = Grid::new(config.size.0, config.size.1);
-        grid.generate_terrain();
+        match config.terrain {
+            TerrainStyle::Scattered => grid.generate_terrain(),
+            TerrainStyle::Smooth => grid.generate_smooth_terrain(),
+        }
 
         let mut world = Self {
             grid,
@@ -1251,6 +1289,7 @@ impl World {
             road_network: path_planning::RoadNetwork::new(),
             territory_manager: territory::TerritoryManager::new(),
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
+            terrain_style: config.terrain,
             dropped: Vec::new(),
             snares: Vec::new(),
             pits: Vec::new(),
@@ -1692,16 +1731,34 @@ impl World {
         }
 
         // Generate water sources (rivers, wells, springs)
-        // Water is critical for survival - place near various terrains
-        for _ in 0..config.water_sources {
-            // Water can be found in various locations
-            let terrain = match rng.gen_range(0..4) {
-                0 => TerrainType::Plains,   // River in plains
-                1 => TerrainType::Meadow,   // Stream in meadow
-                2 => TerrainType::Forest,   // Spring in forest
-                _ => TerrainType::Hills,    // Well in hills
+        //
+        // **Most of them where the water is.** A drink is taken at a source,
+        // and the sources were put down at random on grass, meadow, wood and
+        // hill, while the lakes and rivers on the map were scenery nobody
+        // could drink from. While the ground was drawn tile by tile that
+        // hardly showed: water and dry land were never more than a few paces
+        // apart. In smooth country it killed. A people put down beside a lake
+        // on one fresh world had the nearest source 40 cells off, and eight
+        // of twelve died of thirst inside four days (#315). Two in three are
+        // on the shore of a lake or a river now; the rest are springs and
+        // wells in the hills and woods, as before. On smooth ground only, for
+        // now: the scattered ground everything was tuned on keeps its springs
+        // where they always were (`TerrainStyle`).
+        for source in 0..config.water_sources {
+            let on_the_shore = if self.terrain_style == TerrainStyle::Smooth && source % 3 != 2 {
+                self.find_random_shore_position(TerrainType::Water, taken)
+            } else {
+                None
             };
-            let pos = self.find_random_terrain_position(terrain, taken);
+            let pos = on_the_shore.unwrap_or_else(|| {
+                let terrain = match rng.gen_range(0..4) {
+                    0 => TerrainType::Plains,   // River in plains
+                    1 => TerrainType::Meadow,   // Stream in meadow
+                    2 => TerrainType::Forest,   // Spring in forest
+                    _ => TerrainType::Hills,    // Well in hills
+                };
+                self.find_random_terrain_position(terrain, taken)
+            });
             // Water sources are renewable and have high capacity
             self.resources.push(ResourceNode::new(
                 ResourceType::Water,
@@ -1723,7 +1780,14 @@ impl World {
                 continue;
             }
             for _ in 0..Self::HOW_MANY_PLACES_THE_SEA_CAN_BE_REACHED {
-                let pos = self.find_random_terrain_position(terrain, taken);
+                // On the shore, where somebody can stand and reach it: out in
+                // smooth sea a source is a long swim from anybody (#315)
+                let pos = if self.terrain_style == TerrainStyle::Smooth {
+                    self.find_random_shore_position(terrain, taken)
+                } else {
+                    None
+                }
+                .unwrap_or_else(|| self.find_random_terrain_position(terrain, taken));
                 self.resources.push(ResourceNode::new(
                     ResourceType::Water,
                     pos,
@@ -1881,6 +1945,34 @@ impl World {
     /// caller that puts something down at a position this did not choose has
     /// to say so - see `land_tests::stocking_a_map_leaves_no_two_things_on_a
     /// _tile`.
+    /// Somewhere on dry ground beside water of this kind, not already taken:
+    /// `None` if a few hundred tries find none.
+    fn find_random_shore_position(
+        &self,
+        water: TerrainType,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) -> Option<Position> {
+        let mut rng = crate::core::dice::roll();
+        for _ in 0..400 {
+            let pos = Position::new(
+                rng.gen_range(0..self.grid.width) as i32,
+                rng.gen_range(0..self.grid.height) as i32,
+            );
+            let dry = self.grid.get_tile(&pos).is_some_and(|tile| {
+                !matches!(tile.terrain.terrain_type, TerrainType::Water | TerrainType::Sea)
+            });
+            let beside = [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|(dx, dy)| {
+                self.grid
+                    .get_tile(&Position::new(pos.x + dx, pos.y + dy))
+                    .is_some_and(|tile| tile.terrain.terrain_type == water)
+            });
+            if dry && beside && taken.insert((pos.x, pos.y)) {
+                return Some(pos);
+            }
+        }
+        None
+    }
+
     fn find_random_terrain_position(
         &self,
         terrain_type: TerrainType,
@@ -3517,6 +3609,7 @@ mod tests {
     fn test_custom_world_config() {
         let config = WorldConfig {
             size: (100, 80),
+            terrain: crate::world::TerrainStyle::Scattered,
             initial_resources: ResourceConfig {
                 wood_nodes: 30,
                 stone_nodes: 20,
@@ -3558,3 +3651,22 @@ mod tests {
 // External TDD test modules
 #[cfg(test)]
 mod tdd_tests;
+
+#[cfg(test)]
+impl World {
+    /// The same world laid to open grass end to end, for a test about
+    /// walking or building that is not about the lie of the land.
+    ///
+    /// Terrain is smooth and each world's own now (#315), so a test that
+    /// walks from (10, 10) to (12, 12) on a world it did not lay out may find
+    /// a lake in the way. Tests used to get away with it because every world
+    /// had the same ground.
+    pub(crate) fn all_open_grass(mut self) -> Self {
+        for row in self.grid.tiles.iter_mut() {
+            for tile in row.iter_mut() {
+                tile.terrain.terrain_type = TerrainType::Plains;
+            }
+        }
+        self
+    }
+}

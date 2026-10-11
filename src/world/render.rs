@@ -283,6 +283,7 @@ mod tests {
     fn test_render_basic() {
         let world = World::new(WorldConfig {
             size: (10, 10),
+            terrain: crate::world::TerrainStyle::Scattered,
             initial_resources: crate::world::ResourceConfig {
                 wood_nodes: 2,
                 stone_nodes: 2,
