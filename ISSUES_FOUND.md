@@ -23816,3 +23816,77 @@ Tests:
 - **Wider testing.** Switching the default would also move the repeatable dice
   counts and the handful of tests that were written against scattered ground
   (#315).
+
+### 317. Seed 2's famine: founders put down on an island
+
+On smooth terrain at #316, seed 2 lost eight of twelve to hunger in its first
+winter, between days 334 and 356. The whole time, each person's share of the
+stores stood at 105,000–150,000 units. `zz_famine`, rerun on the same dice,
+reproduced it death for death.
+
+**What the dying did.** One person spent the two days before they died
+walking towards a pit at (468,495), 17 paces west. Every turn they stepped
+from (486,495) to (485,495) and back again ("17 steps to goal", "18 steps to
+goal"), and every step was booked as a success. The way west was a river. The
+route search found no way over it, so the walk fell back to single steps:
+
+- from one cell, the direct step undid the last one and was refused (#254);
+- the fallback took it anyway;
+- from the other cell, west was water, and the first open sidestep was east.
+
+**Why there was no way over.** A flood fill from where they stood reached
+1,179 cells and stopped. Smooth terrain draws a river as a contour of a noise
+field, and a contour can close on itself. The founders' arrival rule (#316)
+had put the people down at (490,509), inside such a loop: an island with no
+ford, with everything a living needs in reach.
+
+**How anybody got off.** Between days 61 and 71, ten of the twelve were on
+the mainland. A frightened person bolts in a straight line, and the landing
+only had to open onto 256 cells of ground (#295). So a bolt could clear any
+water, and ten people bolted across the river and dug their pits on the far
+bank. The two who never left could not reach those pits, and starved walking
+at the river. So did one who later bolted back to the island.
+
+**Two fixes:**
+
+1. **Founders arrive on the mainland.** `where_a_living_is_in_reach` labels
+   every piece of ground a foot can cross, and only considers places on the
+   largest one. This applies on smooth terrain only.
+2. **A bolt lands only where the runner could walk back from.** The landing
+   has to be reachable on foot from where they stood, going no further than
+   the bolt plus `A_WAY_ROUND` (16 paces) from it (`where_a_walk_gets_from`,
+   replacing `can_this_be_walked_out_of`). A pond, or a scattered-terrain
+   river a tile or two wide, still stands between a runner and the wolves,
+   which is what #295 wanted from a bolt. A smooth-terrain river with no ford
+   near does not. Neither does the rock in the sea that #295 found.
+
+**Two years from 12 founders, seeds 1–8** (`zz_gate_why`):
+
+| | births | deaths |
+|---|---|---|
+| smooth, at #316 | 40 | 9 (all seed 2) |
+| smooth, now | **43** | **0** |
+| old terrain, at #316 | 46 | 1 |
+| old terrain, now | 46 | 1 |
+
+Seed 2 went from 2 births and 9 deaths to 6 and 0. Every old-terrain seed
+came out exactly as before, and both repeatable dice counts are unchanged:
+on scattered ground, no bolt was ever refused for want of a way back.
+
+Tests:
+- `off_the_map_tests::a_bolt_does_not_clear_a_river_with_no_way_back`
+- `off_the_map_tests::a_bolt_still_clears_a_pond`
+- `terrain_tests::a_people_does_not_arrive_on_an_island`, which fails without
+  the mainland rule.
+
+`theft_tests::running_is_away_from_the_thing` stood its man at (50, 50), just
+off the corner of a 50-cell map, and checked that he bolted west. The old
+landing check let him land back on the map. The new one asks for a way back
+from where he stood, and there is none off the map. Since #37 nobody can
+stand there, so the test now stands him on open ground on the map.
+
+**Not fixed, and worth knowing about.** A walk to somewhere it has no route to
+still steps back and forth on the bank and books every step as a success. The
+decision that chose the walk learns nothing from it. Nothing in these runs
+still walks into that, but anything else that strands somebody across water
+would starve them the same way.
