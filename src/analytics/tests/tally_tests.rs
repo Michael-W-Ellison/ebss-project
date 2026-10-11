@@ -133,6 +133,9 @@ fn the_branches_of_the_tree_account_for_every_time_it_was_asked() {
         "a grudge answered before the tree was asked",
         "stands over one of its own",
         "stands its ground",
+        // Never once reached on the old scattered test map, so the list did
+        // not have it; on smooth ground it is (#318).
+        "backs away from something bigger",
         "runs",
         "cornered, so fights",
         "cannot fight, so runs",

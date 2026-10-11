@@ -208,7 +208,8 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // eaten. Up to 9,894 for #301: nobody walks to the pit underfoot.
     // Down to 9,333 for #302: the wish to sleep comes from tiredness, not the
     // clock, so nobody takes a five-hour sleep in the afternoon unless tired.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 9_333;
+    // Down to 7,686 for #318: worlds are made on smooth ground by default.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_686;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -427,7 +428,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 4.2% to 1,317,154 for #316: a head full of berry patches and
     // fishing spots still keeps the nearest few places it knows of each
     // thing its tools are made of.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_317_154;
+    // Up 12.1% to 1,476,142 for #318: worlds are made on smooth ground by
+    // default.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_476_142;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

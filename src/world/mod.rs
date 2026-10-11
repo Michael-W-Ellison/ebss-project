@@ -266,8 +266,9 @@ pub struct World {
     pub what_the_strange_plants_are: Vec<bool>,
 
     /// How this world's ground was laid out; see `TerrainStyle`. Last, with a
-    /// default, because saves are positional.
-    #[serde(default)]
+    /// default, because saves are positional. A save from before the field
+    /// existed was made on scattered ground, whatever the default is now.
+    #[serde(default = "TerrainStyle::what_old_saves_were_made_on")]
     pub terrain_style: TerrainStyle,
 }
 
@@ -611,22 +612,29 @@ pub struct WorldConfig {
 
 /// How a world's ground is laid out.
 ///
-/// **Scattered** is the generator every world has been made with: each tile
-/// read from a hash, so every kind of ground lies within a pace or two of
-/// every other and every world has the same ground. Everything in this model
-/// was tuned on it, and it is the default.
+/// **Smooth**, the default, is seeded relief: country a couple of kilometres
+/// across, lakes and rivers with banks and fords, a coast, woods in copses, so
+/// there is good land and bad and a reason to be in one place rather than
+/// another (#315). It became the default once settlements did as well on it
+/// as on the old ground: over two years on eight fresh big-map worlds, 43
+/// births and no deaths, against 46 and 1 (#316, #317, #318).
 ///
-/// **Smooth** is seeded relief: country a couple of kilometres across, lakes
-/// and rivers with banks and fords, a coast, woods in copses, so there is
-/// good land and bad and a reason to be in one place rather than another.
-/// It is opt-in while the model is recalibrated on it; on four fresh big-map
-/// worlds it bore no children in two years where the scattered ground bore
-/// 29. See ISSUES_FOUND #315.
+/// **Scattered** is the generator every world was made with before that: each
+/// tile read from a hash, so every kind of ground lies within a pace or two of
+/// every other and every world has the same ground. Kept for old saves and for
+/// tests that want a little of everything everywhere.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TerrainStyle {
-    #[default]
     Scattered,
+    #[default]
     Smooth,
+}
+
+impl TerrainStyle {
+    /// What a save from before `World::terrain_style` existed was made on.
+    pub fn what_old_saves_were_made_on() -> Self {
+        TerrainStyle::Scattered
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -751,7 +759,7 @@ impl Default for WorldConfig {
         Self {
             size: (50, 50),
             initial_resources: ResourceConfig::default(),
-            terrain: TerrainStyle::Scattered,
+            terrain: TerrainStyle::Smooth,
         }
     }
 }
@@ -775,7 +783,7 @@ impl WorldConfig {
         let side = Grid::HOW_MANY_CELLS_ACROSS_A_COUNTRY;
         Self {
             size: (side, side),
-            terrain: crate::world::TerrainStyle::Scattered,
+            terrain: TerrainStyle::Smooth,
             initial_resources: ResourceConfig::default(),
         }
     }
@@ -783,6 +791,12 @@ impl WorldConfig {
     /// The same world on smooth, seeded ground; see `TerrainStyle`.
     pub fn with_smooth_terrain(mut self) -> Self {
         self.terrain = TerrainStyle::Smooth;
+        self
+    }
+
+    /// The same world on the old scattered ground; see `TerrainStyle`.
+    pub fn with_scattered_terrain(mut self) -> Self {
+        self.terrain = TerrainStyle::Scattered;
         self
     }
 

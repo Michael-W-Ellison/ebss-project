@@ -28,12 +28,10 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #317): `cargo test --lib` in one piece.
-2,789 tests run: 2,784 passed, 1 failed, 4 ignored, in 1,248 s. The failure
-was `theft_tests::running_is_away_from_the_thing`, which stood its man just
-off the corner of the map. A bolt now lands only where he could walk back
-from, and nowhere is, off the map. The test now stands him on the map, and
-`theft_tests` passes (23 of 23). That leaves:
+**Last full run** (ISSUES_FOUND #318), the first on smooth ground by
+default: `cargo test --lib` in one piece. 2,789 tests run: 2,785 passed, none
+failed, 4 ignored, in 1,080 s. The dice counts are now 7,686 (seed 4242, 120
+turns) and 1,476,142 (seed 0, a year). That leaves:
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed

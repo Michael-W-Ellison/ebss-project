@@ -229,10 +229,8 @@ fn stone_and_wood_lie_by_the_rivers() {
 
     let share_by_the_water = |smooth: bool, what: ResourceType, grounds: &[TerrainType]| {
         crate::core::dice::seed(11);
-        let mut config = WorldConfig::default();
-        if smooth {
-            config = config.with_smooth_terrain();
-        }
+        let config0 = WorldConfig::default();
+        let mut config = if smooth { config0.with_smooth_terrain() } else { config0.with_scattered_terrain() };
         config.size = (200, 200);
         let world = World::new(config);
         let all: Vec<_> = world.resources.iter().filter(|node| node.resource_type == what).collect();

@@ -23890,3 +23890,59 @@ still steps back and forth on the bank and books every step as a success. The
 decision that chose the walk learns nothing from it. Nothing in these runs
 still walks into that, but anything else that strands somebody across water
 would starve them the same way.
+
+### 318. Smooth terrain is the default
+
+`TerrainStyle::Smooth` is now the default for `WorldConfig::default()` and
+`WorldConfig::big_enough_for_an_ecology()`. The switch was gated on
+settlements doing as well on it as on the old ground. Over two years from 12
+founders on seeds 1–8 (#317):
+
+| | births | deaths |
+|---|---|---|
+| smooth | 43 | 0 |
+| scattered | 46 | 1 |
+
+What came with the switch:
+- **The old ground can still be asked for.** `WorldConfig::with_scattered_terrain()`
+  gives it, for tests that want a little of everything everywhere.
+- **Old saves still load as what they were.** A save from before
+  `World::terrain_style` existed has no such field, so it is read as
+  Scattered (`TerrainStyle::what_old_saves_were_made_on`), not as the new
+  default.
+- **Dice counts:**
+  - seed 4242, 120 turns: 9,333 → 7,686;
+  - seed 0, a year: 1,317,154 → 1,476,142 (+12.1%).
+
+**Tests written against scattered ground.** Six failed on the switch. One
+found a gap in the test's list; four had fixtures that assumed a little of
+everything everywhere; one was my own test, from #316.
+
+- **`tally_tests::the_branches_of_the_tree_account_for_every_time_it_was_asked`.**
+  The tree's branches came to 186 fewer than the times it was asked. "Backs
+  away from something bigger" is one of the tree's outcomes, and the test's
+  list did not have it: on the old test map nobody was ever near anything
+  bigger than they were. Added to the list.
+- **`errand_tests` (2).** 284 errands set out and none arrived. The fixture
+  left 12 people in the corner they are made in, and on smooth country that
+  corner is a spit of land in the sea. The fixture now brings them to where
+  a people arrives (`bring_everybody_to_the_middle`), as every run does.
+- **`preparation_tests::somebody_with_a_vessel_leaves_the_river_carrying_water`.**
+  The spring the test puts at (25, 25) was in the sea on the smooth test map,
+  and nobody drinks salt water by choice. The fixture is now open grass
+  (`World::all_open_grass`).
+- **`cooking_tests::an_agent_lights_a_fire_and_cooks_on_it`.** On smooth
+  ground, open grass or not, the agent dried its fish 16 times and ate 41
+  meals in 400 turns, and never wanted a fire: there was other food to hand
+  near where it started. That is a fair answer, and not the question the test
+  asks (#224), so the test is on scattered ground.
+- **`terrain_tests::stone_and_wood_lie_by_the_rivers`** built its
+  "scattered" world from the default config, which is no longer scattered.
+  It now asks for scattered ground by name.
+
+**Still open on smooth ground:**
+- Worn-out tools stay in the pack (#316).
+- Packs fill with fish (#316).
+- A walk to somewhere it has no route to wastes its turns on the bank (#317).
+- The weather deaths of #315 have not come back in any run since #316, but
+  have not been looked into either.
