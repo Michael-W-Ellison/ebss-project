@@ -24191,3 +24191,60 @@ A camp that can make tools can build and burn.
 
 No change to the code. If weather deaths come back, the first thing to read
 is whether that camp had tools, wood and a roof.
+
+### 323. The far bank, filtered where it is decided
+
+#321 stopped anybody walking at a river, but the walks were still chosen and
+then refused, each costing a turn. Over two years on smooth seeds 1–8 that
+was 3,099 refused walks: 1,627 on seed 2 and 1,201 on seed 4. The scattered
+seeds had 351.
+
+**Tried first, and taken out: ending the walk on this bank.** Every walk
+anybody decides on passes through `where_a_walk_can_end`, so one change there
+would catch them all: a walk to the far bank ends at the bank opposite. It
+made things worse. People walked to the bank and then stood there, deciding
+the same walk every turn. Over two years, "move: already there" went from
+5,164 to 18,301 on seed 2 and from 77 to 7,595 on seed 4. The lesson is that
+a decision has to be steered while it is being made; correcting it afterwards
+does not work.
+
+**What asked for the far bank.** Each refused walk was labelled with the
+branch of the decision that chose it (a diagnostic, since removed):
+
+| where it came from | how it chose the place | fixed by |
+|---|---|---|
+| a way, or a drive's answer | `the_ways_open`, `how_this_agent_answers` | stands aside before it is chosen (`can_this_be_got_to`) |
+| running from a beast or an attacker | a straight line away, often over the river | runs where a bolt would, on this bank (`away_on_this_side`) |
+| something just seen | `generate_action_from_percepts` | the same check |
+| an errand already under way | its `going_to` | given up before it is kept to |
+| night (seed 6: all 1,471 in a year) | the nearest cover, often trees over the river; clean ground; the evening fire; home | each looked for on this bank; home with no way back is not walked at ("night: no way home") |
+| somebody starving or parched (seed 8: 471 in 540 days) | water or food smelled, remembered or seen, and prey | `known_source_position` keeps to this bank; prey over the river is not chased |
+
+**After, two years from 12 founders, seeds 1–8:**
+
+| | births, deaths (#321) | after | refused walks (#321) | after |
+|---|---|---|---|---|
+| smooth | 55, 1 | 51, 2 | 3,099 | **3** |
+| scattered | 43, 3 | 48, 3 | 351 | **0** |
+
+Births and deaths are within the spread between seeds. Every death on smooth
+ground was a mishap. "Move: already there" (#234) also fell, from 8,480 to
+221 on smooth and from 824 to 112 on scattered. I have not traced why. Those
+counts swing widely from seed to seed: after only the first half of this
+change, seed 7 had 5,775 on its own.
+
+**Tests** (`off_the_map_tests`):
+- `running_away_with_a_river_behind_stays_on_this_bank`
+- `the_water_a_thirsty_one_heads_for_is_on_this_bank`
+- `the_cover_a_sleeper_goes_to_is_on_this_bank`
+- `nobody_sets_out_for_what_is_on_the_far_bank` and
+  `an_errand_to_somewhere_there_is_no_way_to_is_given_up` are kept from #321.
+  `a_walk_with_no_way_there_is_refused_rather_than_walked_at` is back to
+  expecting a refusal, since the clamp is gone.
+
+The water and cover tests each put the nearer spot over the river, so
+without the fix they pick it.
+
+The seed-0 yearly dice count moved from 1,466,916 (#321), through 1,461,434
+with the clamp and 1,372,417 without it, to 1,572,784. Seed 4242's 120-turn
+count did not move.
