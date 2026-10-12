@@ -440,7 +440,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 2.8% to 1,466,916 for #321: nobody sets out for somewhere there
     // is no way to, a walk there is refused before a step is taken, and an
     // errand there is given up.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_466_916;
+    // Down 0.4% to 1,461,434 for #323: a walk decided on across a river ends
+    // on this bank, and a way or a drive's answer that is a walk to the far
+    // bank stands aside before it is chosen.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_461_434;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

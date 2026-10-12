@@ -119,6 +119,13 @@ impl Simulation {
                 .what_a_threat_came_to
                 .entry("walk: no way there".to_string())
                 .or_insert(0) += 1;
+            if std::env::var("WALK_DETAIL").is_ok() {
+                let why = match self.population.agents[agent_index].errand.as_ref() {
+                    Some(errand) => format!("errand for {:?}", errand.for_drive),
+                    None => format!("no errand, pressing {:?}", self.population.agents[agent_index].what_presses_hardest()),
+                };
+                *self.what_a_threat_came_to.entry(format!("walk: no way there, {why}")).or_insert(0) += 1;
+            }
             // And an errand to there is over. It holds its place across
             // turns, so it would have been refused again every turn until it
             // ran out of patience: thirty-nine and two hundred times, on two

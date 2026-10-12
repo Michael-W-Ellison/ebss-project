@@ -723,6 +723,12 @@ impl Simulation {
             }
         }
 
+        // And so does a walk to somewhere there is no way to, before it is
+        // refused at the water's edge (#323).
+        if !self.can_this_be_got_to(agent_position, &answer) {
+            return None;
+        }
+
         if agent
             .lessons
             .will_try_this_here(&crate::agents::Agent::what_was_tried(&answer), here)
@@ -733,6 +739,22 @@ impl Simulation {
         }
     }
 
+
+    /// Whether this is somewhere this one could walk to, if it is a walk at
+    /// all.
+    ///
+    /// The far bank of a river is in sight and in mind, and many decisions
+    /// pick a place without asking what is known to be there: a day's trip to
+    /// the best ground, somewhere to meet, a step out of curiosity. Each such
+    /// walk was refused at the start (#321) and then decided again, and on one
+    /// world that was 680 turns a year. Asked here, where a decision is still
+    /// being made, the next answer gets the turn instead (#323).
+    pub(in crate::analytics) fn can_this_be_got_to(&self, from: (i32, i32, i32), doing: &Action) -> bool {
+        match doing {
+            Action::Move { target } => self.world.can_walk_between((from.0, from.1), (target.0, target.1)),
+            _ => true,
+        }
+    }
 
     /// Whether an answer is one there is nothing to find out about.
     ///
