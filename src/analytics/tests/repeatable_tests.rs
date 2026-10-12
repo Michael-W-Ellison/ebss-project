@@ -437,9 +437,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // rather than carried for the rest of the year.
     // Down 3.3% to 1,509,486 for #320: dried and smoked food are carried
     // under their own names, and a merged stack weighs what its parts did.
-    // Down 1.4% to 1,488,273 for #321: nobody sets out for somewhere there
-    // is no way to, and a walk there is refused before a step is taken.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_488_273;
+    // Down 2.8% to 1,466,916 for #321: nobody sets out for somewhere there
+    // is no way to, a walk there is refused before a step is taken, and an
+    // errand there is given up.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_466_916;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -119,6 +119,20 @@ impl Simulation {
                 .what_a_threat_came_to
                 .entry("walk: no way there".to_string())
                 .or_insert(0) += 1;
+            // And an errand to there is over. It holds its place across
+            // turns, so it would have been refused again every turn until it
+            // ran out of patience: thirty-nine and two hundred times, on two
+            // worlds, for one errand (#321).
+            let agent = &mut self.population.agents[agent_index];
+            if agent.errand.as_ref().is_some_and(|errand| {
+                !self.world.can_walk_between((from.0, from.1), (errand.going_to.0, errand.going_to.1))
+            }) {
+                agent.errand = None;
+                *self
+                    .what_a_threat_came_to
+                    .entry("errand: no way there".to_string())
+                    .or_insert(0) += 1;
+            }
             return ActionResult::failure(format!(
                 "No way from ({}, {}) to ({}, {})",
                 from.0, from.1, target.0, target.1

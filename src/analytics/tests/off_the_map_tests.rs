@@ -417,3 +417,30 @@ fn nobody_sets_out_for_what_is_on_the_far_bank() {
     assert!(known.contains(&this_side), "the spring on this bank is known: {known:?}");
     assert!(!known.contains(&far_side), "and the one over the river is no use: {known:?}");
 }
+
+/// And an errand to there is over, rather than refused again every turn
+/// until it runs out of patience (#321).
+#[test]
+fn an_errand_to_somewhere_there_is_no_way_to_is_given_up() {
+    let (mut simulation, (cx, cy)) = somebody_by_the_water(true);
+    simulation.population.agents[0].state.position = (cx, cy, 0);
+    let over_the_river = (cx + 10, cy, 0);
+    simulation.population.agents[0].errand = Some(crate::agents::Errand {
+        going_to: over_the_river,
+        set_out_from: (cx, cy, 0),
+        to_make: None,
+        for_drive: crate::core::DriveType::Curiosity,
+        pressed_this_hard: 0.5,
+        turns_on_it: 0,
+        set_aside: 0,
+    });
+
+    let result = simulation.execute_action(&Action::Move { target: over_the_river }, 0);
+
+    assert!(!result.success);
+    assert!(
+        simulation.population.agents[0].errand.is_none(),
+        "the errand is still held: {:?}",
+        simulation.population.agents[0].errand
+    );
+}
