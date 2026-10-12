@@ -371,9 +371,15 @@ impl Simulation {
                         });
                     }
 
-                    return Some(Action::Move {
-                        target: (animal_position.0, animal_position.1, agent_position.2),
-                    });
+                    // Not after it over a river, though (#323).
+                    if self.world.can_walk_between(
+                        (agent_position.0, agent_position.1),
+                        (animal_position.0, animal_position.1),
+                    ) {
+                        return Some(Action::Move {
+                            target: (animal_position.0, animal_position.1, agent_position.2),
+                        });
+                    }
                 }
             }
         }
@@ -705,6 +711,13 @@ impl Simulation {
         let walking_distance = |candidate: &(i32, i32, i32)| {
             (candidate.0 - agent_position.0).abs() + (candidate.1 - agent_position.1).abs()
         };
+        // Water smelled or remembered over a river is no answer to thirst:
+        // walked at, it was refused at the bank every turn, and someone parched
+        // stood there (#323).
+        let can_be_got_to = |candidate: &(i32, i32, i32)| {
+            self.world
+                .can_walk_between((agent_position.0, agent_position.1), (candidate.0, candidate.1))
+        };
 
         let smelled = agent
             .senses
@@ -712,6 +725,7 @@ impl Simulation {
             .get_scents_by_type(scent_type)
             .into_iter()
             .map(|scent| scent.source_position)
+            .filter(can_be_got_to)
             .min_by_key(walking_distance);
 
         smelled
@@ -721,6 +735,7 @@ impl Simulation {
                     .recall_locations(memory_type.clone())
                     .into_iter()
                     .map(|memory| memory.position)
+                    .filter(can_be_got_to)
                     .min_by_key(walking_distance)
             })
             // And last, what this one has *seen*.
@@ -779,6 +794,7 @@ impl Simulation {
                     .map(|where_it_is| {
                         (where_it_is.x, where_it_is.y, agent_position.2)
                     })
+                    .filter(can_be_got_to)
                     .min_by_key(walking_distance)
             })
     }

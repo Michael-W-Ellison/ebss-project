@@ -444,7 +444,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // just seen that is a walk to the far bank stands aside before it is
     // chosen, and whoever runs from a beast or an attacker across a river
     // runs somewhere on this bank instead.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_372_417;
+    // Up 14.6% to 1,572,784, still #323: nor is water or food known of over
+    // the river, prey on the far bank, or cover, clean ground, a fire or home
+    // there at night.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_572_784;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

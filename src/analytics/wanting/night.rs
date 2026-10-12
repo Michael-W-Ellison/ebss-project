@@ -73,6 +73,9 @@ impl Simulation {
                     .grid
                     .get_tile(at)
                     .is_some_and(|tile| !tile.soil.is_foul() && tile.terrain.is_walkable())
+                // Not the trees on the far bank of a river: a walk there was
+                // refused at the water, night after night (#323).
+                && self.world.can_walk_between((from.0, from.1), (at.x, at.y))
         };
         if fit(&Position::new(from.0, from.1)) {
             return None;
@@ -117,6 +120,7 @@ impl Simulation {
         }
         if let Some((_, fire)) =
             self.nearest_fire_from(here, Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS, true)
+                .filter(|(_, fire)| self.world.can_walk_between((here.0, here.1), (fire.0, fire.1)))
         {
             return Some(Action::Move { target: fire });
         }
@@ -259,6 +263,12 @@ impl Simulation {
                     if (home.0 - here.0).abs().max((home.1 - here.1).abs())
                         > Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS =>
                 {
+                    // Home over a river with no way back is not walked at
+                    // (#323).
+                    if !self.world.can_walk_between((here.0, here.1), (home.0, home.1)) {
+                        *self.what_a_threat_came_to.entry("night: no way home".to_string()).or_insert(0) += 1;
+                        return action;
+                    }
                     Action::Move { target: (home.0, home.1, here.2) }
                 }
                 Some(_) => match self.the_evening_at_home(agent_index) {

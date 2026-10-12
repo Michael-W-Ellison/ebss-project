@@ -470,3 +470,58 @@ fn an_errand_to_somewhere_there_is_no_way_to_is_given_up() {
     );
 }
 
+
+/// Water known of over a river is not where somebody parched heads.
+///
+/// Smelled, remembered or seen, the nearest water was often on the far bank
+/// of a river, and somebody starving or parched was sent to it and refused at
+/// the bank every turn: 471 turns in half a year on one world (#323).
+#[test]
+fn the_water_a_thirsty_one_heads_for_is_on_this_bank() {
+    use crate::core::memory::SpatialMemoryType;
+    use crate::agents::senses::ScentType;
+    use crate::world::{Position, ResourceType};
+
+    let (mut simulation, (cx, cy)) = somebody_by_the_water(true);
+    let agent = &mut simulation.population.agents[0];
+    agent.state.position = (cx, cy, 0);
+    let known = &mut agent.exploration_knowledge.known_resources;
+    known.insert(Position::new(cx + 7, cy), ResourceType::Water);
+    known.insert(Position::new(cx - 12, cy), ResourceType::Water);
+
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.known_source_position(agent, (cx, cy, 0), ScentType::Water, SpatialMemoryType::Water),
+        Some((cx - 12, cy, 0)),
+        "the nearer water is over the river"
+    );
+}
+
+/// Nor does anybody go in out of the weather under trees on the far bank.
+///
+/// At night a sleeper out in the open goes to the nearest cover, and the
+/// nearest was over the river often enough to be refused 1,400 times in a
+/// year on one world (#323).
+#[test]
+fn the_cover_a_sleeper_goes_to_is_on_this_bank() {
+    use crate::world::{Position, TerrainType};
+
+    let (mut simulation, (cx, cy)) = somebody_by_the_water(true);
+    simulation.world.buildings.clear();
+    for (x, y) in [(cx + 7, cy), (cx - 9, cy)] {
+        simulation
+            .world
+            .grid
+            .get_tile_mut(&Position::new(x, y))
+            .expect("on the map")
+            .terrain
+            .terrain_type = TerrainType::Forest;
+    }
+    simulation.world.the_lie_of_the_land_changed();
+
+    assert_eq!(
+        simulation.somewhere_out_of_the_weather((cx, cy, 0)),
+        Some((cx - 9, cy, 0)),
+        "the nearer trees are over the river"
+    );
+}

@@ -36,7 +36,10 @@ impl Simulation {
                 let Some(tile) = self.world.grid.get_tile(&there) else {
                     continue;
                 };
-                if tile.soil.is_foul() || !tile.terrain.is_walkable() {
+                if tile.soil.is_foul()
+                    || !tile.terrain.is_walkable()
+                    || !self.world.can_walk_between((from.0, from.1), (there.x, there.y))
+                {
                     continue;
                 }
 
