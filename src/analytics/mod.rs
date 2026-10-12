@@ -979,6 +979,16 @@ impl Simulation {
 
         known.sort_unstable();
         known.dedup();
+
+        // **And only what it could walk to.** A spring or a fishing place on
+        // the far bank of a river is in sight, and is remembered, and is no
+        // use to somebody with no way over: they set out for it and walked at
+        // the water (#321).
+        let here = (from.x, from.y);
+        known.retain(|&number| {
+            let at = self.world.resources[number].position;
+            self.world.can_walk_between(here, (at.x, at.y))
+        });
         known
     }
 

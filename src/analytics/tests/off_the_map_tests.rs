@@ -337,6 +337,7 @@ fn somebody_by_the_water(the_water_runs_the_whole_way: bool) -> (crate::analytic
                 .terrain_type = if in_the_water { TerrainType::Water } else { TerrainType::Plains };
         }
     }
+    simulation.world.the_lie_of_the_land_changed();
     (simulation, (cx, cy))
 }
 
@@ -368,4 +369,51 @@ fn a_bolt_still_clears_a_pond() {
         .expect("there is ground to run to");
 
     assert!(landed.0 > cx + 5, "stopped short of the pond at {landed:?}");
+}
+
+/// A walk to somewhere there is no way to is refused, and nobody walks at the
+/// water.
+///
+/// With no route, a walk took single steps towards the place, and against a
+/// river they went one way and back again, each step a success, until the
+/// turn was spent, and the next turn the same. On one world that was a walk
+/// in six (#321).
+#[test]
+fn a_walk_with_no_way_there_is_refused_rather_than_walked_at() {
+    let (mut simulation, (cx, cy)) = somebody_by_the_water(true);
+    simulation.population.agents[0].state.position = (cx, cy, 0);
+    let over_the_river = (cx + 10, cy, 0);
+
+    let result = simulation.execute_action(&Action::Move { target: over_the_river }, 0);
+
+    assert!(!result.success, "there is no way over: {:?}", result.message);
+    assert_eq!(
+        simulation.population.agents[0].state.position,
+        (cx, cy, 0),
+        "and nobody has walked anywhere"
+    );
+}
+
+/// And what is on the far bank is not somewhere to set out for.
+#[test]
+fn nobody_sets_out_for_what_is_on_the_far_bank() {
+    use crate::world::{Position, ResourceNode, ResourceType};
+
+    let (mut simulation, (cx, cy)) = somebody_by_the_water(true);
+    simulation.population.agents[0].state.position = (cx, cy, 0);
+    simulation.world.resources.clear();
+    let this_side = Position::new(cx - 8, cy);
+    let far_side = Position::new(cx + 8, cy);
+    simulation.world.resources.push(ResourceNode::new(ResourceType::Water, this_side, 50));
+    simulation.world.resources.push(ResourceNode::new(ResourceType::Water, far_side, 50));
+    simulation.world.file_the_nodes();
+
+    let agent = &simulation.population.agents[0];
+    let known: Vec<Position> = simulation
+        .nodes_known_to(agent, Position::new(cx, cy), 25)
+        .map(|node| node.position)
+        .collect();
+
+    assert!(known.contains(&this_side), "the spring on this bank is known: {known:?}");
+    assert!(!known.contains(&far_side), "and the one over the river is no use: {known:?}");
 }

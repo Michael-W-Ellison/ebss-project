@@ -270,6 +270,12 @@ pub struct World {
     /// existed was made on scattered ground, whatever the default is now.
     #[serde(default = "TerrainStyle::what_old_saves_were_made_on")]
     pub terrain_style: TerrainStyle,
+
+    /// Which piece of ground a foot can cross each cell is on, worked out the
+    /// first time anybody asks and not saved: it is the map's to say, and the
+    /// map does not change what can be walked on (`World::can_walk_between`).
+    #[serde(skip)]
+    pieces: std::sync::OnceLock<Vec<u32>>,
 }
 
 /// Something lying on the ground where somebody left it.
@@ -1304,6 +1310,7 @@ impl World {
             territory_manager: territory::TerritoryManager::new(),
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
             terrain_style: config.terrain,
+            pieces: std::sync::OnceLock::new(),
             dropped: Vec::new(),
             snares: Vec::new(),
             pits: Vec::new(),
@@ -2008,6 +2015,93 @@ impl World {
             }
         }
         None
+    }
+
+    /// Whether somebody standing at `from` could walk to `to`, or to the bank
+    /// beside it if it is in the water.
+    ///
+    /// Every cell a foot can go on is labelled once with the piece of ground
+    /// it belongs to, so this is a lookup and not a search. On scattered
+    /// ground nearly everything is one piece. On smooth country a river runs
+    /// for kilometres and some close round an island, and a person who had
+    /// seen a spring or a fishing place on the far bank set out for it and
+    /// walked at the water for the rest of the turn, and the next, because
+    /// there was no way there (#321).
+    ///
+    /// The labels are worked out from the ground as it is on first asking.
+    /// Nothing in a running world turns land to water or water to land; a test
+    /// that redraws the map after asking must call `the_lie_of_the_land_changed`.
+    pub fn can_walk_between(&self, from: (i32, i32), to: (i32, i32)) -> bool {
+        let ours = self.pieces_at_or_beside(from);
+        if ours.is_empty() {
+            return true;
+        }
+        self.pieces_at_or_beside(to).iter().any(|piece| ours.contains(piece))
+    }
+
+    /// Forget the labels, after redrawing the map.
+    pub fn the_lie_of_the_land_changed(&mut self) {
+        self.pieces = std::sync::OnceLock::new();
+    }
+
+    /// The piece a cell is on, or, for a cell no foot can go on, the pieces
+    /// of the ground beside it: where somebody standing in the shallows can
+    /// step out to, and where a walk to the water ends.
+    fn pieces_at_or_beside(&self, at: (i32, i32)) -> Vec<u32> {
+        let piece = |x: i32, y: i32| -> u32 {
+            let (w, h) = (self.grid.width as i32, self.grid.height as i32);
+            if x < 0 || y < 0 || x >= w || y >= h {
+                return 0;
+            }
+            self.pieces.get_or_init(|| self.label_the_pieces())[(y * w + x) as usize]
+        };
+        let here = piece(at.0, at.1);
+        if here != 0 {
+            return vec![here];
+        }
+        let mut beside: Vec<u32> = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+            .iter()
+            .map(|(dx, dy)| piece(at.0 + dx, at.1 + dy))
+            .filter(|&piece| piece != 0)
+            .collect();
+        beside.sort_unstable();
+        beside.dedup();
+        beside
+    }
+
+    /// Every cell's piece of ground, nought for one no foot can go on.
+    fn label_the_pieces(&self) -> Vec<u32> {
+        let (w, h) = (self.grid.width as i32, self.grid.height as i32);
+        let walkable = |x: i32, y: i32| {
+            self.grid
+                .get_tile(&Position::new(x, y))
+                .is_some_and(|tile| tile.terrain.is_walkable())
+        };
+        let mut piece = vec![0u32; (w * h) as usize];
+        let mut next = 0u32;
+        for start in 0..(w * h) {
+            let (sx, sy) = (start % w, start / w);
+            if piece[start as usize] != 0 || !walkable(sx, sy) {
+                continue;
+            }
+            next += 1;
+            piece[start as usize] = next;
+            let mut to_look_at = vec![(sx, sy)];
+            while let Some((x, y)) = to_look_at.pop() {
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx < 0 || ny < 0 || nx >= w || ny >= h {
+                        continue;
+                    }
+                    let i = (ny * w + nx) as usize;
+                    if piece[i] == 0 && walkable(nx, ny) {
+                        piece[i] = next;
+                        to_look_at.push((nx, ny));
+                    }
+                }
+            }
+        }
+        piece
     }
 
     /// A free tile of one of these grounds, for wood and stone laid by the

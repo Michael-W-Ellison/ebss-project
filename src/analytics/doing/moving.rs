@@ -107,6 +107,24 @@ impl Simulation {
         };
         let can_cover = ((left * cells_a_minute).floor() as u32).max(1);
 
+        // **Somewhere there is no way to is not walked at.** With no route,
+        // a walk took single steps towards the place, and against a river
+        // they went one way and back again, each step a success, until the
+        // turn was spent, and the next turn the same (#321). On seed 2 that
+        // was a walk in six. It is refused now, before a step is taken, so
+        // whatever chose it hears that it came to nothing.
+        let from = self.population.agents[agent_index].state.position;
+        if !self.world.can_walk_between((from.0, from.1), (target.0, target.1)) {
+            *self
+                .what_a_threat_came_to
+                .entry("walk: no way there".to_string())
+                .or_insert(0) += 1;
+            return ActionResult::failure(format!(
+                "No way from ({}, {}) to ({}, {})",
+                from.0, from.1, target.0, target.1
+            ));
+        }
+
         let mut last = self.a_step_toward(target, agent_index);
         if !last.success {
             // Going nowhere: the rest of the half hour goes on it.
@@ -158,6 +176,12 @@ impl Simulation {
         let mut the_way = self
             .the_way_there((start.0, start.1), (target.0, target.1), Self::AS_FAR_AS_A_ROUTE_IS_LOOKED_FOR)
             .map(|route| route.into_iter().collect::<std::collections::VecDeque<_>>());
+        if the_way.is_none() {
+            *self
+                .what_a_threat_came_to
+                .entry("walk: no route found".to_string())
+                .or_insert(0) += 1;
+        }
         let mut saw_trouble_at: Option<(i32, i32)> = None;
 
         while walked < can_cover {
