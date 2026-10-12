@@ -568,25 +568,21 @@ impl Simulation {
                     // Find attacker position and flee away from them
                     if let Some(attacker) = self.population.agents.iter().find(|a| a.id == attacker_id) {
                         let attacker_pos = attacker.state.position;
-                        let dx = agent_position.0 - attacker_pos.0;
-                        let dy = agent_position.1 - attacker_pos.1;
-                        let distance = ((dx * dx + dy * dy) as f32).sqrt().max(1.0);
-                        let flee_distance = 15;
-                        let flee_x = agent_position.0 + ((dx as f32 / distance) * flee_distance as f32) as i32;
-                        let flee_y = agent_position.1 + ((dy as f32 / distance) * flee_distance as f32) as i32;
 
                         debug!(
                             "Agent {} FLEEING from attacker {} (fear={:.2})",
                             agent_id, attacker_id, agent.emotions.fear
                         );
 
+                        // Away from them, and from somebody standing on the
+                        // same ground too: worked out here as a straight line
+                        // away from where they stood, that was a walk to where
+                        // this one already was, and an errand to it.
                         (self.away_on_this_side(
                             agent,
                             agent_position,
                             (attacker_pos.0, attacker_pos.1),
-                            crate::environment::Action::Move {
-                                target: (flee_x, flee_y, agent_position.2),
-                            },
+                            Self::put_ground_between(agent_position, (attacker_pos.0, attacker_pos.1)),
                         ), false)
                     } else {
                         // Attacker not found, flee in random direction

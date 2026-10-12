@@ -552,3 +552,37 @@ fn a_walk_out_into_open_water_is_passed_over() {
         "so it is not somewhere to set out for"
     );
 }
+
+/// A walk that would end where it began is not somewhere to set out for.
+///
+/// Something seen in the water a pace off was answered with a walk to it,
+/// the walk ended on the bank, which was where the walker stood, and the
+/// turn went on standing there; started as an errand, the next turn went on
+/// arriving (#324).
+#[test]
+fn a_walk_that_would_end_where_it_began_is_passed_over() {
+    let (simulation, (cx, cy)) = somebody_by_the_water(true);
+    let on_the_bank = (cx + 2, cy, 0);
+    let walk_to = |x: i32| Action::Move { target: (x, cy, 0) };
+
+    assert!(!simulation.can_this_be_got_to(on_the_bank, &walk_to(cx + 3)), "the water a pace off");
+    assert!(!simulation.can_this_be_got_to(on_the_bank, &walk_to(cx + 2)), "the ground underfoot");
+    assert!(simulation.can_this_be_got_to(on_the_bank, &walk_to(cx + 1)), "but a pace back from the bank is a walk");
+}
+
+/// Running from somebody on the same ground is running somewhere.
+///
+/// The way away from an attacker was a straight line from where they stood,
+/// and from somebody on the very same tile that was no line at all: a walk
+/// to where this one already was, and an errand to it (#324).
+#[test]
+fn running_from_somebody_on_the_same_ground_goes_somewhere() {
+    let (simulation, (cx, cy)) = somebody_by_the_water(true);
+    let here = (cx - 20, cy, 0);
+    let away = crate::analytics::Simulation::put_ground_between(here, (here.0, here.1));
+
+    assert!(
+        simulation.can_this_be_got_to(here, &away),
+        "running from somebody standing here goes nowhere: {away:?}"
+    );
+}

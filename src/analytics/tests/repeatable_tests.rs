@@ -447,7 +447,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Up 14.6% to 1,572,784, still #323: nor is water or food known of over
     // the river, prey on the far bank, or cover, clean ground, a fire or home
     // there at night.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_572_784;
+    // Down 8.3% to 1,441,966 for #324: a walk that would end where it began
+    // is passed over, and running from somebody on the same ground runs
+    // somewhere.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_441_966;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

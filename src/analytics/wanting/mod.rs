@@ -637,7 +637,8 @@ impl Simulation {
         let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> =
             agent.recent_percepts.iter().cloned().collect();
 
-        // Not something just noticed on the far bank, either (#323)
+        // Not something just noticed on the far bank, either (#323), nor in
+        // the water at the walker's feet (#324)
         if let Some(percept_action) = Self::generate_action_from_percepts(
             &recent_percepts,
             &agent.drives,
@@ -752,9 +753,26 @@ impl Simulation {
     /// walk was refused at the start (#321) and then decided again, and on one
     /// world that was 680 turns a year. Asked here, where a decision is still
     /// being made, the next answer gets the turn instead (#323).
+    ///
+    /// **Nor a walk that ends where it began.** A walk to the water a pace
+    /// off ends on the bank, which is where the walker is standing, and so
+    /// does a walk to the ground underfoot. Either "succeeded", went nowhere
+    /// and spent the turn, booked as "move: already there"; one decided at
+    /// the start of an errand spent the next turn arriving. Something seen in
+    /// the shallows was walked at like this a hundred times in two years on
+    /// one world (#324).
     pub(in crate::analytics) fn can_this_be_got_to(&self, from: (i32, i32, i32), doing: &Action) -> bool {
         match doing {
-            Action::Move { target } => self.world.can_walk_between((from.0, from.1), (target.0, target.1)),
+            Action::Move { target } => {
+                let a_pace_off = (target.0 - from.0).abs().max((target.1 - from.1).abs()) <= 1;
+                if a_pace_off {
+                    let end = self.where_a_walk_can_end(from, *target);
+                    if (end.0, end.1) == (from.0, from.1) {
+                        return false;
+                    }
+                }
+                self.world.can_walk_between((from.0, from.1), (target.0, target.1))
+            }
             _ => true,
         }
     }
