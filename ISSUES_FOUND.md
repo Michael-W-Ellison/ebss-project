@@ -24272,3 +24272,73 @@ without the fix they pick it.
 The seed-0 yearly dice count moved from 1,466,916 (#321), through 1,461,434
 with the clamp and 1,372,417 without it, to 1,572,784. Seed 4242's 120-turn
 count did not move.
+
+### 324. The last walks that went nowhere
+
+After #323, two years on smooth seeds 1–8 still had 221 turns booked as
+"move: already there", spread thinly: 102 on seed 1, 40 on seed 2, 30 on
+seed 7 and none to 18 on the rest. Each decision branch was labelled (a
+diagnostic, since removed) and every walk that ended where it began was
+traced back to the branch that chose it.
+
+**Something seen in the water a pace off** (seed 1's 102, and 10 on seed 2).
+`generate_action_from_percepts` answers something just noticed with a walk
+to it. When the thing was in the shallows beside the walker,
+`where_a_walk_can_end` ended the walk on the bank, which was where the walker
+stood. A walk that began an errand spent the next turn arriving. The ground
+underfoot was already excluded (#234); the water beside it was not.
+
+**Running from an attacker on the same tile** (15 errands, 30 turns, on each
+of seeds 2 and 7). The way away was a straight line from where the attacker
+stood, and from the very same tile there is no line, so the run was to where
+the walker already stood. `put_ground_between` already handles a threat
+underfoot and runs the same 15 paces otherwise, so the attacker branch now
+uses it.
+
+**The fix brought one more to light.** Once the attacker branch ran
+somewhere, smooth seed 2 had 117 refused walks in a year, every one from
+running from an attacker, with open ground all round. The straight line was
+aimed at water that touched this bank only at a corner. The reachability
+labels count corners, so `can_this_be_got_to` let it pass. The route search
+steps only along square sides, so no route reached it. `where_a_walk_can_end`
+then fell back to the square-on ground beside it, which was the far bank, and
+the walk was refused there.
+
+**Fix.** `can_this_be_got_to` judges a walk where it will end, which is where
+`walking` judges it. A walk that ends where it began is no walk, and one that
+ends on ground this side does not reach is no walk either. The piece check
+still comes first, so the extra work falls only on targets nobody can stand on
+that have reachable ground beside them: the walks that would do the same route
+search when walked. The runtime of `repeatable_tests` did not move (138 s,
+142 s before).
+
+**After, two years from 12 founders:**
+
+| | #323 | after |
+|---|---|---|
+| smooth 1–8: births, deaths | 51, 2 | 55, 4 |
+| smooth 1–8: refused walks, "already there" | 3, 221 | **0, 0** |
+| scattered 1–8: births, deaths | 48, 3 | 50, 3 |
+| scattered 1–8: refused walks, "already there" | 0, 112 | **0, 0** |
+| smooth 9–16: births, deaths | 57, 3 | 59, 2 |
+| smooth 9–16: refused walks, "already there" | 16, 97 | **0, 0** |
+
+**Deaths from a blow.** Three of the four smooth deaths on seeds 1–8 were from
+a blow, where the rounds before had none. Logged at the moment of death on
+seeds 2, 7 and 8:
+- none was struck by a person, so the attacker branch played no part;
+- two were killed by a boar, one of them an infant, and the third had no
+  attacker on record;
+- on fresh seeds 9–16, #323 had one death from a blow and this change none.
+
+Taken together, that reads as the spread between seeds, not this change.
+
+**Tests** (`off_the_map_tests`):
+- `a_walk_that_would_end_where_it_began_is_passed_over`
+- `a_walk_is_judged_where_it_will_end`: builds the corner-touching water
+  exactly, and fails if only the target is asked about.
+- `running_from_somebody_on_the_same_ground_goes_somewhere`
+
+The seed-0 yearly dice count moved from 1,572,784 to 1,441,966 with the
+first half of this change; judging the end did not move it. Seed 4242's
+120-turn count did not move.
