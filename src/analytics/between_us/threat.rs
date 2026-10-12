@@ -206,10 +206,36 @@ impl Simulation {
             return None;
         }
 
-        Some(Self::put_ground_between(
+        Some(self.away_on_this_side(
+            agent,
             agent_position,
             (where_they_are.0, where_they_are.1),
+            Self::put_ground_between(agent_position, (where_they_are.0, where_they_are.1)),
         ))
+    }
+
+    /// A walk away from something, kept to ground this one can walk.
+    ///
+    /// Running away is worked out as a straight line, and a straight line
+    /// runs into the river as readily as anywhere. Where its end is on the
+    /// far bank there is no way there, and the walk was refused at its first
+    /// step: on two worlds, three and five hundred turns a year of somebody
+    /// frightened standing still (#323). Then it is the best way out that a
+    /// bolt would take, which only lands where it can be walked back from
+    /// (`where_this_one_would_run`), walked rather than bolted.
+    pub(in crate::analytics) fn away_on_this_side(
+        &self,
+        agent: &crate::agents::Agent,
+        from: (i32, i32, i32),
+        away_from: (i32, i32),
+        straight: Action,
+    ) -> Action {
+        if self.can_this_be_got_to(from, &straight) {
+            return straight;
+        }
+        self.where_this_one_would_run(&agent.exploration_knowledge, from, away_from)
+            .map(|target| Action::Move { target })
+            .unwrap_or(straight)
     }
 
     /// The whole answer to a thing that would kill you, in the order the

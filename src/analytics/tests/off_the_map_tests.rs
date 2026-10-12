@@ -371,29 +371,52 @@ fn a_bolt_still_clears_a_pond() {
     assert!(landed.0 > cx + 5, "stopped short of the pond at {landed:?}");
 }
 
-/// A walk to somewhere there is no way to goes no further than this bank, and
-/// nobody walks at the water.
+/// Running from something with a river at your back is running somewhere on
+/// this bank.
+///
+/// Running away was a straight line, and the straight line went over the
+/// river: a walk with no way there, refused at its first step, and somebody
+/// frightened stood still for it, hundreds of turns a year on some worlds
+/// (#323).
+#[test]
+fn running_away_with_a_river_behind_stays_on_this_bank() {
+    let (simulation, (cx, cy)) = somebody_by_the_water(true);
+    let agent = &simulation.population.agents[0];
+    let straight = crate::analytics::Simulation::put_ground_between((cx, cy, 0), (cx - 1, cy));
+    assert!(
+        !simulation.can_this_be_got_to((cx, cy, 0), &straight),
+        "the straight line away is meant to cross the river: {straight:?}"
+    );
+
+    match simulation.away_on_this_side(agent, (cx, cy, 0), (cx - 1, cy), straight) {
+        Action::Move { target } => assert!(
+            simulation.world.can_walk_between((cx, cy), (target.0, target.1)),
+            "ran for the far bank at {target:?}"
+        ),
+        other => panic!("did not run at all: {other:?}"),
+    }
+}
+
+/// A walk to somewhere there is no way to is refused, and nobody walks at the
+/// water.
 ///
 /// With no route, a walk took single steps towards the place, and against a
 /// river they went one way and back again, each step a success, until the
 /// turn was spent, and the next turn the same. On one world that was a walk
-/// in six (#321). It ends on this side now, at the bank opposite (#323).
+/// in six (#321).
 #[test]
-fn a_walk_with_no_way_there_goes_no_further_than_this_bank() {
+fn a_walk_with_no_way_there_is_refused_rather_than_walked_at() {
     let (mut simulation, (cx, cy)) = somebody_by_the_water(true);
     simulation.population.agents[0].state.position = (cx, cy, 0);
     let over_the_river = (cx + 10, cy, 0);
 
-    for _ in 0..3 {
-        simulation.execute_action(&Action::Move { target: over_the_river }, 0);
-        let (x, y, _) = simulation.population.agents[0].state.position;
-        assert!(x < cx + 3, "got over the river to ({x}, {y})");
-        assert!(simulation.is_passable_tile(x, y), "and into it, at ({x}, {y})");
-    }
+    let result = simulation.execute_action(&Action::Move { target: over_the_river }, 0);
+
+    assert!(!result.success, "there is no way over: {:?}", result.message);
     assert_eq!(
         simulation.population.agents[0].state.position,
-        (cx + 2, cy, 0),
-        "and stands on the bank opposite, rather than stepping to and fro"
+        (cx, cy, 0),
+        "and nobody has walked anywhere"
     );
 }
 
@@ -447,14 +470,3 @@ fn an_errand_to_somewhere_there_is_no_way_to_is_given_up() {
     );
 }
 
-/// And a walk anybody decides on across a river ends on this bank, as far
-/// towards the place as this side goes, rather than being refused at its
-/// first step (#323).
-#[test]
-fn a_walk_decided_on_across_the_river_ends_on_this_bank() {
-    let (simulation, (cx, cy)) = somebody_by_the_water(true);
-    let end = simulation.where_a_walk_can_end((cx, cy, 0), (cx + 10, cy, 0));
-
-    assert_eq!(end, (cx + 2, cy, 0), "the bank opposite, on this side");
-    assert!(simulation.world.can_walk_between((cx, cy), (end.0, end.1)));
-}

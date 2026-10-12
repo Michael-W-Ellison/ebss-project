@@ -637,11 +637,14 @@ impl Simulation {
         let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> =
             agent.recent_percepts.iter().cloned().collect();
 
+        // Not something just noticed on the far bank, either (#323)
         if let Some(percept_action) = Self::generate_action_from_percepts(
             &recent_percepts,
             &agent.drives,
             agent_position,
-        ) {
+        )
+        .filter(|action| self.can_this_be_got_to(agent_position, action))
+        {
             return (percept_action, false);
         }
 

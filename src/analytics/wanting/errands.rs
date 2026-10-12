@@ -672,38 +672,7 @@ impl Simulation {
     /// ground beside the water nearest the walker, square sides before
     /// corners, and the walk will then find no way there and be given up. A
     /// target a foot can go on is left exactly where it was put.
-    ///
-    /// **And on this side of the water.** Somewhere on the far bank of a river,
-    /// or on an island, is ground a foot can go on and no walk from here can
-    /// reach. Every walk anybody decides on comes through here before it is
-    /// set out on, so this is where the last of them are caught: a step out
-    /// of curiosity at a random spot over the river, a walk to somebody on
-    /// the other bank, a day's trip to the best ground. Each used to be
-    /// refused at its first step, and the turn lost, two or six hundred times
-    /// a year on some worlds (#321). It ends instead at the last ground on the
-    /// way that this side reaches, the bank opposite, which is as far towards
-    /// it as anybody could go (#323).
     pub(in crate::analytics) fn where_a_walk_can_end(
-        &self,
-        from: (i32, i32, i32),
-        target: (i32, i32, i32),
-    ) -> (i32, i32, i32) {
-        let end = self.where_a_walk_could_end(from, target);
-        if self.world.can_walk_between((from.0, from.1), (end.0, end.1)) {
-            return end;
-        }
-        let mut at = (end.0, end.1);
-        while at != (from.0, from.1)
-            && !(self.is_passable_tile(at.0, at.1) && self.world.can_walk_between((from.0, from.1), at))
-        {
-            at.0 += (from.0 - at.0).signum();
-            at.1 += (from.1 - at.1).signum();
-        }
-        (at.0, at.1, end.2)
-    }
-
-    /// The same, without asking whether the end can be got to from here.
-    fn where_a_walk_could_end(
         &self,
         from: (i32, i32, i32),
         target: (i32, i32, i32),
@@ -769,8 +738,8 @@ impl Simulation {
         }
 
         // An errand to somewhere this one has no way to is over, before it
-        // is kept to: kept to, it walks to the bank opposite and stands there
-        // until it runs out of patience (#323).
+        // is kept to: kept to, it is refused at the water every turn until it
+        // runs out of patience (#323).
         if self.population.agents[agent_index].errand.as_ref().is_some_and(|errand| {
             !self.world.can_walk_between((here.0, here.1), (errand.going_to.0, errand.going_to.1))
         }) {

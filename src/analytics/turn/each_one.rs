@@ -580,9 +580,14 @@ impl Simulation {
                             agent_id, attacker_id, agent.emotions.fear
                         );
 
-                        (crate::environment::Action::Move {
-                            target: (flee_x, flee_y, agent_position.2),
-                        }, false)
+                        (self.away_on_this_side(
+                            agent,
+                            agent_position,
+                            (attacker_pos.0, attacker_pos.1),
+                            crate::environment::Action::Move {
+                                target: (flee_x, flee_y, agent_position.2),
+                            },
+                        ), false)
                     } else {
                         // Attacker not found, flee in random direction
                         use rand::Rng;
