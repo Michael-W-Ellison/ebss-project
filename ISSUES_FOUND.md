@@ -24149,3 +24149,45 @@ walked to. Their map is now 100 cells across and open grass.
 
 The seed-0 yearly dice count moved from 1,509,486 to 1,466,916. Seed 4242's
 120-turn count did not move.
+
+### 322. The weather deaths on smooth terrain did not come back
+
+At #315 smooth seed 6 lost five of twelve to the weather in its first winter
+(and seed 8 one). That was left open as a step of recalibrating smooth
+terrain: wood and shelter.
+
+**What the runs since say.** Every run since #316, on the current code, from
+12 founders (`zz_gate_why`):
+
+| | runs | births | deaths | of the weather |
+|---|---|---|---|---|
+| seeds 1–8, two years (#321) | 8 | 55 | 1 | 0 |
+| seeds 9–16, two years | 8 | 51 | 2 (a mishap, an illness) | 0 |
+| seeds 1–4, four years | 4 | 40 | 1 (hunger) | 0 |
+
+Over the earlier rounds of #316–#321 (eight seeds a round, two years, on
+both terrains) no death was put down to the weather either.
+
+**How close it came.** At the deepest point of each winter, at most two to
+five of 12–24 adults were cold at once, and on most samples nobody was. The
+other "exposed" readings are summer heat: on seed 16, seven of twelve on day
+120, with four of them thirsty. That is heat, not cold, and nobody died of
+it.
+
+**Why it stopped.** The seed-6 deaths came in the same run as the tool
+famine #316 found:
+- on that seed nobody held a tool after day 30;
+- the camp had no wood and no stone in reach;
+- only eight pits were dug in the year;
+- all 12 people were exposed on days 120–180, and cold on day 300.
+
+The camp could not raise a roof or keep a fire. Since then:
+- founders settle where wood and stone are in reach (#316);
+- wood and stone lie along the rivers (#316);
+- people remember where the materials for their tools are (#316);
+- worn-out tools are thrown away, not carried (#319).
+
+A camp that can make tools can build and burn.
+
+No change to the code. If weather deaths come back, the first thing to read
+is whether that camp had tools, wood and a roof.
