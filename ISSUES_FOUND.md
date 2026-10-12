@@ -24007,3 +24007,75 @@ drying makes it lighter. The likely way in is dried food passing the weight
 check at its dried weight, then merging into a fresh stack and being weighed
 as fresh. Not confirmed or fixed here. The fish noted at #316 was the same
 packs at a different season.
+
+### 320. Packs over their limit: two ways a merged stack changed weight
+
+By midsummer on seed 1 (#319), 11 of 12 adults carried more than their packs
+could hold, up to 94 against a limit of 42, most of it legumes. Everything
+that puts a thing in a pack checks its weight first (`Inventory::add_item`).
+But it checked only what the newcomer weighed. The newcomer then merged into
+a stack of the same name (`InventoryItem::absorb`), and the merge could
+change what the whole stack weighed. It did, in two ways.
+
+**1. Drying was undone by the next raw handful.** Drying (`Simulation::drying`)
+changed a stack's preparation in place, and the stack kept its name. A
+merge takes the preparation that spoils faster ("a stack is as good as its
+worst part"). So the first raw legume gathered after drying turned the whole
+stack raw again:
+- it spoiled at the raw rate, so the drying was lost;
+- it weighed what raw food weighs, nearly three times the dried weight it
+  had gone into the pack at (`what_it_does_to_the_weight`: dried 0.35).
+
+The model already had the rule this broke: one stack holds one preparation,
+which is why cooked food is carried as `cooked_fish` and `burnt_meat`.
+Drying was the one preparation that did not follow it. Now:
+- dried food is carried as `dried_<name>` and smoked food as `smoked_<name>`;
+- `storage_integration::without_preparation` reads through all four
+  prefixes, wherever the code asks what a thing is underneath (`base_item_id`,
+  `Piece::is_it_flesh`).
+
+**2. A merged stack kept the first stack's weight per unit.** `absorb` blended
+freshness, quality and durability, but not weight. Some examples:
+- ten two-unit stones and ten half-unit pebbles weighed forty together;
+- crops come off a harvested plant at 1.5 a unit and a gathered handful
+  weighs 0.5, so a harvest added to a stack started with a handful was then
+  carried at a third of its weight;
+- the reverse made a pack suddenly far heavier than it had let in.
+
+The weight per unit is now blended by quantity too.
+
+**And the check.** `add_item` now asks what the pack would weigh once the
+newcomer has merged into its stack.
+
+**Measured over two years from 12 founders, seeds 1–8** (`zz_gate_why`, with
+`PACKMIX` listing what packs held):
+
+| | births, deaths | packs over their limit |
+|---|---|---|
+| before | smooth 46, 1 · scattered 41, 1 | 8 of 12 by day 150 on seed 1 |
+| fix 1 and the check, without fix 2 | smooth 67, 0 · scattered 52, 2 | none |
+| all three | smooth 42, 1 · scattered 49, 3 | none, in 384 samples |
+
+**The second row is not a result.** Without fix 2, a harvest merged into a
+stack started with a handful was carried at a third of its weight, and the
+new check, reading that figure, let it in. People carried home three times
+the food a pack can hold. With weights honest, births are back where they
+were, within the spread between seeds (0 to 11 a seed). What #320 gains is
+that a pack holds what it says. Food that is dried stays dried, and it now
+shows in packs as `dried_legumes` and `dried_roots` beside the raw.
+
+Dice counts:
+- seed 4242, 120 turns: 7,686 → 7,626;
+- seed 0, a year: 1,561,205 → 1,509,486.
+
+**Tests:**
+- `keeping_tests::gathering_more_after_drying_does_not_undo_the_drying`
+- `keeping_tests::a_pack_takes_nothing_that_would_overload_it_once_merged`
+- Three tests looked dried food up under its old name, and now use the new
+  one: `keeping_tests::drying_food_makes_it_keep`,
+  `dried_meat_outlasts_raw_meat` and `food_hung_over_a_fire_is_smoked`.
+  `larder_tests` (2) now expect `Cover { what: "dried_food" }`.
+
+**Something the stores may share.** Pits merge what goes into them with the
+same `absorb` (`Pit::put_in`). Dried food in a pit with raw food of the same
+name would have been turned raw there too. Under its own name now, it is not.
