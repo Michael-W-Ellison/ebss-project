@@ -26,8 +26,13 @@ use crate::world::{
 };
 
 /// A world with nothing edible in it but what the test puts there
+///
+/// Big enough to hold the valley, and open ground all the way to it. The
+/// valley was off the edge of the fifty-cell test map, which did not matter
+/// while nobody asked whether a place could be walked to; it does now, and a
+/// valley off the map is nowhere anybody can go (#321).
 fn bare_country() -> World {
-    let mut world = World::new(WorldConfig::default());
+    let mut world = World::new(WorldConfig::default().with_size(100, 100)).all_open_grass();
     world.resources.retain(|resource| {
         !matches!(
             resource.resource_type,

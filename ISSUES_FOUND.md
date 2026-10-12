@@ -24079,3 +24079,73 @@ Dice counts:
 **Something the stores may share.** Pits merge what goes into them with the
 same `absorb` (`Pit::put_in`). Dried food in a pit with raw food of the same
 name would have been turned raw there too. Under its own name now, it is not.
+
+### 321. Walks to somewhere there was no way to
+
+#317 left this open: a walk to somewhere it had no route to stepped back and
+forth on the bank, and booked every step as a success.
+
+**How often.** A counter on walks that found no route
+(`walk: no way there`). Over a year on smooth seeds 1–8:
+- 0, 1, 18, 27, 43, 141 and 258 such walks on seven seeds;
+- **2,117 on seed 2**, one walk in six.
+
+They were walks to dry ground 6–25 cells off, mostly riverbanks, beaches and
+wetland: springs and fishing places seen on the far bank of a river, or on a
+spit. Since #315 springs lie on shores, so the nearest one somebody had seen
+was often on the wrong side.
+
+**What happened on such a walk.** `walking` took one greedy step
+(`a_step_toward`) and then asked for a route. With none, every further step
+was greedy too. Against a river they went one way and back again, each step
+a success, until the half hour was spent. The next turn the same, because
+nothing had failed. `where_a_walk_can_end` expected "the walk will then find
+no way there and be given up", and it never was.
+
+**Fix.**
+- **The ground is labelled.** `World::can_walk_between` labels every cell
+  with the piece of ground a foot can cross, once, on first asking. It is not
+  saved: it is the map's to say, and nothing in a running world turns land to
+  water or water to land. A cell in the water answers for the ground beside
+  it, where a walk to it ends.
+- **Nobody sets out for the far bank.** `nodes_this_one_knows_of` keeps only
+  what the asker could walk to. Every search for somewhere to go, and every
+  gather, reads through it.
+- **A walk there is refused before a step is taken.** Whatever chose it hears
+  that it came to nothing, and the turn is not spent stepping.
+- **An errand there is over.** An errand holds its place across turns, so
+  before this a refused walk was refused again every turn until the errand
+  ran out of patience: 39 and 213 times for single errands on seeds 2 and 6.
+
+**After, two years from 12 founders, seeds 1–8:**
+
+| | births, deaths before (#320) | after |
+|---|---|---|
+| smooth | 42, 1 | 55, 1 |
+| scattered | 49, 3 | 43, 3 |
+
+That is within the spread between seeds (0 to 11 a seed), so the gain cannot
+be pinned on this. What did change is the walks:
+- seed 2 went from 2,117 walks in a year spent stepping at a river to about
+  680 refused walks a year;
+- each refusal costs its turn, but no longer the walking;
+- with 12 or more people, that is well under one turn in a hundred.
+
+**What still asks for the far bank.** The refusals left come from decisions
+that pick a place without asking what is known there: a day's trip to the best
+ground, a spot to meet a partner, an exploring step. Each is refused once, and
+then decided again. Worth filtering at the source if they ever matter.
+
+**Tests.**
+- `off_the_map_tests::a_walk_with_no_way_there_is_refused_rather_than_walked_at`
+- `off_the_map_tests::nobody_sets_out_for_what_is_on_the_far_bank`
+- `off_the_map_tests::an_errand_to_somewhere_there_is_no_way_to_is_given_up`
+
+The first two fail without the fix.
+
+**`nomad_tests` (7)** put their valley at (60, 20), off the edge of the
+50-cell test map. That passed while nobody asked whether a place could be
+walked to. Their map is now 100 cells across and open grass.
+
+The seed-0 yearly dice count moved from 1,509,486 to 1,466,916. Seed 4242's
+120-turn count did not move.
