@@ -586,3 +586,44 @@ fn running_from_somebody_on_the_same_ground_goes_somewhere() {
         "running from somebody standing here goes nowhere: {away:?}"
     );
 }
+
+/// A walk is judged where it will end, not where it was aimed.
+///
+/// Water that touches this bank only at a corner counts as somewhere to get
+/// to, since the ground beside it is this side's. But no route steps into it
+/// corner-wise, so the walk ends on the ground beside it that is square on,
+/// which is the far bank, and is refused there. Somebody running from an
+/// attacker straight at such a river was refused 117 times in a year, with
+/// open ground to run to all round (#324).
+#[test]
+fn a_walk_is_judged_where_it_will_end() {
+    use crate::world::{Position, TerrainType};
+
+    let (mut simulation, (cx, cy)) = somebody_by_the_water(true);
+    // The river two wide, at cx + 3 and cx + 4, with a spit of this bank
+    // reaching out to touch the water at (cx + 4, cy) at its corner.
+    let high = simulation.world.grid.height as i32;
+    let mut make_ground = |x: i32, y: i32| {
+        simulation.world.grid.get_tile_mut(&Position::new(x, y)).expect("on the map").terrain.terrain_type =
+            TerrainType::Plains;
+    };
+    for y in 0..high {
+        make_ground(cx + 5, y);
+    }
+    make_ground(cx + 3, cy + 1);
+    simulation.world.the_lie_of_the_land_changed();
+
+    let here = (cx, cy, 0);
+    let in_the_water = (cx + 4, cy, 0);
+    assert!(
+        simulation.world.can_walk_between((cx, cy), (in_the_water.0, in_the_water.1)),
+        "the water is meant to touch this bank at a corner"
+    );
+    let end = simulation.where_a_walk_can_end(here, in_the_water);
+    assert!(
+        !simulation.world.can_walk_between((cx, cy), (end.0, end.1)),
+        "the walk is meant to end on the far bank, at {end:?}"
+    );
+
+    assert!(!simulation.can_this_be_got_to(here, &Action::Move { target: in_the_water }));
+}

@@ -759,19 +759,24 @@ impl Simulation {
     /// does a walk to the ground underfoot. Either "succeeded", went nowhere
     /// and spent the turn, booked as "move: already there"; one decided at
     /// the start of an errand spent the next turn arriving. Something seen in
-    /// the shallows was walked at like this a hundred times in two years on
+    /// the shallows was walked at like this a hundred turns in two years on
     /// one world (#324).
+    ///
+    /// **Judged where the walk will end**, which is where it is judged when it
+    /// is walked. Water with this bank beside it is somewhere to get to, but
+    /// where the route there is too long to find, the walk ends on whichever
+    /// ground beside it is nearest, and that can be the far bank: somebody
+    /// running from an attacker straight at a river was refused 117 times in a
+    /// year on one world, with open ground to run to all round (#324).
     pub(in crate::analytics) fn can_this_be_got_to(&self, from: (i32, i32, i32), doing: &Action) -> bool {
         match doing {
             Action::Move { target } => {
-                let a_pace_off = (target.0 - from.0).abs().max((target.1 - from.1).abs()) <= 1;
-                if a_pace_off {
-                    let end = self.where_a_walk_can_end(from, *target);
-                    if (end.0, end.1) == (from.0, from.1) {
-                        return false;
-                    }
+                if !self.world.can_walk_between((from.0, from.1), (target.0, target.1)) {
+                    return false;
                 }
-                self.world.can_walk_between((from.0, from.1), (target.0, target.1))
+                let end = self.where_a_walk_can_end(from, *target);
+                (end.0, end.1) != (from.0, from.1)
+                    && self.world.can_walk_between((from.0, from.1), (end.0, end.1))
             }
             _ => true,
         }
