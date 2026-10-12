@@ -525,3 +525,30 @@ fn the_cover_a_sleeper_goes_to_is_on_this_bank() {
         "the nearer trees are over the river"
     );
 }
+
+/// A walk out into open water is passed over, rather than walked to where
+/// you already stand.
+///
+/// Somewhere in the water with no dry ground beside it is clamped back along
+/// the line to the first ground a foot can go on, which for somebody on the
+/// bank is the ground under their feet. The walk "succeeded", went nowhere,
+/// and was booked as "move: already there", never as a refusal: 2,173 turns
+/// in half a year on one world, a third of them somebody running from danger
+/// straight at a lake (#323). Asked where it is decided, a place with no
+/// ground beside it is somewhere nobody can get to.
+#[test]
+fn a_walk_out_into_open_water_is_passed_over() {
+    let (simulation, (cx, cy)) = somebody_by_the_water(true);
+    let on_the_bank = (cx + 2, cy, 0);
+    let mid_river = Action::Move { target: (cx + 4, cy, 0) };
+
+    assert_eq!(
+        simulation.where_a_walk_can_end(on_the_bank, (cx + 4, cy, 0)),
+        on_the_bank,
+        "clamped, the walk ends where it began"
+    );
+    assert!(
+        !simulation.can_this_be_got_to(on_the_bank, &mid_river),
+        "so it is not somewhere to set out for"
+    );
+}

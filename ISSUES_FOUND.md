@@ -24228,15 +24228,39 @@ branch of the decision that chose it (a diagnostic, since removed):
 | scattered | 43, 3 | 48, 3 | 351 | **0** |
 
 Births and deaths are within the spread between seeds. Every death on smooth
-ground was a mishap. "Move: already there" (#234) also fell, from 8,480 to
-221 on smooth and from 824 to 112 on scattered. I have not traced why. Those
-counts swing widely from seed to seed: after only the first half of this
-change, seed 7 had 5,775 on its own.
+ground was a mishap.
+
+**"Move: already there" (#234) fell too**, from 8,480 to 221 on smooth and
+from 824 to 112 on scattered. These were more wasted turns of the same kind,
+hidden under another name.
+
+Traced on the #321 code, seed 2, first 180 days: 2,203 such turns. Only 30
+were decided as a walk to where the walker stood. The other 2,173 were
+decided as a walk somewhere else, and `where_a_walk_can_end` moved them back
+onto the walker's own tile. Every one of those 2,173 was aimed at somewhere no
+foot can go with no dry ground beside it: open water (1,978) or off the map
+(195). For such a target the clamp's last resort steps back along the line to
+the first ground a foot can go on, and for somebody on the bank that is the
+ground under their feet. The walk then "succeeded", went nowhere and spent the
+turn. It was never refused, so it was not in the refusal counts above. 810 of
+them were somebody running from danger: a straight line 15 paces away, into a
+lake.
+
+`can_this_be_got_to` counts a place with no ground beside it as somewhere
+nobody can get to. So since the filters above, these walks are passed over
+where they are decided, and running away goes through `away_on_this_side`.
+The seed 7 spike of 5,775 after only the first half of this change was the
+same thing, before the night and survival walks were filtered.
+
+Over two years on smooth seeds 1–8, then, this change saved about 11,350
+wasted turns (3,096 refused walks and 8,259 walks to where the walker
+stood), not the 3,096 the refusals alone suggest.
 
 **Tests** (`off_the_map_tests`):
 - `running_away_with_a_river_behind_stays_on_this_bank`
 - `the_water_a_thirsty_one_heads_for_is_on_this_bank`
 - `the_cover_a_sleeper_goes_to_is_on_this_bank`
+- `a_walk_out_into_open_water_is_passed_over`
 - `nobody_sets_out_for_what_is_on_the_far_bank` and
   `an_errand_to_somewhere_there_is_no_way_to_is_given_up` are kept from #321.
   `a_walk_with_no_way_there_is_refused_rather_than_walked_at` is back to
