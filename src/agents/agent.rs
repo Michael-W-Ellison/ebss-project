@@ -175,6 +175,18 @@ impl InventoryItem {
     pub fn absorb(&mut self, other: InventoryItem) {
         let mine = self.quantity;
         let theirs = other.quantity;
+
+        // **And what a unit of the stack weighs, blended the same way.** It
+        // kept the first stack's figure, so ten two-unit stones and ten
+        // half-unit pebbles weighed forty together, and a made thing (weighed
+        // by the work in it) merged into a found one took on the found one's
+        // weight. A pack that let something in at what it weighed then
+        // carried it at what the stack said (#320).
+        if mine + theirs > 0 {
+            self.weight_per_unit = (self.weight_per_unit * mine as f32
+                + other.weight_per_unit * theirs as f32)
+                / (mine + theirs) as f32;
+        }
         self.quantity += other.quantity;
 
         self.food_data = match (self.food_data.take(), other.food_data) {
