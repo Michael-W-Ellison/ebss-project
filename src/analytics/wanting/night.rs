@@ -159,7 +159,7 @@ impl Simulation {
         let agent = &self.population.agents[agent_index];
         let let_be = if agent.state.life_stage == crate::agents::LifeStage::Infant {
             Some("night: let be, an infant")
-        } else if agent.emotions.in_danger() {
+        } else if agent.emotions.threatened_by_something_there() {
             // Nothing wakes a sleeper but danger, and danger is not answered
             // by going back to sleep. Somebody backing away from a boar was
             // sent to bed instead, and struck where they lay, four times in a

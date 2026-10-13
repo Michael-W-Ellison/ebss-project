@@ -117,23 +117,6 @@ impl EmotionState {
         self.should_flee() || self.should_attack()
     }
 
-    /// Afraid enough of anything, a want included, not to lie still.
-    ///
-    /// Fear of going without was once enough to be "in danger", and so was
-    /// enough to wake a sleeper. It no longer puts anybody on the minute clock
-    /// (#325), but somebody parched in the night still gets up for it: kept
-    /// asleep through four turns at a stretch, three on one world died of
-    /// thirst in a year.
-    pub fn too_troubled_to_lie_still(&self) -> bool {
-        self.in_danger()
-            || self
-                .fear_sources
-                .values()
-                .copied()
-                .fold(0.0_f32, f32::max)
-                > Self::AFRAID_ENOUGH_TO_ACT
-    }
-
     /// Record being struck, by whatever struck.
     ///
     /// `EmotionSource` rather than a bare id, because the two callers are a
@@ -478,20 +461,35 @@ impl EmotionState {
         Self::worst_of(&self.fear_sources)
     }
 
-    /// Of the things a branch can act on: a beast, or a person.
-    ///
-    /// Fear of going hungry and anger at the way things have gone are held
-    /// here too, and passed these gates with nothing behind them to run from
-    /// or turn on. Somebody parched far from camp was "in danger", answered
-    /// it a minute at a time by gathering and tilling, and the boar beside
-    /// them had a strike at them every one of those minutes: seven in one
-    /// half hour, and dead (#325).
     fn worst_of(sources: &BTreeMap<EmotionSource, f32>) -> f32 {
         sources
-            .iter()
-            .filter(|(source, _)| matches!(source, EmotionSource::Creature(_) | EmotionSource::Agent(_)))
-            .map(|(_, amount)| *amount)
+            .values()
+            .copied()
             .fold(0.0_f32, f32::max)
+    }
+
+    /// Afraid or angry enough at something that is there, a beast or a
+    /// person, to be answering it.
+    ///
+    /// `in_danger` reads every fear, the fear of going without among them, and
+    /// that is what puts somebody parched or hungry on the minute clock. That
+    /// clock is load-bearing: taken away from want, births over two years on
+    /// eight worlds fell from 55 to 40 and four died of thirst. But the beast
+    /// is given its minutes only against somebody answering a beast or a
+    /// person. Somebody parched far from camp, gathering and tilling a minute
+    /// at a time, gave the boar beside them a strike every one of those
+    /// minutes: seven in a half hour, and dead (#325).
+    pub fn threatened_by_something_there(&self) -> bool {
+        let worst_there = |sources: &BTreeMap<EmotionSource, f32>| {
+            sources
+                .iter()
+                .filter(|(source, _)| matches!(source, EmotionSource::Creature(_) | EmotionSource::Agent(_)))
+                .map(|(_, amount)| *amount)
+                .fold(0.0_f32, f32::max)
+        };
+        worst_there(&self.fear_sources) > Self::AFRAID_ENOUGH_TO_ACT
+            || (worst_there(&self.anger_sources) > Self::ANGRY_ENOUGH_TO_ACT
+                && self.fear < Self::TOO_FRIGHTENED_TO_STAND)
     }
 
     /// Check if agent is emotionally distressed
@@ -1483,23 +1481,21 @@ mod tests {
         assert!(emotions.should_attack());
     }
 
-    /// Going without is not something to run from or turn on, nor a reason to
-    /// take the half hour a minute at a time (#325).
+    /// Going without is no reason to give a beast its minutes (#325).
     #[test]
-    fn going_without_is_not_being_in_danger() {
+    fn going_without_is_not_a_threat_that_is_there() {
         let mut emotions = EmotionState::new();
         emotions.add_fear(EmotionSource::Event("unmet survival needs".to_string()), 0.9);
         emotions.add_anger(EmotionSource::Event("a bad harvest".to_string()), 0.9);
 
-        assert!(!emotions.should_flee(), "nothing there to run from");
-        assert!(!emotions.should_attack(), "nothing there to turn on");
-        assert!(!emotions.in_danger());
+        assert!(emotions.in_danger(), "want still takes the half hour a minute at a time");
+        assert!(!emotions.threatened_by_something_there());
 
         emotions.add_fear(
             EmotionSource::Creature("boar".to_string()),
             ThreatAssessment::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU,
         );
-        assert!(emotions.in_danger(), "but a boar is");
+        assert!(emotions.threatened_by_something_there(), "but a boar is there");
     }
 
     #[test]

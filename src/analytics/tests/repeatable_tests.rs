@@ -450,10 +450,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 8.3% to 1,441,966 for #324: a walk that would end where it began
     // is passed over, and running from somebody on the same ground runs
     // somewhere.
-    // Up 4.0% to 1,499,953 for #325: going hungry is not being in danger, a
-    // small child takes no minutes of its own, and the night does not send
-    // somebody in danger back to bed.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_499_953;
+    // Up 4.1% to 1,500,653 for #325: a beast has its minutes only against
+    // somebody answering a beast or a person, a small child takes no minutes
+    // of its own, and the night does not send somebody threatened back to bed.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_500_653;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

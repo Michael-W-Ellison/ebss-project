@@ -134,7 +134,12 @@ impl Simulation {
                 self.minutes_spent_in_danger += 1;
 
                 self.one_persons_turn(agent_id, &agent_positions);
-                self.predators_try_their_luck_at(agent_index);
+                // And the beast gets its minute only against somebody
+                // answering a beast or a person; see
+                // `EmotionState::threatened_by_something_there` (#325).
+                if self.population.agents[agent_index].emotions.threatened_by_something_there() {
+                    self.predators_try_their_luck_at(agent_index);
+                }
             }
         }
     }
@@ -204,7 +209,7 @@ impl Simulation {
             {
                 let now = self.current_turn;
                 let agent = &mut self.population.agents[agent_index];
-                if agent.emotions.too_troubled_to_lie_still() {
+                if agent.emotions.in_danger() {
                     agent.busy_until = 0;
                 } else if agent.busy_until > now {
                     return;
