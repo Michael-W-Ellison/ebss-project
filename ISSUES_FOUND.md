@@ -24544,3 +24544,94 @@ a half hour, since they come out of it.
 The seed-0 yearly dice count moved from 1,500,653 to 1,032,478: a third fewer
 decisions, now that want takes no extra minutes. The repeatability tests run in
 104 s against 152 s. Seed 4242's 120-turn count moved from 7,626 to 7,639.
+
+### 327. People fighting the mammoth
+
+#326 traced a death "from a blow" on smooth seed 3 to grown people afraid of a
+woolly mammoth fighting it at 40 a blow. Every decision of the threat tree to
+fight a beast was logged (a diagnostic, since removed) over two years on smooth
+seeds 1–8.
+
+**The mammoth.** All of seed 3's mammoth fights came from one branch, "stands
+over one of its own":
+- First, one man with no anger and a fear of 0.70, with a loved one within two
+  paces of the mammoth, fought it twice in a half hour and went from 100
+  health to 20.
+- Later nine adults fought it at once. `could_i_fight_at_all` asks only for
+  more health than one blow, so each one knocked down to 20 became somebody
+  "in the way" who could not fight it, and everybody near who loved them
+  stood over them in turn.
+
+But a mammoth hunts nothing. In this model nothing strikes a person of its own
+accord except a hungry hunter big enough to take them (`predators_try_their_luck`).
+A mammoth harms only somebody who fights or hunts it.
+
+**The same, smaller, everywhere.** Angry grown people "stood their ground"
+against kestrels, herons, eagles, elk, goats and cows, none of which would ever
+touch them. On seed 3 alone that was 458 decisions against eagles.
+
+**Why.** What strikes and what frightens asked different questions. A beast
+struck if it hunted, was hungry, and was not too small to take the person. A
+beast frightened, or angered, anybody if its temper menaced and its blow did
+anything, territorial and defensive grazers included.
+
+**Fix 1: one question for both.** `could_it_take`: the beast hunts, its blow
+does something, and it is not too small to take a person of that age. It is
+asked by:
+- the strike;
+- the appraisal (`feel_about_what_stands_in_the_way`, through `what_menaces`);
+- the walk's look ahead (`what_would_frighten`);
+- the sight pass that marks dangerous ground.
+
+Nobody now fears or fights a mammoth or a cow. An eagle frightens a child and
+not a grown person.
+
+**Which brought the mammoth hunters to light.** With nobody afraid of mammoths,
+people hunted them, and on smooth seeds 4 and 5 a hunter died of one. There were
+two faults:
+- **The blow was weighed with the spear in hand.** `worth_hunting` weighed the
+  blow as the spear would turn it (`could_i_fight_at_all`). But a hunt is a
+  spear thrown, a miss can leave the spear in the bracken, and the whole blow
+  landed. A dangerous beast is now hunted only by somebody fit for its whole
+  blow.
+- **The check was asked only where the hunt was chosen.** A hunt can be made
+  later, after a blow, from a plan or a way already in hand. One hunter went
+  after the mammoth again at 36 health and died. `hunting` now asks it too
+  (`fit_to_take_it_on`).
+
+And what turns on a hunter is one question asked in one place
+(`fights_back`). A cow, a goat or an elk turns on a hunter as a bear does, and
+gave most of the hunting hurts, so it is weighed so too. Only what comes after
+you still needs a weapon in hand. The blow that lands in a hunt or a fight with
+a beast is now what gets through whatever is in the person's hands at the time,
+as with a beast's own strike.
+
+**After, two years from 12 founders:**
+
+| | #326 | #327 |
+|---|---|---|
+| smooth 1–16: births, deaths | 112, 4 | 107, 1 |
+| scattered 1–8: births, deaths | 52, 1 | 55, 0 |
+| fights picked with beasts (decisions) | hundreds, mostly against beasts that never strike | 40, all wolves and boars |
+| strikes on people (smooth, scattered) | 46, 28 | 13, 6 |
+| hurt hunting | – | 55; none left below 34 health, none by a mammoth |
+| deaths from a blow | 2 | 0 |
+
+The one death left is of thirst (smooth seed 5).
+
+**What this gives up.** Nobody keeps clear of a mammoth now. In this model it
+is harmless unless hunted, and it is hunted only by somebody fit for its blow.
+If territorial beasts should charge people who come too near, that is a
+behaviour of the beasts still to be written, and the appraisal should then ask
+it too.
+
+**Tests:**
+- `danger_cadence_tests::a_beast_that_never_strikes_frightens_nobody`
+- `danger_cadence_tests::an_eagle_frightens_a_child_and_not_a_grown_person`
+- `hunting_tests::a_hunter_fit_for_the_blow_survives_it`
+- `hunting_tests::a_hunt_after_the_blow_is_not_made`
+
+The first three fail without their fixes.
+
+The seed-0 yearly dice count moved from 1,032,478 to 1,017,291. Seed 4242's
+120-turn count did not move.
