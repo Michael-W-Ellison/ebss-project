@@ -39,17 +39,40 @@ impl Simulation {
             return false;
         }
 
+        Self::fit_to_take_it_on(agent, species)
+    }
+
+    /// Whether a hunted beast of this kind turns on the hunter.
+    ///
+    /// The same question `hunting` asks when the throw misses: an aggressive,
+    /// defensive or territorial beast with a blow worth the name.
+    pub(in crate::analytics) fn fights_back(species: &crate::environment::fauna::AnimalSpecies) -> bool {
+        use crate::environment::AnimalBehavior;
+        matches!(
+            species.behavior,
+            AnimalBehavior::Aggressive | AnimalBehavior::Defensive | AnimalBehavior::Territorial
+        ) && species.attack_damage > 0.0
+    }
+
+    /// Whether this one is in a state to start a fight with a beast of this
+    /// kind: asked when the hunt is chosen and again when it is made, since a
+    /// hunt can be chosen one half hour and made the next, after a blow.
+    pub(in crate::analytics) fn fit_to_take_it_on(
+        agent: &crate::agents::Agent,
+        species: &crate::environment::fauna::AnimalSpecies,
+    ) -> bool {
+        use crate::environment::AnimalBehavior;
+
+        if !Self::fights_back(species) {
+            return true;
+        }
+
+        // Anything that comes after you is a job for someone with a weapon.
         let dangerous = matches!(
             species.behavior,
             AnimalBehavior::Aggressive | AnimalBehavior::Territorial
         );
-
-        if !dangerous {
-            return true;
-        }
-
-        // Anything that fights back is a job for someone with a weapon.
-        if agent.equipment.get_weapon().is_none() {
+        if dangerous && agent.equipment.get_weapon().is_none() {
             return false;
         }
 
@@ -76,6 +99,9 @@ impl Simulation {
         // the blow as the spear would turn it, a hunter with forty-odd health
         // went after a mammoth, lost his spear, and died of the whole blow -
         // on two worlds of sixteen (#327).
+        //
+        // Anything that turns on a hunter is weighed so, a cow as much as a
+        // bear: a cow's blow is small, and it is still a blow (#327).
         agent.could_i_fight_at_all(species.attack_damage)
             && agent.state.health > species.attack_damage
     }

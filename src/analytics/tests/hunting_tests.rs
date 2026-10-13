@@ -528,3 +528,51 @@ fn a_hunter_fit_for_the_blow_survives_it() {
         }
     }
 }
+
+/// And a hunt made by somebody no longer fit for it is not made, however it
+/// was chosen.
+///
+/// A hunt chosen at full health can come round again after a blow, from a
+/// plan or a way already in hand, without being chosen again: a hunter at
+/// thirty-six health went after a mammoth a second time and died of it (#327).
+#[test]
+fn a_hunt_after_the_blow_is_not_made() {
+    use crate::agents::equipment::WeaponTemplate;
+    use crate::agents::skills::Quality;
+
+    let mut world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    world.animals.get_all_mut().clear();
+    world
+        .spawn_animal("mammoth".to_string(), (30, 31))
+        .expect("a mammoth should spawn");
+
+    let mut simulation = Simulation::new(world, population);
+    let hunter = &mut simulation.population.agents[0];
+    hunter.state.position = (30, 30, 0);
+    hunter
+        .inventory
+        .add_item(InventoryItem::new_with_weight("spear".to_string(), 1, 2.0));
+    hunter
+        .equipment
+        .equip(WeaponTemplate::wooden_spear(Quality::Common))
+        .expect("the spear should go in his hand");
+    hunter.state.health = 36.0;
+
+    let mammoth = simulation.world.animals.get_all()[0].id;
+    let result = simulation.execute_action(
+        &Action::Hunt {
+            animal_id: mammoth,
+            weapon: Some("spear".to_string()),
+        },
+        0,
+    );
+
+    assert!(
+        !result.success && result.message.as_deref().is_some_and(|said| said.starts_with("Not fit")),
+        "a hunter at 36 health took on a mammoth: {:?}",
+        result.message
+    );
+    assert_eq!(simulation.population.agents[0].state.health, 36.0, "and was hurt by it");
+}

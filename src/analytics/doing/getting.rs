@@ -809,6 +809,14 @@ impl Simulation {
             }
         };
 
+        // Asked again where the hunt is made: one chosen at full health can
+        // come round again after a blow, from a plan or a way already in
+        // hand, and a hunter at thirty-six health went after a mammoth a
+        // second time and died of it (#327).
+        if !Self::fit_to_take_it_on(&self.population.agents[agent_index], &species) {
+            return ActionResult::failure(format!("Not fit to take on a {}", species.name));
+        }
+
         // Now get mutable reference to animal
         if let Some(animal) = self.world.animals.get_mut(animal_id) {
 
@@ -1020,14 +1028,7 @@ impl Simulation {
                 }
 
                 // A rabbit runs. A boar turns round.
-                let fights_back = matches!(
-                    species.behavior,
-                    crate::environment::AnimalBehavior::Aggressive
-                        | crate::environment::AnimalBehavior::Defensive
-                        | crate::environment::AnimalBehavior::Territorial
-                );
-
-                if fights_back && species.attack_damage > 0.0 {
+                if Self::fights_back(&species) {
                     // What gets through what is in the hunter's hands, as with
                     // any other blow. The hunt was weighed against exactly this
                     // (`worth_hunting` asks `could_i_fight_at_all`, which asks
