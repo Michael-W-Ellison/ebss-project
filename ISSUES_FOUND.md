@@ -24434,3 +24434,113 @@ the most health over a life, so it may be old blows added up rather than one.
 
 The seed-0 yearly dice count moved from 1,441,966 to 1,500,653. Seed 4242's
 120-turn count did not move.
+
+### 326. Everybody's own half hour, and the minute clock kept for danger
+
+The request:
+- **Staggered decisions.** "Agents should have their 30 minute decision ticks
+  separated out to prevent lag spikes if every agent was forced to make
+  decisions at the exact same time."
+- **The minute clock is for threats in sight.** "The minute-to-minute decision
+  making was meant to occur when a threat was within eyesight of an agent ...
+  All drives, including Hunger and thirst, should be checked during the 30
+  minute decision turn."
+- **No sleeping under attack.** "Agents should not be peacefully sleeping
+  while being attacked ... An agent should avoid sleep regardless of the time
+  of day if there is something else nearby which is trying to kill them."
+- **The biggest threat to survival leads.** "Primary Drive demand should be
+  determined by whichever drive results in the largest threat to the
+  continued survival of the agent."
+- **Familiarity.** "If a potential threat is nearby but continues to not
+  actively harm the agent, they should adjust their fear level."
+
+**What it was.**
+- Everybody decided at once at the start of each half hour, in one call.
+- Anybody frightened or angry enough went round again once a minute, on top
+  of the half hour. Want counted: the fear of going without passed the flight
+  gate, so somebody hungry or parched got twenty-nine more decisions a turn.
+  That was the escape hatch the clock's own comment warns of, and #325 found
+  the food and water balance resting on it.
+
+**What it is now.**
+- **Everybody keeps their own half hour.** Each person's begins at their own
+  minute of it, fixed by their id (`next_decision_at`). The world turns on the
+  half hour as before, but `take_a_minute` runs one minute of it:
+  - the world's start of the half hour comes at its first minute, and its end
+    after the last;
+  - in between, whoever's decision falls on that minute decides.
+
+  `take_a_turn` is thirty of them. Both GUIs step a minute at a time, and when
+  running behind they take as many minutes as are due, up to a half hour, so
+  no frame carries the whole half hour's deciding.
+- **A minute at a time only with something after you.** Somebody takes a
+  minute at a time only while a beast or a person they are afraid of, or angry
+  enough to face, is about (`something_is_after_me`). Feelings about what is
+  around are re-appraised at each person's own decision, against the half
+  hour's beasts (`what_menaces`). Those minutes come out of their own half
+  hour rather than being added to it:
+  - a walk that comes into sight of something stops there, and the rest of the
+    half hour goes a minute at a time;
+  - hunger and thirst are answered on the half hour with every other need;
+  - a small child gets no minutes of its own (#325);
+  - the beast gets its strike a minute only against somebody taking it a
+    minute at a time.
+- **Struck, you wake and answer it.** A strike breaks off whatever the struck
+  was doing, sleep included, and they decide again now. Whatever struck them
+  is a threat, however they had sized it up: at least angry enough to face it,
+  or, in no state to face anything, afraid enough to go
+  (`EmotionState::struck_by`). The seed 7 death in #325 was somebody who went
+  on tilling while a boar bit them. The night lets somebody threatened be.
+- **What would kill first is answered first.** A beast after somebody would
+  kill them, at a blow a minute, in health over its blow. If that is sooner
+  than hunger or thirst would, the beast is answered before eating, before
+  carrying a load home, and before going without for a child.
+- **Familiarity** (`Agent::familiar_with`):
+  - every half hour a kind of beast is about and does no harm, it frightens a
+    little less, by 1.6% of what is left to get used to, up to 95%;
+  - a stranger beside you is still frightening for a day, and one that has
+    been about for a week is hardly noticed;
+  - a blow from one makes the kind a stranger again;
+  - a kind not seen for a month is about half forgotten.
+
+**After, two years from 12 founders:**
+
+| | #324 | #325 | #326 |
+|---|---|---|---|
+| smooth 1–8: births, deaths | 55, 4 | 48, 0 | 56, 3 |
+| smooth 1–8: strikes on people | 64 | 5 | 7 |
+| smooth 9–16: births, deaths | 59, 2 | 56, 2 | 56, 1 |
+| smooth 9–16: strikes on people | – | 10 | 39 |
+| scattered 1–8: births, deaths | 50, 3 | – | 52, 1 |
+
+**Thirst.** No deaths of thirst. Taking the extra minutes away from want cost
+births and four deaths of thirst in #325's first attempt. It does not here, with
+want answered on the half hour and a beast answered before want only when it
+would kill sooner. Why the two differ was not traced.
+
+**Strikes.** Strikes on smooth 9–16 rose from 10 to 39, and none killed
+anybody. Somebody used to a kind of beast no longer keeps clear of it, which is
+what familiarity is for, and a hungry one gets its once-a-turn chance. That was
+not measured on its own.
+
+**The deaths** were a mishap, an illness, hunger and two from a blow (smooth
+seed 3, scattered seed 3). The smooth seed 3 one was traced. It was no strike:
+grown people afraid of a woolly mammoth (fear 0.70) fought it, at 40 a blow,
+twice in a half hour on the minute clock. Which branch of the threat tree chose
+to fight was not traced. A mammoth is no predator and strikes nobody of its
+own accord, so a frightened person fighting one is worth a look of its own.
+
+**Tests** (`danger_cadence_tests`):
+- `everybody_keeps_their_own_half_hour`
+- `going_without_is_answered_on_the_half_hour`
+- `a_sleeper_who_is_struck_wakes_and_decides_now`
+- `a_beast_that_does_no_harm_comes_to_frighten_less`: fails without the
+  familiarity, at fear 0.7 throughout.
+- `what_kills_first_is_answered_first`
+
+`nobody_gets_more_minutes_than_the_turn_holds` now allows all thirty minutes of
+a half hour, since they come out of it.
+
+The seed-0 yearly dice count moved from 1,500,653 to 1,032,478: a third fewer
+decisions, now that want takes no extra minutes. The repeatability tests run in
+104 s against 152 s. Seed 4242's 120-turn count moved from 7,626 to 7,639.

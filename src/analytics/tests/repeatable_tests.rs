@@ -212,8 +212,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Down to 7,626 for #320: dried and smoked food are carried under their
     // own names, a merged stack weighs what its parts did, and a pack takes
     // nothing that would overload it once merged.
-    // 7,639 for #326: everybody keeps their own half hour, begun at their own
-    // minute, and takes it a minute at a time only with something after them.
+    // Up to 7,639 for #326: everybody keeps their own half hour, begun at
+    // their own minute, and takes it a minute at a time only with something
+    // after them.
     const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_639;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
