@@ -474,8 +474,10 @@ impl Simulation {
             result
         } else {
             // It got the better of the exchange
-            let damage = species.attack_damage.max(1.0);
+            // What gets through what is in their hands, as with any other
+            // blow, and as the fight was weighed (#327)
             let agent = &mut self.population.agents[agent_index];
+            let damage = agent.what_a_blow_costs_me(species.attack_damage.max(1.0));
             let came_off_well = damage < agent.state.health * Self::A_SCRATCH;
             agent.take_damage(damage);
             agent

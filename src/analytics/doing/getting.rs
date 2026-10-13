@@ -1028,12 +1028,20 @@ impl Simulation {
                 );
 
                 if fights_back && species.attack_damage > 0.0 {
+                    // What gets through what is in the hunter's hands, as with
+                    // any other blow. The hunt was weighed against exactly this
+                    // (`worth_hunting` asks `could_i_fight_at_all`, which asks
+                    // `what_a_blow_costs_me`), and the whole blow landed instead:
+                    // a hunter with a spear and forty-odd health went after a
+                    // mammoth and was killed by the one blow the reckoning said
+                    // he could take (#327).
                     let agent = &mut self.population.agents[agent_index];
-                    agent.take_damage(species.attack_damage);
+                    let landed = agent.what_a_blow_costs_me(species.attack_damage);
+                    agent.take_damage(landed);
 
                     return ActionResult::failure(format!(
                         "{} turned on the hunter ({:.0} damage)",
-                        species.name, species.attack_damage
+                        species.name, landed
                     ))
                     .with_energy_cost(Self::WHAT_A_THROW_COSTS);
                 }

@@ -448,3 +448,83 @@ fn a_hurt_man_with_a_spear_still_leaves_the_bear_alone() {
         "and should not set out to"
     );
 }
+
+/// A hunter fit to take a beast's blow is not killed by it.
+///
+/// A hunt is a spear thrown, and a throw that misses can leave the spear in
+/// the bracken, so the beast that turns on the hunter may find nothing in their
+/// hands. The hunt was weighed against the blow as the spear would turn it, and
+/// a man with forty-odd health went after a mammoth, lost his spear and died of
+/// the whole blow, on two worlds of sixteen (#327).
+#[test]
+fn a_hunter_fit_for_the_blow_survives_it() {
+    use crate::agents::equipment::WeaponTemplate;
+    use crate::agents::skills::Quality;
+
+    let mut world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    world.animals.get_all_mut().clear();
+    world
+        .spawn_animal("mammoth".to_string(), (30, 31))
+        .expect("a mammoth should spawn");
+
+    let mut simulation = Simulation::new(world, population);
+    simulation.population.agents[0].state.position = (30, 30, 0);
+    let arm = |simulation: &mut Simulation| {
+        let hunter = &mut simulation.population.agents[0];
+        if !hunter.inventory.has_item("spear", 1) {
+            hunter
+                .inventory
+                .add_item(InventoryItem::new_with_weight("spear".to_string(), 1, 2.0));
+        }
+        if hunter.equipment.get_weapon().is_none() {
+            hunter
+                .equipment
+                .equip(WeaponTemplate::wooden_spear(Quality::Common))
+                .expect("the spear should go in his hand");
+        }
+    };
+    arm(&mut simulation);
+
+    let mammoth = simulation.world.animals.get_all()[0].clone();
+    let its_blow = simulation
+        .world
+        .animals
+        .get_species(&mammoth.species_id)
+        .expect("a mammoth is a species")
+        .attack_damage;
+    let through_the_spear = simulation.population.agents[0].what_a_blow_costs_me(its_blow);
+    assert!(through_the_spear < its_blow, "the spear is meant to turn some of it");
+
+    // Fit for the blow as the spear turns it, and not for the whole of it:
+    // no hunt.
+    simulation.population.agents[0].state.health = through_the_spear + 1.0;
+    assert!(
+        !simulation.worth_hunting(&simulation.population.agents[0], &mammoth),
+        "fit only for the blow the spear turns, and the spear may be gone"
+    );
+
+    // Fit for the whole blow: a hunt, and never killed by it.
+    for _ in 0..200 {
+        arm(&mut simulation);
+        let hunter = &mut simulation.population.agents[0];
+        hunter.state.health = its_blow + 1.0;
+        hunter.busy_until = 0;
+        assert!(simulation.worth_hunting(&simulation.population.agents[0], &mammoth));
+        simulation.execute_action(
+            &Action::Hunt {
+                animal_id: mammoth.id,
+                weapon: Some("spear".to_string()),
+            },
+            0,
+        );
+        assert!(
+            simulation.population.agents[0].state.health > 0.0,
+            "killed by the blow he was judged fit to take"
+        );
+        if let Some(animal) = simulation.world.animals.get_mut(&mammoth.id) {
+            animal.current_health = 300.0;
+        }
+    }
+}

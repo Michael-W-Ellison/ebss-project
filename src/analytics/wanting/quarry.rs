@@ -69,7 +69,15 @@ impl Simulation {
         // looking for the fight. Ordinary prey is untouched - a rabbit is not
         // `dangerous` and a hurt man may still eat - so this declines the
         // fights that would kill him and none of the ones that would feed him.
+        //
+        // **And fit for it bare-handed.** A hunt is a spear thrown, and a
+        // throw that misses can leave the spear in the bracken, so the beast
+        // that turns on him may find nothing in his hands. Weighed against
+        // the blow as the spear would turn it, a hunter with forty-odd health
+        // went after a mammoth, lost his spear, and died of the whole blow -
+        // on two worlds of sixteen (#327).
         agent.could_i_fight_at_all(species.attack_damage)
+            && agent.state.health > species.attack_damage
     }
 
     /// The nearest animal this agent could reasonably take, and where it is
