@@ -24602,9 +24602,19 @@ two faults:
 And what turns on a hunter is one question asked in one place
 (`fights_back`). A cow, a goat or an elk turns on a hunter as a bear does, and
 gave most of the hunting hurts, so it is weighed so too. Only what comes after
-you still needs a weapon in hand. The blow that lands in a hunt or a fight with
-a beast is now what gets through whatever is in the person's hands at the time,
-as with a beast's own strike.
+you still needs a weapon in hand. The blow that lands when a hunted beast turns
+is now what gets through whatever is in the hunter's hands at the time, as with
+a beast's own strike.
+
+**Tried and taken back: the same for a fight.** Treating a beast's blow in a
+fight the same way made `armed_tests::a_spear_tells_when_you_stand_your_ground`
+fail, by 1.6 blows to put a wolf down with a spear against 1.8 bare-handed.
+That test passed only through the men who died: it counts a fight cut short by
+the man's death as a fight over, and with the spear turning part of each blow,
+the armed man lasted long enough to swing more. Held at full health for every
+swing, a spear takes 1.6 blows against 1.7 bare-handed. A spear barely helps
+put a wolf down, and has not since the test was written. The fight is left as
+it was, and the spear's part in a fight is a question of its own.
 
 **After, two years from 12 founders:**
 
