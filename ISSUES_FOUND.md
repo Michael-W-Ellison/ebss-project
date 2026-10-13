@@ -24342,3 +24342,95 @@ Taken together, that reads as the spread between seeds, not this change.
 The seed-0 yearly dice count moved from 1,572,784 to 1,441,966 with the
 first half of this change; judging the end did not move it. Seed 4242's
 120-turn count did not move.
+
+### 325. The boar deaths
+
+After #324, three of the four deaths in two years on smooth seeds 1–8 were
+"from a blow" (#324 traced none of them to a person). Every animal strike on a
+person on those worlds was logged with who was struck, where, by what, what
+they were doing and who was near (a diagnostic, since removed). There were 64
+strikes, every one of them by a boar: 45 on seed 2, 13 on seed 7, and 0 to 3
+on the rest.
+
+A hungry boar within three paces strikes for 15. Once a turn that is
+survivable. What killed was the minute clock. Somebody in danger takes the
+rest of the half hour a minute at a time, and the beast gets a strike at them
+each minute, so that running away is not free. All three deaths were people
+on the minute clock who could not answer the boar.
+
+**Somebody in want, with a boar beside them** (seed 7, aged 40, alone at the
+west edge of the map). Their fear was 0.67, and all of it was "unmet survival
+needs": hungry and thirsty, far from camp. That passes the flight gate, so
+they were on the minute clock. But the threat tree found no beast or person
+to run from, so each minute they gathered, sought shelter or tilled. A
+confident adult had appraised the boar as nothing to fear or fight. They were
+struck seven times in one half hour and died.
+
+**An infant left where its people had been** (seed 2). A small child takes no
+turn of its own, but it was still given the minute clock, and so the beast had
+the minutes. Small children are put back with their keeper only at the end of
+the turn, and infants come late in the turn order. So by the time an infant's
+minutes came round, the parent had walked on, and nobody was within three
+paces. 27 of seed 2's 45 strikes were on infants, and one was struck four
+times in a half hour and died.
+
+**A sleeper sent back to bed** (seed 2, not fatal). Anger at the boar put them
+on the minute clock, and the tree answered "back away from something bigger".
+But the night lets only somebody running away be, so it sent them back to
+sleep. They were struck four times before morning. Ten of seed 2's strikes
+were on people asleep.
+
+**Tried first, and taken back: want is not danger.** The flight and anger
+gates were made to count only a beast or a person, which is what the branches
+behind them act on. Strikes fell to 6 and deaths from a blow to none, but over
+the same eight worlds:
+- births fell from 55 to 40;
+- four people died of thirst;
+- seed 6 had no births at all, because it came out of the winter with too
+  little left for the breeding gate.
+
+Waking a parched sleeper again did not bring them back (seeds 6, 7 and 8: no
+births on 6, five deaths of thirst). The minute clock runs after the half
+hour's own thirty minutes, so somebody on it gets close to a second half hour:
+a step, a drink or a gather every minute. People in want rely on it to reach
+water and to forage through the lean months, and the food and water balance
+rests on it. That is the escape hatch the clock's own comment warns of. It is
+left as it is here, because removing it is a recalibration of its own.
+
+**Fix.**
+- The gates are as they were, and want still takes the half hour a minute at
+  a time.
+- The beast gets its strike every minute only against somebody threatened by
+  a beast or a person (`EmotionState::threatened_by_something_there`).
+- A small child gets no minute clock of its own. It is carried, and the beast
+  has its usual chance once a turn.
+- The night lets somebody threatened be, as it already did somebody running
+  away.
+
+**After, two years from 12 founders:**
+
+| | #324 | after |
+|---|---|---|
+| smooth 1–8: strikes on people | 64 | **5** |
+| smooth 1–8: births, deaths | 55, 4 (3 from a blow) | 48, **0** |
+| smooth 9–16: births, deaths | 59, 2 | 56, 2 |
+| smooth 9–16: strikes on people | – | 10 |
+
+Across the 16 worlds births are 104 against 114. Single worlds swing by two to
+five births either way, so that is within the spread, though not by much.
+Seed 6 had no births under every version of this change, against four before.
+Its run parts from #324's by day 180, through different dice, and comes out of
+the winter short. Worth watching. Deaths fell from 6 to 2, both mishaps.
+
+**Not explained:** seed 8's death from a blow had no attacker on record, and
+one boar strike more than a year earlier. The cause of death is whatever took
+the most health over a life, so it may be old blows added up rather than one.
+
+**Tests:**
+- `emotions::tests::going_without_is_not_a_threat_that_is_there`
+- `danger_cadence_tests::a_small_child_is_not_given_the_minutes`: fails
+  without the fix (29 minutes in its first turn).
+- `night_tests::somebody_in_danger_is_not_sent_to_bed`
+
+The seed-0 yearly dice count moved from 1,441,966 to 1,500,653. Seed 4242's
+120-turn count did not move.
