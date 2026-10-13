@@ -212,7 +212,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Down to 7,626 for #320: dried and smoked food are carried under their
     // own names, a merged stack weighs what its parts did, and a pack takes
     // nothing that would overload it once merged.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_626;
+    // 7,639 for #326: everybody keeps their own half hour, begun at their own
+    // minute, and takes it a minute at a time only with something after them.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_639;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -453,7 +455,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Up 4.1% to 1,500,653 for #325: a beast has its minutes only against
     // somebody answering a beast or a person, a small child takes no minutes
     // of its own, and the night does not send somebody threatened back to bed.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_500_653;
+    // Down 31.2% to 1,032,478 for #326: everybody keeps their own half hour,
+    // begun at their own minute, and takes it a minute at a time only with
+    // something after them, not for hunger or thirst; those minutes come out
+    // of the half hour rather than on top of it.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_032_478;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

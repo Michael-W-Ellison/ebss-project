@@ -117,6 +117,25 @@ impl EmotionState {
         self.should_flee() || self.should_attack()
     }
 
+    /// Something has just struck this one, and it is still there.
+    ///
+    /// However it was sized up, it is now at least enough to act on: anger
+    /// enough to face it for somebody in a state to, fear enough to go for
+    /// somebody who is not. Feeling more than that already, nothing changes.
+    pub fn struck_by(&mut self, source: EmotionSource, face_it: bool) {
+        let fear = self.fear_sources.get(&source).copied().unwrap_or(0.0);
+        let anger = self.anger_sources.get(&source).copied().unwrap_or(0.0);
+        if fear > Self::AFRAID_ENOUGH_TO_ACT || anger > Self::ANGRY_ENOUGH_TO_ACT {
+            return;
+        }
+        const AND_A_LITTLE: f32 = 0.01;
+        if face_it {
+            self.set_anger(source, Self::ANGRY_ENOUGH_TO_ACT + AND_A_LITTLE);
+        } else {
+            self.set_fear(source, Self::AFRAID_ENOUGH_TO_ACT + AND_A_LITTLE);
+        }
+    }
+
     /// Record being struck, by whatever struck.
     ///
     /// `EmotionSource` rather than a bare id, because the two callers are a
@@ -444,7 +463,7 @@ impl EmotionState {
     /// thing in front of you; this asks whether you are in any state to face
     /// it, and being afraid of three things at once is exactly the state it is
     /// about.
-    const TOO_FRIGHTENED_TO_STAND: f32 = 0.3;
+    pub const TOO_FRIGHTENED_TO_STAND: f32 = 0.3;
 
     /// The worst single thing angering this one, whatever kind of thing it is.
     ///

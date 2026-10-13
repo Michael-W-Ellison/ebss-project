@@ -213,6 +213,26 @@ pub struct Simulation {
     /// The route search's bookkeeping, kept between searches; see
     /// `the_way_there` (#315).
     pub(crate) route_scratch: std::cell::RefCell<RouteScratch>,
+    /// Every beast that menaces anybody, where it stands and how much of a
+    /// match it is, as of this half hour. Animals move on the half hour, so
+    /// this holds for every minute of it, and a person can be re-appraised at
+    /// their own minute without going through every animal again; see
+    /// `feel_about_what_stands_in_the_way`.
+    pub(crate) what_menaces: Vec<Menace>,
+}
+
+/// A beast that menaces people, as it stands this half hour.
+#[derive(Debug, Clone)]
+pub(crate) struct Menace {
+    pub(crate) at: (i32, i32),
+    /// How much of a match it is, before nearness.
+    pub(crate) strength: f32,
+    /// The kind, by name, which is what fear and anger are held against.
+    pub(crate) name: String,
+    /// The kind, by id, which is what a strike is recorded against.
+    pub(crate) species: String,
+    /// What its blow costs.
+    pub(crate) damage: f32,
 }
 
 /// Flat tables for the route search, the size of the map, cleared by stamp.
@@ -403,6 +423,7 @@ impl Simulation {
             shut_in: Default::default(),
             camp_move_proposed: Default::default(),
             route_scratch: Default::default(),
+            what_menaces: Vec::new(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
@@ -1791,6 +1812,7 @@ impl Simulation {
             shut_in: Default::default(),
             camp_move_proposed: Default::default(),
             route_scratch: Default::default(),
+            what_menaces: Vec::new(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,

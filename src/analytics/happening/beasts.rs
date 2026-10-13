@@ -371,6 +371,10 @@ impl Simulation {
         }
 
         for (animal_id, what_it_was, agent_index, damage, fed) in strikes {
+            // And a blow from one makes a stranger of the kind again
+            if let Some(species) = self.world.animals.get_species(&what_it_was) {
+                self.population.agents[agent_index].familiar_with.remove(&species.name);
+            }
             // Standing there while something bites you is a fight, and how it
             // goes is what the agent takes away from it. This is where the
             // record mostly comes from: agents seldom set upon one another,
@@ -411,6 +415,13 @@ impl Simulation {
                 }
 
                 agent.take_damage(landed);
+
+                // "Agents should not be peacefully sleeping while being
+                // attacked." Whatever they were about, sleep included, is
+                // broken off, and they decide again now.
+                agent.busy_until = 0;
+                agent.state.next_decision_at = agent.state.next_decision_at.min(current_turn);
+
                 agent.emotions.record_attack(
                     crate::agents::EmotionSource::Creature(what_it_was.clone()),
                     current_turn,

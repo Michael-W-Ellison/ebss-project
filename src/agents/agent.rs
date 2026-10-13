@@ -1093,6 +1093,20 @@ pub struct AgentState {
     /// time to spare, and so leaves the rest of the half hour to decide on.
     #[serde(default)]
     pub walked_with_time_to_spare: bool,
+    /// The minute this one next decides what to do, on the clock that counts
+    /// minutes.
+    ///
+    /// Everybody used to decide at the same moment, once a half hour, so the
+    /// whole of a settlement's thinking fell in one step and the step was as
+    /// slow as all of it together. Each person now keeps their own half hour,
+    /// begun at their own minute of it, so the deciding is spread across the
+    /// thirty minutes. Nought until the first turn sets it.
+    #[serde(default)]
+    pub next_decision_at: u32,
+    /// Whether this one is taking things a minute at a time, because
+    /// something that menaces them is in sight.
+    #[serde(default)]
+    pub deciding_by_the_minute: bool,
     pub turns_without_water: u32, // Count dehydration duration
     /// What this body has to pass, waiting to be left on the ground.
     ///
@@ -1182,6 +1196,8 @@ impl AgentState {
             minutes_walked: 0.0,
             walking_effort: 0.0,
             walked_with_time_to_spare: false,
+            next_decision_at: 0,
+            deciding_by_the_minute: false,
             turns_without_water: 0,
             waste_carried: 0.0,
             ailing: None,
@@ -1766,6 +1782,18 @@ pub struct Agent {
     /// because the test is `busy_until > now` rather than `>=`.
     #[serde(default)]
     pub busy_until: u32,
+    /// How used this one has got to each kind of beast, by name, from
+    /// nought (a stranger) to nearly one (part of the furniture).
+    ///
+    /// "If a potential threat is nearby but continues to not actively harm
+    /// the agent, they should adjust their fear level. An unknown animal or
+    /// situation might cause fear at first only to eventually be ignored as
+    /// an agent adjusts to it." Every half hour a kind of beast is about and
+    /// does no harm, it counts for a little less; a blow from one puts it
+    /// back to a stranger at once; and a kind not seen for a long while is
+    /// slowly forgotten. See `Simulation::feel_again_about_what_is_round`.
+    #[serde(default)]
+    pub familiar_with: std::collections::BTreeMap<String, f32>,
 
     /// The tile this one last stepped off, so that a walk does not turn
     /// straight back onto it - see `Simulation::moving`.
@@ -2017,6 +2045,7 @@ impl Agent {
         let mut agent = Self {
             id: crate::core::dice::name(),
             busy_until: 0,
+            familiar_with: std::collections::BTreeMap::new(),
             stepped_from: None,
             state: AgentState::new(),
             drives: if config.random_weights {
