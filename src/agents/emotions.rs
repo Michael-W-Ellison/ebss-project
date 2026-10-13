@@ -117,6 +117,23 @@ impl EmotionState {
         self.should_flee() || self.should_attack()
     }
 
+    /// Afraid enough of anything, a want included, not to lie still.
+    ///
+    /// Fear of going without was once enough to be "in danger", and so was
+    /// enough to wake a sleeper. It no longer puts anybody on the minute clock
+    /// (#325), but somebody parched in the night still gets up for it: kept
+    /// asleep through four turns at a stretch, three on one world died of
+    /// thirst in a year.
+    pub fn too_troubled_to_lie_still(&self) -> bool {
+        self.in_danger()
+            || self
+                .fear_sources
+                .values()
+                .copied()
+                .fold(0.0_f32, f32::max)
+                > Self::AFRAID_ENOUGH_TO_ACT
+    }
+
     /// Record being struck, by whatever struck.
     ///
     /// `EmotionSource` rather than a bare id, because the two callers are a

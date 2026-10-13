@@ -204,7 +204,7 @@ impl Simulation {
             {
                 let now = self.current_turn;
                 let agent = &mut self.population.agents[agent_index];
-                if agent.emotions.in_danger() {
+                if agent.emotions.too_troubled_to_lie_still() {
                     agent.busy_until = 0;
                 } else if agent.busy_until > now {
                     return;
