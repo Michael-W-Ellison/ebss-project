@@ -118,8 +118,15 @@ impl Simulation {
                     break;
                 };
 
+                // Nor for a small child, who takes no turn of its own: it is
+                // carried, and the minutes were only the beast's. An infant
+                // left on the spot where its people had been was struck four
+                // times in a half hour and died of it (#325).
                 let agent = &self.population.agents[agent_index];
-                if !agent.state.is_alive || !agent.emotions.in_danger() {
+                if !agent.state.is_alive
+                    || !agent.emotions.in_danger()
+                    || agent.state.years_old() < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+                {
                     break;
                 }
 

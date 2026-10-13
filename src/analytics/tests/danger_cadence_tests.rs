@@ -152,3 +152,30 @@ fn the_fast_clock_costs_nothing_where_there_is_no_danger() {
         "the minute clock is for danger and there was none"
     );
 }
+
+/// A small child takes no minutes of its own.
+///
+/// It takes no turn either: it is carried, and goes where its people go. The
+/// minute clock asked it every minute what it would do about the beast, it
+/// did nothing, and the beast had a strike at it every one of those minutes.
+/// An infant left on the spot where its people had stood was struck four
+/// times in a half hour and died of it (#325).
+#[test]
+fn a_small_child_is_not_given_the_minutes() {
+    let mut simulation = one_person_and_a_wolf();
+    let child = &mut simulation.population.agents[0];
+    child.state.age = 0;
+    child.state.life_stage = LifeStage::Infant;
+
+    let mut ever_afraid = false;
+    for _ in 0..8 {
+        simulation.take_a_turn();
+        ever_afraid |= simulation.population.agents[0].emotions.in_danger();
+    }
+
+    assert!(ever_afraid, "the child is meant to be frightened of the wolf");
+    assert_eq!(
+        simulation.minutes_spent_in_danger, 0,
+        "a child who cannot act was given minutes to act in"
+    );
+}

@@ -461,10 +461,19 @@ impl EmotionState {
         Self::worst_of(&self.fear_sources)
     }
 
+    /// Of the things a branch can act on: a beast, or a person.
+    ///
+    /// Fear of going hungry and anger at the way things have gone are held
+    /// here too, and passed these gates with nothing behind them to run from
+    /// or turn on. Somebody parched far from camp was "in danger", answered
+    /// it a minute at a time by gathering and tilling, and the boar beside
+    /// them had a strike at them every one of those minutes: seven in one
+    /// half hour, and dead (#325).
     fn worst_of(sources: &BTreeMap<EmotionSource, f32>) -> f32 {
         sources
-            .values()
-            .copied()
+            .iter()
+            .filter(|(source, _)| matches!(source, EmotionSource::Creature(_) | EmotionSource::Agent(_)))
+            .map(|(_, amount)| *amount)
             .fold(0.0_f32, f32::max)
     }
 
@@ -1455,6 +1464,25 @@ mod tests {
         emotions.add_anger(EmotionSource::Creature("rabbit".to_string()), 0.6);
 
         assert!(emotions.should_attack());
+    }
+
+    /// Going without is not something to run from or turn on, nor a reason to
+    /// take the half hour a minute at a time (#325).
+    #[test]
+    fn going_without_is_not_being_in_danger() {
+        let mut emotions = EmotionState::new();
+        emotions.add_fear(EmotionSource::Event("unmet survival needs".to_string()), 0.9);
+        emotions.add_anger(EmotionSource::Event("a bad harvest".to_string()), 0.9);
+
+        assert!(!emotions.should_flee(), "nothing there to run from");
+        assert!(!emotions.should_attack(), "nothing there to turn on");
+        assert!(!emotions.in_danger());
+
+        emotions.add_fear(
+            EmotionSource::Creature("boar".to_string()),
+            ThreatAssessment::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU,
+        );
+        assert!(emotions.in_danger(), "but a boar is");
     }
 
     #[test]

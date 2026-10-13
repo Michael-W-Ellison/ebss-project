@@ -408,3 +408,23 @@ fn a_camp_sleeps_where_its_people_are() {
     }
     assert_eq!(simulation.where_this_one_sleeps(0), Some((30, 20)));
 }
+
+/// Danger is not answered by going back to sleep.
+///
+/// Somebody backing away from a boar in the night was sent to bed instead by
+/// the night, and struck where they lay, four times before morning (#325).
+#[test]
+fn somebody_in_danger_is_not_sent_to_bed() {
+    let mut simulation = people(1);
+    under_the_trees(&mut simulation, 0);
+    let dawn = first_light(&simulation);
+    set_the_clock(&mut simulation, dawn - 2.0);
+    simulation.population.agents[0].emotions.add_fear(
+        crate::agents::EmotionSource::Creature("Wild Boar".to_string()),
+        crate::agents::ThreatAssessment::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU,
+    );
+    assert!(simulation.population.agents[0].emotions.in_danger());
+
+    let away = Action::FleeFrom { away_from: (1, 1, 0) };
+    assert_eq!(simulation.what_the_night_asks(0, away.clone(), false), away);
+}
