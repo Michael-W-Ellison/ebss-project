@@ -237,6 +237,8 @@ pub(crate) struct Menace {
     pub(crate) species: String,
     /// What its blow costs.
     pub(crate) damage: f32,
+    /// Too small to take a grown person; see `Simulation::could_it_take`.
+    pub(crate) only_takes_the_small: bool,
 }
 
 /// Flat tables for the route search, the size of the map, cleared by stamp.

@@ -460,7 +460,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // begun at their own minute, and takes it a minute at a time only with
     // something after them, not for hunger or thirst; those minutes come out
     // of the half hour rather than on top of it.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_032_478;
+    // Down 0.4% to 1,027,961 for #327: only a hunter big enough to take
+    // somebody frightens them, so nobody squares up to a mammoth or an eagle.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_027_961;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

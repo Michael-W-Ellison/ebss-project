@@ -330,3 +330,51 @@ fn what_kills_first_is_answered_first() {
     let the_thirst = Simulation::minutes_before_want_kills_me(&simulation.population.agents[0]);
     assert!(the_wolf < the_thirst, "the wolf in {the_wolf} minutes, thirst in {the_thirst}");
 }
+
+fn one_person_beside(species: &str, years: u32) -> Simulation {
+    let mut world = an_empty_country();
+    world.spawn_animal(species.to_string(), (30, 31)).expect("it should spawn");
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+    let agent = &mut simulation.population.agents[0];
+    agent.state.position = (30, 30, 0);
+    agent.state.now_this_many_years_old(years);
+    agent.state.health = HURT_ENOUGH_TO_BE_AFRAID;
+    simulation
+}
+
+fn afraid_or_angry_at_a_beast(simulation: &Simulation) -> bool {
+    let emotions = &simulation.population.agents[0].emotions;
+    emotions.what_frightens_me_most().is_some() || emotions.what_angers_me_most().is_some()
+}
+
+/// A beast that hunts nothing frightens nobody, and nobody fights it.
+///
+/// Nothing that does not hunt strikes anybody of its own accord, and a
+/// frightened man with a loved one two paces from a mammoth stood over them
+/// and fought it, at forty a blow; nine fought it at once, and one died of it
+/// (#327).
+#[test]
+fn a_beast_that_never_strikes_frightens_nobody() {
+    let mut simulation = one_person_beside("mammoth", 30);
+    simulation.feel_about_what_stands_in_the_way();
+
+    assert!(!afraid_or_angry_at_a_beast(&simulation), "a hurt man beside a mammoth");
+    assert!(!simulation.something_is_after_me(0));
+}
+
+/// And a hunter too small to take a grown person frightens only the small.
+///
+/// An eagle takes a child and not a man, and grown people squared up to
+/// eagles, kestrels and herons hundreds of times a year (#327).
+#[test]
+fn an_eagle_frightens_a_child_and_not_a_grown_person() {
+    let mut grown = one_person_beside("eagle", 30);
+    grown.feel_about_what_stands_in_the_way();
+    assert!(!afraid_or_angry_at_a_beast(&grown), "a grown man squaring up to an eagle");
+
+    let mut child = one_person_beside("eagle", 4);
+    child.feel_about_what_stands_in_the_way();
+    assert!(afraid_or_angry_at_a_beast(&child), "but a child of four is meant to be afraid of it");
+}

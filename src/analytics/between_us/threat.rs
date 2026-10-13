@@ -763,6 +763,15 @@ impl Simulation {
                     return None;
                 }
 
+                // **Only a hunter menaces anybody.** A mammoth, an elk or a
+                // cow never strikes anybody of its own accord - nothing that
+                // does not hunt does - and a man frightened of a mammoth,
+                // with a loved one two paces from it, stood over them and
+                // fought it, at forty a blow (#327).
+                if !Self::a_hunter(species) {
+                    return None;
+                }
+
                 let condition = (animal.current_health / species.health.max(1.0)).clamp(0.0, 1.0);
                 let menace = (species.attack_damage / 20.0).clamp(0.1, 2.0) * temper;
 
@@ -772,6 +781,7 @@ impl Simulation {
                     name: species.name.clone(),
                     species: animal.species_id.clone(),
                     damage: species.attack_damage,
+                    only_takes_the_small: Self::too_small_for_the_grown(species),
                 })
             })
             .collect();
@@ -805,9 +815,11 @@ impl Simulation {
             return;
         }
         let (x, y, _) = agent.state.position;
+        let grown = agent.state.years_old() >= Self::TOO_BIG_FOR_A_SMALL_HUNTER;
         let about: std::collections::BTreeSet<&String> = self
             .what_menaces
             .iter()
+            .filter(|menace| !(grown && menace.only_takes_the_small))
             .filter(|menace| {
                 (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= Self::CLOSE_ENOUGH_TO_WORRY_ABOUT
             })
@@ -843,10 +855,14 @@ impl Simulation {
         }
 
         let (x, y, _) = agent.state.position;
+        let grown = agent.state.years_old() >= Self::TOO_BIG_FOR_A_SMALL_HUNTER;
 
+        // And only one that could take this one: an eagle takes a child and
+        // not a man, and a man squaring up to an eagle is fighting the air.
         let closing: Vec<(f32, &String)> = self
             .what_menaces
             .iter()
+            .filter(|menace| !(grown && menace.only_takes_the_small))
             .filter_map(|menace| {
                 let ((hx, hy), strength, what) = (menace.at, menace.strength, &menace.name);
                 // Less of a fright for being familiar; see `familiar_with`.

@@ -32,6 +32,7 @@ impl Simulation {
     pub(in crate::analytics) fn what_would_frighten(&self, agent_index: usize, reach: i32) -> Vec<(i32, i32)> {
         let agent = &self.population.agents[agent_index];
         let at = agent.state.position;
+        let years_old = agent.state.years_old();
         let armed = agent
             .what_i_have_to_work_with(crate::agents::SkillType::MeleeCombat)
             .is_some();
@@ -49,7 +50,8 @@ impl Simulation {
             .filter_map(|animal| {
                 let species = self.world.animals.get_species(&animal.species_id)?;
                 let menace = species.behavior.how_much_it_menaces_you();
-                if menace <= 0.0 {
+                // Nothing that would never touch them (#327)
+                if menace <= 0.0 || !Self::could_it_take(species, years_old) {
                     return None;
                 }
                 let worth = Self::what_a_beast_is_worth_in_a_fight(
@@ -71,7 +73,7 @@ impl Simulation {
 
         // Everything alive that means anybody harm, with what it is worth in
         // a fight and what to call it
-        let beasts: Vec<((i32, i32), f32, f32, String)> = self
+        let beasts: Vec<((i32, i32), f32, f32, String, bool)> = self
             .world
             .animals
             .get_all()
@@ -80,7 +82,8 @@ impl Simulation {
             .filter_map(|animal| {
                 let species = self.world.animals.get_species(&animal.species_id)?;
                 let menace = species.behavior.how_much_it_menaces_you();
-                if menace <= 0.0 {
+                // Only a hunter means anybody harm (#327)
+                if menace <= 0.0 || !Self::a_hunter(species) {
                     return None;
                 }
                 let worth = Self::what_a_beast_is_worth_in_a_fight(
@@ -88,7 +91,13 @@ impl Simulation {
                     species.health,
                     species.attack_damage,
                 );
-                Some((animal.position, worth, menace, species.name.clone()))
+                Some((
+                    animal.position,
+                    worth,
+                    menace,
+                    species.name.clone(),
+                    Self::too_small_for_the_grown(species),
+                ))
             })
             .collect();
 
@@ -115,9 +124,11 @@ impl Simulation {
             // with a spear and four of them are a different afternoon
             // entirely, and judging each separately would have him walk into
             // the pack four times unafraid.
-            let in_sight: Vec<&((i32, i32), f32, f32, String)> = beasts
+            let grown = agent.state.years_old() >= Self::TOO_BIG_FOR_A_SMALL_HUNTER;
+            let in_sight: Vec<&((i32, i32), f32, f32, String, bool)> = beasts
                 .iter()
-                .filter(|((x, y), _, _, _)| {
+                .filter(|(_, _, _, _, small)| !(grown && *small))
+                .filter(|((x, y), _, _, _, _)| {
                     (agent.state.position.0 - x)
                         .abs()
                         .max((agent.state.position.1 - y).abs())
@@ -131,7 +142,7 @@ impl Simulation {
 
             let against_me: f32 = in_sight
                 .iter()
-                .map(|(_, worth, menace, _)| worth * menace)
+                .map(|(_, worth, menace, _, _)| worth * menace)
                 .sum();
 
             // A thing worth twice what you are is frightening; a thing worth
@@ -146,13 +157,13 @@ impl Simulation {
             // What to call it is whatever the worst single one of them was.
             let called = in_sight
                 .iter()
-                .max_by(|(_, one, _, _), (_, other, _, _)| {
+                .max_by(|(_, one, _, _, _), (_, other, _, _, _)| {
                     one.partial_cmp(other).unwrap_or(std::cmp::Ordering::Equal)
                 })
-                .map(|(_, _, _, called)| called.clone())
+                .map(|(_, _, _, called, _)| called.clone())
                 .unwrap_or_else(|| "something".to_string());
 
-            for ((x, y), _, _, _) in in_sight {
+            for ((x, y), _, _, _, _) in in_sight {
                 agent.exploration_knowledge.saw_danger(
                     crate::world::Position::new(*x, *y),
                     &called,

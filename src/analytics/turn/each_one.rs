@@ -196,9 +196,11 @@ impl Simulation {
         }
         let agent = &self.population.agents[at];
         let (x, y, _) = agent.state.position;
+        let grown = agent.state.years_old() >= Self::TOO_BIG_FOR_A_SMALL_HUNTER;
         let worst_blow = self
             .what_menaces
             .iter()
+            .filter(|menace| !(grown && menace.only_takes_the_small))
             .filter(|menace| {
                 (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= Self::CLOSE_ENOUGH_TO_WORRY_ABOUT
             })

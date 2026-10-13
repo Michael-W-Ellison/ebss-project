@@ -252,6 +252,29 @@ impl Simulation {
 
     /// What a beast is worth in a fight, on the same scale everything else is
     /// reckoned on: how sound it is, and what it can do with that.
+    /// Whether a beast of this kind would ever strike a person of this age.
+    ///
+    /// It hunts, its blow does something, and it is not too small to take
+    /// them. This is the whole of what makes a beast dangerous here: nothing
+    /// else strikes anybody of its own accord. It is asked both where the
+    /// beasts strike and where people size them up, so that nobody is
+    /// frightened of, or squares up to, a thing that would never touch them
+    /// (#327).
+    pub(in crate::analytics) fn could_it_take(species: &crate::environment::fauna::AnimalSpecies, years_old: u32) -> bool {
+        Self::a_hunter(species)
+            && !(Self::too_small_for_the_grown(species) && years_old >= Self::TOO_BIG_FOR_A_SMALL_HUNTER)
+    }
+
+    /// It hunts, and its blow does something.
+    pub(in crate::analytics) fn a_hunter(species: &crate::environment::fauna::AnimalSpecies) -> bool {
+        !species.prey_species.is_empty() && species.attack_damage > 0.0
+    }
+
+    /// Several times smaller than a grown person.
+    pub(in crate::analytics) fn too_small_for_the_grown(species: &crate::environment::fauna::AnimalSpecies) -> bool {
+        species.mass_kg * Self::HOW_MUCH_BIGGER_A_MAN_CAN_BE < Self::WHAT_A_GROWN_PERSON_WEIGHS
+    }
+
     pub(in crate::analytics) fn what_a_beast_is_worth_in_a_fight(health: f32, full: f32, damage: f32) -> f32 {
         let condition = (health / full.max(1.0)).clamp(0.0, 1.0);
         condition * (damage / 20.0).clamp(0.1, 2.0)
@@ -346,10 +369,7 @@ impl Simulation {
             // weight. An eagle does not take a man; it struck six times in a
             // year on four seeds once people walked the country (ISSUES_FOUND
             // #274).
-            if species.mass_kg * Self::HOW_MUCH_BIGGER_A_MAN_CAN_BE < Self::WHAT_A_GROWN_PERSON_WEIGHS
-                && self.population.agents[*agent_index].state.years_old()
-                    >= Self::TOO_BIG_FOR_A_SMALL_HUNTER
-            {
+            if !Self::could_it_take(species, self.population.agents[*agent_index].state.years_old()) {
                 continue;
             }
 
