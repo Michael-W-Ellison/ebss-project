@@ -219,6 +219,10 @@ pub struct Simulation {
     /// their own minute without going through every animal again; see
     /// `feel_about_what_stands_in_the_way`.
     pub(crate) what_menaces: Vec<Menace>,
+    /// Which minute of the half hour the world is at; see `take_a_minute`.
+    pub(crate) minute_of_the_half_hour: u32,
+    /// Who stood where as this half hour began.
+    pub(crate) where_everybody_stood: Vec<(uuid::Uuid, (i32, i32, i32))>,
 }
 
 /// A beast that menaces people, as it stands this half hour.
@@ -424,6 +428,8 @@ impl Simulation {
             camp_move_proposed: Default::default(),
             route_scratch: Default::default(),
             what_menaces: Vec::new(),
+            minute_of_the_half_hour: 0,
+            where_everybody_stood: Vec::new(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
@@ -1813,6 +1819,8 @@ impl Simulation {
             camp_move_proposed: Default::default(),
             route_scratch: Default::default(),
             what_menaces: Vec::new(),
+            minute_of_the_half_hour: 0,
+            where_everybody_stood: Vec::new(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,

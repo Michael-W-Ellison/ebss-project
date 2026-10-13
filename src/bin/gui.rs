@@ -263,26 +263,33 @@ fn run_simulation_thread(
             }
         }
 
-        // Run simulation turn if appropriate
-        let should_turn = match state {
+        // Run the simulation a minute at a time.
+        //
+        // Everybody's half hour begins at their own minute of it, so stepping
+        // a minute at a time spreads the deciding across the half hour rather
+        // than having all of it land in one frame. Running behind, as many
+        // minutes as are due are taken, up to a half hour at once.
+        let minutes_due = match state {
             SimState::Running => {
-                let turn_duration = Duration::from_secs_f32(
-                    base_turn_duration.as_secs_f32() / speed
-                );
-                last_turn.elapsed() >= turn_duration
+                let a_minute = base_turn_duration.as_secs_f64()
+                    / speed as f64
+                    / ebss::environment::seasons::MINUTES_PER_TURN as f64;
+                ((last_turn.elapsed().as_secs_f64() / a_minute) as u32)
+                    .min(ebss::environment::seasons::MINUTES_PER_TURN)
             }
-            SimState::Stepping => true,
-            SimState::Paused => false,
+            SimState::Stepping | SimState::Paused => 0,
         };
 
-        if should_turn {
+        if state == SimState::Stepping {
+            // A step is the rest of the half hour
             simulation.take_a_turn();
             last_turn = Instant::now();
-
-            // After stepping, go back to paused
-            if state == SimState::Stepping {
-                state = SimState::Paused;
+            state = SimState::Paused;
+        } else if minutes_due > 0 {
+            for _ in 0..minutes_due {
+                simulation.take_a_minute();
             }
+            last_turn = Instant::now();
         }
 
         // Send snapshot to GUI at regular intervals

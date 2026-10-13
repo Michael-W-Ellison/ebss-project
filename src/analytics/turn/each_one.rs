@@ -33,10 +33,12 @@ impl Simulation {
     /// By id rather than by index, and the index re-found each time, because a
     /// turn can kill somebody: an index taken before the loop would be pointing
     /// at the wrong person by the time it was used.
+    /// Ready the half hour's deciding: who stood where as it began, and
+    /// everybody's own half hour begun at their own minute.
     pub(in crate::analytics) fn everybody_takes_a_turn(&mut self) {
         // Collected up front so that a social action can resolve a nil id
         // against who was actually standing about when the turn began.
-        let agent_positions: Vec<(uuid::Uuid, (i32, i32, i32))> = self
+        self.where_everybody_stood = self
             .population
             .agents
             .iter()
@@ -48,16 +50,12 @@ impl Simulation {
         // every agent was forced to make decisions at the exact same time."
         // Each person's half hour begins at their own minute of it, fixed by
         // who they are, so the deciding is spread over the thirty minutes
-        // rather than all of it falling at once.
+        // rather than all of it falling at once. See `take_a_minute`.
         let began = self.current_turn;
         for agent in self.population.agents.iter_mut() {
             if agent.state.next_decision_at == 0 {
                 agent.state.next_decision_at = began + Self::my_minute_of_the_half_hour(agent.id);
             }
-        }
-
-        for minute in 0..crate::environment::seasons::MINUTES_PER_TURN {
-            self.this_minute(began + minute, &agent_positions);
         }
     }
 

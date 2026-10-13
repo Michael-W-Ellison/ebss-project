@@ -26,7 +26,45 @@ use log::{debug, warn};
 
 impl Simulation {
     /// Execute one simulation turn
+    /// Half an hour: the world's turn, and everybody's own half hour within
+    /// it, a minute at a time.
     pub fn take_a_turn(&mut self) {
+        loop {
+            self.take_a_minute();
+            if self.minute_of_the_half_hour == 0 {
+                break;
+            }
+        }
+    }
+
+    /// One minute of the half hour.
+    ///
+    /// For something showing the world as it goes: the half hour's deciding
+    /// is spread over its thirty minutes, each person at their own, so a
+    /// display that steps a minute at a time never has the whole of it land
+    /// in one frame. The world itself - weather, beasts, bodies - turns on the
+    /// half hour, at its first and last minutes.
+    pub fn take_a_minute(&mut self) {
+        let minute = self.minute_of_the_half_hour;
+        if minute == 0 {
+            self.the_half_hour_begins();
+            self.everybody_takes_a_turn();
+        }
+
+        let began = self.current_turn;
+        let positions = std::mem::take(&mut self.where_everybody_stood);
+        self.this_minute(began + minute, &positions);
+        self.where_everybody_stood = positions;
+
+        self.minute_of_the_half_hour = (minute + 1) % crate::environment::seasons::MINUTES_PER_TURN;
+        if self.minute_of_the_half_hour == 0 {
+            self.the_half_hour_ends();
+        }
+    }
+
+    /// Everything the world does at the start of the half hour, before
+    /// anybody decides anything.
+    fn the_half_hour_begins(&mut self) {
         // Every question about what is near somebody reads the nodes by where
         // they stand, which is only right while the file agrees with the list.
         // The world keeps it so as it goes; this catches a world just built or
@@ -148,8 +186,12 @@ impl Simulation {
 
         debug!("=== Turn {} ===", self.current_turn);
 
-        // And everybody in it takes a turn - see `turn::each_one`.
-        self.everybody_takes_a_turn();
+        // And then everybody in it takes their half hour, a minute at a
+        // time - see `take_a_minute` and `turn::each_one`.
+    }
+
+    /// And everything it does once the half hour's deciding is done.
+    fn the_half_hour_ends(&mut self) {
 
         // What everybody makes of their provisions, and the winter coming
         self.reckon_what_is_put_by();
