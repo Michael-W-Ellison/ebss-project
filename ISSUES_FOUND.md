@@ -24645,3 +24645,68 @@ The first three fail without their fixes.
 
 The seed-0 yearly dice count moved from 1,032,478 to 1,017,291. Seed 4242's
 120-turn count did not move.
+
+### 328. Why a spear barely helped in a fight
+
+Found under #327: held at full health for every swing, a man put a wolf down in
+1.6 blows with a spear against 1.7 bare-handed.
+
+**The fight** (`fighting_a_beast`).
+- **Whether a blow lands:** what the fighter is worth against what the beast is
+  worth. A spear adds a quarter of its worth over one. A grown man's chance went
+  from 68% bare-handed to 72% with a spear worth 1.9.
+- **What a blow that lands takes off:** it was (25 + 25 x strength) x the
+  point's worth, with the worth floored at one "so bare hands are exactly what
+  they were". For a grown man that was 57.5 bare-handed and 120 with a spear,
+  against a wolf's whole health of 45.
+
+Every blow that landed killed the wolf, with a spear or without. The spear's
+doubled blow was wasted, and its whole part in the fight was four points on
+whether a blow landed: 1/0.68 = 1.47 blows against 1/0.72 = 1.39.
+
+`a_spear_tells_when_you_stand_your_ground` had passed only by counting fights
+the man died in as fights over. A fight cut short by the man's death ended
+early, and the spear's men lasted a little longer. #327's attempt to let a
+spear turn part of the beast's blow broke it for that reason.
+
+**What the specification asks.** "A wooden spear is enough, but should take
+several attacks to kill the animal, depending on the size of the animal. A
+flint spear should reduce the number of attacks." The points' worths are: bare
+hands 0.3, sharpened stick 1.4, flint spear 2.0, metal spear 3.0.
+
+**Fix.** A blow that lands takes `WHAT_AN_ARM_PUTS_BEHIND_A_POINT` (9) x
+strength x the point's own worth, bare hands at their own 0.3. For a grown arm,
+three blows that land put a wolf down with a sharpened stick, two with a flint
+spear, and a dozen or more bare-handed. More for a bigger beast: a boar of 80
+takes about six with a stick and four with flint. Whether a blow lands is
+unchanged. With the misses, the test's man now puts the wolf down in about 3.7
+blows with a flint spear against 16 bare-handed.
+
+**After, two years from 12 founders:**
+
+| | #327 | #328 |
+|---|---|---|
+| smooth 1–16: births, deaths | 107, 1 | 114, 1 |
+| scattered 1–8: births, deaths | 55, 0 | 56, 0 |
+| blows landed on beasts | – | 20, every one with a spear |
+| lowest health after a beast's blow in a fight | – | 64 |
+
+Fights with beasts are few since #327, against wolves and boars only, and those
+who fought had spears. The weaker bare hands never came into it. The one death
+is of thirst.
+
+**Not done: the hunt.** In a hunt a throw that lands takes 35% of the beast's
+health whatever the point (`WHAT_ONE_THROW_TAKES_OUT_OF_IT`). So every beast,
+rabbit or mammoth, dies to three throws that land, and a better spear only
+helps one land. It is the same gap in the specification. Closing it changes how
+much meat and how many hides the hunting brings in, and is a question of its
+own.
+
+**Tests** (`armed_tests`):
+- `a_spear_tells_when_you_stand_your_ground` now holds the man at full health,
+  so it counts how fast the wolf goes down.
+- `a_flint_spear_puts_it_down_in_fewer_blows_than_a_sharpened_stick` fails
+  under the old blow, at about one and a half blows for every point.
+
+Neither dice count moved: no fight with a beast happens in the two runs they
+count.
