@@ -24710,3 +24710,62 @@ own.
 
 Neither dice count moved: no fight with a beast happens in the two runs they
 count.
+
+### 329. A better point takes fewer throws in a hunt
+
+The hunt's half of #328. A throw that told took 35% of whatever it hit
+(`WHAT_ONE_THROW_TAKES_OUT_OF_IT`). So every animal, a rabbit or a mammoth,
+went down to three throws that told, and the point counted only towards
+whether a throw told: a quarter of its worth over one. The specification asks
+otherwise: "A wooden spear is enough, but should take several attacks to kill
+the animal, depending on the size of the animal. A flint spear should reduce
+the number of attacks."
+
+**Fix.** A throw that tells takes `WHAT_AN_ARM_PUTS_BEHIND_A_THROWN_POINT` (17)
+x the thrower's strength x the point's worth (`what_a_throw_takes_off`):
+- the point's worth is a stone 0.3, a sharpened stick 1.4, a flint spear 2.0, a
+  metal spear 3.0;
+- strength is `own_strength`: 1.0 for most grown people, 1.3 for the brave.
+
+It is sized so that an ordinary grown arm with a flint spear takes about the
+three throws it always took for a cow or a boar, which is most of what a hunt
+brings in. That keeps the meat a hunt brings in about where it was.
+
+Throws that tell, measured in real hunts in a test, with an ordinary grown arm:
+
+| | sharpened stick | flint spear (a little worn) |
+|---|---|---|
+| deer (60) | 3 | 2 |
+| cow (100) | – | 4 |
+| rabbit (15), with a stone | 3 | |
+
+By the arithmetic, a mammoth (300) takes about nine with a flint spear.
+Whether a throw tells is unchanged.
+
+**After, smooth 1–12, two years from 12 founders:**
+
+| | #328 | #329 |
+|---|---|---|
+| births, deaths | 91, 1 | 87, 0 |
+| throws that told | 22 | 42 |
+| kills | 2 (a deer, a camel) | 11 (6 kestrels, 2 sheep, an owl, a deer, a cow) |
+| hurt hunting | 26 | 39, none near death |
+
+The new kills are mostly small birds, which a spear now takes in one throw. The
+births are within the spread between seeds.
+
+**What this shows besides.** Hunting hardly happens at all: two kills in
+twenty-four settlement-years before this, eleven after. Whatever a better point
+does to a hunt, it does to very few hunts. Hunting and trapping as a real part
+of the year's food is a question of its own (it is on the list as "make winter
+hunting/trapping a real supplement").
+
+**Tests:**
+- `hunting_tests::a_better_point_takes_fewer_throws_and_a_bigger_beast_more`
+  hunts a deer and a cow for real. Under the old throw every count was three,
+  so it fails.
+- `lean_season_tests::one_throw_does_not_bring_a_deer_down` now asks it of an
+  ordinary grown arm with a metal spear: 51 against a deer's 60.
+
+The seed-0 yearly dice count moved from 1,017,291 to 1,028,941. Seed 4242's
+120-turn count did not move.
