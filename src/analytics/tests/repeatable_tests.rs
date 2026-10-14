@@ -466,7 +466,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // blow would kill them, the spear they threw being perhaps gone.
     // Up 7.2% to 1,017,291, still #327: asked again where the hunt is made,
     // and of anything that turns on a hunter, a cow as much as a bear.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_017_291;
+    // Up 1.1% to 1,028,941 for #329: a better point brings a beast down in
+    // fewer throws, and a bigger beast takes more.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_028_941;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

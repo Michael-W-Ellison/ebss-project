@@ -576,3 +576,72 @@ fn a_hunt_after_the_blow_is_not_made() {
     );
     assert_eq!(simulation.population.agents[0].state.health, 36.0, "and was hurt by it");
 }
+
+/// How many throws that tell it takes to bring one of these down, with this
+/// in the pack, averaged over a few hunts.
+fn throws_that_tell(species: &str, in_the_pack: &str) -> f32 {
+    const HUNTS: u64 = 12;
+    let mut told = 0u32;
+    for seed in 0..HUNTS {
+        crate::core::dice::seed(7_000 + seed);
+        let mut world = World::new(WorldConfig::default());
+        let mut population = Population::new();
+        population.spawn_agent(AgentConfig::default());
+        world.animals.get_all_mut().clear();
+        world.spawn_animal(species.to_string(), (30, 31)).expect("it should spawn");
+        let mut simulation = Simulation::new(world, population);
+        let hunter = &mut simulation.population.agents[0];
+        hunter.state.position = (30, 30, 0);
+        hunter
+            .inventory
+            .add_item(InventoryItem::new_with_weight(in_the_pack.to_string(), 1, 2.0));
+        let quarry = simulation.world.animals.get_all()[0].id;
+
+        for _ in 0..400 {
+            let before = simulation.world.animals.get(&quarry).map(|a| a.current_health);
+            let hunter = &mut simulation.population.agents[0];
+            hunter.state.health = 100.0;
+            hunter.busy_until = 0;
+            if !hunter.inventory.has_item(in_the_pack, 1) {
+                hunter
+                    .inventory
+                    .add_item(InventoryItem::new_with_weight(in_the_pack.to_string(), 1, 2.0));
+            }
+            if let Some(beast) = simulation.world.animals.get_mut(&quarry) {
+                beast.position = (30, 31);
+            }
+            simulation.execute_action(&Action::Hunt { animal_id: quarry, weapon: None }, 0);
+            let after = simulation.world.animals.get(&quarry);
+            if after.map(|a| a.current_health) != before {
+                told += 1;
+            }
+            if after.is_none_or(|a| !a.is_alive()) {
+                break;
+            }
+        }
+    }
+    told as f32 / HUNTS as f32
+}
+
+/// A better point brings a beast down in fewer throws, and a bigger beast
+/// takes more.
+///
+/// "A wooden spear is enough, but should take several attacks to kill the
+/// animal, depending on the size of the animal. A flint spear should reduce
+/// the number of attacks." A throw that told took a third of whatever it hit,
+/// so everything went down to three, whatever threw at it (#329).
+#[test]
+fn a_better_point_takes_fewer_throws_and_a_bigger_beast_more() {
+    let stick_on_a_deer = throws_that_tell("deer", "sharpenedstick");
+    let flint_on_a_deer = throws_that_tell("deer", "spear");
+    let flint_on_a_cow = throws_that_tell("cow", "spear");
+
+    assert!(
+        flint_on_a_deer < stick_on_a_deer,
+        "a flint spear took {flint_on_a_deer:.1} throws to a deer, a sharpened stick {stick_on_a_deer:.1}"
+    );
+    assert!(
+        flint_on_a_cow > flint_on_a_deer,
+        "a cow took {flint_on_a_cow:.1} throws and a deer {flint_on_a_deer:.1}"
+    );
+}

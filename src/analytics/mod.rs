@@ -902,8 +902,28 @@ impl Simulation {
 
     const A_THROW_THAT_TELLS: f32 = 0.3;
 
-    /// What a throw that tells takes out of an animal.
-    const WHAT_ONE_THROW_TAKES_OUT_OF_IT: f32 = 0.35;
+    /// What a throw that tells takes off an animal, for each point of the
+    /// arm that threw it and of the point it carried.
+    ///
+    /// A throw took a third of whatever it hit, so every animal from a
+    /// rabbit to a mammoth went down to three throws that told and the point
+    /// counted only towards whether one told. "A wooden spear is enough, but
+    /// should take several attacks to kill the animal, depending on the size
+    /// of the animal. A flint spear should reduce the number of attacks."
+    /// Sized so that an ordinary grown arm (strength 1.0; the brave are
+    /// 1.3) with a flint spear still takes about the three it always took
+    /// for a cow or a boar, or four once it is worn - which is most of the
+    /// meat a hunt brings in - two for a deer and nine for a mammoth; a
+    /// sharpened stick three for a deer and five for a cow, and a thrown
+    /// stone about three for a rabbit (#329).
+    pub(in crate::analytics) const WHAT_AN_ARM_PUTS_BEHIND_A_THROWN_POINT: f32 = 17.0;
+
+    /// What a throw that tells takes off an animal, from an arm of this
+    /// strength with a point of this worth (`how_fast_my_tools_make_this_go`
+    /// for Hunting: a stone 0.3, a sharpened stick 1.4, a flint spear 2.0).
+    pub(in crate::analytics) fn what_a_throw_takes_off(strength: f32, point: f32) -> f32 {
+        Self::WHAT_AN_ARM_PUTS_BEHIND_A_THROWN_POINT * strength * point
+    }
 
     /// How often a throw that misses puts the shaft somewhere you have to go
     /// and get it.

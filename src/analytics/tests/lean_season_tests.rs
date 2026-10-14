@@ -163,11 +163,15 @@ fn the_same_kill_yields_more_meat_in_the_autumn() {
 
 // --- slow work --------------------------------------------------------------
 
-/// A throw does not kill outright.
+/// A throw does not kill outright: not a deer, by an ordinary grown arm, with
+/// the best point there is.
 #[test]
 fn one_throw_does_not_bring_a_deer_down() {
+    const A_DEER: f32 = 60.0;
+    const A_GROWN_ARM: f32 = 1.0;
+    const A_METAL_SPEAR: f32 = 3.0;
     assert!(
-        Simulation::WHAT_ONE_THROW_TAKES_OUT_OF_IT < 0.5,
+        Simulation::what_a_throw_takes_off(A_GROWN_ARM, A_METAL_SPEAR) < A_DEER,
         "a hunt that ends on the first hit is not a hunt"
     );
 }

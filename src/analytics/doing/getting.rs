@@ -840,6 +840,7 @@ impl Simulation {
             // what is in the pack counts for more, and counts for
             // less as it wears.
             let spear = agent.how_fast_my_tools_make_this_go(crate::agents::skills::SkillType::Hunting);
+            let throwing = agent.own_strength();
 
             // Something in the hand, for anything bigger than a hare.
             //
@@ -877,10 +878,13 @@ impl Simulation {
             if rng.gen_bool(success_prob as f64) {
                 // Successful hunt - damage the animal.
                 //
-                // A third of what it can take, not two thirds: one
-                // clean throw did not kill a bull, and a hunt that
-                // ends on the first hit is not a hunt.
-                let base_damage = species.health * Self::WHAT_ONE_THROW_TAKES_OUT_OF_IT;
+                // As much as the arm and the point put into it, so that a
+                // better point brings the beast down in fewer throws and a
+                // bigger beast takes more; see `what_a_throw_takes_off`.
+                // It was a third of whatever it hit, whatever hit it: three
+                // throws for a rabbit or a mammoth, with a stone or a flint
+                // spear (#329).
+                let base_damage = Self::what_a_throw_takes_off(throwing, spear);
                 let combat_multiplier = 1.0 + mount_bonus;
                 let damage = base_damage * combat_multiplier;
                 animal.take_damage(damage);
