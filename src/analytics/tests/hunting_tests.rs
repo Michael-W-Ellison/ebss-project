@@ -645,3 +645,80 @@ fn a_better_point_takes_fewer_throws_and_a_bigger_beast_more() {
         "a cow took {flint_on_a_cow:.1} throws and a deer {flint_on_a_deer:.1}"
     );
 }
+
+/// A hunter with a flint spear, alone in a world holding only these animals.
+fn a_hunter_among(animals: &[(&str, (i32, i32))]) -> Simulation {
+    let mut world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    world.animals.get_all_mut().clear();
+    for (species, at) in animals {
+        world.spawn_animal(species.to_string(), *at).expect("it should spawn");
+    }
+    let mut simulation = Simulation::new(world, population);
+    simulation.population.agents[0].state.position = (30, 30, 0);
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("spear".to_string(), 1, 2.0));
+    simulation
+}
+
+/// Nobody throws at a kestrel for supper: there is no meat on it.
+///
+/// Prey was the nearest animal there was a means of killing, and six of the
+/// eleven kills in twelve settlement-years were kestrels (#330).
+#[test]
+fn nobody_hunts_a_kestrel_for_supper() {
+    let simulation = a_hunter_among(&[("kestrel", (30, 31))]);
+    let hunter = &simulation.population.agents[0];
+
+    assert!(
+        simulation.the_best_prey_to_eat(hunter, hunter.state.position, 5).is_none(),
+        "a kestrel has nothing on it to eat"
+    );
+}
+
+/// A deer a few paces further off is worth more than a rabbit at your feet,
+/// for what is on it - and it is the deer that is gone after.
+#[test]
+fn the_deer_is_worth_more_than_the_rabbit_at_your_feet() {
+    let simulation = a_hunter_among(&[("rabbit", (30, 31)), ("deer", (30, 34))]);
+    let hunter = &simulation.population.agents[0];
+    let here = hunter.state.position;
+
+    let worth_of = |species: &str| {
+        let animal = simulation
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .find(|animal| animal.species_id == species)
+            .expect("it should be there");
+        let kind = simulation.world.animals.get_species(species).unwrap();
+        simulation.what_this_hunt_is_worth_to_eat(hunter, here, animal, kind)
+    };
+    let deer = worth_of("deer");
+    let rabbit = worth_of("rabbit");
+    assert!(deer > rabbit, "a deer was worth {deer:.0} a turn and a rabbit {rabbit:.0}");
+
+    let (chosen, _, _) = simulation
+        .the_best_prey_to_eat(hunter, here, 5)
+        .expect("something here is worth a throw");
+    let chosen = simulation.world.animals.get(&chosen).unwrap();
+    assert_eq!(chosen.species_id, "deer", "the hunter went after the {}", chosen.species_id);
+}
+
+/// A man after a coat goes after something with a skin on it, not the nearer
+/// bird with feathers.
+#[test]
+fn a_skin_hunt_goes_after_a_skin() {
+    let simulation = a_hunter_among(&[("kestrel", (30, 31)), ("deer", (30, 36))]);
+    let hunter = &simulation.population.agents[0];
+
+    let (chosen, _) = simulation
+        .the_best_prey_for_its_skin(hunter, hunter.state.position)
+        .expect("the deer has a skin worth having");
+    let chosen = simulation.world.animals.get(&chosen).unwrap();
+    assert_eq!(chosen.species_id, "deer", "went after the {} for its skin", chosen.species_id);
+}
+

@@ -28,9 +28,11 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #329): `cargo test --lib` in one piece.
-2,816 tests run: 2,812 passed, none failed, 4 ignored, in 1,675 s. The dice
-counts are 7,639 (seed 4242, 120 turns) and 1,028,941 (seed 0, a year). That
+**Last full run** (ISSUES_FOUND #330): `cargo test --lib` in one piece.
+2,819 tests run: 2,814 passed, 1 failed, 4 ignored, in 1,407 s. The one was
+the seed-0 dice count, which #330 moves; recorded anew and passing on its own.
+The dice counts are 7,639 (seed 4242, 120 turns) and 1,014,941 (seed 0, a
+year). That
 leaves:
 - The two multi-generation tests below, which are ignored long runs.
 

@@ -24769,3 +24769,135 @@ hunting/trapping a real supplement").
 
 The seed-0 yearly dice count moved from 1,017,291 to 1,028,941. Seed 4242's
 120-turn count did not move.
+
+### 330. A hunt weighed by what it brings home, against what it costs
+
+"The yield of the hunt should be considered. A small bird results in little
+meat, whereas a deer results in significantly more meat than a bird. How many
+meals does a cow provide? The drives influence actions, but effort, time, and
+results should all be considered."
+
+Nothing about a hunt asked any of that. Prey was the *nearest* animal there
+was a means of killing (`nearest_prey`), in all three places a hunt is chosen:
+- the hungry agent with no food within reach and an animal within five cells;
+- the desperate agent;
+- the agent after skins for a coat.
+
+What was on the animal, how many throws it would take and what it would cost
+were never asked. Six of the eleven kills after #329 were kestrels. A kestrel
+drops feathers and nothing else, so it fed nobody and clothed nobody.
+
+**How many meals is a cow, in this model.** A sitting is a third of a day:
+480 food units. A joint cuts into 3 portions, and a portion of meat is 5 units
+at 30 energy, which is 150 units. With an average carcass and a flint flake:
+
+| | joints (drop table) | portions | meals | real animal, about |
+|---|---|---|---|---|
+| cow, 600 kg | 15–25 | ~60 | ~19 | 600+ |
+| deer, 70 kg | 8–12 | ~30 | ~9 | 80 |
+| rabbit, 2 kg | 1–2 | ~4 | ~1.4 | 2–3 |
+| kestrel, 0.2 kg | none | 0 | 0 | a mouthful |
+
+Butchering with bare hands keeps 15% of that (`what_bare_hands_manage`). A
+carcass in late winter is 0.65 of one in autumn (`how_fat_the_beasts_are`).
+
+**Fix: a hunt is priced in the coin a forage patch is.** It is food brought
+home less what the trip costs, over the turns it takes, as
+`what_this_patch_is_worth` prices a patch
+(`Simulation::what_this_hunt_is_worth_to_eat`). The parts:
+- **Results:** the joints on it (`what_one_of_these_gives`), as many as there
+  is room for in the pack. That is counted in portions, three a joint
+  (`CUT_MEAT_INTO_PORTIONS`), at what a portion of meat is worth to eat. It
+  reads the carcass's condition and the hunter's flake the way `butcher` does.
+- **Time:** the turns of throwing it takes this hunter
+  (`turns_to_bring_it_down`). That is the throws that have to tell, from
+  `what_a_throw_takes_off` (#329), over how often a throw tells. The hit chance
+  is now one function, `how_often_a_throw_tells`, which the executor and the
+  pricing share. Add a turn with the knife and the walk there and back.
+- **Effort:** the walk and every throw at `WHAT_A_THROW_COSTS`.
+- **Risk:** every throw that misses something that fights back is a blow
+  taken. The hunt is scaled by the share of the hunter's health those expected
+  blows leave him (`what_is_left_after_the_blows`). This is
+  `fit_to_take_it_on`'s question, asked of the whole hunt rather than of one
+  blow.
+
+Where this is used:
+- **Choosing prey for food.** `the_best_prey_to_eat` takes the animal in reach
+  worth the most. Nothing with no meat on it is food.
+- **Choosing whether to hunt or forage.** The hungry agent's hunt is made only
+  when it is worth more than the best food the agent knows of
+  (`the_best_food_anywhere_and_its_worth`). Before, the hunt came first
+  whenever there was nothing within reach.
+- **Choosing prey for a coat.** `the_best_prey_for_its_skin` takes hides,
+  leather and wool per turn, less the blows.
+
+What it comes to for an untrained grown hunter with a flint spear, in autumn
+condition 0.65, in food units a turn. A full berry bush is 1,386 at the door
+and 1,196 twenty cells off:
+
+| pig | deer | reindeer | sheep | cow | rabbit | kestrel |
+|---|---|---|---|---|---|---|
+| 1,124 | 743 | 651 | 590 | 481 | 180 | 0 |
+
+The cow takes ten turns of throwing and costs a third of the hunter's health in
+blows. With nothing in the hand but a stone, a rabbit is twenty turns of
+throwing and worth 13 a turn.
+
+**Measured, smooth 1–12, two years from 12 founders:**
+
+| | #329 | #330 |
+|---|---|---|
+| births, deaths | 87, 0 | 82, 0 |
+| people at two years | 231 | 226 |
+| throws that told | 42 | 12 |
+| kills | 11 (6 kestrels, 2 sheep, an owl, a deer, a cow) | 2 (an elk, a deer) |
+| hurt hunting | 39 | 9 |
+| food in the pits at two years | 120,100 | 122,347 |
+
+Births by seed were 8 11 8 7 0 5 5 10 5 9 8 11 before and
+4 8 6 10 5 5 5 10 4 9 5 11 after, which is within the spread between seeds.
+
+The hunts that went nowhere are gone. The ones that are left are rare because,
+at what a carcass gives in this model, a hunt beats a known patch of food only
+when there is next to nothing else about.
+
+**Tried and not kept: meat by the beast's mass.** This is the other half of
+the question, and #257 tried it once before the decision weighed yield:
+- joints off the mass at 45% edible (a deer 16, a cow 135, a rabbit 1);
+- a portion of meat at 120 energy, the physiology's own "four of a fat
+  carcass" (`physiology::WHAT_A_SITTING_AIMS_AT`), with its protein raised to
+  match.
+
+A cow comes to about 500 meals then. On the same twelve seeds, on top of
+#330:
+
+| | #330 | + meat by mass |
+|---|---|---|
+| births, deaths | 82, 0 | 68, 1 (thirst) |
+| people at two years | 226 | 211 |
+| kills | 2 | 6 (3 deer, 2 sheep, a cow) |
+| joints brought in | 3 | 30, 21 of them off the cow |
+| food in the pits | 122,347 | 102,322 |
+
+Births were lower on nine seeds of twelve. Five of the six kills gave one or
+two joints, because the hunter had no flake and bare hands keep 15% of a
+carcass. The pricing knows this, so these were most likely the coat hunts and
+the desperate ones, which do not ask about meat.
+
+Three things stand between a real carcass and a real supper, and each wants
+answering before the carcass is made bigger again:
+- what a bare-handed butchery wastes;
+- where the rest of a carcass goes once the pack is full: it is left on the
+  ground and nobody fetches it;
+- what four-times-richer meat does to everything else that prices food by its
+  energy, the forage patch for a `Meat` resource among them.
+
+**Tests:**
+- `hunting_tests::nobody_hunts_a_kestrel_for_supper`
+- `hunting_tests::the_deer_is_worth_more_than_the_rabbit_at_your_feet`: the
+  deer is chosen though the rabbit is nearer.
+- `hunting_tests::a_skin_hunt_goes_after_a_skin`: the deer, not the nearer
+  kestrel.
+
+The seed-0 yearly dice count moved from 1,028,941 to 1,014,941. Seed 4242's
+120-turn count did not move.

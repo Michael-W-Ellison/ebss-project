@@ -830,15 +830,6 @@ impl Simulation {
             // Hunting skill now, which existed and had no callers, and
             // never falls below a fifth.
             let agent = &self.population.agents[agent_index];
-            let hunting_skill = agent
-                .skills
-                .get_skill_if_exists(crate::agents::skills::SkillType::Hunting)
-                .map(|s| s.level)
-                .unwrap_or(-10);
-            // A spear in the hand, which is the whole of stone-age
-            // hunting. `weapon` is the older flag and still counts;
-            // what is in the pack counts for more, and counts for
-            // less as it wears.
             let spear = agent.how_fast_my_tools_make_this_go(crate::agents::skills::SkillType::Hunting);
             let throwing = agent.own_strength();
 
@@ -858,9 +849,6 @@ impl Simulation {
                 ))
                 .with_energy_cost(2.0);
             }
-            let carried_flag: f32 = if weapon.is_some() { 0.2 } else { 0.0 };
-            let weapon_bonus = carried_flag.max((spear - 1.0) * 0.25);
-
             // Get mounted combat bonus (hunting from horseback is advantageous!)
             let mount_bonus = agent.transport.mounted_combat_bonus();
 
@@ -869,11 +857,7 @@ impl Simulation {
             // up to rather than a thing you stalked; a stone-age hunt
             // is mostly missing. What makes the difference is the
             // spear and the hand that throws it, not the walking up.
-            let success_prob = (Self::A_THROW_THAT_TELLS
-                + (hunting_skill as f32 * 0.03)
-                + weapon_bonus
-                + mount_bonus)
-                .clamp(0.1_f32, 0.9_f32);
+            let success_prob = Self::how_often_a_throw_tells(agent, weapon.is_some());
 
             if rng.gen_bool(success_prob as f64) {
                 // Successful hunt - damage the animal.

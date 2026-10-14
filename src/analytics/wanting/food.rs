@@ -355,31 +355,42 @@ impl Simulation {
             && !Self::more_food_than_he_will_get_through(agent)
             && agent.lessons.will_try_this_again("hunt")
         {
-            if let Some((animal_id, animal_position)) = self.nearest_prey(agent, agent_position) {
+            // And not for what is on it unless it beats the walk to the best
+            // food this one knows of, in the same coin: food home less the
+            // trip, per turn the trip takes. A deer at your feet against a
+            // hedge in fruit across the meadow is a real question with an
+            // answer, and the answer depends on how much meat is on the deer
+            // and how many throws it will take - not, as it was, on the deer
+            // being the nearer (#330).
+            let the_hunt = self
+                .the_best_prey_to_eat(agent, agent_position, Self::AS_NEAR_AS_PREY_HAS_TO_BE_TO_BOTHER)
+                .filter(|(_, _, hunt_worth)| {
+                    self.the_best_food_anywhere_and_its_worth(agent, agent_position)
+                        .is_none_or(|(_, patch_worth)| *hunt_worth > patch_worth)
+                });
+            if let Some((animal_id, animal_position, _)) = the_hunt {
                 let reach = (animal_position.0 - agent_position.0)
                     .abs()
                     .max((animal_position.1 - agent_position.1).abs());
 
-                if reach <= Self::AS_NEAR_AS_PREY_HAS_TO_BE_TO_BOTHER {
-                    if reach <= Self::HUNT_REACH {
-                        return Some(Action::Hunt {
-                            animal_id,
-                            weapon: agent
-                                .equipment
-                                .get_weapon()
-                                .map(|weapon| weapon.name.clone()),
-                        });
-                    }
+                if reach <= Self::HUNT_REACH {
+                    return Some(Action::Hunt {
+                        animal_id,
+                        weapon: agent
+                            .equipment
+                            .get_weapon()
+                            .map(|weapon| weapon.name.clone()),
+                    });
+                }
 
-                    // Not after it over a river, though (#323).
-                    if self.world.can_walk_between(
-                        (agent_position.0, agent_position.1),
-                        (animal_position.0, animal_position.1),
-                    ) {
-                        return Some(Action::Move {
-                            target: (animal_position.0, animal_position.1, agent_position.2),
-                        });
-                    }
+                // Not after it over a river, though (#323).
+                if self.world.can_walk_between(
+                    (agent_position.0, agent_position.1),
+                    (animal_position.0, animal_position.1),
+                ) {
+                    return Some(Action::Move {
+                        target: (animal_position.0, animal_position.1, agent_position.2),
+                    });
                 }
             }
         }
@@ -496,9 +507,14 @@ impl Simulation {
             // An animal is food. Hunting does not pay against berries and
             // fish, which is why an agent does not do it for the meat as a
             // rule - but an agent with nothing else left is a different case.
-            if let Some((animal_id, animal_position)) =
-                self.nearest_prey(agent, agent_position)
-            {
+            //
+            // Something with meat on it, though, and the one most worth the
+            // throwing: a starving man has even less to spare on a kestrel.
+            if let Some((animal_id, animal_position, _)) = self.the_best_prey_to_eat(
+                agent,
+                agent_position,
+                Self::HUNT_SEARCH_RADIUS as i32,
+            ) {
                 let reach = (animal_position.0 - agent_position.0)
                     .abs()
                     .max((animal_position.1 - agent_position.1).abs());
@@ -645,6 +661,17 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<crate::world::Position> {
+        self.the_best_food_anywhere_and_its_worth(agent, agent_position)
+            .map(|(where_it_is, _)| where_it_is)
+    }
+
+    /// The same, with what the trip there is worth - `what_this_patch_is_worth`
+    /// - so that something else on offer can be held up against it.
+    pub(in crate::analytics) fn the_best_food_anywhere_and_its_worth(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<(crate::world::Position, f32)> {
         use crate::world::Position;
 
         let here = Position::new(agent_position.0, agent_position.1);
@@ -690,7 +717,7 @@ impl Simulation {
             }
         }
 
-        best.map(|(where_it_is, _)| where_it_is)
+        best
     }
 
     /// A place the agent knows to look: what it can smell right now, falling

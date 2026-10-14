@@ -823,6 +823,10 @@ impl Simulation {
         left_behind
     }
 
+    /// What one piece off a carcass weighs - a joint, a hide, a horn - in
+    /// kilograms.
+    pub(in crate::analytics) const WHAT_A_JOINT_WEIGHS: f32 = 2.0;
+
     fn butcher(
         &self,
         dropped: &[crate::environment::ItemStack],
@@ -853,7 +857,8 @@ impl Simulation {
 
                 // Two kilos is what an animal drop weighs unless something
                 // else says otherwise
-                let mut item = InventoryItem::new_with_weight(item_id, off_the_carcass, 2.0);
+                let mut item =
+                    InventoryItem::new_with_weight(item_id, off_the_carcass, Self::WHAT_A_JOINT_WEIGHS);
                 item.food_data = food_data;
 
                 // And how good it is, which the caller decided when it read
@@ -923,6 +928,34 @@ impl Simulation {
     /// for Hunting: a stone 0.3, a sharpened stick 1.4, a flint spear 2.0).
     pub(in crate::analytics) fn what_a_throw_takes_off(strength: f32, point: f32) -> f32 {
         Self::WHAT_AN_ARM_PUTS_BEHIND_A_THROWN_POINT * strength * point
+    }
+
+    /// How often a throw from this one tells: the hand that throws it, what is
+    /// in the hand, and being up on a horse.
+    ///
+    /// Asked where the throw is made and where the hunt is weighed, so that
+    /// what a hunter expects of a hunt is what the hunt gives him. Never under
+    /// a tenth, which is the floor a man with no skill and nothing in his
+    /// hand still has, and never over nine in ten.
+    pub(in crate::analytics) fn how_often_a_throw_tells(
+        agent: &crate::agents::Agent,
+        carrying_a_weapon: bool,
+    ) -> f32 {
+        let hunting_skill = agent
+            .skills
+            .get_skill_if_exists(crate::agents::skills::SkillType::Hunting)
+            .map(|s| s.level)
+            .unwrap_or(-10);
+        // A spear in the hand, which is the whole of stone-age hunting.
+        // `carrying_a_weapon` is the older flag and still counts; what is in
+        // the pack counts for more, and counts for less as it wears.
+        let spear = agent.how_fast_my_tools_make_this_go(crate::agents::skills::SkillType::Hunting);
+        let carried_flag: f32 = if carrying_a_weapon { 0.2 } else { 0.0 };
+        let weapon_bonus = carried_flag.max((spear - 1.0) * 0.25);
+        let mount_bonus = agent.transport.mounted_combat_bonus();
+
+        (Self::A_THROW_THAT_TELLS + (hunting_skill as f32 * 0.03) + weapon_bonus + mount_bonus)
+            .clamp(0.1_f32, 0.9_f32)
     }
 
     /// How often a throw that misses puts the shaft somewhere you have to go
