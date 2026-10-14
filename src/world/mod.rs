@@ -875,6 +875,47 @@ impl World {
         });
     }
 
+    /// How long a carcass lying in the open is worth going back to.
+    ///
+    /// Half what a joint keeps in a pack (`FoodDatabase`: raw meat ten days):
+    /// out on the grass the flies, the crows and the foxes are at it as well
+    /// as the air, and nobody is keeping the sun off it.
+    pub const HOW_LONG_A_CARCASS_LIES: u32 = 5 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// Somebody brought a beast down here and has not taken all of it: this
+    /// many joints still on it, killed this turn.
+    ///
+    /// It goes on the map as a node of `Meat` - the resource the map has
+    /// always had for "a kill somebody left" and nothing ever made - so that
+    /// it is food like any other to whoever knows it is there: they can walk
+    /// to it, weigh it against a berry patch, cut joints off it, and tell
+    /// somebody else where it is. Returns its number.
+    pub fn a_carcass_lies_here(&mut self, where_it_fell: Position, joints: u32, killed_on: u32) -> Option<usize> {
+        if joints == 0 {
+            return None;
+        }
+        Some(self.put_a_node_down(ResourceNode::a_carcass(where_it_fell, joints, killed_on)))
+    }
+
+    /// Carcasses lying past `HOW_LONG_A_CARCASS_LIES` are carrion, and go.
+    fn carcasses_go_off(&mut self) {
+        let now = self.turn;
+        let mut any = false;
+        for node in self.resources.iter_mut() {
+            if node
+                .killed_on
+                .is_some_and(|then| now.saturating_sub(then) >= Self::HOW_LONG_A_CARCASS_LIES)
+                && node.amount > 0
+            {
+                node.amount = 0;
+                any = true;
+            }
+        }
+        if any {
+            self.swept_since_anything_ran_out = false;
+        }
+    }
+
     /// What is lying on a given tile, newest first.
     pub fn what_is_lying_at(&self, where_it_is: &Position) -> Vec<&Dropped> {
         let mut here: Vec<&Dropped> = self
@@ -2805,6 +2846,7 @@ impl World {
         // And the weather gets at whatever is lying about
         if self.turn % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.what_is_lying_about_weathers();
+            self.carcasses_go_off();
         }
 
         // What is under the earth keeps

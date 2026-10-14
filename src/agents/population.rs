@@ -2454,7 +2454,7 @@ impl Population {
     /// - a man may be taken at his word by his friends and disbelieved by
     /// everybody else in the same breath - and the speaker decides once, for
     /// the whole room, whether to tell the truth.
-    fn say_it_out_loud(&mut self) {
+    pub(crate) fn say_it_out_loud(&mut self) {
         use crate::core::DriveType;
         use rand::seq::SliceRandom;
         use rand::Rng;
@@ -2472,7 +2472,12 @@ impl Population {
             if !self.agents[speaker].state.is_alive {
                 continue;
             }
-            if !rng.gen_bool(Self::HOW_OFTEN_ANYBODY_SPEAKS) {
+
+            // A kill with meat still on it that this one has seen, and that
+            // will not keep: something worth calling everybody over for.
+            let kills = self.kills_worth_telling_of(speaker, current_turn);
+
+            if kills.is_empty() && !rng.gen_bool(Self::HOW_OFTEN_ANYBODY_SPEAKS) {
                 continue;
             }
 
@@ -2501,7 +2506,19 @@ impl Population {
             if mine.is_empty() {
                 continue;
             }
-            let places: Vec<_> = mine.choose_multiple(&mut rng, 5).copied().collect();
+            // The kill first: it is the one thing he knows of that will not be
+            // there in a week, and the one thing that is worth more told than
+            // kept.
+            let places: Vec<_> = kills
+                .iter()
+                .copied()
+                .chain(
+                    mine.choose_multiple(&mut rng, 5)
+                        .copied()
+                        .filter(|place| !kills.contains(place)),
+                )
+                .take(5)
+                .collect();
 
             // A man does not invent a place that somebody standing next to him
             // has walked over - he would be contradicted before he finished
@@ -2528,8 +2545,10 @@ impl Population {
                 .copied()
                 .collect();
 
-            // The speaker decides once, for the whole room
-            let lying = !nobody_has_walked.is_empty()
+            // The speaker decides once, for the whole room - and a man
+            // calling people over to his kill is not lying to them.
+            let lying = kills.is_empty()
+                && !nobody_has_walked.is_empty()
                 && self.agents[speaker].would_lie_to_this_room(
                     &audience
                         .iter()
@@ -2541,24 +2560,97 @@ impl Population {
             let telling = if lying { &nobody_has_walked } else { &places };
 
             let mut anybody_listened = false;
+            let mut shared_a_kill = false;
             for listener in audience {
                 let talker_traits = self.agents[speaker].traits.clone();
                 if !self.agents[listener].would_take_their_word(who_i_am, &talker_traits) {
                     continue;
                 }
 
+                let had_heard_of_it = kills.iter().all(|(where_it_is, _)| {
+                    self.agents[listener]
+                        .exploration_knowledge
+                        .known_resources
+                        .contains_key(where_it_is)
+                });
                 if self.tell_them_where_it_is(speaker, listener, telling, lying, current_turn) > 0 {
                     anybody_listened = true;
+
+                    // Meat off somebody else's kill is a gift, and is taken
+                    // as one.
+                    if !had_heard_of_it {
+                        shared_a_kill = true;
+                        let speaker_id = self.agents[speaker].id;
+                        self.agents[listener]
+                            .relationships
+                            .get_or_create_relationship(speaker_id, current_turn)
+                            .positive_interaction(Self::WHAT_A_SHARED_KILL_IS_WORTH_TO_HIM, current_turn);
+                    }
                 }
             }
 
-            // Being listened to is what the social drive is asking for
+            // Being listened to is what the social drive is asking for, and
+            // giving away meat that would otherwise rot answers it better
             if anybody_listened {
                 if let Some(drive) = self.agents[speaker].drives.get_mut(DriveType::Social) {
-                    drive.partial_satisfy(0.03);
+                    drive.partial_satisfy(if shared_a_kill {
+                        Self::WHAT_SHARING_A_KILL_DOES_FOR_THE_SOCIAL_DRIVE
+                    } else {
+                        0.03
+                    });
                 }
             }
         }
+    }
+
+    /// What being told where to find meat off somebody's kill does for what
+    /// the listener thinks of him: a step up the scale, from nothing much to
+    /// liking him (`RelationshipLevel`).
+    const WHAT_A_SHARED_KILL_IS_WORTH_TO_HIM: i8 = 3;
+
+    /// And what giving it away does for the man who killed it. A tenth of the
+    /// drive, against the three hundredths of being listened to at all.
+    const WHAT_SHARING_A_KILL_DOES_FOR_THE_SOCIAL_DRIVE: f32 = 0.1;
+
+    /// Kills this one has seen with meat on them that will not keep: worth
+    /// calling people over for.
+    ///
+    /// "If most of the kill will go to waste before a hunter can harvest it
+    /// fully, the hunter can decrease their social drive and improve
+    /// relationships by sharing the location and harvest with other agents
+    /// before the meat goes bad." A carcass is the only `Meat` on the map
+    /// (`World::a_carcass_lies_here`), so a remembered `Meat` seen lately with
+    /// something left on it is a kill still worth the walk. More of it than
+    /// his pack has room for, and he would rather it fed somebody than the
+    /// crows (#331).
+    fn kills_worth_telling_of(
+        &self,
+        speaker: usize,
+        current_turn: u32,
+    ) -> Vec<(crate::world::Position, crate::world::ResourceType)> {
+        // What he could carry off it himself, at two kilos the joint: more
+        // than that on the bone and the rest is the crows' unless somebody
+        // else comes for it. Packs run full - a hunter has room for a joint
+        // or two, and some have none.
+        let room_for = self.agents[speaker].inventory.weight_capacity_remaining() / 2.0;
+        let knows = &self.agents[speaker].exploration_knowledge;
+        knows
+            .known_resources
+            .iter()
+            .filter(|(_, what)| **what == crate::world::ResourceType::Meat)
+            .filter(|(where_it_is, _)| !knows.who_told_me.contains_key(*where_it_is))
+            .map(|(where_it_is, what)| (*where_it_is, *what))
+            .filter(|(where_it_is, _)| {
+                knows.when_i_saw_it(where_it_is).is_some_and(|then| {
+                    current_turn.saturating_sub(then) < crate::world::World::HOW_LONG_A_CARCASS_LIES
+                })
+            })
+            .filter(|(where_it_is, _)| {
+                knows
+                    .how_much_was_there_then(where_it_is)
+                    .is_some_and(|joints| joints as f32 > room_for)
+            })
+            .collect()
     }
 
     /// How far a liar moves the place he names.

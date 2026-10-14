@@ -10883,6 +10883,29 @@ impl Agent {
                 places.sort_by_key(|where_it_is| here.distance_to(where_it_is));
                 keep.extend(places.into_iter().take(Self::NEAREST_MAKINGS_KEPT_IN_MIND));
             }
+
+            // And a kill with meat on it, for as long as it lasts. It is the
+            // one thing on the map that will not be there next week, so it is
+            // the last thing to let slip this week - and weighed with the rest
+            // it was the first: heard of rather than seen, out in country not
+            // lived in, wanted only by whoever happened to be hungry that
+            // turn. Somebody told where a kill lay had forgotten it by the
+            // next turn and was told again, five thousand times in two years
+            // on one world, and never once went (#331).
+            keep.extend(
+                self.exploration_knowledge
+                    .known_resources
+                    .iter()
+                    .filter(|(_, what)| **what == crate::world::ResourceType::Meat)
+                    .filter(|(where_it_is, _)| {
+                        self.exploration_knowledge
+                            .when_i_saw_it(where_it_is)
+                            .is_some_and(|then| {
+                                current_turn.saturating_sub(then) < crate::world::World::HOW_LONG_A_CARCASS_LIES
+                            })
+                    })
+                    .map(|(where_it_is, _)| *where_it_is),
+            );
             keep
         };
 

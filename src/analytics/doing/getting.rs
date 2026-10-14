@@ -141,24 +141,22 @@ impl Simulation {
         }
     }
 
-    /// `Action::Gather`.
-    pub(in crate::analytics) fn gathering(&mut self, resource_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
-        use crate::world::{ResourceType, Position};
-        use crate::agents::InventoryItem;
+    /// The node a gather for this would take from, and how far off it is:
+    /// the best food patch within foraging reach for a request for food, by
+    /// what the trip is worth, and the nearest worthwhile one of anything else.
+    ///
+    /// Asked by `gathering` to do the gather and by `what_trade_this_asks_for`
+    /// to know what it will be done with - a request for food at a carcass is
+    /// knife work, not picking (#331).
+    pub(in crate::analytics) fn the_node_this_gather_takes(
+        &self,
+        agent_index: usize,
+        resource_type_enum: crate::world::ResourceType,
+    ) -> Option<(usize, u32)> {
+        use crate::world::{Position, ResourceType};
 
-        let resource_type_enum = Self::what_a_gather_asks_for(resource_type);
-
-        if resource_type_enum.is_none() {
-            return ActionResult::failure(format!("Unknown resource type: {}", resource_type));
-        }
-        let resource_type_enum = resource_type_enum.unwrap();
-
-        // Get agent position
         let agent = &self.population.agents[agent_index];
-        let agent_pos = Position::new(
-            agent.state.position.0,
-            agent.state.position.1
-        );
+        let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
 
         // Look for resources within a 25-tile radius. A request for
         // food accepts anything edible, so foraging is not limited to
@@ -221,7 +219,8 @@ impl Simulation {
                         let energy = Self::edible_item_for(resource.resource_type)
                             .and_then(|kind| self.food_database.get(&kind))
                             .map(|t| t.base_nutrition.energy)
-                            .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD);
+                            .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD)
+                            * Self::portions_in_one_off(resource.resource_type);
                         let costs = crate::agents::provision::what_foraging_costs(
                             distance,
                             physiology::how_much_work_this_food_is(energy),
@@ -248,6 +247,31 @@ impl Simulation {
                 }
             }
         }
+
+        nearest_resource
+    }
+
+    /// `Action::Gather`.
+    pub(in crate::analytics) fn gathering(&mut self, resource_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
+        use crate::world::{ResourceType, Position};
+        use crate::agents::InventoryItem;
+
+        let resource_type_enum = Self::what_a_gather_asks_for(resource_type);
+
+        if resource_type_enum.is_none() {
+            return ActionResult::failure(format!("Unknown resource type: {}", resource_type));
+        }
+        let resource_type_enum = resource_type_enum.unwrap();
+
+        // Get agent position
+        let agent = &self.population.agents[agent_index];
+        let agent_pos = Position::new(
+            agent.state.position.0,
+            agent.state.position.1
+        );
+
+        let gathering_food = resource_type_enum == ResourceType::Food;
+        let nearest_resource = self.the_node_this_gather_takes(agent_index, resource_type_enum);
 
         if let Some((resource_index, _)) = nearest_resource {
             // The harvested node may be an edible substitute for a
@@ -308,6 +332,10 @@ impl Simulation {
                     Self::what_a_trip_brings_back(resource_type_enum, today, rng)
                 }
 
+                // A carcass is cut, not picked, and the edge is the
+                // trade's - see `trade_for_gathering`.
+                ResourceType::Meat => Self::JOINTS_A_TURN_OF_CUTTING_TAKES,
+
                 _ => 1,
             };
 
@@ -367,6 +395,7 @@ impl Simulation {
 
             // Harvest resource
             let where_it_grew = self.world.resources[resource_index].position;
+            let killed_on = self.world.resources[resource_index].killed_on;
             let harvested = {
                 let node = &mut self.world.resources[resource_index];
                 let taken = node.harvest(harvest_amount);
@@ -564,11 +593,13 @@ impl Simulation {
                     Self::what_one_of_these_weighs(resource_type_enum),
                 );
 
-                // Gathered food carries nutrition and spoils over time
+                // Gathered food carries nutrition and spoils over time -
+                // and a joint off a carcass is as old as the kill, not as
+                // the cutting.
                 if let Some(item_type) = Self::edible_item_for(resource_type_enum) {
                     item.food_data = self
                         .food_database
-                        .create_food_data(&item_type, self.current_turn);
+                        .create_food_data(&item_type, killed_on.unwrap_or(self.current_turn));
                 }
 
                 let it_is_food = item.food_data.is_some();
@@ -903,19 +934,24 @@ impl Simulation {
                         }
                     }
 
-                    // How much comes off the carcass, which is the waste
+                    let where_it_fell = {
+                        let at = self.population.agents[agent_index].state.position;
+                        crate::world::Position::new(at.0, at.1)
+                    };
+
+                    // The meat is cut as far as a turn takes it and the rest
+                    // left on the bone - see `the_beast_comes_down`.
+                    self.the_beast_comes_down(agent_index, &mut items_gained, where_it_fell, rng);
+
+                    // How much of the rest comes off, which is the waste
                     // question and so reads the yield channel: a fine flake
-                    // leaves less on the bone than a crude one, and a worn
+                    // leaves less of a hide than a crude one, and a worn
                     // flake leaves no more than a fresh one.
                     let knife = self.population.agents[agent_index]
                         .how_much_my_tools_bring_back(
                             crate::agents::skills::SkillType::Leatherworking,
                         );
                     let butchered = self.butcher(&items_gained, knife);
-                    let where_it_fell = {
-                        let at = self.population.agents[agent_index].state.position;
-                        crate::world::Position::new(at.0, at.1)
-                    };
                     self.into_the_pack_or_on_the_ground(
                         agent_index,
                         butchered,

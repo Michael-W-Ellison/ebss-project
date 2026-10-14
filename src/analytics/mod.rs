@@ -827,6 +827,102 @@ impl Simulation {
     /// kilograms.
     pub(in crate::analytics) const WHAT_A_JOINT_WEIGHS: f32 = 2.0;
 
+    /// How many joints an ordinary grown pair of hands with an ordinary edge
+    /// takes off a carcass in a turn of cutting. Bare hands manage a sixth of
+    /// an edge's work (`what_bare_hands_manage`), so a man with nothing to cut
+    /// with gets one joint a turn and one with a flint knife three or four.
+    pub(in crate::analytics) const JOINTS_A_TURN_OF_CUTTING_TAKES: u32 = 2;
+
+    /// How many joints this one takes off a carcass in a turn of cutting: the
+    /// hand, the edge in it, and the age of the body behind it, the fraction
+    /// carried as a chance. Never none - anybody can tear a joint off.
+    pub(in crate::analytics) fn what_a_turn_of_cutting_takes_off(
+        &self,
+        agent_index: usize,
+        rng: &mut impl rand::Rng,
+    ) -> u32 {
+        let trade = crate::agents::skills::SkillType::Leatherworking;
+        let agent = &self.population.agents[agent_index];
+        let worth = Self::JOINTS_A_TURN_OF_CUTTING_TAKES as f32
+            * agent.skills.hand_for(trade)
+            * agent.how_much_my_tools_bring_back(trade)
+            * agent.state.what_i_can_do_for_my_age();
+        let whole = worth.floor();
+        ((whole as u32) + u32::from(rng.gen::<f32>() < worth - whole)).max(1)
+    }
+
+    /// A beast has come down here: the meat on it is cut as far as one turn
+    /// takes it, and the rest is left lying as a carcass this one knows about.
+    ///
+    /// The meat is taken out of `dropped`, which keeps the skins, horn and
+    /// fangs for `butcher` as before. Returns how many joints were left.
+    ///
+    /// The whole beast used to come apart in the instant it fell, at whatever
+    /// the hunter happened to have in the pack to cut with - which was mostly
+    /// nothing, since getting ready to hunt fetches a spear and never a knife -
+    /// and bare hands keep fifteen in a hundred of it. The other eighty-five
+    /// were never made at all, and what would not fit in the pack went on the
+    /// grass, where nobody went back for it because nobody goes back for food
+    /// they have dropped. A carcass is a slow job without an edge, not a lost
+    /// one: what is not cut today is still on the bone tomorrow, for the
+    /// hunter or for whoever he tells (#331).
+    pub(in crate::analytics) fn the_beast_comes_down(
+        &mut self,
+        agent_index: usize,
+        dropped: &mut Vec<crate::environment::ItemStack>,
+        where_it_fell: crate::world::Position,
+        rng: &mut impl rand::Rng,
+    ) -> u32 {
+        let condition = self.world.climate.how_fat_the_beasts_are();
+        let mut joints_on_it = 0u32;
+        dropped.retain(|stack| {
+            if crate::agents::storage_integration::butchered_item_id(&stack.material_id) == "meat" {
+                joints_on_it += ((stack.quantity as f32 * condition).round() as u32).max(1);
+                false
+            } else {
+                true
+            }
+        });
+        if joints_on_it == 0 {
+            return 0;
+        }
+
+        let now = self.current_turn;
+        let cut = self.what_a_turn_of_cutting_takes_off(agent_index, rng).min(joints_on_it);
+        let mut joints = crate::agents::InventoryItem::new_with_weight(
+            "meat".to_string(),
+            cut,
+            Self::WHAT_A_JOINT_WEIGHS,
+        );
+        joints.food_data = self
+            .food_database
+            .create_food_data(&crate::world::ItemType::Meat, now);
+        if let Some(quality) = self.population.agents[agent_index]
+            .how_well_made_is_what_i_work_this_trade_with(
+                crate::agents::skills::SkillType::Leatherworking,
+            )
+        {
+            joints.quality = Some(quality);
+        }
+        let took = self.take_what_fits(agent_index, &joints);
+
+        let left = joints_on_it - took;
+        if self.world.a_carcass_lies_here(where_it_fell, left, now).is_some() {
+            let knows = &mut self.population.agents[agent_index].exploration_knowledge;
+            knows.discover_resource(where_it_fell, crate::world::ResourceType::Meat, now);
+            knows.saw_it_again(where_it_fell, left, now);
+            knows.found_some_at(where_it_fell);
+        }
+        if took > 0 && self.population.agents[agent_index]
+            .how_much_my_tools_bring_back(crate::agents::skills::SkillType::Leatherworking)
+            > 1.0
+        {
+            self.population.agents[agent_index]
+                .wear_what_i_worked_with(crate::agents::skills::SkillType::Leatherworking);
+        }
+        left
+    }
+
     fn butcher(
         &self,
         dropped: &[crate::environment::ItemStack],
@@ -1289,6 +1385,7 @@ impl Simulation {
             ResourceType::Stone => 5.0, // Stone is heavy
             ResourceType::Iron => 8.0,  // Iron is very heavy
             ResourceType::Food => crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,
+            ResourceType::Meat => Self::WHAT_A_JOINT_WEIGHS,
             _ => 1.0,
         }
     }

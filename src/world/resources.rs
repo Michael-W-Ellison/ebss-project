@@ -955,9 +955,32 @@ pub struct ResourceNode {
     /// `world::sleeping`.
     #[serde(default)]
     pub asleep_since: Option<u32>,
+
+    /// The turn the beast this was came down, for a carcass; `None` for
+    /// everything that grows or flows.
+    ///
+    /// A kill is the one food on the map that is not a stand of anything: it
+    /// was alive this morning and it will be carrion in a few days, and what
+    /// is cut off it is as old as it is - see `World::a_carcass_lies_here`.
+    #[serde(default)]
+    pub killed_on: Option<u32>,
 }
 
 impl ResourceNode {
+    /// What is left of a beast where it fell: this many joints of meat on it,
+    /// killed this turn.
+    pub fn a_carcass(position: Position, joints: u32, killed_on: u32) -> Self {
+        Self {
+            killed_on: Some(killed_on),
+            ..Self::new(ResourceType::Meat, position, joints)
+        }
+    }
+
+    /// Whether this is a carcass with meat still on it.
+    pub fn is_a_carcass(&self) -> bool {
+        self.killed_on.is_some()
+    }
+
     /// What wild ground of ordinary grade carries of what a plant of this kind
     /// could carry at most.
     ///
@@ -1000,6 +1023,7 @@ impl ResourceNode {
             ripe_stand: 0,
             taken_since_it_ripened: 0,
             asleep_since: None,
+            killed_on: None,
         }
     }
 

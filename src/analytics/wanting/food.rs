@@ -704,7 +704,8 @@ impl Simulation {
                 .food_database
                 .get(&kind)
                 .map(|template| template.base_nutrition.energy)
-                .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD);
+                .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD)
+                * Self::portions_in_one_off(resource.resource_type);
             let costs = crate::agents::provision::what_foraging_costs(
                 felt,
                 physiology::how_much_work_this_food_is(energy),
@@ -1080,8 +1081,10 @@ impl Simulation {
         position: (i32, i32, i32),
         radius: u32,
     ) -> Option<crate::world::Position> {
+        // Not a carcass: that is cut, not eaten where it stands, and the way
+        // to it is a walk and a `Gather` (#331).
         self.nearest_resource_within(agent, position, radius, |resource| {
-            Self::edible_item_for(resource.resource_type).is_some()
+            Self::edible_item_for(resource.resource_type).is_some() && !resource.is_a_carcass()
         })
     }
 
@@ -1222,6 +1225,22 @@ impl Simulation {
         let turns = 1.0
             + crate::world::pace::turns_to_walk(paces) * Self::TURNS_A_PACE_TAKES;
         (brings_back - costs) / turns
+    }
+
+    /// How many portions one of what comes off this goes down as.
+    ///
+    /// One, for everything picked: a handful is eaten as it is. Three for a
+    /// joint off a carcass, which is cut into portions before it is eaten
+    /// (`CUT_MEAT_INTO_PORTIONS`) - so a carcass weighed by the joint at the
+    /// worth of a portion read as a third of what it was, and lost to a berry
+    /// bush every time (#331).
+    pub(in crate::analytics) fn portions_in_one_off(resource: crate::world::ResourceType) -> f32 {
+        match resource {
+            crate::world::ResourceType::Meat => {
+                crate::environment::making::CUT_MEAT_INTO_PORTIONS.how_many as f32
+            }
+            _ => 1.0,
+        }
     }
 
     /// The inventory item a resource yields when eaten, if it is edible at all

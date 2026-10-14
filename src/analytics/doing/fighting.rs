@@ -461,16 +461,17 @@ impl Simulation {
             // a tool still in the pack - so a kill in a fight and the same
             // kill in a hunt were butchered by two different rules. Two
             // spellings of one question; see `could_bring_it_down`.
+            let where_it_fell = {
+                let at = self.population.agents[agent_index].state.position;
+                crate::world::Position::new(at.0, at.1)
+            };
+            self.the_beast_comes_down(agent_index, &mut items_gained, where_it_fell, rng);
             let knife = self.population.agents[agent_index]
                 .how_much_my_tools_bring_back(
                     crate::agents::skills::SkillType::Leatherworking,
                 );
             let butchered = self.butcher(&items_gained, knife);
             {
-                let where_it_fell = {
-                    let at = self.population.agents[agent_index].state.position;
-                    crate::world::Position::new(at.0, at.1)
-                };
                 self.into_the_pack_or_on_the_ground(
                     agent_index,
                     butchered,

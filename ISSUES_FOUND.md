@@ -24901,3 +24901,147 @@ answering before the carcass is made bigger again:
 
 The seed-0 yearly dice count moved from 1,028,941 to 1,014,941. Seed 4242's
 120-turn count did not move.
+
+### 331. A kill leaves a carcass: going back to it, and telling people where it is
+
+"Why is meat harvesting not utilizing cutting tools? Are agents sharing the
+location of kills? Why are they not going back to kills to continue
+harvesting? The cost of harvesting meat from a carcass is significantly less
+than hunting an alive animal. If most of the kill will go to waste before a
+hunter can harvest it fully, the hunter can decrease their social drive and
+improve relationships by sharing the location and harvest with other agents
+before the meat goes bad."
+
+**What was there.** A beast came apart in the instant it fell (`butcher`):
+- Every drop off it was multiplied by whatever the hunter had in the pack to
+  cut with. Bare hands keep 15% (`what_bare_hands_manage`), so the other 85%
+  of a carcass was never made at all.
+- What would not fit in the pack went on the ground as a loose item.
+- Nobody picks up dropped food (`something_worth_taking` takes only what a
+  plan is short of, and tools), so it rotted.
+- Nothing about a dropped item can be told to anybody, because what people
+  tell each other is resource nodes (`say_it_out_loud`).
+- The map has always had a resource for "a kill somebody left" (`Meat`, and
+  `every_food_grows_back` says as much). Nothing ever made one.
+
+**Why nobody had a knife.** Founders walk in with a handaxe and a stone knife
+each (`WHAT_THEY_CARRY`). Counted on smooth seed 2 over a year, the number of
+twelve adults carrying a cutting edge was:
+
+| day | 30 | 60 | 90 | 120 | 150 | 180 | 210 → 360 |
+|---|---|---|---|---|---|---|---|
+| with an edge | 5 | 8 | 7 | 6 | 4 | 1 | 0 |
+
+A knife lasts thirty jobs, and nothing makes another. A better tool is made
+when the job in hand asks for its trade (`would_a_better_tool_pay`, through
+`what_trade_this_asks_for`). No job ever asked for butchery:
+- butchering happened inside `Hunt`;
+- cutting a joint into portions (`Work`) is not one of the actions that
+  function maps;
+- tearing a joint by hand happens inside `Eat`, which is never interrupted for
+  a tool.
+
+Over that year nobody once wanted a knife.
+
+The tool counter was misleading as well. "Tool: gone to fetch what the making
+wants" counted 73,516 in the year. It counted whether or not the fetch sent
+anybody anywhere, and 69 in 70 of them were a digging stick whose makings
+nobody could get, with the turn going on as it was. It now counts only a fetch
+that diverts the agent.
+
+**Fix: a kill leaves a carcass.** `the_beast_comes_down`, for a hunt and a
+fight alike:
+- The meat is taken out of the drop at the carcass's seasonal condition and
+  nothing else, so no edge is charged as waste.
+- One turn of cutting goes into the pack (`what_a_turn_of_cutting_takes_off`):
+  two joints for an ordinary hand with an ordinary edge, at the butchery
+  tool's factor. Bare hands get one joint, a stone knife three or four.
+- The rest is put on the map as a carcass (`World::a_carcass_lies_here`): a
+  `Meat` node carrying the turn it was killed (`ResourceNode::killed_on`).
+- The hunter knows where it is.
+- Skins, horn and fangs are butchered as before.
+
+A carcass is food like any other to whoever knows of it:
+- It is cut with a `Gather`, at what a turn of cutting takes off it
+  (`JOINTS_A_TURN_OF_CUTTING_TAKES` at the edge's factor). The knife decides
+  how fast, and never how much is wasted.
+- A joint cut off it is as old as the kill.
+- It is never eaten where it stands; it has to be cut.
+- It is weighed against a berry bush in what its joints cut into, three
+  portions a joint (`portions_in_one_off`). Weighed by the joint at the worth
+  of a portion, it read as a third of what was on it and lost every time.
+- It is gone five days after the kill (`HOW_LONG_A_CARCASS_LIES`, half what
+  raw meat keeps in a pack).
+- A food gather that will land on a carcass asks for butchery
+  (`the_node_this_gather_takes`, pulled out of `gathering` so the two cannot
+  disagree). So taking a carcass apart bare-handed is now a job a stone knife
+  can be weighed against.
+
+**Fix: telling people about a kill.** A kill seen within the five days, with
+more joints on it than the hunter has room for in his pack
+(`kills_worth_telling_of`):
+- puts him in the speaking round every turn rather than six in a hundred;
+- is said first, and truthfully;
+- for each listener who had not heard of it, is a gift. The listener's bond
+  with him rises (`WHAT_A_SHARED_KILL_IS_WORTH_TO_HIM`, three hundredths of
+  the scale, as a good meeting does), and it answers a tenth of his Social
+  drive against three hundredths for being listened to at all.
+
+**And remembering a kill.** A kill one has been told of is kept in mind until
+it rots (`forget_what_does_not_matter`). Weighed with everything else, hearsay
+in country one does not know, wanted only if hungry that turn, it was the
+first place to go. Those told of a kill had forgotten it by the next turn and
+were told again: 5,764 tellings in two years on smooth seed 7, all about three
+kills.
+
+**Measured, smooth 1–12, two years from 12 founders, against #330:**
+
+| | #330 | #331 |
+|---|---|---|
+| births, deaths | 82, 0 | 82, 0 |
+| people at two years | 226 | 226 |
+| food in the pits | 122,347 | 121,396 |
+| kills | 2 | 5 |
+| joints on them | – | 35 |
+| cut at the kill | – | 4 |
+| cut later by the hunter | – | 14 |
+| cut by anybody else | – | 0 |
+| left to rot | – | 17, on 4 carcasses |
+| kills told of | – | 17 tellings, plus 231 turns with nobody in earshot |
+
+Births were the same on every seed. Every joint was cut with bare hands.
+
+What the steps on the way showed:
+- **Carcass alone:** 25 of 40 joints rotted and nobody was told; the bar for
+  telling was a fixed ten joints. It is now the hunter's pack room.
+- **Then telling, before the memory fix:** the 5,764 tellings above.
+- **Counting `Work` as knife work too**, so that cutting a joint or fish into
+  portions asked for a knife: 18,549 wants of a stone knife in two years and
+  not one made. Births fell from 82 to 74 with two deaths by mishap, and
+  others came to carcasses 24 times. Not kept. A stone knife wants a knapped
+  tip and a lashing, and the lashing wants flax; the fetch for it is where
+  every tool chain in these runs stalls (`fetch_what_the_making_of_it_wants`).
+
+**What still stands between a carcass and a supper:**
+- **Nobody makes a knife.** Every cut in every run was bare-handed. That is the
+  tool chain, not the carcass.
+- **Those told do not go.** An ordinary hungry agent walks to the nearest food
+  it knows of (`known_source_position`). Only the desperate weigh the best
+  (`the_best_food_anywhere`), so a kill out past the hedges is never chosen.
+- **Kills are rare:** five in twenty-four settlement-years.
+- **Carrying for a share is not done.** "An agent offering a portion of the
+  meat to agents who help transport the meat" wants an agreement between two
+  agents and a load carried for somebody else, and this model has neither.
+
+**Tests (`carcass_tests`):**
+- `the_rest_of_a_kill_is_left_on_the_bone`
+- `a_knife_takes_more_off_a_carcass_than_bare_hands`
+- `meat_off_a_carcass_is_as_old_as_the_kill`
+- `a_carcass_goes_off`
+- `a_hunter_calls_people_over_to_his_kill`
+- `food_off_a_carcass_is_knife_work`
+- `a_kill_you_were_told_of_is_not_forgotten_by_the_next_turn`
+- `a_carcass_is_worth_more_than_a_bush_the_same_walk_away`
+
+The seed-0 yearly dice count moved from 1,014,941 to 1,065,822. Seed 4242's
+120-turn count did not move.

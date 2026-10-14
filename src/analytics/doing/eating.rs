@@ -262,7 +262,10 @@ impl Simulation {
             Self::FORAGE_RADIUS,
         ) {
             let resource = &self.world.resources[i];
-            if Self::edible_item_for(resource.resource_type).is_some() && resource.anything_to_take() {
+            if Self::edible_item_for(resource.resource_type).is_some()
+                && resource.anything_to_take()
+                && !resource.is_a_carcass()
+            {
                 let distance = agent_pos.distance_to(&resource.position);
                 if distance <= Self::FORAGE_RADIUS {
                     let bad = remembers.how_bad_is_it_there(resource.position, now);

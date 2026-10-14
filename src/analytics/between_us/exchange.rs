@@ -31,6 +31,8 @@ impl Simulation {
             ResourceType::Food | ResourceType::Herbs => SkillType::Herbalism,
             ResourceType::Flax | ResourceType::Cotton => SkillType::Farming,
             ResourceType::Fish => SkillType::Fishing,
+            // Taking a carcass apart is knife work (#331)
+            ResourceType::Meat => SkillType::Leatherworking,
             _ => SkillType::Herbalism,
         }
     }

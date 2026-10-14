@@ -1341,11 +1341,24 @@ impl Simulation {
             // by the request rather than by the node, because the request is
             // what the agent has decided to do.
             Action::Gather { resource_type } => {
-                let _ = agent_index;
                 match resource_type.as_str() {
                     "wood" => SkillType::Woodcutting,
                     "stone" | "iron" | "coal" | "clay" | "sand" => SkillType::Mining,
                     "grain" | "flax" | "cotton" => SkillType::Farming,
+                    // Except that food off a carcass is cut, and what it is
+                    // cut with is a knife. Named by the request alone, a man
+                    // taking a deer apart with his fingers was picking
+                    // berries as far as this knew, so nothing ever set him
+                    // wanting an edge and the knives his people walked in
+                    // with were all gone by midsummer and never made again
+                    // (#331).
+                    "food"
+                        if self
+                            .the_node_this_gather_takes(agent_index, crate::world::ResourceType::Food)
+                            .is_some_and(|(node, _)| self.world.resources[node].is_a_carcass()) =>
+                    {
+                        SkillType::Leatherworking
+                    }
                     "food" | "greens" | "roots" | "herbs" => SkillType::Herbalism,
                     "fish" => SkillType::Fishing,
                     // Water wants nothing but hands, and a request for
@@ -1512,11 +1525,19 @@ impl Simulation {
             // having and the agent stood there for want of a length of flax.
             // `fetch_what_the_making_of_it_wants` is the same errand
             // `make_what_this_wants` runs one case over.
-            *self
-                .what_a_threat_came_to
-                .entry("tool: gone to fetch what the making wants".to_string())
-                .or_insert(0) += 1;
-            return self.fetch_what_the_making_of_it_wants(action, agent_index, better.called);
+            //
+            // Counted only when it does send him somewhere. It was counted
+            // whether or not it did, and over a year on one world 69 in 70
+            // of the count were a digging stick nobody could get the makings
+            // of, with the turn going on as it was (#331).
+            let fetching = self.fetch_what_the_making_of_it_wants(action.clone(), agent_index, better.called);
+            if fetching != action {
+                *self
+                    .what_a_threat_came_to
+                    .entry("tool: gone to fetch what the making wants".to_string())
+                    .or_insert(0) += 1;
+            }
+            return fetching;
         };
 
         let instead = Action::Craft {
