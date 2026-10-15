@@ -187,3 +187,26 @@ fn founders_arrive_practised_at_what_they_have_always_made() {
     assert_eq!(founder.skills.times_made("bow"), 0);
     assert!(founder.skills.level_at_making("bow", SkillType::Crafting) < trade);
 }
+
+/// Somebody who has found out how to make a thing makes a few to see it
+/// happen, and then stops: the novelty is spent. Before this a settlement made
+/// hundreds of bows and wheels a year that nobody used.
+#[test]
+fn curiosity_makes_a_few_and_then_stops() {
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let agent = &mut population.agents[0];
+    agent.inventory.get_all_items_mut().clear();
+    agent.found_out_how_to("bow");
+    let knife = agent.a_tool_fresh_from_these_hands("stoneknife", 1, 0.5);
+    agent.inventory.add_item(knife);
+    agent.inventory.add_item(InventoryItem::new_with_weight("wood".to_string(), 2, 1.0));
+    agent.inventory.add_item(InventoryItem::new_with_weight("lashing".to_string(), 2, 0.1));
+
+    assert_eq!(agent.what_i_would_try_out(), Some("bow".to_string()));
+
+    for _ in 0..crate::agents::Agent::MADE_OFTEN_ENOUGH_TO_HAVE_SEEN_IT {
+        agent.skills.made_one("bow");
+    }
+    assert_eq!(agent.what_i_would_try_out(), None, "seen it made often enough");
+}

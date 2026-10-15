@@ -3514,6 +3514,10 @@ impl Agent {
     /// tonight's supper.
     const DAYS_OF_FOOD_THEY_WALK_IN_WITH: f32 = 2.0;
 
+    /// How many times somebody makes a new thing out of curiosity before the
+    /// novelty is gone.
+    pub const MADE_OFTEN_ENOUGH_TO_HAVE_SEEN_IT: u32 = 3;
+
     /// Whether this agent can do a step at all.
     ///
     /// Everything a stone-age people arrives knowing is `obvious`; everything
@@ -3874,11 +3878,18 @@ impl Agent {
     /// do it again to see it happen, with no use in mind for what comes out.
     /// That is how the next link in the chain gets into his hands at all:
     /// nobody can want a metal knife before anybody has seen a metal blade.
+    ///
+    /// Only until he has seen it happen a few times. Without that the thought
+    /// never wore off: whatever was put down to make room was made again, and
+    /// a settlement made five hundred wheels a year and six hundred bows in
+    /// two, for nobody to use (#335). A thing he wants for a use is wanted by
+    /// another road - `what_i_would_rather_have` - and is not held back here.
     pub fn what_i_would_try_out(&self) -> Option<String> {
         let holding = |what: &str| self.how_many_i_have(what);
 
         crate::environment::making::everything_to_find_out()
             .filter(|step| self.knows_how_to(step))
+            .filter(|step| self.skills.times_made(step.makes) < Self::MADE_OFTEN_ENOUGH_TO_HAVE_SEEN_IT)
             .filter(|step| holding(step.makes) < crate::environment::making::A_FEW_SPARE)
             .filter(|step| {
                 step.wants_in_hand
