@@ -1312,7 +1312,25 @@ pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
     match what {
         "wheel" => &["stoneware", "metalaxe"],
         "handcart" => &["wheel"],
+        // Ore does not run in a cooking fire. The first copper ran in a
+        // potter's kiln, so nobody has the thought before they have fired a
+        // pot (#336).
+        "shinylump" => &["stoneware"],
         _ => &[],
+    }
+}
+
+/// How often a fire is hot enough for this to happen in it at all.
+///
+/// One for everything a cooking fire does. A fire that runs metal out of a
+/// stone is a fire built up and fed far past what anybody cooks on, and most
+/// fires never get there: a man can sit at one with ore in his pack all
+/// winter and see nothing but a hot stone. So the moment of seeing it comes a
+/// tenth as often as the moment of seeing a pot harden (#336).
+pub fn how_often_a_fire_is_hot_enough_for(what: &str) -> f64 {
+    match what {
+        "shinylump" => 0.1,
+        _ => 1.0,
     }
 }
 

@@ -39,6 +39,9 @@ impl Simulation {
 
         let could_be_for: Vec<&'static str> = self.population.agents[agent_index]
             .what_i_could_find_out()
+            // What a fire does to a thing is not in the thing: "rock + fire =
+            // ?" is "nothing an agent can work out by looking at it" (#336).
+            .filter(|step| !step.over_a_fire)
             .filter(|step| step.needs.iter().any(|(needs, _)| needs == what))
             .map(|step| step.makes)
             .chain(

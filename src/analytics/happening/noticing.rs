@@ -115,9 +115,12 @@ impl Simulation {
 
                 // A practised hand notices sooner, because it knows what it
                 // is looking at.
+                // And the fire has to be hot enough for it, which a cooking
+                // fire mostly is not for metal.
                 let odds = Self::HOW_OFTEN_ANYBODY_WORKS_IT_OUT
                     * curiosity as f64
-                    * agent.skills.hand_for(step.hands) as f64;
+                    * agent.skills.hand_for(step.hands) as f64
+                    * crate::environment::making::how_often_a_fire_is_hot_enough_for(step.makes);
 
                 if rng.gen_bool(odds.clamp(0.0, 1.0)) {
                     found.push((index, step.makes));

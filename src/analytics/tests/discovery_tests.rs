@@ -146,7 +146,8 @@ fn making_what_nobody_knows_fails_saying_so() {
 
 // --- finding out ------------------------------------------------------------
 
-/// A curious man, holding a bright stone, at a fire, works it out.
+/// A curious man who has fired a pot, holding a bright stone, at a fire,
+/// works it out - in time. One fire in ten is hot enough (#336).
 #[test]
 fn a_bright_stone_at_a_fire_is_eventually_understood() {
     let mut simulation = one_agent_world();
@@ -155,13 +156,14 @@ fn a_bright_stone_at_a_fire_is_eventually_understood() {
     {
         let agent = &mut simulation.population.agents[0];
         carrying(agent, "iron", 8);
+        agent.found_out_how_to("stoneware");
         if let Some(curiosity) = agent.drives.get_mut(DriveType::Curiosity) {
             curiosity.value = 1.0;
         }
     }
 
     let mut worked_it_out = false;
-    for _ in 0..4000 {
+    for _ in 0..100_000 {
         simulation.somebody_notices_something();
         if let Some(curiosity) = simulation.population.agents[0]
             .drives
@@ -180,6 +182,37 @@ fn a_bright_stone_at_a_fire_is_eventually_understood() {
         "a curious man with iron in his hands at a burning fire should \
          eventually see what the fire does to it"
     );
+}
+
+/// Nobody who has never fired a pot has the thought at all: ore does not run
+/// in a cooking fire, and the first copper ran in a potter's kiln (#336).
+#[test]
+fn nobody_runs_metal_before_they_have_fired_a_pot() {
+    let mut simulation = one_agent_world();
+    a_fire_where_he_stands(&mut simulation);
+    carrying(&mut simulation.population.agents[0], "iron", 8);
+
+    for _ in 0..20_000 {
+        if let Some(curiosity) = simulation.population.agents[0]
+            .drives
+            .get_mut(DriveType::Curiosity)
+        {
+            curiosity.value = 1.0;
+        }
+        simulation.somebody_notices_something();
+    }
+
+    assert!(!simulation.population.agents[0].knows_how_to_make("shinylump"));
+}
+
+/// And a cooking fire is seldom hot enough: the thought comes a tenth as
+/// often as one a cooking fire does show.
+#[test]
+fn a_fire_hot_enough_to_run_metal_is_a_rare_fire() {
+    use crate::environment::making::how_often_a_fire_is_hot_enough_for;
+
+    assert!(how_often_a_fire_is_hot_enough_for("shinylump") < 0.5);
+    assert_eq!(how_often_a_fire_is_hot_enough_for("stoneware"), 1.0);
 }
 
 /// And away from a fire he never does.
@@ -496,15 +529,19 @@ fn a_settlement_can_find_metal_out_for_itself() {
     // Put iron and a fire where the people are, so that this tests the
     // mechanism rather than whether a random world happens to put a mountain
     // within walking distance.
+    // A people who have fired pots: nobody has the thought before that, and
+    // a cooking fire is hot enough to run metal one time in ten, so they are
+    // given ten times as long as a pot takes (#336).
     a_fire_where_he_stands(&mut simulation);
     for agent in simulation.population.agents.iter_mut() {
         carrying(agent, "iron", 6);
+        agent.found_out_how_to("stoneware");
     }
 
     let hearth = simulation.population.agents[0].state.position;
 
     let mut anybody_knows = false;
-    for _ in 0..600 {
+    for _ in 0..6_000 {
         simulation.take_a_turn();
 
         // Keep the conditions in place: a fire that stays lit, iron in every
@@ -537,6 +574,6 @@ fn a_settlement_can_find_metal_out_for_itself() {
     assert!(
         anybody_knows,
         "six curious people at a fire with iron in their packs should work \
-         out what the fire does to it inside fifty days"
+         out what the fire does to it in time"
     );
 }

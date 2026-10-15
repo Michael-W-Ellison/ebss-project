@@ -1450,8 +1450,13 @@ impl Simulation {
                     }
                 }
 
+                // Only once a bright stone could come to anything in this
+                // one's hands: before a pot has been fired it is a heavy stone
+                // to carry about and nothing more (#336).
                 let agent_has_none = agent.how_many_i_have("iron") < 2;
-                if agent_has_none && agent.have_i_seen("iron") {
+                let could_come_to_something = agent.knows_how_to_make("shinylump")
+                    || agent.what_i_could_find_out().any(|step| step.makes == "shinylump");
+                if agent_has_none && could_come_to_something && agent.have_i_seen("iron") {
                     return Some(Action::Gather {
                         resource_type: "iron".to_string(),
                     });

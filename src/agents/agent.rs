@@ -3917,6 +3917,7 @@ impl Agent {
             }
 
             self.what_i_could_find_out()
+                .filter(|step| !step.over_a_fire)
                 .filter(|step| step.needs.iter().any(|(needs, _)| *needs == what))
                 .map(|step| step.makes)
                 .chain(
