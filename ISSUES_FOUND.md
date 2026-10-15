@@ -25315,3 +25315,91 @@ of that, and whether anybody needs them is a question of its own.
   knows sinew comes off a kill.
 - The seed-0 yearly dice count moved from 1,135,991 to 1,018,105, and seed
   4242's 120-turn count from 7,639 to 7,743.
+
+### 335. A hand at each thing, the wheel down the path, and meat nobody had to kill
+
+Three asks in one:
+
+> "Crafting is a skill which should improve over time with experience. The
+> result should be lesser chance of injury, faster Crafting, and higher
+> quality output. Crafting should not be a general skill, but based on the
+> object being crafted. Why are agents crafting wheels? ... Why are few agents
+> going for free meat? ... Preparation should drive the utilization of free
+> meat for at least some agents."
+
+**Practice at each thing (`Skills::made`).** Every making, or spoiled try,
+counts one towards the hand at that thing. The level comes of the count:
+`-10 + 20(1 - e^(-n/30))`, so the first ten teach the most, thirty is about
+two-thirds of the climb, and a hundred is mastery. The trade is kept as what
+carries over, and only as a floor three levels under it
+(`WHAT_A_NEW_THING_COSTS_THE_TRADE`). A hundred lashings make a man good at
+lashings and only as good at a bow as his trade takes him. The hand at the
+thing (`level_at_making`) now decides:
+- the odds of a cut and of spoiling the makings (the skill category's
+  chances, as before, but at the thing's level);
+- the quality and life of what comes out (`a_tool_fresh_from_these_hands_out_of`);
+- how long it holds the maker. An ordinary hand does eight effort of making
+  in a period (`WHAT_A_PERIOD_OF_MAKING_COMES_TO`), and periods are effort / 8
+  / hand, rounded, at least one. `ActionResult::took_periods` carries it to
+  `busy_until`. A beginner at a handaxe takes two periods, a master one;
+- the energy: effort / sqrt(hand). A spoiled try now costs its energy too.
+
+Founders arrive having made every obvious thing as often as it takes to stand
+at their trade's level, so a founder's spear is what it always was.
+
+**The wheel.** It was a discovery with nothing in front of it: anybody
+holding two wood, a lashing and a handaxe could have the thought. And once
+somebody had it, `what_i_would_try_out` made wheels to see them made until four
+were spare, and remade whatever was set down to make room. #334 counted 503 in
+one seed-year. Two fixes:
+- `what_has_to_be_known_first`: the wheel waits on fired pottery and a metal
+  axe, the handcart on the wheel. `Agent::what_i_could_find_out` is the list
+  the noticing, likeness and looking paths now walk.
+- Curiosity makes a new thing three times and stops
+  (`MADE_OFTEN_ENOUGH_TO_HAVE_SEEN_IT`). Measured with the gate alone, the
+  same loop moved to the bow: 606 bows over four smooth settlements, 217 of
+  them with a cut. With both, 222.
+
+On scattered maps the gate is met inside the first year. Ore lies near camp, a
+metal axe is found by swapping a part (`TrySwapping`), and clay gives pottery.
+So wheels are still made there: 17, 17 and 14 in three of eight settlements
+over two years, against 500 to 1,000 per settlement with the gate and no limit
+on curiosity. The wheel is where it belongs on the path; the metal is what
+comes too early on those maps.
+
+**Meat lying in the wood.** A kill was gone back to only for a meal, and
+weighed as one against a berry bush. Before this, over twenty settlements and
+two years, 42 kills left 381 joints lying, 196 of them rotted, and 12 people
+ever cut at somebody else's kill. Now Preparedness goes for it in any season
+(`a_kill_worth_fetching`, above salting and drying in `putting_food_by`):
+- from age 12, with room for a joint in the pack;
+- only a kill reachable with a day of it left after the walk;
+- priced as a patch is (`what_this_patch_is_worth`).
+
+It gathers where it lies within reach and walks there where it does not. A
+trip for "meat" asks for an edge, as a trip for food at a carcass does.
+
+**Measured, two years from 12 founders:**
+
+| | #334 | gate + practice + kills | and curiosity limited |
+|---|---|---|---|
+| smooth 1–12: births, deaths | 83, 7 | 84, 2 | 84, 4 |
+| smooth: food in pits | 151,965 | 164,487 | 128,796 |
+| scattered 1–8: births, deaths | 63, 1 | 50, 2 | 69, 0 |
+| scattered: food in pits | 92,923 | 89,842 | 109,111 |
+| makings | 115,853 | 74,806 | 62,013 |
+| deaths by a mishap | 5 | 0 | 0 |
+| kills, joints left, rotted | 42, 381, 196 | 38, 332, 33 | 35, 318, 64 |
+| joints cut by others, by how many | 88, 12 | 143, 28 | 120, 19 |
+
+Births by seed:
+- smooth: 8 2 9 10 7 7 8 4 5 8 7 9;
+- scattered: 8 11 10 8 5 10 6 11.
+
+The four deaths are all thirst, all in smooth seed 8. Of 54,148 makings, 4,012
+drew blood (7.4%): knapped tips most, then digging sticks, handaxes and bows.
+Bows are the one thing beginners are often slow at (304 of 747 took two
+periods); everything else in the kit is made in one.
+
+The seed-0 yearly dice count moved from 1,018,105 to 984,596, and seed 4242's
+120-turn count from 7,743 to 7,934.

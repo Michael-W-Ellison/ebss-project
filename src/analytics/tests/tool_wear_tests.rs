@@ -441,6 +441,9 @@ fn even_crude_work_beats_bare_hands() {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let agent = &mut population.agents[0];
+    // Never made one, and no trade to carry over: a founder arrives having
+    // made spears before (#335), so the practice goes too.
+    agent.skills = crate::agents::Skills::new();
     agent.skills.set_skill_level(SkillType::Crafting, -10);
 
     let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);

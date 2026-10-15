@@ -217,7 +217,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // after them.
     // Up to 7,743 for #334: lashing from sinew, strips of bark and rawhide,
     // and only a making with something sharp or hot in it can hurt.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_743;
+    // Up to 7,934 for #335: the hand at each thing made, and a making that
+    // holds an unpractised hand longer than a period.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_934;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -481,7 +483,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // pottering rather than before it.
     // Down 10.4% to 1,018,105 for #334: lashing from sinew, strips of bark
     // and rawhide, and only a making with something sharp or hot in it hurts.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_018_105;
+    // Down 3.3% to 984,596 for #335: the hand at each thing made, the wheel
+    // behind pottery and metal, curiosity spent after three, and kills
+    // fetched for the store.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 984_596;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
