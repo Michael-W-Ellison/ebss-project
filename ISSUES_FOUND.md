@@ -25045,3 +25045,127 @@ What the steps on the way showed:
 
 The seed-0 yearly dice count moved from 1,014,941 to 1,065,822. Seed 4242's
 120-turn count did not move.
+
+### 332. Knives: an edge in the kit, and what kept it out
+
+"Fix the tool-making chain so agents make knives."
+
+**Where the chain broke.** Counted on smooth seed 2 over a year, every adult
+without an edge, asked what stood between them and a stone knife:
+
+- **Nobody wanted one.** A better tool is made when the job in hand asks for
+  its trade (`would_a_better_tool_pay`), and no job asks for a knife. Butchery
+  was inside `Hunt`. Cutting portions (`Work`) is not a job that function
+  maps. Tearing by hand is inside `Eat`, which is never interrupted for a
+  tool. The spare-turn making (`what_i_would_make`) put the knife third,
+  behind hunting and woodcutting, and only took a step that could be done
+  from the pack.
+- **A full pack.** Stone is five to the unit and packs run full. Asked for
+  stone, `could_this_gather_come_to_anything` refused 11 of 12 adults by
+  midsummer, because only somebody already on a making errand was exempt,
+  and the fetch is asked before the errand is set.
+- **No flax half the year.** A stone knife is a knapped tip and a lashing,
+  and lashing is flax. Flax stood at 2,300–3,200 units near camp to day 180,
+  then none from day 210 to the year's end. Tips piled up in packs (14 by
+  midwinter) with nothing to bind them.
+- **Making errands gave up on a missing stone.** An errand took the making
+  steps only, and was dropped as "stuck" the moment the pack was short of
+  anything (`next_step_towards_making`).
+- **And the discovered thong could not be planned with.** Putting a hide
+  where the flax goes makes lashing (`THONG_FOR_CORD`), and finding it out
+  records only "lashing", which everybody already knows. No `Making` turns a
+  hide into cord, so the discovery changes nothing anybody plans. Not changed
+  here.
+
+**Fix.**
+- **A struck flake is an edge** (`FLAKE_FOR_BUTCHERING`): the knapped tip
+  helps butchery at 1.4 against a knife's 1.8 and bare hands' 0.15, and dulls
+  in twelve jobs. Two stones and nothing else, all year round.
+- **The kit** (`Agent::what_my_kit_is_short_of`). For a grown person with
+  none, the humblest edge they know how to make, which is a flake. For one
+  with an edge and no lashing, a lashing for the next knife, kept in the pack
+  (`what_stays_in_the_pack`).
+- **The edge first in a spare turn**, ahead of the pottering. Carving wants a
+  knife anyway, so a person with no edge was not carving bowls. The cord comes
+  after the pottering, because the pottering is where bowls come from
+  (`knife_chain_tests`). A step towards the kit is held on to as an errand
+  (`hold_on_to_the_making`).
+- **A kit errand fetches what it is short of** (`how_i_would_come_by` in the
+  errand) rather than being given up. Only the kit: every making fetching
+  sent people round chains that end in a tool they have not got (a digging
+  stick is whittled with a knife in the hand). That was 68,694 turns of it in
+  eight months on one world, a fifth fewer births across twelve, and five dead
+  of thirst and hunger.
+- **A full pack does not refuse a making's stone** when there is something to
+  put down for it (`could_this_gather_come_to_anything_for`,
+  `Agent::room_i_could_make`). The gather puts down what is worth least,
+  never the making's own materials (`set_down_to_make_room`,
+  `what_my_makings_want`). A pack full of food is still full: asked for stone
+  regardless, it came back "Inventory full" 2,130 times in a year.
+- **Only what the storehouse has a name for is offered to it**
+  (`what_i_can_spare`). With flakes about, tinder (three to a scraped stick)
+  was the most of anything in a pack, and every turn spent putting it by came
+  back "Unknown item type: tinder", 791 times in a year on one world. The
+  food went unstored, and the breeding gate, which reads the store, stayed
+  shut.
+
+**Tried and taken out:**
+- **Striking a flake before tearing a joint by hand.** Hands get half of what
+  a cut does. On smooth seed 8 it took the first year's store from 57,968 to
+  385, as hungry people went for stone instead of eating.
+- **Errands for every making, and the better-tool fetch taken on as an
+  errand.** That is the 68,694 turns above.
+
+**Edges, smooth seed 2, adults out of twelve, every thirty days:**
+
+| day | 30 | 60 | 90 | 120 | 150 | 180 | 210 | 240 | 270 | 300 | 330 | 360 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| #331 | 5 | 8 | 7 | 6 | 4 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
+| #332 | 10 | 10 | 7 | 6 | 6 | 6 | 6 | 6 | 6 | 7 | 8 | 8 |
+
+Hafted stone knives are 4–5 to day 60 and gone by day 120. Flakes carry the
+rest of the year: with a flake the kit has its edge, and a knife is only an
+upgrade, made when a job asks for it and flax is to hand.
+
+**Measured, two years from 12 founders:**
+
+| | #331 | #332 |
+|---|---|---|
+| smooth 1–12: births, deaths | 82, 0 | 88, 3 (2 a mishap, 1 hunger) |
+| smooth: people at two years | 226 | 229 |
+| smooth: food in pits | 121,396 | 140,901 |
+| scattered 1–8: births, deaths | 59, 0 | 34, 0 |
+| scattered: people at two years | 155 | 130 |
+| scattered: food in pits | 57,251 | 57,547 |
+| butchery cuts with an edge | 0 | 34 of 60 |
+
+Births on scattered terrain were lower on every seed: 5 5 3 7 2 1 3 8
+against 8 6 8 11 5 5 8 8. On scattered seed 3 the first year's store was
+13,479 against 61,489. Packs at midsummer held 9.1 dried legumes a head
+against about 2 of grain and roots, pits ended the year at 1,294 against
+5,903, and the breeding gate (which reads the store) saw no mating attempt
+all year against 10,692. By the end of the second year the store was ahead
+(66,000 against 51,000).
+
+So food is being carried rather than put in the ground in the first year.
+**Why an edge in the kit does that is not found.** "A mishap" is the
+crafting injury (`making.rs`, `A_MISHAP`): it never takes the last point of
+health, but it is booked as the cause when it was the last harm before a
+death, and more knapping means more of it.
+
+**Tests (`kit_tests`):**
+- `a_struck_flake_is_an_edge`
+- `somebody_with_no_edge_knaps_one_first`
+- `somebody_with_an_edge_keeps_a_cord_for_the_next`
+- `a_full_pack_does_not_keep_the_makings_of_an_edge_out`
+- `a_making_short_of_stone_goes_for_stone`
+- `tinder_is_not_offered_to_the_store`
+- `a_pack_full_of_food_is_not_asked_for_stone`
+
+`the_undirected_working_comes_first_and_that_is_where_bowls_come_from` and
+`a_making_somebody_chose_is_held_on_to` now give their person an edge: both
+are about somebody who has one, and somebody without takes the edge on
+first.
+
+The seed-0 yearly dice count moved from 1,065,822 to 1,052,931. Seed 4242's
+120-turn count did not move.

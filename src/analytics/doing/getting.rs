@@ -49,6 +49,18 @@ impl Simulation {
         agent_index: usize,
         room_wanted: f32,
     ) -> f32 {
+        self.set_down_to_make_room(agent_index, room_wanted, &[])
+    }
+
+    /// The same, never putting down anything in `keep`: what a making wants
+    /// goes in ahead of what is worth least in the pack, but not ahead of the
+    /// rest of what the same making wants.
+    pub(in crate::analytics) fn set_down_to_make_room(
+        &mut self,
+        agent_index: usize,
+        room_wanted: f32,
+        keep: &[&str],
+    ) -> f32 {
         use crate::world::Position;
 
         let here = {
@@ -69,7 +81,7 @@ impl Simulation {
                 break;
             }
 
-            let Some(what) = self.population.agents[agent_index].what_i_would_set_down() else {
+            let Some(what) = self.population.agents[agent_index].what_i_would_set_down_keeping(keep) else {
                 break;
             };
 
@@ -633,6 +645,22 @@ impl Simulation {
                         let mut the_rest = item.clone();
                         the_rest.quantity = harvested - took;
                         took += self.take_what_fits(agent_index, &the_rest);
+                    }
+                }
+
+                // And what a making wants, the same way: a man short two stone
+                // for a knife puts down the iron he has no use for, not the
+                // flax the knife's cord is going to be twisted from (#332).
+                if !it_is_food && took < harvested {
+                    let makings = self.population.agents[agent_index].what_my_makings_want();
+                    if makings.contains(&item_id) {
+                        let each = item.what_one_of_them_weighs();
+                        let short = (harvested - took) as f32 * each;
+                        if self.set_down_to_make_room(agent_index, short, &makings) > 0.0 {
+                            let mut the_rest = item.clone();
+                            the_rest.quantity = harvested - took;
+                            took += self.take_what_fits(agent_index, &the_rest);
+                        }
                     }
                 }
                 let took = took;

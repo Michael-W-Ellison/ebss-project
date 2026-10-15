@@ -1720,6 +1720,25 @@ pub const SPEAR_FOR_FISHING: Tool = Tool {
     how_long_it_lasts: 25.0,
 };
 
+/// A flake struck off a core is an edge before it is anything else.
+///
+/// Most of what was ever butchered in the stone age was butchered with an
+/// unretouched flake: struck, used, and dropped when it dulled. It wants two
+/// stones and nothing else, where a hafted knife wants a lashing too - and
+/// lashing is flax, and flax stands only from spring to the end of summer. So
+/// a people whose knives wore through in the autumn went without any edge at
+/// all until the spring, and kept fifteen in a hundred of every carcass, with
+/// the flakes for the knives they could not bind piling up in their packs
+/// (#332).
+///
+/// Below a knife, since there is nothing to hold it by, and quick to dull.
+pub const FLAKE_FOR_BUTCHERING: Tool = Tool {
+    called: "knappedtip",
+    helps: SkillType::Leatherworking,
+    how_much_better: 1.4,
+    how_long_it_lasts: 12.0,
+};
+
 /// A knife is for taking a carcass apart.
 pub const KNIFE_FOR_BUTCHERING: Tool = Tool {
     called: "stoneknife",
@@ -1818,6 +1837,7 @@ pub const EVERY_TOOL: &[Tool] = &[
     SHOVEL_FOR_BUILDING,
     SPEAR_FOR_HUNTING,
     SPEAR_FOR_FISHING,
+    FLAKE_FOR_BUTCHERING,
     KNIFE_FOR_BUTCHERING,
     KNIFE_FOR_CRAFTING,
     METAL_KNIFE_FOR_BUTCHERING,

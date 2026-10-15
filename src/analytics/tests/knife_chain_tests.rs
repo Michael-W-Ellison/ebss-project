@@ -226,7 +226,13 @@ fn the_undirected_working_comes_first_and_that_is_where_bowls_come_from() {
             agent
                 .inventory
                 .add_item(InventoryItem::new_with_weight(what.to_string(), 20, 0.1));
-        }    }
+        }
+        // With an edge in the pack. Somebody with no edge at all takes one
+        // on before anything (#332) - and could not carve a bowl without it
+        // anyway, carving wanting a tool for the craft.
+        let knife = agent.a_tool_fresh_from_these_hands("stoneknife", 1, 0.5);
+        agent.inventory.add_item(knife);
+    }
 
     let chosen = simulation.what_this_drive_offers(
         crate::core::DriveType::Utility,

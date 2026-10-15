@@ -799,7 +799,24 @@ impl Simulation {
                     return action;
                 }
 
-                match self.next_step_towards_making(&wanted, &self.population.agents[agent_index]) {
+                // The step if one can be taken - and for the kit, the
+                // makings if not: an edge short of a stone is a reason to go
+                // and get one, not a reason to give the edge up (#332).
+                //
+                // Only for the kit. Every making fetching what it was short
+                // of sent people round chains that end in a tool they have
+                // not got - a digging stick is whittled with a knife in the
+                // hand - fetching the wood, failing the whittling, giving up
+                // and taking it on again: 68,694 turns of it in eight months
+                // on one world, a fifth fewer births and five dead of thirst
+                // and hunger across twelve.
+                let agent = &self.population.agents[agent_index];
+                let next = if agent.what_my_kit_is_short_of() == Some(wanted.as_str()) {
+                    self.how_i_would_come_by(&wanted, agent)
+                } else {
+                    self.next_step_towards_making(&wanted, agent)
+                };
+                match next {
                     Some(step) => {
                         if let Some(errand) = self.population.agents[agent_index].errand.as_mut() {
                             errand.turns_on_it += 1;
@@ -1639,11 +1656,19 @@ impl Simulation {
         let short_of =
             crate::environment::making::everything_wanting_knowing(wanted, &holding, &knows);
 
+        // The kit is fetched for with a full pack, because what it is made
+        // of goes in ahead of whatever is worth least (`set_down_to_make_room`
+        // keeps to `what_my_makings_want`); anything else waits for room.
+        let for_the_kit = agent.what_my_kit_is_short_of() == Some(wanted)
+            || agent
+                .errand
+                .as_ref()
+                .is_some_and(|errand| errand.to_make.is_some());
         let here = agent.state.position;
         let raw = short_of
             .iter()
             .filter(|what| agent.have_i_seen(what))
-            .find(|what| self.could_this_gather_come_to_anything(agent, here, what))?;
+            .find(|what| self.could_this_gather_come_to_anything_for(agent, here, what, for_the_kit))?;
 
         let instead = Action::Gather {
             resource_type: raw.to_string(),
@@ -1767,12 +1792,23 @@ impl Simulation {
         action: Action,
         agent_index: usize,
     ) -> Action {
-        if !matches!(action, Action::Craft { .. }) {
+        let agent = &self.population.agents[agent_index];
+        if agent.errand.is_some() {
             return action;
         }
 
-        let agent = &self.population.agents[agent_index];
-        if agent.errand.is_some() {
+        // A step towards what the kit is short of - a stone fetched for a
+        // knife as much as the knapping - is held on to as that making, so
+        // the fetching is followed by the knapping and the knapping by the
+        // knife (#332).
+        if let Some(kit) = agent.what_my_kit_is_short_of() {
+            if self.how_i_would_come_by(kit, agent).as_ref() == Some(&action) {
+                self.take_the_making_on(kit, agent_index);
+                return action;
+            }
+        }
+
+        if !matches!(action, Action::Craft { .. }) {
             return action;
         }
 
@@ -1799,7 +1835,7 @@ impl Simulation {
 
     /// Take a making on as an errand, so that a chain several turns long is
     /// walked rather than restarted.
-    fn take_the_making_on(&mut self, wanted: &str, agent_index: usize) {
+    pub(in crate::analytics) fn take_the_making_on(&mut self, wanted: &str, agent_index: usize) {
         let Some(for_drive) = self.population.agents[agent_index].what_presses_hardest() else {
             return;
         };

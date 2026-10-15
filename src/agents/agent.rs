@@ -2413,6 +2413,12 @@ impl Agent {
                     && item.food_data.is_none()
                     && !name.contains("food")
             })
+            // Only what the storehouse has a name for. Tinder comes three to
+            // a scraped stick, so it was the most of anything in a pack that
+            // had a flake to scrape with, and every turn spent putting it by
+            // came back "Unknown item type: tinder" - 791 of them in a year
+            // on one world (#332).
+            .filter(|(name, _)| crate::agents::storage_integration::id_to_item_type(name).is_some())
             .max_by_key(|(_, item)| item.quantity)
             .map(|(name, item)| {
                 (name.clone(), item.quantity - Self::how_much_of_this_to_keep(name))
@@ -2509,14 +2515,64 @@ impl Agent {
     /// what is being carried is the means to something the carrier is going to
     /// want tonight. See ISSUES_FOUND #224.
     fn what_stays_in_the_pack(name: &str) -> u32 {
-        if name == "wood" {
-            Self::ENOUGH_WOOD_TO_HAND
-        } else {
-            0
+        match name {
+            "wood" => Self::ENOUGH_WOOD_TO_HAND,
+            // The cord for the next knife - see `what_my_kit_is_short_of`
+            "lashing" => 2,
+            _ => 0,
         }
     }
 
     pub fn what_i_would_set_down(&self) -> Option<String> {
+        self.what_i_would_set_down_keeping(&[])
+    }
+
+    /// Everything that goes into what this one is making - the errand's
+    /// making and what the kit is short of - down to the raw stuff: the
+    /// things not to put down to make room for the rest of it (#332).
+    pub fn what_my_makings_want(&self) -> Vec<&'static str> {
+        fn into(what: &str, depth: usize, out: &mut Vec<&'static str>) {
+            if depth > 4 {
+                return;
+            }
+            for step in crate::environment::making::every_way_to_make(what) {
+                for (needed, _) in step.needs {
+                    if !out.contains(needed) {
+                        out.push(needed);
+                        into(needed, depth + 1, out);
+                    }
+                }
+            }
+        }
+
+        let mut wanted = Vec::new();
+        let making = self.errand.as_ref().and_then(|errand| errand.to_make.clone());
+        for what in making.as_deref().into_iter().chain(self.what_my_kit_is_short_of()) {
+            into(what, 0, &mut wanted);
+        }
+        wanted
+    }
+
+    /// How much room this one could make in the pack without putting down
+    /// food, the kit, or anything in `keep`: what `what_i_would_set_down_keeping`
+    /// would offer, all of it, less what stays in the pack regardless.
+    pub fn room_i_could_make(&self, keep: &[&str]) -> f32 {
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(_, item)| item.quantity > 0)
+            .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
+            .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
+            .filter(|(name, _)| !keep.contains(&name.as_str()))
+            .map(|(name, item)| {
+                item.quantity.saturating_sub(Self::what_stays_in_the_pack(name)) as f32
+                    * item.what_one_of_them_weighs()
+            })
+            .sum()
+    }
+
+    /// The same, never choosing any of `keep`.
+    pub fn what_i_would_set_down_keeping(&self, keep: &[&str]) -> Option<String> {
         // Food that has gone past eating goes before anything else.
         //
         // Food was never set down, rotten or not, so a pack that filled with
@@ -2562,6 +2618,7 @@ impl Agent {
             .filter(|(_, item)| item.quantity > 0)
             .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
             .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
+            .filter(|(name, _)| !keep.contains(&name.as_str()))
             .max_by(|a, b| {
                 let load = |item: &InventoryItem| item.quantity as f32 * item.weight_per_unit;
                 // Anything with something to spare goes before anything that
@@ -4272,6 +4329,78 @@ impl Agent {
             })
             .map(|step| step.makes.to_string())
     }
+
+    /// What this one's own kit is short of, that is worth going out of the
+    /// way to put right whatever the job in hand happens to be.
+    ///
+    /// **An edge.** Everything that comes off an animal, every fish and
+    /// joint cut into portions, every hide scraped and every stick carved
+    /// wants one, and with none a carcass keeps fifteen in a hundred of
+    /// itself. Founders walk in with a stone knife (`WHAT_THEY_CARRY`); it is
+    /// worn through in thirty jobs, and nothing made another, because nothing
+    /// ever asked for one - a better tool is wanted when the job in hand asks
+    /// for its trade (`would_a_better_tool_pay`), and no job asks for a knife
+    /// that cannot be done without one. Counted on one world, adults carrying
+    /// any edge went from eight in twelve to none by the seventh month, and
+    /// stayed at none (#332).
+    ///
+    /// **And a lashing for the next one.** Lashing is flax, flax stands only
+    /// from spring to the end of summer, and a knife wants a lashing: knives
+    /// that wore out in the autumn were not replaced until the spring, while
+    /// the knapped tips for them piled up in packs. Somebody with an edge
+    /// keeps the cord for its successor.
+    ///
+    /// The humblest edge this one knows how to make: the knife, which wants
+    /// a tip and a lashing, before the handaxe, which wants the haft as well.
+    pub fn what_my_kit_is_short_of(&self) -> Option<&'static str> {
+        if let Some(edge) = self.the_edge_i_am_without() {
+            return Some(edge);
+        }
+
+        if self.state.years_old() >= Self::OLD_ENOUGH_TO_KEEP_A_KIT
+            && self.how_many_i_have("lashing") == 0
+            && self.knows_how_to_make("lashing")
+        {
+            return Some("lashing");
+        }
+
+        None
+    }
+
+    /// The first half of `what_my_kit_is_short_of`: the edge, for somebody
+    /// with none.
+    ///
+    /// Apart because the two do not sit in the same place in a spare turn.
+    /// An edge comes before the pottering, since nearly every working wants
+    /// one; a spare cord comes after it, because the pottering is where bowls
+    /// come from (`knife_chain_tests`).
+    pub fn the_edge_i_am_without(&self) -> Option<&'static str> {
+        use super::SkillType;
+
+        if self.state.years_old() < Self::OLD_ENOUGH_TO_KEEP_A_KIT {
+            return None;
+        }
+
+        if self.what_i_have_to_work_with(SkillType::Leatherworking).is_none() {
+            let mut edges: Vec<&'static crate::environment::making::Tool> =
+                crate::environment::making::what_helps_with(SkillType::Leatherworking)
+                    .filter(|tool| self.knows_how_to_make(tool.called))
+                    .collect();
+            edges.sort_by_key(|tool| {
+                crate::environment::making::every_way_to_make(tool.called)
+                    .map(|step| step.needs.len())
+                    .min()
+                    .unwrap_or(usize::MAX)
+            });
+            return edges.first().map(|tool| tool.called);
+        }
+
+        None
+    }
+
+    /// Old enough to keep a kit of one's own: to knap a flake and twist a
+    /// cord rather than borrow a parent's.
+    pub const OLD_ENOUGH_TO_KEEP_A_KIT: u32 = 12;
 
     /// And the thing that making is a step *towards*.
     ///

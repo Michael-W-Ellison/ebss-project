@@ -473,7 +473,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // kestrel and a known patch of food beats most hunts.
     // Up 5.0% to 1,065,822 for #331: a kill leaves a carcass that is gone
     // back to, cut a turn at a time and told of.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_065_822;
+    // Down 1.2% to 1,052,931 for #332: an edge in everybody's kit - a struck
+    // flake, knapped in a spare turn - and the makings of it fetched.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_052_931;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

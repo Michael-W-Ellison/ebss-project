@@ -1248,6 +1248,31 @@ impl Simulation {
         agent_position: (i32, i32, i32),
         named: &str,
     ) -> bool {
+        // Somebody who is actually making a thing is exempt from the pack
+        // questions below. He is not hoarding, he is short two stone for a
+        // knife, and `Errand::to_make` is where the model already says so.
+        let on_a_making = agent
+            .errand
+            .as_ref()
+            .is_some_and(|errand| errand.to_make.is_some());
+        self.could_this_gather_come_to_anything_for(agent, agent_position, named, on_a_making)
+    }
+
+    /// The same, for a gather that is a step towards making something.
+    ///
+    /// A full pack is not a reason to leave a knife unmade: what is gathered
+    /// for a making is put in the pack ahead of whatever is worth least in it
+    /// (`set_down_to_make_room`). Asked of somebody who has not yet taken the
+    /// making on as an errand, the pack questions refused it - most packs run
+    /// full, and stone is five to the unit - so a man without a knife stood
+    /// over a seam he could not take a flake from, every time (#332).
+    pub(in crate::analytics) fn could_this_gather_come_to_anything_for(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        named: &str,
+        on_a_making: bool,
+    ) -> bool {
         use crate::world::{Position, ResourceType};
 
         let Some(wanted) = Self::what_a_gather_asks_for(named) else {
@@ -1277,8 +1302,15 @@ impl Simulation {
         // pack did not walk to the bush at all.
         let food_is_the_point = wanted == ResourceType::Food;
 
+        // And for a making, only if there is something to put down to make
+        // the room: a pack full of food is full, making or not, and a stone
+        // asked for into it came back "Inventory full" 2,130 times in a year
+        // on one world (#332).
+        let room = agent.inventory.weight_capacity_remaining();
+        let one = Self::what_one_of_these_weighs(wanted);
         if !food_is_the_point
-            && agent.inventory.weight_capacity_remaining() < Self::what_one_of_these_weighs(wanted)
+            && room < one
+            && (!on_a_making || room + agent.room_i_could_make(&agent.what_my_makings_want()) < one)
         {
             return false;
         }
@@ -1310,14 +1342,7 @@ impl Simulation {
         // of 10,014 and nobody could dig the store that would have held the
         // food.
         //
-        // Somebody who is actually making a thing is exempt. He is not
-        // hoarding, he is short two stone for a knife, and `Errand::to_make`
-        // is where the model already says so.
-        let on_a_making = agent
-            .errand
-            .as_ref()
-            .is_some_and(|errand| errand.to_make.is_some());
-
+        // Somebody who is actually making a thing is exempt - see above.
         if !food_is_the_point && !on_a_making {
             let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
 

@@ -1212,9 +1212,16 @@ impl Simulation {
             // were good on their own terms and are kept below: not naming a
             // step that cannot be taken, and getting the hammerstone out
             // before trying to use it.
+            // An edge before anything else, for somebody with none: nearly
+            // every working wants one (#332).
             DriveType::Utility => agent
-                .what_i_would_work_on()
-                .map(|(verb, to)| Action::Work { verb, to })
+                .the_edge_i_am_without()
+                .and_then(|edge| self.how_i_would_come_by(edge, agent))
+                .or_else(|| {
+                    agent
+                        .what_i_would_work_on()
+                        .map(|(verb, to)| Action::Work { verb, to })
+                })
                 .or_else(|| {
                     agent
                         .what_i_have_to_work_with(crate::agents::SkillType::Crafting)?;
@@ -1224,6 +1231,13 @@ impl Simulation {
                             verb: verb.to_string(),
                             to: to.to_string(),
                         })
+                })
+                // And the cord for the next edge, while there is flax to
+                // twist it from.
+                .or_else(|| {
+                    agent
+                        .what_my_kit_is_short_of()
+                        .and_then(|kit| self.how_i_would_come_by(kit, agent))
                 })
                 .or_else(|| {
                     agent
