@@ -475,7 +475,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // back to, cut a turn at a time and told of.
     // Down 1.2% to 1,052,931 for #332: an edge in everybody's kit - a struck
     // flake, knapped in a spare turn - and the makings of it fetched.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_052_931;
+    // Up 7.9% to 1,135,991 for #333: the edge is taken on after the
+    // pottering rather than before it.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_135_991;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

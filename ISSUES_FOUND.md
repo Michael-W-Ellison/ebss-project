@@ -25169,3 +25169,58 @@ first.
 
 The seed-0 yearly dice count moved from 1,065,822 to 1,052,931. Seed 4242's
 120-turn count did not move.
+
+### 333. The edge after the pottering, not before it
+
+#332 cost scattered worlds their births: 34 against 59 over two years, lower
+on all eight seeds. The first year's store was the part that fell. On
+scattered seed 3 the larder at the year's end was 13,479 against 61,489, and
+the breeding gate, which reads the larder, saw no mating attempt all year.
+
+**Taken apart on that seed and year,** one piece of #332 off at a time
+(larder at day 360):
+
+| | larder |
+|---|---|
+| #332 | 13,479 |
+| without the flake as an edge | 52,906 |
+| without the edge first in a spare turn | 64,965 |
+| without the spare lashing | 65,229 |
+| without the kit errand | 49,291 |
+| without making room for a making | 78,397 |
+
+**What this table does and does not say.** Every one of them puts the larder
+back, so #332's 13,479 is one seed's year falling badly rather than any one
+piece doing it. What it does point at is the edge being taken on ahead of
+the pottering. Founders arrive with a knife, it wears through between the
+second and the fourth month, and from then on, through the months the winter
+store is laid in, the spare turn went on a flake instead of on the pottering.
+The pottering is where bowls come from (`knife_chain_tests`). So the edge now
+comes after it, with the spare cord: `Agent::what_my_kit_is_short_of` in the
+Utility branch, behind the pottering and the vessel.
+
+**Measured, two years from 12 founders:**
+
+| | #331 | #332 | #333 |
+|---|---|---|---|
+| smooth 1–12: births, deaths | 82, 0 | 88, 3 | 81, 3 |
+| smooth: food in pits | 121,396 | 140,901 | 146,796 |
+| scattered 1–8: births, deaths | 59, 0 | 34, 0 | 47, 2 |
+| scattered: food in pits | 57,251 | 57,547 | 71,293 |
+| butchery cuts with an edge | 0 | 34 of 60 | 36 of 63 |
+
+Births by scattered seed were 5 8 5 8 5 4 6 6 against #331's 8 6 8 11 5 5 8
+8. The five deaths across both terrains were 3 of hunger and 2 booked to a
+crafting mishap.
+
+**What is left against #331.** Births are 9% under it (128 against 141), and
+lower on six scattered seeds of eight, while there is about a fifth more food
+in the pits on both terrains. Births and the store have come apart, which the
+breeding gate reading the store does not explain on its own. Not found.
+
+**Test:** `kit_tests::somebody_with_no_edge_knaps_one_after_the_pottering`
+replaces `somebody_with_no_edge_knaps_one_first`. The kit still names the
+flake and the step towards it, and the pottering is taken ahead of it.
+
+The seed-0 yearly dice count moved from 1,052,931 to 1,135,991. Seed 4242's
+120-turn count did not move.

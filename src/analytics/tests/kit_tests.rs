@@ -48,9 +48,14 @@ fn a_struck_flake_is_an_edge() {
     assert!(with_a_knife > with_a_flake, "a knife is {with_a_knife}, a flake {with_a_flake}");
 }
 
-/// Somebody with no edge at all, a spare turn and two stones knaps a flake.
+/// Somebody with no edge at all and two stones has a flake as the next step
+/// of the kit - after the pottering, not ahead of it.
+///
+/// Ahead of it, the settlement lost its first winter's store: the pottering is
+/// where bowls come from, and on scattered seed 3 the larder at the year's end
+/// was a fifth of what it was with the edge behind it (#333).
 #[test]
-fn somebody_with_no_edge_knaps_one_first() {
+fn somebody_with_no_edge_knaps_one_after_the_pottering() {
     let mut simulation = one_person_with_nothing();
     for what in ["stone", "flax", "wood"] {
         simulation.population.agents[0]
@@ -58,18 +63,19 @@ fn somebody_with_no_edge_knaps_one_first() {
             .add_item(InventoryItem::new_with_weight(what.to_string(), 6, 0.1));
     }
     let here = simulation.population.agents[0].state.position;
+    let agent = &simulation.population.agents[0];
 
+    assert_eq!(agent.what_my_kit_is_short_of(), Some("knappedtip"), "the humblest edge is a flake");
     assert_eq!(
-        simulation.population.agents[0].what_my_kit_is_short_of(),
-        Some("knappedtip"),
-        "the humblest edge is a flake"
+        simulation.how_i_would_come_by("knappedtip", agent),
+        Some(Action::Craft { item_type: "knappedtip".to_string() })
     );
-    let chosen = simulation.what_this_drive_offers(
-        crate::core::DriveType::Utility,
-        &simulation.population.agents[0],
-        here,
+
+    let chosen = simulation.what_this_drive_offers(crate::core::DriveType::Utility, agent, here);
+    assert!(
+        matches!(chosen, Some(Action::Work { .. })),
+        "with something to potter at, the pottering comes first: {chosen:?}"
     );
-    assert_eq!(chosen, Some(Action::Craft { item_type: "knappedtip".to_string() }));
 }
 
 /// And with an edge, the cord for the next one is what the kit wants.

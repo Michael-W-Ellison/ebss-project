@@ -1212,16 +1212,9 @@ impl Simulation {
             // were good on their own terms and are kept below: not naming a
             // step that cannot be taken, and getting the hammerstone out
             // before trying to use it.
-            // An edge before anything else, for somebody with none: nearly
-            // every working wants one (#332).
             DriveType::Utility => agent
-                .the_edge_i_am_without()
-                .and_then(|edge| self.how_i_would_come_by(edge, agent))
-                .or_else(|| {
-                    agent
-                        .what_i_would_work_on()
-                        .map(|(verb, to)| Action::Work { verb, to })
-                })
+                .what_i_would_work_on()
+                .map(|(verb, to)| Action::Work { verb, to })
                 .or_else(|| {
                     agent
                         .what_i_have_to_work_with(crate::agents::SkillType::Crafting)?;
@@ -1232,8 +1225,16 @@ impl Simulation {
                             to: to.to_string(),
                         })
                 })
-                // And the cord for the next edge, while there is flax to
-                // twist it from.
+                // And what the kit is short of: an edge for somebody with
+                // none, and the cord for the next one while there is flax to
+                // twist it from (#332).
+                //
+                // After the pottering and not before it. Put first, it cost
+                // the settlement its first winter's store: on scattered seed 3
+                // the larder at the year's end was 13,479 against 64,965 with
+                // the edge here, and the breeding gate - which reads the
+                // larder - stayed shut all year. The pottering is where bowls
+                // come from, and a bowl is what a larder is kept in (#333).
                 .or_else(|| {
                     agent
                         .what_my_kit_is_short_of()
