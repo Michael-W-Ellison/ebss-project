@@ -1376,6 +1376,8 @@ impl Simulation {
                     {
                         SkillType::Leatherworking
                     }
+                    // And a trip for meat is always a trip to a carcass.
+                    "meat" => SkillType::Leatherworking,
                     "food" | "greens" | "roots" | "herbs" => SkillType::Herbalism,
                     "fish" => SkillType::Fishing,
                     // Water wants nothing but hands, and a request for

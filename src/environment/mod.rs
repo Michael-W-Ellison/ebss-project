@@ -164,6 +164,11 @@ pub struct ActionResult {
     /// of a skill deciding the odds. See `knife_chain_tests::
     /// a_settlement_crafts_without_being_refused`, which caught it.
     pub attempted: bool,
+    /// How many planning periods this held the one who did it, where that is
+    /// longer than the verb's own price. Nought for everything that takes what
+    /// the verb says; a making by an unpractised hand takes longer.
+    #[serde(default)]
+    pub took_periods: u32,
 }
 
 /// Actions that agents can perform in the environment
@@ -430,6 +435,7 @@ impl ActionResult {
             drive_satisfaction: 0.0,
             message: None,
             attempted: true,
+            took_periods: 0,
         }
     }
 
@@ -445,6 +451,7 @@ impl ActionResult {
             // A plain failure is a refusal: the work never began.
             attempted: false,
             message: Some(message),
+            took_periods: 0,
         }
     }
 
@@ -455,6 +462,12 @@ impl ActionResult {
     /// better hand.
     pub fn spoiled_in_the_making(mut self) -> Self {
         self.attempted = true;
+        self
+    }
+
+    /// It held the one who did it for this many planning periods.
+    pub fn taking_periods(mut self, periods: u32) -> Self {
+        self.took_periods = periods;
         self
     }
 

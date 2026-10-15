@@ -3523,6 +3523,20 @@ impl Agent {
         step.obvious || self.found_out.contains(step.makes)
     }
 
+    /// The discoveries this agent is far enough along to have.
+    ///
+    /// Everything nobody arrives knowing, less what waits on something this
+    /// agent has not got to yet (`what_has_to_be_known_first`).
+    pub fn what_i_could_find_out(
+        &self,
+    ) -> impl Iterator<Item = &'static crate::environment::making::Making> + '_ {
+        crate::environment::making::everything_to_find_out().filter(|step| {
+            crate::environment::making::what_has_to_be_known_first(step.makes)
+                .iter()
+                .all(|first| self.knows_how_to_make(first))
+        })
+    }
+
     /// Whether this agent knows any way at all of making a named thing.
     pub fn knows_how_to_make(&self, what: &str) -> bool {
         crate::environment::making::every_way_to_make(what).any(|step| self.knows_how_to(step))
@@ -3891,7 +3905,7 @@ impl Agent {
                 return false;
             }
 
-            making::everything_to_find_out()
+            self.what_i_could_find_out()
                 .filter(|step| step.needs.iter().any(|(needs, _)| *needs == what))
                 .map(|step| step.makes)
                 .chain(
@@ -4988,7 +5002,8 @@ impl Agent {
             let trade = crate::environment::making::how_to_make(called)
                 .map(|step| step.hands)
                 .unwrap_or(tool.helps);
-            let hand = self.skills.hand_for(trade);
+            // The hand at this thing, not at the trade in general (#335).
+            let hand = self.skills.hand_at_making(called, trade);
 
             // What the hand would turn out, and what it is working with will
             // let it. Skill alone used to decide this, so a master with
@@ -5092,6 +5107,17 @@ impl Agent {
                 .unwrap_or(i32::MIN);
             if already < hand {
                 self.skills.set_skill_level(trade, hand);
+            }
+        }
+
+        // And they have made everything a stone-age people knows how to make
+        // before, as often as it takes to have the hand they arrive with at
+        // the trade it belongs to: a founder is as good at a spear as he was
+        // the day before he walked in, and no better.
+        for step in crate::environment::making::EVERY_STEP.iter().filter(|step| step.obvious) {
+            if let Some(trade) = self.skills.get_skill_if_exists(step.hands) {
+                let times = super::skills::Skills::makings_for_level(trade.level);
+                self.skills.have_made_before(step.makes, times);
             }
         }
 

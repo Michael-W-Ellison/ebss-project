@@ -396,8 +396,13 @@ impl Simulation {
             // holds him past more gates. Anything of a single period leaves
             // him free at the next one, which is what everything cost before
             // this existed and what most things still cost.
+            //
+            // Or from what the doing of it said, where that was longer: a
+            // making takes an unpractised hand more than one period.
             {
-                let takes = crate::agents::AgentState::how_long_this_takes(&action);
+                let takes = crate::agents::AgentState::how_long_this_takes(&action).max(
+                    action_result.took_periods * crate::environment::seasons::TICKS_BETWEEN_PLANS,
+                );
                 let now = self.current_turn;
                 self.population.agents[agent_index].busy_until = now + takes;
             }

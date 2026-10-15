@@ -1296,6 +1296,26 @@ pub fn everything_to_find_out() -> impl Iterator<Item = &'static Making> {
     EVERY_STEP.iter().filter(|step| !step.obvious)
 }
 
+/// What somebody has to know already before a discovery can occur to them.
+///
+/// "Why are agents crafting wheels? That sort of technology should be far down
+/// the development path." It was one rung up from the travois: anybody holding
+/// two pieces of wood, a lashing and a handaxe could have the thought, and
+/// those are the four commonest things in a stone-age pack. Measured over two
+/// years the wheel was the busiest making in the settlement.
+///
+/// A disc that turns true on an axle came long after the potter's wheel, and
+/// was cut with metal: the first carts are copper-age. So the wheel waits on
+/// fired pottery and a metal axe, and the handcart waits on the wheel. Nothing
+/// else in the chain is held back this way; its makings already do that.
+pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
+    match what {
+        "wheel" => &["stoneware", "metalaxe"],
+        "handcart" => &["wheel"],
+        _ => &[],
+    }
+}
+
 /// Whether a named thing is already part of something everybody understands.
 ///
 /// A length of cord is a thing every person here has handled a thousand times:

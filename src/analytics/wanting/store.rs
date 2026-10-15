@@ -505,6 +505,24 @@ impl Simulation {
             }
         }
 
+        // Meat lying in the wood that nobody has to kill.
+        //
+        // "Why are few agents going for free meat? It increases future
+        // survival odds at almost no cost or risk. Preparation should drive
+        // the utilization of free meat for at least some agents." A kill
+        // somebody else made, or told of, was reached only by hunger - and
+        // weighed as one meal against a berry bush - so a fed man who had
+        // heard of a deer lying a short walk off did nothing about it and the
+        // deer went to the crows on the fifth day. Fetched now and dried or
+        // buried, it is a week of winter eating.
+        //
+        // In any season, not only the autumn: a kill does not wait for the
+        // year to turn. Above salting and drying, because what is in the pack
+        // keeps a day and the carcass does not.
+        if let Some(fetch) = self.a_kill_worth_fetching(agent, agent_position) {
+            return Some(fetch);
+        }
+
         // Salt it, if there is salt for it.
         //
         // Salting is the third way of keeping a thing and the only one that
@@ -702,6 +720,77 @@ impl Simulation {
         }
 
         None
+    }
+
+    /// A kill this one knows of with meat still on it, worth going for and
+    /// with room in the pack to bring some back: `Gather` it where it lies
+    /// within reach, and walk to it where it does not.
+    ///
+    /// Priced the way a patch of food is priced (`what_this_patch_is_worth`),
+    /// so that a deer across the valley does not beat a winter's work, and
+    /// only while there is time to get there before it turns.
+    pub(in crate::analytics) fn a_kill_worth_fetching(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::Position;
+
+        if agent.state.years_old() < crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT {
+            return None;
+        }
+        if agent.inventory.weight_capacity_remaining() < Self::WHAT_A_JOINT_WEIGHS {
+            return None;
+        }
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let now = self.current_turn;
+        let energy = self
+            .food_database
+            .get(&crate::world::ItemType::Meat)
+            .map(|template| template.base_nutrition.energy)
+            .unwrap_or(crate::agents::physiology::ENERGY_OF_ORDINARY_FOOD)
+            * Self::portions_in_one_off(crate::world::ResourceType::Meat);
+
+        let (there, paces, _) = self
+            .nodes_known_to(agent, here, u32::MAX)
+            .filter(|node| node.is_a_carcass() && node.anything_to_take())
+            .filter_map(|node| {
+                let paces = here.distance_to(&node.position);
+                // Time to walk there with a day of it left to cut
+                let left = node.killed_on.map(|then| {
+                    (then + crate::world::World::HOW_LONG_A_CARCASS_LIES).saturating_sub(now)
+                })?;
+                let walking = crate::world::pace::turns_to_walk(paces)
+                    * crate::environment::seasons::TICKS_BETWEEN_PLANS as f32;
+                if (left as f32) < walking + crate::environment::seasons::TICKS_PER_DAY as f32 {
+                    return None;
+                }
+                if !self.world.can_walk_between(
+                    (here.x, here.y),
+                    (node.position.x, node.position.y),
+                ) {
+                    return None;
+                }
+
+                let costs = crate::agents::provision::what_foraging_costs(
+                    paces,
+                    crate::agents::physiology::how_much_work_this_food_is(energy),
+                );
+                let worth = Self::what_this_patch_is_worth(energy, node.amount, paces, costs);
+                (worth > 0.0).then_some((node.position, paces, worth))
+            })
+            .max_by(|(_, _, a), (_, _, b)| a.total_cmp(b))?;
+
+        if paces <= Self::FORAGE_RADIUS {
+            return Some(Action::Gather {
+                resource_type: "meat".to_string(),
+            });
+        }
+
+        Some(Action::Move {
+            target: (there.x, there.y, agent_position.2),
+        })
     }
 
     /// Whether this agent should go and draw on the store rather than the

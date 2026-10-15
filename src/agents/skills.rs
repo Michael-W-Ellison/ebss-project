@@ -622,13 +622,92 @@ pub struct Skills {
     /// Iterated to find a best hand and to rust what is unused, so hash order
     /// decided ties and made the same agent behave differently between runs.
     skills: std::collections::BTreeMap<SkillType, Skill>,
+
+    /// How many times this one has made each thing, by name.
+    ///
+    /// "Crafting should not be a general skill, but based on the object being
+    /// crafted." A trade is what carries over from one thing to the next - a
+    /// man who has knapped a hundred handaxes is not starting from nothing on
+    /// his first spearhead - but the hand that matters is the hand at *this*
+    /// thing, and that comes of having made it. See `level_at_making`.
+    #[serde(default)]
+    made: std::collections::BTreeMap<String, u32>,
 }
 
 impl Skills {
     pub fn new() -> Self {
         Self {
             skills: std::collections::BTreeMap::new(),
+            made: std::collections::BTreeMap::new(),
         }
+    }
+
+    /// How many makings of a thing it takes for the hand at it to go most of
+    /// the way up: about two-thirds of the climb after this many, nineteen
+    /// twentieths after three times as many. The first few teach the most.
+    pub const MAKINGS_TO_GET_THE_HANG_OF_IT: f32 = 30.0;
+
+    /// How far below the trade a hand starts on a thing it has never made.
+    ///
+    /// The trade is the carry-over: what knapping one shape teaches about
+    /// knapping another. It is a floor, not the hand itself, and it sits this
+    /// many levels under the trade.
+    pub const WHAT_A_NEW_THING_COSTS_THE_TRADE: i32 = 3;
+
+    /// How many times this one has made a thing.
+    pub fn times_made(&self, what: &str) -> u32 {
+        self.made.get(what).copied().unwrap_or(0)
+    }
+
+    /// One more of a thing made, or tried and spoiled - a spoiled one
+    /// teaches the hand as much about the thing as a good one does.
+    pub fn made_one(&mut self, what: &str) {
+        *self.made.entry(what.to_string()).or_insert(0) += 1;
+    }
+
+    /// Say this one has made a thing so many times before, never fewer than
+    /// it has.
+    pub fn have_made_before(&mut self, what: &str, times: u32) {
+        let had = self.made.entry(what.to_string()).or_insert(0);
+        *had = (*had).max(times);
+    }
+
+    /// The level on the -10 to 10 ladder that a number of makings comes to.
+    pub fn level_from_makings(times: u32) -> i32 {
+        let along = 1.0 - (-(times as f32) / Self::MAKINGS_TO_GET_THE_HANG_OF_IT).exp();
+        (-10.0 + 20.0 * along).round() as i32
+    }
+
+    /// And how many makings it takes to come to a level.
+    pub fn makings_for_level(level: i32) -> u32 {
+        let along = ((level.clamp(-10, 9) + 10) as f32 / 20.0).min(0.99);
+        (-Self::MAKINGS_TO_GET_THE_HANG_OF_IT * (1.0 - along).ln()).ceil() as u32
+    }
+
+    /// The hand at this one thing, on the -10 to 10 ladder.
+    ///
+    /// What having made it has taught, or what the trade carries over less
+    /// what being new to it costs, whichever is the better.
+    pub fn level_at_making(&self, what: &str, trade: SkillType) -> i32 {
+        let from_making_it = Self::level_from_makings(self.times_made(what));
+        let from_the_trade = self
+            .get_skill_if_exists(trade)
+            .map(|skill| skill.level)
+            .unwrap_or(-10)
+            - Self::WHAT_A_NEW_THING_COSTS_THE_TRADE;
+
+        from_making_it.max(from_the_trade).clamp(-10, 10)
+    }
+
+    /// The same, as a skill that can be rolled against: the odds of a cut, of
+    /// spoiling the makings, and the quality of what comes out.
+    pub fn skill_at_making(&self, what: &str, trade: SkillType) -> Skill {
+        Skill::with_level(trade, self.level_at_making(what, trade))
+    }
+
+    /// What this hand is worth at making this thing, against an ordinary one.
+    pub fn hand_at_making(&self, what: &str, trade: SkillType) -> f32 {
+        self.skill_at_making(what, trade).hand()
     }
 
     /// Get a skill (creates if doesn't exist)

@@ -37,7 +37,8 @@ impl Simulation {
             .with_energy_cost(1.0);
         }
 
-        let could_be_for: Vec<&'static str> = making::everything_to_find_out()
+        let could_be_for: Vec<&'static str> = self.population.agents[agent_index]
+            .what_i_could_find_out()
             .filter(|step| step.needs.iter().any(|(needs, _)| needs == what))
             .map(|step| step.makes)
             .chain(

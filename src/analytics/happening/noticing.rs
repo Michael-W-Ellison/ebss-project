@@ -96,7 +96,7 @@ impl Simulation {
 
             let holding = |what: &str| agent.how_many_i_have(what);
 
-            for step in crate::environment::making::everything_to_find_out() {
+            for step in agent.what_i_could_find_out() {
                 if agent.knows_how_to(step) || !step.makings_to_hand(&holding) {
                     continue;
                 }
@@ -198,7 +198,7 @@ impl Simulation {
                 continue;
             }
 
-            for step in crate::environment::making::everything_to_find_out() {
+            for step in agent.what_i_could_find_out() {
                 if agent.knows_how_to(step) {
                     continue;
                 }

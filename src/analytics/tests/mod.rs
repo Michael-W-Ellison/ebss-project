@@ -130,3 +130,4 @@ pub mod minding_tests;
 pub mod young_parents_tests;
 pub mod carcass_tests;
 pub mod kit_tests;
+pub mod practice_tests;
