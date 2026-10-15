@@ -3533,7 +3533,7 @@ impl Agent {
         crate::environment::making::everything_to_find_out().filter(|step| {
             crate::environment::making::what_has_to_be_known_first(step.makes)
                 .iter()
-                .all(|first| self.knows_how_to_make(first))
+                .all(|first| self.found_out.contains(*first) || self.knows_how_to_make(first))
         })
     }
 
