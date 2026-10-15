@@ -544,9 +544,10 @@ impl Path {
                 // gets past "short lengths", and it is a discovery. The
                 // fishing net wants four lengths and is a discovery for the
                 // same reason.
-                standing: Standing::Stands(
-                    "lashing from flax or cotton is obvious and holds nearly everything \
-                     else in the table together; retting past it is a discovery",
+                standing: Standing::Part(
+                    "lashing from flax or cotton, and from sinew, strips of bark and \
+                     rawhide, is obvious, and retting past it is a discovery; vines and \
+                     twisted grasses are not on the map",
                 ),
                 born_knowing: &["lashing"],
             },

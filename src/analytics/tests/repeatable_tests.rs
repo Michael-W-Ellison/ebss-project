@@ -215,7 +215,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 7,639 for #326: everybody keeps their own half hour, begun at
     // their own minute, and takes it a minute at a time only with something
     // after them.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_639;
+    // Up to 7,743 for #334: lashing from sinew, strips of bark and rawhide,
+    // and only a making with something sharp or hot in it can hurt.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_743;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -477,7 +479,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // flake, knapped in a spare turn - and the makings of it fetched.
     // Up 7.9% to 1,135,991 for #333: the edge is taken on after the
     // pottering rather than before it.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_135_991;
+    // Down 10.4% to 1,018,105 for #334: lashing from sinew, strips of bark
+    // and rawhide, and only a making with something sharp or hot in it hurts.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_018_105;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

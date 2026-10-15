@@ -85,6 +85,10 @@ fn the_rest_of_a_kill_is_left_on_the_bone() {
     let at = carcass.position;
 
     assert_eq!(carried, 1, "bare hands cut one joint in the turn it fell");
+    assert!(
+        simulation.population.agents[0].how_many_i_have("sinew") > 0,
+        "the tendon comes out with the first joint"
+    );
     assert!(left >= 4, "a deer is eight to twelve joints a fat one; {left} were left on it");
     assert_eq!(
         simulation.population.agents[0].exploration_knowledge.known_resources.get(&at),

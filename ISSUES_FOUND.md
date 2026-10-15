@@ -25224,3 +25224,94 @@ flake and the step towards it, and the pottering is taken ahead of it.
 
 The seed-0 yearly dice count moved from 1,052,931 to 1,135,991. Seed 4242's
 120-turn count did not move.
+
+### 334. The natural bindings, and a cord that cannot cut anybody
+
+"Is flax the only source of lashing?" It was. There were three ways to a
+lashing, all of them fibre that stands only from spring to the end of
+summer:
+- flax;
+- cotton;
+- flax left in water, which is retting, a discovery.
+
+A hide put where the flax goes makes cord (`THONG_FOR_CORD`), but finding that
+out recorded only "lashing", which everybody knows, and no `Making` turns a
+hide into cord. So nobody could plan with it.
+
+The development matrix's cordage path starts with "Stage 0: natural bindings -
+vines, strips of bark, rawhide thongs, twisted grasses, tendons/sinew". The
+stage table (`stage.rs`) listed all five and claimed the stage stood on flax
+and cotton alone.
+
+**Fix: three of the five, all obvious, after the fibres in the table:**
+- **Sinew** (`LASHING_FROM_SINEW`): one length makes two lashings. Every beast
+  taken apart gives a length of tendon for every three joints on it
+  (`JOINTS_TO_A_LENGTH_OF_SINEW`, in `the_beast_comes_down`).
+- **Strips of bark** (`LASHING_FROM_BARK`): one piece of wood makes two short
+  lashings. Wood stands all year.
+- **Rawhide thong** (`LASHING_FROM_RAWHIDE`): one hide makes three. It comes
+  last, since a hide might have been a coat.
+
+Vines and twisted grasses are not here. Nothing on the map is a vine, and grass
+is grazing, not a thing anybody gathers. Cordage's Stage 0 now says it stands
+in part, and why.
+
+**And the injury roll.** The first cut of this cost nine lives. Every making
+rolled for a cut or a burn alike, a quarter of a beginner's attempts at
+anything. Counted on smooth seed 2 over a year, once a lashing could be had
+from wood all year:
+
+| making | times | hurt |
+|---|---|---|
+| lashing from bark | 2,751 | 702 |
+| lashing from flax | 709 | 189 |
+| wheel | 503 | 157 |
+| knapped tip | 449 | 120 |
+
+Over twenty settlements, makings went from about 50,000 to 128,000, and nine
+deaths were booked to "a mishap". Twisting a cord, peeling bark and splitting
+a tendon have nothing in them to cut anybody. A making can now hurt only when
+it works stone, flint or metal, wants a tool in the hand, or is done over a
+fire (`could_this_making_hurt`). Tailoring keeps its own roll; awls and
+needles prick. Bark gives two lengths to a branch, not one.
+
+**Measured, two years from 12 founders:**
+
+| | #331 | #333 | #334 first cut | #334 |
+|---|---|---|---|---|
+| smooth 1–12: births, deaths | 82, 0 | 81, 3 | 71, 9 | 83, 7 |
+| smooth: food in pits | 121,396 | 146,796 | 190,926 | 151,965 |
+| scattered 1–8: births, deaths | 59, 0 | 47, 2 | 50, 2 | 63, 1 |
+| scattered: food in pits | 57,251 | 71,293 | 79,376 | 92,923 |
+
+Births by seed:
+- smooth: 6 8 7 10 8 2 2 9 7 10 6 8;
+- scattered: 9 4 5 11 9 10 7 8, against #331's 8 6 8 11 5 5 8 8.
+
+The eight deaths were 5 booked to a mishap (knapping and the like, which can
+still cut), 2 of thirst and 1 of hunger. Edges did 83 of 174 butchery cuts.
+
+On smooth seed 2, with the first cut, edges came back in the winter. From day
+300 people held three to six lashings with no flax standing anywhere, and by
+the year's end carried three or four stone knives and five or six handaxes.
+Before, they carried none. Nobody held any edge from day 210 to day 270. The
+spare cord and the edge come after the pottering (#333), and the summer has
+little room for either.
+
+**What is left.** The deaths: eight against #331's none, five of them still
+booked to a mishap. Making overall stays at about twice what it was before
+lashing could be had all year (115,853 makings). The wheels are a fair share
+of that, and whether anybody needs them is a question of its own.
+
+**Tests:**
+- `kit_tests::a_lashing_can_be_had_from_bark_when_there_is_no_flax`
+- `kit_tests::sinew_is_a_lashing`
+- `kit_tests::only_a_making_with_something_sharp_or_hot_in_it_can_hurt`
+- `carcass_tests::the_rest_of_a_kill_is_left_on_the_bone` now also asks for
+  the sinew.
+- `making_tests::there_is_more_than_one_way_to_make_a_lashing` now counts six
+  ways and asks that the three natural bindings are obvious.
+- `making_tests::nothing_in_the_chain_asks_for_a_thing_that_cannot_be_had`
+  knows sinew comes off a kill.
+- The seed-0 yearly dice count moved from 1,135,991 to 1,018,105, and seed
+  4242's 120-turn count from 7,639 to 7,743.

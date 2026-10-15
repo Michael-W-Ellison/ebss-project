@@ -833,6 +833,10 @@ impl Simulation {
     /// with gets one joint a turn and one with a flint knife three or four.
     pub(in crate::analytics) const JOINTS_A_TURN_OF_CUTTING_TAKES: u32 = 2;
 
+    /// How many joints of a beast go with one length of tendon worth
+    /// keeping: a rabbit gives one, a deer three, a cow six or seven.
+    pub(in crate::analytics) const JOINTS_TO_A_LENGTH_OF_SINEW: u32 = 3;
+
     /// How many joints this one takes off a carcass in a turn of cutting: the
     /// hand, the edge in it, and the age of the body behind it, the fraction
     /// carried as a chance. Never none - anybody can tear a joint off.
@@ -905,6 +909,16 @@ impl Simulation {
             joints.quality = Some(quality);
         }
         let took = self.take_what_fits(agent_index, &joints);
+
+        // And the sinew, which comes out with the first joints: a length of
+        // tendon for every few joints on the beast, the strongest of the
+        // natural bindings (`LASHING_FROM_SINEW`).
+        let sinew = crate::agents::InventoryItem::new_with_weight(
+            "sinew".to_string(),
+            joints_on_it.div_ceil(Self::JOINTS_TO_A_LENGTH_OF_SINEW),
+            0.1,
+        );
+        self.take_what_fits(agent_index, &sinew);
 
         let left = joints_on_it - took;
         if self.world.a_carcass_lies_here(where_it_fell, left, now).is_some() {

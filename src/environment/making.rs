@@ -123,6 +123,80 @@ pub const LASHING_FROM_COTTON: Making = Making {
     wants_in_hand: None,
 };
 
+/// Whether a making can hurt the hands that do it.
+///
+/// Striking stone can - a flake flies, an edge slips - and so can anything
+/// worked with an edge in the hand or over a fire. Twisting a cord, peeling
+/// bark off a branch, splitting a tendon and tying a lashing cannot: there is
+/// nothing in them to cut anybody. The injury roll was made for every making
+/// alike, a quarter of a beginner's attempts at anything, so when a lashing
+/// could be had from wood all year a settlement stripped bark 2,751 times in
+/// a year, was hurt 702 times doing it, and lost nine people across twenty
+/// worlds to wounds booked as "a mishap" (#334).
+pub fn could_this_making_hurt(step: &Making) -> bool {
+    step.over_a_fire
+        || step.wants_in_hand.is_some()
+        || step.needs.iter().any(|(what, _)| {
+            matches!(*what, "stone" | "flint" | "knappedtip" | "metalblade" | "iron" | "shinylump")
+        })
+}
+
+/// The natural bindings: what a people ties things together with before
+/// anybody has twisted a fibre. "Stage 0: natural bindings - vines, strips of
+/// bark, rawhide thongs, twisted grasses, tendons and sinew."
+///
+/// Lashing was flax or cotton and nothing else, and both stand only from the
+/// spring to the end of the summer. From the seventh month to the spring
+/// nobody anywhere could make a length of cord, so a knife that wore out in
+/// the autumn stayed unmade until the flax came up, while the knapped tips
+/// for it piled up in packs (#332, #334). Weak, short and quick to rot, all of
+/// them, which is why flax was worth working out; but there all year.
+///
+/// Vines and twisted grasses are not here: nothing on the map is a vine, and
+/// grass is grazing, not a thing anybody gathers.
+///
+/// Tendon and sinew, dried and split: the strongest of the natural bindings,
+/// and what comes off every beast that is taken apart
+/// (`Simulation::the_beast_comes_down`).
+pub const LASHING_FROM_SINEW: Making = Making {
+    makes: "lashing",
+    how_many: 2,
+    needs: &[("sinew", 1)],
+    hands: SkillType::Crafting,
+    effort: 3.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// Strips of bark peeled off a green branch: two short lengths off a branch,
+/// and they rot, but there is wood standing in every month of the year.
+pub const LASHING_FROM_BARK: Making = Making {
+    makes: "lashing",
+    how_many: 2,
+    needs: &[("wood", 1)],
+    hands: SkillType::Crafting,
+    effort: 5.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// A hide cut round and round into a thong: a long length and a strong one,
+/// at the price of a skin that might have been a coat - so it comes last of
+/// the ways to a lashing, and `THONG_FOR_CORD` is what finding it out used to
+/// teach.
+pub const LASHING_FROM_RAWHIDE: Making = Making {
+    makes: "lashing",
+    how_many: 3,
+    needs: &[("hides", 1)],
+    hands: SkillType::Crafting,
+    effort: 4.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
 /// A flake struck off a core: the edge that every stone tool is built round.
 pub const KNAPPED_TIP: Making = Making {
     makes: "knappedtip",
@@ -1191,6 +1265,9 @@ pub const EVERY_STEP: &[Making] = &[
     LASHING,
     LASHING_FROM_COTTON,
     LASHING_FROM_RETTED,
+    LASHING_FROM_SINEW,
+    LASHING_FROM_BARK,
+    LASHING_FROM_RAWHIDE,
     KNAPPED_TIP,
     KNAPPED_TIP_FROM_FLINT,
     DIGGING_STICK,

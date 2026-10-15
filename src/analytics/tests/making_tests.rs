@@ -141,7 +141,10 @@ fn nothing_in_the_chain_asks_for_a_thing_that_cannot_be_had() {
                              // as meat and fish above: the world has had both
                              // of these for a while and this list is the last
                              // thing to hear about it.
-                             "nuts", "antler"];
+                             "nuts", "antler",
+                             // And the tendon that comes out with the first
+                             // joints of a kill (#334).
+                             "sinew"];
 
     // And what comes off a thing that is worked down rather than assembled -
     // a flake off a core, leather off a hide, shavings off a stick
@@ -176,15 +179,22 @@ fn nothing_in_the_chain_asks_for_a_thing_that_cannot_be_had() {
     }
 }
 
-/// Cordage can be had from either fibrous thing that grows here.
+/// Cordage can be had from either fibrous thing that grows here, and from the
+/// natural bindings that are there all year: sinew, bark and rawhide (#334).
 #[test]
 fn there_is_more_than_one_way_to_make_a_lashing() {
     let ways: Vec<_> = making::every_way_to_make("lashing").collect();
     assert_eq!(
         ways.len(),
-        3,
-        "flax, cotton, and flax that has been left in water"
+        6,
+        "flax, cotton, flax that has been left in water, sinew, bark and rawhide"
     );
+    for natural in ["sinew", "wood", "hides"] {
+        assert!(
+            ways.iter().any(|w| w.obvious && w.needs.iter().any(|(what, _)| *what == natural)),
+            "a lashing from {natural} is a natural binding, and nobody has to find it out"
+        );
+    }
     assert!(ways.iter().any(|w| w.needs == LASHING.needs));
     assert!(ways.iter().any(|w| w.needs == LASHING_FROM_COTTON.needs));
     assert!(

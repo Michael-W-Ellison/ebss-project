@@ -476,8 +476,12 @@ impl Simulation {
             let attempt = agent.skills.perform_check(step.hands, with_what);
 
             // Cuts and burns, which are the other tax on a bad hand and a bad
-            // tool both.
-            if let Some(hurt) = attempt.injury {
+            // tool both - where there is anything in the making to cut or
+            // burn anybody (`could_this_making_hurt`).
+            let hurt_doing_it = attempt
+                .injury
+                .filter(|_| crate::environment::making::could_this_making_hurt(&step));
+            if let Some(hurt) = hurt_doing_it {
                 let harm: f32 = match hurt {
                     crate::agents::skills::InjuryType::Small => 2.0,
                     crate::agents::skills::InjuryType::Large => 8.0,

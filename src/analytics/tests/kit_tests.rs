@@ -198,3 +198,65 @@ fn a_pack_full_of_food_is_not_asked_for_stone() {
     let agent = &simulation.population.agents[0];
     assert_eq!(simulation.how_i_would_come_by("knappedtip", agent), None);
 }
+
+/// Out of the flax season, with a knife and wood: a lashing is still to be
+/// had, from strips of bark. It was flax or cotton or nothing, and both stand
+/// only half the year (#334).
+#[test]
+fn a_lashing_can_be_had_from_bark_when_there_is_no_flax() {
+    let mut simulation = one_person_with_nothing();
+    let knife = simulation.population.agents[0].a_tool_fresh_from_these_hands("stoneknife", 1, 0.5);
+    simulation.population.agents[0].inventory.add_item(knife);
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("wood".to_string(), 12, 1.0));
+
+    let agent = &simulation.population.agents[0];
+    assert_eq!(agent.what_my_kit_is_short_of(), Some("lashing"));
+    assert_eq!(
+        simulation.how_i_would_come_by("lashing", agent),
+        Some(Action::Craft { item_type: "lashing".to_string() })
+    );
+
+    // A first-day hand spoils some, so a few goes at it
+    for _ in 0..8 {
+        if simulation.population.agents[0].how_many_i_have("lashing") > 0 {
+            break;
+        }
+        simulation.population.agents[0].busy_until = 0;
+        simulation.execute_action(&Action::Craft { item_type: "lashing".to_string() }, 0);
+    }
+    assert!(
+        simulation.population.agents[0].how_many_i_have("lashing") > 0,
+        "strips of bark off the wood"
+    );
+}
+
+/// Every beast taken apart gives tendon, and tendon is a lashing.
+#[test]
+fn sinew_is_a_lashing() {
+    let mut simulation = one_person_with_nothing();
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("sinew".to_string(), 1, 0.1));
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.how_i_would_come_by("lashing", agent),
+        Some(Action::Craft { item_type: "lashing".to_string() })
+    );
+}
+
+/// Striking stone can hurt the hands that do it; twisting a cord, peeling bark
+/// and splitting sinew cannot (#334).
+#[test]
+fn only_a_making_with_something_sharp_or_hot_in_it_can_hurt() {
+    use crate::environment::making::{
+        could_this_making_hurt, KNAPPED_TIP, LASHING, LASHING_FROM_BARK, LASHING_FROM_RAWHIDE,
+        LASHING_FROM_SINEW, STONE_KNIFE,
+    };
+    assert!(could_this_making_hurt(&KNAPPED_TIP));
+    assert!(could_this_making_hurt(&STONE_KNIFE));
+    for binding in [LASHING, LASHING_FROM_BARK, LASHING_FROM_SINEW, LASHING_FROM_RAWHIDE] {
+        assert!(!could_this_making_hurt(&binding), "a lashing from {:?} cut somebody", binding.needs);
+    }
+}
