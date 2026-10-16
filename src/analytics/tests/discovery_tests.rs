@@ -207,7 +207,7 @@ fn nobody_runs_metal_before_they_have_fired_a_pot() {
 }
 
 /// The first time ore sits in a man's fire he sees a hot stone. It is the
-/// man who has watched it there a good many times who sees it run (#336).
+/// man who has sat a good many evenings with it there who sees it run (#336).
 #[test]
 fn ore_has_to_be_watched_in_the_fire_before_it_runs() {
     let mut simulation = one_agent_world();
@@ -216,19 +216,19 @@ fn ore_has_to_be_watched_in_the_fire_before_it_runs() {
         let agent = &mut simulation.population.agents[0];
         carrying(agent, "iron", 8);
         agent.found_out_how_to("stoneware");
-        if let Some(curiosity) = agent.drives.get_mut(DriveType::Curiosity) {
-            curiosity.value = 1.0;
-        }
     }
 
-    let could = |simulation: &Simulation| {
-        simulation.population.agents[0]
-            .what_i_could_find_out()
-            .any(|step| step.makes == "shinylump")
+    let curious = |simulation: &mut Simulation| {
+        if let Some(curiosity) = simulation.population.agents[0]
+            .drives
+            .get_mut(DriveType::Curiosity)
+        {
+            curiosity.value = 1.0;
+        }
     };
-    assert!(!could(&simulation), "a first look at ore in a fire is a hot stone");
 
     // An evening at the fire with it counts once, however long it runs
+    curious(&mut simulation);
     for _ in 0..10 {
         simulation.somebody_notices_something();
     }
@@ -240,24 +240,21 @@ fn ore_has_to_be_watched_in_the_fire_before_it_runs() {
         "one evening is one evening"
     );
 
-    // And each evening after it counts again
-    for _ in 1..making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS {
+    // And each evening after it counts again, until the one that shows it
+    for evening in 2..=making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS {
+        assert!(
+            !simulation.population.agents[0].knows_how_to_make("shinylump"),
+            "not yet, after {} evenings",
+            evening - 1
+        );
         simulation.current_turn += crate::environment::seasons::TICKS_PER_DAY;
-        if let Some(curiosity) = simulation.population.agents[0]
-            .drives
-            .get_mut(DriveType::Curiosity)
-        {
-            curiosity.value = 1.0;
-        }
+        curious(&mut simulation);
         simulation.somebody_notices_something();
     }
-    assert_eq!(
-        simulation.population.agents[0]
-            .skills
-            .times_made(making::ORE_WATCHED_IN_A_FIRE),
-        making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS
+    assert!(
+        simulation.population.agents[0].knows_how_to_make("shinylump"),
+        "watched long enough, he sees it run"
     );
-    assert!(could(&simulation), "watched long enough, the thought can come");
 }
 
 /// Nor asleep beside one. Sleeping by the fire with ore in the pack is not

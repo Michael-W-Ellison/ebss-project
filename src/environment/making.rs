@@ -1340,14 +1340,15 @@ pub fn how_practised_first(what: &str) -> &'static [(&'static str, u32)] {
 /// pack, counted once a day however long it ran.
 pub const ORE_WATCHED_IN_A_FIRE: &str = "ore watched in a fire";
 
-/// And how many of those evenings come before the thought can: most of a
-/// year of them, even for somebody at the fire with it every night. Ore
-/// watching is bunched in one or two people who carry a bright stone about.
-/// Counted by the half hour, one man in one settlement watched it a hundred
-/// times in his first month and another thirteen hundred times in two years,
-/// so a count of half hours was no wait at all for them, and metal still came
-/// on day thirty and day sixty.
-pub const TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS: u32 = 300;
+/// And how many of those evenings it takes to see it: the twentieth shows
+/// it. Ore comes to a fire seldom and in bursts - over four years on
+/// eight settlements on ore-bearing ground, the keenest person in each sat at
+/// a fire with it on between six and twenty-one evenings, half of them in the
+/// first two months - so twenty is the second or third year for a settlement
+/// with somebody who keeps a bright stone about, and later than four for the
+/// rest. At fifteen one settlement had it by day sixty; counted by the half
+/// hour, by day thirty.
+pub const TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS: u32 = 20;
 
 /// What else a firing of this might show somebody, if they have the stuff for
 /// it in their pack: what has to be beside it, how much, what it shows, and

@@ -156,6 +156,13 @@ impl Simulation {
             agent
                 .skills
                 .made_one(crate::environment::making::ORE_WATCHED_IN_A_FIRE);
+
+            // And watched often enough, he sees the bead in the ash.
+            if agent.what_i_could_find_out().any(|step| step.makes == "shinylump")
+                && !agent.knows_how_to_make("shinylump")
+            {
+                found.push((index, "shinylump"));
+            }
         }
 
         for (index, what) in found {
