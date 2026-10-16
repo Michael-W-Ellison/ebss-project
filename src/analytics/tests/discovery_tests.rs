@@ -247,6 +247,40 @@ fn ore_has_to_be_watched_in_the_fire_before_it_runs() {
     assert!(could(&simulation), "watched long enough, the thought can come");
 }
 
+/// Nor asleep beside one. Sleeping by the fire with ore in the pack is not
+/// watching it (#336).
+#[test]
+fn nobody_watches_ore_in_their_sleep() {
+    let mut simulation = one_agent_world();
+    a_fire_where_he_stands(&mut simulation);
+    {
+        let agent = &mut simulation.population.agents[0];
+        carrying(agent, "iron", 8);
+        agent.found_out_how_to("stoneware");
+        agent.skills.have_made_before(
+            making::ORE_WATCHED_IN_A_FIRE,
+            making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS,
+        );
+    }
+
+    for _ in 0..4000 {
+        let agent = &mut simulation.population.agents[0];
+        agent.fatigue.is_sleeping = true;
+        if let Some(curiosity) = agent.drives.get_mut(DriveType::Curiosity) {
+            curiosity.value = 1.0;
+        }
+        simulation.somebody_notices_something();
+    }
+
+    let agent = &simulation.population.agents[0];
+    assert!(!agent.knows_how_to_make("shinylump"), "nothing is seen asleep");
+    assert_eq!(
+        agent.skills.times_made(making::ORE_WATCHED_IN_A_FIRE),
+        making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS,
+        "and sleeping beside it is not watching it"
+    );
+}
+
 /// And away from a fire he never does.
 #[test]
 fn the_same_stone_in_the_cold_teaches_nothing() {

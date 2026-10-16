@@ -86,6 +86,14 @@ impl Simulation {
                 continue;
             }
 
+            // Nobody notices anything asleep. A man who slept by the fire
+            // with ore in his pack was counted as watching it all night, and
+            // rolled for seeing it run, which put metal in one settlement's
+            // hands in its first month (#336).
+            if agent.fatigue.is_sleeping {
+                continue;
+            }
+
             let curiosity = agent
                 .drives
                 .get(crate::core::DriveType::Curiosity)

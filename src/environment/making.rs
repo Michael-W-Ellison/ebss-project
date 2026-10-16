@@ -1340,8 +1340,11 @@ pub fn how_practised_first(what: &str) -> &'static [(&'static str, u32)] {
 /// the pack.
 pub const ORE_WATCHED_IN_A_FIRE: &str = "ore watched in a fire";
 
-/// And how many of those half hours come before the thought can.
-pub const TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS: u32 = 20;
+/// And how many of those half hours come before the thought can: fifty
+/// waking hours of it. Ore watching is bunched in one or two people who carry
+/// a bright stone about, and twenty half hours was a fortnight's evenings for
+/// them.
+pub const TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS: u32 = 100;
 
 /// What else a firing of this might show somebody, if they have the stuff for
 /// it in their pack: what has to be beside it, how much, what it shows, and
