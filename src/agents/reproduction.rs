@@ -68,12 +68,19 @@ pub enum MatingResult {
 /// - Both must be capable of reproduction AND have their survival needs met
 /// - Agents that are hungry or thirsty will not attempt reproduction
 pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria) -> bool {
-    // Both must be alive, able to reproduce, AND have survival needs met
-    if !agent1.should_attempt_reproduction() || !agent2.should_attempt_reproduction() {
+    // Both must be alive, grown, AND have survival needs met, and one of them
+    // free to carry it. Either of a pair can carry, so one already carrying or
+    // nursing leaves the other free to: refusing the pair then, once mating
+    // was only within a pair, halved births through two years on settlements
+    // whose stores allowed the old number (#338).
+    if !agent1.would_have_a_child_with_a_partner() || !agent2.would_have_a_child_with_a_partner() {
+        return false;
+    }
+    if !agent1.can_carry_a_child() && !agent2.can_carry_a_child() {
         return false;
     }
 
-    // Two different people, and neither of them already carrying.
+    // Two different people.
     //
     // "Agents are gender neutral. There are no male/female agents, merely
     // child and adult agents." This required one of each, so a pair drawn
@@ -82,10 +89,6 @@ pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria
     // turns of action, half of every candidate pair was thrown away on a
     // distinction the specification does not have.
     if agent1.id == agent2.id {
-        return false;
-    }
-
-    if agent1.is_pregnant() || agent2.is_pregnant() {
         return false;
     }
 
@@ -135,7 +138,7 @@ pub fn attempt_impregnation(
     let mut rng = crate::core::dice::roll();
 
     // Check basic requirements
-    if !carrier.can_carry_a_child() || !other.can_reproduce() {
+    if !carrier.can_carry_a_child() || !other.could_be_the_other_parent() {
         return None;
     }
 
@@ -682,7 +685,7 @@ mod tests {
         assert!(!can_mate(&agent, &agent, &criteria));
     }
 
-    /// And nobody already carrying one starts another.
+    /// Nobody already carrying one starts another, and their partner may.
     #[test]
     fn nobody_already_carrying_starts_another() {
         // Seeded: `Agent::new` draws a random weight per drive, so how many
@@ -704,15 +707,13 @@ mod tests {
         let criteria = MateSelectionCriteria::default();
         assert!(can_mate(&agent1, &agent2, &criteria));
 
+        // One carrying leaves the other free to, whichever it is
         agent1.pregnancy = Some(PregnancyState::new(0, agent2.id));
-        assert!(
-            !can_mate(&agent1, &agent2, &criteria),
-            "and it does not matter which of the two it is"
-        );
+        assert!(can_mate(&agent1, &agent2, &criteria));
+        assert!(!agent1.can_carry_a_child(), "but not to start another");
 
-        agent1.pregnancy = None;
         agent2.pregnancy = Some(PregnancyState::new(0, agent1.id));
-        assert!(!can_mate(&agent1, &agent2, &criteria));
+        assert!(!can_mate(&agent1, &agent2, &criteria), "both carrying");
     }
 
     #[test]
@@ -741,14 +742,18 @@ mod tests {
         assert!(!can_mate(&infant, &adult, &criteria));
     }
 
+    /// One of a pair carrying or nursing leaves the other free to carry, and
+    /// a pair with neither free cannot start a child (#338).
     #[test]
-    fn test_cannot_mate_when_pregnant() {
-        let (other, mut carrier) = create_mating_pair();
-
-        // Female is pregnant
-        carrier.pregnancy = Some(PregnancyState::new(0, other.id));
-
+    fn test_cannot_mate_when_neither_is_free_to_carry() {
+        let (mut other, mut carrier) = create_mating_pair();
         let criteria = MateSelectionCriteria::default();
+
+        carrier.pregnancy = Some(PregnancyState::new(0, other.id));
+        assert!(can_mate(&other, &carrier, &criteria), "the other may carry");
+        assert!(attempt_impregnation(&carrier, &other, carrier.my_next_fertile_turn(0)).is_none());
+
+        other.nursing_a_child = true;
         assert!(!can_mate(&other, &carrier, &criteria));
     }
 

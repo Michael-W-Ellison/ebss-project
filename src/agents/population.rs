@@ -1242,12 +1242,13 @@ impl Population {
         }
 
         // Find potential mating pairs
-        // Use should_attempt_reproduction() which checks both capability AND survival state
+        // Use would_have_a_child_with_a_partner(), which checks both capability AND survival state;
+        // which of a pair is free to carry is `can_mate`'s to ask.
         // Agents with active hunger/thirst drives are excluded - they must secure food first
         let alive_agents: Vec<usize> = self.agents
             .iter()
             .enumerate()
-            .filter(|(_, a)| a.should_attempt_reproduction())
+            .filter(|(_, a)| a.would_have_a_child_with_a_partner())
             .filter(|(_, a)| !self.is_on_cooldown(a.id))
             .map(|(i, _)| i)
             .collect();
@@ -1273,7 +1274,11 @@ impl Population {
                         .map(|d| d.is_active())
                         .unwrap_or(false);
 
-                    if drive1 && drive2 {
+                    // A pair wants a child between them, not each on the
+                    // same day: either of them wanting one is enough. Asking
+                    // for both at once, of one partner rather than of anybody
+                    // in reach, halved births (#338).
+                    if drive1 || drive2 {
                         // Which of the two carries it: whichever is on their
                         // own fertile day - see `does_this_one_carry`. Each
                         // person still has one chance a cycle, their own.
@@ -1299,6 +1304,7 @@ impl Population {
                         // One chance a cycle, on the carrier's own day of it,
                         // and with one partner - see `DAYS_IN_A_CYCLE`.
                         if tried_this_turn.contains(&carrier_idx)
+                            || !carrier.can_carry_a_child()
                             || !carrier.could_conceive_now(self.current_turn)
                         {
                             continue;

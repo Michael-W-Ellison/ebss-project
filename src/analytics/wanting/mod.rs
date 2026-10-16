@@ -1222,6 +1222,19 @@ impl Simulation {
                     .map(|them| Action::Mate {
                         target_agent_id: them,
                     })
+                    // A partner out of reach is gone to (#338)
+                    .or_else(|| {
+                        let partner = agent.my_partner()?;
+                        let them = self
+                            .population
+                            .agents
+                            .iter()
+                            .find(|them| them.id == partner && them.state.is_alive)?;
+                        let (x, y, _) = them.state.position;
+                        let paces = (x - agent_position.0).abs().max((y - agent_position.1).abs());
+                        (paces > Self::CLOSE_ENOUGH_TO_COURT)
+                            .then_some(Action::Move { target: (x, y, agent_position.2) })
+                    })
                     // And with nobody to have one with, keep company with
                     // whoever might become somebody (#338)
                     .or_else(|| {
