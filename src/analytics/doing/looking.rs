@@ -168,6 +168,9 @@ impl Simulation {
 
             agent.inventory.add_item(made);
             agent.skills.practise(working.hands, 12, turn_now);
+            // And one more of these done, which is what a practised hand at
+            // this one thing comes of (#335, #336).
+            agent.skills.made_one(working.makes);
 
             // Having done it once he can do it on purpose. For the
             // obvious ones this is a formality; for the rest it is the

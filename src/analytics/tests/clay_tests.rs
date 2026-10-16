@@ -426,7 +426,9 @@ fn fire_pots(with_iron: bool, times: u32) -> bool {
 
 #[test]
 fn a_bright_stone_beside_the_pots_runs_in_the_pot_fire() {
-    assert!(fire_pots(true, 60), "sixty firings with ore beside them");
+    // The first thirty only make a potter of him (`how_practised_first`)
+    assert!(!fire_pots(true, making::POTS_A_POTTER_FIRES_BEFORE_METAL - 1));
+    assert!(fire_pots(true, 120), "a hundred and twenty firings with ore beside them");
 }
 
 #[test]

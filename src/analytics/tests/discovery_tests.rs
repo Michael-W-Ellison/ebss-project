@@ -146,8 +146,8 @@ fn making_what_nobody_knows_fails_saying_so() {
 
 // --- finding out ------------------------------------------------------------
 
-/// A curious man who has fired a pot, holding a bright stone, at a fire,
-/// works it out (#336).
+/// A curious potter who has fired a good many pots, holding a bright stone,
+/// at a fire, works it out (#336).
 #[test]
 fn a_bright_stone_at_a_fire_is_eventually_understood() {
     let mut simulation = one_agent_world();
@@ -157,6 +157,7 @@ fn a_bright_stone_at_a_fire_is_eventually_understood() {
         let agent = &mut simulation.population.agents[0];
         carrying(agent, "iron", 8);
         agent.found_out_how_to("stoneware");
+        agent.skills.have_made_before("stoneware", making::POTS_A_POTTER_FIRES_BEFORE_METAL);
         if let Some(curiosity) = agent.drives.get_mut(DriveType::Curiosity) {
             curiosity.value = 1.0;
         }
@@ -203,6 +204,33 @@ fn nobody_runs_metal_before_they_have_fired_a_pot() {
     }
 
     assert!(!simulation.population.agents[0].knows_how_to_make("shinylump"));
+}
+
+/// Knowing how to fire a pot is not enough: everybody knows that inside a
+/// month. It is the potter with a good many firings behind him whose fire
+/// could run ore (#336).
+#[test]
+fn a_new_potter_does_not_run_metal_and_a_practised_one_can() {
+    let mut simulation = one_agent_world();
+    a_fire_where_he_stands(&mut simulation);
+    {
+        let agent = &mut simulation.population.agents[0];
+        carrying(agent, "iron", 8);
+        agent.found_out_how_to("stoneware");
+        agent.skills.have_made_before("stoneware", 3);
+    }
+
+    let could = |simulation: &Simulation| {
+        simulation.population.agents[0]
+            .what_i_could_find_out()
+            .any(|step| step.makes == "shinylump")
+    };
+    assert!(!could(&simulation), "three pots is not a kiln");
+
+    simulation.population.agents[0]
+        .skills
+        .have_made_before("stoneware", making::POTS_A_POTTER_FIRES_BEFORE_METAL);
+    assert!(could(&simulation), "a potter's lifetime of firings is");
 }
 
 /// And away from a fire he never does.
@@ -519,12 +547,13 @@ fn a_settlement_can_find_metal_out_for_itself() {
     // Put iron and a fire where the people are, so that this tests the
     // mechanism rather than whether a random world happens to put a mountain
     // within walking distance.
-    // A people who have fired pots: nobody has the thought before that
+    // A people of practised potters: nobody has the thought before that
     // (#336).
     a_fire_where_he_stands(&mut simulation);
     for agent in simulation.population.agents.iter_mut() {
         carrying(agent, "iron", 6);
         agent.found_out_how_to("stoneware");
+        agent.skills.have_made_before("stoneware", making::POTS_A_POTTER_FIRES_BEFORE_METAL);
     }
 
     let hearth = simulation.population.agents[0].state.position;

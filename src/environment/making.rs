@@ -1320,6 +1320,26 @@ pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
     }
 }
 
+/// How many times somebody has to have done a thing before a discovery can
+/// occur to them, beyond merely knowing how (`what_has_to_be_known_first`).
+///
+/// Every founder knows how to fire a pot inside a month, so waiting on pottery
+/// alone held metal back by a month: one settlement in four ran metal on day
+/// thirty, because somebody happened to carry ore to the fire. A kiln hot
+/// enough to run ore is a thing a potter learns to build over many firings,
+/// and metal came out of potting traditions, not out of anybody's first pot.
+/// So the thought waits on a potter who has fired a good many (#336).
+pub fn how_practised_first(what: &str) -> &'static [(&'static str, u32)] {
+    match what {
+        "shinylump" => &[("stoneware", POTS_A_POTTER_FIRES_BEFORE_METAL)],
+        _ => &[],
+    }
+}
+
+/// How many pots somebody fires before a kiln of theirs could be hot enough
+/// to run ore.
+pub const POTS_A_POTTER_FIRES_BEFORE_METAL: u32 = 30;
+
 /// What else a firing of this might show somebody, if they have the stuff for
 /// it in their pack: what has to be beside it, how much, what it shows, and
 /// the odds of seeing it on one firing.

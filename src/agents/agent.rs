@@ -3530,7 +3530,8 @@ impl Agent {
     /// The discoveries this agent is far enough along to have.
     ///
     /// Everything nobody arrives knowing, less what waits on something this
-    /// agent has not got to yet (`what_has_to_be_known_first`).
+    /// agent has not got to yet (`what_has_to_be_known_first`) or has not yet
+    /// done often enough (`how_practised_first`).
     pub fn what_i_could_find_out(
         &self,
     ) -> impl Iterator<Item = &'static crate::environment::making::Making> + '_ {
@@ -3538,6 +3539,9 @@ impl Agent {
             crate::environment::making::what_has_to_be_known_first(step.makes)
                 .iter()
                 .all(|first| self.found_out.contains(*first) || self.knows_how_to_make(first))
+                && crate::environment::making::how_practised_first(step.makes)
+                    .iter()
+                    .all(|(done, times)| self.skills.times_made(done) >= *times)
         })
     }
 
