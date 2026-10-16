@@ -1326,9 +1326,9 @@ pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
 /// A man does not see metal run the first time a bright stone sits in his
 /// fire; he sees a hot stone. One settlement ran metal on day thirty because
 /// somebody carried ore to the fire in the first month and the roll came up.
-/// So the thought waits on somebody who has watched ore in a fire a good many
-/// times (`ORE_WATCHED_IN_A_FIRE`, counted by `somebody_notices_something`)
-/// before it can come to them at all (#336).
+/// So the thought waits on somebody who has sat a good many evenings at a fire
+/// with ore in the pack (`ORE_WATCHED_IN_A_FIRE`, counted by
+/// `somebody_notices_something`) before it can come to them at all (#336).
 pub fn how_practised_first(what: &str) -> &'static [(&'static str, u32)] {
     match what {
         "shinylump" => &[(ORE_WATCHED_IN_A_FIRE, TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS)],
@@ -1336,15 +1336,18 @@ pub fn how_practised_first(what: &str) -> &'static [(&'static str, u32)] {
     }
 }
 
-/// What the practice record calls a half hour spent at a fire with ore in
-/// the pack.
+/// What the practice record calls an evening spent at a fire with ore in the
+/// pack, counted once a day however long it ran.
 pub const ORE_WATCHED_IN_A_FIRE: &str = "ore watched in a fire";
 
-/// And how many of those half hours come before the thought can: fifty
-/// waking hours of it. Ore watching is bunched in one or two people who carry
-/// a bright stone about, and twenty half hours was a fortnight's evenings for
-/// them.
-pub const TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS: u32 = 100;
+/// And how many of those evenings come before the thought can: most of a
+/// year of them, even for somebody at the fire with it every night. Ore
+/// watching is bunched in one or two people who carry a bright stone about.
+/// Counted by the half hour, one man in one settlement watched it a hundred
+/// times in his first month and another thirteen hundred times in two years,
+/// so a count of half hours was no wait at all for them, and metal still came
+/// on day thirty and day sixty.
+pub const TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS: u32 = 300;
 
 /// What else a firing of this might show somebody, if they have the stuff for
 /// it in their pack: what has to be beside it, how much, what it shows, and

@@ -1795,6 +1795,12 @@ pub struct Agent {
     #[serde(default)]
     pub familiar_with: std::collections::BTreeMap<String, f32>,
 
+    /// The day this one last sat at a fire with ore in the pack, so that an
+    /// evening of it counts once however many half hours it ran to - see
+    /// `making::ORE_WATCHED_IN_A_FIRE` (#336).
+    #[serde(default)]
+    pub last_evening_watching_ore: Option<u32>,
+
     /// The tile this one last stepped off, so that a walk does not turn
     /// straight back onto it - see `Simulation::moving`.
     #[serde(default)]
@@ -2046,6 +2052,7 @@ impl Agent {
             id: crate::core::dice::name(),
             busy_until: 0,
             familiar_with: std::collections::BTreeMap::new(),
+            last_evening_watching_ore: None,
             stepped_from: None,
             state: AgentState::new(),
             drives: if config.random_weights {

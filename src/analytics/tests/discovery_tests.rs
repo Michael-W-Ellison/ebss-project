@@ -228,8 +228,21 @@ fn ore_has_to_be_watched_in_the_fire_before_it_runs() {
     };
     assert!(!could(&simulation), "a first look at ore in a fire is a hot stone");
 
-    // Each half hour at the fire with it counts, curious and paying attention
-    for _ in 0..making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS {
+    // An evening at the fire with it counts once, however long it runs
+    for _ in 0..10 {
+        simulation.somebody_notices_something();
+    }
+    assert_eq!(
+        simulation.population.agents[0]
+            .skills
+            .times_made(making::ORE_WATCHED_IN_A_FIRE),
+        1,
+        "one evening is one evening"
+    );
+
+    // And each evening after it counts again
+    for _ in 1..making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS {
+        simulation.current_turn += crate::environment::seasons::TICKS_PER_DAY;
         if let Some(curiosity) = simulation.population.agents[0]
             .drives
             .get_mut(DriveType::Curiosity)

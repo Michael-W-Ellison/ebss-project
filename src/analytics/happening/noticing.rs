@@ -80,6 +80,7 @@ impl Simulation {
         let mut rng = crate::core::dice::roll();
         let mut found: Vec<(usize, &'static str)> = Vec::new();
         let mut watched_ore: Vec<usize> = Vec::new();
+        let today = self.current_turn / crate::environment::seasons::TICKS_PER_DAY;
 
         for (index, agent) in self.population.agents.iter().enumerate() {
             if !agent.state.is_alive {
@@ -107,8 +108,11 @@ impl Simulation {
 
             // Ore sitting in the pack at a fire is ore watched in a fire,
             // whatever comes of it: it is how somebody gets to the point of
-            // seeing metal run (`how_practised_first`, #336).
-            if crate::environment::making::SHINY_LUMP.makings_to_hand(&holding)
+            // seeing metal run (`how_practised_first`, #336). Once an evening:
+            // a man who sits at the fire all day with a stone in his pack has
+            // watched it one day, not forty-eight half hours.
+            if agent.last_evening_watching_ore != Some(today)
+                && crate::environment::making::SHINY_LUMP.makings_to_hand(&holding)
                 && self
                     .nearest_fire_from(agent.state.position, Self::FIRE_REACH, true)
                     .is_some()
@@ -147,7 +151,9 @@ impl Simulation {
         }
 
         for index in watched_ore {
-            self.population.agents[index]
+            let agent = &mut self.population.agents[index];
+            agent.last_evening_watching_ore = Some(today);
+            agent
                 .skills
                 .made_one(crate::environment::making::ORE_WATCHED_IN_A_FIRE);
         }
