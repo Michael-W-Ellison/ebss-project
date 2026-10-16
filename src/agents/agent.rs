@@ -11044,7 +11044,7 @@ impl Agent {
         let to_keep: std::collections::BTreeSet<crate::world::Position> = {
             let holding_none = |_: &str| 0;
             let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
-            let makings: std::collections::BTreeSet<crate::world::ResourceType> =
+            let mut makings: std::collections::BTreeSet<crate::world::ResourceType> =
                 Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
                     .iter()
                     .flat_map(|trade| crate::environment::making::what_helps_with(*trade))
@@ -11054,6 +11054,20 @@ impl Agent {
                     })
                     .filter_map(crate::world::ResourceType::called)
                     .collect();
+
+            // And the raw stuff of a discovery he is far enough along to
+            // wonder about and has not made. Ore makes nothing a stone-age
+            // people knows, so every place anybody had seen it went out of
+            // mind inside a month, nobody fetched any again, and whatever was
+            // going to come of a bright stone at the fire came in the first
+            // month or never (#336).
+            makings.extend(
+                crate::environment::making::everything_to_find_out()
+                    .filter(|step| !self.knows_how_to(step))
+                    .filter(|step| self.knows_what_comes_before(step.makes))
+                    .flat_map(|step| step.needs.iter().map(|(what, _)| *what))
+                    .filter_map(crate::world::ResourceType::called),
+            );
             let here = crate::world::Position::new(self.state.position.0, self.state.position.1);
             let mut keep = std::collections::BTreeSet::new();
             for making in makings {
