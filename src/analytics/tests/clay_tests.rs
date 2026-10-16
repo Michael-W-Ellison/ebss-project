@@ -390,14 +390,19 @@ fn molding_is_a_live_verb() {
 // The kiln and the first metal (#336)
 // --------------------------------------------------------------------------
 
-/// Fire some pots with a bright stone in the pack beside them, and sooner or
-/// later something that is not stone runs out of it. That is how metal comes
+/// Fire some pots with a bright stone in the pack beside them, as somebody who
+/// has watched ore in a fire before, and sooner or later something that is
+/// not stone runs out of it. That is how metal comes
 /// to a people at all: through the potter.
 fn fire_pots(with_iron: bool, times: u32) -> bool {
     let mut simulation = one_person();
     let here = simulation.population.agents[0].state.position;
     a_lit_fire_at(&mut simulation, here);
     simulation.population.agents[0].found_out_how_to("stoneware");
+    simulation.population.agents[0].skills.have_made_before(
+        making::ORE_WATCHED_IN_A_FIRE,
+        making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS,
+    );
 
     for _ in 0..times {
         let agent = &mut simulation.population.agents[0];
@@ -426,9 +431,7 @@ fn fire_pots(with_iron: bool, times: u32) -> bool {
 
 #[test]
 fn a_bright_stone_beside_the_pots_runs_in_the_pot_fire() {
-    // The first thirty only make a potter of him (`how_practised_first`)
-    assert!(!fire_pots(true, making::POTS_A_POTTER_FIRES_BEFORE_METAL - 1));
-    assert!(fire_pots(true, 120), "a hundred and twenty firings with ore beside them");
+    assert!(fire_pots(true, 60), "sixty firings with ore beside them");
 }
 
 #[test]

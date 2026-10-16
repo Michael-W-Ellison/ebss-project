@@ -79,6 +79,7 @@ impl Simulation {
 
         let mut rng = crate::core::dice::roll();
         let mut found: Vec<(usize, &'static str)> = Vec::new();
+        let mut watched_ore: Vec<usize> = Vec::new();
 
         for (index, agent) in self.population.agents.iter().enumerate() {
             if !agent.state.is_alive {
@@ -95,6 +96,17 @@ impl Simulation {
             }
 
             let holding = |what: &str| agent.how_many_i_have(what);
+
+            // Ore sitting in the pack at a fire is ore watched in a fire,
+            // whatever comes of it: it is how somebody gets to the point of
+            // seeing metal run (`how_practised_first`, #336).
+            if crate::environment::making::SHINY_LUMP.makings_to_hand(&holding)
+                && self
+                    .nearest_fire_from(agent.state.position, Self::FIRE_REACH, true)
+                    .is_some()
+            {
+                watched_ore.push(index);
+            }
 
             for step in agent.what_i_could_find_out() {
                 if agent.knows_how_to(step) || !step.makings_to_hand(&holding) {
@@ -124,6 +136,12 @@ impl Simulation {
                     break;
                 }
             }
+        }
+
+        for index in watched_ore {
+            self.population.agents[index]
+                .skills
+                .made_one(crate::environment::making::ORE_WATCHED_IN_A_FIRE);
         }
 
         for (index, what) in found {

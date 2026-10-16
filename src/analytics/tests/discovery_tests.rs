@@ -157,7 +157,7 @@ fn a_bright_stone_at_a_fire_is_eventually_understood() {
         let agent = &mut simulation.population.agents[0];
         carrying(agent, "iron", 8);
         agent.found_out_how_to("stoneware");
-        agent.skills.have_made_before("stoneware", making::POTS_A_POTTER_FIRES_BEFORE_METAL);
+        agent.skills.have_made_before(making::ORE_WATCHED_IN_A_FIRE, making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS);
         if let Some(curiosity) = agent.drives.get_mut(DriveType::Curiosity) {
             curiosity.value = 1.0;
         }
@@ -206,18 +206,19 @@ fn nobody_runs_metal_before_they_have_fired_a_pot() {
     assert!(!simulation.population.agents[0].knows_how_to_make("shinylump"));
 }
 
-/// Knowing how to fire a pot is not enough: everybody knows that inside a
-/// month. It is the potter with a good many firings behind him whose fire
-/// could run ore (#336).
+/// The first time ore sits in a man's fire he sees a hot stone. It is the
+/// man who has watched it there a good many times who sees it run (#336).
 #[test]
-fn a_new_potter_does_not_run_metal_and_a_practised_one_can() {
+fn ore_has_to_be_watched_in_the_fire_before_it_runs() {
     let mut simulation = one_agent_world();
     a_fire_where_he_stands(&mut simulation);
     {
         let agent = &mut simulation.population.agents[0];
         carrying(agent, "iron", 8);
         agent.found_out_how_to("stoneware");
-        agent.skills.have_made_before("stoneware", 3);
+        if let Some(curiosity) = agent.drives.get_mut(DriveType::Curiosity) {
+            curiosity.value = 1.0;
+        }
     }
 
     let could = |simulation: &Simulation| {
@@ -225,12 +226,25 @@ fn a_new_potter_does_not_run_metal_and_a_practised_one_can() {
             .what_i_could_find_out()
             .any(|step| step.makes == "shinylump")
     };
-    assert!(!could(&simulation), "three pots is not a kiln");
+    assert!(!could(&simulation), "a first look at ore in a fire is a hot stone");
 
-    simulation.population.agents[0]
-        .skills
-        .have_made_before("stoneware", making::POTS_A_POTTER_FIRES_BEFORE_METAL);
-    assert!(could(&simulation), "a potter's lifetime of firings is");
+    // Each half hour at the fire with it counts, curious and paying attention
+    for _ in 0..making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS {
+        if let Some(curiosity) = simulation.population.agents[0]
+            .drives
+            .get_mut(DriveType::Curiosity)
+        {
+            curiosity.value = 1.0;
+        }
+        simulation.somebody_notices_something();
+    }
+    assert_eq!(
+        simulation.population.agents[0]
+            .skills
+            .times_made(making::ORE_WATCHED_IN_A_FIRE),
+        making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS
+    );
+    assert!(could(&simulation), "watched long enough, the thought can come");
 }
 
 /// And away from a fire he never does.
@@ -553,7 +567,7 @@ fn a_settlement_can_find_metal_out_for_itself() {
     for agent in simulation.population.agents.iter_mut() {
         carrying(agent, "iron", 6);
         agent.found_out_how_to("stoneware");
-        agent.skills.have_made_before("stoneware", making::POTS_A_POTTER_FIRES_BEFORE_METAL);
+        agent.skills.have_made_before(making::ORE_WATCHED_IN_A_FIRE, making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS);
     }
 
     let hearth = simulation.population.agents[0].state.position;

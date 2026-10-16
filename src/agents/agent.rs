@@ -3536,13 +3536,19 @@ impl Agent {
         &self,
     ) -> impl Iterator<Item = &'static crate::environment::making::Making> + '_ {
         crate::environment::making::everything_to_find_out().filter(|step| {
-            crate::environment::making::what_has_to_be_known_first(step.makes)
-                .iter()
-                .all(|first| self.found_out.contains(*first) || self.knows_how_to_make(first))
+            self.knows_what_comes_before(step.makes)
                 && crate::environment::making::how_practised_first(step.makes)
                     .iter()
                     .all(|(done, times)| self.skills.times_made(done) >= *times)
         })
+    }
+
+    /// Whether this agent knows everything a discovery waits on
+    /// (`what_has_to_be_known_first`), whatever practice it waits on besides.
+    pub fn knows_what_comes_before(&self, what: &str) -> bool {
+        crate::environment::making::what_has_to_be_known_first(what)
+            .iter()
+            .all(|first| self.found_out.contains(*first) || self.knows_how_to_make(first))
     }
 
     /// Whether this agent knows any way at all of making a named thing.

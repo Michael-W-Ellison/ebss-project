@@ -1323,22 +1323,25 @@ pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
 /// How many times somebody has to have done a thing before a discovery can
 /// occur to them, beyond merely knowing how (`what_has_to_be_known_first`).
 ///
-/// Every founder knows how to fire a pot inside a month, so waiting on pottery
-/// alone held metal back by a month: one settlement in four ran metal on day
-/// thirty, because somebody happened to carry ore to the fire. A kiln hot
-/// enough to run ore is a thing a potter learns to build over many firings,
-/// and metal came out of potting traditions, not out of anybody's first pot.
-/// So the thought waits on a potter who has fired a good many (#336).
+/// A man does not see metal run the first time a bright stone sits in his
+/// fire; he sees a hot stone. One settlement ran metal on day thirty because
+/// somebody carried ore to the fire in the first month and the roll came up.
+/// So the thought waits on somebody who has watched ore in a fire a good many
+/// times (`ORE_WATCHED_IN_A_FIRE`, counted by `somebody_notices_something`)
+/// before it can come to them at all (#336).
 pub fn how_practised_first(what: &str) -> &'static [(&'static str, u32)] {
     match what {
-        "shinylump" => &[("stoneware", POTS_A_POTTER_FIRES_BEFORE_METAL)],
+        "shinylump" => &[(ORE_WATCHED_IN_A_FIRE, TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS)],
         _ => &[],
     }
 }
 
-/// How many pots somebody fires before a kiln of theirs could be hot enough
-/// to run ore.
-pub const POTS_A_POTTER_FIRES_BEFORE_METAL: u32 = 30;
+/// What the practice record calls a half hour spent at a fire with ore in
+/// the pack.
+pub const ORE_WATCHED_IN_A_FIRE: &str = "ore watched in a fire";
+
+/// And how many of those half hours come before the thought can.
+pub const TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS: u32 = 20;
 
 /// What else a firing of this might show somebody, if they have the stuff for
 /// it in their pack: what has to be beside it, how much, what it shows, and
