@@ -35,25 +35,59 @@ impl Simulation {
 
         let criteria = MateSelectionCriteria::default();
 
+        // One's own partner, and nobody else (#338)
+        let partner = agent.my_partner()?;
         self.population
             .agents
             .iter()
-            .filter(|them| them.id != agent.id && them.state.is_alive)
+            .filter(|them| them.id == partner && them.state.is_alive)
             .filter(|them| {
                 let paces = (them.state.position.0 - agent_position.0)
                     .abs()
                     .max((them.state.position.1 - agent_position.1).abs());
                 paces <= Self::CLOSE_ENOUGH_TO_COURT
             })
-            .filter(|them| agent.would_take_their_word(them.id, &them.traits))
-            .filter(|them| can_mate(agent, them, &criteria))
+            .find(|them| can_mate(agent, them, &criteria))
+            .map(|them| them.id)
+    }
+
+    /// Somebody this one, with nobody yet, would spend time with in the hope
+    /// of more: the unpaired adult in reach it is warmest to. Courting is
+    /// keeping company, and the pair forms out of the bond it builds
+    /// (`Population::pair_off`).
+    pub(in crate::analytics) fn somebody_to_court(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        if agent.my_partner().is_some() {
+            return None;
+        }
+        self.population
+            .agents
+            .iter()
+            .filter(|them| them.id != agent.id && them.state.is_alive)
+            .filter(|them| them.state.life_stage.can_reproduce() && them.my_partner().is_none())
+            .filter(|them| {
+                !them.parent_ids.contains(&agent.id)
+                    && !agent.parent_ids.contains(&them.id)
+                    && !agent.parent_ids.iter().any(|parent| them.parent_ids.contains(parent))
+            })
+            .filter(|them| {
+                let paces = (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs());
+                paces <= Self::CLOSE_ENOUGH_TO_COURT
+            })
             .max_by(|a, b| {
-                let trust = |them: &&crate::agents::Agent| {
-                    agent.how_far_i_trust(them.id, &them.traits)
+                let warmth = |them: &&crate::agents::Agent| {
+                    agent
+                        .relationships
+                        .get_relationship(&them.id)
+                        .map(|bond| bond.bond_strength)
+                        .unwrap_or(0.0)
                 };
-                trust(a)
-                    .partial_cmp(&trust(b))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                warmth(a).total_cmp(&warmth(b))
             })
             .map(|them| them.id)
     }

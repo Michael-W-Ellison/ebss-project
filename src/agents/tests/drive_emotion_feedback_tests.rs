@@ -446,7 +446,7 @@ fn test_empathetic_trait_bonus_for_helping() {
     
     let mut regular_agent = Agent::new(AgentConfig::default());
     let mut empathetic_agent = Agent::new(AgentConfig::default());
-    empathetic_agent.traits.add_trait(Trait::Empathetic);
+    empathetic_agent.traits.add_trait(Trait::Empathic);
     
     let recipient = crate::core::dice::name();
     

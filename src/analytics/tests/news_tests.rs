@@ -139,7 +139,7 @@ fn being_out_of_date_is_not_the_same_as_lying() {
 fn a_crowd_makes_a_man_think_twice() {
     let mut liar = somebody();
     liar.traits.add_trait(Trait::Dishonest);
-    liar.traits.add_trait(Trait::Manipulative);
+    liar.traits.add_trait(Trait::Manipulator);
 
     let room: Vec<uuid::Uuid> = (0..8).map(|_| crate::core::dice::name()).collect();
 

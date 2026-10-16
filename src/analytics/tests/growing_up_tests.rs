@@ -674,6 +674,11 @@ fn there_is_no_gender_left_to_refuse_anybody() {
         ));
     }
 
+    // A pair, since only a pair has children (#338)
+    let (a, b) = (one.id, two.id);
+    one.pair_with(b, 0);
+    two.pair_with(a, 0);
+
     assert!(
         can_mate(&one, &two, &criteria),
         "two grown people, and nothing else to say about them: {:.2} and {:.2} \

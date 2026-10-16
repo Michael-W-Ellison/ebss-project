@@ -12,9 +12,11 @@ pub enum Trait {
     // Emotional Response Modifiers
     Anxious,        // Doubles fear increase, halves fear reduction
     Brave,          // Halves fear gain, doubles fear loss
+    #[serde(alias = "Hottempered")]
     HotHeaded,      // Doubles anger gain, halves anger loss
     Calm,           // Halves anger gain, doubles anger loss
     Pacifist,       // Prevents anger gain
+    #[serde(alias = "Empathetic")]
     Empathic,       // Doubles sadness loss and gain
     ColdHearted,    // Halves sadness gain, doubles loss
     Resilient,      // Doubles sadness loss
@@ -25,7 +27,9 @@ pub enum Trait {
     Repressed,      // Decreases average emotions, increases extreme
 
     // Social Traits
+    #[serde(alias = "Sociable")]
     Extrovert,      // Doubles happiness from socializing, double agent count
+    #[serde(alias = "Introverted")]
     Introvert,      // Happiness when alone, decreases with agents nearby
     KindHearted,    // Doubles happiness loss when seeing agent hurt
     Cruel,          // Reverses happiness loss when seeing pain
@@ -36,6 +40,7 @@ pub enum Trait {
     Mediator,       // Decreases nearby negative emotions
     Romantic,       // Additional happiness from relationships
     Insecure,       // Decreased happiness if partner talks to opposite sex
+    #[serde(alias = "Manipulative")]
     Manipulator,    // Happiness from convincing agents to act contrary
     Copycat,        // Happiness from copying nearby agent tasks
     Imaginative,    // Increases nearby agent happiness when sharing
@@ -104,13 +109,6 @@ pub enum Trait {
     // Work Ethic (additional)
     Diligent,       // Hard worker, gains satisfaction from labor
 
-    // Compatibility aliases for agents system
-    Hottempered,    // Alias for HotHeaded
-    Sociable,       // Alias for Extrovert
-    Introverted,    // Alias for Introvert
-    Empathetic,     // Alias for Empathic
-    Manipulative,   // Alias for Manipulator
-
     // Obsession Trait
     Obsessive,      // Gains/loses happiness based on proximity to obsession
 
@@ -129,7 +127,7 @@ impl Trait {
     /// traits lean on which drive, whether a new one reaches anything at all.
     /// Held to the enum by `every_trait_is_listed`, which is an exhaustive
     /// match: adding a variant and not listing it here fails to compile.
-    pub fn all() -> [Trait; 82] {
+    pub fn all() -> [Trait; 77] {
         [
             Trait::Anxious,
             Trait::Brave,
@@ -204,11 +202,6 @@ impl Trait {
             Trait::Dishonest,
             Trait::Callous,
             Trait::Diligent,
-            Trait::Hottempered,
-            Trait::Sociable,
-            Trait::Introverted,
-            Trait::Empathetic,
-            Trait::Manipulative,
             Trait::Obsessive,
             Trait::Infertile,
             Trait::Narcoleptic,
@@ -299,11 +292,6 @@ mod every_trait_tests {
             Trait::Dishonest => {}
             Trait::Callous => {}
             Trait::Diligent => {}
-            Trait::Hottempered => {}
-            Trait::Sociable => {}
-            Trait::Introverted => {}
-            Trait::Empathetic => {}
-            Trait::Manipulative => {}
             Trait::Obsessive => {}
             Trait::Infertile => {}
             Trait::Narcoleptic => {}
@@ -355,28 +343,20 @@ mod every_trait_tests {
     /// and `Zealot` all plainly bear on wanting and lean on nothing.
     const LEAN_ON_NOTHING: usize = 38;
 
-    /// Six variants that call themselves aliases and are not.
-    ///
-    /// `Hottempered` says "Alias for HotHeaded" in its own comment, and is a
-    /// separate variant, so the two never compare equal: an agent given one
-    /// gets none of the other's leanings. Both spellings are live - two call
-    /// sites read `HotHeaded` and three read `Hottempered`; two read `Empathic`
-    /// and eleven read `Empathetic`. Nothing maps one to the other.
-    ///
-    /// This asserts the pairs are still distinct, so that whoever fixes it
-    /// (#234) finds this test rather than discovering it the way it was
-    /// discovered - by a guard written for something else entirely.
+    /// The five spellings that were separate variants calling themselves
+    /// aliases are now one trait each (#338). A saved world that wrote the
+    /// old names reads them back as the trait they were meant to be.
     #[test]
-    fn the_aliases_are_not_aliases() {
-        for (a, b) in [
-            (Trait::HotHeaded, Trait::Hottempered),
-            (Trait::Empathic, Trait::Empathetic),
-            (Trait::Manipulator, Trait::Manipulative),
+    fn the_old_alias_names_read_back_as_the_trait() {
+        for (old, now) in [
+            ("Hottempered", Trait::HotHeaded),
+            ("Sociable", Trait::Extrovert),
+            ("Introverted", Trait::Introvert),
+            ("Empathetic", Trait::Empathic),
+            ("Manipulative", Trait::Manipulator),
         ] {
-            assert_ne!(
-                a, b,
-                "if these are equal now, this test has done its job and can go"
-            );
+            let read: Trait = serde_json::from_str(&format!("\"{old}\"")).expect("an old name reads");
+            assert_eq!(read, now, "{old}");
         }
     }
 }
@@ -459,11 +439,6 @@ impl Trait {
             Trait::Dishonest => "Frequently lies and manipulates information",
             Trait::Callous => "Doesn't care about others' feelings",
             Trait::Diligent => "Hard worker, gains satisfaction from labor",
-            Trait::Hottempered => "Quick to anger (alias for HotHeaded)",
-            Trait::Sociable => "Enjoys social interaction (alias for Extrovert)",
-            Trait::Introverted => "Prefers solitude (alias for Introvert)",
-            Trait::Empathetic => "Feels others' emotions strongly (alias for Empathic)",
-            Trait::Manipulative => "Lies and manipulates for personal gain (alias for Manipulator)",
             Trait::Obsessive => "Strong focus on specific obsession target",
             Trait::Infertile => "Cannot reproduce due to biological condition",
             Trait::Narcoleptic => "Sleep is less restful, recovers fatigue slower",
@@ -547,11 +522,6 @@ impl Trait {
             Trait::Dishonest => "Dishonest",
             Trait::Callous => "Callous",
             Trait::Diligent => "Diligent",
-            Trait::Hottempered => "Hottempered",
-            Trait::Sociable => "Sociable",
-            Trait::Introverted => "Introverted",
-            Trait::Empathetic => "Empathetic",
-            Trait::Manipulative => "Manipulative",
             Trait::Obsessive => "Obsessive",
             Trait::Infertile => "Infertile",
             Trait::Narcoleptic => "Narcoleptic",
@@ -607,8 +577,8 @@ impl Trait {
             Trait::Envious => &[(D::Luxury, 1.45, 0.75)],
 
             // Other people
-            Trait::Extrovert | Trait::Sociable => &[(D::Social, 1.7, 0.65)],
-            Trait::Introvert | Trait::Introverted => &[(D::Social, 0.45, 1.5)],
+            Trait::Extrovert => &[(D::Social, 1.7, 0.65)],
+            Trait::Introvert => &[(D::Social, 0.45, 1.5)],
             Trait::Charismatic => &[(D::Social, 1.3, 0.85)],
             Trait::Gossip => &[(D::Social, 1.4, 0.8)],
             Trait::Romantic => &[(D::Reproduction, 1.35, 0.8), (D::Social, 1.2, 0.9)],
@@ -685,18 +655,9 @@ impl Trait {
             (Trait::Trusting, Trait::Paranoid) | (Trait::Paranoid, Trait::Trusting) |
             (Trait::Honest, Trait::Dishonest) | (Trait::Dishonest, Trait::Honest) |
             (Trait::Honest, Trait::Manipulator) | (Trait::Manipulator, Trait::Honest) |
-            (Trait::Honest, Trait::Manipulative) | (Trait::Manipulative, Trait::Honest) |
             (Trait::Empathic, Trait::Callous) | (Trait::Callous, Trait::Empathic) |
             (Trait::KindHearted, Trait::Callous) | (Trait::Callous, Trait::KindHearted) |
-            (Trait::Diligent, Trait::Lazy) | (Trait::Lazy, Trait::Diligent) |
-            // Compatibility aliases
-            (Trait::Hottempered, Trait::Calm) | (Trait::Calm, Trait::Hottempered) |
-            (Trait::Hottempered, Trait::Pacifist) | (Trait::Pacifist, Trait::Hottempered) |
-            (Trait::Sociable, Trait::Introvert) | (Trait::Introvert, Trait::Sociable) |
-            (Trait::Sociable, Trait::Introverted) | (Trait::Introverted, Trait::Sociable) |
-            (Trait::Extrovert, Trait::Introverted) | (Trait::Introverted, Trait::Extrovert) |
-            (Trait::Empathetic, Trait::ColdHearted) | (Trait::ColdHearted, Trait::Empathetic) |
-            (Trait::Empathetic, Trait::Callous) | (Trait::Callous, Trait::Empathetic)
+            (Trait::Diligent, Trait::Lazy) | (Trait::Lazy, Trait::Diligent)
         )
     }
 
@@ -725,8 +686,6 @@ impl Trait {
             ],
             Trait::Forgiving => vec![(EmotionType::Anger, 1.0, 2.0)],
             // Compatibility aliases - map to same as their base traits
-            Trait::Hottempered => vec![(EmotionType::Anger, 2.0, 0.5)], // Same as HotHeaded
-            Trait::Empathetic => vec![(EmotionType::Sadness, 2.0, 2.0)], // Same as Empathic
             _ => vec![],
         }
     }
@@ -736,7 +695,6 @@ impl Trait {
         match self {
             Trait::Imaginative => 5.0,    // From embellishing stories
             Trait::Manipulator => 10.0,   // From successful manipulation
-            Trait::Manipulative => 10.0,  // From successful manipulation (alias)
             Trait::Forgiving => 3.0,      // From forgiving others
             Trait::Extrovert => 5.0,      // From social interaction
             Trait::Diligent => 2.0,       // From hard work
@@ -747,7 +705,6 @@ impl Trait {
             Trait::Explorer => 4.0,       // From exploring
             Trait::Caretaker => 3.0,      // From helping others
             // Compatibility aliases
-            Trait::Sociable => 5.0,       // From social interaction (same as Extrovert)
             _ => 0.0,
         }
     }
@@ -762,7 +719,6 @@ impl Trait {
             Trait::Honest => 0.2,          // Others trust you +20%
             Trait::Dishonest => -0.2,      // Others trust you -20%
             Trait::Manipulator => -0.3,    // Others distrust you -30%
-            Trait::Manipulative => -0.3,   // Others distrust you -30% (alias)
             Trait::KindHearted => 0.1,     // Others trust you slightly more
             Trait::Cruel => -0.2,          // Others distrust you
             Trait::Charismatic => 0.15,    // Others trust you more
@@ -778,7 +734,104 @@ pub struct TraitSet {
     pub traits: Vec<Trait>,
 }
 
+/// The ways of answering a want that a person's nature chooses between.
+///
+/// "Drive demand forces action, but traits influence the type of action taken
+/// to satisfy a drive." The drive decides that something is done; these are
+/// the somethings that are open to the same drive, and what a person is like
+/// decides which of them they reach for (#338).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AWay {
+    /// Handing somebody something for nothing
+    Give,
+    /// Telling somebody what you know
+    Share,
+    /// Keeping somebody company for its own sake
+    Talk,
+    /// Swapping what you have spare for what you want
+    Trade,
+    /// Helping yourself to what is somebody else's
+    Take,
+}
+
+impl Trait {
+    /// How much more (or less) readily somebody with this trait reaches for a
+    /// way of answering a want, against somebody without it.
+    pub fn inclines_to(&self, way: AWay) -> f32 {
+        use AWay::*;
+        match (self, way) {
+            (Trait::Altruist, Give) => 3.0,
+            (Trait::KindHearted, Give) => 2.5,
+            (Trait::Caretaker, Give) => 2.0,
+            (Trait::Empathic, Give) => 1.6,
+            (Trait::Charismatic, Give) => 1.2,
+            (Trait::Greedy, Give) => 0.25,
+            (Trait::Cruel, Give) => 0.2,
+            (Trait::Callous, Give) => 0.3,
+            (Trait::ColdHearted, Give) => 0.4,
+            (Trait::Uncaring, Give) => 0.4,
+            (Trait::Frugal, Give) => 0.6,
+            (Trait::Envious, Give) => 0.7,
+
+            (Trait::Gossip, Share) => 3.0,
+            (Trait::Bookworm, Share) => 1.6,
+            (Trait::Charismatic, Share) => 1.3,
+            (Trait::Imaginative, Share) => 1.3,
+            (Trait::Extrovert, Share) => 1.2,
+            (Trait::Mute, Share) => 0.1,
+            (Trait::Stoic, Share) => 0.7,
+            (Trait::Suspicious, Share) => 0.7,
+            (Trait::Introvert, Share) => 0.8,
+
+            (Trait::Extrovert, Talk) => 2.0,
+            (Trait::Charismatic, Talk) => 1.6,
+            (Trait::Clown, Talk) => 1.5,
+            (Trait::Romantic, Talk) => 1.3,
+            (Trait::Empathic, Talk) => 1.2,
+            (Trait::Introvert, Talk) => 0.5,
+            (Trait::Mute, Talk) => 0.4,
+            (Trait::Stoic, Talk) => 0.7,
+            (Trait::Intolerant, Talk) => 0.7,
+
+            (Trait::Pragmatist, Trade) => 1.5,
+            (Trait::Frugal, Trade) => 1.3,
+            (Trait::Charismatic, Trade) => 1.2,
+            (Trait::Greedy, Trade) => 1.2,
+            (Trait::Suspicious, Trade) => 0.7,
+            (Trait::Intolerant, Trade) => 0.7,
+
+            (Trait::Greedy, Take) => 2.5,
+            (Trait::Dishonest, Take) => 2.0,
+            (Trait::Manipulator, Take) => 1.8,
+            (Trait::Cruel, Take) => 1.8,
+            (Trait::Callous, Take) => 1.6,
+            (Trait::Envious, Take) => 1.5,
+            (Trait::Uncaring, Take) => 1.4,
+            (Trait::Rebel, Take) => 1.3,
+            (Trait::Honest, Take) => 0.1,
+            (Trait::KindHearted, Take) => 0.3,
+            (Trait::Altruist, Take) => 0.3,
+            (Trait::Empathic, Take) => 0.5,
+            (Trait::Caretaker, Take) => 0.6,
+            (Trait::Traditionalist, Take) => 0.7,
+
+            _ => 1.0,
+        }
+    }
+}
+
 impl TraitSet {
+    /// How readily this person reaches for a way of answering a want, against
+    /// an ordinary one: every trait's leaning multiplied together, kept within
+    /// reason so that no one person is wholly given over to one way.
+    pub fn how_readily_i(&self, way: AWay) -> f32 {
+        self.get_traits()
+            .iter()
+            .map(|what| what.inclines_to(way))
+            .product::<f32>()
+            .clamp(0.05, 6.0)
+    }
+
     pub fn new() -> Self {
         Self {
             traits: Vec::new(),
@@ -837,8 +890,6 @@ impl TraitSet {
     pub fn would_distort_info(&self) -> Option<Trait> {
         if self.has(Trait::Manipulator) {
             Some(Trait::Manipulator)
-        } else if self.has(Trait::Manipulative) {
-            Some(Trait::Manipulative)
         } else if self.has(Trait::Dishonest) {
             Some(Trait::Dishonest)
         } else if self.has(Trait::Imaginative) {

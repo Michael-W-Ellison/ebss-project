@@ -120,7 +120,7 @@ impl Information {
             Trait::Gossip => self.apply_gossip_distortion(),
 
             // Deceptive distortions
-            Trait::Manipulative | Trait::Manipulator => self.apply_manipulative_distortion(),
+            Trait::Manipulator => self.apply_manipulative_distortion(),
             Trait::Dishonest => self.apply_dishonest_distortion(),
 
             // Fear/Anxiety-based distortions
@@ -129,7 +129,7 @@ impl Information {
             Trait::Suspicious => self.apply_suspicious_distortion(),
 
             // Conflict-related distortions
-            Trait::HotHeaded | Trait::Hottempered => self.apply_hothead_distortion(),
+            Trait::HotHeaded => self.apply_hothead_distortion(),
             Trait::Vengeful => self.apply_vengeful_distortion(),
             Trait::Aggressive => self.apply_aggressive_distortion(),
 
@@ -141,7 +141,7 @@ impl Information {
             // Empathy-based distortions
             Trait::KindHearted => self.apply_kindhearted_distortion(),
             Trait::Cruel | Trait::Callous => self.apply_cruel_distortion(),
-            Trait::Empathic | Trait::Empathetic => self.apply_empathic_distortion(),
+            Trait::Empathic => self.apply_empathic_distortion(),
 
             // Trust-based distortions
             Trait::Trusting => self.apply_trusting_distortion(),
@@ -845,7 +845,7 @@ pub fn calculate_opinion_transfer_chance(
         chance += 0.15;
     }
     // Manipulative speakers are very persuasive (+20%)
-    if speaker_traits.has(Trait::Manipulative) || speaker_traits.has(Trait::Manipulator) {
+    if speaker_traits.has(Trait::Manipulator) {
         chance += 0.20;
     }
     // Gossip trait makes negative talk more compelling (+10%)

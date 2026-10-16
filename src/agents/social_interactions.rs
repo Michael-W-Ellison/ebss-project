@@ -148,12 +148,12 @@ pub fn calculate_relationship_change(
     let mut modifier = 1.0;
 
     // Sociable agents get more benefit from interactions
-    if initiator_traits.contains(&Trait::Sociable) {
+    if initiator_traits.contains(&Trait::Extrovert) {
         modifier += 0.3;
     }
 
     // Introverted agents get less benefit
-    if initiator_traits.contains(&Trait::Introverted) {
+    if initiator_traits.contains(&Trait::Introvert) {
         modifier -= 0.2;
     }
 
@@ -205,12 +205,12 @@ pub fn calculate_social_satisfaction(
     let mut modifier = 1.0_f32;
 
     // Sociable agents enjoy socializing
-    if initiator_traits.contains(&Trait::Sociable) {
+    if initiator_traits.contains(&Trait::Extrovert) {
         modifier += 0.8;
     }
 
     // Introverted agents get less satisfaction
-    if initiator_traits.contains(&Trait::Introverted) {
+    if initiator_traits.contains(&Trait::Introvert) {
         modifier -= 0.4;
     }
 
@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn test_social_satisfaction() {
         let greet = SocialInteractionType::Greet;
-        let traits = vec![Trait::Sociable];
+        let traits = vec![Trait::Extrovert];
         let relationship = RelationshipLevel::neutral();
 
         let satisfaction = calculate_social_satisfaction(&greet, &traits, &relationship);
@@ -394,7 +394,7 @@ mod tests {
     #[test]
     fn test_relationship_change() {
         let greet = SocialInteractionType::Greet;
-        let traits1 = vec![Trait::Sociable];
+        let traits1 = vec![Trait::Extrovert];
         let traits2 = vec![Trait::Peaceful];
         let relationship = RelationshipLevel::neutral();
 

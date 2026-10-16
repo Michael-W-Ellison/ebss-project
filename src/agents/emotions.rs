@@ -718,6 +718,13 @@ pub struct Relationship {
     pub last_interaction_turn: u32,
     /// Total number of interactions
     pub total_interactions: u32,
+    /// How well these two are made to get on, from -1 to 1, read off both
+    /// their natures (`Relationship::affinity_between`). It sets how close
+    /// they could ever become (`how_close_we_could_be`), so that what two
+    /// people are like decides what they can be to each other and how often
+    /// they meet decides how near that they get (#338).
+    #[serde(default)]
+    pub affinity: f32,
 }
 
 impl Relationship {
@@ -739,6 +746,7 @@ impl Relationship {
             time_together: 0,
             last_interaction_turn: 0,
             total_interactions: 0,
+            affinity: 0.0,
         }
     }
 
@@ -751,6 +759,7 @@ impl Relationship {
             time_together: 0,
             last_interaction_turn: current_turn,
             total_interactions: 0,
+            affinity: 0.0,
         }
     }
 
@@ -767,9 +776,155 @@ impl Relationship {
         )
     }
 
-    /// Strengthen bond
+    /// Warm to somebody, by up to `amount`.
+    ///
+    /// Every kindness counted in full and the bond had only a ceiling at 1.0,
+    /// so in a settlement of a dozen everybody ended friends with everybody:
+    /// twelve friends apiece and a mean bond of 0.78, whoever they were
+    /// (#337). A bond now climbs towards how close these two could ever be
+    /// (`how_close_we_could_be`), and each step is worth less the nearer it
+    /// is: the room left is what a kindness can fill.
     pub fn strengthen(&mut self, amount: f32) {
-        self.bond_strength = (self.bond_strength + amount).min(1.0);
+        if amount <= 0.0 {
+            self.weaken(-amount);
+            return;
+        }
+        let ceiling = self.how_close_we_could_be();
+        if self.bond_strength >= ceiling {
+            return;
+        }
+        let room = (ceiling - self.bond_strength) / ceiling.max(0.1);
+        self.bond_strength = (self.bond_strength + amount * room.min(1.0)).min(ceiling);
+    }
+
+    /// The nearest a bond between these two can come.
+    ///
+    /// Blood and a pair bond are not held back by temperament. Anybody else
+    /// is: two people made to clash can be civil at best (0.35), two of a
+    /// kind can be as close as friends get (0.9), and most pairs, neither,
+    /// come to about 0.6 if they keep each other's company.
+    pub fn how_close_we_could_be(&self) -> f32 {
+        if self.is_family() || self.relationship_type == RelationshipType::Partner {
+            return 1.0;
+        }
+        Self::LEAST_CLOSE_PEOPLE_CAN_BE_MADE
+            + (Self::CLOSEST_FRIENDS_GET - Self::LEAST_CLOSE_PEOPLE_CAN_BE_MADE)
+                * (self.affinity.clamp(-1.0, 1.0) + 1.0)
+                / 2.0
+    }
+
+    /// The bond ceiling for two people whose natures clash at every turn.
+    pub const LEAST_CLOSE_PEOPLE_CAN_BE_MADE: f32 = 0.35;
+
+    /// And for two who are made for each other.
+    pub const CLOSEST_FRIENDS_GET: f32 = 0.9;
+
+    /// How well two natures sit together, from -1 to 1.
+    ///
+    /// Like draws to like: every trait the two share counts for them. Some
+    /// pairs pull against each other (`Trait::is_incompatible_with`), the
+    /// worst of them over belief and honesty. And some people are easy to
+    /// like or hard to: a charismatic or kind man is warmed to, a cruel or
+    /// callous one is not. An intolerant man warms only to his own kind, and
+    /// a forgiving one lets a clash count for less.
+    pub fn affinity_between(mine: &TraitSet, theirs: &TraitSet) -> f32 {
+        let shared = mine
+            .get_traits()
+            .iter()
+            .filter(|what| theirs.has_trait(what))
+            .count() as f32;
+
+        let mut clashes = 0.0;
+        for a in mine.get_traits() {
+            for b in theirs.get_traits() {
+                if a.incompatible_with(b) {
+                    clashes += match (a, b) {
+                        (Trait::Believer, Trait::Atheist)
+                        | (Trait::Atheist, Trait::Believer)
+                        | (Trait::Zealot, Trait::Atheist)
+                        | (Trait::Atheist, Trait::Zealot)
+                        | (Trait::Honest, Trait::Dishonest)
+                        | (Trait::Dishonest, Trait::Honest)
+                        | (Trait::Honest, Trait::Manipulator)
+                        | (Trait::Manipulator, Trait::Honest) => 0.5,
+                        _ => 0.35,
+                    };
+                }
+            }
+        }
+        if mine.has(Trait::Forgiving) {
+            clashes *= 0.6;
+        }
+
+        let mut affinity = 0.15 * shared - clashes;
+
+        if mine.has(Trait::Empathic) && theirs.has(Trait::Empathic) {
+            affinity += 0.2;
+        }
+        if mine.has(Trait::Extrovert) && theirs.has(Trait::Extrovert) {
+            affinity += 0.15;
+        }
+        if theirs.has(Trait::Charismatic) {
+            affinity += 0.2;
+        }
+        if theirs.has(Trait::KindHearted) {
+            affinity += 0.15;
+        }
+        if theirs.has(Trait::Cruel) {
+            affinity -= 0.3;
+        }
+        if theirs.has(Trait::Callous) || theirs.has(Trait::ColdHearted) {
+            affinity -= 0.2;
+        }
+        if mine.has(Trait::Intolerant) && shared < 1.0 {
+            affinity -= 0.3;
+        }
+
+        affinity.clamp(-1.0, 1.0)
+    }
+
+    /// The bond nobody has to keep up: a face you know. Anything warmer than
+    /// this fades back towards it when the two stop keeping company.
+    pub const WHERE_AN_UNTENDED_BOND_SETTLES: f32 = 0.2;
+
+    /// How much of the way back it goes in a day: a friendship left alone
+    /// is half gone in about three weeks.
+    pub const WHAT_A_DAY_UNTENDED_TAKES: f32 = 0.03;
+
+    /// And how much of a grudge a day lets go of, for somebody neither
+    /// forgiving nor vengeful.
+    pub const WHAT_A_DAY_HEALS: f32 = 0.01;
+
+    /// A day of not tending this bond.
+    ///
+    /// Nothing ever took a bond down except distance past fifty tiles and a
+    /// grudge, so every kindness ever done stayed done. Now warmth has to be
+    /// kept up, and ill feeling wears off - faster for a forgiving man and
+    /// hardly at all for a vengeful one. Family and a pair bond are kept.
+    pub fn a_day_untended(&mut self, mine: &TraitSet) {
+        if self.is_family() || self.relationship_type == RelationshipType::Partner {
+            return;
+        }
+        let settles = Self::WHERE_AN_UNTENDED_BOND_SETTLES;
+        if self.bond_strength > settles {
+            self.bond_strength -= (self.bond_strength - settles) * Self::WHAT_A_DAY_UNTENDED_TAKES;
+        } else if self.bond_strength < 0.0 {
+            let mut heals = Self::WHAT_A_DAY_HEALS;
+            if mine.has(Trait::Forgiving) {
+                heals *= 2.5;
+            }
+            if mine.has(Trait::Vengeful) {
+                heals *= 0.2;
+            }
+            self.bond_strength += -self.bond_strength * heals;
+        }
+        // Above the ceiling is not a place a bond can stay, whatever put it
+        // there: a man you are made to clash with does not stay a close friend.
+        let ceiling = self.how_close_we_could_be();
+        if self.bond_strength > ceiling {
+            self.bond_strength = ceiling;
+        }
+        self.settle_what_we_are();
     }
 
     /// The most that standing near somebody can be worth on its own.
@@ -955,6 +1110,7 @@ impl Relationship {
         self_traits: &TraitSet,
         other_traits: &TraitSet,
     ) -> bool {
+        self.affinity = Self::affinity_between(self_traits, other_traits);
         let mut total_change = 0.0;
 
         // Check for incompatibilities
@@ -973,12 +1129,12 @@ impl Relationship {
                         // Moderate conflicts (personality clashes)
                         (Trait::Aggressive, Trait::Peaceful) |
                         (Trait::Peaceful, Trait::Aggressive) => 0.02,
-                        (Trait::Hottempered, Trait::Calm) |
-                        (Trait::Calm, Trait::Hottempered) => 0.02,
+                        (Trait::HotHeaded, Trait::Calm) |
+                        (Trait::Calm, Trait::HotHeaded) => 0.02,
 
                         // Minor conflicts (preferences)
-                        (Trait::Sociable, Trait::Introverted) |
-                        (Trait::Introverted, Trait::Sociable) => 0.01,
+                        (Trait::Extrovert, Trait::Introvert) |
+                        (Trait::Introvert, Trait::Extrovert) => 0.01,
                         (Trait::Diligent, Trait::Lazy) |
                         (Trait::Lazy, Trait::Diligent) => 0.015,
 
@@ -991,8 +1147,8 @@ impl Relationship {
         }
 
         // Check for complementary traits (strengthen relationships)
-        if self_traits.has_trait(&Trait::Empathetic) &&
-           other_traits.has_trait(&Trait::Empathetic) {
+        if self_traits.has_trait(&Trait::Empathic) &&
+           other_traits.has_trait(&Trait::Empathic) {
             total_change += 0.02; // Both empathetic
         }
 
@@ -1001,8 +1157,8 @@ impl Relationship {
             total_change *= 0.7;
         }
 
-        if self_traits.has_trait(&Trait::Sociable) &&
-           other_traits.has_trait(&Trait::Sociable) {
+        if self_traits.has_trait(&Trait::Extrovert) &&
+           other_traits.has_trait(&Trait::Extrovert) {
             total_change += 0.015; // Both sociable
         }
 
@@ -1025,9 +1181,9 @@ impl Relationship {
         if a_day_of_it > 0.0 {
             // Getting on with a man will make him a friend. Whether he is more
             // than that is decided by what the two of you have actually done.
-            if self.bond_strength < Self::GETTING_ON_WITH_SOMEBODY {
-                self.bond_strength =
-                    (self.bond_strength + a_day_of_it).min(Self::GETTING_ON_WITH_SOMEBODY);
+            let getting_on = Self::GETTING_ON_WITH_SOMEBODY.min(self.how_close_we_could_be());
+            if self.bond_strength < getting_on {
+                self.bond_strength = (self.bond_strength + a_day_of_it).min(getting_on);
             }
         } else {
             // Friction is friction, and has no floor short of the scale's
@@ -1124,6 +1280,11 @@ impl RelationshipMap {
     }
 
 
+    /// Every relationship, to change.
+    pub fn get_all_mut(&mut self) -> &mut BTreeMap<Uuid, Relationship> {
+        &mut self.relationships
+    }
+
     /// Get all relationships
     pub fn get_all(&self) -> &BTreeMap<Uuid, Relationship> {
         &self.relationships
@@ -1187,13 +1348,13 @@ impl RelationshipMap {
         // Check for synergies
         let mut synergies = 0;
 
-        if self_traits.has_trait(&Trait::Empathetic) &&
-           other_traits.has_trait(&Trait::Empathetic) {
+        if self_traits.has_trait(&Trait::Empathic) &&
+           other_traits.has_trait(&Trait::Empathic) {
             synergies += 1;
         }
 
-        if self_traits.has_trait(&Trait::Sociable) &&
-           other_traits.has_trait(&Trait::Sociable) {
+        if self_traits.has_trait(&Trait::Extrovert) &&
+           other_traits.has_trait(&Trait::Extrovert) {
             synergies += 1;
         }
 
@@ -1572,9 +1733,15 @@ mod tests {
         let mut rel = Relationship::new(crate::core::dice::name(), RelationshipType::Friend);
         assert_eq!(rel.bond_strength, 0.5);
 
+        // A kindness fills part of the room left below how close the two can
+        // be (#338), so two made for each other warm faster than two who are
+        // neither
+        let mut close = rel.clone();
+        close.affinity = 1.0;
         rel.strengthen(0.2);
-        assert_eq!(rel.bond_strength, 0.7);
-        assert!(rel.is_loved_one());
+        close.strengthen(0.2);
+        assert!(rel.bond_strength > 0.5 && rel.bond_strength <= rel.how_close_we_could_be());
+        assert!(close.bond_strength > rel.bond_strength);
     }
 
     #[test]
@@ -1622,12 +1789,12 @@ mod tests {
         let agent2_id = crate::core::dice::name();
 
         let mut agent1_traits = TraitSet::new();
-        agent1_traits.add_trait(Trait::Empathetic);
-        agent1_traits.add_trait(Trait::Sociable);
+        agent1_traits.add_trait(Trait::Empathic);
+        agent1_traits.add_trait(Trait::Extrovert);
 
         let mut agent2_traits = TraitSet::new();
-        agent2_traits.add_trait(Trait::Empathetic);
-        agent2_traits.add_trait(Trait::Sociable);
+        agent2_traits.add_trait(Trait::Empathic);
+        agent2_traits.add_trait(Trait::Extrovert);
 
         let mut rel = Relationship::new(agent2_id, RelationshipType::Acquaintance);
         let initial_strength = rel.bond_strength;
@@ -1772,11 +1939,11 @@ mod tests {
     fn test_are_traits_compatible() {
         // Compatible agents
         let mut compatible1 = TraitSet::new();
-        compatible1.add_trait(Trait::Empathetic);
-        compatible1.add_trait(Trait::Sociable);
+        compatible1.add_trait(Trait::Empathic);
+        compatible1.add_trait(Trait::Extrovert);
 
         let mut compatible2 = TraitSet::new();
-        compatible2.add_trait(Trait::Empathetic);
+        compatible2.add_trait(Trait::Empathic);
         compatible2.add_trait(Trait::Forgiving);
 
         assert!(RelationshipMap::are_traits_compatible(&compatible1, &compatible2));

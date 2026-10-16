@@ -112,7 +112,11 @@ pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria
         return false;
     }
 
-    true
+    // And only a pair. "Mating should only occur between agents in a
+    // relationship": any two adults in reach of each other on a fertile day
+    // could make a child, so the model had about 2.4 matings an adult a day
+    // and no couples (#337, #338). See `Population::pair_off`.
+    agent1.are_we_a_pair(agent2.id) && agent2.are_we_a_pair(agent1.id)
 }
 
 
@@ -496,6 +500,11 @@ mod tests {
         with_a_full_larder(&mut other);
         with_a_full_larder(&mut carrier);
 
+        // And they are a pair: only a pair has children (#338)
+        let (a, b) = (other.id, carrier.id);
+        other.pair_with(b, 0);
+        carrier.pair_with(a, 0);
+
         (other, carrier)
     }
 
@@ -622,7 +631,7 @@ mod tests {
         );
     }
 
-    /// Any two grown people can pair.
+    /// Any two grown people can pair - once they are a pair (#338).
     ///
     /// This was `test_cannot_mate_same_gender` and it asserted the opposite:
     /// two males or two females were refused. "Agents are gender neutral.
@@ -650,8 +659,16 @@ mod tests {
 
         let criteria = MateSelectionCriteria::default();
         assert!(
+            !can_mate(&agent1, &agent2, &criteria),
+            "two grown people who are not a pair have no child together"
+        );
+
+        let (a, b) = (agent1.id, agent2.id);
+        agent1.pair_with(b, 0);
+        agent2.pair_with(a, 0);
+        assert!(
             can_mate(&agent1, &agent2, &criteria),
-            "two grown people, and nothing else to say about them"
+            "two grown people who are, and nothing else to say about them"
         );
     }
 
@@ -680,6 +697,9 @@ mod tests {
 
         with_a_full_larder(&mut agent1);
         with_a_full_larder(&mut agent2);
+        let (a, b) = (agent1.id, agent2.id);
+        agent1.pair_with(b, 0);
+        agent2.pair_with(a, 0);
 
         let criteria = MateSelectionCriteria::default();
         assert!(can_mate(&agent1, &agent2, &criteria));

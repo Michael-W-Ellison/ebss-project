@@ -647,7 +647,13 @@ impl Simulation {
                     return true;
                 }
 
-                agent.how_far_i_trust(they.id, &they.traits) >= Self::WELL_ENOUGH_OF_THEM_TO_GIVE
+                // And a generous nature gives to people it thinks less well
+                // of, a mean one only to people it thinks a great deal of
+                // (#338).
+                let bar = (Self::WELL_ENOUGH_OF_THEM_TO_GIVE
+                    / agent.traits.how_readily_i(crate::core::traits::AWay::Give).sqrt())
+                .clamp(0.15, 0.9);
+                agent.how_far_i_trust(they.id, &they.traits) >= bar
                     && they.what_i_am_short_of().contains(&what.as_str())
             })
             .map(|(_, them)| them.id)
