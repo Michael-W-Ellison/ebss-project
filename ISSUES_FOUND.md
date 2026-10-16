@@ -25403,3 +25403,69 @@ periods); everything else in the kit is made in one.
 
 The seed-0 yearly dice count moved from 1,018,105 to 984,596, and seed 4242's
 120-turn count from 7,743 to 7,934.
+
+### 336. Metal slowed: no reading it in a cold stone, and twenty evenings at the fire
+
+"Slow the metal chain down on scattered maps." Every one of eight scattered
+settlements ran metal out of ore in its first year, some sixty lumps of it,
+and two of them went on to metal axes and so to the wheel (#335). Smooth
+maps have no ore near camp and were never affected.
+
+**What made it fast.** Looking closely at a thing in the pack
+(`Action::Examine`) told a curious person what it went into up to half the
+time, and ore went into the shiny lump. But "rock + fire = ?" is, in the
+lump's own docstring, "nothing an agent can work out by looking at it". A man
+turned a lump of ore over in his hands and knew it would run in a fire.
+
+**What made the first fixes come out wrong, in turn:**
+- **Pottery first** (`what_has_to_be_known_first`: the lump waits on
+  stoneware) holds nothing back. Everybody knows pottery inside a month,
+  learned from a lump that hardens in the embers.
+- **A cooking fire a tenth as hot** stopped metal altogether: none in eight
+  settlements over five years. Ore is in a pack at a fire about seventeen
+  half-hours a year in a settlement, and a tenth of that is a discovery a
+  century.
+- **A practised potter** (thirty firings) would also have stopped it. Pots
+  are fired nought to four times a settlement in three years.
+- **Ore watched by the half hour** let one keen ore-carrier pass any
+  threshold in weeks. One man had a hundred half-hours in his first month,
+  another thirteen hundred in two years, so metal still came on day thirty
+  and day sixty. Many of those half-hours were asleep: noticing never asked
+  whether anybody was awake.
+- **Ore went out of mind.** Nobody keeps in mind where something lies that
+  makes nothing they know, so every ore site was forgotten within a month.
+  Whatever was going to come of a bright stone came in the first month or
+  never.
+
+**The chain now:**
+- Looking at a thing does not reveal anything made over a fire (`examining`,
+  `what_i_would_look_at`).
+- Nobody notices anything asleep (`somebody_notices_something`).
+- An evening at a fire with two lumps of ore in the pack, awake and curious,
+  counts once a day as ore watched (`ORE_WATCHED_IN_A_FIRE`). The twentieth
+  such evening shows it run (`TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS`,
+  `how_practised_first`).
+- A pot fired with ore beside it shows it one time in four, for somebody far
+  enough along (`what_firing_this_might_show`).
+- Curiosity fetches ore only from somebody who knows pottery.
+- Somebody far enough along to wonder about a discovery keeps the nearest
+  few places of its raw makings in mind, as for the tools they know.
+- A working now counts towards the hand at that one thing, as a making does
+  (#335).
+
+**Measured on scattered ground, 12 founders.** Over four years the keenest
+ore-watcher in each settlement had between six and twenty-one evenings, half
+of them in the first two months. With twenty to see it:
+
+| seed | evenings watched | first metal |
+|---|---|---|
+| 4 | 21 | day 600 |
+| 1 | 21 | day 1,020 |
+| 2 | 18 by day 1,080 | none by day 1,080 |
+| 5 | 17 by day 1,440 | none in four years |
+| 3, 7 | 10 or fewer | none |
+
+Before this, all eight ran metal inside the first year.
+
+The seed-0 yearly dice count moved from 984,596 to 939,765, and seed 4242's
+120-turn count from 7,934 to 7,954.

@@ -219,7 +219,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // and only a making with something sharp or hot in it can hurt.
     // Up to 7,934 for #335: the hand at each thing made, and a making that
     // holds an unpractised hand longer than a period.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_934;
+    // Up to 7,954 for #336: nobody notices anything asleep, and the makings
+    // of a discovery somebody wonders about are kept in mind.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_954;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -486,7 +488,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 3.3% to 984,596 for #335: the hand at each thing made, the wheel
     // behind pottery and metal, curiosity spent after three, and kills
     // fetched for the store.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 984_596;
+    // Down 4.6% to 939,765 for #336: ore is not read in a cold stone, nobody
+    // notices anything asleep, and metal waits on twenty evenings at a fire
+    // with ore in the pack.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 939_765;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

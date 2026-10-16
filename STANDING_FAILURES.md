@@ -28,13 +28,11 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #335): `cargo test --lib` in one piece.
-2,844 tests run: 2,837 passed, 3 failed, 4 ignored, in 1,791 s. Two were the
-dice counts, which #335 moves; recorded anew and passing on their own. The
-third, `tool_wear_tests::even_crude_work_beats_bare_hands`, asked a founder for
-crude work by lowering the trade alone, and founders now arrive having made
-spears; it clears the practice too and passes. The dice counts are 7,934 (seed
-4242, 120 turns) and 984,596 (seed 0, a year). That
+**Last full run** (ISSUES_FOUND #336): `cargo test --lib` in one piece.
+2,850 tests run: 2,844 passed, 2 failed, 4 ignored, in 983 s. The two were
+the dice counts, which #336 moves; recorded anew and passing on their own.
+The dice counts are 7,954 (seed 4242, 120 turns) and 939,765 (seed 0, a
+year). That
 leaves:
 - The two multi-generation tests below, which are ignored long runs.
 
