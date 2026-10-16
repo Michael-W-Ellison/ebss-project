@@ -1326,27 +1326,13 @@ pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
 ///
 /// A pot fire is the hottest fire a stone-age people builds, and the first
 /// metal anybody ran came out of one: a bright stone beside the pots, and a
-/// bead of something that was not stone in the ash afterwards. The cooking
-/// fire is a tenth as likely to show it (`how_often_a_fire_is_hot_enough_for`),
-/// so this is the road metal comes by: through the potter, and slowly (#336).
+/// bead of something that was not stone in the ash afterwards. It is the
+/// second road to metal beside a curious man at a cooking fire, and both want
+/// the ore in the pack, which is what makes either slow (#336).
 pub fn what_firing_this_might_show(makes: &str) -> Option<(&'static str, u32, &'static str, f64)> {
     match makes {
         "stoneware" => Some(("iron", 2, "shinylump", 0.25)),
         _ => None,
-    }
-}
-
-/// How often a fire is hot enough for this to happen in it at all.
-///
-/// One for everything a cooking fire does. A fire that runs metal out of a
-/// stone is a fire built up and fed far past what anybody cooks on, and most
-/// fires never get there: a man can sit at one with ore in his pack all
-/// winter and see nothing but a hot stone. So the moment of seeing it comes a
-/// tenth as often as the moment of seeing a pot harden (#336).
-pub fn how_often_a_fire_is_hot_enough_for(what: &str) -> f64 {
-    match what {
-        "shinylump" => 0.1,
-        _ => 1.0,
     }
 }
 
