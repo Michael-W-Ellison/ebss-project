@@ -25485,3 +25485,87 @@ Births by seed:
 - scattered: 11 8 8 8 9 7 6 9.
 
 The one death is of thirst.
+
+### 337. Measured: what personality does to how people deal with each other
+
+"Do agents change their interactions due to their personality traits?" Read
+off the code, a good deal does: drive leanings, trust, lying, the cost of
+theft, bonds from compatibility, and the proximity effects. Nobody had
+measured whether any of it shows. This is that measurement, and no model code
+changes with it.
+
+**How.** Forty settlements (smooth 1–24, scattered 1–16), two years each, 12
+founders. A probe logged every social action by who did it, to whom and
+whether it came off; every lie told to a room, and who believed it; every
+claim passed on one to one, with whether it was twisted and how far it was
+believed; and every question asked and whether the answer was taken. At the
+end each person's traits and bonds were written down. 466 people lived at
+least 60 days past twelve. Each trait's holders are set against everybody
+else with a rank test (Mann–Whitney), so a few people with hundreds of social
+actions do not swamp the means, and rare events are given as counts. Traits
+held by fewer than 8 adults are left out.
+
+**Where the settlement stands, whoever is in it:**
+- Everybody is friends with everybody. Each person ends on about 12 friends,
+  mean bond 0.78, and 0.02 enemies.
+- People believe 97.8% of what they are told, and 97.7% of lies.
+- About 2.4 mating attempts per adult a day, 89% of them "succeeding".
+- Gifts are 0.4 a day each.
+- Theft is 191 takings by 29 of 466 people in two years; trade is 194.
+- Attacks are 2,450, by 214 people.
+- No relationship is ever a `Partner`: nothing assigns it.
+
+**Traits that visibly change behaviour** (holders against everybody else):
+
+| behaviour | trait | holders | others |
+|---|---|---|---|
+| lies to a room, per 100 adult days (median) | Dishonest | 18.1 | 0 |
+| | Manipulator | 10.6 | 0 |
+| twists what it passes on (median share) | Manipulator, Imaginative, Dishonest | about 2% | 0 |
+| believes what it is told | Suspicious | 71% | 99.9% |
+| | Skeptic | 90% | 99.9% |
+| believes a lie | Suspicious | 70% | 100% |
+| takes the answer to a question | Suspicious | 6% | 100% |
+| confidence in what it is told | Manipulator, Suspicious | 0.67 | 0.97 |
+| | Trusting | 0.99 | 0.96 |
+| is believed | Cruel | 88% | 99.6% |
+| attacks, per 1000 adult days | Dishonest | 43.8 | 5.2 |
+| | Manipulator | 36.7 | 4.7 |
+| | Vengeful | 20.8 | 6.2 |
+| | Aggressive | 13.8 | 6.9 |
+| | Pacifist, Forgiving, Calm | 0.4–0.5 | 7.7 |
+| is attacked | Hot-Headed | 23.1 | 5.8 |
+| socialises, per 100 adult days (median) | Extrovert | 61.5 | 41.9 |
+| | Charismatic | 60.4 | 41.9 |
+| | Romantic | 53.6 | 41.9 |
+| | Introvert | 31.5 | 43.8 |
+| shares what it knows (median) | Extrovert | 69.6 | 43.6 |
+
+**What barely registers, or runs the wrong way:**
+- **Bonds.** No trait moves the number of friends, and the mean bond moves
+  by about 5% at most (Hot-Headed, Lazy and Cold-Hearted lower; Altruist
+  higher). Compatibility is read every turn, but living side by side fills
+  every bond up regardless.
+- **Generosity.** Altruists give 0.69 times as often as everybody else,
+  Kind-Hearted 0.90, Caretakers 1.14, Greedy 1.04 and Cruel 1.04. Giving is
+  not a matter of temperament.
+- **Theft.** Greedy people stole nothing and one Honest person in twelve
+  stole nine times. With every bond near its top, what a theft costs among
+  friends swamps the Honest and Greedy multipliers.
+- **Mating.** Romantic people try 1.21 times as often.
+- **Cruel** people attack a tenth as often as everybody else.
+- **Gossip** people socialise 1.14 times as often, against a 1.4 leaning.
+- **Trusting** has nothing to raise: everybody already believes nearly
+  everything.
+
+**Traits that can never show, whatever they are written to do:**
+- Sociable, Introverted, Hottempered, Empathetic and Manipulative are
+  checked in the code but are in neither the founders' draw nor the
+  mutation pool. They are near-twins of Extrovert, Introvert, Hot-Headed,
+  Empathic and Manipulator, which are drawn, so every branch on them is dead.
+- Paranoid, Mute, Deaf, Blind and the rest of the mutation-only traits did
+  not appear in any adult in two years.
+- The Romantic partner-proximity and Insecure partner-jealousy effects look
+  for a `Partner` relationship, which is never made.
+- `Population::process_gossip`, where Gossip people spread twisted rumours,
+  is never called.
