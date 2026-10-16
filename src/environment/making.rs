@@ -1320,6 +1320,22 @@ pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
     }
 }
 
+/// What else a firing of this might show somebody, if they have the stuff for
+/// it in their pack: what has to be beside it, how much, what it shows, and
+/// the odds of seeing it on one firing.
+///
+/// A pot fire is the hottest fire a stone-age people builds, and the first
+/// metal anybody ran came out of one: a bright stone beside the pots, and a
+/// bead of something that was not stone in the ash afterwards. The cooking
+/// fire is a tenth as likely to show it (`how_often_a_fire_is_hot_enough_for`),
+/// so this is the road metal comes by: through the potter, and slowly (#336).
+pub fn what_firing_this_might_show(makes: &str) -> Option<(&'static str, u32, &'static str, f64)> {
+    match makes {
+        "stoneware" => Some(("iron", 2, "shinylump", 0.25)),
+        _ => None,
+    }
+}
+
 /// How often a fire is hot enough for this to happen in it at all.
 ///
 /// One for everything a cooking fire does. A fire that runs metal out of a

@@ -385,3 +385,51 @@ fn molding_is_a_live_verb() {
 
     assert!(mold.is_live(), "and now something does it");
 }
+
+// --------------------------------------------------------------------------
+// The kiln and the first metal (#336)
+// --------------------------------------------------------------------------
+
+/// Fire some pots with a bright stone in the pack beside them, and sooner or
+/// later something that is not stone runs out of it. That is how metal comes
+/// to a people at all: through the potter.
+fn fire_pots(with_iron: bool, times: u32) -> bool {
+    let mut simulation = one_person();
+    let here = simulation.population.agents[0].state.position;
+    a_lit_fire_at(&mut simulation, here);
+    simulation.population.agents[0].found_out_how_to("stoneware");
+
+    for _ in 0..times {
+        let agent = &mut simulation.population.agents[0];
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight("claypot".to_string(), 1, 1.0));
+        if with_iron && agent.how_many_i_have("iron") < 2 {
+            agent
+                .inventory
+                .add_item(InventoryItem::new_with_weight("iron".to_string(), 2, 1.0));
+        }
+        simulation.population.agents[0].busy_until = 0;
+        simulation.execute_action(
+            &Action::Work {
+                verb: "fire".to_string(),
+                to: "claypot".to_string(),
+            },
+            0,
+        );
+        if simulation.population.agents[0].knows_how_to_make("shinylump") {
+            return true;
+        }
+    }
+    false
+}
+
+#[test]
+fn a_bright_stone_beside_the_pots_runs_in_the_pot_fire() {
+    assert!(fire_pots(true, 60), "sixty firings with ore beside them");
+}
+
+#[test]
+fn a_pot_fire_with_no_ore_in_it_shows_nothing_but_pots() {
+    assert!(!fire_pots(false, 200));
+}

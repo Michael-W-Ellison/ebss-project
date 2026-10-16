@@ -175,6 +175,17 @@ impl Simulation {
             // hand and a fire that will not light finds out what
             // shavings are for by making some.
             agent.found_out_how_to(working.makes);
+
+            // And a pot fire with a bright stone beside it may show more than
+            // a pot (`what_firing_this_might_show`).
+            if let Some((beside, how_many, shows, odds)) = making::what_firing_this_might_show(working.makes) {
+                let could_see_it = agent.what_i_could_find_out().any(|step| step.makes == shows)
+                    && !agent.knows_how_to_make(shows);
+                if could_see_it && agent.how_many_i_have(beside) >= how_many && rng.gen_bool(odds) {
+                    agent.found_out_how_to(shows);
+                    debug!("Agent {} saw a {beside} run in the pot fire ({shows})", agent.id);
+                }
+            }
         }
 
         // And the edge that did it is the worse for it
