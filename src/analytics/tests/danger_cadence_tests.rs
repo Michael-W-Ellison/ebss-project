@@ -122,6 +122,9 @@ fn a_wolf_across_the_country_is_not_a_danger() {
 }
 
 /// The half hour is a ceiling: nobody gets more minutes than the turn holds.
+///
+/// The minutes taken one at a time come out of the half hour, not on top of
+/// it: at most every minute of it.
 #[test]
 fn nobody_gets_more_minutes_than_the_turn_holds() {
     let mut simulation = one_person_and_a_wolf();
@@ -131,7 +134,7 @@ fn nobody_gets_more_minutes_than_the_turn_holds() {
         simulation.take_a_turn();
     }
 
-    let ceiling = turns * (MINUTES_PER_TURN as u64 - 1);
+    let ceiling = turns * MINUTES_PER_TURN as u64;
     assert!(
         simulation.minutes_spent_in_danger <= ceiling,
         "{turns} turns cannot hold more than {ceiling} extra minutes, got {}",
@@ -151,4 +154,227 @@ fn the_fast_clock_costs_nothing_where_there_is_no_danger() {
         quiet.minutes_spent_in_danger, 0,
         "the minute clock is for danger and there was none"
     );
+}
+
+/// A small child takes no minutes of its own.
+///
+/// It takes no turn either: it is carried, and goes where its people go. The
+/// minute clock asked it every minute what it would do about the beast, it
+/// did nothing, and the beast had a strike at it every one of those minutes.
+/// An infant left on the spot where its people had stood was struck four
+/// times in a half hour and died of it (#325).
+#[test]
+fn a_small_child_is_not_given_the_minutes() {
+    let mut simulation = one_person_and_a_wolf();
+    let child = &mut simulation.population.agents[0];
+    child.state.age = 0;
+    child.state.life_stage = LifeStage::Infant;
+
+    let mut ever_afraid = false;
+    for _ in 0..8 {
+        simulation.take_a_turn();
+        ever_afraid |= simulation.population.agents[0].emotions.in_danger();
+    }
+
+    assert!(ever_afraid, "the child is meant to be frightened of the wolf");
+    assert_eq!(
+        simulation.minutes_spent_in_danger, 0,
+        "a child who cannot act was given minutes to act in"
+    );
+}
+
+/// Everybody decides once a half hour, and not all at the same minute.
+///
+/// "Agents should have their 30 minute decision ticks separated out to
+/// prevent lag spikes if every agent was forced to make decisions at the
+/// exact same time."
+#[test]
+fn everybody_keeps_their_own_half_hour() {
+    let mut population = Population::new();
+    for _ in 0..12 {
+        population.spawn_agent(AgentConfig::default());
+    }
+    let mut simulation = Simulation::new(an_empty_country(), population);
+    for agent in simulation.population.agents.iter_mut() {
+        agent.state.position = (30, 30, 0);
+        agent.state.life_stage = LifeStage::Adult;
+    }
+
+    simulation.take_a_turn();
+
+    let began = simulation.current_turn;
+    let mut minutes = std::collections::BTreeSet::new();
+    for agent in &simulation.population.agents {
+        let mine = Simulation::my_minute_of_the_half_hour(agent.id);
+        minutes.insert(mine);
+        assert_eq!(
+            agent.state.next_decision_at,
+            began + mine + MINUTES_PER_TURN,
+            "decided once, at their own minute, and next in half an hour"
+        );
+    }
+    assert!(minutes.len() > 1, "twelve people all deciding at the same minute");
+}
+
+/// Hunger and thirst are answered on the half hour, with every other need.
+///
+/// The fear of going without used to count as danger, so somebody parched
+/// took the half hour a minute at a time, and a beast beside them had a
+/// strike at them every minute (#325).
+#[test]
+fn going_without_is_answered_on_the_half_hour() {
+    let mut simulation = one_person_alone();
+    let agent = &mut simulation.population.agents[0];
+    for need in [crate::core::DriveType::Thirst, crate::core::DriveType::Hunger] {
+        if let Some(drive) = agent.drives.get_mut(need) {
+            drive.value = 1.0;
+        }
+    }
+
+    for _ in 0..6 {
+        simulation.take_a_turn();
+    }
+
+    assert_eq!(
+        simulation.minutes_spent_in_danger, 0,
+        "nothing was after anybody, however thirsty they were"
+    );
+}
+
+fn a_starving_wolf(simulation: &mut Simulation) {
+    for animal in simulation.world.animals.get_all_mut() {
+        animal.hunger = animal.max_hunger;
+    }
+}
+
+/// Struck in their sleep, a sleeper wakes and answers it.
+///
+/// "Agents should not be peacefully sleeping while being attacked."
+#[test]
+fn a_sleeper_who_is_struck_wakes_and_decides_now() {
+    let mut simulation = one_person_and_a_wolf();
+    a_starving_wolf(&mut simulation);
+    simulation.current_turn = 600;
+    let agent = &mut simulation.population.agents[0];
+    agent.state.health = 100.0;
+    agent.fatigue.is_sleeping = true;
+    agent.busy_until = 10_000;
+    agent.state.next_decision_at = 10_000;
+
+    let mut struck = false;
+    for _ in 0..500 {
+        simulation.predators_try_their_luck_at(0);
+        if simulation.population.agents[0].state.health < 100.0 {
+            struck = true;
+            break;
+        }
+    }
+
+    assert!(struck, "the wolf is meant to strike");
+    let agent = &simulation.population.agents[0];
+    assert_eq!(agent.busy_until, 0, "still asleep under the wolf");
+    assert!(agent.state.next_decision_at <= simulation.current_turn, "and left to decide later");
+}
+
+/// A beast that is about and does no harm comes to frighten less, and a blow
+/// from one makes it a stranger again.
+///
+/// "An unknown animal or situation might cause fear at first only to
+/// eventually be ignored as an agent adjusts to it."
+#[test]
+fn a_beast_that_does_no_harm_comes_to_frighten_less() {
+    let mut simulation = one_person_and_a_wolf();
+
+    simulation.feel_about_what_stands_in_the_way();
+    let at_first = simulation.population.agents[0].emotions.fear;
+    for _ in 0..200 {
+        simulation.feel_about_what_stands_in_the_way();
+    }
+    let after_a_while = simulation.population.agents[0].emotions.fear;
+    assert!(at_first > 0.6, "a stranger at the elbow is meant to frighten: {at_first}");
+    assert!(
+        after_a_while < at_first / 2.0,
+        "four days beside it and no harm done, and still {after_a_while} against {at_first}"
+    );
+
+    a_starving_wolf(&mut simulation);
+    let before = simulation.population.agents[0].state.health;
+    for _ in 0..500 {
+        simulation.predators_try_their_luck_at(0);
+        if simulation.population.agents[0].state.health < before {
+            break;
+        }
+    }
+    assert!(
+        simulation.population.agents[0].familiar_with.is_empty(),
+        "bitten, and still used to it: {:?}",
+        simulation.population.agents[0].familiar_with
+    );
+}
+
+/// A beast that would kill sooner than thirst is answered before thirst.
+///
+/// "Primary Drive demand should be determined by whichever drive results in
+/// the largest threat to the continued survival of the agent."
+#[test]
+fn what_kills_first_is_answered_first() {
+    let mut simulation = one_person_and_a_wolf();
+    simulation.feel_about_what_stands_in_the_way();
+    if let Some(thirst) = simulation.population.agents[0].drives.get_mut(crate::core::DriveType::Thirst) {
+        thirst.value = 1.0;
+    }
+
+    let the_wolf = simulation
+        .minutes_before_what_is_after_me_kills_me(0)
+        .expect("the wolf is after him");
+    let the_thirst = Simulation::minutes_before_want_kills_me(&simulation.population.agents[0]);
+    assert!(the_wolf < the_thirst, "the wolf in {the_wolf} minutes, thirst in {the_thirst}");
+}
+
+fn one_person_beside(species: &str, years: u32) -> Simulation {
+    let mut world = an_empty_country();
+    world.spawn_animal(species.to_string(), (30, 31)).expect("it should spawn");
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+    let agent = &mut simulation.population.agents[0];
+    agent.state.position = (30, 30, 0);
+    agent.state.now_this_many_years_old(years);
+    agent.state.health = HURT_ENOUGH_TO_BE_AFRAID;
+    simulation
+}
+
+fn afraid_or_angry_at_a_beast(simulation: &Simulation) -> bool {
+    let emotions = &simulation.population.agents[0].emotions;
+    emotions.what_frightens_me_most().is_some() || emotions.what_angers_me_most().is_some()
+}
+
+/// A beast that hunts nothing frightens nobody, and nobody fights it.
+///
+/// Nothing that does not hunt strikes anybody of its own accord, and a
+/// frightened man with a loved one two paces from a mammoth stood over them
+/// and fought it, at forty a blow; nine fought it at once, and one died of it
+/// (#327).
+#[test]
+fn a_beast_that_never_strikes_frightens_nobody() {
+    let mut simulation = one_person_beside("mammoth", 30);
+    simulation.feel_about_what_stands_in_the_way();
+
+    assert!(!afraid_or_angry_at_a_beast(&simulation), "a hurt man beside a mammoth");
+    assert!(!simulation.something_is_after_me(0));
+}
+
+/// And a hunter too small to take a grown person frightens only the small.
+///
+/// An eagle takes a child and not a man, and grown people squared up to
+/// eagles, kestrels and herons hundreds of times a year (#327).
+#[test]
+fn an_eagle_frightens_a_child_and_not_a_grown_person() {
+    let mut grown = one_person_beside("eagle", 30);
+    grown.feel_about_what_stands_in_the_way();
+    assert!(!afraid_or_angry_at_a_beast(&grown), "a grown man squaring up to an eagle");
+
+    let mut child = one_person_beside("eagle", 4);
+    child.feel_about_what_stands_in_the_way();
+    assert!(afraid_or_angry_at_a_beast(&child), "but a child of four is meant to be afraid of it");
 }

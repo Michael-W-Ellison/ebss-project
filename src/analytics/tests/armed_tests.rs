@@ -54,6 +54,11 @@ fn give_him_a_spear(simulation: &mut Simulation) {
 /// answer, because a wolf that dies to the first blow absorbs no more than a
 /// wolf's worth of it however hard the blow was.
 fn blows_to_put_it_down(with_a_spear: bool) -> f32 {
+    blows_to_put_it_down_with(with_a_spear.then_some("spear"))
+}
+
+/// The same, with whatever is named in his pack.
+fn blows_to_put_it_down_with(in_the_pack: Option<&str>) -> f32 {
     const HOW_MANY_FIGHTS: u64 = 40;
     const BEFORE_GIVING_UP: u32 = 60;
 
@@ -66,8 +71,10 @@ fn blows_to_put_it_down(with_a_spear: bool) -> f32 {
         crate::core::dice::seed(8_000 + seed);
 
         let (mut simulation, which) = a_man_and_a_wolf();
-        if with_a_spear {
-            give_him_a_spear(&mut simulation);
+        if let Some(what) = in_the_pack {
+            simulation.population.agents[0]
+                .inventory
+                .add_item(InventoryItem::new_with_weight(what.to_string(), 1, 2.0));
         }
 
         // Seeded *after* the world is built, not before it. What is being
@@ -81,6 +88,12 @@ fn blows_to_put_it_down(with_a_spear: bool) -> f32 {
         crate::core::dice::seed(9_000 + seed);
 
         for swung in 1..=BEFORE_GIVING_UP {
+            // Whole for every swing, so that what is counted is how fast the
+            // wolf goes down and not how long the man lasts. Counting a fight
+            // the man died in as a fight over let this pass for years while
+            // every blow that landed killed the wolf, with a spear or without:
+            // the spear's men lasted a swing or two longer (#328).
+            simulation.population.agents[0].state.health = 100.0;
             let mut rng = crate::core::dice::roll();
             let _ = simulation.fighting_a_beast(&which, &None, 0, &mut rng, 10);
 
@@ -171,3 +184,20 @@ fn a_fight_and_a_hunt_read_the_same_hand() {
 }
 
 
+
+/// And a better point puts it down in fewer blows than a worse one.
+///
+/// "A wooden spear is enough, but should take several attacks to kill the
+/// animal ... A flint spear should reduce the number of attacks." Every blow
+/// that landed killed the wolf, bare-handed or not, so no point could take a
+/// blow off the fight (#328).
+#[test]
+fn a_flint_spear_puts_it_down_in_fewer_blows_than_a_sharpened_stick() {
+    let stick = blows_to_put_it_down_with(Some("sharpenedstick"));
+    let flint = blows_to_put_it_down_with(Some("spear"));
+    let bare = blows_to_put_it_down_with(None);
+
+    assert!(stick >= 2.5, "a sharpened stick is meant to take several blows: {stick:.1}");
+    assert!(flint < stick * 0.85, "flint {flint:.1} against a sharpened stick {stick:.1}");
+    assert!(stick < bare * 0.5, "a sharpened stick {stick:.1} against bare hands {bare:.1}");
+}

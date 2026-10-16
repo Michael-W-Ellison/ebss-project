@@ -171,7 +171,12 @@ fn an_agent_will_not_eat_what_it_has_ruined() {
 /// wood is already in the pack. See ISSUES_FOUND #224.
 #[test]
 fn an_agent_lights_a_fire_and_cooks_on_it() {
-    let mut world = World::new(WorldConfig::default());
+    // On the scattered ground this was written on. On smooth country, round
+    // the corner the agent starts in, it dried its fish sixteen times and ate
+    // forty-one meals over four hundred turns and never wanted a fire: there
+    // was other food to hand, and keeping the fish was the better use of it.
+    // That is a fair answer, and not the one this test is asking about (#318).
+    let mut world = World::new(WorldConfig::default().with_scattered_terrain());
 
     // Nothing to hunt and nothing to be hunted by: this is about the fire
     world.animals.get_all_mut().clear();

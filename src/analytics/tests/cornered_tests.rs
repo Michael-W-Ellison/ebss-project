@@ -271,3 +271,26 @@ fn it_does_not_run_into_the_wood_the_pack_lives_in() {
         "and it should still have got clear of the wolf, not stayed put at {landed:?}"
     );
 }
+
+/// A beast standing on the very tile somebody is on can still be run from.
+///
+/// Which way is away was worked out from where the thing stood, and when it
+/// stood on top of you there was no away: every one of the eight ways out
+/// was the tile you were on, so there was nowhere to run on open ground. On
+/// one big-map seed, 28,622 turns in a year ended in a freeze for that reason,
+/// mostly with a lion or a camel on the tile. The children froze, and their
+/// parents stood over them and fought the lion, and four died of it. See
+/// ISSUES_FOUND #308.
+#[test]
+fn something_on_your_own_tile_can_still_be_run_from() {
+    let world = a_country_shaped_like(|_, _| true);
+    let middle = (world.grid.width as i32 / 2, world.grid.height as i32 / 2);
+    let simulation = one_person(world, (middle.0, middle.1, 0));
+    let remembers = simulation.population.agents[0].exploration_knowledge.clone();
+
+    let landed = simulation.where_this_one_would_run(&remembers, (middle.0, middle.1, 0), middle);
+    assert!(landed.is_some(), "open ground all round, and nowhere to run from a thing underfoot");
+    let (x, y, _) = landed.unwrap();
+    assert_ne!((x, y), middle, "ran on the spot");
+    assert!(simulation.is_there_anywhere_to_run(&remembers, (middle.0, middle.1, 0), middle));
+}

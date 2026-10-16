@@ -23,7 +23,9 @@ use crate::environment::{making, Action};
 use crate::world::{Position, ResourceNode, ResourceType, World, WorldConfig};
 
 fn one_person() -> Simulation {
-    let mut world = World::new(WorldConfig::default());
+    // Open ground: on smooth country the middle of the test map can be the
+    // sea, and nobody drinks from a spring in it (#318).
+    let mut world = World::new(WorldConfig::default()).all_open_grass();
     world.animals.get_all_mut().clear();
     world.buildings.clear();
     world.resources.clear();

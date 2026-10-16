@@ -206,10 +206,36 @@ impl Simulation {
             return None;
         }
 
-        Some(Self::put_ground_between(
+        Some(self.away_on_this_side(
+            agent,
             agent_position,
             (where_they_are.0, where_they_are.1),
+            Self::put_ground_between(agent_position, (where_they_are.0, where_they_are.1)),
         ))
+    }
+
+    /// A walk away from something, kept to ground this one can walk.
+    ///
+    /// Running away is worked out as a straight line, and a straight line
+    /// runs into the river as readily as anywhere. Where its end is on the
+    /// far bank there is no way there, and the walk was refused at its first
+    /// step: on two worlds, three and five hundred turns a year of somebody
+    /// frightened standing still (#323). Then it is the best way out that a
+    /// bolt would take, which only lands where it can be walked back from
+    /// (`where_this_one_would_run`), walked rather than bolted.
+    pub(in crate::analytics) fn away_on_this_side(
+        &self,
+        agent: &crate::agents::Agent,
+        from: (i32, i32, i32),
+        away_from: (i32, i32),
+        straight: Action,
+    ) -> Action {
+        if self.can_this_be_got_to(from, &straight) {
+            return straight;
+        }
+        self.where_this_one_would_run(&agent.exploration_knowledge, from, away_from)
+            .map(|target| Action::Move { target })
+            .unwrap_or(straight)
     }
 
     /// The whole answer to a thing that would kill you, in the order the
@@ -490,6 +516,18 @@ impl Simulation {
                     .max((them.state.position.1 - where_it_is.1).abs())
                     <= Self::STANDING_OVER_THEM
             })
+            // **And not one this agent carries off with them.** A child under
+            // six is kept wherever its keeper is (`the_small_stay_with_their_people`),
+            // so a parent who runs takes the child along, and there is nobody
+            // left standing in the thing's way. Read as in the way, an infant
+            // in arms made every lion that came within two paces of its
+            // parent a fight the parent had to have: on one big-map seed a
+            // mother of forty-three stood over hers thirty-three times in an
+            // afternoon at the same two paces. See ISSUES_FOUND #308.
+            .filter(|them| {
+                them.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+                    || self.who_a_small_child_is_kept_with(them) != Some(agent.id)
+            })
             // And unable to do anything about it. Somebody who can fight it
             // themselves is not being protected, they are being joined
             .any(|them| !them.could_i_fight_at_all(coming))
@@ -545,7 +583,21 @@ impl Simulation {
         let dy = from.1 - away_from.1;
         let span = (((dx * dx + dy * dy) as f32).sqrt()).max(1.0);
 
-        let straight = (dx as f32 / span, dy as f32 / span);
+        // **And when the thing is standing on you, any way is away.** Away
+        // was worked out from where it stood, and from the very tile you are
+        // on there is no away: all eight ways out came to nought, every
+        // landing was the tile itself, and there was nowhere to run on open
+        // ground. On one big-map seed that froze people 28,622 turns in a
+        // year, mostly with a lion or a camel underfoot - and a frozen child
+        // is a child its parent stands over, so four parents fought a lion
+        // and died of it. Any one of the eight is as far from the thing as
+        // another, so where to land is left to the scoring below. See
+        // ISSUES_FOUND #308.
+        let straight = if dx == 0 && dy == 0 {
+            (1.0, 0.0)
+        } else {
+            (dx as f32 / span, dy as f32 / span)
+        };
 
         // Straight away, then an eighth-turn either side, then a quarter,
         // and so round to behind. Listed nearest-to-away first, so that
@@ -560,6 +612,7 @@ impl Simulation {
         });
 
         let bolt = Self::HOW_FAR_A_FRIGHTENED_PERSON_GETS;
+        let a_way_back = self.where_a_walk_gets_from((from.0, from.1), bolt + Self::A_WAY_ROUND);
 
         ways.iter()
             .filter_map(|(wx, wy)| {
@@ -574,10 +627,7 @@ impl Simulation {
 
                     let moved = landed.0 != from.0 || landed.1 != from.1;
 
-                    (moved
-                        && self.is_passable_tile(landed.0, landed.1)
-                        && self.can_this_be_walked_out_of((landed.0, landed.1), (from.0, from.1)))
-                    .then_some(landed)
+                    (moved && a_way_back((landed.0, landed.1))).then_some(landed)
                 })
             })
             .min_by(|one, other| {
@@ -587,39 +637,55 @@ impl Simulation {
             })
     }
 
-    /// Whether somebody landing at `at` could walk away from it again.
-    ///
-    /// **A bolt may clear a river; it may not land on a rock.** A frightened
-    /// person runs over whatever is in the way, water included, and that is
-    /// worth something: whatever was after them is on the other bank. But it
-    /// asked only whether the landing was ground, so somebody bolted onto a
-    /// rock in the sea at the corner of the map with water all round it,
-    /// which nobody can walk off - two worlds in sixteen, somebody stranded
-    /// there for the rest of the year (#295). Stopping every bolt at the water
-    /// instead measured a fifteenth fewer person-days over sixteen worlds -
-    /// not much more than the difference between two runs, but the way you
-    /// would expect if a river between you and the wolves is worth having.
-    ///
-    /// So the landing has to be somewhere with a way on: either it is the
-    /// ground the runner is already standing in, or it opens out into at
-    /// least `OPEN_GROUND` cells a foot can reach.
-    pub(in crate::analytics) fn can_this_be_walked_out_of(&self, at: (i32, i32), from: (i32, i32)) -> bool {
-        const OPEN_GROUND: usize = 256;
+    /// How far out of their way a runner will go to get back to where they
+    /// bolted from: see `where_a_walk_gets_from`.
+    pub(in crate::analytics) const A_WAY_ROUND: i32 = 16;
 
-        let mut seen = std::collections::BTreeSet::from([at]);
-        let mut to_look_at = std::collections::VecDeque::from([at]);
+    /// The ground a walk from `from` reaches without going further than
+    /// `reach` from it, as a question: can this cell be walked back from?
+    ///
+    /// **A bolt may not clear a river it cannot walk back over.** A frightened
+    /// person used to run over whatever was in the way, water included, and
+    /// the landing only had to open onto 256 cells of ground: whatever was
+    /// after them was on the other bank, and stopping every bolt at the water
+    /// measured a fifteenth fewer person-days over sixteen worlds (#295). On
+    /// scattered ground a river was a tile or two and the way back was a few
+    /// paces round it. On smooth country a river runs for kilometres, and
+    /// some close on themselves round an island with no ford. Ten of a people
+    /// put down on such an island bolted off it and dug their pits on the far
+    /// bank; the two who did not, and one who bolted back, walked at the
+    /// water for days on the way to those pits and starved (#317).
+    ///
+    /// So a runner lands only where they could walk back to where they stood,
+    /// going no further than `reach` from it. A river with a way round inside
+    /// that is still a river between you and the wolves. It also keeps
+    /// anybody off the rock in the sea that #295 found.
+    pub(in crate::analytics) fn where_a_walk_gets_from(
+        &self,
+        from: (i32, i32),
+        reach: i32,
+    ) -> impl Fn((i32, i32)) -> bool {
+        let side = 2 * reach + 1;
+        let mut reached = vec![false; (side * side) as usize];
+        let slot = move |at: (i32, i32)| -> Option<usize> {
+            let (x, y) = (at.0 - from.0 + reach, at.1 - from.1 + reach);
+            (x >= 0 && y >= 0 && x < side && y < side).then(|| (y * side + x) as usize)
+        };
+        if let Some(i) = slot(from) {
+            reached[i] = true;
+        }
+        let mut to_look_at = std::collections::VecDeque::from([from]);
         while let Some(here) = to_look_at.pop_front() {
-            if here == from || seen.len() >= OPEN_GROUND {
-                return true;
-            }
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
                 let next = (here.0 + dx, here.1 + dy);
-                if (next == from || self.is_passable_tile(next.0, next.1)) && seen.insert(next) {
+                let Some(i) = slot(next) else { continue };
+                if !reached[i] && self.is_passable_tile(next.0, next.1) {
+                    reached[i] = true;
                     to_look_at.push_back(next);
                 }
             }
         }
-        false
+        move |at| slot(at).is_some_and(|i| reached[i])
     }
 
     /// What is wrong with running that way.
@@ -683,7 +749,7 @@ impl Simulation {
     /// agent run or fight never once fired.
     pub(in crate::analytics) fn feel_about_what_stands_in_the_way(&mut self) {
         // What is out there, and how much of a match each one is
-        let hunters: Vec<((i32, i32), f32, String)> = self
+        self.what_menaces = self
             .world
             .animals
             .get_all()
@@ -692,84 +758,177 @@ impl Simulation {
             .filter_map(|animal| {
                 let species = self.world.animals.get_species(&animal.species_id)?;
 
-                // What a thing does to somebody who has done nothing to it.
-                // Reading this off `attack_damage` said a rabbit was a threat,
-                // because a rabbit will bite you if you pick it up - and once
-                // several of a thing began adding up, a herd of reindeer came
-                // to about a wolf and the settlement stopped hunting.
                 let temper = species.behavior.how_much_it_menaces_you();
                 if temper <= 0.0 || species.attack_damage <= 0.0 {
                     return None;
                 }
 
-                // What it is worth in a fight, on the same scale an agent
-                // reckons itself on: a healthy body, and what it can do with it
+                // **Only a hunter menaces anybody.** A mammoth, an elk or a
+                // cow never strikes anybody of its own accord - nothing that
+                // does not hunt does - and a man frightened of a mammoth,
+                // with a loved one two paces from it, stood over them and
+                // fought it, at forty a blow (#327).
+                if !Self::a_hunter(species) {
+                    return None;
+                }
+
                 let condition = (animal.current_health / species.health.max(1.0)).clamp(0.0, 1.0);
                 let menace = (species.attack_damage / 20.0).clamp(0.1, 2.0) * temper;
 
-                Some((
-                    (animal.position.0, animal.position.1),
-                    condition * menace,
-                    species.name.clone(),
-                ))
+                Some(crate::analytics::Menace {
+                    at: (animal.position.0, animal.position.1),
+                    strength: condition * menace,
+                    name: species.name.clone(),
+                    species: animal.species_id.clone(),
+                    damage: species.attack_damage,
+                    only_takes_the_small: Self::too_small_for_the_grown(species),
+                })
             })
             .collect();
 
-        for agent in self.population.agents.iter_mut() {
-            if !agent.state.is_alive {
-                continue;
+        for at in 0..self.population.agents.len() {
+            self.feel_again_about_what_is_round(at);
+            self.get_used_to_what_is_round(at);
+        }
+    }
+
+    /// How much a half hour beside a kind of beast that does no harm takes
+    /// off the fright of it: a little, so that a stranger is still frightening
+    /// for a day, and something that has been about all week without touching
+    /// anybody is hardly noticed.
+    const GETTING_USED_TO_IT: f32 = 0.016;
+
+    /// The most anybody gets used to anything that can kill them.
+    const AS_USED_TO_IT_AS_ANYBODY_GETS: f32 = 0.95;
+
+    /// And how much of that is lost for every half hour it is not about,
+    /// which is about half of it in a month.
+    const OUT_OF_THE_HABIT: f32 = 0.0005;
+
+    /// Once a half hour: what is about and has done no harm counts for a
+    /// little less, and what is not about is slowly forgotten.
+    pub(in crate::analytics) fn get_used_to_what_is_round(&mut self, at: usize) {
+        let Some(agent) = self.population.agents.get_mut(at) else {
+            return;
+        };
+        if !agent.state.is_alive {
+            return;
+        }
+        let (x, y, _) = agent.state.position;
+        let grown = agent.state.years_old() >= Self::TOO_BIG_FOR_A_SMALL_HUNTER;
+        let about: std::collections::BTreeSet<&String> = self
+            .what_menaces
+            .iter()
+            .filter(|menace| !(grown && menace.only_takes_the_small))
+            .filter(|menace| {
+                (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= Self::CLOSE_ENOUGH_TO_WORRY_ABOUT
+            })
+            .map(|menace| &menace.name)
+            .collect();
+
+        for kind in &about {
+            let used_to = agent.familiar_with.entry((*kind).clone()).or_insert(0.0);
+            *used_to = (*used_to + (1.0 - *used_to) * Self::GETTING_USED_TO_IT)
+                .min(Self::AS_USED_TO_IT_AS_ANYBODY_GETS);
+        }
+        agent.familiar_with.retain(|kind, used_to| {
+            if !about.contains(kind) {
+                *used_to *= 1.0 - Self::OUT_OF_THE_HABIT;
             }
+            *used_to > 0.01
+        });
+    }
 
-            let (x, y, _) = agent.state.position;
+    /// The same, for one person, against the beasts as they stand this half
+    /// hour.
+    ///
+    /// Asked at the start of the half hour for everybody, and again at each
+    /// person's own decision: somebody who has walked since the half hour
+    /// began may have walked into sight of something, and the minute clock
+    /// is for exactly that.
+    pub(in crate::analytics) fn feel_again_about_what_is_round(&mut self, at: usize) {
+        let Some(agent) = self.population.agents.get_mut(at) else {
+            return;
+        };
+        if !agent.state.is_alive {
+            return;
+        }
 
-            // Everything within sight of this agent that would eat it. All of
-            // it, not the worst of it: the appraisal used to take the single
-            // largest thing in view and throw the rest away, so a man
-            // surrounded by four wolves faced whichever one happened to be
-            // nearest and felt no differently about it than he would about
-            // one.
-            let closing: Vec<(f32, &String)> = hunters
-                .iter()
-                .filter_map(|((hx, hy), strength, what)| {
-                    let paces = (hx - x).abs().max((hy - y).abs());
-                    if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
-                        return None;
-                    }
+        let (x, y, _) = agent.state.position;
+        let grown = agent.state.years_old() >= Self::TOO_BIG_FOR_A_SMALL_HUNTER;
 
-                    // A wolf across the field is not the wolf at your elbow.
-                    // Without this an agent felt the full weight of anything
-                    // within ten paces, and spent a third of its life angry at
-                    // something it could barely see.
-                    let nearness = 1.0
-                        - (paces as f32 / (Self::CLOSE_ENOUGH_TO_WORRY_ABOUT as f32 + 1.0));
-
-                    Some((strength * nearness, what))
-                })
-                .collect();
-
-            // What it is called is the name of the worst of them: a man
-            // hemmed in by wolves is afraid of wolves, whatever else is in
-            // the field
-            let worst = closing
-                .iter()
-                .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
-                .map(|(_, what)| (*what).clone());
-
-            match worst {
-                Some(what) => {
-                    let all: Vec<f32> = closing.iter().map(|(strength, _)| *strength).collect();
-                    let pack = crate::agents::ThreatAssessment::a_pack_of(&all);
-
-                    agent.appraise_what_is_there(
-                        pack,
-                        crate::agents::EmotionSource::Creature(what),
-                    );
+        // And only one that could take this one: an eagle takes a child and
+        // not a man, and a man squaring up to an eagle is fighting the air.
+        let closing: Vec<(f32, &String)> = self
+            .what_menaces
+            .iter()
+            .filter(|menace| !(grown && menace.only_takes_the_small))
+            .filter_map(|menace| {
+                let ((hx, hy), strength, what) = (menace.at, menace.strength, &menace.name);
+                // Less of a fright for being familiar; see `familiar_with`.
+                let strength =
+                    strength * (1.0 - agent.familiar_with.get(what).copied().unwrap_or(0.0));
+                let paces = (hx - x).abs().max((hy - y).abs());
+                if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+                    return None;
                 }
-                None => {
-                    // Nothing is stalking this one, so whatever it was
-                    // frightened of has gone
-                    agent.emotions.nothing_is_stalking_me();
-                }
+
+                let nearness = 1.0
+                    - (paces as f32 / (Self::CLOSE_ENOUGH_TO_WORRY_ABOUT as f32 + 1.0));
+
+                Some((strength * nearness, what))
+            })
+            .collect();
+
+        let worst = closing
+            .iter()
+            .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(_, what)| (*what).clone());
+
+        match worst {
+            Some(what) => {
+                let all: Vec<f32> = closing.iter().map(|(strength, _)| *strength).collect();
+                let pack = crate::agents::ThreatAssessment::a_pack_of(&all);
+
+                agent.appraise_what_is_there(
+                    pack,
+                    crate::agents::EmotionSource::Creature(what),
+                );
+            }
+            None => {
+                agent.emotions.nothing_is_stalking_me();
+            }
+        }
+
+        // **And whatever has just struck you is a threat, whatever you made
+        // of it.** A confident adult could size up a boar as nothing to fear
+        // or fight, and go on sizing it up so while it bit them: somebody
+        // parched far from camp went on gathering and tilling and was struck
+        // seven times in a half hour (#325). Struck within the half hour, by
+        // a kind of thing still in sight, they are at least angry enough to
+        // face it - or, in no state to face anything, afraid enough to go.
+        let now = self.current_turn;
+        let struck_by = agent
+            .emotions
+            .what_last_struck_me
+            .clone()
+            .filter(|_| {
+                now.saturating_sub(agent.emotions.last_attack_turn)
+                    <= crate::environment::seasons::MINUTES_PER_TURN
+            });
+        if let Some(crate::agents::EmotionSource::Creature(species)) = struck_by {
+            let in_sight = self.what_menaces.iter().find(|menace| {
+                menace.species == species
+                    && (menace.at.0 - x).abs().max((menace.at.1 - y).abs())
+                        <= Self::AS_FAR_AS_ANYBODY_SEES_A_BEAST
+            });
+            if let Some(menace) = in_sight {
+                let face_it = agent.could_i_fight_at_all(menace.damage)
+                    && agent.emotions.fear < crate::agents::EmotionState::TOO_FRIGHTENED_TO_STAND;
+                agent.emotions.struck_by(
+                    crate::agents::EmotionSource::Creature(menace.name.clone()),
+                    face_it,
+                );
             }
         }
     }

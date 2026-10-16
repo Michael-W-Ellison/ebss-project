@@ -205,6 +205,66 @@ pub struct Simulation {
     /// Ground a route search has already found to be shut off from where it
     /// was going. See `wanting::errands::ShutIn` (#293).
     pub(crate) shut_in: std::cell::RefCell<wanting::errands::ShutIn>,
+    /// A move of camp the decision layer has just proposed, waiting to be
+    /// carried out if the person actually sets off. The decision layer reads
+    /// the world and does not write to it, and moving a camp moves other
+    /// people's hearths; see `Simulation::the_camp_moves` (#314).
+    pub(crate) camp_move_proposed: std::cell::RefCell<Option<wanting::camp::CampMove>>,
+    /// The route search's bookkeeping, kept between searches; see
+    /// `the_way_there` (#315).
+    pub(crate) route_scratch: std::cell::RefCell<RouteScratch>,
+    /// Every beast that menaces anybody, where it stands and how much of a
+    /// match it is, as of this half hour. Animals move on the half hour, so
+    /// this holds for every minute of it, and a person can be re-appraised at
+    /// their own minute without going through every animal again; see
+    /// `feel_about_what_stands_in_the_way`.
+    pub(crate) what_menaces: Vec<Menace>,
+    /// Which minute of the half hour the world is at; see `take_a_minute`.
+    pub(crate) minute_of_the_half_hour: u32,
+    /// Who stood where as this half hour began.
+    pub(crate) where_everybody_stood: Vec<(uuid::Uuid, (i32, i32, i32))>,
+}
+
+/// A beast that menaces people, as it stands this half hour.
+#[derive(Debug, Clone)]
+pub(crate) struct Menace {
+    pub(crate) at: (i32, i32),
+    /// How much of a match it is, before nearness.
+    pub(crate) strength: f32,
+    /// The kind, by name, which is what fear and anger are held against.
+    pub(crate) name: String,
+    /// The kind, by id, which is what a strike is recorded against.
+    pub(crate) species: String,
+    /// What its blow costs.
+    pub(crate) damage: f32,
+    /// Too small to take a grown person; see `Simulation::could_it_take`.
+    pub(crate) only_takes_the_small: bool,
+}
+
+/// Flat tables for the route search, the size of the map, cleared by stamp.
+#[derive(Debug, Default)]
+pub(crate) struct RouteScratch {
+    pub(crate) stamp: u32,
+    pub(crate) stamps: Vec<u32>,
+    pub(crate) walked: Vec<u32>,
+    pub(crate) came_from: Vec<u32>,
+}
+
+impl RouteScratch {
+    /// Ready for a fresh search over a map of this many cells.
+    pub(crate) fn ready_for(&mut self, cells: usize) {
+        if self.stamps.len() != cells {
+            self.stamps = vec![0; cells];
+            self.walked = vec![0; cells];
+            self.came_from = vec![0; cells];
+            self.stamp = 0;
+        }
+        self.stamp = self.stamp.wrapping_add(1);
+        if self.stamp == 0 {
+            self.stamps.iter_mut().for_each(|stamp| *stamp = 0);
+            self.stamp = 1;
+        }
+    }
 }
 
 /// Configuration for simulation behavior and limits
@@ -367,6 +427,11 @@ impl Simulation {
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
             shut_in: Default::default(),
+            camp_move_proposed: Default::default(),
+            route_scratch: Default::default(),
+            what_menaces: Vec::new(),
+            minute_of_the_half_hour: 0,
+            where_everybody_stood: Vec::new(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,
@@ -758,6 +823,120 @@ impl Simulation {
         left_behind
     }
 
+    /// What one piece off a carcass weighs - a joint, a hide, a horn - in
+    /// kilograms.
+    pub(in crate::analytics) const WHAT_A_JOINT_WEIGHS: f32 = 2.0;
+
+    /// How many joints an ordinary grown pair of hands with an ordinary edge
+    /// takes off a carcass in a turn of cutting. Bare hands manage a sixth of
+    /// an edge's work (`what_bare_hands_manage`), so a man with nothing to cut
+    /// with gets one joint a turn and one with a flint knife three or four.
+    pub(in crate::analytics) const JOINTS_A_TURN_OF_CUTTING_TAKES: u32 = 2;
+
+    /// How many joints of a beast go with one length of tendon worth
+    /// keeping: a rabbit gives one, a deer three, a cow six or seven.
+    pub(in crate::analytics) const JOINTS_TO_A_LENGTH_OF_SINEW: u32 = 3;
+
+    /// How many joints this one takes off a carcass in a turn of cutting: the
+    /// hand, the edge in it, and the age of the body behind it, the fraction
+    /// carried as a chance. Never none - anybody can tear a joint off.
+    pub(in crate::analytics) fn what_a_turn_of_cutting_takes_off(
+        &self,
+        agent_index: usize,
+        rng: &mut impl rand::Rng,
+    ) -> u32 {
+        let trade = crate::agents::skills::SkillType::Leatherworking;
+        let agent = &self.population.agents[agent_index];
+        let worth = Self::JOINTS_A_TURN_OF_CUTTING_TAKES as f32
+            * agent.skills.hand_for(trade)
+            * agent.how_much_my_tools_bring_back(trade)
+            * agent.state.what_i_can_do_for_my_age();
+        let whole = worth.floor();
+        ((whole as u32) + u32::from(rng.gen::<f32>() < worth - whole)).max(1)
+    }
+
+    /// A beast has come down here: the meat on it is cut as far as one turn
+    /// takes it, and the rest is left lying as a carcass this one knows about.
+    ///
+    /// The meat is taken out of `dropped`, which keeps the skins, horn and
+    /// fangs for `butcher` as before. Returns how many joints were left.
+    ///
+    /// The whole beast used to come apart in the instant it fell, at whatever
+    /// the hunter happened to have in the pack to cut with - which was mostly
+    /// nothing, since getting ready to hunt fetches a spear and never a knife -
+    /// and bare hands keep fifteen in a hundred of it. The other eighty-five
+    /// were never made at all, and what would not fit in the pack went on the
+    /// grass, where nobody went back for it because nobody goes back for food
+    /// they have dropped. A carcass is a slow job without an edge, not a lost
+    /// one: what is not cut today is still on the bone tomorrow, for the
+    /// hunter or for whoever he tells (#331).
+    pub(in crate::analytics) fn the_beast_comes_down(
+        &mut self,
+        agent_index: usize,
+        dropped: &mut Vec<crate::environment::ItemStack>,
+        where_it_fell: crate::world::Position,
+        rng: &mut impl rand::Rng,
+    ) -> u32 {
+        let condition = self.world.climate.how_fat_the_beasts_are();
+        let mut joints_on_it = 0u32;
+        dropped.retain(|stack| {
+            if crate::agents::storage_integration::butchered_item_id(&stack.material_id) == "meat" {
+                joints_on_it += ((stack.quantity as f32 * condition).round() as u32).max(1);
+                false
+            } else {
+                true
+            }
+        });
+        if joints_on_it == 0 {
+            return 0;
+        }
+
+        let now = self.current_turn;
+        let cut = self.what_a_turn_of_cutting_takes_off(agent_index, rng).min(joints_on_it);
+        let mut joints = crate::agents::InventoryItem::new_with_weight(
+            "meat".to_string(),
+            cut,
+            Self::WHAT_A_JOINT_WEIGHS,
+        );
+        joints.food_data = self
+            .food_database
+            .create_food_data(&crate::world::ItemType::Meat, now);
+        if let Some(quality) = self.population.agents[agent_index]
+            .how_well_made_is_what_i_work_this_trade_with(
+                crate::agents::skills::SkillType::Leatherworking,
+            )
+        {
+            joints.quality = Some(quality);
+        }
+        let took = self.take_what_fits(agent_index, &joints);
+
+        // And the sinew, which comes out with the first joints: a length of
+        // tendon for every few joints on the beast, the strongest of the
+        // natural bindings (`LASHING_FROM_SINEW`).
+        let sinew = crate::agents::InventoryItem::new_with_weight(
+            "sinew".to_string(),
+            joints_on_it.div_ceil(Self::JOINTS_TO_A_LENGTH_OF_SINEW),
+            0.1,
+        );
+        self.take_what_fits(agent_index, &sinew);
+
+        let left = joints_on_it - took;
+        if self.world.a_carcass_lies_here(where_it_fell, left, now).is_some() {
+            let knows = &mut self.population.agents[agent_index].exploration_knowledge;
+            knows.discover_resource(where_it_fell, crate::world::ResourceType::Meat, now);
+            knows.saw_it_again(where_it_fell, left, now);
+            knows.found_some_at(where_it_fell);
+        }
+        if took > 0 && self.population.agents[agent_index]
+            .how_much_my_tools_bring_back(crate::agents::skills::SkillType::Leatherworking)
+            > 1.0
+        {
+            self.population.agents[agent_index]
+                .wear_what_i_worked_with(crate::agents::skills::SkillType::Leatherworking);
+        }
+        left
+    }
+
     fn butcher(
         &self,
         dropped: &[crate::environment::ItemStack],
@@ -788,7 +967,8 @@ impl Simulation {
 
                 // Two kilos is what an animal drop weighs unless something
                 // else says otherwise
-                let mut item = InventoryItem::new_with_weight(item_id, off_the_carcass, 2.0);
+                let mut item =
+                    InventoryItem::new_with_weight(item_id, off_the_carcass, Self::WHAT_A_JOINT_WEIGHS);
                 item.food_data = food_data;
 
                 // And how good it is, which the caller decided when it read
@@ -837,8 +1017,56 @@ impl Simulation {
 
     const A_THROW_THAT_TELLS: f32 = 0.3;
 
-    /// What a throw that tells takes out of an animal.
-    const WHAT_ONE_THROW_TAKES_OUT_OF_IT: f32 = 0.35;
+    /// What a throw that tells takes off an animal, for each point of the
+    /// arm that threw it and of the point it carried.
+    ///
+    /// A throw took a third of whatever it hit, so every animal from a
+    /// rabbit to a mammoth went down to three throws that told and the point
+    /// counted only towards whether one told. "A wooden spear is enough, but
+    /// should take several attacks to kill the animal, depending on the size
+    /// of the animal. A flint spear should reduce the number of attacks."
+    /// Sized so that an ordinary grown arm (strength 1.0; the brave are
+    /// 1.3) with a flint spear still takes about the three it always took
+    /// for a cow or a boar, or four once it is worn - which is most of the
+    /// meat a hunt brings in - two for a deer and nine for a mammoth; a
+    /// sharpened stick three for a deer and five for a cow, and a thrown
+    /// stone about three for a rabbit (#329).
+    pub(in crate::analytics) const WHAT_AN_ARM_PUTS_BEHIND_A_THROWN_POINT: f32 = 17.0;
+
+    /// What a throw that tells takes off an animal, from an arm of this
+    /// strength with a point of this worth (`how_fast_my_tools_make_this_go`
+    /// for Hunting: a stone 0.3, a sharpened stick 1.4, a flint spear 2.0).
+    pub(in crate::analytics) fn what_a_throw_takes_off(strength: f32, point: f32) -> f32 {
+        Self::WHAT_AN_ARM_PUTS_BEHIND_A_THROWN_POINT * strength * point
+    }
+
+    /// How often a throw from this one tells: the hand that throws it, what is
+    /// in the hand, and being up on a horse.
+    ///
+    /// Asked where the throw is made and where the hunt is weighed, so that
+    /// what a hunter expects of a hunt is what the hunt gives him. Never under
+    /// a tenth, which is the floor a man with no skill and nothing in his
+    /// hand still has, and never over nine in ten.
+    pub(in crate::analytics) fn how_often_a_throw_tells(
+        agent: &crate::agents::Agent,
+        carrying_a_weapon: bool,
+    ) -> f32 {
+        let hunting_skill = agent
+            .skills
+            .get_skill_if_exists(crate::agents::skills::SkillType::Hunting)
+            .map(|s| s.level)
+            .unwrap_or(-10);
+        // A spear in the hand, which is the whole of stone-age hunting.
+        // `carrying_a_weapon` is the older flag and still counts; what is in
+        // the pack counts for more, and counts for less as it wears.
+        let spear = agent.how_fast_my_tools_make_this_go(crate::agents::skills::SkillType::Hunting);
+        let carried_flag: f32 = if carrying_a_weapon { 0.2 } else { 0.0 };
+        let weapon_bonus = carried_flag.max((spear - 1.0) * 0.25);
+        let mount_bonus = agent.transport.mounted_combat_bonus();
+
+        (Self::A_THROW_THAT_TELLS + (hunting_skill as f32 * 0.03) + weapon_bonus + mount_bonus)
+            .clamp(0.1_f32, 0.9_f32)
+    }
 
     /// How often a throw that misses puts the shaft somewhere you have to go
     /// and get it.
@@ -943,6 +1171,16 @@ impl Simulation {
 
         known.sort_unstable();
         known.dedup();
+
+        // **And only what it could walk to.** A spring or a fishing place on
+        // the far bank of a river is in sight, and is remembered, and is no
+        // use to somebody with no way over: they set out for it and walked at
+        // the water (#321).
+        let here = (from.x, from.y);
+        known.retain(|&number| {
+            let at = self.world.resources[number].position;
+            self.world.can_walk_between(here, (at.x, at.y))
+        });
         known
     }
 
@@ -1024,6 +1262,31 @@ impl Simulation {
         agent_position: (i32, i32, i32),
         named: &str,
     ) -> bool {
+        // Somebody who is actually making a thing is exempt from the pack
+        // questions below. He is not hoarding, he is short two stone for a
+        // knife, and `Errand::to_make` is where the model already says so.
+        let on_a_making = agent
+            .errand
+            .as_ref()
+            .is_some_and(|errand| errand.to_make.is_some());
+        self.could_this_gather_come_to_anything_for(agent, agent_position, named, on_a_making)
+    }
+
+    /// The same, for a gather that is a step towards making something.
+    ///
+    /// A full pack is not a reason to leave a knife unmade: what is gathered
+    /// for a making is put in the pack ahead of whatever is worth least in it
+    /// (`set_down_to_make_room`). Asked of somebody who has not yet taken the
+    /// making on as an errand, the pack questions refused it - most packs run
+    /// full, and stone is five to the unit - so a man without a knife stood
+    /// over a seam he could not take a flake from, every time (#332).
+    pub(in crate::analytics) fn could_this_gather_come_to_anything_for(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        named: &str,
+        on_a_making: bool,
+    ) -> bool {
         use crate::world::{Position, ResourceType};
 
         let Some(wanted) = Self::what_a_gather_asks_for(named) else {
@@ -1053,8 +1316,15 @@ impl Simulation {
         // pack did not walk to the bush at all.
         let food_is_the_point = wanted == ResourceType::Food;
 
+        // And for a making, only if there is something to put down to make
+        // the room: a pack full of food is full, making or not, and a stone
+        // asked for into it came back "Inventory full" 2,130 times in a year
+        // on one world (#332).
+        let room = agent.inventory.weight_capacity_remaining();
+        let one = Self::what_one_of_these_weighs(wanted);
         if !food_is_the_point
-            && agent.inventory.weight_capacity_remaining() < Self::what_one_of_these_weighs(wanted)
+            && room < one
+            && (!on_a_making || room + agent.room_i_could_make(&agent.what_my_makings_want()) < one)
         {
             return false;
         }
@@ -1086,14 +1356,7 @@ impl Simulation {
         // of 10,014 and nobody could dig the store that would have held the
         // food.
         //
-        // Somebody who is actually making a thing is exempt. He is not
-        // hoarding, he is short two stone for a knife, and `Errand::to_make`
-        // is where the model already says so.
-        let on_a_making = agent
-            .errand
-            .as_ref()
-            .is_some_and(|errand| errand.to_make.is_some());
-
+        // Somebody who is actually making a thing is exempt - see above.
         if !food_is_the_point && !on_a_making {
             let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
 
@@ -1161,6 +1424,7 @@ impl Simulation {
             ResourceType::Stone => 5.0, // Stone is heavy
             ResourceType::Iron => 8.0,  // Iron is very heavy
             ResourceType::Food => crate::agents::provision::WHAT_A_HANDFUL_OF_FOOD_WEIGHS,
+            ResourceType::Meat => Self::WHAT_A_JOINT_WEIGHS,
             _ => 1.0,
         }
     }
@@ -1308,32 +1572,254 @@ impl Simulation {
     /// kilometres (`WorldConfig::big_enough_for_an_ecology`) is a corner five
     /// kilometres from the middle, often in water. A people founding a
     /// settlement on the big map starts here instead, with the whole country
-    /// round it. The nearest ground that can be stood on, looked for in rings
-    /// outward from the middle, so the answer is the same for the same map.
+    /// round it. The nearest open grass or meadow, looked for in rings outward
+    /// from the middle, so the answer is the same for the same map; or, on a
+    /// map with none, the nearest ground that can be stood on.
+    ///
+    /// **Open country, not merely dry ground.** While terrain was drawn tile
+    /// by tile at random, every kind of ground was within a few paces of
+    /// every other and any dry tile would do. Smooth country has mountain
+    /// ranges kilometres across, and the middle of the big map fell in one on
+    /// four seeds of five: a people put down there would start a long walk
+    /// from anything that grows. Grass and meadow are where food grows and
+    /// what a plough takes, so that is where a people arriving would stop
+    /// (#315). With woods in reach, too - trees to sleep under out of the
+    /// rain, within the walk a sleeper takes to get under them, and wood to
+    /// burn: on one fresh world a people that stopped in the middle of a plain
+    /// died of the weather the month winter came, eleven of twelve. And with
+    /// fresh water in reach, for drinking and for fish: fish is what dries
+    /// and keeps, and a people put down among greens and roots with the
+    /// river forty cells off filled a quarter of the store a riverside people
+    /// did by midsummer, and never once opened the gate for a child in its
+    /// first year.
+    ///
+    /// **And with a living in reach.** Woods and water tiles nearby were not
+    /// enough: what a people needs from the country round it is wood, stone,
+    /// plant food, fish and springs, all within a forage. So the place is the
+    /// nearest open ground with all of those
+    /// (`WHAT_A_LIVING_NEEDS_IN_REACH`). Where nowhere has all of it, it is
+    /// the place with most of what it is shortest of. The rules above only
+    /// come back on a map with no open ground at all (#316).
     pub fn bring_everybody_to_the_middle(&mut self) -> (i32, i32) {
         let middle = (
             self.world.grid.width as i32 / 2,
             self.world.grid.height as i32 / 2,
         );
         let furthest = middle.0.max(middle.1);
-        let mut at = middle;
-        'looking: for ring in 0..=furthest {
+        let open_country = |simulation: &Self, x: i32, y: i32| {
+            simulation
+                .world
+                .grid
+                .get_tile(&crate::world::Position::new(x, y))
+                .map(|tile| tile.terrain.can_be_tilled())
+                .unwrap_or(false)
+        };
+        let nearest = |simulation: &Self, will_do: &dyn Fn(&Self, i32, i32) -> bool| {
+            for ring in 0..=furthest {
+                for dx in -ring..=ring {
+                    for dy in -ring..=ring {
+                        if dx.abs() != ring && dy.abs() != ring {
+                            continue;
+                        }
+                        if will_do(simulation, middle.0 + dx, middle.1 + dy) {
+                            return Some((middle.0 + dx, middle.1 + dy));
+                        }
+                    }
+                }
+            }
+            None
+        };
+        let in_reach = |simulation: &Self, x: i32, y: i32, kind: crate::world::TerrainType| {
+            let reach = Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS;
+            (-reach..=reach).any(|dx| {
+                (-reach..=reach).any(|dy| {
+                    simulation
+                        .world
+                        .grid
+                        .get_tile(&crate::world::Position::new(x + dx, y + dy))
+                        .is_some_and(|tile| tile.terrain.terrain_type == kind)
+                })
+            })
+        };
+        let woods_in_reach = |s: &Self, x: i32, y: i32| in_reach(s, x, y, crate::world::TerrainType::Forest);
+        let water_in_reach = |s: &Self, x: i32, y: i32| in_reach(s, x, y, crate::world::TerrainType::Water);
+        // On scattered ground, where everything is within a pace or two, the
+        // nearest dry ground, as it always was (`TerrainStyle`).
+        if self.world.terrain_style == crate::world::TerrainStyle::Scattered {
+            let at = nearest(self, &|s, x, y| s.is_passable_tile(x, y)).unwrap_or(middle);
+            for agent in self.population.agents.iter_mut().filter(|agent| agent.state.is_alive) {
+                agent.state.position = (at.0, at.1, agent.state.position.2);
+            }
+            return at;
+        }
+        let at = self
+            .where_a_living_is_in_reach(middle)
+            .or_else(|| {
+                nearest(self, &|s, x, y| {
+                    open_country(s, x, y)
+                        && s.is_passable_tile(x, y)
+                        && woods_in_reach(s, x, y)
+                        && water_in_reach(s, x, y)
+                })
+            })
+        .or_else(|| {
+            nearest(self, &|s, x, y| {
+                open_country(s, x, y) && s.is_passable_tile(x, y) && woods_in_reach(s, x, y)
+            })
+        })
+        .or_else(|| nearest(self, &|s, x, y| open_country(s, x, y) && s.is_passable_tile(x, y)))
+        .or_else(|| nearest(self, &|s, x, y| s.is_passable_tile(x, y)))
+        .unwrap_or(middle);
+        for agent in self.population.agents.iter_mut().filter(|agent| agent.state.is_alive) {
+            agent.state.position = (at.0, at.1, agent.state.position.2);
+        }
+        at
+    }
+
+    /// What a people arriving needs within a forage of where it stops, as
+    /// counts of what grows or lies there: wood, stone, plant food, fish and
+    /// fresh water.
+    ///
+    /// About what lay within a forage of anywhere on the old scattered map,
+    /// where every kind of ground was a few paces from every other. Smooth
+    /// country gathers each of those into a region of its own. A people put
+    /// down on open grass with little of the first two in reach wore out the
+    /// handaxes it arrived with and could not make more: no stone for the
+    /// edge, no wood for the haft. After that nobody could cut wood, dig a pit
+    /// or raise a roof, and on four worlds of four the store never reached
+    /// half of what the gate for a child asks (#316).
+    pub(crate) const WHAT_A_LIVING_NEEDS_IN_REACH: [(&'static str, u32); 5] = [
+        ("wood", 10),
+        ("stone", 6),
+        ("plants", 100),
+        ("fish", 15),
+        ("springs", 5),
+    ];
+
+    /// The nearest open, dry ground to `middle` with everything in
+    /// `WHAT_A_LIVING_NEEDS_IN_REACH` within a forage of it; or, if nowhere
+    /// has all of it, the place with most of what it is shortest of.
+    /// `None` only on a map with no open ground at all.
+    fn where_a_living_is_in_reach(&self, middle: (i32, i32)) -> Option<(i32, i32)> {
+        use crate::world::ResourceType;
+
+        let (w, h) = (self.world.grid.width as i32, self.world.grid.height as i32);
+        let kind = |what: ResourceType| -> Option<usize> {
+            match what {
+                ResourceType::Wood => Some(0),
+                ResourceType::Stone => Some(1),
+                ResourceType::Fish => Some(3),
+                ResourceType::Water => Some(4),
+                other if other.is_it_food() && other != ResourceType::Meat => Some(2),
+                _ => None,
+            }
+        };
+        // A running total over the map for each, so any square's count is
+        // four lookups.
+        let side = (w + 1) as usize;
+        let mut sums = vec![vec![0u32; side * (h + 1) as usize]; 5];
+        for node in &self.world.resources {
+            let (x, y) = (node.position.x, node.position.y);
+            if x < 0 || y < 0 || x >= w || y >= h {
+                continue;
+            }
+            if let Some(k) = kind(node.resource_type) {
+                sums[k][(y + 1) as usize * side + (x + 1) as usize] += 1;
+            }
+        }
+        for table in sums.iter_mut() {
+            for y in 1..=h as usize {
+                for x in 1..=w as usize {
+                    table[y * side + x] +=
+                        table[(y - 1) * side + x] + table[y * side + x - 1] - table[(y - 1) * side + x - 1];
+                }
+            }
+        }
+        // A forage is a walk of `FORAGE_RADIUS` paces, a diamond on the grid.
+        // A square of the same area stands in for it, so the running totals
+        // can count it.
+        let reach = (Self::FORAGE_RADIUS as f32 / std::f32::consts::SQRT_2).round() as i32;
+        let in_reach = |k: usize, x: i32, y: i32| -> u32 {
+            let (x0, y0) = ((x - reach).max(0) as usize, (y - reach).max(0) as usize);
+            let (x1, y1) = ((x + reach + 1).min(w) as usize, (y + reach + 1).min(h) as usize);
+            let t = &sums[k];
+            t[y1 * side + x1] + t[y0 * side + x0] - t[y0 * side + x1] - t[y1 * side + x0]
+        };
+        // How well a place answers the need it answers worst: 1 or more is
+        // all of it.
+        let how_well = |x: i32, y: i32| -> f32 {
+            Self::WHAT_A_LIVING_NEEDS_IN_REACH
+                .iter()
+                .enumerate()
+                .map(|(k, (_, wanted))| in_reach(k, x, y) as f32 / *wanted as f32)
+                .fold(f32::MAX, f32::min)
+        };
+
+        // **And on the mainland.** Smooth country's rivers can close on
+        // themselves round an island with no ford. On one world the middle's
+        // best ground was on an island of 1,179 cells, and the people put
+        // down there could only leave it by bolting from danger across the
+        // water. Two never did, and starved walking at the river towards the
+        // pits the others had dug on the far bank (#317). So a people
+        // arrives on the largest piece of ground a foot can cross.
+        let mainland = {
+            let mut piece = vec![0u32; (w * h) as usize];
+            let mut sizes = vec![0usize];
+            for start in 0..(w * h) {
+                let (sx, sy) = (start % w, start / w);
+                if piece[start as usize] != 0 || !self.is_passable_tile(sx, sy) {
+                    continue;
+                }
+                let id = sizes.len() as u32;
+                sizes.push(0);
+                piece[start as usize] = id;
+                let mut to_look_at = vec![(sx, sy)];
+                while let Some((x, y)) = to_look_at.pop() {
+                    sizes[id as usize] += 1;
+                    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                        let (nx, ny) = (x + dx, y + dy);
+                        if nx < 0 || ny < 0 || nx >= w || ny >= h {
+                            continue;
+                        }
+                        let i = (ny * w + nx) as usize;
+                        if piece[i] == 0 && self.is_passable_tile(nx, ny) {
+                            piece[i] = id;
+                            to_look_at.push((nx, ny));
+                        }
+                    }
+                }
+            }
+            let largest = (1..sizes.len()).max_by_key(|id| sizes[*id]).unwrap_or(0) as u32;
+            move |x: i32, y: i32| piece[(y * w + x) as usize] == largest
+        };
+
+        let mut best: Option<((i32, i32), f32)> = None;
+        for ring in 0..=middle.0.max(middle.1) {
             for dx in -ring..=ring {
                 for dy in -ring..=ring {
                     if dx.abs() != ring && dy.abs() != ring {
                         continue;
                     }
-                    if self.is_passable_tile(middle.0 + dx, middle.1 + dy) {
-                        at = (middle.0 + dx, middle.1 + dy);
-                        break 'looking;
+                    let (x, y) = (middle.0 + dx, middle.1 + dy);
+                    let open = self
+                        .world
+                        .grid
+                        .get_tile(&crate::world::Position::new(x, y))
+                        .is_some_and(|tile| tile.terrain.can_be_tilled());
+                    if !open || !self.is_passable_tile(x, y) || !mainland(x, y) {
+                        continue;
+                    }
+                    let score = how_well(x, y);
+                    if score >= 1.0 {
+                        return Some((x, y));
+                    }
+                    if best.is_none_or(|(_, so_far)| score > so_far) {
+                        best = Some(((x, y), score));
                     }
                 }
             }
         }
-        for agent in self.population.agents.iter_mut().filter(|agent| agent.state.is_alive) {
-            agent.state.position = (at.0, at.1, agent.state.position.2);
-        }
-        at
+        best.map(|(at, _)| at)
     }
 
     /// Whether an agent can stand on this tile
@@ -1498,9 +1984,15 @@ impl Simulation {
         population.stats.total_deaths = state.population_stats.total_deaths;
         population.stats.total_abandonments = state.population_stats.total_abandonments;
 
+        // What is not saved and has to be put back: without the books of
+        // species no animal or plant takes a turn. See ISSUES_FOUND #305.
+        let mut world = state.world;
+        world.animals.the_registry_back();
+        world.plants.the_registry_back();
+
         // Reconstruct Simulation
         let sim = Simulation {
-            world: state.world,
+            world,
             population,
             current_turn: state.current_turn,
             renderer: None,
@@ -1515,6 +2007,11 @@ impl Simulation {
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
             shut_in: Default::default(),
+            camp_move_proposed: Default::default(),
+            route_scratch: Default::default(),
+            what_menaces: Vec::new(),
+            minute_of_the_half_hour: 0,
+            where_everybody_stood: Vec::new(),
             what_anybody_found_out: std::collections::BTreeMap::new(),
             what_anybody_was_told: std::collections::BTreeMap::new(),
             what_would_not_fit_in_the_pack: 0,

@@ -305,12 +305,22 @@ fn protection_asks_for_nothing_when_there_are_no_children() {
     assert!(some > none && strayed > some, "{none:.2} {some:.2} {strayed:.2}");
 }
 
-/// Hunger, thirst and tiredness still build with time whatever is going on.
+/// Hunger and thirst still build with time whatever is going on.
+///
+/// Tiredness did too, until there was a night: it is the body's fatigue that
+/// asks for sleep now, not the clock (#302), so Rest stays where it is on time
+/// alone.
 #[test]
 fn the_needs_of_the_body_still_run_on_the_clock() {
     let ctx = DriveContext::default();
 
-    for drive_type in [DriveType::Hunger, DriveType::Thirst, DriveType::Rest] {
+    let mut rest = Drive::new(DriveType::Rest);
+    for _ in 0..200 {
+        rest.turn_in(&ctx, true);
+    }
+    assert_eq!(rest.value, 0.0, "time alone should not make anybody tired");
+
+    for drive_type in [DriveType::Hunger, DriveType::Thirst] {
         assert!(
             drive_type.demand(&ctx).is_none(),
             "{drive_type:?} should not be reading the world"

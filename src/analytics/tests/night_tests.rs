@@ -116,8 +116,11 @@ fn somebody_far_off_heads_home_in_the_evening() {
     for (index, at) in [(10, 10), (10, 10), (10, 10), (90, 10)].into_iter().enumerate() {
         simulation.population.agents[index].state.position.0 = at.0;
         simulation.population.agents[index].state.position.1 = at.1;
+        simulation.population.agents[index].hearth = Some((10, 10));
     }
-    let home = simulation.where_the_people_sleep().expect("four grown people have a camp");
+    simulation.world.buildings.clear();
+    let home = simulation.where_this_one_sleeps(3).expect("somebody who lives somewhere has a home");
+    assert_eq!(home, (30, 10), "home is the middle of the camp's people, the one far off among them");
     let dawn = first_light(&simulation);
     set_the_clock(&mut simulation, dawn - 10.0);
 
@@ -261,4 +264,167 @@ fn a_sleeper_goes_in_out_of_the_weather() {
         false,
     );
     assert!(matches!(action, Action::Sleep { .. }), "under the trees, they sleep: got {action:?}");
+}
+
+/// Somebody put to bed is asleep for the night, and mends as a sleeper does.
+///
+/// The night's sleep was reckoned all at once and the sleeper woken on the
+/// spot, so through every turn of the stretch that followed the body was
+/// awake to everything that asked: on a big-map seed, not one grown person's
+/// turn in 71,852 had anybody asleep in it, and the wounded mended at a
+/// waking man's rate, a fifth of a sleeper's. See ISSUES_FOUND #310.
+#[test]
+fn a_sleeper_sleeps_through_the_stretch_and_mends() {
+    let mut simulation = people(1);
+    under_the_trees(&mut simulation, 0);
+    simulation.population.agents[0].state.health = 50.0;
+
+    simulation.execute_action(&Action::Sleep { duration: 4 }, 0);
+    assert!(
+        simulation.population.agents[0].fatigue.is_sleeping,
+        "woken the moment the sleep was reckoned"
+    );
+
+    let now = simulation.current_turn;
+    let before = simulation.population.agents[0].state.health;
+    for step in 1..=4 {
+        simulation.population.agents[0].process_survival_turn(now + step * 30);
+    }
+    let asleep = simulation.population.agents[0].state.health - before;
+
+    let mut awake = people(1);
+    awake.population.agents[0].state.health = 50.0;
+    let before = awake.population.agents[0].state.health;
+    for step in 1..=4 {
+        awake.population.agents[0].process_survival_turn(now + step * 30);
+    }
+    let up_and_about = awake.population.agents[0].state.health - before;
+
+    assert!(
+        asleep > up_and_about * 2.0,
+        "two hours asleep mended {asleep:.2}, against {up_and_about:.2} up and about"
+    );
+}
+
+/// Two camps out of each other's reach are two homes: somebody standing by
+/// the other camp in the evening walks back to their own.
+///
+/// Home was the middle of every grown person in the world, so there could be
+/// only one camp, and anybody who went off was walked back to the others that
+/// evening however far it was (#314).
+#[test]
+fn two_camps_are_two_homes() {
+    let mut simulation = people(6);
+    simulation.world.buildings.clear();
+    for (index, lives) in [(5, 5), (5, 5), (5, 5), (48, 48), (48, 48), (48, 48)].into_iter().enumerate() {
+        let agent = &mut simulation.population.agents[index];
+        agent.hearth = Some(lives);
+        agent.state.position = (lives.0, lives.1, 0);
+    }
+    // One of the first camp is over at the second at nightfall
+    simulation.population.agents[0].state.position = (46, 46, 0);
+
+    assert_eq!(simulation.where_this_one_sleeps(0), Some((18, 18)), "the middle of the first camp's people");
+    assert_eq!(simulation.where_this_one_sleeps(3), Some((48, 48)));
+
+    let dawn = first_light(&simulation);
+    set_the_clock(&mut simulation, dawn - 10.0);
+    match simulation.what_the_night_asks(0, Action::Gather { resource_type: "wood".to_string() }, false) {
+        Action::Move { target } => assert_eq!((target.0, target.1), (18, 18), "home is their own camp"),
+        other => panic!("somebody at the wrong camp at nightfall should head home, got {other:?}"),
+    }
+}
+
+/// And two camps that drift within reach of each other become one.
+#[test]
+fn camps_within_reach_of_each_other_are_one() {
+    let mut simulation = people(4);
+    simulation.world.buildings.clear();
+    for (index, lives) in [(10, 10), (10, 10), (30, 10), (30, 10)].into_iter().enumerate() {
+        simulation.population.agents[index].hearth = Some(lives);
+        simulation.population.agents[index].state.position = (lives.0, lives.1, 0);
+    }
+    assert_eq!(simulation.where_this_one_sleeps(0), simulation.where_this_one_sleeps(3));
+    assert_eq!(simulation.where_this_one_sleeps(0), Some((20, 10)));
+}
+
+/// Lying down at home makes the camp one's hearth.
+#[test]
+fn whoever_sleeps_at_home_lives_there() {
+    let mut simulation = people(3);
+    simulation.world.buildings.clear();
+    for agent in simulation.population.agents.iter_mut() {
+        agent.state.position = (12, 12, 0);
+        agent.hearth = None;
+    }
+    under_the_trees(&mut simulation, 0);
+    let dawn = first_light(&simulation);
+    set_the_clock(&mut simulation, dawn - 3.0);
+    let _ = simulation.what_the_night_asks(0, Action::Gather { resource_type: "wood".to_string() }, false);
+    assert_eq!(simulation.population.agents[0].hearth, Some((12, 12)));
+}
+
+/// A finished roof near the middle of a camp is where it sleeps.
+#[test]
+fn a_roof_among_them_is_home() {
+    let mut simulation = people(3);
+    for agent in simulation.population.agents.iter_mut() {
+        agent.hearth = Some((20, 20));
+    }
+    let longhouse = simulation.world.buildings.iter().find(|b| b.is_completed()).map(|b| (b.position.x, b.position.y));
+    assert_eq!(simulation.where_this_one_sleeps(0), longhouse, "the longhouse in the middle of the map is within reach");
+}
+
+/// Somebody on their own, with nothing keeping them there, sleeps at the
+/// nearest camp; one with a fresh move of their own to wait out does not.
+#[test]
+fn nobody_lives_alone_by_accident() {
+    let mut simulation = people(4);
+    simulation.world.buildings.clear();
+    for (index, lives) in [(5, 5), (5, 5), (5, 5), (48, 48)].into_iter().enumerate() {
+        simulation.population.agents[index].hearth = Some(lives);
+        simulation.population.agents[index].state.position = (lives.0, lives.1, 0);
+    }
+    assert_eq!(simulation.where_this_one_sleeps(3), Some((5, 5)), "the straggler goes to the camp");
+
+    simulation.current_turn = 100_000;
+    simulation.population.agents[3].hearth_moved_at = simulation.current_turn - 30;
+    assert_eq!(simulation.where_this_one_sleeps(3), Some((48, 48)), "a pioneer waits out their move");
+}
+
+/// A camp drifts towards where its people are: tonight it sleeps in the
+/// middle of where they actually are, not where they slept last night.
+///
+/// Taken from the hearths alone, home was a fixed point, and a camp that
+/// started by the longhouse slept there for ever, walking back every evening
+/// to ground it had stripped (#314).
+#[test]
+fn a_camp_sleeps_where_its_people_are() {
+    let mut simulation = people(4);
+    simulation.world.buildings.clear();
+    for agent in simulation.population.agents.iter_mut() {
+        agent.hearth = Some((20, 20));
+        agent.state.position = (30, 20, 0);
+    }
+    assert_eq!(simulation.where_this_one_sleeps(0), Some((30, 20)));
+}
+
+/// Danger is not answered by going back to sleep.
+///
+/// Somebody backing away from a boar in the night was sent to bed instead by
+/// the night, and struck where they lay, four times before morning (#325).
+#[test]
+fn somebody_in_danger_is_not_sent_to_bed() {
+    let mut simulation = people(1);
+    under_the_trees(&mut simulation, 0);
+    let dawn = first_light(&simulation);
+    set_the_clock(&mut simulation, dawn - 2.0);
+    simulation.population.agents[0].emotions.add_fear(
+        crate::agents::EmotionSource::Creature("Wild Boar".to_string()),
+        crate::agents::ThreatAssessment::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU,
+    );
+    assert!(simulation.population.agents[0].emotions.in_danger());
+
+    let away = Action::FleeFrom { away_from: (1, 1, 0) };
+    assert_eq!(simulation.what_the_night_asks(0, away.clone(), false), away);
 }

@@ -50,6 +50,9 @@ fn a_parent_and_a_child(world: World) -> Simulation {
     simulation.population.agents[0].state.energy = 100.0;
 
     simulation.population.agents[1].state.position = (31, 30, 0);
+    // A child of an age to be on its own feet, as `LifeStage::Child` is: a
+    // younger one is carried off by whoever keeps it (#308).
+    simulation.population.agents[1].state.now_this_many_years_old(8);
     simulation.population.agents[1].state.life_stage = LifeStage::Child;
     simulation.population.agents[1].parent_ids = vec![parent];
 
@@ -310,5 +313,39 @@ fn going_without_counts_for_more_than_a_gift() {
     assert!(
         Simulation::WHAT_GOING_WITHOUT_IS_WORTH > Simulation::WHAT_A_GIFT_IS_WORTH,
         "a thing somebody could spare is not the same as a thing they could not"
+    );
+}
+
+/// An infant in arms is carried off, not stood over.
+///
+/// A child under six is kept wherever its keeper is, so a parent who runs
+/// takes it along. Read as somebody left in the way, an infant made every
+/// lion that came near its parent a fight the parent had to have, and four
+/// parents on one big-map seed died of them in an autumn. See ISSUES_FOUND
+/// #308.
+#[test]
+fn a_parent_runs_with_the_infant_in_arms() {
+    let mut world = an_empty_country();
+    for at in [(32, 30), (32, 31), (31, 31), (32, 29)] {
+        world
+            .spawn_animal("wolf".to_string(), at)
+            .expect("a wolf should spawn");
+    }
+
+    let mut simulation = a_parent_and_a_child(world);
+    // An infant, on its parent's own tile, as one is kept
+    simulation.population.agents[1].state.now_this_many_years_old(1);
+    simulation.population.agents[1].state.life_stage = LifeStage::Infant;
+    simulation.population.agents[1].state.position = simulation.population.agents[0].state.position;
+    simulation.feel_about_what_stands_in_the_way();
+
+    let here = simulation.population.agents[0].state.position;
+    let answer = simulation
+        .how_this_one_answers_a_threat(&simulation.population.agents[0], here)
+        .expect("wolves at his elbow want an answer");
+
+    assert!(
+        matches!(answer, Action::FleeFrom { .. }),
+        "with the child in his arms he can take it away, and fought instead: {answer:?}"
     );
 }

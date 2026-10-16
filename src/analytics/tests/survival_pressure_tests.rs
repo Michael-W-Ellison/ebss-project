@@ -549,3 +549,82 @@ fn a_parent_counts_the_children_already_here() {
         "a parent feeding two infants had a third on the same stores as somebody with none"
     );
 }
+
+/// One grown person who has seen a winter through: so much put by going into
+/// the hungry gap, and so much still there when it was over.
+fn through_a_winter(going_in: f32, coming_out: f32) -> Agent {
+    use crate::agents::provision::{how_long_the_land_gives_nothing, when_the_land_stops_giving};
+    use crate::environment::seasons::DAYS_PER_YEAR;
+
+    let starts = when_the_land_stops_giving();
+    let ends = (starts + how_long_the_land_gives_nothing()) % DAYS_PER_YEAR;
+    let mut agent = fed_adult();
+    agent.state.winters_seen.note_the_larder(starts, going_in);
+    agent.state.winters_seen.note_the_larder(ends, coming_out);
+    agent
+}
+
+/// What the store holds today, which in spring is not much.
+fn a_thin_spring(agent: &mut Agent) {
+    use crate::agents::provision::WhatIsPutBy;
+    let a_day = agent.state.physiology.what_i_burn_in_a_day;
+    agent.state.what_the_larder_says = Some(WhatIsPutBy::reckon(a_day * 5.0, a_day, 90.0, 100));
+}
+
+/// A store that came through the winter with food in it has a surplus, and a
+/// child may be conceived on it in spring.
+///
+/// The gate asked for a whole winter's eating in the store on the day, which
+/// no store holds in spring however good the year: the gate stood shut from
+/// midwinter to late summer in settlements whose pits never ran short. See
+/// ISSUES_FOUND #307.
+#[test]
+fn a_winter_that_left_food_over_lets_a_child_be_conceived_in_spring() {
+    let mut agent = through_a_winter(1_000.0, 600.0);
+    a_thin_spring(&mut agent);
+    assert!(
+        agent.enough_put_by_for_a_child(),
+        "the winter took 400 and left 600, and a newborn's winter was refused out of it"
+    );
+}
+
+/// And one that left next to nothing does not.
+#[test]
+fn a_winter_that_left_almost_nothing_keeps_the_gate_shut() {
+    let mut agent = through_a_winter(1_000.0, 10.0);
+    a_thin_spring(&mut agent);
+    assert!(
+        !agent.enough_put_by_for_a_child(),
+        "the winter took 990 and left 10, and a child was let on it"
+    );
+}
+
+/// A winter that ran the store dry has counted nothing, and the stricter
+/// question - a whole winter in the store today - comes back.
+#[test]
+fn a_winter_that_ran_the_store_dry_asks_the_old_question() {
+    let mut agent = through_a_winter(1_000.0, 0.0);
+    assert_eq!(agent.state.winters_seen.what_a_gap_leaves(), None);
+    a_thin_spring(&mut agent);
+    assert!(!agent.enough_put_by_for_a_child());
+}
+
+/// The small ones already here are charged against the surplus as well, which
+/// is what spaces children.
+#[test]
+fn the_children_already_here_are_charged_against_the_surplus() {
+    let newborn = crate::agents::agent::what_a_body_this_age_eats(0);
+
+    // Left over is just more than one newborn's share of what the winter took.
+    let took = 1_000.0;
+    let mut alone = through_a_winter(took + took * newborn * 1.1, took * newborn * 1.1);
+    a_thin_spring(&mut alone);
+    assert!(alone.enough_put_by_for_a_child());
+
+    let mut with_two = alone.clone();
+    with_two.the_small_ones_i_answer_for = 2.0 * newborn;
+    assert!(
+        !with_two.enough_put_by_for_a_child(),
+        "a parent of two infants was let a third on a surplus that covers one"
+    );
+}

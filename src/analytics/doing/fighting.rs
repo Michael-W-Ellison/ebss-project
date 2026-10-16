@@ -294,6 +294,11 @@ impl Simulation {
     }
 
     /// `Action::Fight`.
+    /// What a blow that lands takes off a beast, for each point of the arm
+    /// behind it and of the point it drives: about sixteen for a grown arm
+    /// with a sharpened stick, against a wolf's forty-five.
+    pub(in crate::analytics) const WHAT_AN_ARM_PUTS_BEHIND_A_POINT: f32 = 9.0;
+
     pub(in crate::analytics) fn fighting_a_beast(&mut self, animal_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         // Standing your ground. The agent is not after this thing's
         // skin - it is here because the thing is close enough to be a
@@ -352,11 +357,14 @@ impl Simulation {
             // counts for more, and counts for less as it wears.
             let named: f32 = if weapon.is_some() { 0.2 } else { 0.0 };
             let steadier = named.max((spear - 1.0) * 0.25);
-            // Floored at one, so bare hands are exactly what they were. Above
-            // that it is the tool's own worth rather than a quarter of it,
-            // because this is the half of the specification that is about how
-            // many blows it takes rather than whether one lands.
-            (agent.own_strength() + steadier, spear.max(1.0))
+            // The point's own worth, bare hands included, because this is the
+            // half of the specification that is about how many blows it takes
+            // rather than whether one lands. It was floored at one, "so bare
+            // hands are exactly what they were" - which was a blow of fifty-odd,
+            // more than a wolf's whole health: every blow that landed killed,
+            // bare-handed or not, and a spear could not take a blow off a
+            // fight that was already one blow long (#328).
+            (agent.own_strength() + steadier, spear)
         };
 
         // Whether the blow lands is what the agent is worth against
@@ -388,7 +396,14 @@ impl Simulation {
             // as well as in whether the blow lands at all - and this is where
             // it tells most, because halving the blows is what the
             // specification actually asks for.
-            let hurt = (25.0 + mine * 25.0) * what_the_point_is_worth;
+            //
+            // Sized so that a grown arm with a sharpened stick takes about
+            // three blows that land to put a wolf down, with a flint spear
+            // about two, and bare-handed a dozen or more: "a wooden spear is
+            // enough, but should take several attacks to kill the animal,
+            // depending on the size of the animal. A flint spear should
+            // reduce the number of attacks" (#328).
+            let hurt = Self::WHAT_AN_ARM_PUTS_BEHIND_A_POINT * mine * what_the_point_is_worth;
             let killed = {
                 let Some(animal) = self.world.animals.get_mut(animal_id) else {
                     return ActionResult::failure("Nothing there to fight".to_string());
@@ -446,16 +461,17 @@ impl Simulation {
             // a tool still in the pack - so a kill in a fight and the same
             // kill in a hunt were butchered by two different rules. Two
             // spellings of one question; see `could_bring_it_down`.
+            let where_it_fell = {
+                let at = self.population.agents[agent_index].state.position;
+                crate::world::Position::new(at.0, at.1)
+            };
+            self.the_beast_comes_down(agent_index, &mut items_gained, where_it_fell, rng);
             let knife = self.population.agents[agent_index]
                 .how_much_my_tools_bring_back(
                     crate::agents::skills::SkillType::Leatherworking,
                 );
             let butchered = self.butcher(&items_gained, knife);
             {
-                let where_it_fell = {
-                    let at = self.population.agents[agent_index].state.position;
-                    crate::world::Position::new(at.0, at.1)
-                };
                 self.into_the_pack_or_on_the_ground(
                     agent_index,
                     butchered,

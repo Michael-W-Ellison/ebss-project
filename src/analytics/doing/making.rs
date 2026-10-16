@@ -364,6 +364,11 @@ impl Simulation {
     }
 
     /// `Action::Craft`.
+    /// The effort of a making an ordinary hand gets through in one planning
+    /// period. A spear, a handaxe or a basket is about this; a lashing is
+    /// half of it; a wheel was twice it.
+    pub(in crate::analytics) const WHAT_A_PERIOD_OF_MAKING_COMES_TO: f32 = 8.0;
+
     pub(in crate::analytics) fn crafting(&mut self, item_type: &String, agent_index: usize, turn_now: u32) -> ActionResult {
         // The stone-age chain comes first. These steps take named
         // things and turn out named things, so what one step produces
@@ -472,12 +477,31 @@ impl Simulation {
             // What is in the hand tells here too, and not on the quality: a
             // poor tool is a *dangerous* tool, and `tool_risk_roll_count`
             // rolls the failure and injury checks again for one.
+            //
+            // And the hand is the hand at *this* thing (#335): "crafting
+            // should not be a general skill, but based on the object being
+            // crafted." The trade carries some of the way to a new thing;
+            // having made it before carries the rest.
             let with_what = agent.how_well_made_is_what_i_work_this_trade_with(step.hands);
-            let attempt = agent.skills.perform_check(step.hands, with_what);
+            let at_this = agent.skills.skill_at_making(step.makes, step.hands);
+            let attempt = at_this.perform_check(with_what);
+
+            // A practised hand is quicker at it and spends less of itself on
+            // it. An ordinary hand does a making of ordinary size in a period;
+            // a beginner takes two at it, and a big one takes longer still.
+            let hand = at_this.hand();
+            let periods = (step.effort / Self::WHAT_A_PERIOD_OF_MAKING_COMES_TO / hand)
+                .round()
+                .max(1.0) as u32;
+            let effort = step.effort / hand.sqrt();
 
             // Cuts and burns, which are the other tax on a bad hand and a bad
-            // tool both.
-            if let Some(hurt) = attempt.injury {
+            // tool both - where there is anything in the making to cut or
+            // burn anybody (`could_this_making_hurt`).
+            let hurt_doing_it = attempt
+                .injury
+                .filter(|_| crate::environment::making::could_this_making_hurt(&step));
+            if let Some(hurt) = hurt_doing_it {
                 let harm: f32 = match hurt {
                     crate::agents::skills::InjuryType::Small => 2.0,
                     crate::agents::skills::InjuryType::Large => 8.0,
@@ -513,12 +537,15 @@ impl Simulation {
                 agent
                     .skills
                     .practise(step.hands, (step.effort / 8.0).round().max(1.0) as u32, turn_now);
+                agent.skills.made_one(step.makes);
 
                 return ActionResult::failure(format!(
                     "Spoiled the makings of a {} in the trying",
                     step.makes
                 ))
-                .spoiled_in_the_making();
+                .spoiled_in_the_making()
+                .with_energy_cost(effort)
+                .taking_periods(periods);
             }
 
             // A thing that took more doing is the heavier thing to
@@ -557,10 +584,12 @@ impl Simulation {
                 skill.gain_experience(learned);
                 skill.last_used = turn_now;
             }
+            agent.skills.made_one(step.makes);
 
             return ActionResult::success()
                 .with_drive_change(DriveType::Utility, -0.2)
-                .with_energy_cost(step.effort)
+                .with_energy_cost(effort)
+                .taking_periods(periods)
                 .with_message(format!("Made {} {}", step.how_many, step.makes));
         }
 

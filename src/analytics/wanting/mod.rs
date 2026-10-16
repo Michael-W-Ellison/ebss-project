@@ -637,11 +637,15 @@ impl Simulation {
         let recent_percepts: Vec<(u32, crate::agents::sensory_processing::Percept)> =
             agent.recent_percepts.iter().cloned().collect();
 
+        // Not something just noticed on the far bank, either (#323), nor in
+        // the water at the walker's feet (#324)
         if let Some(percept_action) = Self::generate_action_from_percepts(
             &recent_percepts,
             &agent.drives,
             agent_position,
-        ) {
+        )
+        .filter(|action| self.can_this_be_got_to(agent_position, action))
+        {
             return (percept_action, false);
         }
 
@@ -723,6 +727,12 @@ impl Simulation {
             }
         }
 
+        // And so does a walk to somewhere there is no way to, before it is
+        // refused at the water's edge (#323).
+        if !self.can_this_be_got_to(agent_position, &answer) {
+            return None;
+        }
+
         if agent
             .lessons
             .will_try_this_here(&crate::agents::Agent::what_was_tried(&answer), here)
@@ -733,6 +743,44 @@ impl Simulation {
         }
     }
 
+
+    /// Whether this is somewhere this one could walk to, if it is a walk at
+    /// all.
+    ///
+    /// The far bank of a river is in sight and in mind, and many decisions
+    /// pick a place without asking what is known to be there: a day's trip to
+    /// the best ground, somewhere to meet, a step out of curiosity. Each such
+    /// walk was refused at the start (#321) and then decided again, and on one
+    /// world that was 680 turns a year. Asked here, where a decision is still
+    /// being made, the next answer gets the turn instead (#323).
+    ///
+    /// **Nor a walk that ends where it began.** A walk to the water a pace
+    /// off ends on the bank, which is where the walker is standing, and so
+    /// does a walk to the ground underfoot. Either "succeeded", went nowhere
+    /// and spent the turn, booked as "move: already there"; one decided at
+    /// the start of an errand spent the next turn arriving. Something seen in
+    /// the shallows was walked at like this a hundred turns in two years on
+    /// one world (#324).
+    ///
+    /// **Judged where the walk will end**, which is where it is judged when it
+    /// is walked. Water with this bank beside it is somewhere to get to, but
+    /// where the route there is too long to find, the walk ends on whichever
+    /// ground beside it is nearest, and that can be the far bank: somebody
+    /// running from an attacker straight at a river was refused 117 times in a
+    /// year on one world, with open ground to run to all round (#324).
+    pub(in crate::analytics) fn can_this_be_got_to(&self, from: (i32, i32, i32), doing: &Action) -> bool {
+        match doing {
+            Action::Move { target } => {
+                if !self.world.can_walk_between((from.0, from.1), (target.0, target.1)) {
+                    return false;
+                }
+                let end = self.where_a_walk_can_end(from, *target);
+                (end.0, end.1) != (from.0, from.1)
+                    && self.world.can_walk_between((from.0, from.1), (end.0, end.1))
+            }
+            _ => true,
+        }
+    }
 
     /// Whether an answer is one there is nothing to find out about.
     ///
@@ -1086,6 +1134,7 @@ impl Simulation {
             DriveType::Sustenance => self
                 .cooking_action(agent, agent_position)
                 .or_else(|| self.muck_action(agent, agent_position))
+                .or_else(|| self.moving_to_farmland(agent, agent_position))
                 .or_else(|| self.farming_action(agent, agent_position))
                 .or_else(|| self.transplanting_action(agent, agent_position))
                 .or_else(|| self.moving_on(agent, agent_position))
@@ -1175,6 +1224,21 @@ impl Simulation {
                             verb: verb.to_string(),
                             to: to.to_string(),
                         })
+                })
+                // And what the kit is short of: an edge for somebody with
+                // none, and the cord for the next one while there is flax to
+                // twist it from (#332).
+                //
+                // After the pottering and not before it. Put first, it cost
+                // the settlement its first winter's store: on scattered seed 3
+                // the larder at the year's end was 13,479 against 64,965 with
+                // the edge here, and the breeding gate - which reads the
+                // larder - stayed shut all year. The pottering is where bowls
+                // come from, and a bowl is what a larder is kept in (#333).
+                .or_else(|| {
+                    agent
+                        .what_my_kit_is_short_of()
+                        .and_then(|kit| self.how_i_would_come_by(kit, agent))
                 })
                 .or_else(|| {
                     agent
@@ -1386,8 +1450,13 @@ impl Simulation {
                     }
                 }
 
+                // Only once a bright stone could come to anything in this
+                // one's hands: before a pot has been fired it is a heavy stone
+                // to carry about and nothing more (#336).
                 let agent_has_none = agent.how_many_i_have("iron") < 2;
-                if agent_has_none && agent.have_i_seen("iron") {
+                let could_come_to_something = agent.knows_how_to_make("shinylump")
+                    || agent.knows_what_comes_before("shinylump");
+                if agent_has_none && could_come_to_something && agent.have_i_seen("iron") {
                     return Some(Action::Gather {
                         resource_type: "iron".to_string(),
                     });

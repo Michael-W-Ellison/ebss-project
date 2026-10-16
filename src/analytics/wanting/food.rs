@@ -355,22 +355,39 @@ impl Simulation {
             && !Self::more_food_than_he_will_get_through(agent)
             && agent.lessons.will_try_this_again("hunt")
         {
-            if let Some((animal_id, animal_position)) = self.nearest_prey(agent, agent_position) {
+            // And not for what is on it unless it beats the walk to the best
+            // food this one knows of, in the same coin: food home less the
+            // trip, per turn the trip takes. A deer at your feet against a
+            // hedge in fruit across the meadow is a real question with an
+            // answer, and the answer depends on how much meat is on the deer
+            // and how many throws it will take - not, as it was, on the deer
+            // being the nearer (#330).
+            let the_hunt = self
+                .the_best_prey_to_eat(agent, agent_position, Self::AS_NEAR_AS_PREY_HAS_TO_BE_TO_BOTHER)
+                .filter(|(_, _, hunt_worth)| {
+                    self.the_best_food_anywhere_and_its_worth(agent, agent_position)
+                        .is_none_or(|(_, patch_worth)| *hunt_worth > patch_worth)
+                });
+            if let Some((animal_id, animal_position, _)) = the_hunt {
                 let reach = (animal_position.0 - agent_position.0)
                     .abs()
                     .max((animal_position.1 - agent_position.1).abs());
 
-                if reach <= Self::AS_NEAR_AS_PREY_HAS_TO_BE_TO_BOTHER {
-                    if reach <= Self::HUNT_REACH {
-                        return Some(Action::Hunt {
-                            animal_id,
-                            weapon: agent
-                                .equipment
-                                .get_weapon()
-                                .map(|weapon| weapon.name.clone()),
-                        });
-                    }
+                if reach <= Self::HUNT_REACH {
+                    return Some(Action::Hunt {
+                        animal_id,
+                        weapon: agent
+                            .equipment
+                            .get_weapon()
+                            .map(|weapon| weapon.name.clone()),
+                    });
+                }
 
+                // Not after it over a river, though (#323).
+                if self.world.can_walk_between(
+                    (agent_position.0, agent_position.1),
+                    (animal_position.0, animal_position.1),
+                ) {
                     return Some(Action::Move {
                         target: (animal_position.0, animal_position.1, agent_position.2),
                     });
@@ -490,9 +507,14 @@ impl Simulation {
             // An animal is food. Hunting does not pay against berries and
             // fish, which is why an agent does not do it for the meat as a
             // rule - but an agent with nothing else left is a different case.
-            if let Some((animal_id, animal_position)) =
-                self.nearest_prey(agent, agent_position)
-            {
+            //
+            // Something with meat on it, though, and the one most worth the
+            // throwing: a starving man has even less to spare on a kestrel.
+            if let Some((animal_id, animal_position, _)) = self.the_best_prey_to_eat(
+                agent,
+                agent_position,
+                Self::HUNT_SEARCH_RADIUS as i32,
+            ) {
                 let reach = (animal_position.0 - agent_position.0)
                     .abs()
                     .max((animal_position.1 - agent_position.1).abs());
@@ -639,6 +661,17 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<crate::world::Position> {
+        self.the_best_food_anywhere_and_its_worth(agent, agent_position)
+            .map(|(where_it_is, _)| where_it_is)
+    }
+
+    /// The same, with what the trip there is worth - `what_this_patch_is_worth`
+    /// - so that something else on offer can be held up against it.
+    pub(in crate::analytics) fn the_best_food_anywhere_and_its_worth(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<(crate::world::Position, f32)> {
         use crate::world::Position;
 
         let here = Position::new(agent_position.0, agent_position.1);
@@ -671,7 +704,8 @@ impl Simulation {
                 .food_database
                 .get(&kind)
                 .map(|template| template.base_nutrition.energy)
-                .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD);
+                .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD)
+                * Self::portions_in_one_off(resource.resource_type);
             let costs = crate::agents::provision::what_foraging_costs(
                 felt,
                 physiology::how_much_work_this_food_is(energy),
@@ -684,7 +718,7 @@ impl Simulation {
             }
         }
 
-        best.map(|(where_it_is, _)| where_it_is)
+        best
     }
 
     /// A place the agent knows to look: what it can smell right now, falling
@@ -705,6 +739,13 @@ impl Simulation {
         let walking_distance = |candidate: &(i32, i32, i32)| {
             (candidate.0 - agent_position.0).abs() + (candidate.1 - agent_position.1).abs()
         };
+        // Water smelled or remembered over a river is no answer to thirst:
+        // walked at, it was refused at the bank every turn, and someone parched
+        // stood there (#323).
+        let can_be_got_to = |candidate: &(i32, i32, i32)| {
+            self.world
+                .can_walk_between((agent_position.0, agent_position.1), (candidate.0, candidate.1))
+        };
 
         let smelled = agent
             .senses
@@ -712,6 +753,7 @@ impl Simulation {
             .get_scents_by_type(scent_type)
             .into_iter()
             .map(|scent| scent.source_position)
+            .filter(can_be_got_to)
             .min_by_key(walking_distance);
 
         smelled
@@ -721,6 +763,7 @@ impl Simulation {
                     .recall_locations(memory_type.clone())
                     .into_iter()
                     .map(|memory| memory.position)
+                    .filter(can_be_got_to)
                     .min_by_key(walking_distance)
             })
             // And last, what this one has *seen*.
@@ -779,6 +822,7 @@ impl Simulation {
                     .map(|where_it_is| {
                         (where_it_is.x, where_it_is.y, agent_position.2)
                     })
+                    .filter(can_be_got_to)
                     .min_by_key(walking_distance)
             })
     }
@@ -1037,8 +1081,10 @@ impl Simulation {
         position: (i32, i32, i32),
         radius: u32,
     ) -> Option<crate::world::Position> {
+        // Not a carcass: that is cut, not eaten where it stands, and the way
+        // to it is a walk and a `Gather` (#331).
         self.nearest_resource_within(agent, position, radius, |resource| {
-            Self::edible_item_for(resource.resource_type).is_some()
+            Self::edible_item_for(resource.resource_type).is_some() && !resource.is_a_carcass()
         })
     }
 
@@ -1179,6 +1225,22 @@ impl Simulation {
         let turns = 1.0
             + crate::world::pace::turns_to_walk(paces) * Self::TURNS_A_PACE_TAKES;
         (brings_back - costs) / turns
+    }
+
+    /// How many portions one of what comes off this goes down as.
+    ///
+    /// One, for everything picked: a handful is eaten as it is. Three for a
+    /// joint off a carcass, which is cut into portions before it is eaten
+    /// (`CUT_MEAT_INTO_PORTIONS`) - so a carcass weighed by the joint at the
+    /// worth of a portion read as a third of what it was, and lost to a berry
+    /// bush every time (#331).
+    pub(in crate::analytics) fn portions_in_one_off(resource: crate::world::ResourceType) -> f32 {
+        match resource {
+            crate::world::ResourceType::Meat => {
+                crate::environment::making::CUT_MEAT_INTO_PORTIONS.how_many as f32
+            }
+            _ => 1.0,
+        }
     }
 
     /// The inventory item a resource yields when eaten, if it is edible at all

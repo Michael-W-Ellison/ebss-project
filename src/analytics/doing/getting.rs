@@ -49,6 +49,18 @@ impl Simulation {
         agent_index: usize,
         room_wanted: f32,
     ) -> f32 {
+        self.set_down_to_make_room(agent_index, room_wanted, &[])
+    }
+
+    /// The same, never putting down anything in `keep`: what a making wants
+    /// goes in ahead of what is worth least in the pack, but not ahead of the
+    /// rest of what the same making wants.
+    pub(in crate::analytics) fn set_down_to_make_room(
+        &mut self,
+        agent_index: usize,
+        room_wanted: f32,
+        keep: &[&str],
+    ) -> f32 {
         use crate::world::Position;
 
         let here = {
@@ -69,7 +81,7 @@ impl Simulation {
                 break;
             }
 
-            let Some(what) = self.population.agents[agent_index].what_i_would_set_down() else {
+            let Some(what) = self.population.agents[agent_index].what_i_would_set_down_keeping(keep) else {
                 break;
             };
 
@@ -141,24 +153,22 @@ impl Simulation {
         }
     }
 
-    /// `Action::Gather`.
-    pub(in crate::analytics) fn gathering(&mut self, resource_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
-        use crate::world::{ResourceType, Position};
-        use crate::agents::InventoryItem;
+    /// The node a gather for this would take from, and how far off it is:
+    /// the best food patch within foraging reach for a request for food, by
+    /// what the trip is worth, and the nearest worthwhile one of anything else.
+    ///
+    /// Asked by `gathering` to do the gather and by `what_trade_this_asks_for`
+    /// to know what it will be done with - a request for food at a carcass is
+    /// knife work, not picking (#331).
+    pub(in crate::analytics) fn the_node_this_gather_takes(
+        &self,
+        agent_index: usize,
+        resource_type_enum: crate::world::ResourceType,
+    ) -> Option<(usize, u32)> {
+        use crate::world::{Position, ResourceType};
 
-        let resource_type_enum = Self::what_a_gather_asks_for(resource_type);
-
-        if resource_type_enum.is_none() {
-            return ActionResult::failure(format!("Unknown resource type: {}", resource_type));
-        }
-        let resource_type_enum = resource_type_enum.unwrap();
-
-        // Get agent position
         let agent = &self.population.agents[agent_index];
-        let agent_pos = Position::new(
-            agent.state.position.0,
-            agent.state.position.1
-        );
+        let agent_pos = Position::new(agent.state.position.0, agent.state.position.1);
 
         // Look for resources within a 25-tile radius. A request for
         // food accepts anything edible, so foraging is not limited to
@@ -221,7 +231,8 @@ impl Simulation {
                         let energy = Self::edible_item_for(resource.resource_type)
                             .and_then(|kind| self.food_database.get(&kind))
                             .map(|t| t.base_nutrition.energy)
-                            .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD);
+                            .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD)
+                            * Self::portions_in_one_off(resource.resource_type);
                         let costs = crate::agents::provision::what_foraging_costs(
                             distance,
                             physiology::how_much_work_this_food_is(energy),
@@ -248,6 +259,31 @@ impl Simulation {
                 }
             }
         }
+
+        nearest_resource
+    }
+
+    /// `Action::Gather`.
+    pub(in crate::analytics) fn gathering(&mut self, resource_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
+        use crate::world::{ResourceType, Position};
+        use crate::agents::InventoryItem;
+
+        let resource_type_enum = Self::what_a_gather_asks_for(resource_type);
+
+        if resource_type_enum.is_none() {
+            return ActionResult::failure(format!("Unknown resource type: {}", resource_type));
+        }
+        let resource_type_enum = resource_type_enum.unwrap();
+
+        // Get agent position
+        let agent = &self.population.agents[agent_index];
+        let agent_pos = Position::new(
+            agent.state.position.0,
+            agent.state.position.1
+        );
+
+        let gathering_food = resource_type_enum == ResourceType::Food;
+        let nearest_resource = self.the_node_this_gather_takes(agent_index, resource_type_enum);
 
         if let Some((resource_index, _)) = nearest_resource {
             // The harvested node may be an edible substitute for a
@@ -308,6 +344,10 @@ impl Simulation {
                     Self::what_a_trip_brings_back(resource_type_enum, today, rng)
                 }
 
+                // A carcass is cut, not picked, and the edge is the
+                // trade's - see `trade_for_gathering`.
+                ResourceType::Meat => Self::JOINTS_A_TURN_OF_CUTTING_TAKES,
+
                 _ => 1,
             };
 
@@ -367,6 +407,7 @@ impl Simulation {
 
             // Harvest resource
             let where_it_grew = self.world.resources[resource_index].position;
+            let killed_on = self.world.resources[resource_index].killed_on;
             let harvested = {
                 let node = &mut self.world.resources[resource_index];
                 let taken = node.harvest(harvest_amount);
@@ -564,11 +605,13 @@ impl Simulation {
                     Self::what_one_of_these_weighs(resource_type_enum),
                 );
 
-                // Gathered food carries nutrition and spoils over time
+                // Gathered food carries nutrition and spoils over time -
+                // and a joint off a carcass is as old as the kill, not as
+                // the cutting.
                 if let Some(item_type) = Self::edible_item_for(resource_type_enum) {
                     item.food_data = self
                         .food_database
-                        .create_food_data(&item_type, self.current_turn);
+                        .create_food_data(&item_type, killed_on.unwrap_or(self.current_turn));
                 }
 
                 let it_is_food = item.food_data.is_some();
@@ -602,6 +645,22 @@ impl Simulation {
                         let mut the_rest = item.clone();
                         the_rest.quantity = harvested - took;
                         took += self.take_what_fits(agent_index, &the_rest);
+                    }
+                }
+
+                // And what a making wants, the same way: a man short two stone
+                // for a knife puts down the iron he has no use for, not the
+                // flax the knife's cord is going to be twisted from (#332).
+                if !it_is_food && took < harvested {
+                    let makings = self.population.agents[agent_index].what_my_makings_want();
+                    if makings.contains(&item_id) {
+                        let each = item.what_one_of_them_weighs();
+                        let short = (harvested - took) as f32 * each;
+                        if self.set_down_to_make_room(agent_index, short, &makings) > 0.0 {
+                            let mut the_rest = item.clone();
+                            the_rest.quantity = harvested - took;
+                            took += self.take_what_fits(agent_index, &the_rest);
+                        }
                     }
                 }
                 let took = took;
@@ -809,6 +868,14 @@ impl Simulation {
             }
         };
 
+        // Asked again where the hunt is made: one chosen at full health can
+        // come round again after a blow, from a plan or a way already in
+        // hand, and a hunter at thirty-six health went after a mammoth a
+        // second time and died of it (#327).
+        if !Self::fit_to_take_it_on(&self.population.agents[agent_index], &species) {
+            return ActionResult::failure(format!("Not fit to take on a {}", species.name));
+        }
+
         // Now get mutable reference to animal
         if let Some(animal) = self.world.animals.get_mut(animal_id) {
 
@@ -822,16 +889,8 @@ impl Simulation {
             // Hunting skill now, which existed and had no callers, and
             // never falls below a fifth.
             let agent = &self.population.agents[agent_index];
-            let hunting_skill = agent
-                .skills
-                .get_skill_if_exists(crate::agents::skills::SkillType::Hunting)
-                .map(|s| s.level)
-                .unwrap_or(-10);
-            // A spear in the hand, which is the whole of stone-age
-            // hunting. `weapon` is the older flag and still counts;
-            // what is in the pack counts for more, and counts for
-            // less as it wears.
             let spear = agent.how_fast_my_tools_make_this_go(crate::agents::skills::SkillType::Hunting);
+            let throwing = agent.own_strength();
 
             // Something in the hand, for anything bigger than a hare.
             //
@@ -849,9 +908,6 @@ impl Simulation {
                 ))
                 .with_energy_cost(2.0);
             }
-            let carried_flag: f32 = if weapon.is_some() { 0.2 } else { 0.0 };
-            let weapon_bonus = carried_flag.max((spear - 1.0) * 0.25);
-
             // Get mounted combat bonus (hunting from horseback is advantageous!)
             let mount_bonus = agent.transport.mounted_combat_bonus();
 
@@ -860,19 +916,18 @@ impl Simulation {
             // up to rather than a thing you stalked; a stone-age hunt
             // is mostly missing. What makes the difference is the
             // spear and the hand that throws it, not the walking up.
-            let success_prob = (Self::A_THROW_THAT_TELLS
-                + (hunting_skill as f32 * 0.03)
-                + weapon_bonus
-                + mount_bonus)
-                .clamp(0.1_f32, 0.9_f32);
+            let success_prob = Self::how_often_a_throw_tells(agent, weapon.is_some());
 
             if rng.gen_bool(success_prob as f64) {
                 // Successful hunt - damage the animal.
                 //
-                // A third of what it can take, not two thirds: one
-                // clean throw did not kill a bull, and a hunt that
-                // ends on the first hit is not a hunt.
-                let base_damage = species.health * Self::WHAT_ONE_THROW_TAKES_OUT_OF_IT;
+                // As much as the arm and the point put into it, so that a
+                // better point brings the beast down in fewer throws and a
+                // bigger beast takes more; see `what_a_throw_takes_off`.
+                // It was a third of whatever it hit, whatever hit it: three
+                // throws for a rabbit or a mammoth, with a stone or a flint
+                // spear (#329).
+                let base_damage = Self::what_a_throw_takes_off(throwing, spear);
                 let combat_multiplier = 1.0 + mount_bonus;
                 let damage = base_damage * combat_multiplier;
                 animal.take_damage(damage);
@@ -907,19 +962,24 @@ impl Simulation {
                         }
                     }
 
-                    // How much comes off the carcass, which is the waste
+                    let where_it_fell = {
+                        let at = self.population.agents[agent_index].state.position;
+                        crate::world::Position::new(at.0, at.1)
+                    };
+
+                    // The meat is cut as far as a turn takes it and the rest
+                    // left on the bone - see `the_beast_comes_down`.
+                    self.the_beast_comes_down(agent_index, &mut items_gained, where_it_fell, rng);
+
+                    // How much of the rest comes off, which is the waste
                     // question and so reads the yield channel: a fine flake
-                    // leaves less on the bone than a crude one, and a worn
+                    // leaves less of a hide than a crude one, and a worn
                     // flake leaves no more than a fresh one.
                     let knife = self.population.agents[agent_index]
                         .how_much_my_tools_bring_back(
                             crate::agents::skills::SkillType::Leatherworking,
                         );
                     let butchered = self.butcher(&items_gained, knife);
-                    let where_it_fell = {
-                        let at = self.population.agents[agent_index].state.position;
-                        crate::world::Position::new(at.0, at.1)
-                    };
                     self.into_the_pack_or_on_the_ground(
                         agent_index,
                         butchered,
@@ -1020,20 +1080,21 @@ impl Simulation {
                 }
 
                 // A rabbit runs. A boar turns round.
-                let fights_back = matches!(
-                    species.behavior,
-                    crate::environment::AnimalBehavior::Aggressive
-                        | crate::environment::AnimalBehavior::Defensive
-                        | crate::environment::AnimalBehavior::Territorial
-                );
-
-                if fights_back && species.attack_damage > 0.0 {
+                if Self::fights_back(&species) {
+                    // What gets through what is in the hunter's hands, as with
+                    // any other blow. The hunt was weighed against exactly this
+                    // (`worth_hunting` asks `could_i_fight_at_all`, which asks
+                    // `what_a_blow_costs_me`), and the whole blow landed instead:
+                    // a hunter with a spear and forty-odd health went after a
+                    // mammoth and was killed by the one blow the reckoning said
+                    // he could take (#327).
                     let agent = &mut self.population.agents[agent_index];
-                    agent.take_damage(species.attack_damage);
+                    let landed = agent.what_a_blow_costs_me(species.attack_damage);
+                    agent.take_damage(landed);
 
                     return ActionResult::failure(format!(
                         "{} turned on the hunter ({:.0} damage)",
-                        species.name, species.attack_damage
+                        species.name, landed
                     ))
                     .with_energy_cost(Self::WHAT_A_THROW_COSTS);
                 }

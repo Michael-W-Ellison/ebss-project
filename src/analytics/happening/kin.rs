@@ -275,28 +275,40 @@ impl Simulation {
     /// of nineteen under-sixes dead in one measured year died of thirst, not
     /// hunger. Nearest is by the same walk `WITHIN_A_FEW_PACES` measures, and
     /// ties break on the id so a seeded world picks the same keeper twice.
+    ///
+    /// Its own people are anybody past six who is theirs - a parent is past
+    /// eleven, and the keeping and the feeding must agree on who that is. The
+    /// keeping read anybody past six and the feeding anybody past sixteen, so
+    /// a child of a parent of thirteen was put at that parent's feet and then
+    /// fed by nobody, and an orphan was put beside a child of nine and fed by
+    /// nobody either: the first grandchildren of a settlement died of thirst
+    /// in their first year. Both passes ask this now, out of
+    /// `who_could_look_after_a_small_child`. See ISSUES_FOUND #304.
     fn whoever_looks_after(
         child: &crate::agents::Agent,
-        grown: &[(uuid::Uuid, (i32, i32, i32))],
+        about: &[(uuid::Uuid, (i32, i32, i32), u32)],
     ) -> Option<(uuid::Uuid, (i32, i32, i32))> {
         // Whoever it was last handed to, if they are still about.
-        if let Some(carrier) = child
+        if let Some((who, stood, _)) = child
             .carried_by
-            .and_then(|id| grown.iter().find(|(who, _)| *who == id))
+            .and_then(|id| about.iter().find(|(who, _, _)| *who == id))
         {
-            return Some(*carrier);
+            return Some((*who, *stood));
         }
 
-        if let Some(theirs) = child
+        if let Some((who, stood, _)) = child
             .parent_ids
             .iter()
-            .find_map(|id| grown.iter().find(|(who, _)| who == id))
+            .find_map(|id| about.iter().find(|(who, _, _)| who == id))
         {
-            return Some(*theirs);
+            return Some((*who, *stood));
         }
 
-        grown
+        // A stranger takes an orphan only if grown.
+        about
             .iter()
+            .filter(|(_, _, years)| *years >= crate::agents::LifeStage::KEPT_WITHIN_AN_HOUR_UNTIL)
+            .map(|(who, stood, _)| (*who, *stood))
             .min_by(|(this_who, this), (that_who, that)| {
                 let far = |stood: &(i32, i32, i32)| {
                     let across = (stood.0 - child.state.position.0) as i64;
@@ -307,7 +319,18 @@ impl Simulation {
                     .cmp(&far(that))
                     .then_with(|| this_who.cmp(that_who))
             })
-            .copied()
+    }
+
+    /// Everybody living who could be a small child's keeper: past the age of
+    /// being kept themselves, with where they stand and how old they are.
+    fn who_could_look_after_a_small_child(&self) -> Vec<(uuid::Uuid, (i32, i32, i32), u32)> {
+        self.population
+            .agents
+            .iter()
+            .filter(|a| a.state.is_alive)
+            .filter(|a| a.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL)
+            .map(|a| (a.id, a.state.position, a.state.years_old()))
+            .collect()
     }
 
     /// Which of its parents a small child is kept with: the first of them
@@ -398,16 +421,7 @@ impl Simulation {
 
     pub(in crate::analytics) fn the_small_stay_with_their_people(&mut self) {
         let where_their_people_are: Vec<(usize, (i32, i32, i32))> = {
-            let grown: Vec<(uuid::Uuid, (i32, i32, i32))> = self
-                .population
-                .agents
-                .iter()
-                .filter(|a| a.state.is_alive)
-                .filter(|a| {
-                    a.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
-                })
-                .map(|a| (a.id, a.state.position))
-                .collect();
+            let grown = self.who_could_look_after_a_small_child();
 
             self.population
                 .agents
@@ -447,14 +461,7 @@ impl Simulation {
             its_size_to_theirs: f32,
         }
 
-        let grown: Vec<(uuid::Uuid, (i32, i32, i32))> = self
-            .population
-            .agents
-            .iter()
-            .filter(|a| a.state.is_alive)
-            .filter(|a| a.state.years_old() >= crate::agents::LifeStage::KEPT_WITHIN_AN_HOUR_UNTIL)
-            .map(|a| (a.id, a.state.position))
-            .collect();
+        let grown = self.who_could_look_after_a_small_child();
 
         let mouths: Vec<AMouthToFeed> = self
             .population

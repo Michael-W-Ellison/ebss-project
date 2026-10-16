@@ -187,6 +187,25 @@ fn a_bad_plant_makes_the_man_who_tried_it_ill() {
     );
 }
 
+/// And what it costs him is an illness, not a blow.
+///
+/// It went in through the door a blow comes in by: booked as "a blow", so a
+/// death of a bad plant was reckoned a death in combat, and opening a wound
+/// as a blow does, which could fester. It was even softened by standing near
+/// a building, as a blow is. See ISSUES_FOUND #309.
+#[test]
+fn a_bad_plant_is_an_illness_and_not_a_blow() {
+    use crate::agents::AgentState;
+
+    let (mut simulation, _) = somebody_at_a_strange_plant(1, 0);
+    simulation.execute_action(&Action::Taste, 0);
+
+    let agent = &simulation.population.agents[0];
+    let booked: Vec<&str> = agent.state.what_has_taken_health.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(booked, vec![AgentState::ILLNESS], "a bad plant was booked as {booked:?}");
+    assert_eq!(agent.state.an_open_wound, 0.0, "a bad plant opened a wound");
+}
+
 /// Sometimes it costs him everything.
 #[test]
 fn a_bad_plant_can_kill() {

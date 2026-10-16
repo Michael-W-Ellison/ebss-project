@@ -147,6 +147,11 @@ fn test_spoiled_food_harmful() {
         }
         _ => panic!("Expected to get sick from spoiled food"),
     }
+
+    // And it is booked as what it was. It went down as "a blow", so a death
+    // of rotten meat was reckoned a death in combat. See ISSUES_FOUND #309.
+    let booked: Vec<&str> = agent.state.what_has_taken_health.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(booked, vec![crate::agents::AgentState::ILLNESS], "spoiled food was booked as {booked:?}");
 }
 
 #[test]

@@ -33,103 +33,207 @@ impl Simulation {
     /// By id rather than by index, and the index re-found each time, because a
     /// turn can kill somebody: an index taken before the loop would be pointing
     /// at the wrong person by the time it was used.
+    /// Ready the half hour's deciding: who stood where as it began, and
+    /// everybody's own half hour begun at their own minute.
     pub(in crate::analytics) fn everybody_takes_a_turn(&mut self) {
         // Collected up front so that a social action can resolve a nil id
         // against who was actually standing about when the turn began.
-        let agent_ids: Vec<_> = self.population.agents.iter().map(|a| a.id).collect();
-        let agent_positions: Vec<(uuid::Uuid, (i32, i32, i32))> = self
+        self.where_everybody_stood = self
             .population
             .agents
             .iter()
             .map(|a| (a.id, a.state.position))
             .collect();
 
-        for agent_id in agent_ids {
-            if let Some(index) = self.population.agents.iter().position(|a| a.id == agent_id) {
-                let state = &mut self.population.agents[index].state;
-                state.minutes_left_this_turn = crate::environment::seasons::MINUTES_PER_TURN as f32;
-                state.walked_with_time_to_spare = false;
-            }
-            self.one_persons_turn(agent_id, &agent_positions);
-
-            // A walk that arrived with time to spare leaves the rest of the
-            // half hour for whatever is done on arriving.
-            //
-            // "An agent should easily be capable of walking a kilometer in
-            // half an hour while accomplishing other tasks." A kilometre is
-            // twelve minutes at five kilometres an hour, and somebody who has
-            // walked to the larder has come to take something out of it, not
-            // to stand there until the next half hour. So they decide again,
-            // on what is about them now, until something that is not a walk
-            // takes the rest of the time, or it has gone. Bounded, so that a
-            // run of short walks cannot go on for ever.
-            let mut again = 0;
-            loop {
-                let Some(index) = self.population.agents.iter().position(|a| a.id == agent_id) else {
-                    break;
-                };
-                let agent = &mut self.population.agents[index];
-                if !agent.state.is_alive
-                    || !agent.state.walked_with_time_to_spare
-                    || agent.state.minutes_left_this_turn < Self::TIME_ENOUGH_TO_DO_SOMETHING
-                    || again >= Self::AS_MANY_THINGS_AS_A_HALF_HOUR_HOLDS
-                {
-                    agent.state.minutes_left_this_turn = 0.0;
-                    agent.state.walked_with_time_to_spare = false;
-                    break;
-                }
-                agent.state.walked_with_time_to_spare = false;
-                agent.busy_until = 0;
-                again += 1;
-                self.one_persons_turn(agent_id, &agent_positions);
-            }
-
-            // And then, for anybody with something on them, the rest of the
-            // half hour a minute at a time.
-            //
-            // "Every 30 turns/minutes agents should have the option of making
-            // a decision. This does not apply if an agent encounters a
-            // dangerous situation, as they must then make decisions minute by
-            // minute to enhance their survival odds."
-            //
-            // A turn is half an hour of committed action, which is the right
-            // grain for walking to a hedgerow and the wrong one for a wolf:
-            // half an hour is a long time to have already decided what you are
-            // doing. So somebody frightened enough to run or angry enough to
-            // stand goes round again, once a simulated minute, until the
-            // danger is off them or the half hour is gone.
-            //
-            // Only that person, and only while it lasts. The rest of the
-            // world stands still - and that is the whole difficulty with this
-            // mechanism, which was twice estimated as cheap and is not. A
-            // `Move` is one tile, whatever the turn is worth in minutes. Give
-            // a frightened man twenty-nine extra turns and he covers
-            // twenty-nine tiles while the wolf covers one, so the fast clock
-            // is not a finer grain on the same world: it is an escape hatch
-            // out of every predator balance the model has. Hence
-            // `predators_try_their_luck_at` just below - the thing that is
-            // after him gets its minutes too, and running away costs him what
-            // it should.
-            let mut minutes_left = crate::environment::seasons::MINUTES_PER_TURN;
-            while minutes_left > 1 {
-                let Some(agent_index) =
-                    self.population.agents.iter().position(|a| a.id == agent_id)
-                else {
-                    break;
-                };
-
-                let agent = &self.population.agents[agent_index];
-                if !agent.state.is_alive || !agent.emotions.in_danger() {
-                    break;
-                }
-
-                minutes_left -= 1;
-                self.minutes_spent_in_danger += 1;
-
-                self.one_persons_turn(agent_id, &agent_positions);
-                self.predators_try_their_luck_at(agent_index);
+        // **Everybody keeps their own half hour.** "Agents should have their
+        // 30 minute decision ticks separated out to prevent lag spikes if
+        // every agent was forced to make decisions at the exact same time."
+        // Each person's half hour begins at their own minute of it, fixed by
+        // who they are, so the deciding is spread over the thirty minutes
+        // rather than all of it falling at once. See `take_a_minute`.
+        let began = self.current_turn;
+        for agent in self.population.agents.iter_mut() {
+            if agent.state.next_decision_at == 0 {
+                agent.state.next_decision_at = began + Self::my_minute_of_the_half_hour(agent.id);
             }
         }
+    }
+
+    /// One minute of the half hour: whoever's decision falls on it decides,
+    /// and whatever is after somebody taking things a minute at a time gets
+    /// its minute at them.
+    pub(in crate::analytics) fn this_minute(
+        &mut self,
+        now: u32,
+        agent_positions: &[(uuid::Uuid, (i32, i32, i32))],
+    ) {
+        let due: Vec<uuid::Uuid> = self
+            .population
+            .agents
+            .iter()
+            .filter(|a| a.state.is_alive && a.state.next_decision_at <= now)
+            .map(|a| a.id)
+            .collect();
+        for agent_id in due {
+            self.the_next_decision(agent_id, now, agent_positions);
+        }
+
+        // "The minute-to-minute decision making was meant to occur when a
+        // threat was within eyesight of an agent." Somebody taking things a
+        // minute at a time is somebody with something after them, and the
+        // thing after them gets its minutes too, or running away would be
+        // free: a man who gets out of reach in the first two minutes is not
+        // struck at in the other twenty-eight, and one who is cornered is
+        // struck at every minute he stays there.
+        let watching: Vec<usize> = self
+            .population
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| a.state.is_alive && a.state.deciding_by_the_minute)
+            .map(|(at, _)| at)
+            .collect();
+        for at in watching {
+            self.minutes_spent_in_danger += 1;
+            self.predators_try_their_luck_at(at);
+        }
+    }
+
+    /// Which minute of the half hour this one's own half hour begins on.
+    pub(in crate::analytics) fn my_minute_of_the_half_hour(id: uuid::Uuid) -> u32 {
+        (id.as_u128() % crate::environment::seasons::MINUTES_PER_TURN as u128) as u32
+    }
+
+    /// One person decides, and how long it is until they decide again.
+    ///
+    /// Half an hour at a time, with every need on the table: hunger, thirst,
+    /// the lot. A minute at a time only while something that menaces them is
+    /// in sight, and those minutes come out of their own half hour rather than
+    /// being added to it - so somebody walking to the stream who comes into
+    /// sight of a wolf stops where they are, and takes what is left of the
+    /// half hour a minute at a time.
+    fn the_next_decision(
+        &mut self,
+        agent_id: uuid::Uuid,
+        now: u32,
+        agent_positions: &[(uuid::Uuid, (i32, i32, i32))],
+    ) {
+        let Some(index) = self.population.agents.iter().position(|a| a.id == agent_id) else {
+            return;
+        };
+
+        self.feel_again_about_what_is_round(index);
+        let watching = self.something_is_after_me(index);
+        let budget = if watching { 1 } else { crate::environment::seasons::MINUTES_PER_TURN };
+        {
+            let state = &mut self.population.agents[index].state;
+            state.minutes_left_this_turn = budget as f32;
+            state.walked_with_time_to_spare = false;
+            state.deciding_by_the_minute = watching;
+        }
+
+        self.one_persons_turn(agent_id, agent_positions);
+
+        // A walk that arrived with time to spare leaves the rest of the
+        // budget for whatever is done on arriving.
+        //
+        // "An agent should easily be capable of walking a kilometer in
+        // half an hour while accomplishing other tasks." A kilometre is
+        // twelve minutes at five kilometres an hour, and somebody who has
+        // walked to the larder has come to take something out of it, not
+        // to stand there until the next half hour. So they decide again,
+        // on what is about them now, until something that is not a walk
+        // takes the rest of the time, or it has gone, or something has come
+        // into sight that wants the rest of it taken a minute at a time.
+        // Bounded, so that a run of short walks cannot go on for ever.
+        let mut again = 0;
+        let mut stopped_short = false;
+        loop {
+            let Some(index) = self.population.agents.iter().position(|a| a.id == agent_id) else {
+                return;
+            };
+            let agent = &self.population.agents[index];
+            if !agent.state.is_alive
+                || !agent.state.walked_with_time_to_spare
+                || agent.state.minutes_left_this_turn < Self::TIME_ENOUGH_TO_DO_SOMETHING
+                || again >= Self::AS_MANY_THINGS_AS_A_HALF_HOUR_HOLDS
+            {
+                break;
+            }
+            if !watching {
+                self.feel_again_about_what_is_round(index);
+                if self.something_is_after_me(index) {
+                    stopped_short = true;
+                    break;
+                }
+            }
+            let agent = &mut self.population.agents[index];
+            agent.state.walked_with_time_to_spare = false;
+            agent.busy_until = 0;
+            again += 1;
+            self.one_persons_turn(agent_id, agent_positions);
+        }
+
+        let Some(index) = self.population.agents.iter().position(|a| a.id == agent_id) else {
+            return;
+        };
+        let state = &mut self.population.agents[index].state;
+        let used = if stopped_short {
+            (budget as f32 - state.minutes_left_this_turn).ceil().max(1.0) as u32
+        } else {
+            budget
+        };
+        state.next_decision_at = now + used;
+        state.minutes_left_this_turn = 0.0;
+        state.walked_with_time_to_spare = false;
+    }
+
+    /// How many minutes the beast after this one would take to kill them, at
+    /// a blow a minute; `None` with nothing after them.
+    pub(in crate::analytics) fn minutes_before_what_is_after_me_kills_me(&self, at: usize) -> Option<f32> {
+        if !self.something_is_after_me(at) {
+            return None;
+        }
+        let agent = &self.population.agents[at];
+        let (x, y, _) = agent.state.position;
+        let grown = agent.state.years_old() >= Self::TOO_BIG_FOR_A_SMALL_HUNTER;
+        let worst_blow = self
+            .what_menaces
+            .iter()
+            .filter(|menace| !(grown && menace.only_takes_the_small))
+            .filter(|menace| {
+                (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= Self::CLOSE_ENOUGH_TO_WORRY_ABOUT
+            })
+            .map(|menace| agent.what_a_blow_costs_me(menace.damage))
+            .fold(0.0_f32, f32::max);
+        // Something after them that is no beast is a person, whose blows are
+        // nearer a beast's than nothing
+        let blow = if worst_blow > 0.0 { worst_blow } else { Self::WHAT_A_PERSONS_BLOW_COSTS };
+        Some(agent.state.health.max(0.0) / blow)
+    }
+
+    /// What a blow from a person costs, for reckoning how soon one would kill.
+    const WHAT_A_PERSONS_BLOW_COSTS: f32 = 10.0;
+
+    /// How many minutes before hunger or thirst would kill this one.
+    pub(in crate::analytics) fn minutes_before_want_kills_me(agent: &crate::agents::Agent) -> f32 {
+        [crate::core::DriveType::Thirst, crate::core::DriveType::Hunger]
+            .into_iter()
+            .filter_map(|need| agent.state.turns_before_this_kills_me(need))
+            .fold(f32::INFINITY, f32::min)
+            * crate::environment::seasons::MINUTES_PER_TURN as f32
+    }
+
+    /// Whether something that menaces this one is in sight: a beast or a
+    /// person they are afraid of, or angry enough at to face.
+    ///
+    /// Not hunger or thirst, which are answered on the half hour like every
+    /// other need. And not for a small child, who takes no turn of its own:
+    /// it is carried, and the minutes were only ever the beast's (#325).
+    pub(in crate::analytics) fn something_is_after_me(&self, at: usize) -> bool {
+        let agent = &self.population.agents[at];
+        agent.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
+            && agent.emotions.threatened_by_something_there()
     }
 
     /// Fewer minutes than this left of the half hour is not enough to start
@@ -202,6 +306,12 @@ impl Simulation {
                 } else if agent.busy_until > now {
                     return;
                 }
+
+                // Free to decide, so awake: the night is over, or something
+                // has broken it (#310).
+                if agent.fatigue.is_sleeping {
+                    agent.wake_up(now);
+                }
             }
 
             // What is pressing hardest, and where this one is standing.
@@ -251,6 +361,7 @@ impl Simulation {
             // Fleeing comes out as an ordinary `Move`, so without a note of why
             // it was chosen it is invisible to both the tally and the errand.
             let mut ran_for_it = false;
+            self.camp_move_proposed.borrow_mut().take();
             let (action, is_plan_action) =
                 self.choose_what_to_do(agent_index, agent_position, &mut ran_for_it);
 
@@ -268,6 +379,16 @@ impl Simulation {
             self.population.agents[agent_index].by_what_way = None;
             let action_result = self.execute_action(&action, agent_index);
 
+            // A move of camp proposed while deciding is carried out only if
+            // this is the walk it proposed: anything that overruled it (the
+            // night, an errand, danger) leaves the camp where it is (#314).
+            let proposed = self.camp_move_proposed.borrow_mut().take();
+            if let (Some(decided), crate::environment::Action::Move { target }) = (proposed, &action) {
+                if decided.who == agent_id && (target.0, target.1) == decided.to {
+                    self.the_camp_moves(decided);
+                }
+            }
+
             // And now he is busy with it until it is done.
             //
             // Set from what the verb matrix says the action costs - see
@@ -275,8 +396,13 @@ impl Simulation {
             // holds him past more gates. Anything of a single period leaves
             // him free at the next one, which is what everything cost before
             // this existed and what most things still cost.
+            //
+            // Or from what the doing of it said, where that was longer: a
+            // making takes an unpractised hand more than one period.
             {
-                let takes = crate::agents::AgentState::how_long_this_takes(&action);
+                let takes = crate::agents::AgentState::how_long_this_takes(&action).max(
+                    action_result.took_periods * crate::environment::seasons::TICKS_BETWEEN_PLANS,
+                );
                 let now = self.current_turn;
                 self.population.agents[agent_index].busy_until = now + takes;
             }
@@ -473,10 +599,23 @@ impl Simulation {
                 Some("under the gate: neither strongly enough")
             };
 
+            // "Primary Drive demand should be determined by whichever drive
+            // results in the largest threat to the continued survival of
+            // the agent." A beast in sight that is after this one kills in
+            // minutes, and want in hours or days: whichever would kill
+            // first is answered first. Everything below that is not the
+            // answer to the beast - eating, carrying a load home, going
+            // without for a child - waits while it is there.
+            let the_beast_first = self
+                .minutes_before_what_is_after_me_kills_me(agent_index)
+                .is_some_and(|beast| beast < Self::minutes_before_want_kills_me(agent));
+
             // PRIORITY -1: An agent already starving eats before it does
-            // anything else, including running from a threat.
-            if let Some(survival_action) =
-                self.survival_action(agent, agent_position, true)
+            // anything else - unless the thing after it would kill it
+            // sooner than the hunger or the thirst.
+            if let Some(survival_action) = (!the_beast_first)
+                .then(|| self.survival_action(agent, agent_position, true))
+                .flatten()
             {
                 debug!(
                     "Agent {} is starving at {:?}, survival action: {:?}",
@@ -494,8 +633,9 @@ impl Simulation {
             // load never survived long enough to reach the pit. The
             // starving branch above still beats it: a man who will be
             // dead by morning eats what is in his hand.
-            else if let Some(carrying_home) =
-                self.is_the_load_worth_carrying_home(agent, agent_position)
+            else if let Some(carrying_home) = (!the_beast_first)
+                .then(|| self.is_the_load_worth_carrying_home(agent, agent_position))
+                .flatten()
             {
                 debug!("Agent {agent_id} is taking a load to the store");
                 (carrying_home, false)
@@ -510,8 +650,9 @@ impl Simulation {
             // asked whether it is itself past bearing, above, and
             // `somebody_of_mine_who_needs_it_more` refuses again -
             // two dead people is not better than one.
-            else if let Some(for_them) =
-                self.somebody_of_mine_who_needs_it_more(agent, agent_position)
+            else if let Some(for_them) = (!the_beast_first)
+                .then(|| self.somebody_of_mine_who_needs_it_more(agent, agent_position))
+                .flatten()
             {
                 debug!("Agent {agent_id} is going without for {for_them}");
                 (Action::GoWithout { for_them }, false)
@@ -551,21 +692,22 @@ impl Simulation {
                     // Find attacker position and flee away from them
                     if let Some(attacker) = self.population.agents.iter().find(|a| a.id == attacker_id) {
                         let attacker_pos = attacker.state.position;
-                        let dx = agent_position.0 - attacker_pos.0;
-                        let dy = agent_position.1 - attacker_pos.1;
-                        let distance = ((dx * dx + dy * dy) as f32).sqrt().max(1.0);
-                        let flee_distance = 15;
-                        let flee_x = agent_position.0 + ((dx as f32 / distance) * flee_distance as f32) as i32;
-                        let flee_y = agent_position.1 + ((dy as f32 / distance) * flee_distance as f32) as i32;
 
                         debug!(
                             "Agent {} FLEEING from attacker {} (fear={:.2})",
                             agent_id, attacker_id, agent.emotions.fear
                         );
 
-                        (crate::environment::Action::Move {
-                            target: (flee_x, flee_y, agent_position.2),
-                        }, false)
+                        // Away from them, and from somebody standing on the
+                        // same ground too: worked out here as a straight line
+                        // away from where they stood, that was a walk to where
+                        // this one already was, and an errand to it.
+                        (self.away_on_this_side(
+                            agent,
+                            agent_position,
+                            (attacker_pos.0, attacker_pos.1),
+                            Self::put_ground_between(agent_position, (attacker_pos.0, attacker_pos.1)),
+                        ), false)
                     } else {
                         // Attacker not found, flee in random direction
                         use rand::Rng;

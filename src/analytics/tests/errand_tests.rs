@@ -21,6 +21,10 @@ fn a_settlement(founders: usize, turns: usize) -> Simulation {
         population.spawn_agent(AgentConfig::default());
     }
     let mut simulation = Simulation::new(world, population);
+    // Where a people arrives, rather than the corner everybody is made in:
+    // on smooth country that corner can be a spit of land in the sea, where
+    // no errand arrives anywhere (#318).
+    simulation.bring_everybody_to_the_middle();
     for _ in 0..turns {
         simulation.take_a_turn();
     }

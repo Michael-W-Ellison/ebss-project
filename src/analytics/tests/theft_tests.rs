@@ -293,15 +293,26 @@ fn running_covers_more_ground_than_walking_and_costs_more() {
 #[test]
 fn running_is_away_from_the_thing() {
     let mut simulation = two_people();
-    simulation.population.agents[0].state.position = (50, 50, 0);
+    // On the map, and on open ground. He stood at (50, 50), which is just
+    // off the corner of a fifty-cell map: a bolt from there used to land on
+    // it, and now lands only where he could walk back from, which nowhere
+    // off the map is (#317).
+    for x in 0..simulation.world.grid.width as i32 {
+        for y in 0..simulation.world.grid.height as i32 {
+            if let Some(tile) = simulation.world.grid.get_tile_mut(&crate::world::Position::new(x, y)) {
+                tile.terrain = crate::world::Terrain::new(crate::world::TerrainType::Plains);
+            }
+        }
+    }
+    simulation.population.agents[0].state.position = (30, 25, 0);
 
-    let wolf = (60, 50, 0);
+    let wolf = (40, 25, 0);
     simulation.execute_action(&Action::FleeFrom { away_from: wolf }, 0);
 
     let landed = simulation.population.agents[0].state.position;
 
     assert!(
-        landed.0 < 50,
+        landed.0 < 30,
         "the wolf is east, so he is west of where he was: {landed:?}"
     );
 }

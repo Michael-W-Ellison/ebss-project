@@ -39,17 +39,40 @@ impl Simulation {
             return false;
         }
 
+        Self::fit_to_take_it_on(agent, species)
+    }
+
+    /// Whether a hunted beast of this kind turns on the hunter.
+    ///
+    /// The same question `hunting` asks when the throw misses: an aggressive,
+    /// defensive or territorial beast with a blow worth the name.
+    pub(in crate::analytics) fn fights_back(species: &crate::environment::fauna::AnimalSpecies) -> bool {
+        use crate::environment::AnimalBehavior;
+        matches!(
+            species.behavior,
+            AnimalBehavior::Aggressive | AnimalBehavior::Defensive | AnimalBehavior::Territorial
+        ) && species.attack_damage > 0.0
+    }
+
+    /// Whether this one is in a state to start a fight with a beast of this
+    /// kind: asked when the hunt is chosen and again when it is made, since a
+    /// hunt can be chosen one half hour and made the next, after a blow.
+    pub(in crate::analytics) fn fit_to_take_it_on(
+        agent: &crate::agents::Agent,
+        species: &crate::environment::fauna::AnimalSpecies,
+    ) -> bool {
+        use crate::environment::AnimalBehavior;
+
+        if !Self::fights_back(species) {
+            return true;
+        }
+
+        // Anything that comes after you is a job for someone with a weapon.
         let dangerous = matches!(
             species.behavior,
             AnimalBehavior::Aggressive | AnimalBehavior::Territorial
         );
-
-        if !dangerous {
-            return true;
-        }
-
-        // Anything that fights back is a job for someone with a weapon.
-        if agent.equipment.get_weapon().is_none() {
+        if dangerous && agent.equipment.get_weapon().is_none() {
             return false;
         }
 
@@ -69,11 +92,196 @@ impl Simulation {
         // looking for the fight. Ordinary prey is untouched - a rabbit is not
         // `dangerous` and a hurt man may still eat - so this declines the
         // fights that would kill him and none of the ones that would feed him.
+        //
+        // **And fit for it bare-handed.** A hunt is a spear thrown, and a
+        // throw that misses can leave the spear in the bracken, so the beast
+        // that turns on him may find nothing in his hands. Weighed against
+        // the blow as the spear would turn it, a hunter with forty-odd health
+        // went after a mammoth, lost his spear, and died of the whole blow -
+        // on two worlds of sixteen (#327).
+        //
+        // Anything that turns on a hunter is weighed so, a cow as much as a
+        // bear: a cow's blow is small, and it is still a blow (#327).
         agent.could_i_fight_at_all(species.attack_damage)
+            && agent.state.health > species.attack_damage
     }
 
-    /// The nearest animal this agent could reasonably take, and where it is
-    pub(in crate::analytics) fn nearest_prey(
+    /// How many of what this one wants come off one of these, as this one
+    /// would take it apart, on a carcass as fat as the time of year makes it.
+    ///
+    /// `wanted` is asked of what each drop is carried as once cut - `meat`,
+    /// `hides`, `wool` - so the same reckoning prices a hunt for supper and a
+    /// hunt for a coat. An expectation, not a roll: the middle of each drop's
+    /// range at its chance of coming off at all.
+    pub(in crate::analytics) fn what_one_of_these_gives(
+        &self,
+        agent: &crate::agents::Agent,
+        species: &crate::environment::fauna::AnimalSpecies,
+        wanted: impl Fn(&str) -> bool,
+    ) -> f32 {
+        let condition = self.world.climate.how_fat_the_beasts_are();
+        let knife = agent.how_much_my_tools_bring_back(crate::agents::skills::SkillType::Leatherworking);
+
+        species
+            .drops
+            .iter()
+            .filter(|drop| {
+                wanted(crate::agents::storage_integration::butchered_item_id(&drop.material_id))
+            })
+            .map(|drop| {
+                let middle = (drop.min_quantity + drop.max_quantity) as f32 / 2.0;
+                middle * drop.drop_chance * condition * knife
+            })
+            .sum()
+    }
+
+    /// How many turns of throwing it takes this one to bring down an animal
+    /// with this much life left in it.
+    ///
+    /// The throws that have to tell, over how often one does - both as the
+    /// executor will have them, from `what_a_throw_takes_off` and
+    /// `how_often_a_throw_tells`. A flint spear in a grown arm is two throws
+    /// that tell for a deer and something like eight turns of throwing for
+    /// somebody who has never hunted; a stone at a rabbit is three that tell.
+    pub(in crate::analytics) fn turns_to_bring_it_down(
+        agent: &crate::agents::Agent,
+        life_left: f32,
+    ) -> f32 {
+        let point = agent.how_fast_my_tools_make_this_go(crate::agents::skills::SkillType::Hunting);
+        let one_throw = Self::what_a_throw_takes_off(agent.own_strength(), point)
+            * (1.0 + agent.transport.mounted_combat_bonus());
+        let that_tell = (life_left / one_throw.max(0.1)).ceil().max(1.0);
+
+        that_tell / Self::how_often_a_throw_tells(agent, agent.equipment.get_weapon().is_some())
+    }
+
+    /// What share of a hunt is left once the blows it will cost are paid for.
+    ///
+    /// Every throw that misses something that fights back is a blow taken
+    /// (`hunting`), so a hunt of `turns` throws at a beast that turns is that
+    /// many misses' worth of its blow, as what is in the hand turns it. A hunt
+    /// that would cost half of what this one has left is worth half as much to
+    /// him, and one that would cost all of it is worth nothing - which is the
+    /// same question `fit_to_take_it_on` asks of a single blow, asked of the
+    /// whole hunt.
+    pub(in crate::analytics) fn what_is_left_after_the_blows(
+        agent: &crate::agents::Agent,
+        species: &crate::environment::fauna::AnimalSpecies,
+        turns: f32,
+    ) -> f32 {
+        if !Self::fights_back(species) {
+            return 1.0;
+        }
+        let tells = Self::how_often_a_throw_tells(agent, agent.equipment.get_weapon().is_some());
+        let misses = turns * (1.0 - tells);
+        let hurt = misses * agent.what_a_blow_costs_me(species.attack_damage);
+
+        (1.0 - hurt / agent.state.health.max(1.0)).max(0.0)
+    }
+
+    /// What going after this animal for its meat is worth, in the same coin a
+    /// forage patch is: food brought home less what the trip costs, over the
+    /// turns it takes - see `what_this_patch_is_worth`.
+    ///
+    /// "The yield of the hunt should be considered. A small bird results in
+    /// little meat, whereas a deer results in significantly more... effort,
+    /// time, and results should all be considered." Prey was the *nearest*
+    /// animal there was any means of killing, and nothing asked what was on
+    /// it: a hungry man threw at a kestrel, which has no meat on it at all,
+    /// as readily as at a deer, and six of the eleven kills over twelve
+    /// settlement-years were kestrels (#330).
+    ///
+    /// **Results**: the meat on it, as much of it as there is room for in the
+    /// pack, at what the portions it cuts into are worth to eat. A joint is
+    /// three portions (`CUT_MEAT_INTO_PORTIONS`), and it is the portion that
+    /// is eaten.
+    ///
+    /// **Time**: the turns of throwing it takes as this hunter throws, the
+    /// walk there and back, and a turn to take it apart.
+    ///
+    /// **Effort**: the walk and every throw, landed or not.
+    ///
+    /// And **what it costs him**: the blows a beast that fights back will
+    /// land on the throws that miss.
+    pub(in crate::analytics) fn what_this_hunt_is_worth_to_eat(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        animal: &crate::environment::Animal,
+        species: &crate::environment::fauna::AnimalSpecies,
+    ) -> f32 {
+        let joints = self.what_one_of_these_gives(agent, species, |cut| cut == "meat");
+        if joints <= 0.0 {
+            return 0.0;
+        }
+
+        // What will go in the pack: the rest stays where it fell.
+        let room_for = agent.inventory.weight_capacity_remaining() / Self::WHAT_A_JOINT_WEIGHS;
+        let portions = joints.min(room_for)
+            * crate::environment::making::CUT_MEAT_INTO_PORTIONS.how_many as f32;
+
+        let energy = self
+            .food_database
+            .get(&crate::world::ItemType::Meat)
+            .map(|template| template.base_nutrition.energy)
+            .unwrap_or(crate::agents::physiology::ENERGY_OF_ORDINARY_FOOD);
+        let brings_back = portions
+            * crate::agents::physiology::UNITS_IN_ONE_ITEM
+            * crate::agents::physiology::what_a_unit_of_this_is_worth(energy);
+
+        let paces = ((animal.position.0 - agent_position.0).abs()
+            + (animal.position.1 - agent_position.1).abs()) as u32;
+        let throwing = Self::turns_to_bring_it_down(agent, animal.current_health);
+        let costs = crate::agents::provision::what_foraging_costs(
+            paces,
+            crate::agents::physiology::how_much_work_this_food_is(energy),
+        ) + throwing * Self::WHAT_A_THROW_COSTS;
+
+        // The throwing, a turn with the knife, and the walk there and back.
+        let turns = throwing
+            + 1.0
+            + crate::world::pace::turns_to_walk(paces) * Self::TURNS_A_PACE_TAKES;
+
+        (brings_back - costs) / turns * Self::what_is_left_after_the_blows(agent, species, throwing)
+    }
+
+    /// The animal within `reach` most worth going after for its meat, where it
+    /// is, and what it is worth - `None` when nothing in reach is worth a
+    /// throw for supper.
+    pub(in crate::analytics) fn the_best_prey_to_eat(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+        reach: i32,
+    ) -> Option<(uuid::Uuid, (i32, i32), f32)> {
+        self.world
+            .get_animals_in_radius(
+                (agent_position.0, agent_position.1),
+                Self::HUNT_SEARCH_RADIUS,
+            )
+            .into_iter()
+            .filter(|animal| {
+                (animal.position.0 - agent_position.0)
+                    .abs()
+                    .max((animal.position.1 - agent_position.1).abs())
+                    <= reach
+            })
+            .filter(|animal| self.worth_hunting(agent, animal))
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                let worth = self.what_this_hunt_is_worth_to_eat(agent, agent_position, animal, species);
+                (worth > 0.0).then_some((animal.id, animal.position, worth))
+            })
+            .max_by(|(_, _, a), (_, _, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+    }
+
+    /// The animal most worth going after for its skin, and where it is.
+    ///
+    /// What a coat is cut from - hides, leather, wool - per turn the hunt
+    /// takes, less the blows it costs. It was the nearest animal there was a
+    /// means of killing, which sent a man wanting a fur coat after a kestrel
+    /// for its feathers (#330).
+    pub(in crate::analytics) fn the_best_prey_for_its_skin(
         &self,
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
@@ -85,11 +293,25 @@ impl Simulation {
             )
             .into_iter()
             .filter(|animal| self.worth_hunting(agent, animal))
-            .min_by_key(|animal| {
-                (animal.position.0 - agent_position.0).abs()
-                    + (animal.position.1 - agent_position.1).abs()
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                let skins = self.what_one_of_these_gives(agent, species, |cut| {
+                    matches!(cut, "hides" | "leather" | "wool")
+                });
+                if skins <= 0.0 {
+                    return None;
+                }
+                let paces = ((animal.position.0 - agent_position.0).abs()
+                    + (animal.position.1 - agent_position.1).abs()) as u32;
+                let throwing = Self::turns_to_bring_it_down(agent, animal.current_health);
+                let turns = throwing
+                    + 1.0
+                    + crate::world::pace::turns_to_walk(paces) * Self::TURNS_A_PACE_TAKES;
+                let worth = skins / turns * Self::what_is_left_after_the_blows(agent, species, throwing);
+                (worth > 0.0).then_some((animal.id, animal.position, worth))
             })
-            .map(|animal| (animal.id, animal.position))
+            .max_by(|(_, _, a), (_, _, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(id, position, _)| (id, position))
     }
 
     /// Whether the agent has a reason to go after an animal.
@@ -188,7 +410,7 @@ impl Simulation {
             return Some(getting_one);
         }
 
-        let (animal_id, animal_position) = self.nearest_prey(agent, agent_position)?;
+        let (animal_id, animal_position) = self.the_best_prey_for_its_skin(agent, agent_position)?;
 
         let reach = (animal_position.0 - agent_position.0)
             .abs()

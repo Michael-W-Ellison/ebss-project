@@ -146,7 +146,8 @@ fn making_what_nobody_knows_fails_saying_so() {
 
 // --- finding out ------------------------------------------------------------
 
-/// A curious man, holding a bright stone, at a fire, works it out.
+/// A curious potter who has fired a good many pots, holding a bright stone,
+/// at a fire, works it out (#336).
 #[test]
 fn a_bright_stone_at_a_fire_is_eventually_understood() {
     let mut simulation = one_agent_world();
@@ -155,6 +156,8 @@ fn a_bright_stone_at_a_fire_is_eventually_understood() {
     {
         let agent = &mut simulation.population.agents[0];
         carrying(agent, "iron", 8);
+        agent.found_out_how_to("stoneware");
+        agent.skills.have_made_before(making::ORE_WATCHED_IN_A_FIRE, making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS);
         if let Some(curiosity) = agent.drives.get_mut(DriveType::Curiosity) {
             curiosity.value = 1.0;
         }
@@ -179,6 +182,112 @@ fn a_bright_stone_at_a_fire_is_eventually_understood() {
         worked_it_out,
         "a curious man with iron in his hands at a burning fire should \
          eventually see what the fire does to it"
+    );
+}
+
+/// Nobody who has never fired a pot has the thought at all: ore does not run
+/// in a cooking fire, and the first copper ran in a potter's kiln (#336).
+#[test]
+fn nobody_runs_metal_before_they_have_fired_a_pot() {
+    let mut simulation = one_agent_world();
+    a_fire_where_he_stands(&mut simulation);
+    carrying(&mut simulation.population.agents[0], "iron", 8);
+
+    for _ in 0..20_000 {
+        if let Some(curiosity) = simulation.population.agents[0]
+            .drives
+            .get_mut(DriveType::Curiosity)
+        {
+            curiosity.value = 1.0;
+        }
+        simulation.somebody_notices_something();
+    }
+
+    assert!(!simulation.population.agents[0].knows_how_to_make("shinylump"));
+}
+
+/// The first time ore sits in a man's fire he sees a hot stone. It is the
+/// man who has sat a good many evenings with it there who sees it run (#336).
+#[test]
+fn ore_has_to_be_watched_in_the_fire_before_it_runs() {
+    let mut simulation = one_agent_world();
+    a_fire_where_he_stands(&mut simulation);
+    {
+        let agent = &mut simulation.population.agents[0];
+        carrying(agent, "iron", 8);
+        agent.found_out_how_to("stoneware");
+    }
+
+    let curious = |simulation: &mut Simulation| {
+        if let Some(curiosity) = simulation.population.agents[0]
+            .drives
+            .get_mut(DriveType::Curiosity)
+        {
+            curiosity.value = 1.0;
+        }
+    };
+
+    // An evening at the fire with it counts once, however long it runs
+    curious(&mut simulation);
+    for _ in 0..10 {
+        simulation.somebody_notices_something();
+    }
+    assert_eq!(
+        simulation.population.agents[0]
+            .skills
+            .times_made(making::ORE_WATCHED_IN_A_FIRE),
+        1,
+        "one evening is one evening"
+    );
+
+    // And each evening after it counts again, until the one that shows it
+    for evening in 2..=making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS {
+        assert!(
+            !simulation.population.agents[0].knows_how_to_make("shinylump"),
+            "not yet, after {} evenings",
+            evening - 1
+        );
+        simulation.current_turn += crate::environment::seasons::TICKS_PER_DAY;
+        curious(&mut simulation);
+        simulation.somebody_notices_something();
+    }
+    assert!(
+        simulation.population.agents[0].knows_how_to_make("shinylump"),
+        "watched long enough, he sees it run"
+    );
+}
+
+/// Nor asleep beside one. Sleeping by the fire with ore in the pack is not
+/// watching it (#336).
+#[test]
+fn nobody_watches_ore_in_their_sleep() {
+    let mut simulation = one_agent_world();
+    a_fire_where_he_stands(&mut simulation);
+    {
+        let agent = &mut simulation.population.agents[0];
+        carrying(agent, "iron", 8);
+        agent.found_out_how_to("stoneware");
+        agent.skills.have_made_before(
+            making::ORE_WATCHED_IN_A_FIRE,
+            making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS,
+        );
+    }
+
+    for _ in 0..4000 {
+        let agent = &mut simulation.population.agents[0];
+        agent.fatigue.is_sleeping = true;
+        if let Some(curiosity) = agent.drives.get_mut(DriveType::Curiosity) {
+            curiosity.value = 1.0;
+        }
+        simulation.somebody_notices_something();
+    }
+
+    let agent = &simulation.population.agents[0];
+    assert!(!agent.knows_how_to_make("shinylump"), "nothing is seen asleep");
+    assert_eq!(
+        agent.skills.times_made(making::ORE_WATCHED_IN_A_FIRE),
+        making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS,
+        "and sleeping beside it is not watching it"
     );
 }
 
@@ -496,9 +605,13 @@ fn a_settlement_can_find_metal_out_for_itself() {
     // Put iron and a fire where the people are, so that this tests the
     // mechanism rather than whether a random world happens to put a mountain
     // within walking distance.
+    // A people of practised potters: nobody has the thought before that
+    // (#336).
     a_fire_where_he_stands(&mut simulation);
     for agent in simulation.population.agents.iter_mut() {
         carrying(agent, "iron", 6);
+        agent.found_out_how_to("stoneware");
+        agent.skills.have_made_before(making::ORE_WATCHED_IN_A_FIRE, making::TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS);
     }
 
     let hearth = simulation.population.agents[0].state.position;

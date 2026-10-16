@@ -448,3 +448,277 @@ fn a_hurt_man_with_a_spear_still_leaves_the_bear_alone() {
         "and should not set out to"
     );
 }
+
+/// A hunter fit to take a beast's blow is not killed by it.
+///
+/// A hunt is a spear thrown, and a throw that misses can leave the spear in
+/// the bracken, so the beast that turns on the hunter may find nothing in their
+/// hands. The hunt was weighed against the blow as the spear would turn it, and
+/// a man with forty-odd health went after a mammoth, lost his spear and died of
+/// the whole blow, on two worlds of sixteen (#327).
+#[test]
+fn a_hunter_fit_for_the_blow_survives_it() {
+    use crate::agents::equipment::WeaponTemplate;
+    use crate::agents::skills::Quality;
+
+    let mut world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    world.animals.get_all_mut().clear();
+    world
+        .spawn_animal("mammoth".to_string(), (30, 31))
+        .expect("a mammoth should spawn");
+
+    let mut simulation = Simulation::new(world, population);
+    simulation.population.agents[0].state.position = (30, 30, 0);
+    let arm = |simulation: &mut Simulation| {
+        let hunter = &mut simulation.population.agents[0];
+        if !hunter.inventory.has_item("spear", 1) {
+            hunter
+                .inventory
+                .add_item(InventoryItem::new_with_weight("spear".to_string(), 1, 2.0));
+        }
+        if hunter.equipment.get_weapon().is_none() {
+            hunter
+                .equipment
+                .equip(WeaponTemplate::wooden_spear(Quality::Common))
+                .expect("the spear should go in his hand");
+        }
+    };
+    arm(&mut simulation);
+
+    let mammoth = simulation.world.animals.get_all()[0].clone();
+    let its_blow = simulation
+        .world
+        .animals
+        .get_species(&mammoth.species_id)
+        .expect("a mammoth is a species")
+        .attack_damage;
+    let through_the_spear = simulation.population.agents[0].what_a_blow_costs_me(its_blow);
+    assert!(through_the_spear < its_blow, "the spear is meant to turn some of it");
+
+    // Fit for the blow as the spear turns it, and not for the whole of it:
+    // no hunt.
+    simulation.population.agents[0].state.health = through_the_spear + 1.0;
+    assert!(
+        !simulation.worth_hunting(&simulation.population.agents[0], &mammoth),
+        "fit only for the blow the spear turns, and the spear may be gone"
+    );
+
+    // Fit for the whole blow: a hunt, and never killed by it.
+    for _ in 0..200 {
+        arm(&mut simulation);
+        let hunter = &mut simulation.population.agents[0];
+        hunter.state.health = its_blow + 1.0;
+        hunter.busy_until = 0;
+        assert!(simulation.worth_hunting(&simulation.population.agents[0], &mammoth));
+        simulation.execute_action(
+            &Action::Hunt {
+                animal_id: mammoth.id,
+                weapon: Some("spear".to_string()),
+            },
+            0,
+        );
+        assert!(
+            simulation.population.agents[0].state.health > 0.0,
+            "killed by the blow he was judged fit to take"
+        );
+        if let Some(animal) = simulation.world.animals.get_mut(&mammoth.id) {
+            animal.current_health = 300.0;
+        }
+    }
+}
+
+/// And a hunt made by somebody no longer fit for it is not made, however it
+/// was chosen.
+///
+/// A hunt chosen at full health can come round again after a blow, from a
+/// plan or a way already in hand, without being chosen again: a hunter at
+/// thirty-six health went after a mammoth a second time and died of it (#327).
+#[test]
+fn a_hunt_after_the_blow_is_not_made() {
+    use crate::agents::equipment::WeaponTemplate;
+    use crate::agents::skills::Quality;
+
+    let mut world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    world.animals.get_all_mut().clear();
+    world
+        .spawn_animal("mammoth".to_string(), (30, 31))
+        .expect("a mammoth should spawn");
+
+    let mut simulation = Simulation::new(world, population);
+    let hunter = &mut simulation.population.agents[0];
+    hunter.state.position = (30, 30, 0);
+    hunter
+        .inventory
+        .add_item(InventoryItem::new_with_weight("spear".to_string(), 1, 2.0));
+    hunter
+        .equipment
+        .equip(WeaponTemplate::wooden_spear(Quality::Common))
+        .expect("the spear should go in his hand");
+    hunter.state.health = 36.0;
+
+    let mammoth = simulation.world.animals.get_all()[0].id;
+    let result = simulation.execute_action(
+        &Action::Hunt {
+            animal_id: mammoth,
+            weapon: Some("spear".to_string()),
+        },
+        0,
+    );
+
+    assert!(
+        !result.success && result.message.as_deref().is_some_and(|said| said.starts_with("Not fit")),
+        "a hunter at 36 health took on a mammoth: {:?}",
+        result.message
+    );
+    assert_eq!(simulation.population.agents[0].state.health, 36.0, "and was hurt by it");
+}
+
+/// How many throws that tell it takes to bring one of these down, with this
+/// in the pack, averaged over a few hunts.
+fn throws_that_tell(species: &str, in_the_pack: &str) -> f32 {
+    const HUNTS: u64 = 12;
+    let mut told = 0u32;
+    for seed in 0..HUNTS {
+        crate::core::dice::seed(7_000 + seed);
+        let mut world = World::new(WorldConfig::default());
+        let mut population = Population::new();
+        population.spawn_agent(AgentConfig::default());
+        world.animals.get_all_mut().clear();
+        world.spawn_animal(species.to_string(), (30, 31)).expect("it should spawn");
+        let mut simulation = Simulation::new(world, population);
+        let hunter = &mut simulation.population.agents[0];
+        hunter.state.position = (30, 30, 0);
+        hunter
+            .inventory
+            .add_item(InventoryItem::new_with_weight(in_the_pack.to_string(), 1, 2.0));
+        let quarry = simulation.world.animals.get_all()[0].id;
+
+        for _ in 0..400 {
+            let before = simulation.world.animals.get(&quarry).map(|a| a.current_health);
+            let hunter = &mut simulation.population.agents[0];
+            hunter.state.health = 100.0;
+            hunter.busy_until = 0;
+            if !hunter.inventory.has_item(in_the_pack, 1) {
+                hunter
+                    .inventory
+                    .add_item(InventoryItem::new_with_weight(in_the_pack.to_string(), 1, 2.0));
+            }
+            if let Some(beast) = simulation.world.animals.get_mut(&quarry) {
+                beast.position = (30, 31);
+            }
+            simulation.execute_action(&Action::Hunt { animal_id: quarry, weapon: None }, 0);
+            let after = simulation.world.animals.get(&quarry);
+            if after.map(|a| a.current_health) != before {
+                told += 1;
+            }
+            if after.is_none_or(|a| !a.is_alive()) {
+                break;
+            }
+        }
+    }
+    told as f32 / HUNTS as f32
+}
+
+/// A better point brings a beast down in fewer throws, and a bigger beast
+/// takes more.
+///
+/// "A wooden spear is enough, but should take several attacks to kill the
+/// animal, depending on the size of the animal. A flint spear should reduce
+/// the number of attacks." A throw that told took a third of whatever it hit,
+/// so everything went down to three, whatever threw at it (#329).
+#[test]
+fn a_better_point_takes_fewer_throws_and_a_bigger_beast_more() {
+    let stick_on_a_deer = throws_that_tell("deer", "sharpenedstick");
+    let flint_on_a_deer = throws_that_tell("deer", "spear");
+    let flint_on_a_cow = throws_that_tell("cow", "spear");
+
+    assert!(
+        flint_on_a_deer < stick_on_a_deer,
+        "a flint spear took {flint_on_a_deer:.1} throws to a deer, a sharpened stick {stick_on_a_deer:.1}"
+    );
+    assert!(
+        flint_on_a_cow > flint_on_a_deer,
+        "a cow took {flint_on_a_cow:.1} throws and a deer {flint_on_a_deer:.1}"
+    );
+}
+
+/// A hunter with a flint spear, alone in a world holding only these animals.
+fn a_hunter_among(animals: &[(&str, (i32, i32))]) -> Simulation {
+    let mut world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    world.animals.get_all_mut().clear();
+    for (species, at) in animals {
+        world.spawn_animal(species.to_string(), *at).expect("it should spawn");
+    }
+    let mut simulation = Simulation::new(world, population);
+    simulation.population.agents[0].state.position = (30, 30, 0);
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("spear".to_string(), 1, 2.0));
+    simulation
+}
+
+/// Nobody throws at a kestrel for supper: there is no meat on it.
+///
+/// Prey was the nearest animal there was a means of killing, and six of the
+/// eleven kills in twelve settlement-years were kestrels (#330).
+#[test]
+fn nobody_hunts_a_kestrel_for_supper() {
+    let simulation = a_hunter_among(&[("kestrel", (30, 31))]);
+    let hunter = &simulation.population.agents[0];
+
+    assert!(
+        simulation.the_best_prey_to_eat(hunter, hunter.state.position, 5).is_none(),
+        "a kestrel has nothing on it to eat"
+    );
+}
+
+/// A deer a few paces further off is worth more than a rabbit at your feet,
+/// for what is on it - and it is the deer that is gone after.
+#[test]
+fn the_deer_is_worth_more_than_the_rabbit_at_your_feet() {
+    let simulation = a_hunter_among(&[("rabbit", (30, 31)), ("deer", (30, 34))]);
+    let hunter = &simulation.population.agents[0];
+    let here = hunter.state.position;
+
+    let worth_of = |species: &str| {
+        let animal = simulation
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .find(|animal| animal.species_id == species)
+            .expect("it should be there");
+        let kind = simulation.world.animals.get_species(species).unwrap();
+        simulation.what_this_hunt_is_worth_to_eat(hunter, here, animal, kind)
+    };
+    let deer = worth_of("deer");
+    let rabbit = worth_of("rabbit");
+    assert!(deer > rabbit, "a deer was worth {deer:.0} a turn and a rabbit {rabbit:.0}");
+
+    let (chosen, _, _) = simulation
+        .the_best_prey_to_eat(hunter, here, 5)
+        .expect("something here is worth a throw");
+    let chosen = simulation.world.animals.get(&chosen).unwrap();
+    assert_eq!(chosen.species_id, "deer", "the hunter went after the {}", chosen.species_id);
+}
+
+/// A man after a coat goes after something with a skin on it, not the nearer
+/// bird with feathers.
+#[test]
+fn a_skin_hunt_goes_after_a_skin() {
+    let simulation = a_hunter_among(&[("kestrel", (30, 31)), ("deer", (30, 36))]);
+    let hunter = &simulation.population.agents[0];
+
+    let (chosen, _) = simulation
+        .the_best_prey_for_its_skin(hunter, hunter.state.position)
+        .expect("the deer has a skin worth having");
+    let chosen = simulation.world.animals.get(&chosen).unwrap();
+    assert_eq!(chosen.species_id, "deer", "went after the {} for its skin", chosen.species_id);
+}
+

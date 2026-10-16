@@ -53,43 +53,6 @@ impl Simulation {
         (asleep, heading_home, turns_left)
     }
 
-    /// Where the people sleep: amongst one another, under a finished roof
-    /// near the middle of them if they have built one.
-    ///
-    /// Not `where_the_camp_is`, which answers from wherever the asker stands:
-    /// for somebody out on their own it is the nearest roof to them or the
-    /// knot they are standing in, which is the right answer to "is this plant
-    /// near where I live" and no answer at all to "where is home tonight".
-    pub(in crate::analytics) fn where_the_people_sleep(&self) -> Option<(i32, i32)> {
-        let grown: Vec<(i32, i32)> = self
-            .population
-            .agents
-            .iter()
-            .filter(|agent| agent.state.is_alive && agent.state.life_stage.can_reproduce())
-            .map(|agent| (agent.state.position.0, agent.state.position.1))
-            .collect();
-        if grown.is_empty() {
-            return None;
-        }
-        let n = grown.len() as i32;
-        let middle = (
-            grown.iter().map(|(x, _)| x).sum::<i32>() / n,
-            grown.iter().map(|(_, y)| y).sum::<i32>() / n,
-        );
-        let roof = self
-            .world
-            .buildings
-            .iter()
-            .filter(|roof| roof.is_completed())
-            .map(|roof| (roof.position.x, roof.position.y))
-            .filter(|at| {
-                (at.0 - middle.0).abs().max((at.1 - middle.1).abs())
-                    <= Self::FORAGE_RADIUS as i32
-            })
-            .min_by_key(|at| (at.0 - middle.0).abs() + (at.1 - middle.1).abs());
-        Some(roof.unwrap_or(middle))
-    }
-
     /// The nearest clean ground out of the weather within
     /// `NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS`, for somebody about to sleep
     /// where they are not: under a finished roof, or among trees.
@@ -110,6 +73,9 @@ impl Simulation {
                     .grid
                     .get_tile(at)
                     .is_some_and(|tile| !tile.soil.is_foul() && tile.terrain.is_walkable())
+                // Not the trees on the far bank of a river: a walk there was
+                // refused at the water, night after night (#323).
+                && self.world.can_walk_between((from.0, from.1), (at.x, at.y))
         };
         if fit(&Position::new(from.0, from.1)) {
             return None;
@@ -154,6 +120,7 @@ impl Simulation {
         }
         if let Some((_, fire)) =
             self.nearest_fire_from(here, Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS, true)
+                .filter(|(_, fire)| self.world.can_walk_between((here.0, here.1), (fire.0, fire.1)))
         {
             return Some(Action::Move { target: fire });
         }
@@ -192,6 +159,12 @@ impl Simulation {
         let agent = &self.population.agents[agent_index];
         let let_be = if agent.state.life_stage == crate::agents::LifeStage::Infant {
             Some("night: let be, an infant")
+        } else if agent.emotions.threatened_by_something_there() {
+            // Nothing wakes a sleeper but danger, and danger is not answered
+            // by going back to sleep. Somebody backing away from a boar was
+            // sent to bed instead, and struck where they lay, four times in a
+            // night (#325).
+            Some("night: let be, in danger")
         } else if agent.state.is_starving() || agent.state.is_dehydrated() {
             Some("night: let be, starving or parched")
         } else if agent.body_temperature.is_too_cold() {
@@ -291,11 +264,17 @@ impl Simulation {
             // until morning.
             Action::Sleep { duration: turns_left.min(Self::A_STRETCH_OF_SLEEP) }
         } else {
-            match self.where_the_people_sleep() {
+            match self.where_this_one_sleeps(agent_index) {
                 Some(home)
                     if (home.0 - here.0).abs().max((home.1 - here.1).abs())
                         > Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS =>
                 {
+                    // Home over a river with no way back is not walked at
+                    // (#323).
+                    if !self.world.can_walk_between((here.0, here.1), (home.0, home.1)) {
+                        *self.what_a_threat_came_to.entry("night: no way home".to_string()).or_insert(0) += 1;
+                        return action;
+                    }
                     Action::Move { target: (home.0, home.1, here.2) }
                 }
                 Some(_) => match self.the_evening_at_home(agent_index) {
@@ -330,6 +309,10 @@ impl Simulation {
                 .to_string(),
             )
             .or_insert(0) += 1;
+        // Lying down at home makes this one's hearth wherever the camp is now.
+        if asleep {
+            self.settle_the_hearth(agent_index);
+        }
         if self.population.agents[agent_index].errand.is_some() {
             self.set_the_errand_aside(agent_index, instead)
         } else {

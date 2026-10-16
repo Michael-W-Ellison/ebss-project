@@ -79,9 +79,19 @@ impl Simulation {
 
         let mut rng = crate::core::dice::roll();
         let mut found: Vec<(usize, &'static str)> = Vec::new();
+        let mut watched_ore: Vec<usize> = Vec::new();
+        let today = self.current_turn / crate::environment::seasons::TICKS_PER_DAY;
 
         for (index, agent) in self.population.agents.iter().enumerate() {
             if !agent.state.is_alive {
+                continue;
+            }
+
+            // Nobody notices anything asleep. A man who slept by the fire
+            // with ore in his pack was counted as watching it all night, and
+            // rolled for seeing it run, which put metal in one settlement's
+            // hands in its first month (#336).
+            if agent.fatigue.is_sleeping {
                 continue;
             }
 
@@ -96,7 +106,21 @@ impl Simulation {
 
             let holding = |what: &str| agent.how_many_i_have(what);
 
-            for step in crate::environment::making::everything_to_find_out() {
+            // Ore sitting in the pack at a fire is ore watched in a fire,
+            // whatever comes of it: it is how somebody gets to the point of
+            // seeing metal run (`how_practised_first`, #336). Once an evening:
+            // a man who sits at the fire all day with a stone in his pack has
+            // watched it one day, not forty-eight half hours.
+            if agent.last_evening_watching_ore != Some(today)
+                && crate::environment::making::SHINY_LUMP.makings_to_hand(&holding)
+                && self
+                    .nearest_fire_from(agent.state.position, Self::FIRE_REACH, true)
+                    .is_some()
+            {
+                watched_ore.push(index);
+            }
+
+            for step in agent.what_i_could_find_out() {
                 if agent.knows_how_to(step) || !step.makings_to_hand(&holding) {
                     continue;
                 }
@@ -123,6 +147,21 @@ impl Simulation {
                     found.push((index, step.makes));
                     break;
                 }
+            }
+        }
+
+        for index in watched_ore {
+            let agent = &mut self.population.agents[index];
+            agent.last_evening_watching_ore = Some(today);
+            agent
+                .skills
+                .made_one(crate::environment::making::ORE_WATCHED_IN_A_FIRE);
+
+            // And watched often enough, he sees the bead in the ash.
+            if agent.what_i_could_find_out().any(|step| step.makes == "shinylump")
+                && !agent.knows_how_to_make("shinylump")
+            {
+                found.push((index, "shinylump"));
             }
         }
 
@@ -198,7 +237,7 @@ impl Simulation {
                 continue;
             }
 
-            for step in crate::environment::making::everything_to_find_out() {
+            for step in agent.what_i_could_find_out() {
                 if agent.knows_how_to(step) {
                     continue;
                 }

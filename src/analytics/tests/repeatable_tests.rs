@@ -205,8 +205,23 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 9,667 when sleepers go in under a roof or the trees first, the
     // trees being near on this map.
     // Up to 9,842 for #300: what comes off a fire keeps its cut, and can be
-    // eaten.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 9_842;
+    // eaten. Up to 9,894 for #301: nobody walks to the pit underfoot.
+    // Down to 9,333 for #302: the wish to sleep comes from tiredness, not the
+    // clock, so nobody takes a five-hour sleep in the afternoon unless tired.
+    // Down to 7,686 for #318: worlds are made on smooth ground by default.
+    // Down to 7,626 for #320: dried and smoked food are carried under their
+    // own names, a merged stack weighs what its parts did, and a pack takes
+    // nothing that would overload it once merged.
+    // Up to 7,639 for #326: everybody keeps their own half hour, begun at
+    // their own minute, and takes it a minute at a time only with something
+    // after them.
+    // Up to 7,743 for #334: lashing from sinew, strips of bark and rawhide,
+    // and only a making with something sharp or hot in it can hurt.
+    // Up to 7,934 for #335: the hand at each thing made, and a making that
+    // holds an unpractised hand longer than a period.
+    // Up to 7,954 for #336: nobody notices anything asleep, and the makings
+    // of a discovery somebody wonders about are kept in mind.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_954;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -408,7 +423,75 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // what comes off a fire keeps its cut, and can be eaten. Up 10.5% to
     // 869,212 for #301: a hungry man with a joint and no knife is offered
     // supper out of it, rather than walked about until his reserve runs out.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 869_212;
+    // Then 892,632 when nobody walks to the pit underfoot.
+    // Up 24.9% to 1,115,135 for #302: the wish to sleep comes from tiredness,
+    // not the clock, and the afternoons that went on sleeping are spent awake.
+    // Up 4.9% to 1,169,903 for #308: somebody with a beast on their own tile
+    // has somewhere to run, and runs, where they used to freeze on the spot.
+    // Down 0.5% to 1,164,176 for #309: a bad plant is an illness, and no
+    // longer opens a wound that goes bad.
+    // Up 14.0% to 1,327,438 for #310: a sleeper is asleep until the night's
+    // stretch is over, rather than woken the turn it began, so nobody tires
+    // through the night as though they were up, and the wounded mend.
+    // Up 5.3% to 1,397,816 for #311: a coupling off the fertile day answers
+    // the wish of whoever was asking for the day, and spends nobody else's.
+    // Down 1.6% to 1,374,948 for #312: whichever of a pair is on their
+    // fertile day carries, so a pair's chance comes twice a cycle.
+    // Down 4.2% to 1,317,154 for #316: a head full of berry patches and
+    // fishing spots still keeps the nearest few places it knows of each
+    // thing its tools are made of.
+    // Up 12.1% to 1,476,142 for #318: worlds are made on smooth ground by
+    // default.
+    // Up 5.8% to 1,561,205 for #319: a worn-through tool is thrown away
+    // rather than carried for the rest of the year.
+    // Down 3.3% to 1,509,486 for #320: dried and smoked food are carried
+    // under their own names, and a merged stack weighs what its parts did.
+    // Down 2.8% to 1,466,916 for #321: nobody sets out for somewhere there
+    // is no way to, a walk there is refused before a step is taken, and an
+    // errand there is given up.
+    // Down 6.4% to 1,372,417 for #323: a way, a drive's answer or something
+    // just seen that is a walk to the far bank stands aside before it is
+    // chosen, and whoever runs from a beast or an attacker across a river
+    // runs somewhere on this bank instead.
+    // Up 14.6% to 1,572,784, still #323: nor is water or food known of over
+    // the river, prey on the far bank, or cover, clean ground, a fire or home
+    // there at night.
+    // Down 8.3% to 1,441,966 for #324: a walk that would end where it began
+    // is passed over, and running from somebody on the same ground runs
+    // somewhere.
+    // Up 4.1% to 1,500,653 for #325: a beast has its minutes only against
+    // somebody answering a beast or a person, a small child takes no minutes
+    // of its own, and the night does not send somebody threatened back to bed.
+    // Down 31.2% to 1,032,478 for #326: everybody keeps their own half hour,
+    // begun at their own minute, and takes it a minute at a time only with
+    // something after them, not for hunger or thirst; those minutes come out
+    // of the half hour rather than on top of it.
+    // Down 0.4% to 1,027,961 for #327: only a hunter big enough to take
+    // somebody frightens them, so nobody squares up to a mammoth or an eagle.
+    // Down 7.7% to 948,539, still #327: nobody hunts a beast whose whole
+    // blow would kill them, the spear they threw being perhaps gone.
+    // Up 7.2% to 1,017,291, still #327: asked again where the hunt is made,
+    // and of anything that turns on a hunter, a cow as much as a bear.
+    // Up 1.1% to 1,028,941 for #329: a better point brings a beast down in
+    // fewer throws, and a bigger beast takes more.
+    // Down 1.4% to 1,014,941 for #330: a hunt is weighed by what is on the
+    // animal against the throws and blows it costs, so nobody throws at a
+    // kestrel and a known patch of food beats most hunts.
+    // Up 5.0% to 1,065,822 for #331: a kill leaves a carcass that is gone
+    // back to, cut a turn at a time and told of.
+    // Down 1.2% to 1,052,931 for #332: an edge in everybody's kit - a struck
+    // flake, knapped in a spare turn - and the makings of it fetched.
+    // Up 7.9% to 1,135,991 for #333: the edge is taken on after the
+    // pottering rather than before it.
+    // Down 10.4% to 1,018,105 for #334: lashing from sinew, strips of bark
+    // and rawhide, and only a making with something sharp or hot in it hurts.
+    // Down 3.3% to 984,596 for #335: the hand at each thing made, the wheel
+    // behind pottery and metal, curiosity spent after three, and kills
+    // fetched for the store.
+    // Down 4.6% to 939,765 for #336: ore is not read in a cold stone, nobody
+    // notices anything asleep, and metal waits on twenty evenings at a fire
+    // with ore in the pack.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 939_765;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

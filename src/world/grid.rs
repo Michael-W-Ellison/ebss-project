@@ -211,11 +211,168 @@ impl Grid {
         }
 
         // Second pass: create transition zones (beaches, riverbanks)
-        self.generate_transition_terrain();
+        self.generate_transition_terrain(false);
 
         // Third pass: ensure some minimum terrain diversity
         self.ensure_terrain_diversity(&mut rng);
     }
+
+    /// Generate smooth, seeded terrain: see `crate::world::TerrainStyle` and
+    /// ISSUES_FOUND #315. The scattered generator above stays the default
+    /// until the model is recalibrated on this one.
+    pub fn generate_smooth_terrain(&mut self) {
+        let mut rng = crate::core::dice::roll();
+
+        // **Smooth, seeded, and the same mix as before** (ISSUES_FOUND #315).
+        //
+        // This read a hash, `sin(sin(x) * 43758.5453 + cos(y) * 12345.6789)`,
+        // at each tile and called it noise. It had no smoothness and no seed:
+        // neighbouring tiles agreed on their terrain one time in five, which
+        // is what tiles drawn at random do, and every world ever made had the
+        // same ground. Measured on the big map, ploughland was 16-19% of every
+        // 100x100 block and the ground within a field's walk of any point was
+        // worth the same to within a tenth, so there was nowhere better to
+        // farm and nowhere worse, and a people had no reason to be anywhere.
+        //
+        // Now elevation and moisture are smooth fields drawn from the world's
+        // own dice (`Relief`), with country about a quarter of the map across
+        // and finer relief on top, and the terrain is read off them by rank.
+        // By rank so that the world holds about as much of each kind of
+        // ground as it always did - everything that grows, and everything
+        // calibrated against what grows, was set on that mix - and what
+        // changes is where it lies: lakes and sea in the basins, plains and
+        // fen round them, then meadow and dry country, woods, hills and
+        // mountain on the heights.
+        let relief = Relief::for_a_map(rng.gen(), self.width, self.height);
+        let (elevation, moisture) = relief.read_over(self.width, self.height);
+        let (lakes, rivers, fords) = relief.water_over(self.width, self.height);
+        let woods = relief.woods_over(self.width, self.height);
+        let by_rank = |field: &[f32], shares: &[f32]| -> Vec<f32> {
+            let mut sorted = field.to_vec();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            shares
+                .iter()
+                .map(|share| sorted[((sorted.len() - 1) as f32 * share) as usize])
+                .collect()
+        };
+        let e = by_rank(&elevation, &Self::ELEVATION_BANDS);
+        let m = by_rank(&moisture, &[0.3, 0.5, 0.6, 0.7]);
+        let (dry, middling, fairly_wet, wet) = (m[0], m[1], m[2], m[3]);
+        let lake_bed = by_rank(&lakes, &[Self::HOW_MUCH_OF_THE_LOW_COUNTRY_IS_LAKE])[0];
+        let wooded = by_rank(&woods, &[Self::HOW_MUCH_OF_THE_COUNTRY_IS_WOODED])[0];
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let height = elevation[y * self.width + x];
+                let damp = moisture[y * self.width + x];
+
+                // Fresh water lies in the low country and runs through
+                // everything below the hills: lakes in the hollows of their
+                // own field, rivers along the lines where another field
+                // crosses its middle, which wander as rivers do. Taken by
+                // height alone, the water ringed the sea, the sea never met
+                // the land, and the coast - the whole of the world's salt -
+                // was gone; and a smooth lake has a short shore, so the
+                // riverbank went from a twentieth of the map to nothing.
+                let in_a_lake = height < e[3] && lakes[y * self.width + x] < lake_bed;
+                // And a river can be crossed. Only water stops a foot, so an
+                // unbroken river was a wall from one end of the country to
+                // the other; one this narrow - ten to thirty metres - has
+                // shallows, and every so often the stream runs over them dry
+                // enough to wade.
+                let in_a_river = height < e[4]
+                    && (rivers[y * self.width + x] - 0.5).abs() < Self::HOW_WIDE_A_RIVER_RUNS
+                    && fords[y * self.width + x] < Self::WHERE_A_RIVER_RUNS_DEEP;
+
+                let terrain_type = if height < e[0] {
+                    // The deepest basins are sea. A world that has no deep
+                    // basin has no coast, which is a world where salt has to
+                    // be found inland or not at all.
+                    TerrainType::Sea
+                } else if in_a_lake || in_a_river {
+                    TerrainType::Water
+                } else if height < e[2] {
+                    // Low-lying ground round the water: fen where it is wet,
+                    // open grass where it is not
+                    if damp > fairly_wet {
+                        TerrainType::Wetland
+                    } else {
+                        TerrainType::Plains
+                    }
+                } else if height < e[3] {
+                    if damp > wet {
+                        TerrainType::Meadow
+                    } else if damp < dry {
+                        TerrainType::Desert
+                    } else {
+                        TerrainType::Plains
+                    }
+                } else if height < e[4] {
+                    if damp > middling {
+                        TerrainType::Meadow
+                    } else {
+                        TerrainType::Plains
+                    }
+                } else if height < e[5] {
+                    TerrainType::Hills
+                } else {
+                    TerrainType::Mountain
+                };
+
+                // **Woods are copses through the country, not a band up the
+                // hill.** Read by height alone, forest grew only partway up
+                // the slopes, so a plain could be kilometres from a tree:
+                // nowhere to sleep out of the rain and nothing to burn, and
+                // on one fresh world eleven of twelve died of the weather
+                // the month winter came (#315). So woods are their own
+                // field, patches a few hundred metres across through
+                // everything below the hills that is not water or dry
+                // country.
+                let terrain_type = if woods[y * self.width + x] > wooded
+                    && height >= e[0]
+                    && height < e[4]
+                    && matches!(terrain_type, TerrainType::Plains | TerrainType::Meadow | TerrainType::Wetland)
+                {
+                    TerrainType::Forest
+                } else {
+                    terrain_type
+                };
+
+                self.tiles[y][x].terrain.terrain_type = terrain_type;
+            }
+        }
+
+        // Second pass: create transition zones (beaches, riverbanks)
+        self.generate_transition_terrain(true);
+        self.banks_run_back_a_little();
+
+        // Third pass: ensure some minimum terrain diversity
+        self.ensure_terrain_diversity(&mut rng);
+    }
+
+    /// Where each band of elevation ends, as a share of the map lying lower:
+    /// sea, water, the low ground round it, the middle-low, the middle, and
+    /// hills, with mountain above. Chosen so that a world holds about the mix
+    /// of ground the old generator gave it - 40% mountain, about a tenth hills,
+    /// about a tenth water - which is what everything that grows was set
+    /// against. See `generate_terrain`.
+    const ELEVATION_BANDS: [f32; 6] = [0.036, 0.096, 0.20, 0.37, 0.50, 0.60];
+
+    /// Above this share of the woods field, ground below the hills is wood:
+    /// chosen to keep about the seven parts in a hundred of forest the world
+    /// always had.
+    const HOW_MUCH_OF_THE_COUNTRY_IS_WOODED: f32 = 0.84;
+
+    /// How much of the low country lies under lakes, as a share of the
+    /// lake field, which is read only where the ground is low enough.
+    const HOW_MUCH_OF_THE_LOW_COUNTRY_IS_LAKE: f32 = 0.10;
+
+    /// How far the river field may stand from its middle and still be river.
+    const HOW_WIDE_A_RIVER_RUNS: f32 = 0.012;
+
+    /// Below this on the ford field a river runs deep; above it, over
+    /// shallows that can be waded.
+    const WHERE_A_RIVER_RUNS_DEEP: f32 = 0.62;
 
     /// How low the ground has to fall before the water standing on it is
     /// salt.
@@ -230,8 +387,32 @@ impl Grid {
     /// And how often dry ground beside the sea has dried out salt.
     const HOW_OFTEN_DRY_GROUND_BY_THE_SEA_IS_A_FLAT: f32 = 0.35;
 
-    /// Generate transition terrain between water and land
-    fn generate_transition_terrain(&mut self) {
+    /// A riverbank is more than the one strip of ground touching the water:
+    /// open grass beside a bank is bank too, so banks run two cells (twenty
+    /// metres) deep. One cell deep, along the short shores smooth country
+    /// gives, the richest wild ground in the world was a few hundredths of
+    /// the map where it had been a twentieth (#315).
+    fn banks_run_back_a_little(&mut self) {
+        let terrain_copy: Vec<Vec<TerrainType>> = self.tiles.iter()
+            .map(|row| row.iter().map(|t| t.terrain.terrain_type).collect())
+            .collect();
+        for y in 1..self.height - 1 {
+            for x in 1..self.width - 1 {
+                if matches!(terrain_copy[y][x], TerrainType::Plains | TerrainType::Meadow)
+                    && self.is_adjacent_to_terrain(&terrain_copy, x, y, TerrainType::Riverbank)
+                {
+                    self.tiles[y][x].terrain.terrain_type = TerrainType::Riverbank;
+                }
+            }
+        }
+    }
+
+    /// Generate transition terrain between water and land.
+    ///
+    /// `through_woods`: a river through woods or dry country banks them too,
+    /// as it does on smooth ground (#315). The scattered generator keeps the
+    /// banks it always had, of open grass and meadow.
+    fn generate_transition_terrain(&mut self, through_woods: bool) {
         let mut rng = crate::core::dice::roll();
 
         // Create a copy of terrain types for reference
@@ -262,8 +443,12 @@ impl Grid {
                         TerrainType::Riverbank
                     };
 
-                    // Only change Plains, Meadow to transition terrain
-                    if matches!(current, TerrainType::Plains | TerrainType::Meadow) {
+                    // Open grass and meadow, and the woods and dry country a
+                    // river runs through: an oasis is a riverbank, and so is
+                    // the alder strip along a stream in a forest (#315)
+                    if matches!(current, TerrainType::Plains | TerrainType::Meadow)
+                        || (through_woods && matches!(current, TerrainType::Forest | TerrainType::Desert))
+                    {
                         self.tiles[y][x].terrain.terrain_type = new_terrain;
                     }
                 }
@@ -381,6 +566,7 @@ impl Grid {
 
         count
     }
+
 
     // Simple noise function for terrain generation
     fn simple_noise(&self, x: f32, y: f32) -> f32 {
@@ -875,5 +1061,124 @@ mod tests {
 
         assert!(grid.get_tile(&pos).is_some());
         assert!(grid.get_tile(&Position::new(-1, 0)).is_none());
+    }
+}
+
+/// The lie of the land: smooth fields of elevation and moisture, the same for
+/// the same seed.
+///
+/// Value noise: a number drawn for each point of a coarse lattice, eased
+/// smoothly between them, and summed over octaves each half the size and half
+/// the weight of the last, so there is country, and relief within it. The
+/// coarsest octave is about a quarter of the map across, so the big map's
+/// regions are two or three kilometres and a small test map still has a few.
+/// See `Grid::generate_terrain` and ISSUES_FOUND #315.
+#[derive(Debug, Clone, Copy)]
+pub struct Relief {
+    seed: u64,
+    /// The coarsest octave's lattice spacing, in cells.
+    across: f32,
+}
+
+impl Relief {
+    /// How many octaves of relief: country, district, neighbourhood, field.
+    pub const OCTAVES: u32 = 4;
+
+    /// How much of the map one stretch of country is.
+    pub const A_STRETCH_OF_COUNTRY: f32 = 0.25;
+
+    /// The relief of a map this size, from a seed.
+    pub fn for_a_map(seed: u64, width: usize, height: usize) -> Self {
+        let across = (width.min(height) as f32 * Self::A_STRETCH_OF_COUNTRY).max(4.0);
+        Self { seed, across }
+    }
+
+    /// Elevation and moisture at every tile, row by row, each from nought to
+    /// about one.
+    pub fn read_over(&self, width: usize, height: usize) -> (Vec<f32>, Vec<f32>) {
+        let mut elevation = Vec::with_capacity(width * height);
+        let mut moisture = Vec::with_capacity(width * height);
+        for y in 0..height {
+            for x in 0..width {
+                elevation.push(self.layered(self.seed, x as f32, y as f32, self.across));
+                // Weather runs over wider country than relief does
+                moisture.push(self.layered(
+                    self.seed ^ 0xA5A5_5A5A_DEAD_BEEF,
+                    x as f32,
+                    y as f32,
+                    self.across * 1.5,
+                ));
+            }
+        }
+        (elevation, moisture)
+    }
+
+    /// Where lakes lie and rivers run: two more smooth fields, read by
+    /// `Grid::generate_terrain`. Lakes are the low spots of one, at the
+    /// scale of a district; rivers follow the lines where the other crosses
+    /// its middle, at the scale of the country, with a little finer relief
+    /// so that they wander.
+    ///
+    /// And where a river can be waded: a third field at the scale of a few
+    /// tens of metres, whose high spots are shallows.
+    pub fn water_over(&self, width: usize, height: usize) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+        let mut lakes = Vec::with_capacity(width * height);
+        let mut rivers = Vec::with_capacity(width * height);
+        let mut fords = Vec::with_capacity(width * height);
+        for y in 0..height {
+            for x in 0..width {
+                lakes.push(self.layered(self.seed ^ 0x1A4E_5EED_0000_0001, x as f32, y as f32, self.across * 0.5));
+                rivers.push(self.layered(self.seed ^ 0x0F10_0D5E_ED00_0002, x as f32, y as f32, self.across));
+                fords.push(Self::eased(self.seed ^ 0xF0_4D50_0000_0003, x as f32 / 5.0, y as f32 / 5.0));
+            }
+        }
+        (lakes, rivers, fords)
+    }
+
+    /// Where woods stand: a field at the scale of a few hundred metres, whose
+    /// high spots are copses.
+    pub fn woods_over(&self, width: usize, height: usize) -> Vec<f32> {
+        let mut woods = Vec::with_capacity(width * height);
+        for y in 0..height {
+            for x in 0..width {
+                woods.push(self.layered(self.seed ^ 0x0F0E_5700_0000_0004, x as f32, y as f32, self.across * 0.25));
+            }
+        }
+        woods
+    }
+
+    /// Octaves summed, each half the size and half the weight of the last.
+    pub fn layered(&self, seed: u64, x: f32, y: f32, across: f32) -> f32 {
+        let (mut total, mut weight, mut weights, mut spacing) = (0.0, 1.0, 0.0, across);
+        for octave in 0..Self::OCTAVES {
+            let lattice_seed = seed.wrapping_add((octave as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+            total += weight * Self::eased(lattice_seed, x / spacing, y / spacing);
+            weights += weight;
+            weight *= 0.5;
+            spacing = (spacing * 0.5).max(1.0);
+        }
+        total / weights
+    }
+
+    /// One octave: the lattice values round a point, eased between.
+    fn eased(seed: u64, x: f32, y: f32) -> f32 {
+        let (x0, y0) = (x.floor(), y.floor());
+        let ease = |t: f32| t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+        let (u, v) = (ease(x - x0), ease(y - y0));
+        let (ix, iy) = (x0 as i64, y0 as i64);
+        let at = |dx: i64, dy: i64| Self::drawn(seed, ix + dx, iy + dy);
+        let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+        lerp(lerp(at(0, 0), at(1, 0), u), lerp(at(0, 1), at(1, 1), u), v)
+    }
+
+    /// The number drawn for one lattice point, from nought to one.
+    fn drawn(seed: u64, ix: i64, iy: i64) -> f32 {
+        let mut z = seed
+            ^ (ix as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            ^ (iy as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        (z >> 40) as f32 / (1u64 << 24) as f32
     }
 }

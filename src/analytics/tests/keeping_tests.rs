@@ -203,7 +203,8 @@ fn drying_food_makes_it_keep() {
 
     let how = simulation.population.agents[0]
         .inventory
-        .get_item("meatportions")
+        // Carried under its own name now, as cooked food is (#320)
+        .get_item("dried_meatportions")
         .and_then(|item| item.food_data.as_ref())
         .map(|food| food.preparation)
         .expect("still in the pack");
@@ -244,7 +245,7 @@ fn dried_meat_outlasts_raw_meat() {
         "the raw one is gone"
     );
     assert!(
-        simulation.population.agents[0].how_many_i_have("venison") > 0,
+        simulation.population.agents[0].how_many_i_have("dried_venison") > 0,
         "and the dried one is supper"
     );
 }
@@ -283,7 +284,8 @@ fn food_hung_over_a_fire_is_smoked() {
 
     let how = simulation.population.agents[0]
         .inventory
-        .get_item("meatportions")
+        // Carried under its own name now, as cooked food is (#320)
+        .get_item("smoked_meatportions")
         .and_then(|item| item.food_data.as_ref())
         .map(|food| food.preparation)
         .expect("still in the pack");
@@ -488,4 +490,53 @@ fn drying_is_in_the_matrix() {
 
     assert!(one.is_live(), "something performs it");
     assert_eq!(one.family, verbs::Family::Thermal);
+}
+
+/// Gathering more after drying does not undo the drying.
+///
+/// Dried in place, the dried food kept its name, and the first raw handful
+/// gathered after it merged into the same stack. A stack is as good as its
+/// worst part, so the whole of it was raw again: it spoiled at the raw rate,
+/// and weighed what raw food weighs, three times what it had gone into the
+/// pack at (#320).
+#[test]
+fn gathering_more_after_drying_does_not_undo_the_drying() {
+    let mut simulation = one_person();
+    let agent = &mut simulation.population.agents[0];
+    agent.found_out_how_to(Simulation::THAT_LAYING_IT_OUT_KEEPS_IT);
+    agent.inventory.max_weight = 500.0;
+    let _ = agent.inventory.add_item(a_meal(ItemType::Legumes, "legumes", 20, 0));
+    let dried = simulation.execute_action(&Action::Dry { what: "legumes".to_string() }, 0);
+    assert!(dried.success, "{:?}", dried.message);
+
+    let _ = simulation.population.agents[0]
+        .inventory
+        .add_item(a_meal(ItemType::Legumes, "legumes", 1, 0));
+
+    let pack = &simulation.population.agents[0].inventory;
+    let how = |what: &str| pack.get_item(what).and_then(|item| item.food_data.as_ref()).map(|food| food.preparation);
+    assert_eq!(how("dried_legumes"), Some(PreparationState::Dried), "the twenty are still dried");
+    assert_eq!(pack.count_item("dried_legumes"), 20);
+    assert_eq!(how("legumes"), Some(PreparationState::Raw), "and the handful is raw, on its own");
+}
+
+/// And nothing goes into a pack that would leave it heavier than it can hold
+/// once it has joined the stack it goes into.
+#[test]
+fn a_pack_takes_nothing_that_would_overload_it_once_merged() {
+    let mut simulation = one_person();
+    let pack = &mut simulation.population.agents[0].inventory;
+    pack.max_weight = 9.0;
+    // Ten raw, at half a unit each
+    assert!(pack.add_item(a_meal(ItemType::Legumes, "legumes", 10, 0)));
+    // And ten dried, at a third of that, which would fit on their own
+    let mut dried = a_meal(ItemType::Legumes, "legumes", 10, 0);
+    if let Some(food) = dried.food_data.as_mut() {
+        food.set_preparation(PreparationState::Dried, 0);
+    }
+    assert!(dried.total_weight() + pack.current_weight() <= pack.max_weight);
+
+    // But merged they are all raw, and weigh ten units together
+    assert!(!pack.add_item(dried), "the merge would be over the limit");
+    assert!(pack.current_weight() <= pack.max_weight);
 }

@@ -671,6 +671,8 @@ impl crate::analytics::Simulation {
                 .filter(|way| way.horizon() <= horizon)
                 .filter_map(|way| {
                     self.can_this_way_be_taken(*way, agent, agent_position)
+                        // Not a way at all if it is a walk to the far bank (#323)
+                        .filter(|doing| self.can_this_be_got_to(agent_position, doing))
                         .map(|doing| {
                             let worth = self.what_this_way_is_worth(*way, need, agent, &doing);
                             (*way, doing, worth)

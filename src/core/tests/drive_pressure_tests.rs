@@ -35,7 +35,9 @@ fn an_answered_drive_presses_no_harder_than_it_looks() {
 #[test]
 fn a_denied_drive_builds_faster_the_longer_it_waits() {
     fn value_after(turns: u32, answered: bool) -> f32 {
-        let mut drive = Drive::new(DriveType::Rest);
+        // Social rather than Rest, which no longer builds on the clock
+        // (#302): this is about a drive that does.
+        let mut drive = Drive::new(DriveType::Social);
         for _ in 0..turns {
             drive.take_a_turn();
             if answered {
@@ -46,7 +48,7 @@ fn a_denied_drive_builds_faster_the_longer_it_waits() {
     }
 
     let ignored = value_after(120, false);
-    let flat = 120.0 * DriveType::Rest.base_accumulation_rate();
+    let flat = 120.0 * DriveType::Social.base_accumulation_rate();
 
     assert!(
         ignored > flat,

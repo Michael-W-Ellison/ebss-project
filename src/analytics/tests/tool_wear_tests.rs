@@ -247,6 +247,33 @@ fn enough_work_wears_a_tool_out() {
     );
 }
 
+/// And a worn-through tool is thrown away, not carried.
+///
+/// Nothing can use a broken one and nothing mends one. The last handaxe a
+/// people wore out used to stay in the pack all year, weighing what a whole
+/// one weighs (#319).
+#[test]
+fn a_worn_through_tool_is_thrown_away() {
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let agent = &mut population.agents[0];
+    let carrying_before = agent.inventory.current_weight();
+
+    while agent
+        .wear_what_i_worked_with(SkillType::Woodcutting)
+        .is_none()
+    {}
+
+    assert!(
+        agent.inventory.get_item("handaxe").is_none(),
+        "the broken axe is still in the pack"
+    );
+    assert!(
+        agent.inventory.current_weight() < carrying_before,
+        "and the pack is lighter for it"
+    );
+}
+
 /// A worn-through tool is a reason to make another.
 #[test]
 fn a_broken_tool_is_a_reason_to_make_a_new_one() {
@@ -414,6 +441,9 @@ fn even_crude_work_beats_bare_hands() {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let agent = &mut population.agents[0];
+    // Never made one, and no trade to carry over: a founder arrives having
+    // made spears before (#335), so the practice goes too.
+    agent.skills = crate::agents::Skills::new();
     agent.skills.set_skill_level(SkillType::Crafting, -10);
 
     let spear = agent.a_tool_fresh_from_these_hands("spear", 1, 2.0);

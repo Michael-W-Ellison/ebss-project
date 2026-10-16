@@ -173,6 +173,32 @@ impl Simulation {
     /// when it is wanted", and where the answer is no there are several turns
     /// spare to make it yes - which is what the drying and salting branches
     /// below are for. See ISSUES_FOUND.md #124.
+    /// A pit with room to carry something spare to, if walking would help.
+    ///
+    /// **Not the one underfoot, and not past one with room in it.** This
+    /// asked for the nearest pit with room, which for somebody standing on
+    /// one is that pit, and the branch above has already declined to bury
+    /// the thing in it because it would not keep the winter there. So the
+    /// answer was a walk to the cell they stood on, and they took it, turn
+    /// after turn, for as long as putting by was the loudest thing they
+    /// wanted. Over a year of seed 1 that was **10,081 of 24,499 walks**, all
+    /// of them out of Preparedness, and through a winter it was what a
+    /// parent at a tenth of their reserve did beside a pit of legumes (#301).
+    /// A hole with room here and a thing not worth burying in it is a thing
+    /// not worth burying, and another hole further off will not change that.
+    pub(in crate::analytics) fn a_pit_worth_the_walk(
+        &self,
+        here: crate::world::Position,
+    ) -> Option<crate::world::Position> {
+        if self.world.pit_at(here).is_some_and(|pit| pit.has_room()) {
+            return None;
+        }
+        self.world
+            .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
+            .filter(|(_, paces)| *paces > 0)
+            .map(|(pit, _)| pit.where_it_is)
+    }
+
     pub(in crate::analytics) fn is_it_worth_burying(
         &self,
         agent: &crate::agents::Agent,
@@ -479,6 +505,24 @@ impl Simulation {
             }
         }
 
+        // Meat lying in the wood that nobody has to kill.
+        //
+        // "Why are few agents going for free meat? It increases future
+        // survival odds at almost no cost or risk. Preparation should drive
+        // the utilization of free meat for at least some agents." A kill
+        // somebody else made, or told of, was reached only by hunger - and
+        // weighed as one meal against a berry bush - so a fed man who had
+        // heard of a deer lying a short walk off did nothing about it and the
+        // deer went to the crows on the fifth day. Fetched now and dried or
+        // buried, it is a week of winter eating.
+        //
+        // In any season, not only the autumn: a kill does not wait for the
+        // year to turn. Above salting and drying, because what is in the pack
+        // keeps a day and the carcass does not.
+        if let Some(fetch) = self.a_kill_worth_fetching(agent, agent_position) {
+            return Some(fetch);
+        }
+
         // Salt it, if there is salt for it.
         //
         // Salting is the third way of keeping a thing and the only one that
@@ -577,12 +621,9 @@ impl Simulation {
                 >= self.how_many_mouths_about(here).max(1) * Self::what_a_store_is_filled_to_a_mouth();
 
             if enough_hole_for_the_winter {
-                if let Some((pit, _)) = self
-                    .world
-                    .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
-                {
+                if let Some(pit) = self.a_pit_worth_the_walk(here) {
                     return Some(Action::Move {
-                        target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+                        target: (pit.x, pit.y, agent_position.2),
                     });
                 }
             }
@@ -592,16 +633,20 @@ impl Simulation {
             // somebody happened to be standing, and the executor refused most
             // of them: measured at 100 attempts a world for 1.7 pits, which is
             // ninety-eight turns spent trying to dig a hole in a lake.
-            if self.is_ground_a_pit_will_go_in(here) && !self.is_there_a_hole_going_spare(here) {
-                return Some(Action::Excavate);
+            if !self.is_there_a_hole_going_spare(here) {
+                if self.is_ground_a_pit_will_go_in(here) {
+                    return Some(Action::Excavate);
+                }
+                if let Some(ground) = self.ground_a_pit_will_go_in_near(here) {
+                    return Some(Action::Move {
+                        target: (ground.x, ground.y, agent_position.2),
+                    });
+                }
             }
 
-            if let Some((pit, _)) = self
-                .world
-                .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
-            {
+            if let Some(pit) = self.a_pit_worth_the_walk(here) {
                 return Some(Action::Move {
-                    target: (pit.where_it_is.x, pit.where_it_is.y, agent_position.2),
+                    target: (pit.x, pit.y, agent_position.2),
                 });
             }
         }
@@ -646,6 +691,11 @@ impl Simulation {
         if self.is_ground_a_pit_will_go_in(here) {
             return Some(Action::Excavate);
         }
+        if let Some(ground) = self.ground_a_pit_will_go_in_near(here) {
+            return Some(Action::Move {
+                target: (ground.x, ground.y, agent_position.2),
+            });
+        }
 
         // And with nothing at all to put by, the trip is still worth making
         // pay. Both of these sit at the *bottom* of this branch on purpose.
@@ -670,6 +720,77 @@ impl Simulation {
         }
 
         None
+    }
+
+    /// A kill this one knows of with meat still on it, worth going for and
+    /// with room in the pack to bring some back: `Gather` it where it lies
+    /// within reach, and walk to it where it does not.
+    ///
+    /// Priced the way a patch of food is priced (`what_this_patch_is_worth`),
+    /// so that a deer across the valley does not beat a winter's work, and
+    /// only while there is time to get there before it turns.
+    pub(in crate::analytics) fn a_kill_worth_fetching(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::Position;
+
+        if agent.state.years_old() < crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT {
+            return None;
+        }
+        if agent.inventory.weight_capacity_remaining() < Self::WHAT_A_JOINT_WEIGHS {
+            return None;
+        }
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let now = self.current_turn;
+        let energy = self
+            .food_database
+            .get(&crate::world::ItemType::Meat)
+            .map(|template| template.base_nutrition.energy)
+            .unwrap_or(crate::agents::physiology::ENERGY_OF_ORDINARY_FOOD)
+            * Self::portions_in_one_off(crate::world::ResourceType::Meat);
+
+        let (there, paces, _) = self
+            .nodes_known_to(agent, here, u32::MAX)
+            .filter(|node| node.is_a_carcass() && node.anything_to_take())
+            .filter_map(|node| {
+                let paces = here.distance_to(&node.position);
+                // Time to walk there with a day of it left to cut
+                let left = node.killed_on.map(|then| {
+                    (then + crate::world::World::HOW_LONG_A_CARCASS_LIES).saturating_sub(now)
+                })?;
+                let walking = crate::world::pace::turns_to_walk(paces)
+                    * crate::environment::seasons::TICKS_BETWEEN_PLANS as f32;
+                if (left as f32) < walking + crate::environment::seasons::TICKS_PER_DAY as f32 {
+                    return None;
+                }
+                if !self.world.can_walk_between(
+                    (here.x, here.y),
+                    (node.position.x, node.position.y),
+                ) {
+                    return None;
+                }
+
+                let costs = crate::agents::provision::what_foraging_costs(
+                    paces,
+                    crate::agents::physiology::how_much_work_this_food_is(energy),
+                );
+                let worth = Self::what_this_patch_is_worth(energy, node.amount, paces, costs);
+                (worth > 0.0).then_some((node.position, paces, worth))
+            })
+            .max_by(|(_, _, a), (_, _, b)| a.total_cmp(b))?;
+
+        if paces <= Self::FORAGE_RADIUS {
+            return Some(Action::Gather {
+                resource_type: "meat".to_string(),
+            });
+        }
+
+        Some(Action::Move {
+            target: (there.x, there.y, agent_position.2),
+        })
     }
 
     /// Whether this agent should go and draw on the store rather than the
@@ -999,6 +1120,38 @@ impl Simulation {
             .get_tile(&here)
             .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
             .unwrap_or(false)
+    }
+
+    /// The nearest ground a pit will go in, within a short walk of here.
+    ///
+    /// Digging asked only of the ground underfoot. While every kind of ground
+    /// lay within a pace or two of every other, that was always near enough;
+    /// in smooth country a camp sleeps under the trees, the forest floor will
+    /// not take a hole, and a settlement on one fresh world dug eight pits in
+    /// its first two months and none in the next ten, with sixteen thousand
+    /// of food standing round it and a store too small to breed on (#315).
+    ///
+    /// On smooth ground only for now; on the scattered ground everything was
+    /// tuned on, digging asks of the ground underfoot as it always did
+    /// (`TerrainStyle`).
+    pub(in crate::analytics) fn ground_a_pit_will_go_in_near(
+        &self,
+        here: crate::world::Position,
+    ) -> Option<crate::world::Position> {
+        use crate::world::Position;
+
+        if self.world.terrain_style != crate::world::TerrainStyle::Smooth {
+            return None;
+        }
+
+        let reach = Self::FIELD_WALK_RADIUS as i32;
+        (1..=reach).find_map(|ring| {
+            (-ring..=ring)
+                .flat_map(|dx| (-ring..=ring).map(move |dy| (dx, dy)))
+                .filter(|(dx, dy)| dx.abs() == ring || dy.abs() == ring)
+                .map(|(dx, dy)| Position::new(here.x + dx, here.y + dy))
+                .find(|there| self.is_ground_a_pit_will_go_in(*there))
+        })
     }
 
     /// Salt water close enough to dip a pot in.

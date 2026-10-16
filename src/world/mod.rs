@@ -264,6 +264,18 @@ pub struct World {
     /// health or their life. See `ResourceType::StrangePlant`.
     #[serde(default)]
     pub what_the_strange_plants_are: Vec<bool>,
+
+    /// How this world's ground was laid out; see `TerrainStyle`. Last, with a
+    /// default, because saves are positional. A save from before the field
+    /// existed was made on scattered ground, whatever the default is now.
+    #[serde(default = "TerrainStyle::what_old_saves_were_made_on")]
+    pub terrain_style: TerrainStyle,
+
+    /// Which piece of ground a foot can cross each cell is on, worked out the
+    /// first time anybody asks and not saved: it is the map's to say, and the
+    /// map does not change what can be walked on (`World::can_walk_between`).
+    #[serde(skip)]
+    pieces: std::sync::OnceLock<Vec<u32>>,
 }
 
 /// Something lying on the ground where somebody left it.
@@ -600,6 +612,35 @@ impl Pit {
 pub struct WorldConfig {
     pub size: (usize, usize), // Width, Height (no Z for simplicity)
     pub initial_resources: ResourceConfig,
+    /// How the ground is laid out; see `TerrainStyle`.
+    pub terrain: TerrainStyle,
+}
+
+/// How a world's ground is laid out.
+///
+/// **Smooth**, the default, is seeded relief: country a couple of kilometres
+/// across, lakes and rivers with banks and fords, a coast, woods in copses, so
+/// there is good land and bad and a reason to be in one place rather than
+/// another (#315). It became the default once settlements did as well on it
+/// as on the old ground: over two years on eight fresh big-map worlds, 43
+/// births and no deaths, against 46 and 1 (#316, #317, #318).
+///
+/// **Scattered** is the generator every world was made with before that: each
+/// tile read from a hash, so every kind of ground lies within a pace or two of
+/// every other and every world has the same ground. Kept for old saves and for
+/// tests that want a little of everything everywhere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum TerrainStyle {
+    Scattered,
+    #[default]
+    Smooth,
+}
+
+impl TerrainStyle {
+    /// What a save from before `World::terrain_style` existed was made on.
+    pub fn what_old_saves_were_made_on() -> Self {
+        TerrainStyle::Scattered
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -724,6 +765,7 @@ impl Default for WorldConfig {
         Self {
             size: (50, 50),
             initial_resources: ResourceConfig::default(),
+            terrain: TerrainStyle::Smooth,
         }
     }
 }
@@ -747,8 +789,21 @@ impl WorldConfig {
         let side = Grid::HOW_MANY_CELLS_ACROSS_A_COUNTRY;
         Self {
             size: (side, side),
+            terrain: TerrainStyle::Smooth,
             initial_resources: ResourceConfig::default(),
         }
+    }
+
+    /// The same world on smooth, seeded ground; see `TerrainStyle`.
+    pub fn with_smooth_terrain(mut self) -> Self {
+        self.terrain = TerrainStyle::Smooth;
+        self
+    }
+
+    /// The same world on the old scattered ground; see `TerrainStyle`.
+    pub fn with_scattered_terrain(mut self) -> Self {
+        self.terrain = TerrainStyle::Scattered;
+        self
     }
 
     /// Set world size
@@ -818,6 +873,47 @@ impl World {
             since: turn,
             dried_in_the_sun: 0,
         });
+    }
+
+    /// How long a carcass lying in the open is worth going back to.
+    ///
+    /// Half what a joint keeps in a pack (`FoodDatabase`: raw meat ten days):
+    /// out on the grass the flies, the crows and the foxes are at it as well
+    /// as the air, and nobody is keeping the sun off it.
+    pub const HOW_LONG_A_CARCASS_LIES: u32 = 5 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// Somebody brought a beast down here and has not taken all of it: this
+    /// many joints still on it, killed this turn.
+    ///
+    /// It goes on the map as a node of `Meat` - the resource the map has
+    /// always had for "a kill somebody left" and nothing ever made - so that
+    /// it is food like any other to whoever knows it is there: they can walk
+    /// to it, weigh it against a berry patch, cut joints off it, and tell
+    /// somebody else where it is. Returns its number.
+    pub fn a_carcass_lies_here(&mut self, where_it_fell: Position, joints: u32, killed_on: u32) -> Option<usize> {
+        if joints == 0 {
+            return None;
+        }
+        Some(self.put_a_node_down(ResourceNode::a_carcass(where_it_fell, joints, killed_on)))
+    }
+
+    /// Carcasses lying past `HOW_LONG_A_CARCASS_LIES` are carrion, and go.
+    fn carcasses_go_off(&mut self) {
+        let now = self.turn;
+        let mut any = false;
+        for node in self.resources.iter_mut() {
+            if node
+                .killed_on
+                .is_some_and(|then| now.saturating_sub(then) >= Self::HOW_LONG_A_CARCASS_LIES)
+                && node.amount > 0
+            {
+                node.amount = 0;
+                any = true;
+            }
+        }
+        if any {
+            self.swept_since_anything_ran_out = false;
+        }
     }
 
     /// What is lying on a given tile, newest first.
@@ -1218,7 +1314,10 @@ impl World {
     /// [`World::let_the_country_come_up`] starts from.
     fn made_with(config: WorldConfig, fauna: Option<AnimalSpawnConfig>) -> Self {
         let mut grid = Grid::new(config.size.0, config.size.1);
-        grid.generate_terrain();
+        match config.terrain {
+            TerrainStyle::Scattered => grid.generate_terrain(),
+            TerrainStyle::Smooth => grid.generate_smooth_terrain(),
+        }
 
         let mut world = Self {
             grid,
@@ -1251,6 +1350,8 @@ impl World {
             road_network: path_planning::RoadNetwork::new(),
             territory_manager: territory::TerritoryManager::new(),
             what_the_strange_plants_are: Self::draw_the_strange_plants(),
+            terrain_style: config.terrain,
+            pieces: std::sync::OnceLock::new(),
             dropped: Vec::new(),
             snares: Vec::new(),
             pits: Vec::new(),
@@ -1538,9 +1639,27 @@ impl World {
         rng: &mut impl Rng,
         taken: &mut std::collections::BTreeSet<(i32, i32)>,
     ) {
+        // On smooth country, one in three of each by the water (#316): see
+        // `somewhere_by_the_water`.
+        let smooth = self.terrain_style == TerrainStyle::Smooth;
+        let by_the_water = |n: usize| smooth && n % 3 == 0;
+        let (mut waterside_trees, mut river_stone) = if smooth {
+            (
+                self.every_tile_of(&[TerrainType::Riverbank, TerrainType::Wetland]),
+                self.every_tile_of(&[TerrainType::Riverbank, TerrainType::Beach]),
+            )
+        } else {
+            (Vec::new(), Vec::new())
+        };
+
         // Generate wood nodes (in forest areas)
-        for _ in 0..config.wood_nodes {
-            let pos = self.find_random_terrain_position(TerrainType::Forest, taken);
+        for n in 0..config.wood_nodes {
+            let pos = if by_the_water(n) {
+                Self::somewhere_by_the_water(&mut waterside_trees, taken)
+            } else {
+                None
+            }
+            .unwrap_or_else(|| self.find_random_terrain_position(TerrainType::Forest, taken));
             self.resources.push(ResourceNode::new(
                 ResourceType::Wood,
                 pos,
@@ -1549,13 +1668,18 @@ impl World {
         }
 
         // Generate stone nodes (in mountain and hills areas)
-        for _ in 0..config.stone_nodes {
+        for n in 0..config.stone_nodes {
             let terrain = if rng.gen::<f32>() < 0.7 {
                 TerrainType::Mountain
             } else {
                 TerrainType::Hills
             };
-            let pos = self.find_random_terrain_position(terrain, taken);
+            let pos = if by_the_water(n) {
+                Self::somewhere_by_the_water(&mut river_stone, taken)
+            } else {
+                None
+            }
+            .unwrap_or_else(|| self.find_random_terrain_position(terrain, taken));
             self.resources.push(ResourceNode::new(
                 ResourceType::Stone,
                 pos,
@@ -1692,16 +1816,34 @@ impl World {
         }
 
         // Generate water sources (rivers, wells, springs)
-        // Water is critical for survival - place near various terrains
-        for _ in 0..config.water_sources {
-            // Water can be found in various locations
-            let terrain = match rng.gen_range(0..4) {
-                0 => TerrainType::Plains,   // River in plains
-                1 => TerrainType::Meadow,   // Stream in meadow
-                2 => TerrainType::Forest,   // Spring in forest
-                _ => TerrainType::Hills,    // Well in hills
+        //
+        // **Most of them where the water is.** A drink is taken at a source,
+        // and the sources were put down at random on grass, meadow, wood and
+        // hill, while the lakes and rivers on the map were scenery nobody
+        // could drink from. While the ground was drawn tile by tile that
+        // hardly showed: water and dry land were never more than a few paces
+        // apart. In smooth country it killed. A people put down beside a lake
+        // on one fresh world had the nearest source 40 cells off, and eight
+        // of twelve died of thirst inside four days (#315). Two in three are
+        // on the shore of a lake or a river now; the rest are springs and
+        // wells in the hills and woods, as before. On smooth ground only, for
+        // now: the scattered ground everything was tuned on keeps its springs
+        // where they always were (`TerrainStyle`).
+        for source in 0..config.water_sources {
+            let on_the_shore = if self.terrain_style == TerrainStyle::Smooth && source % 3 != 2 {
+                self.find_random_shore_position(TerrainType::Water, taken)
+            } else {
+                None
             };
-            let pos = self.find_random_terrain_position(terrain, taken);
+            let pos = on_the_shore.unwrap_or_else(|| {
+                let terrain = match rng.gen_range(0..4) {
+                    0 => TerrainType::Plains,   // River in plains
+                    1 => TerrainType::Meadow,   // Stream in meadow
+                    2 => TerrainType::Forest,   // Spring in forest
+                    _ => TerrainType::Hills,    // Well in hills
+                };
+                self.find_random_terrain_position(terrain, taken)
+            });
             // Water sources are renewable and have high capacity
             self.resources.push(ResourceNode::new(
                 ResourceType::Water,
@@ -1723,7 +1865,14 @@ impl World {
                 continue;
             }
             for _ in 0..Self::HOW_MANY_PLACES_THE_SEA_CAN_BE_REACHED {
-                let pos = self.find_random_terrain_position(terrain, taken);
+                // On the shore, where somebody can stand and reach it: out in
+                // smooth sea a source is a long swim from anybody (#315)
+                let pos = if self.terrain_style == TerrainStyle::Smooth {
+                    self.find_random_shore_position(terrain, taken)
+                } else {
+                    None
+                }
+                .unwrap_or_else(|| self.find_random_terrain_position(terrain, taken));
                 self.resources.push(ResourceNode::new(
                     ResourceType::Water,
                     pos,
@@ -1881,6 +2030,169 @@ impl World {
     /// caller that puts something down at a position this did not choose has
     /// to say so - see `land_tests::stocking_a_map_leaves_no_two_things_on_a
     /// _tile`.
+    /// Somewhere on dry ground beside water of this kind, not already taken:
+    /// `None` if a few hundred tries find none.
+    fn find_random_shore_position(
+        &self,
+        water: TerrainType,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) -> Option<Position> {
+        let mut rng = crate::core::dice::roll();
+        for _ in 0..400 {
+            let pos = Position::new(
+                rng.gen_range(0..self.grid.width) as i32,
+                rng.gen_range(0..self.grid.height) as i32,
+            );
+            let dry = self.grid.get_tile(&pos).is_some_and(|tile| {
+                !matches!(tile.terrain.terrain_type, TerrainType::Water | TerrainType::Sea)
+            });
+            let beside = [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|(dx, dy)| {
+                self.grid
+                    .get_tile(&Position::new(pos.x + dx, pos.y + dy))
+                    .is_some_and(|tile| tile.terrain.terrain_type == water)
+            });
+            if dry && beside && taken.insert((pos.x, pos.y)) {
+                return Some(pos);
+            }
+        }
+        None
+    }
+
+    /// Whether somebody standing at `from` could walk to `to`, or to the bank
+    /// beside it if it is in the water.
+    ///
+    /// Every cell a foot can go on is labelled once with the piece of ground
+    /// it belongs to, so this is a lookup and not a search. On scattered
+    /// ground nearly everything is one piece. On smooth country a river runs
+    /// for kilometres and some close round an island, and a person who had
+    /// seen a spring or a fishing place on the far bank set out for it and
+    /// walked at the water for the rest of the turn, and the next, because
+    /// there was no way there (#321).
+    ///
+    /// The labels are worked out from the ground as it is on first asking.
+    /// Nothing in a running world turns land to water or water to land; a test
+    /// that redraws the map after asking must call `the_lie_of_the_land_changed`.
+    pub fn can_walk_between(&self, from: (i32, i32), to: (i32, i32)) -> bool {
+        let ours = self.pieces_at_or_beside(from);
+        if ours.is_empty() {
+            return true;
+        }
+        self.pieces_at_or_beside(to).iter().any(|piece| ours.contains(piece))
+    }
+
+    /// Forget the labels, after redrawing the map.
+    pub fn the_lie_of_the_land_changed(&mut self) {
+        self.pieces = std::sync::OnceLock::new();
+    }
+
+    /// The piece a cell is on, or, for a cell no foot can go on, the pieces
+    /// of the ground beside it: where somebody standing in the shallows can
+    /// step out to, and where a walk to the water ends.
+    fn pieces_at_or_beside(&self, at: (i32, i32)) -> Vec<u32> {
+        let piece = |x: i32, y: i32| -> u32 {
+            let (w, h) = (self.grid.width as i32, self.grid.height as i32);
+            if x < 0 || y < 0 || x >= w || y >= h {
+                return 0;
+            }
+            self.pieces.get_or_init(|| self.label_the_pieces())[(y * w + x) as usize]
+        };
+        let here = piece(at.0, at.1);
+        if here != 0 {
+            return vec![here];
+        }
+        let mut beside: Vec<u32> = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+            .iter()
+            .map(|(dx, dy)| piece(at.0 + dx, at.1 + dy))
+            .filter(|&piece| piece != 0)
+            .collect();
+        beside.sort_unstable();
+        beside.dedup();
+        beside
+    }
+
+    /// Every cell's piece of ground, nought for one no foot can go on.
+    fn label_the_pieces(&self) -> Vec<u32> {
+        let (w, h) = (self.grid.width as i32, self.grid.height as i32);
+        let walkable = |x: i32, y: i32| {
+            self.grid
+                .get_tile(&Position::new(x, y))
+                .is_some_and(|tile| tile.terrain.is_walkable())
+        };
+        let mut piece = vec![0u32; (w * h) as usize];
+        let mut next = 0u32;
+        for start in 0..(w * h) {
+            let (sx, sy) = (start % w, start / w);
+            if piece[start as usize] != 0 || !walkable(sx, sy) {
+                continue;
+            }
+            next += 1;
+            piece[start as usize] = next;
+            let mut to_look_at = vec![(sx, sy)];
+            while let Some((x, y)) = to_look_at.pop() {
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let (nx, ny) = (x + dx, y + dy);
+                    if nx < 0 || ny < 0 || nx >= w || ny >= h {
+                        continue;
+                    }
+                    let i = (ny * w + nx) as usize;
+                    if piece[i] == 0 && walkable(nx, ny) {
+                        piece[i] = next;
+                        to_look_at.push((nx, ny));
+                    }
+                }
+            }
+        }
+        piece
+    }
+
+    /// A free tile of one of these grounds, for wood and stone laid by the
+    /// water on smooth country.
+    ///
+    /// Out in open country, wood and stone are found along the rivers. Trees
+    /// grow in a belt along the banks and in the wet ground, and a river
+    /// leaves cobbles on its banks and beaches, which was where most of the
+    /// stone people knapped came from. On scattered ground, every kind of
+    /// country was a few paces from every other, so the woods and the
+    /// mountains were always near. On smooth country they are regions of
+    /// their own. A people settled on open grass by a river, with fish and
+    /// springs, wore out the handaxes they came with inside two months. With
+    /// one stone node and no wood within a forage, nobody made another, and
+    /// on two worlds of four nobody could dig a pit all year (#316).
+    ///
+    /// `grounds` is every free tile of those grounds, listed once by the
+    /// caller, so a rare ground costs one pass over the map rather than one
+    /// per node. `None` when none of them is left free.
+    fn somewhere_by_the_water(
+        grounds: &mut Vec<(i32, i32)>,
+        taken: &mut std::collections::BTreeSet<(i32, i32)>,
+    ) -> Option<Position> {
+        let mut rng = crate::core::dice::roll();
+        while !grounds.is_empty() {
+            let at = grounds.swap_remove(rng.gen_range(0..grounds.len()));
+            if taken.insert(at) {
+                return Some(Position::new(at.0, at.1));
+            }
+        }
+        None
+    }
+
+    /// Every tile of these grounds, in order.
+    fn every_tile_of(&self, grounds: &[TerrainType]) -> Vec<(i32, i32)> {
+        let mut found = Vec::new();
+        for y in 0..self.grid.height as i32 {
+            for x in 0..self.grid.width as i32 {
+                if self
+                    .grid
+                    .get_tile(&Position::new(x, y))
+                    .is_some_and(|tile| grounds.contains(&tile.terrain.terrain_type))
+                {
+                    found.push((x, y));
+                }
+            }
+        }
+        found
+    }
+
     fn find_random_terrain_position(
         &self,
         terrain_type: TerrainType,
@@ -2534,6 +2846,7 @@ impl World {
         // And the weather gets at whatever is lying about
         if self.turn % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.what_is_lying_about_weathers();
+            self.carcasses_go_off();
         }
 
         // What is under the earth keeps
@@ -3517,6 +3830,7 @@ mod tests {
     fn test_custom_world_config() {
         let config = WorldConfig {
             size: (100, 80),
+            terrain: crate::world::TerrainStyle::Scattered,
             initial_resources: ResourceConfig {
                 wood_nodes: 30,
                 stone_nodes: 20,
@@ -3558,3 +3872,22 @@ mod tests {
 // External TDD test modules
 #[cfg(test)]
 mod tdd_tests;
+
+#[cfg(test)]
+impl World {
+    /// The same world laid to open grass end to end, for a test about
+    /// walking or building that is not about the lie of the land.
+    ///
+    /// Terrain is smooth and each world's own now (#315), so a test that
+    /// walks from (10, 10) to (12, 12) on a world it did not lay out may find
+    /// a lake in the way. Tests used to get away with it because every world
+    /// had the same ground.
+    pub(crate) fn all_open_grass(mut self) -> Self {
+        for row in self.grid.tiles.iter_mut() {
+            for tile in row.iter_mut() {
+                tile.terrain.terrain_type = TerrainType::Plains;
+            }
+        }
+        self
+    }
+}

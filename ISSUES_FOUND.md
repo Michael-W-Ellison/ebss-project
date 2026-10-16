@@ -22681,3 +22681,2807 @@ two-turn walk to a pit. All the hunger ways are ranked as giving the same
 relief, so a stomach full of leaf ranks with a stomach full of dried meat.
 
 Dice count: seed 0 over a year, 786,562 → 869,212.
+
+**And half of all walking was to the cell the walker stood on.** Traced
+with the action each one took, the dying of seed 1's ninth winter did not
+eat when they could. They walked, and mostly to where they already were. A
+parent at a tenth of his reserve stood on a pit of legumes. He was offered
+`Eat` and a handful from the pit, and for two days took "Move to (499,497)"
+from (499,497), until he died.
+
+Counted over seed 1's first year, by where in the decision each walk to
+one's own cell came from:
+
+| | walks |
+|---|---|
+| all walks | 24,499 |
+| to the walker's own cell | 10,081 |
+| of those, chosen by the drive loop | 10,081 |
+| of those, the drive Preparedness | 10,081 |
+
+`putting_food_by`, with something spare and a pit with room underfoot:
+- it asks whether the thing is worth burying here, which means whether it
+  would keep through the winter;
+- if not, it falls to "walk to the nearest pit with room", and that is this
+  pit.
+
+So it was a walk to nowhere, every turn that putting by was the loudest
+want. In a winter that is a parent holding rotten joints beside a pit of
+legumes, with Preparedness loudest because the store is falling.
+
+`a_pit_worth_the_walk` now answers both walks in that branch:
+- never to the cell underfoot;
+- not at all if the pit underfoot has room. A thing not worth burying here
+  is not worth burying in the next hole either.
+
+Test: `nobody_walks_to_the_pit_underfoot`. Dice counts: 892,632 a year on
+seed 0, and 9,894 in 120 turns on seed 4242.
+
+Counted again over seed 1's first year:
+
+| | before | after |
+|---|---|---|
+| all walks | 24,499 | 12,580 |
+| to the walker's own cell | 10,081 | 0 |
+
+### 302. Half of a grown person's life went on sleep
+
+After #301 the famine from year 9 was still there, so `zz_economy` followed
+seed 1 for ten years. Each season it records:
+- heads and reserve for each age band;
+- what each band spent its turns on;
+- the food in the pits and in hand.
+
+Not what was expected:
+- **Children aged 6–10 do help.** They spent 22–40% of their turns
+  gathering food in fall and spring.
+- **The pits stop growing.** They peaked at 17,000–18,000 items every winter
+  from year 5 to year 9, while the under-sixes went from 2 to 10 against
+  the same 12 grown people.
+- **Grown people were asleep on 35–56% of their turns.** Gathering food took
+  6–8%, and fetching water 11–13%.
+
+The nights #299 set are 7–9 hours, 29–37% of the day. What was the rest?
+Split by how long a sleep was, over seed 1's first two years:
+
+| grown people's turns | share |
+|---|---|
+| night, in the night rule's two-hour stretches | 16–28% |
+| five-hour sleeps (`Sleep { duration: 10 }`) by day | 5–24% |
+| five-hour sleeps by night | 6–15% |
+
+Every five-hour sleep came from the Rest drive: 3,756 of them in a year,
+about one a day for every grown person.
+
+The Rest drive built on the clock, at 0.008 a turn whatever the body had
+done. Before #299 that clock was the only thing that ever sent anybody to
+bed. Once people slept at night it went on asking for an afternoon's sleep
+besides, though the median body was fatigued 0.02.
+
+What a body owes in sleep is already counted in `FatigueState`: hours
+awake, and sleep debt past sixteen of them. `Agent::process_survival_turn`
+feeds it into this drive (fatigue × 0.02 a turn awake). So Rest is off the
+clock now (base rate 0.0), and tiredness alone builds it.
+
+Four tests used Rest as their example of a drive that builds with time:
+- `test_rest_drive_accumulates_from_activity` claimed fatigue and never
+  made the agent tired. It now asks that a rested body does not want its
+  bed and a tired one does.
+- `the_needs_of_the_body_still_run_on_the_clock` now says hunger and thirst
+  run on the clock, and asks that Rest does not.
+- `a_denied_drive_builds_faster_the_longer_it_waits` and
+  `test_multiple_drives_accumulate_independently` are about drive mechanics
+  and use Social instead, which still builds with time.
+
+Dice counts:
+
+| | before | after |
+|---|---|---|
+| seed 0, a year | 892,632 | 1,115,135 |
+| seed 4242, 120 turns | 9,894 | 9,333 |
+
+Measurement on the big map follows.
+
+### 303. A hungry parent went after a wandering child instead of eating
+
+After #302 every settlement still grew to about 20 people and crashed. Seed
+0 went from 20 to 11 in the winter of year 8. The land was not the limit
+(`zz_carrying`):
+- food within 50 cells of camp grew back to 21,000–25,000 every fall;
+- the pits filled to 17,000–18,000 every winter;
+- the pits still held 13,000–15,700 items while people died.
+
+The animals crowding the camp that winter were sheep, reindeer, goats and
+deer, so fear of beasts was not it either. So the decision ladder itself was
+instrumented. For every turn on which a grown person was at hunger 0.9 or
+more, it records which branch or drive answered, and what with. Over seed
+0's first eight years:
+
+| branch | answer | turns |
+|---|---|---|
+| `protective_action` | Move | 12,453 |
+| `protective_action` | Move, holding something to eat | 3,254 |
+| larder branch (`something_out_of_the_store`) | Move | 10,589 |
+| larder branch | PickUp | 2,276 |
+| hungry, with food in hand | Eat | 3,898 |
+| the Hunger drive | Eat | 1,033 |
+
+`protective_action` is the first thing a person is asked, above eating. Past
+a sick child or a bare one, it sends a parent after any child of six or more
+who is more than `CHILD_LEASH` (8) cells off. Children that age go out
+foraging; #302's probe had them gathering on 22–40% of their turns. So a
+hungry parent spent the day trailing a child at the edge of the leash, even
+holding supper. In a famine winter that is what they did until they died.
+
+Two rules now hold it back. Neither touches a child in danger, which still
+comes first:
+- **A hungry parent with supper in hand eats first.** The child that has
+  only wandered will still be there in half an hour.
+- **A child with somebody grown beside it is minded.**
+  `keeping_close_to_somebody_grown` already took any grown person within
+  reach, or a roof, as close enough; the parent's rule did not, and sent a
+  father after a child foraging beside its aunt. Both now read the same
+  question (`is_this_child_minded`).
+
+Tests in `minding_tests` (3):
+- a child alone past the leash is fetched;
+- a child beside somebody grown is minded;
+- a hungry parent eats before fetching a child who has only wandered.
+
+The larder branch's 10,589 walks against 2,276 handfuls are open. A walk to
+a pit that a parent's leash kept turning back would show up exactly so.
+
+Dice counts unchanged: the one-year runs have no children past six.
+
+**Measured.** The same tally over seed 0's first eight years, after:
+
+| turns at hunger 0.9 or more | before | after |
+|---|---|---|
+| `protective_action` | 15,707 | 221 |
+| all of them, about | 38,000 | 19,700 |
+
+Seeds 0–3 run toward thirteen years, alongside the same seeds at #302:
+
+| seed | #302 | #303 (so far) |
+|---|---|---|
+| 0 | peak 20, down to 11 in year 8 (7 hunger) | 21 at year 9, no hunger deaths |
+| 1 | peak 23, down to 9 by year 11 (15 hunger and thirst) | 30 at year 11, one hunger death |
+| 2 | 13 at year 10 | 16 at year 10 |
+| 3 | peak 23, down to 9 by year 12 | peak 26, 20 at year 13 (3 hunger, 1 thirst) |
+
+The crash at about twenty people is gone on three seeds, and on the fourth
+it is a dip, not a collapse. Conceived across the four: 58.
+
+### 304. A young parent's infant was kept beside them and fed by nobody
+
+Seed 1 at #303 lost three infants to thirst in year 13. Year 13 is when the
+first children of the founders, now eleven to fifteen, begin to have
+children of their own.
+
+A child under six takes no turns. Two passes look after it each turn:
+- `the_small_stay_with_their_people` puts it where its people stand;
+- `feed_the_small_children` gives it food and water out of whoever is within
+  a few paces (`WITHIN_A_FEW_PACES`, 2).
+
+Each pass picked the child's people out of a different list. Keeping took
+anybody six or over (`KEPT_WITH_A_PARENT_UNTIL`). Feeding took sixteen or
+over (`KEPT_WITHIN_AN_HOUR_UNTIL`). So:
+- **A parent of thirteen** was not in the feeding list. The child was put at
+  that parent's feet. Feeding looked past the parent for the nearest grown
+  body, found it far off, and gave nothing. The same was true of a parent of
+  eleven to fifteen. Water runs out in three days, so these infants died of
+  thirst, not hunger.
+- **An orphan** was kept with the nearest body six or over, which could be a
+  brother of nine. Feeding looked for the nearest of sixteen or over. That is
+  a different person, nowhere near.
+
+Both passes now ask one question, `whoever_looks_after`, of one list,
+`who_could_look_after_a_small_child`:
+- the child's carrier or parent, if alive and six or over;
+- failing those, the nearest living body sixteen or over.
+
+A parent is always eleven or over. A child is only ever handed to a parent.
+
+Tests in `young_parents_tests` (3):
+- a grown parent waters their infant;
+- a parent of thirteen does too (failed before);
+- an orphan is kept with and fed by the same grown stranger, not the
+  nine-year-old beside it (failed before).
+
+**Also found.** `src/analytics/tests/mod.rs` had been flagged
+assume-unchanged in this working copy, to keep a local probe's `mod` line
+out of commits. That also kept out the lines that register `night_tests`
+(#299), `by_hand_tests` (#300) and `minding_tests` (#303). Those files were
+pushed, but a fresh checkout never compiled or ran them. They are registered
+now. All of them pass.
+
+Dice counts unchanged: the one-year runs have no children of young parents
+and no orphans under six.
+
+**Measured.** Seed 1 was run unbroken to year 13 on the build before this
+fix. Its probe kept each infant's last day and a half. Three infants died of
+thirst on day 4584, aged 2, 4 and 5:
+- all three were orphans; both parents had died a few days before;
+- the nearest body of sixteen or over stood 7–9 paces off the whole time,
+  never within the 2 the feeding reads;
+- hydration fell evenly, 0.66 to 0.02 over three and a half days, with food
+  to spare (reserve 0.8–0.9).
+
+That is the orphan half above. They were kept with somebody of six to
+fifteen, and fed by nobody.
+
+The same year was replayed from the day-4320 checkpoint on both builds, once
+#305 let a loaded world run. Neither replay lost an infant. Off a checkpoint
+the dice run differently, and the parents who died near day 4580 lived, so
+there were no orphans to compare.
+
+### 305. A world read back from a save had no living animals or plants
+
+`Simulation::save` skips the books of species, the `FaunaRegistry` and the
+`FloraRegistry` (`#[serde(skip)]`). `Simulation::load` never put them back.
+Every animal and plant turn opens with a guard that returns at once without
+a registry. So in a loaded world:
+- nothing grazed, bred, aged or died;
+- nothing grew or seeded.
+
+The people went on living in a world that had stopped. The GUIs' load and
+the autosave checkpoints read saves back this way.
+
+It came to light at #304. A year-13 run resumed from a checkpoint finished
+in 600 s. The same year run without stopping took about six hours.
+
+`load` now puts both books back (`AnimalManager::the_registry_back`,
+`PlantManager::the_registry_back`). The other skipped parts already come
+back right:
+- the tech tree, crafting, combat and smelting managers default to their
+  `new()`;
+- the node index rebuilds itself on first use.
+
+Test: `save_load_tests::a_loaded_world_still_knows_its_species`. It failed
+before the fix.
+
+**Still not saved.** These `Population` fields start empty after a load:
+- `shared_knowledge`;
+- `technology_registry`, the world-firsts;
+- `unhappiness_tracker`;
+- `how_it_went`, the tally;
+- `bodies_where_they_fell` and `what_the_dead_left`.
+
+A resumed run also does not continue the dice stream. So a resumed run is a
+fair run of the same world, but not the run that would have happened.
+
+### 306. Each simulated year cost more than the last
+
+On the big map, seed 3 took 8 minutes for its first year and 86 for its
+thirteenth. Over the same years the people only doubled, from 12 to 25. What
+grew was the wild (`zz_growth`, from the yearly checkpoints):
+
+| year | animals | plants | one winter day |
+|---|---|---|---|
+| 1 | 852 | 229,000 | 0.7 s |
+| 5 | 1,236 | 325,000 | 1.0 s |
+| 9 | 2,725 | 425,000 | 2.4 s |
+| 11 | 3,550 | 426,000 | 3.1 s |
+
+Stack samples of a late year put about half the turn in the animals. Four
+things cost more with every head, and none of them changes what happens:
+- **`PlantManager::catch_up_one` cloned the whole book of plant species**, with
+  its names and lists, on every call. It is called for every cell every
+  grazer reaches. It borrows the book now.
+- **The grazing walk looked up each plant's kind by name** in that book, once
+  for each cell it searched and each it bit. It reads the kind from a table
+  laid out by species number (`FloraRegistry::by_number`,
+  `SpeciesId::number`), built once a pass.
+- **`what_the_beasts_make_of_us` checked every animal against every other** to
+  find the few that hunt: nine million checks a turn at three thousand head.
+  The list keeps only the hunters now, in the order they were, so the worst
+  threat is picked exactly as before. And each decision found its animal by
+  walking the herd; it now carries the animal's place in the list. The same
+  goes for bolting, in `the_beasts_act_on_it`.
+- **`nearest_roof_of_this_kind` searched up to 4,096 cells** for a roof that
+  did not exist. Most people own no roof and have no kinsman's. It now looks
+  first for any finished building of that kind, and stops if there is none.
+
+**Measured.** Seed 3 run on from the year-11 checkpoint with 3,550 animals:
+
+| run | before | after |
+|---|---|---|
+| 30 winter days, CPU | 96 s | 58 s |
+| 180 days into summer, CPU | 581 s | 337 s |
+
+Both runs end in the same place: the same animals at the same spots, the
+same people, the same plants, and the same number of dice rolled (2,337,269
+over the 180 days). So the change is a speed-up and nothing else, and the
+dice counts in `repeatable_tests` hold.
+
+What is left is spread out. In the profile after, the animals' turn is about
+a fifth, people's decisions about a seventh, and exploration about a seventh.
+The herds still grow, so a later year still costs more than an earlier one.
+
+### 307. The breeding gate asked for a full winter in store on the day
+
+By year 15 on the big map, births had fallen to about one a year per
+settlement. The reproduction drive was at its peak (1.0) in every grown
+person. What turned them away was `enough_put_by_for_a_child`, nearly every
+turn (`zz_why_no_births`, 180 days from midwinter):
+
+| person-turns aged 11+ | seed 3, year 15 | seed 1, year 12 |
+|---|---|---|
+| not enough put by | 70,590 | 69,394 |
+| nursing | 7,307 | 11,187 |
+| needs not met just then | 2,804 | 5,753 |
+| ready to breed | 2,302 | 0 |
+
+The gate asked whether a person's share of the stores held a whole hungry
+gap's eating for them, their small children and a newborn, **on the day**. A
+store is full in autumn and drawn down to its bottom by spring, whatever kind
+of year it was. So the gate opened only from late summer into autumn: about
+days 210–300 on seed 3 and days 140–340 on seed 1. Each person gets a fertile
+day a month, and each chance is about one in ten. That came to roughly a
+conception a year per settlement.
+
+Yet neither settlement was short (`zz_put_by`, a year each, the pits against
+the whole settlement's winter):
+
+| | bottom of the year | top of the year |
+|---|---|---|
+| seed 1 | 0.66 | 2.24 |
+| seed 3 | 0.62 | 1.71 |
+
+Even at the bottom of the year the pits held about two-thirds of a full
+winter. That is a surplus, and the gate could not see it.
+
+**What a surplus is, is what is still there when the winter is over.**
+`WintersSeen` already noted a person's share going into the gap and coming
+out, to learn what a gap takes (#298). It now keeps what the gap left as well
+(`what_a_gap_leaves`), averaged the same way. Once a winter has been seen
+through without the store running dry, the gate asks whether that leftover
+covers the winter cost of this person's children: the small ones already
+here, and one more. That is `took × (small ones + a newborn)`.
+- **The answer is the same all year.** So each person's chance falls on
+  their own fertile day, spread across the year, and not all in one autumn as
+  the timed gate of #255 had them.
+- **It limits itself.** More mouths eat more of the store, the next winter
+  leaves less, and the gate closes again.
+- **It falls back when there is nothing to count.** Before any winter has
+  been seen through, or after one that ran the store dry, the strict
+  whole-winter-in-store question still applies.
+- **Children already here still space the next.** They are charged against
+  the leftover.
+
+Tests in `survival_pressure_tests` (4):
+- a winter that left food over lets a child be conceived in spring (failed
+  before);
+- a winter that left almost nothing keeps the gate shut;
+- a winter that ran the store dry asks the old question;
+- the children already here are charged against the surplus.
+
+The existing gate tests, which have no winter seen, are unchanged and pass.
+
+The dice counts in `repeatable_tests` are unchanged. Their runs are a year
+long, so no winter has been seen through and the gate asks the old question.
+
+**Measured, early.** Seeds 0–3 resumed from their latest checkpoints on the
+new gate. Old checkpoints carry no winter's leftover, so the old question
+applies until the first gap after resuming is over.
+
+| seed | under the old gate | under the new gate, so far |
+|---|---|---|
+| 0 | 1 conceived in year 10 | 2 conceived in year 11 |
+| 1 | 0 conceived in year 13 | 0 conceived in year 14 (4 grown founders left) |
+| 2 | 0 conceived in year 12 | 1 conceived in year 13, 0 in year 14 |
+| 3 | 0, 0, 1 conceived in years 15–17 | 3 conceived in year 19, 1 in year 20 |
+
+On seed 3 the year-19 conceptions were born in year 20: **three
+grandchildren, the first second generation on any big-map seed**. No
+hunger deaths came with them.
+
+The same 180 days from midwinter on seed 3 (`zz_why_no_births`), from the
+year-20 checkpoint:
+
+| person-turns aged 11+ | old gate, year 15 | new gate, year 20 |
+|---|---|---|
+| not enough put by | 70,590 | 11,572 |
+| reproduction drive not active | 3,170 | 69,615 |
+| ready to breed | 2,302 | 7,479 |
+
+The food gate has stopped being what binds. What binds now is the drive. A
+mating outside the fertile day dulls it by `A_TRY_OUTSIDE_THE_WINDOW` (0.05,
+#299), and with the gate open people couple often, so on the fertile day the
+wish is spent. That is open.
+
+### 308. With a beast on your own tile there was nowhere to run
+
+Seed 1 went from 30 people to 23 in its thirteenth year, all within about
+six weeks of late autumn. Five of the seven deaths were reckoned "a blow".
+There were no wolves on that map.
+
+The year was replayed from the year-12 checkpoint with every source of "a
+blow" booked under its own name. The replay matched the recorded run: the
+same 23 left, and the same illnesses on the same days. What held the health
+of the dead:
+- **four adults: a lion,** two or three bites of about 25 each, often taken
+  at 20–40 health, then raw flesh or food on the turn finished them inside a
+  week;
+- **one: a camel, fought four times** and down to nought, before hunger;
+- **one: thirst,** and the child: illness and hunger.
+
+The fights came out of the threat tree as "stands over one of its own": 3
+times by day 239, 29 by the year's end. That branch is the one place a
+person knowingly takes the worse option, for somebody of theirs who cannot
+deal with the thing. And who could not deal with it was everybody. **The
+year's fear came to 42,208 turns, and 28,622 of them ended in a freeze.**
+Every freeze, adult or child, had legs and energy to spare, and was told
+there was nowhere to run: 11,527 from the lion, 8,814 more by children from
+the lion, and 8,169 from a camel.
+
+`where_this_one_would_run` worked out "away" from where the thing stood. With
+the thing on the runner's own tile, away is (0, 0). All eight rotations of it
+are (0, 0), every landing is the tile itself, and nothing counts as moving. So
+a lion or a grazing camel that walked onto somebody's tile pinned them there.
+A pinned child is somebody of theirs who cannot fight, so the parent stood
+over the child and fought the lion.
+
+Two changes:
+- **Something underfoot can be run from.** With no direction to run from,
+  the eight ways out start from east; each one gains the same ground, so the
+  scoring picks among them by what the runner remembers of where they would
+  land.
+- **An infant in arms is carried off, not stood over.** A child under six is
+  kept on its keeper's tile (`the_small_stay_with_their_people`) and goes
+  where they go. So it is not left in the way of anything its keeper runs
+  from. In the replay with only the first change, the lion fights went on:
+  a mother of 43 stood over hers 33 times at the same two paces. A child
+  who keeps itself (six or over) is still stood over, as before.
+
+Tests:
+- `cornered_tests::something_on_your_own_tile_can_still_be_run_from` (failed
+  before);
+- `sacrifice_tests::a_parent_runs_with_the_infant_in_arms`.
+
+`sacrifice_tests`' parent-and-child fixture set `LifeStage::Child` on a child
+of age nought. It is given eight years now, which is what that stage means,
+so its tests still ask about a child who stands on its own feet.
+
+**Dice.** Seed 0's year rolls 1,169,903, up 4.9%. People run where they
+froze.
+
+**`news_reaches_everybody_within_earshot`.** The rate itself moved, from 37 of
+48 worlds before to 31 after. Frightened people used to stay frozen where they
+stood, among the others; now they run nineteen paces at a bolt, so a
+settlement spreads a little more. The bar goes from two-thirds to three-fifths,
+with the measurement written beside it. 31 of 48 is still a clear majority,
+which is the claim the test makes.
+
+**Measured.** Seed 1's thirteenth year, replayed from the same checkpoint
+with the same dice:
+
+| | as recorded | something underfoot can be run from | and infants are carried off |
+|---|---|---|---|
+| deaths | 7 | 3 | 2 |
+| alive at the year's end | 23 | 27 | 28 |
+| died of a lion | 4 | 1 | 0 |
+| freezes | 28,622 | 0 | 0 |
+| runs | 41 | 824 | 217 |
+| lion bites taken, health | 280 | 308 | 56 |
+| boar strikes taken, health | 210 | 30 | 30 |
+
+The two left are one adult whom raw flesh finished on day 146, and one
+whose hunger took them in midwinter.
+
+### 309. Poison and rotten food were booked as blows
+
+Two ways of being made ill by what you eat went into the ledger as "a blow".
+A death that blows hold the most of is reckoned a death in combat
+(`DeathCause::Combat`), with whoever last struck the person named as the
+killer:
+- **Eating food past harm** (`Agent::eat`, `is_harmful`) cost 10 health,
+  booked as "a blow".
+- **Tasting a bad plant** (`Simulation::tasting`) cost 12–55 health through
+  `Agent::take_damage`, the door a blow comes in by. So it did everything a
+  blow does:
+  - it was booked as "a blow";
+  - it opened a wound in proportion to its weight, so that a bad plant of 25
+    or more left a wound fully open, as a hard blow does, to go bad like one;
+  - it was divided by the defence bonus of nearby buildings, as though walls
+    kept poison out;
+  - and it gave a Masochist pleasure.
+
+Both now go straight to the body as `AgentState::ILLNESS`, which is what an
+ailment's turns are already booked as. A bad plant leaves no wound and is
+not softened by a roof.
+
+The labels only ever reached the death reckoning: the cause recorded for a
+death, the `died of` tallies, and the GUI's event timeline, where the killer
+named is decoration that nothing acts on. The wound, the roof and the
+Masochist were behaviour.
+
+How much it mattered: in seed 1's thirteenth year, replayed with every blow
+named (#308), neither path booked anything, and none of that year's "blow"
+deaths came from it. #258 measured bad plants as the largest single thing
+booked as "a blow" before people warned each other about them: 2,275 health
+over four settlements and three years. So in a world where people are still
+learning their plants, these were what most of the "blow" figures were.
+
+Tests:
+- `tasting_tests::a_bad_plant_is_an_illness_and_not_a_blow`: booked as
+  illness, and no wound opened (failed before);
+- `nutrition_integration_tests::test_spoiled_food_harmful` now also asks
+  that rotten food is booked as illness (failed before).
+
+**Dice.** Seed 0's year rolls 1,164,176, down 0.5%: a bad plant is tried
+in its first year, and no longer leaves a wound to go bad.
+
+### 310. Nobody was ever asleep, so nobody mended as a sleeper does
+
+The adults who died of a lion on seed 1 (#308) did not die of the bites.
+They died a few days to a week later, when raw flesh or food on the turn
+made them ill: two or three bites had left them at 20–40 health, and they
+were still there when the illness came. So the question was how fast a
+wounded body mends.
+
+`Agent::regenerate_health` mends at 0.1 a turn, times what the body has
+spare, for somebody asleep (`fatigue.is_sleeping`), and at 0.02 otherwise.
+Over 150 days of seed 1 from its year-12 checkpoint (`zz_mending`):
+
+| grown people's turns | all | under 60 health |
+|---|---|---|
+| asleep | 0.0% of 71,852 | 0.0% of 10,718 |
+| short of water (no mending at all) | 0.1% | 0.0% |
+
+The water gate was not it: people stand at nine-tenths of their water nearly
+all the time. **Nobody was ever asleep.** `Simulation::sleeping` reckons a
+night's stretch all at once: the fatigue it pays back, and the debt. Then it
+called `wake_up` on the spot. The stretch holds the sleeper out of deciding
+for the rest of its length (`busy_until`), but every turn of that, the body's
+own turn (`process_survival_turn`) found them awake. So:
+- they mended at a waking person's rate, a fifth of a sleeper's, through
+  the night as well as the day. For somebody with their reserve whole that
+  is about 1.0 health a day, where sixteen half-hours asleep and the rest
+  awake come to about 2.2;
+- and they tired through the night as if they were up and about.
+
+So a lion bite of 25 took about 26 days to mend rather than about 11. Anything
+in those extra two weeks (a cold snap, a short week, an illness) found the
+wound still there.
+
+Now a sleeper stays asleep until the hold is over, or until danger breaks it,
+and is woken at the moment they are free to decide again
+(`one_persons_turn`). Nothing reads `is_sleeping` while somebody decides
+except the decisions that guard on it, and those now always find them awake.
+
+Test: `night_tests::a_sleeper_sleeps_through_the_stretch_and_mends`. After a
+Sleep the sleeper is still asleep, and two hours of their body's own turns
+mend more than twice what two hours up and about do. It failed before, on
+"woken the moment the sleep was reckoned".
+
+**Measured.** Sixty days of seed 1 from the year-12 checkpoint: grown people
+asleep 36.5% of their turns, about seventeen half-hours in forty-eight, and
+the wounded (under 60 health) 33.2%. Before, both were nought.
+
+A year each, from the same checkpoints, before and after:
+
+| | before | after |
+|---|---|---|
+| seed 1, year 13: deaths | 2 | 0 |
+| seed 1, year 13: alive at the end | 28 | 30 |
+| seed 3, year 16: deaths | 0 | 0 |
+
+Seed 1's two were the case this was about: the adult a camel had hurt, taken
+by raw flesh on day 142, and one to the weather. Both lived. Two settlements
+and a year each is a small sample, so this says the mechanism is gone, not
+how many lives it costs across the map.
+
+**Dice.** Seed 0's year rolls 1,327,438, up 14.0%. Nobody tires through
+the night as if awake, so the rested take more turns between them.
+
+### 311. The wish for a child was spent by other people's asking
+
+At #307 the food gate stopped being what held births back, and "reproduction
+drive not active" took its place: 69,615 of 180 days' grown-person turns on
+seed 3. The record put it down to couplings outside the fertile day each
+dulling the drive by `A_TRY_OUTSIDE_THE_WINDOW` (0.05).
+
+**Not much locking.** The drive also falls quiet while Hunger, Thirst, Rest
+or Safety is unanswered. Over 180 days of seed 3 from the year-20 checkpoint
+(`zz_drive_spent`), that was 1.4% of eligible person-turns. The drive sat
+below 0.1 in 52% of them, and at 1.0 in another 12%.
+
+Per person over 90 days (`zz_drive_people`), of the 13 eligible grown people:
+- **eight sat below 0.1 most of the time,** most of them 11 to 18 years
+  old. Their drops were the small dulls a person loses when *asked* (0.05),
+  from 0.01–0.13 down to nothing. Being asked cost them whether or not they
+  had any wish of their own.
+- **When a young person's wish did reach 1.0, they spent it in a burst.**
+  Seven tries in one day, each costing them 0.10.
+- **Three people in their 50s sat at 1.0** nearly all the time.
+
+The 0.10 was a second fault: `mating` took the dull off the one who asked,
+then reported the same amount as the action's drive change, which
+`apply_feedback` took off again. So a failed try on the fertile day cost the
+one who asked 0.6, which is the whole threshold and about 12 days of
+regrowth. The same was true of a try that took.
+
+So on a carrier's fertile day the wish was nearly always somewhere else:
+of 25 fertile days in those 90, the drive never once stood at the threshold
+on 17.
+
+Three changes, in `Simulation::mating`:
+- **Off the fertile day, a coupling answers the wish of whoever was asking,
+  for the day.** It leaves an active drive a day's regrowth short of its
+  threshold (`after_a_try_outside_the_window`). The person asks again about a
+  day later, not seven times today.
+- **And spends nobody else's.** A partner whose wish was not active is left
+  where it was. The first version of this capped the partner too, and most
+  grown people then sat between 0.5 and 0.6, put back a day short every time
+  somebody else asked, just before they would have asked themselves.
+- **The one who asked loses what they lose once**, through the result, at the
+  amount the drive actually fell, so the learning layer is credited with what
+  happened. A failed try on the fertile day costs 0.3, as it was meant to.
+
+Tests in `coupling_tests` (4, the first three failed before):
+- a try off the fertile day leaves both a day short;
+- being asked does not spend a wish you did not have;
+- a failed try on the fertile day costs the one who asked once;
+- being asked does not set back a wish that was nearly there.
+
+**Measured.** A year from the same checkpoints, before and after; seed 3 was
+then carried on a second year down each line:
+
+| | before | after |
+|---|---|---|
+| seed 3, year 21: conceived / born | 1 / 1 | 6 / 3 |
+| seed 3, year 21: alive at the end | 24 | 27 |
+| seed 3, year 22: conceived / born | 3 / 2 | 5 / 3 |
+| seed 3, year 22: alive at the end | 26 | 29 |
+| seed 0, year 12: conceived / born | 2 / 2 | 3 / 2 |
+| seed 0, year 12: alive at the end | 23 | 24 |
+
+14 conceptions against 6 over three settlement-years. Deaths were 3 before
+and 2 after. One of the two after was a child of hunger on seed 3 in year 22,
+the first hunger death in these runs. Worth watching as the settlements grow.
+
+**What is left.** The carrier of a pair is the lower id, so a person's
+fertile day only counts when they are with somebody of a higher id, and the
+highest id in a settlement never carries. Each person's chance a month is
+their own; whether a pair's should be one or two is a design question and is
+left alone here.
+
+**Dice.** Seed 0's year rolls 1,397,816, up 5.3%: fewer people coupling
+seven times a day, and the turns go on other things.
+
+### 312. Whichever partner is on their fertile day carries
+
+There is no gender in this model, so which of a pair carries a child was
+decided by id: always the lower one, in both `Population::process_reproduction`
+and `Simulation::mating`. Each person has one fertile day a cycle, but under
+that rule it counted only when they were with somebody of a higher id. A
+pair's chance came once a month, on the lower id's day. The other partner's
+day went by with the wrong one of them carrying, and the person with the
+highest id in a settlement could never carry at all.
+
+Now whichever of the two is on their own fertile day carries
+(`reproduction::does_this_one_carry`). If both are, or neither is, it is the
+lower id, so a pair gets the same answer whoever asks. Each person still has
+exactly one chance a cycle, their own, and `last_cycle_tried` still spends it
+whether or not it takes. What changes is that every person's chance is a real
+one, with whoever they are with. A pair's chances go from one a month to two.
+
+Tests in `coupling_tests`:
+- `whoever_is_on_their_fertile_day_carries`;
+- `the_higher_ids_fertile_day_is_a_chance_too`: a coupling on the higher id's
+  fertile day spends their chance for the cycle and can leave them carrying.
+
+Both failed under the lower-id rule. The helper that sets up a coupling "off
+the fertile day" now picks a day that is neither partner's.
+
+**Measured.** A year from the same checkpoints, the #311 build against this
+one. The #311 runs of seed 3 and seed 0 came out exactly as they did at #311,
+so the comparison is like for like.
+
+| | #311 | whoever is fertile carries |
+|---|---|---|
+| seed 3, year 21: conceived / born | 6 / 3 | 8 / 4 |
+| seed 3, year 21: alive at the end | 27 | 28 |
+| seed 0, year 12: conceived / born | 3 / 2 | 3 / 3 |
+| seed 0, year 12: alive at the end | 24 | 25 |
+| seed 2, year 15: conceived / born | 0 / 0 | 0 / 0 |
+
+Deaths were the same in both: one elderly person on seed 3, of food on the
+turn. 11 conceptions against 9, and 7 births against 5. That is modest, and
+what the change should give: it doubles the chances of pairs who were
+already trying, and does nothing where nobody gets that far.
+
+Seed 2 is such a place. Over 180 days from its year-14 checkpoint
+(`zz_why_no_births`), every grown person's wish stood at 1.0 at some point,
+and every one of 86,400 person-turns failed the food gate: "not enough put
+by" 74,357 times, nursing 8,640, needs not met just then 3,361. That
+settlement's stores are a separate question.
+
+**Dice.** Seed 0's year rolls 1,374,948, down 1.6%.
+
+### 313. Seed 2's stores were just short of the gate, and then were not
+
+At #312 seed 2 conceived nobody in a year, and every grown person-turn in
+180 days failed the food gate. That looked like a settlement whose stores
+could never clear it. It was not.
+
+**It is the surplus question that shuts it.** Everybody on seed 2 had seen
+a winter through, so `enough_put_by_for_a_child` asked whether what the last
+winter left would carry the children: `left ≥ took × theirs`, where a newborn
+is 0.20 of a grown body. The hungry gap runs from day 285 to day 0, and the
+checkpoints are saved on day 0, so each one holds exactly what the last
+winter left (`zz_winters_recorded`). As a share of what that winter took:
+
+| | left ÷ took | gate open |
+|---|---|---|
+| seed 2, year 13 | 0.10–0.20 | 0 of 9 |
+| seed 2, year 14 | 0.15–0.18 | 0 of 10 |
+| seed 1, year 14 | 0.13–0.18 | 0 of 5 |
+| seed 0, year 11 | 0.19–0.24 | 3 of 12 |
+| seed 3, years 19–21 | 0.66, 0.36, 0.27 | 19 of 20, 13 of 19, 11 of 17 |
+
+For somebody with no small children, the line is 0.20. Seed 2's winters
+came out a little under it: in year 14, about 1,400 units a head short, or
+some 165 stored items for the whole settlement.
+
+**Not a poor producer.** Over a year from the year-14 checkpoint
+(`zz_food_year`), seed 2 put 2.95 items into its pits per person-day,
+against 1.82 on seed 3 from its year-20 checkpoint. Seed 3 took out as much
+as it put in; seed 2 took out 9,126 of 15,764.
+
+**And the next winter clears it.** Three runs of year 15 from the same
+checkpoint, with different dice, all ended the winter far above the line:
+
+| year-15 run | pits at the end of the winter |
+|---|---|
+| `zz_generations` | 382,750 (25,500 a head) |
+| `zz_food_year` | 970,500 (64,700 a head) |
+| `zz_put_by` | 435,250 on day 345, still falling |
+
+In the first of those, the recorded leftover came to 0.35–0.43 of a winter
+(averaged with year 14's), and the gate stood open for 9 of 11 grown people
+going into year 16.
+
+So "never" was one year, seen through the gate's lag: the surplus is
+measured once a year, at the end of the winter, and averaged with the year
+before. A good autumn opens the gate only once the winter after it is over.
+That lag is deliberate (#307): it is what makes the answer the same all year
+and keeps a settlement from breeding on the strength of a full pit in
+October.
+
+Whether years 13–14 were thin by chance or because of faults fixed since
+(#308–#312; their checkpoints were made before those) is not settled here.
+The year-15 runs were all on the current code.
+
+**Year 16, on from that run:** 5 conceived and 4 born, two of them seed 2's
+first grandchildren. The settlement went from 15 to 18. One adolescent died:
+the run's own tally put it to hunger, and the ledger to a blow.
+
+No change to the code: the gate is reading the stores correctly.
+
+### 314. Home was the middle of everybody, so there could only be one camp
+
+"Home tonight" (`where_the_people_sleep`) was the middle of every grown person
+in the world, or a finished roof near it. Each evening anybody more than 20
+cells from it walked there, however far that was. So a settlement was one
+group by construction: anybody who went off for water or better ground was
+walked back to the others that evening, and no second camp could form.
+
+**Each person has a hearth now** (`Agent::hearth`), the place they live:
+- **Set when they lie down to sleep at home:** it becomes wherever their camp
+  is that night (`settle_the_hearth`).
+- **Moved when their camp moves.**
+- **Defines the camp:** a camp is the grown people whose hearths are within
+  reach of each other (`THE_REACH_OF_A_CAMP`, 40 cells).
+
+`where_this_one_sleeps` replaces the world-wide home:
+- **Tonight's spot** is the middle of where that camp's people actually are,
+  or a finished roof near it. With one camp in the world, that is exactly
+  the old answer.
+- **Just after a move,** with the middle of the camp's people still out of
+  reach of their new hearth, tonight's spot is the new place itself.
+- **Somebody who lives alone,** with nothing standing in a field and no fresh
+  move of their own to wait out, sleeps at the nearest camp. Otherwise
+  whoever was off on their own the first night hearths were kept made a camp
+  of one there and stayed in it: one sat 115 cells from the others for
+  months on seed 0.
+- **A child not yet grown** sleeps where a parent does.
+
+**Camps move as groups** (`the_camp_moves`). The decision layer only proposes
+a move (`propose_moving_camp`); the turn carries it out once the person who
+decided actually sets off. The move takes:
+- the one who decided;
+- and everybody who lives with them, most trusted by the decider first, as
+  many as the new ground will feed (`CampMove::feeds`: a forager's move counts
+  4 a head standing; a move for water takes everybody);
+- but nobody with a crop standing in a field by the camp;
+- and children go with a parent who goes.
+
+Anybody left over stays where they were. That is how one camp becomes two.
+
+A camp moves for two reasons, both judged from where the person lives:
+- **water** they keep going short of (`go_and_live_where_it_is`);
+- **thin ground**, for people who do not farm (`moving_on`).
+
+It does not move again within a week (`A_CAMP_STAYS_AT_LEAST`), and a camp
+with food in a pit within a forage of it does not move on for ground at all
+(`food_in_store_near`).
+
+**When the camp does not move, the person still goes, as before.** Both
+decisions are asked twice:
+- **for the camp, from the hearth;**
+- **for the person, from where they stand:** a day's trip to the best
+  ground they know, or a walk to water, and back to the camp at night.
+
+Before there were hearths, that trip was all `moving_on` ever did, and it
+fed people.
+
+**Farmers move toward ploughland** (`moving_to_farmland`, first in the
+Sustenance ladder after cooking and muck). Somebody who has taken up farming
+weighs the ground around where they live against places they have seen wild
+grain or wild pulses growing. Those grow only on Plains and Meadow, the
+ground a plough takes. The worth of a place is the sum of what every
+tillable tile within a field's walk carries (`what_this_ground_is_worth_to_a_farmer`).
+The camp goes to the best of them if it is half as good again
+(`FARMLAND_WORTH_MOVING_FOR`). They think about this for a few half-hours a
+day, each at their own time.
+
+**Getting there: three wrong turns, each measured on four fresh big-map worlds
+over two years (seeds 5–8, 12 founders each):**
+
+| | births | camp moves |
+|---|---|---|
+| before (one home for everybody) | 30 | n/a |
+| first cut: the forager's move became a camp move | 17 | 7, 0, 13, 11 |
+| plus: no camp move away from food in store | 10 | 0 |
+| plus: the day's trip and the walk to water kept when the camp stays | 12 | 5, 0, 0, 0 |
+| plus: tonight's spot from where the camp's people within reach are | 9 on three seeds | 0 |
+| tonight's spot from where all the camp's people are | **29** | 0 |
+
+- **The forager's move.** Every winter many people's farming confidence falls
+  below "established" (12 farmers to 4–8). That makes them foragers, so
+  `moving_on` fired, and in the first cut it moved the whole camp, up to
+  weekly, away from the pits holding the winter.
+- **The day's trip.** Stopping those moves stopped births worse, because
+  before hearths `moving_on` was really the long foraging trip.
+- **Home was a fixed point.** Taken from the hearths alone, home was where the
+  hearths were and the hearths were set to home, so a camp that started by
+  the longhouse slept there for good. The old world-wide middle of where
+  people actually were had let it drift toward the ground it foraged. On
+  seed 7 the old camp sat 20–30 cells east of the longhouse for most of a
+  year. A variant with only the old night rule restored reproduced the old
+  run exactly, which is how this was found.
+
+Tests:
+- `camp_tests` (9): who goes and who stays, trust, crops, children; farmers
+  moving to known ploughland, foragers not, good ground kept, unknown ground
+  not sought.
+- `night_tests` (6 new): two camps are two homes; camps within reach are one;
+  sleeping at home sets the hearth; a roof among them is home; nobody lives
+  alone by accident; a camp sleeps where its people are.
+- `nomad_tests` (3 new): `moving_on` proposes a move for as many as the valley
+  feeds; a camp that just moved stays a week; no camp moves away from food in
+  store, though its people still go out for the day.
+- `somebody_far_off_heads_home_in_the_evening` is rewritten for hearths.
+
+**What it does now.** With one camp in the world it is exactly the old
+behaviour: the yearly dice count in `repeatable_tests` did not move, and the
+four fresh worlds came out at 29 births against 30. Over a year from mature
+checkpoints:
+
+| | before: births / deaths / camps at the end | after |
+|---|---|---|
+| seed 3, year 22 | 2 / 1 / 2 | 2 / 0 / 4, after one move of 16 people a kilometre west |
+| seed 0, year 12 | 3 / 0 / 2 | 3 / 0 / 4 |
+| seed 2, year 15 | n/a | 0 / 0 / 3 (the food gate, #313) |
+
+"Camps" there are knots of sleepers on one night, counting anybody sleeping
+away on their own. No fresh world moved a camp in its first two years, because
+people take up farming within a few months and fill pits soon after, and a
+camp with food in store stays. More than one settlement can form now, and
+does when a camp moves and some stay; on these maps, in these spans, it is
+rare.
+
+**The map gives farmers almost nothing to move for.** Terrain is made by
+`Grid::generate_terrain` from a hash, not smooth noise (`simple_noise`,
+`sin(sin(x) * 43758.5453 + cos(y) * 12345.6789)`), with no seed. So it has no
+regions, and it is the same in every world. Measured on the big map:
+- tillable ground is 16–19% of every 100×100 block;
+- neighbouring tiles share a terrain only 20% of the time, about what random
+  tiles would;
+- 40% of the map is Mountain;
+- the ploughland within a field's walk of a point averages 72.5, with a
+  spread of 7.0, so ground half as good again as anywhere else hardly exists.
+
+The farmers' move is written and tested, but on this map it will almost
+never fire. Coherent terrain (valleys, plains, uplands) is what it needs.
+
+### 315. Smooth seeded terrain, as an opt-in world setting
+
+#314 found that the map gives farmers almost nothing to move for. Terrain came
+from an unseeded hash, so it had no regions and was the same in every world.
+This adds a second generator, `Grid::generate_smooth_terrain`, chosen by
+`WorldConfig::terrain` (`TerrainStyle::Smooth`, or
+`WorldConfig::with_smooth_terrain()`). **The old generator is still the
+default.** On the new terrain, settlements do much worse than on the old (see
+below), and the model was tuned on the old.
+
+**How the country is made** (`Relief`, value noise with a quintic ease, four
+octaves, seeded from the world's dice):
+- **Elevation and moisture fields.** The bands are cut by rank, so the mix of
+  ground comes out as before:
+  - sea is the lowest 3.6%;
+  - mountain is the highest 40%;
+  - the middle band is meadow or plains by moisture.
+- **Lakes:** low ground where a separate lake field is low.
+- **Rivers:** a narrow contour of a river field (`HOW_WIDE_A_RIVER_RUNS`),
+  broken by a ford field (`WHERE_A_RIVER_RUNS_DEEP`) so every river can be
+  crossed somewhere.
+- **Woods:** copses laid over the low and middle country by a woods field
+  (`HOW_MUCH_OF_THE_COUNTRY_IS_WOODED`). Forest did not grow only on the
+  slopes, where nobody lives.
+- **Riverbanks:** run two cells back from the water.
+
+**Measured on the 1000×1000 map** (seeds 1–3; old terrain in brackets):
+- neighbouring tiles share a terrain 0.967–0.969 of the time (0.20);
+- the tillable share of a 100×100 block runs from 0 to 0.79–0.995, with a
+  median of 0.16–0.23 (0.16–0.19 everywhere);
+- the ploughland within a field's walk of a point is 0 at the 10th
+  percentile, 300–312 at the 90th, and 469 at most (mean 72.5, spread 7.0);
+- mountain 40%, hills 10%, plains 14–18%, meadow 7–9%, forest 6–7%, water
+  5–6%, sea 3.6%;
+- each seed gives a different country.
+
+So there is good country and bad now, and a farmer's move has somewhere to go.
+
+**What the new country needed. Each item was found as a failure on fresh
+worlds, and each is gated on `TerrainStyle::Smooth` unless it says otherwise:**
+- **Springs on shores.** Water was in lakes and rivers, but springs were still
+  scattered anywhere, so people died of thirst on day 3–4. Now two springs in
+  three go on a lake or river shore (`find_random_shore_position`), and sea
+  water goes on the coast.
+- **Arriving on open country.** The middle of the map can be a mountain or the
+  sea. The founders now stop on the nearest tillable ground with woods and
+  water within 20 cells (`bring_everybody_to_the_middle`). If there is none,
+  they take tillable ground with woods, then tillable ground, then any ground
+  they can stand on.
+- **Pits in the woods.** The forest floor will not take a pit. People who
+  lived in a copse put nothing by. They now walk to the nearest ground that
+  will take one, up to a field's walk away (`ground_a_pit_will_go_in_near`).
+- **The farmland move had no brake.** With real ploughland to go to, it fired
+  53–84 times a season. `moving_to_farmland` no longer moves anybody with a
+  crop standing, or a camp with food in store nearby. **This brake applies on
+  both terrains**, and so does the reason now recorded on each camp move
+  (`camp moved for water` / `better ground` / `ploughland`).
+- **Route search.** Smooth country has long detours, and `the_way_there`
+  became the slowest thing in a run. It now keeps its tables in flat arrays
+  cleared by a stamp (`RouteScratch`), not maps. **This applies on both
+  terrains.** The routes are the same: the dice counts were identical with
+  and without it (7,557 and 1,505,547 on a smooth build).
+
+**Settlements on the new terrain: four fresh big-map worlds over two years**
+(seeds 5–8, 12 founders each, the #314 probe):
+
+| seed | births | deaths | alive at the end | camp moves |
+|---|---|---|---|---|
+| 5 | 0 | 0 | 12 | 1, for better ground |
+| 6 | 0 | 6 (5 weather, 1 hunger) | 6 | 0 |
+| 7 | 0 | 0 | 12 | 0 |
+| 8 | 0 | 10 (9 hunger, 1 weather) | 2, in two camps | 1, for better ground |
+| **old terrain (#314)** | **29** | | | 0 |
+
+The child gate is what stays shut. Over the two years on seeds 5 and 7, which
+kept all 12 people, it answered "could not feed" 414,204 times each and
+"ready" never.
+Stores stay low: fewer fish within reach than on a map where a strip of water
+was never far off, and the winter shelter and firewood are further away too.
+Seed 8's founders arrived on thin ground and starved in the first winter.
+
+**Why it is behind a switch.** Everything the model does was tuned on the old
+terrain: forage, fish, wood, the child gate. Making the new terrain the default
+would have changed every repeatable run and left fresh worlds with no births.
+On the default (scattered) terrain:
+- every gated change above is off;
+- the dice counts in `repeatable_tests` are unchanged (seed 4242: 9,333;
+  seed 0, a year: 1,374,948);
+- the suite passes as before.
+
+**What switching the default will take.** Recalibrate on smooth terrain one
+step at a time, measuring births on the same four worlds:
+1. food in store, which the gate turns on: fish and the pit near camp;
+2. firewood and shelter, for the weather deaths;
+3. the founders' choice of ground, so they arrive with a living around them.
+
+Then make it the default once births match the old terrain.
+
+Tests: `terrain_tests` (8):
+- `the_country_is_smooth`
+- `every_world_has_its_own_country`
+- `the_mix_of_ground_is_what_it_was`
+- `there_is_good_country_and_bad`
+- `springs_are_where_the_water_is`
+- `a_people_arrives_on_open_country`
+- `a_river_can_be_crossed`
+- `most_ploughland_has_woods_in_reach`
+
+Also:
+- `camp_tests::a_farmer_does_not_leave_food_in_store_for_ploughland`;
+- `larder_tests::a_surplus_in_the_woods_means_walking_to_open_ground_to_dig`.
+
+### 316. Smooth terrain: nobody could make a tool, so nobody could dig
+
+The first step of recalibrating the smooth terrain (#315). On it, four fresh
+worlds had no births in two years. The child gate was what stayed shut: every
+grown person had their immediate needs met, but the store never reached half
+of what the gate asks for a child.
+
+**What was short was tools, not food.** A year on seeds 5–8 (`zz_gate_why`),
+old terrain against smooth:
+
+| | old | smooth |
+|---|---|---|
+| pits at the end of the year | 54–89 | 5–20 |
+| store at its autumn peak, share of the gate's ask | 100–200% | 15–50% |
+| `Excavate` refused, "nothing in hand that is any use for Mining" | 226–398 | 2,767–5,935 |
+| turns spent building | 185–5,210 | 0–339 |
+
+Pits are dug with a tool, or under a roof that takes one to raise. The
+founders arrive with a handaxe each, and all twelve were worn out within 30 to
+60 days. A new one takes wood, two stone and a lashing. Three things stood
+between the smooth-terrain people and a new one.
+
+**1. They arrived where there was no stone or wood.** The arrival rule asked
+for open ground with woods and water tiles within 20 cells. On smooth country
+that put three of the four peoples on open grass or a coast with 0–12 stone
+nodes and 0–28 wood nodes within a forage, where every spot on the old map had
+both. The founders now go to the nearest open ground with wood, stone, plant
+food, fish and springs all within a forage (`WHAT_A_LIVING_NEEDS_IN_REACH`);
+where nowhere has all of them, to the place with most of what it is shortest
+of. With that alone, seeds 5 and 8 opened the gate in their first autumn and
+seeds 6 and 7 still could not dig.
+
+**2. Stone and wood were only in the hills and the woods.** Out in open
+country, people found both along the rivers: cobbles on the banks and beaches,
+and trees along the water. On smooth terrain one stone node in three now goes
+on riverbanks and beaches, and one wood node in three on riverbanks and
+wetland (`somewhere_by_the_water`). The arrival check now counts a square the
+size of a real forage (a walk of `FORAGE_RADIUS` paces), not the 51-cell square
+it first counted. Every people then arrived with 7–28 stone and 10–17 wood in
+reach. Seed 7 now filled its pits to twice the gate's ask; seed 6 still made no
+tools, with 79 stone nodes within 25 cells of its camp.
+
+**3. Nobody remembered where the stone was.** A person keeps at most 96
+places in mind (`WHAT_A_MAN_CAN_HOLD_IN_MIND`). What they let go first is what
+answers no pressing need, and stone is filed under Shelter, which rarely
+presses. A place is only discovered the first time its tile comes into view,
+so a forgotten stone node is never seen again. A riverside camp on smooth
+terrain has 100–200 fish and plant nodes in sight, so the stone was forgotten
+within days: on seed 6, nobody sampled at any point in the first 150 days had
+ever "seen" stone, including people holding some. `how_i_would_come_by` only
+fetches what has been seen, so no errand for stone could start.
+
+Now a person always keeps the nearest three places they know of each raw thing
+the tools of their work are made of (`NEAREST_MAKINGS_KEPT_IN_MIND`): every
+tool they know how to make for hunting, woodcutting, leatherworking, crafting
+and digging, whether or not they carry one, because the one they carry wears
+out. Those places are left out of the forgetting altogether. A bonus to their
+score was tried first; when a person is hungry, a fishing spot scores about
+500, and no fixed bonus held.
+
+**This rule applies on both terrains.**
+
+**Two years from 12 founders** (`zz_gate_why`; the same dice on both
+terrains):
+
+| seed | smooth, at #315 | smooth, now | old terrain, now |
+|---|---|---|---|
+| 1 | | 5 births, 0 deaths | 4, 0 |
+| 2 | | 2, **9** (8 of hunger, 1 a blow) | 4, 0 |
+| 3 | | 2, 0 | 7, 1 |
+| 4 | | 5, 0 | 11, 0 |
+| 5 | 0, 0 | 5, 0 | 5, 0 |
+| 6 | 0, 6 | 5, 0 | 5, 0 |
+| 7 | 0, 0 | 7, 0 | 4, 0 |
+| 8 | 0, 10 | 9, 0 | 6, 0 |
+| **all** | **0, 16 on seeds 5–8** | **40, 9** | **46, 1** |
+
+**Seed 2 on smooth terrain starved with food in the ground.** Four died before
+day 360 and four more by day 420, all of hunger, while the pits held about
+6,500 units. The four left alive then had more than twice the gate's ask each.
+That looks like the late-winter famine of #41 (people starving beside full
+stores), and is not followed up here.
+
+On old terrain the memory rule made no difference that eight seeds can
+measure: the people alive after two years went up by 47 without it and by 45
+with it (46 births and 1 death), with seeds swinging from 0 to 11 births
+either way. Keeping one place per material, not three, did worse on both
+terrains (16 and 18 births on seeds 5–8).
+
+The yearly dice count for seed 0 moved from 1,374,948 to 1,317,154 (−4.2%).
+The 120-turn count for seed 4242 did not move.
+
+Tests:
+- `terrain_tests::stone_and_wood_lie_by_the_rivers`
+- `terrain_tests::a_people_arrives_with_a_living_in_reach`
+- `news_tests::a_hungry_man_still_remembers_where_the_nearest_stone_is`
+
+**Still to do before smooth terrain is the default:**
+- **Worn-out tools stay in the pack.** A handaxe at 0% still weighs two units,
+  and most packs on seed 6 held one.
+- **Packs fill with fish.** Packs held 30–47 fish each while pits stood half
+  empty. A pack with no room left cannot take the stone for a new tool unless
+  its owner is already on an errand to make one.
+- **Seed 2's famine**, above.
+- **Wider testing.** Switching the default would also move the repeatable dice
+  counts and the handful of tests that were written against scattered ground
+  (#315).
+
+### 317. Seed 2's famine: founders put down on an island
+
+On smooth terrain at #316, seed 2 lost eight of twelve to hunger in its first
+winter, between days 334 and 356. The whole time, each person's share of the
+stores stood at 105,000–150,000 units. `zz_famine`, rerun on the same dice,
+reproduced it death for death.
+
+**What the dying did.** One person spent the two days before they died
+walking towards a pit at (468,495), 17 paces west. Every turn they stepped
+from (486,495) to (485,495) and back again ("17 steps to goal", "18 steps to
+goal"), and every step was booked as a success. The way west was a river. The
+route search found no way over it, so the walk fell back to single steps:
+
+- from one cell, the direct step undid the last one and was refused (#254);
+- the fallback took it anyway;
+- from the other cell, west was water, and the first open sidestep was east.
+
+**Why there was no way over.** A flood fill from where they stood reached
+1,179 cells and stopped. Smooth terrain draws a river as a contour of a noise
+field, and a contour can close on itself. The founders' arrival rule (#316)
+had put the people down at (490,509), inside such a loop: an island with no
+ford, with everything a living needs in reach.
+
+**How anybody got off.** Between days 61 and 71, ten of the twelve were on
+the mainland. A frightened person bolts in a straight line, and the landing
+only had to open onto 256 cells of ground (#295). So a bolt could clear any
+water, and ten people bolted across the river and dug their pits on the far
+bank. The two who never left could not reach those pits, and starved walking
+at the river. So did one who later bolted back to the island.
+
+**Two fixes:**
+
+1. **Founders arrive on the mainland.** `where_a_living_is_in_reach` labels
+   every piece of ground a foot can cross, and only considers places on the
+   largest one. This applies on smooth terrain only.
+2. **A bolt lands only where the runner could walk back from.** The landing
+   has to be reachable on foot from where they stood, going no further than
+   the bolt plus `A_WAY_ROUND` (16 paces) from it (`where_a_walk_gets_from`,
+   replacing `can_this_be_walked_out_of`). A pond, or a scattered-terrain
+   river a tile or two wide, still stands between a runner and the wolves,
+   which is what #295 wanted from a bolt. A smooth-terrain river with no ford
+   near does not. Neither does the rock in the sea that #295 found.
+
+**Two years from 12 founders, seeds 1–8** (`zz_gate_why`):
+
+| | births | deaths |
+|---|---|---|
+| smooth, at #316 | 40 | 9 (all seed 2) |
+| smooth, now | **43** | **0** |
+| old terrain, at #316 | 46 | 1 |
+| old terrain, now | 46 | 1 |
+
+Seed 2 went from 2 births and 9 deaths to 6 and 0. Every old-terrain seed
+came out exactly as before, and both repeatable dice counts are unchanged:
+on scattered ground, no bolt was ever refused for want of a way back.
+
+Tests:
+- `off_the_map_tests::a_bolt_does_not_clear_a_river_with_no_way_back`
+- `off_the_map_tests::a_bolt_still_clears_a_pond`
+- `terrain_tests::a_people_does_not_arrive_on_an_island`, which fails without
+  the mainland rule.
+
+`theft_tests::running_is_away_from_the_thing` stood its man at (50, 50), just
+off the corner of a 50-cell map, and checked that he bolted west. The old
+landing check let him land back on the map. The new one asks for a way back
+from where he stood, and there is none off the map. Since #37 nobody can
+stand there, so the test now stands him on open ground on the map.
+
+**Not fixed, and worth knowing about.** A walk to somewhere it has no route to
+still steps back and forth on the bank and books every step as a success. The
+decision that chose the walk learns nothing from it. Nothing in these runs
+still walks into that, but anything else that strands somebody across water
+would starve them the same way.
+
+### 318. Smooth terrain is the default
+
+`TerrainStyle::Smooth` is now the default for `WorldConfig::default()` and
+`WorldConfig::big_enough_for_an_ecology()`. The switch was gated on
+settlements doing as well on it as on the old ground. Over two years from 12
+founders on seeds 1–8 (#317):
+
+| | births | deaths |
+|---|---|---|
+| smooth | 43 | 0 |
+| scattered | 46 | 1 |
+
+What came with the switch:
+- **The old ground can still be asked for.** `WorldConfig::with_scattered_terrain()`
+  gives it, for tests that want a little of everything everywhere.
+- **Old saves still load as what they were.** A save from before
+  `World::terrain_style` existed has no such field, so it is read as
+  Scattered (`TerrainStyle::what_old_saves_were_made_on`), not as the new
+  default.
+- **Dice counts:**
+  - seed 4242, 120 turns: 9,333 → 7,686;
+  - seed 0, a year: 1,317,154 → 1,476,142 (+12.1%).
+
+**Tests written against scattered ground.** Six failed on the switch. One
+found a gap in the test's list; four had fixtures that assumed a little of
+everything everywhere; one was my own test, from #316.
+
+- **`tally_tests::the_branches_of_the_tree_account_for_every_time_it_was_asked`.**
+  The tree's branches came to 186 fewer than the times it was asked. "Backs
+  away from something bigger" is one of the tree's outcomes, and the test's
+  list did not have it: on the old test map nobody was ever near anything
+  bigger than they were. Added to the list.
+- **`errand_tests` (2).** 284 errands set out and none arrived. The fixture
+  left 12 people in the corner they are made in, and on smooth country that
+  corner is a spit of land in the sea. The fixture now brings them to where
+  a people arrives (`bring_everybody_to_the_middle`), as every run does.
+- **`preparation_tests::somebody_with_a_vessel_leaves_the_river_carrying_water`.**
+  The spring the test puts at (25, 25) was in the sea on the smooth test map,
+  and nobody drinks salt water by choice. The fixture is now open grass
+  (`World::all_open_grass`).
+- **`cooking_tests::an_agent_lights_a_fire_and_cooks_on_it`.** On smooth
+  ground, open grass or not, the agent dried its fish 16 times and ate 41
+  meals in 400 turns, and never wanted a fire: there was other food to hand
+  near where it started. That is a fair answer, and not the question the test
+  asks (#224), so the test is on scattered ground.
+- **`terrain_tests::stone_and_wood_lie_by_the_rivers`** built its
+  "scattered" world from the default config, which is no longer scattered.
+  It now asks for scattered ground by name.
+
+**Still open on smooth ground:**
+- Worn-out tools stay in the pack (#316).
+- Packs fill with fish (#316).
+- A walk to somewhere it has no route to wastes its turns on the bank (#317).
+- The weather deaths of #315 have not come back in any run since #316, but
+  have not been looked into either.
+
+### 319. Worn-out tools stayed in the pack
+
+When the last tool of a kind wore through, `wear_what_i_worked_with` left it
+in the pack at zero durability. Nothing could use it: every reader of a tool
+asks for durability above nothing, and nothing in the model mends one. The
+only thing that ever threw a broken one out was making another of the same
+kind (`making.rs`).
+
+**How much it was.** A year on seeds 1–8 (smooth terrain, 12 founders each,
+`zz_gate_why`) found:
+- 17–45 broken tools among the 12 adults: two to four each, from day 60;
+- 2.0–6.5 units of weight a head, in packs that hold 30–42;
+- most packs within five units of full by midsummer.
+
+**Fix.** A finished tool is thrown away, whether or not another of the same
+kind is in the pack. Afterwards no broken tool was found in any pack at any
+sample.
+
+**And a tool with no working life recorded is not worn at all.** Wearing one
+read "nothing recorded" as zero, so its first use "broke" it. It then stayed
+in the pack and, with nothing recorded, read as whole for ever after. With
+broken tools thrown away it would vanish on first use instead. That is what
+`portion_tests::a_hungry_agent_with_a_deer_ends_up_with_joints` caught: the
+test hands its butcher a bare knife. Now an untracked tool is simply not
+worn, which is how `durability_percentage` already treats it. Every tool
+anybody makes or arrives with has a working life recorded, and the dice
+counts did not move for this half.
+
+**Two years from 12 founders, seeds 1–8:**
+
+| | births, deaths before | after |
+|---|---|---|
+| smooth | 43, 0 | 46, 1 (illness) |
+| scattered | 46, 1 | 41, 1 |
+
+That is within the spread between seeds, which runs from 0 to 11 births
+either way. The pack room broken tools took was not what limited anybody.
+
+The seed-0 yearly dice count moved from 1,476,142 to 1,561,205. Seed 4242's
+120-turn count did not move.
+
+Test: `tool_wear_tests::a_worn_through_tool_is_thrown_away`.
+
+**What does fill the packs: legumes, past what a pack can hold.** Listing
+what the adults carried on seed 1 (`PACKMIX`):
+
+| day | carried a head | over their pack's limit |
+|---|---|---|
+| 30–90 | wood, stoneware and fish, about 25 units | none |
+| 150 | 30 units of legumes | 8 of 12 |
+| 180 | 52 units of legumes | 11 of 12, up to 94 against a limit of 42 |
+
+Everything that puts a thing in a pack checks its weight first, so the
+excess must come from something that changes weight once it is in.
+`InventoryItem::absorb` blends freshness, quality and durability when two
+stacks merge, and a food's weight per unit depends on how it was prepared:
+drying makes it lighter. The likely way in is dried food passing the weight
+check at its dried weight, then merging into a fresh stack and being weighed
+as fresh. Not confirmed or fixed here. The fish noted at #316 was the same
+packs at a different season.
+
+### 320. Packs over their limit: two ways a merged stack changed weight
+
+By midsummer on seed 1 (#319), 11 of 12 adults carried more than their packs
+could hold, up to 94 against a limit of 42, most of it legumes. Everything
+that puts a thing in a pack checks its weight first (`Inventory::add_item`).
+But it checked only what the newcomer weighed. The newcomer then merged into
+a stack of the same name (`InventoryItem::absorb`), and the merge could
+change what the whole stack weighed. It did, in two ways.
+
+**1. Drying was undone by the next raw handful.** Drying (`Simulation::drying`)
+changed a stack's preparation in place, and the stack kept its name. A
+merge takes the preparation that spoils faster ("a stack is as good as its
+worst part"). So the first raw legume gathered after drying turned the whole
+stack raw again:
+- it spoiled at the raw rate, so the drying was lost;
+- it weighed what raw food weighs, nearly three times the dried weight it
+  had gone into the pack at (`what_it_does_to_the_weight`: dried 0.35).
+
+The model already had the rule this broke: one stack holds one preparation,
+which is why cooked food is carried as `cooked_fish` and `burnt_meat`.
+Drying was the one preparation that did not follow it. Now:
+- dried food is carried as `dried_<name>` and smoked food as `smoked_<name>`;
+- `storage_integration::without_preparation` reads through all four
+  prefixes, wherever the code asks what a thing is underneath (`base_item_id`,
+  `Piece::is_it_flesh`).
+
+**2. A merged stack kept the first stack's weight per unit.** `absorb` blended
+freshness, quality and durability, but not weight. Some examples:
+- ten two-unit stones and ten half-unit pebbles weighed forty together;
+- crops come off a harvested plant at 1.5 a unit and a gathered handful
+  weighs 0.5, so a harvest added to a stack started with a handful was then
+  carried at a third of its weight;
+- the reverse made a pack suddenly far heavier than it had let in.
+
+The weight per unit is now blended by quantity too.
+
+**And the check.** `add_item` now asks what the pack would weigh once the
+newcomer has merged into its stack.
+
+**Measured over two years from 12 founders, seeds 1–8** (`zz_gate_why`, with
+`PACKMIX` listing what packs held):
+
+| | births, deaths | packs over their limit |
+|---|---|---|
+| before | smooth 46, 1 · scattered 41, 1 | 8 of 12 by day 150 on seed 1 |
+| fix 1 and the check, without fix 2 | smooth 67, 0 · scattered 52, 2 | none |
+| all three | smooth 42, 1 · scattered 49, 3 | none, in 384 samples |
+
+**The second row is not a result.** Without fix 2, a harvest merged into a
+stack started with a handful was carried at a third of its weight, and the
+new check, reading that figure, let it in. People carried home three times
+the food a pack can hold. With weights honest, births are back where they
+were, within the spread between seeds (0 to 11 a seed). What #320 gains is
+that a pack holds what it says. Food that is dried stays dried, and it now
+shows in packs as `dried_legumes` and `dried_roots` beside the raw.
+
+Dice counts:
+- seed 4242, 120 turns: 7,686 → 7,626;
+- seed 0, a year: 1,561,205 → 1,509,486.
+
+**Tests:**
+- `keeping_tests::gathering_more_after_drying_does_not_undo_the_drying`
+- `keeping_tests::a_pack_takes_nothing_that_would_overload_it_once_merged`
+- Three tests looked dried food up under its old name, and now use the new
+  one: `keeping_tests::drying_food_makes_it_keep`,
+  `dried_meat_outlasts_raw_meat` and `food_hung_over_a_fire_is_smoked`.
+  `larder_tests` (2) now expect `Cover { what: "dried_food" }`.
+
+**Something the stores may share.** Pits merge what goes into them with the
+same `absorb` (`Pit::put_in`). Dried food in a pit with raw food of the same
+name would have been turned raw there too. Under its own name now, it is not.
+
+### 321. Walks to somewhere there was no way to
+
+#317 left this open: a walk to somewhere it had no route to stepped back and
+forth on the bank, and booked every step as a success.
+
+**How often.** A counter on walks that found no route
+(`walk: no way there`). Over a year on smooth seeds 1–8:
+- 0, 1, 18, 27, 43, 141 and 258 such walks on seven seeds;
+- **2,117 on seed 2**, one walk in six.
+
+They were walks to dry ground 6–25 cells off, mostly riverbanks, beaches and
+wetland: springs and fishing places seen on the far bank of a river, or on a
+spit. Since #315 springs lie on shores, so the nearest one somebody had seen
+was often on the wrong side.
+
+**What happened on such a walk.** `walking` took one greedy step
+(`a_step_toward`) and then asked for a route. With none, every further step
+was greedy too. Against a river they went one way and back again, each step
+a success, until the half hour was spent. The next turn the same, because
+nothing had failed. `where_a_walk_can_end` expected "the walk will then find
+no way there and be given up", and it never was.
+
+**Fix.**
+- **The ground is labelled.** `World::can_walk_between` labels every cell
+  with the piece of ground a foot can cross, once, on first asking. It is not
+  saved: it is the map's to say, and nothing in a running world turns land to
+  water or water to land. A cell in the water answers for the ground beside
+  it, where a walk to it ends.
+- **Nobody sets out for the far bank.** `nodes_this_one_knows_of` keeps only
+  what the asker could walk to. Every search for somewhere to go, and every
+  gather, reads through it.
+- **A walk there is refused before a step is taken.** Whatever chose it hears
+  that it came to nothing, and the turn is not spent stepping.
+- **An errand there is over.** An errand holds its place across turns, so
+  before this a refused walk was refused again every turn until the errand
+  ran out of patience: 39 and 213 times for single errands on seeds 2 and 6.
+
+**After, two years from 12 founders, seeds 1–8:**
+
+| | births, deaths before (#320) | after |
+|---|---|---|
+| smooth | 42, 1 | 55, 1 |
+| scattered | 49, 3 | 43, 3 |
+
+That is within the spread between seeds (0 to 11 a seed), so the gain cannot
+be pinned on this. What did change is the walks:
+- seed 2 went from 2,117 walks in a year spent stepping at a river to about
+  680 refused walks a year;
+- each refusal costs its turn, but no longer the walking;
+- with 12 or more people, that is well under one turn in a hundred.
+
+**What still asks for the far bank.** The refusals left come from decisions
+that pick a place without asking what is known there: a day's trip to the best
+ground, a spot to meet a partner, an exploring step. Each is refused once, and
+then decided again. Worth filtering at the source if they ever matter.
+
+**Tests.**
+- `off_the_map_tests::a_walk_with_no_way_there_is_refused_rather_than_walked_at`
+- `off_the_map_tests::nobody_sets_out_for_what_is_on_the_far_bank`
+- `off_the_map_tests::an_errand_to_somewhere_there_is_no_way_to_is_given_up`
+
+The first two fail without the fix.
+
+**`nomad_tests` (7)** put their valley at (60, 20), off the edge of the
+50-cell test map. That passed while nobody asked whether a place could be
+walked to. Their map is now 100 cells across and open grass.
+
+The seed-0 yearly dice count moved from 1,509,486 to 1,466,916. Seed 4242's
+120-turn count did not move.
+
+### 322. The weather deaths on smooth terrain did not come back
+
+At #315 smooth seed 6 lost five of twelve to the weather in its first winter
+(and seed 8 one). That was left open as a step of recalibrating smooth
+terrain: wood and shelter.
+
+**What the runs since say.** Every run since #316, on the current code, from
+12 founders (`zz_gate_why`):
+
+| | runs | births | deaths | of the weather |
+|---|---|---|---|---|
+| seeds 1–8, two years (#321) | 8 | 55 | 1 | 0 |
+| seeds 9–16, two years | 8 | 51 | 2 (a mishap, an illness) | 0 |
+| seeds 1–4, four years | 4 | 40 | 1 (hunger) | 0 |
+
+Over the earlier rounds of #316–#321 (eight seeds a round, two years, on
+both terrains) no death was put down to the weather either.
+
+**How close it came.** At the deepest point of each winter, at most two to
+five of 12–24 adults were cold at once, and on most samples nobody was. The
+other "exposed" readings are summer heat: on seed 16, seven of twelve on day
+120, with four of them thirsty. That is heat, not cold, and nobody died of
+it.
+
+**Why it stopped.** The seed-6 deaths came in the same run as the tool
+famine #316 found:
+- on that seed nobody held a tool after day 30;
+- the camp had no wood and no stone in reach;
+- only eight pits were dug in the year;
+- all 12 people were exposed on days 120–180, and cold on day 300.
+
+The camp could not raise a roof or keep a fire. Since then:
+- founders settle where wood and stone are in reach (#316);
+- wood and stone lie along the rivers (#316);
+- people remember where the materials for their tools are (#316);
+- worn-out tools are thrown away, not carried (#319).
+
+A camp that can make tools can build and burn.
+
+No change to the code. If weather deaths come back, the first thing to read
+is whether that camp had tools, wood and a roof.
+
+### 323. The far bank, filtered where it is decided
+
+#321 stopped anybody walking at a river, but the walks were still chosen and
+then refused, each costing a turn. Over two years on smooth seeds 1–8 that
+was 3,099 refused walks: 1,627 on seed 2 and 1,201 on seed 4. The scattered
+seeds had 351.
+
+**Tried first, and taken out: ending the walk on this bank.** Every walk
+anybody decides on passes through `where_a_walk_can_end`, so one change there
+would catch them all: a walk to the far bank ends at the bank opposite. It
+made things worse. People walked to the bank and then stood there, deciding
+the same walk every turn. Over two years, "move: already there" went from
+5,164 to 18,301 on seed 2 and from 77 to 7,595 on seed 4. The lesson is that
+a decision has to be steered while it is being made; correcting it afterwards
+does not work.
+
+**What asked for the far bank.** Each refused walk was labelled with the
+branch of the decision that chose it (a diagnostic, since removed):
+
+| where it came from | how it chose the place | fixed by |
+|---|---|---|
+| a way, or a drive's answer | `the_ways_open`, `how_this_agent_answers` | stands aside before it is chosen (`can_this_be_got_to`) |
+| running from a beast or an attacker | a straight line away, often over the river | runs where a bolt would, on this bank (`away_on_this_side`) |
+| something just seen | `generate_action_from_percepts` | the same check |
+| an errand already under way | its `going_to` | given up before it is kept to |
+| night (seed 6: all 1,471 in a year) | the nearest cover, often trees over the river; clean ground; the evening fire; home | each looked for on this bank; home with no way back is not walked at ("night: no way home") |
+| somebody starving or parched (seed 8: 471 in 540 days) | water or food smelled, remembered or seen, and prey | `known_source_position` keeps to this bank; prey over the river is not chased |
+
+**After, two years from 12 founders, seeds 1–8:**
+
+| | births, deaths (#321) | after | refused walks (#321) | after |
+|---|---|---|---|---|
+| smooth | 55, 1 | 51, 2 | 3,099 | **3** |
+| scattered | 43, 3 | 48, 3 | 351 | **0** |
+
+Births and deaths are within the spread between seeds. Every death on smooth
+ground was a mishap.
+
+**"Move: already there" (#234) fell too**, from 8,480 to 221 on smooth and
+from 824 to 112 on scattered. These were more wasted turns of the same kind,
+hidden under another name.
+
+Traced on the #321 code, seed 2, first 180 days: 2,203 such turns. Only 30
+were decided as a walk to where the walker stood. The other 2,173 were
+decided as a walk somewhere else, and `where_a_walk_can_end` moved them back
+onto the walker's own tile. Every one of those 2,173 was aimed at somewhere no
+foot can go with no dry ground beside it: open water (1,978) or off the map
+(195). For such a target the clamp's last resort steps back along the line to
+the first ground a foot can go on, and for somebody on the bank that is the
+ground under their feet. The walk then "succeeded", went nowhere and spent the
+turn. It was never refused, so it was not in the refusal counts above. 810 of
+them were somebody running from danger: a straight line 15 paces away, into a
+lake.
+
+`can_this_be_got_to` counts a place with no ground beside it as somewhere
+nobody can get to. So since the filters above, these walks are passed over
+where they are decided, and running away goes through `away_on_this_side`.
+The seed 7 spike of 5,775 after only the first half of this change was the
+same thing, before the night and survival walks were filtered.
+
+Over two years on smooth seeds 1–8, then, this change saved about 11,350
+wasted turns (3,096 refused walks and 8,259 walks to where the walker
+stood), not the 3,096 the refusals alone suggest.
+
+**Tests** (`off_the_map_tests`):
+- `running_away_with_a_river_behind_stays_on_this_bank`
+- `the_water_a_thirsty_one_heads_for_is_on_this_bank`
+- `the_cover_a_sleeper_goes_to_is_on_this_bank`
+- `a_walk_out_into_open_water_is_passed_over`
+- `nobody_sets_out_for_what_is_on_the_far_bank` and
+  `an_errand_to_somewhere_there_is_no_way_to_is_given_up` are kept from #321.
+  `a_walk_with_no_way_there_is_refused_rather_than_walked_at` is back to
+  expecting a refusal, since the clamp is gone.
+
+The water and cover tests each put the nearer spot over the river, so
+without the fix they pick it.
+
+The seed-0 yearly dice count moved from 1,466,916 (#321), through 1,461,434
+with the clamp and 1,372,417 without it, to 1,572,784. Seed 4242's 120-turn
+count did not move.
+
+### 324. The last walks that went nowhere
+
+After #323, two years on smooth seeds 1–8 still had 221 turns booked as
+"move: already there", spread thinly: 102 on seed 1, 40 on seed 2, 30 on
+seed 7 and none to 18 on the rest. Each decision branch was labelled (a
+diagnostic, since removed) and every walk that ended where it began was
+traced back to the branch that chose it.
+
+**Something seen in the water a pace off** (seed 1's 102, and 10 on seed 2).
+`generate_action_from_percepts` answers something just noticed with a walk
+to it. When the thing was in the shallows beside the walker,
+`where_a_walk_can_end` ended the walk on the bank, which was where the walker
+stood. A walk that began an errand spent the next turn arriving. The ground
+underfoot was already excluded (#234); the water beside it was not.
+
+**Running from an attacker on the same tile** (15 errands, 30 turns, on each
+of seeds 2 and 7). The way away was a straight line from where the attacker
+stood, and from the very same tile there is no line, so the run was to where
+the walker already stood. `put_ground_between` already handles a threat
+underfoot and runs the same 15 paces otherwise, so the attacker branch now
+uses it.
+
+**The fix brought one more to light.** Once the attacker branch ran
+somewhere, smooth seed 2 had 117 refused walks in a year, every one from
+running from an attacker, with open ground all round. The straight line was
+aimed at water that touched this bank only at a corner. The reachability
+labels count corners, so `can_this_be_got_to` let it pass. The route search
+steps only along square sides, so no route reached it. `where_a_walk_can_end`
+then fell back to the square-on ground beside it, which was the far bank, and
+the walk was refused there.
+
+**Fix.** `can_this_be_got_to` judges a walk where it will end, which is where
+`walking` judges it. A walk that ends where it began is no walk, and one that
+ends on ground this side does not reach is no walk either. The piece check
+still comes first, so the extra work falls only on targets nobody can stand on
+that have reachable ground beside them: the walks that would do the same route
+search when walked. The runtime of `repeatable_tests` did not move (138 s,
+142 s before).
+
+**After, two years from 12 founders:**
+
+| | #323 | after |
+|---|---|---|
+| smooth 1–8: births, deaths | 51, 2 | 55, 4 |
+| smooth 1–8: refused walks, "already there" | 3, 221 | **0, 0** |
+| scattered 1–8: births, deaths | 48, 3 | 50, 3 |
+| scattered 1–8: refused walks, "already there" | 0, 112 | **0, 0** |
+| smooth 9–16: births, deaths | 57, 3 | 59, 2 |
+| smooth 9–16: refused walks, "already there" | 16, 97 | **0, 0** |
+
+**Deaths from a blow.** Three of the four smooth deaths on seeds 1–8 were from
+a blow, where the rounds before had none. Logged at the moment of death on
+seeds 2, 7 and 8:
+- none was struck by a person, so the attacker branch played no part;
+- two were killed by a boar, one of them an infant, and the third had no
+  attacker on record;
+- on fresh seeds 9–16, #323 had one death from a blow and this change none.
+
+Taken together, that reads as the spread between seeds, not this change.
+
+**Tests** (`off_the_map_tests`):
+- `a_walk_that_would_end_where_it_began_is_passed_over`
+- `a_walk_is_judged_where_it_will_end`: builds the corner-touching water
+  exactly, and fails if only the target is asked about.
+- `running_from_somebody_on_the_same_ground_goes_somewhere`
+
+The seed-0 yearly dice count moved from 1,572,784 to 1,441,966 with the
+first half of this change; judging the end did not move it. Seed 4242's
+120-turn count did not move.
+
+### 325. The boar deaths
+
+After #324, three of the four deaths in two years on smooth seeds 1–8 were
+"from a blow" (#324 traced none of them to a person). Every animal strike on a
+person on those worlds was logged with who was struck, where, by what, what
+they were doing and who was near (a diagnostic, since removed). There were 64
+strikes, every one of them by a boar: 45 on seed 2, 13 on seed 7, and 0 to 3
+on the rest.
+
+A hungry boar within three paces strikes for 15. Once a turn that is
+survivable. What killed was the minute clock. Somebody in danger takes the
+rest of the half hour a minute at a time, and the beast gets a strike at them
+each minute, so that running away is not free. All three deaths were people
+on the minute clock who could not answer the boar.
+
+**Somebody in want, with a boar beside them** (seed 7, aged 40, alone at the
+west edge of the map). Their fear was 0.67, and all of it was "unmet survival
+needs": hungry and thirsty, far from camp. That passes the flight gate, so
+they were on the minute clock. But the threat tree found no beast or person
+to run from, so each minute they gathered, sought shelter or tilled. A
+confident adult had appraised the boar as nothing to fear or fight. They were
+struck seven times in one half hour and died.
+
+**An infant left where its people had been** (seed 2). A small child takes no
+turn of its own, but it was still given the minute clock, and so the beast had
+the minutes. Small children are put back with their keeper only at the end of
+the turn, and infants come late in the turn order. So by the time an infant's
+minutes came round, the parent had walked on, and nobody was within three
+paces. 27 of seed 2's 45 strikes were on infants, and one was struck four
+times in a half hour and died.
+
+**A sleeper sent back to bed** (seed 2, not fatal). Anger at the boar put them
+on the minute clock, and the tree answered "back away from something bigger".
+But the night lets only somebody running away be, so it sent them back to
+sleep. They were struck four times before morning. Ten of seed 2's strikes
+were on people asleep.
+
+**Tried first, and taken back: want is not danger.** The flight and anger
+gates were made to count only a beast or a person, which is what the branches
+behind them act on. Strikes fell to 6 and deaths from a blow to none, but over
+the same eight worlds:
+- births fell from 55 to 40;
+- four people died of thirst;
+- seed 6 had no births at all, because it came out of the winter with too
+  little left for the breeding gate.
+
+Waking a parched sleeper again did not bring them back (seeds 6, 7 and 8: no
+births on 6, five deaths of thirst). The minute clock runs after the half
+hour's own thirty minutes, so somebody on it gets close to a second half hour:
+a step, a drink or a gather every minute. People in want rely on it to reach
+water and to forage through the lean months, and the food and water balance
+rests on it. That is the escape hatch the clock's own comment warns of. It is
+left as it is here, because removing it is a recalibration of its own.
+
+**Fix.**
+- The gates are as they were, and want still takes the half hour a minute at
+  a time.
+- The beast gets its strike every minute only against somebody threatened by
+  a beast or a person (`EmotionState::threatened_by_something_there`).
+- A small child gets no minute clock of its own. It is carried, and the beast
+  has its usual chance once a turn.
+- The night lets somebody threatened be, as it already did somebody running
+  away.
+
+**After, two years from 12 founders:**
+
+| | #324 | after |
+|---|---|---|
+| smooth 1–8: strikes on people | 64 | **5** |
+| smooth 1–8: births, deaths | 55, 4 (3 from a blow) | 48, **0** |
+| smooth 9–16: births, deaths | 59, 2 | 56, 2 |
+| smooth 9–16: strikes on people | – | 10 |
+
+Across the 16 worlds births are 104 against 114. Single worlds swing by two to
+five births either way, so that is within the spread, though not by much.
+Seed 6 had no births under every version of this change, against four before.
+Its run parts from #324's by day 180, through different dice, and comes out of
+the winter short. Worth watching. Deaths fell from 6 to 2, both mishaps.
+
+**Not explained:** seed 8's death from a blow had no attacker on record, and
+one boar strike more than a year earlier. The cause of death is whatever took
+the most health over a life, so it may be old blows added up rather than one.
+
+**Tests:**
+- `emotions::tests::going_without_is_not_a_threat_that_is_there`
+- `danger_cadence_tests::a_small_child_is_not_given_the_minutes`: fails
+  without the fix (29 minutes in its first turn).
+- `night_tests::somebody_in_danger_is_not_sent_to_bed`
+
+The seed-0 yearly dice count moved from 1,441,966 to 1,500,653. Seed 4242's
+120-turn count did not move.
+
+### 326. Everybody's own half hour, and the minute clock kept for danger
+
+The request:
+- **Staggered decisions.** "Agents should have their 30 minute decision ticks
+  separated out to prevent lag spikes if every agent was forced to make
+  decisions at the exact same time."
+- **The minute clock is for threats in sight.** "The minute-to-minute decision
+  making was meant to occur when a threat was within eyesight of an agent ...
+  All drives, including Hunger and thirst, should be checked during the 30
+  minute decision turn."
+- **No sleeping under attack.** "Agents should not be peacefully sleeping
+  while being attacked ... An agent should avoid sleep regardless of the time
+  of day if there is something else nearby which is trying to kill them."
+- **The biggest threat to survival leads.** "Primary Drive demand should be
+  determined by whichever drive results in the largest threat to the
+  continued survival of the agent."
+- **Familiarity.** "If a potential threat is nearby but continues to not
+  actively harm the agent, they should adjust their fear level."
+
+**What it was.**
+- Everybody decided at once at the start of each half hour, in one call.
+- Anybody frightened or angry enough went round again once a minute, on top
+  of the half hour. Want counted: the fear of going without passed the flight
+  gate, so somebody hungry or parched got twenty-nine more decisions a turn.
+  That was the escape hatch the clock's own comment warns of, and #325 found
+  the food and water balance resting on it.
+
+**What it is now.**
+- **Everybody keeps their own half hour.** Each person's begins at their own
+  minute of it, fixed by their id (`next_decision_at`). The world turns on the
+  half hour as before, but `take_a_minute` runs one minute of it:
+  - the world's start of the half hour comes at its first minute, and its end
+    after the last;
+  - in between, whoever's decision falls on that minute decides.
+
+  `take_a_turn` is thirty of them. Both GUIs step a minute at a time, and when
+  running behind they take as many minutes as are due, up to a half hour, so
+  no frame carries the whole half hour's deciding.
+- **A minute at a time only with something after you.** Somebody takes a
+  minute at a time only while a beast or a person they are afraid of, or angry
+  enough to face, is about (`something_is_after_me`). Feelings about what is
+  around are re-appraised at each person's own decision, against the half
+  hour's beasts (`what_menaces`). Those minutes come out of their own half
+  hour rather than being added to it:
+  - a walk that comes into sight of something stops there, and the rest of the
+    half hour goes a minute at a time;
+  - hunger and thirst are answered on the half hour with every other need;
+  - a small child gets no minutes of its own (#325);
+  - the beast gets its strike a minute only against somebody taking it a
+    minute at a time.
+- **Struck, you wake and answer it.** A strike breaks off whatever the struck
+  was doing, sleep included, and they decide again now. Whatever struck them
+  is a threat, however they had sized it up: at least angry enough to face it,
+  or, in no state to face anything, afraid enough to go
+  (`EmotionState::struck_by`). The seed 7 death in #325 was somebody who went
+  on tilling while a boar bit them. The night lets somebody threatened be.
+- **What would kill first is answered first.** A beast after somebody would
+  kill them, at a blow a minute, in health over its blow. If that is sooner
+  than hunger or thirst would, the beast is answered before eating, before
+  carrying a load home, and before going without for a child.
+- **Familiarity** (`Agent::familiar_with`):
+  - every half hour a kind of beast is about and does no harm, it frightens a
+    little less, by 1.6% of what is left to get used to, up to 95%;
+  - a stranger beside you is still frightening for a day, and one that has
+    been about for a week is hardly noticed;
+  - a blow from one makes the kind a stranger again;
+  - a kind not seen for a month is about half forgotten.
+
+**After, two years from 12 founders:**
+
+| | #324 | #325 | #326 |
+|---|---|---|---|
+| smooth 1–8: births, deaths | 55, 4 | 48, 0 | 56, 3 |
+| smooth 1–8: strikes on people | 64 | 5 | 7 |
+| smooth 9–16: births, deaths | 59, 2 | 56, 2 | 56, 1 |
+| smooth 9–16: strikes on people | – | 10 | 39 |
+| scattered 1–8: births, deaths | 50, 3 | – | 52, 1 |
+
+**Thirst.** No deaths of thirst. Taking the extra minutes away from want cost
+births and four deaths of thirst in #325's first attempt. It does not here, with
+want answered on the half hour and a beast answered before want only when it
+would kill sooner. Why the two differ was not traced.
+
+**Strikes.** Strikes on smooth 9–16 rose from 10 to 39, and none killed
+anybody. Somebody used to a kind of beast no longer keeps clear of it, which is
+what familiarity is for, and a hungry one gets its once-a-turn chance. That was
+not measured on its own.
+
+**The deaths** were a mishap, an illness, hunger and two from a blow (smooth
+seed 3, scattered seed 3). The smooth seed 3 one was traced. It was no strike:
+grown people afraid of a woolly mammoth (fear 0.70) fought it, at 40 a blow,
+twice in a half hour on the minute clock. Which branch of the threat tree chose
+to fight was not traced. A mammoth is no predator and strikes nobody of its
+own accord, so a frightened person fighting one is worth a look of its own.
+
+**Tests** (`danger_cadence_tests`):
+- `everybody_keeps_their_own_half_hour`
+- `going_without_is_answered_on_the_half_hour`
+- `a_sleeper_who_is_struck_wakes_and_decides_now`
+- `a_beast_that_does_no_harm_comes_to_frighten_less`: fails without the
+  familiarity, at fear 0.7 throughout.
+- `what_kills_first_is_answered_first`
+
+`nobody_gets_more_minutes_than_the_turn_holds` now allows all thirty minutes of
+a half hour, since they come out of it.
+
+The seed-0 yearly dice count moved from 1,500,653 to 1,032,478: a third fewer
+decisions, now that want takes no extra minutes. The repeatability tests run in
+104 s against 152 s. Seed 4242's 120-turn count moved from 7,626 to 7,639.
+
+### 327. People fighting the mammoth
+
+#326 traced a death "from a blow" on smooth seed 3 to grown people afraid of a
+woolly mammoth fighting it at 40 a blow. Every decision of the threat tree to
+fight a beast was logged (a diagnostic, since removed) over two years on smooth
+seeds 1–8.
+
+**The mammoth.** All of seed 3's mammoth fights came from one branch, "stands
+over one of its own":
+- First, one man with no anger and a fear of 0.70, with a loved one within two
+  paces of the mammoth, fought it twice in a half hour and went from 100
+  health to 20.
+- Later nine adults fought it at once. `could_i_fight_at_all` asks only for
+  more health than one blow, so each one knocked down to 20 became somebody
+  "in the way" who could not fight it, and everybody near who loved them
+  stood over them in turn.
+
+But a mammoth hunts nothing. In this model nothing strikes a person of its own
+accord except a hungry hunter big enough to take them (`predators_try_their_luck`).
+A mammoth harms only somebody who fights or hunts it.
+
+**The same, smaller, everywhere.** Angry grown people "stood their ground"
+against kestrels, herons, eagles, elk, goats and cows, none of which would ever
+touch them. On seed 3 alone that was 458 decisions against eagles.
+
+**Why.** What strikes and what frightens asked different questions. A beast
+struck if it hunted, was hungry, and was not too small to take the person. A
+beast frightened, or angered, anybody if its temper menaced and its blow did
+anything, territorial and defensive grazers included.
+
+**Fix 1: one question for both.** `could_it_take`: the beast hunts, its blow
+does something, and it is not too small to take a person of that age. It is
+asked by:
+- the strike;
+- the appraisal (`feel_about_what_stands_in_the_way`, through `what_menaces`);
+- the walk's look ahead (`what_would_frighten`);
+- the sight pass that marks dangerous ground.
+
+Nobody now fears or fights a mammoth or a cow. An eagle frightens a child and
+not a grown person.
+
+**Which brought the mammoth hunters to light.** With nobody afraid of mammoths,
+people hunted them, and on smooth seeds 4 and 5 a hunter died of one. There were
+two faults:
+- **The blow was weighed with the spear in hand.** `worth_hunting` weighed the
+  blow as the spear would turn it (`could_i_fight_at_all`). But a hunt is a
+  spear thrown, a miss can leave the spear in the bracken, and the whole blow
+  landed. A dangerous beast is now hunted only by somebody fit for its whole
+  blow.
+- **The check was asked only where the hunt was chosen.** A hunt can be made
+  later, after a blow, from a plan or a way already in hand. One hunter went
+  after the mammoth again at 36 health and died. `hunting` now asks it too
+  (`fit_to_take_it_on`).
+
+And what turns on a hunter is one question asked in one place
+(`fights_back`). A cow, a goat or an elk turns on a hunter as a bear does, and
+gave most of the hunting hurts, so it is weighed so too. Only what comes after
+you still needs a weapon in hand. The blow that lands when a hunted beast turns
+is now what gets through whatever is in the hunter's hands at the time, as with
+a beast's own strike.
+
+**Tried and taken back: the same for a fight.** Treating a beast's blow in a
+fight the same way made `armed_tests::a_spear_tells_when_you_stand_your_ground`
+fail, by 1.6 blows to put a wolf down with a spear against 1.8 bare-handed.
+That test passed only through the men who died: it counts a fight cut short by
+the man's death as a fight over, and with the spear turning part of each blow,
+the armed man lasted long enough to swing more. Held at full health for every
+swing, a spear takes 1.6 blows against 1.7 bare-handed. A spear barely helps
+put a wolf down, and has not since the test was written. The fight is left as
+it was, and the spear's part in a fight is a question of its own.
+
+**After, two years from 12 founders:**
+
+| | #326 | #327 |
+|---|---|---|
+| smooth 1–16: births, deaths | 112, 4 | 107, 1 |
+| scattered 1–8: births, deaths | 52, 1 | 55, 0 |
+| fights picked with beasts (decisions) | hundreds, mostly against beasts that never strike | 40, all wolves and boars |
+| strikes on people (smooth, scattered) | 46, 28 | 13, 6 |
+| hurt hunting | – | 55; none left below 34 health, none by a mammoth |
+| deaths from a blow | 2 | 0 |
+
+The one death left is of thirst (smooth seed 5).
+
+**What this gives up.** Nobody keeps clear of a mammoth now. In this model it
+is harmless unless hunted, and it is hunted only by somebody fit for its blow.
+If territorial beasts should charge people who come too near, that is a
+behaviour of the beasts still to be written, and the appraisal should then ask
+it too.
+
+**Tests:**
+- `danger_cadence_tests::a_beast_that_never_strikes_frightens_nobody`
+- `danger_cadence_tests::an_eagle_frightens_a_child_and_not_a_grown_person`
+- `hunting_tests::a_hunter_fit_for_the_blow_survives_it`
+- `hunting_tests::a_hunt_after_the_blow_is_not_made`
+
+The first three fail without their fixes.
+
+The seed-0 yearly dice count moved from 1,032,478 to 1,017,291. Seed 4242's
+120-turn count did not move.
+
+### 328. Why a spear barely helped in a fight
+
+Found under #327: held at full health for every swing, a man put a wolf down in
+1.6 blows with a spear against 1.7 bare-handed.
+
+**The fight** (`fighting_a_beast`).
+- **Whether a blow lands:** what the fighter is worth against what the beast is
+  worth. A spear adds a quarter of its worth over one. A grown man's chance went
+  from 68% bare-handed to 72% with a spear worth 1.9.
+- **What a blow that lands takes off:** it was (25 + 25 x strength) x the
+  point's worth, with the worth floored at one "so bare hands are exactly what
+  they were". For a grown man that was 57.5 bare-handed and 120 with a spear,
+  against a wolf's whole health of 45.
+
+Every blow that landed killed the wolf, with a spear or without. The spear's
+doubled blow was wasted, and its whole part in the fight was four points on
+whether a blow landed: 1/0.68 = 1.47 blows against 1/0.72 = 1.39.
+
+`a_spear_tells_when_you_stand_your_ground` had passed only by counting fights
+the man died in as fights over. A fight cut short by the man's death ended
+early, and the spear's men lasted a little longer. #327's attempt to let a
+spear turn part of the beast's blow broke it for that reason.
+
+**What the specification asks.** "A wooden spear is enough, but should take
+several attacks to kill the animal, depending on the size of the animal. A
+flint spear should reduce the number of attacks." The points' worths are: bare
+hands 0.3, sharpened stick 1.4, flint spear 2.0, metal spear 3.0.
+
+**Fix.** A blow that lands takes `WHAT_AN_ARM_PUTS_BEHIND_A_POINT` (9) x
+strength x the point's own worth, bare hands at their own 0.3. For a grown arm,
+three blows that land put a wolf down with a sharpened stick, two with a flint
+spear, and a dozen or more bare-handed. More for a bigger beast: a boar of 80
+takes about six with a stick and four with flint. Whether a blow lands is
+unchanged. With the misses, the test's man now puts the wolf down in about 3.7
+blows with a flint spear against 16 bare-handed.
+
+**After, two years from 12 founders:**
+
+| | #327 | #328 |
+|---|---|---|
+| smooth 1–16: births, deaths | 107, 1 | 114, 1 |
+| scattered 1–8: births, deaths | 55, 0 | 56, 0 |
+| blows landed on beasts | – | 20, every one with a spear |
+| lowest health after a beast's blow in a fight | – | 64 |
+
+Fights with beasts are few since #327, against wolves and boars only, and those
+who fought had spears. The weaker bare hands never came into it. The one death
+is of thirst.
+
+**Not done: the hunt.** In a hunt a throw that lands takes 35% of the beast's
+health whatever the point (`WHAT_ONE_THROW_TAKES_OUT_OF_IT`). So every beast,
+rabbit or mammoth, dies to three throws that land, and a better spear only
+helps one land. It is the same gap in the specification. Closing it changes how
+much meat and how many hides the hunting brings in, and is a question of its
+own.
+
+**Tests** (`armed_tests`):
+- `a_spear_tells_when_you_stand_your_ground` now holds the man at full health,
+  so it counts how fast the wolf goes down.
+- `a_flint_spear_puts_it_down_in_fewer_blows_than_a_sharpened_stick` fails
+  under the old blow, at about one and a half blows for every point.
+
+Neither dice count moved: no fight with a beast happens in the two runs they
+count.
+
+### 329. A better point takes fewer throws in a hunt
+
+The hunt's half of #328. A throw that told took 35% of whatever it hit
+(`WHAT_ONE_THROW_TAKES_OUT_OF_IT`). So every animal, a rabbit or a mammoth,
+went down to three throws that told, and the point counted only towards
+whether a throw told: a quarter of its worth over one. The specification asks
+otherwise: "A wooden spear is enough, but should take several attacks to kill
+the animal, depending on the size of the animal. A flint spear should reduce
+the number of attacks."
+
+**Fix.** A throw that tells takes `WHAT_AN_ARM_PUTS_BEHIND_A_THROWN_POINT` (17)
+x the thrower's strength x the point's worth (`what_a_throw_takes_off`):
+- the point's worth is a stone 0.3, a sharpened stick 1.4, a flint spear 2.0, a
+  metal spear 3.0;
+- strength is `own_strength`: 1.0 for most grown people, 1.3 for the brave.
+
+It is sized so that an ordinary grown arm with a flint spear takes about the
+three throws it always took for a cow or a boar, which is most of what a hunt
+brings in. That keeps the meat a hunt brings in about where it was.
+
+Throws that tell, measured in real hunts in a test, with an ordinary grown arm:
+
+| | sharpened stick | flint spear (a little worn) |
+|---|---|---|
+| deer (60) | 3 | 2 |
+| cow (100) | – | 4 |
+| rabbit (15), with a stone | 3 | |
+
+By the arithmetic, a mammoth (300) takes about nine with a flint spear.
+Whether a throw tells is unchanged.
+
+**After, smooth 1–12, two years from 12 founders:**
+
+| | #328 | #329 |
+|---|---|---|
+| births, deaths | 91, 1 | 87, 0 |
+| throws that told | 22 | 42 |
+| kills | 2 (a deer, a camel) | 11 (6 kestrels, 2 sheep, an owl, a deer, a cow) |
+| hurt hunting | 26 | 39, none near death |
+
+The new kills are mostly small birds, which a spear now takes in one throw. The
+births are within the spread between seeds.
+
+**What this shows besides.** Hunting hardly happens at all: two kills in
+twenty-four settlement-years before this, eleven after. Whatever a better point
+does to a hunt, it does to very few hunts. Hunting and trapping as a real part
+of the year's food is a question of its own (it is on the list as "make winter
+hunting/trapping a real supplement").
+
+**Tests:**
+- `hunting_tests::a_better_point_takes_fewer_throws_and_a_bigger_beast_more`
+  hunts a deer and a cow for real. Under the old throw every count was three,
+  so it fails.
+- `lean_season_tests::one_throw_does_not_bring_a_deer_down` now asks it of an
+  ordinary grown arm with a metal spear: 51 against a deer's 60.
+
+The seed-0 yearly dice count moved from 1,017,291 to 1,028,941. Seed 4242's
+120-turn count did not move.
+
+### 330. A hunt weighed by what it brings home, against what it costs
+
+"The yield of the hunt should be considered. A small bird results in little
+meat, whereas a deer results in significantly more meat than a bird. How many
+meals does a cow provide? The drives influence actions, but effort, time, and
+results should all be considered."
+
+Nothing about a hunt asked any of that. Prey was the *nearest* animal there
+was a means of killing (`nearest_prey`), in all three places a hunt is chosen:
+- the hungry agent with no food within reach and an animal within five cells;
+- the desperate agent;
+- the agent after skins for a coat.
+
+What was on the animal, how many throws it would take and what it would cost
+were never asked. Six of the eleven kills after #329 were kestrels. A kestrel
+drops feathers and nothing else, so it fed nobody and clothed nobody.
+
+**How many meals is a cow, in this model.** A sitting is a third of a day:
+480 food units. A joint cuts into 3 portions, and a portion of meat is 5 units
+at 30 energy, which is 150 units. With an average carcass and a flint flake:
+
+| | joints (drop table) | portions | meals | real animal, about |
+|---|---|---|---|---|
+| cow, 600 kg | 15–25 | ~60 | ~19 | 600+ |
+| deer, 70 kg | 8–12 | ~30 | ~9 | 80 |
+| rabbit, 2 kg | 1–2 | ~4 | ~1.4 | 2–3 |
+| kestrel, 0.2 kg | none | 0 | 0 | a mouthful |
+
+Butchering with bare hands keeps 15% of that (`what_bare_hands_manage`). A
+carcass in late winter is 0.65 of one in autumn (`how_fat_the_beasts_are`).
+
+**Fix: a hunt is priced in the coin a forage patch is.** It is food brought
+home less what the trip costs, over the turns it takes, as
+`what_this_patch_is_worth` prices a patch
+(`Simulation::what_this_hunt_is_worth_to_eat`). The parts:
+- **Results:** the joints on it (`what_one_of_these_gives`), as many as there
+  is room for in the pack. That is counted in portions, three a joint
+  (`CUT_MEAT_INTO_PORTIONS`), at what a portion of meat is worth to eat. It
+  reads the carcass's condition and the hunter's flake the way `butcher` does.
+- **Time:** the turns of throwing it takes this hunter
+  (`turns_to_bring_it_down`). That is the throws that have to tell, from
+  `what_a_throw_takes_off` (#329), over how often a throw tells. The hit chance
+  is now one function, `how_often_a_throw_tells`, which the executor and the
+  pricing share. Add a turn with the knife and the walk there and back.
+- **Effort:** the walk and every throw at `WHAT_A_THROW_COSTS`.
+- **Risk:** every throw that misses something that fights back is a blow
+  taken. The hunt is scaled by the share of the hunter's health those expected
+  blows leave him (`what_is_left_after_the_blows`). This is
+  `fit_to_take_it_on`'s question, asked of the whole hunt rather than of one
+  blow.
+
+Where this is used:
+- **Choosing prey for food.** `the_best_prey_to_eat` takes the animal in reach
+  worth the most. Nothing with no meat on it is food.
+- **Choosing whether to hunt or forage.** The hungry agent's hunt is made only
+  when it is worth more than the best food the agent knows of
+  (`the_best_food_anywhere_and_its_worth`). Before, the hunt came first
+  whenever there was nothing within reach.
+- **Choosing prey for a coat.** `the_best_prey_for_its_skin` takes hides,
+  leather and wool per turn, less the blows.
+
+What it comes to for an untrained grown hunter with a flint spear, in autumn
+condition 0.65, in food units a turn. A full berry bush is 1,386 at the door
+and 1,196 twenty cells off:
+
+| pig | deer | reindeer | sheep | cow | rabbit | kestrel |
+|---|---|---|---|---|---|---|
+| 1,124 | 743 | 651 | 590 | 481 | 180 | 0 |
+
+The cow takes ten turns of throwing and costs a third of the hunter's health in
+blows. With nothing in the hand but a stone, a rabbit is twenty turns of
+throwing and worth 13 a turn.
+
+**Measured, smooth 1–12, two years from 12 founders:**
+
+| | #329 | #330 |
+|---|---|---|
+| births, deaths | 87, 0 | 82, 0 |
+| people at two years | 231 | 226 |
+| throws that told | 42 | 12 |
+| kills | 11 (6 kestrels, 2 sheep, an owl, a deer, a cow) | 2 (an elk, a deer) |
+| hurt hunting | 39 | 9 |
+| food in the pits at two years | 120,100 | 122,347 |
+
+Births by seed were 8 11 8 7 0 5 5 10 5 9 8 11 before and
+4 8 6 10 5 5 5 10 4 9 5 11 after, which is within the spread between seeds.
+
+The hunts that went nowhere are gone. The ones that are left are rare because,
+at what a carcass gives in this model, a hunt beats a known patch of food only
+when there is next to nothing else about.
+
+**Tried and not kept: meat by the beast's mass.** This is the other half of
+the question, and #257 tried it once before the decision weighed yield:
+- joints off the mass at 45% edible (a deer 16, a cow 135, a rabbit 1);
+- a portion of meat at 120 energy, the physiology's own "four of a fat
+  carcass" (`physiology::WHAT_A_SITTING_AIMS_AT`), with its protein raised to
+  match.
+
+A cow comes to about 500 meals then. On the same twelve seeds, on top of
+#330:
+
+| | #330 | + meat by mass |
+|---|---|---|
+| births, deaths | 82, 0 | 68, 1 (thirst) |
+| people at two years | 226 | 211 |
+| kills | 2 | 6 (3 deer, 2 sheep, a cow) |
+| joints brought in | 3 | 30, 21 of them off the cow |
+| food in the pits | 122,347 | 102,322 |
+
+Births were lower on nine seeds of twelve. Five of the six kills gave one or
+two joints, because the hunter had no flake and bare hands keep 15% of a
+carcass. The pricing knows this, so these were most likely the coat hunts and
+the desperate ones, which do not ask about meat.
+
+Three things stand between a real carcass and a real supper, and each wants
+answering before the carcass is made bigger again:
+- what a bare-handed butchery wastes;
+- where the rest of a carcass goes once the pack is full: it is left on the
+  ground and nobody fetches it;
+- what four-times-richer meat does to everything else that prices food by its
+  energy, the forage patch for a `Meat` resource among them.
+
+**Tests:**
+- `hunting_tests::nobody_hunts_a_kestrel_for_supper`
+- `hunting_tests::the_deer_is_worth_more_than_the_rabbit_at_your_feet`: the
+  deer is chosen though the rabbit is nearer.
+- `hunting_tests::a_skin_hunt_goes_after_a_skin`: the deer, not the nearer
+  kestrel.
+
+The seed-0 yearly dice count moved from 1,028,941 to 1,014,941. Seed 4242's
+120-turn count did not move.
+
+### 331. A kill leaves a carcass: going back to it, and telling people where it is
+
+"Why is meat harvesting not utilizing cutting tools? Are agents sharing the
+location of kills? Why are they not going back to kills to continue
+harvesting? The cost of harvesting meat from a carcass is significantly less
+than hunting an alive animal. If most of the kill will go to waste before a
+hunter can harvest it fully, the hunter can decrease their social drive and
+improve relationships by sharing the location and harvest with other agents
+before the meat goes bad."
+
+**What was there.** A beast came apart in the instant it fell (`butcher`):
+- Every drop off it was multiplied by whatever the hunter had in the pack to
+  cut with. Bare hands keep 15% (`what_bare_hands_manage`), so the other 85%
+  of a carcass was never made at all.
+- What would not fit in the pack went on the ground as a loose item.
+- Nobody picks up dropped food (`something_worth_taking` takes only what a
+  plan is short of, and tools), so it rotted.
+- Nothing about a dropped item can be told to anybody, because what people
+  tell each other is resource nodes (`say_it_out_loud`).
+- The map has always had a resource for "a kill somebody left" (`Meat`, and
+  `every_food_grows_back` says as much). Nothing ever made one.
+
+**Why nobody had a knife.** Founders walk in with a handaxe and a stone knife
+each (`WHAT_THEY_CARRY`). Counted on smooth seed 2 over a year, the number of
+twelve adults carrying a cutting edge was:
+
+| day | 30 | 60 | 90 | 120 | 150 | 180 | 210 → 360 |
+|---|---|---|---|---|---|---|---|
+| with an edge | 5 | 8 | 7 | 6 | 4 | 1 | 0 |
+
+A knife lasts thirty jobs, and nothing makes another. A better tool is made
+when the job in hand asks for its trade (`would_a_better_tool_pay`, through
+`what_trade_this_asks_for`). No job ever asked for butchery:
+- butchering happened inside `Hunt`;
+- cutting a joint into portions (`Work`) is not one of the actions that
+  function maps;
+- tearing a joint by hand happens inside `Eat`, which is never interrupted for
+  a tool.
+
+Over that year nobody once wanted a knife.
+
+The tool counter was misleading as well. "Tool: gone to fetch what the making
+wants" counted 73,516 in the year. It counted whether or not the fetch sent
+anybody anywhere, and 69 in 70 of them were a digging stick whose makings
+nobody could get, with the turn going on as it was. It now counts only a fetch
+that diverts the agent.
+
+**Fix: a kill leaves a carcass.** `the_beast_comes_down`, for a hunt and a
+fight alike:
+- The meat is taken out of the drop at the carcass's seasonal condition and
+  nothing else, so no edge is charged as waste.
+- One turn of cutting goes into the pack (`what_a_turn_of_cutting_takes_off`):
+  two joints for an ordinary hand with an ordinary edge, at the butchery
+  tool's factor. Bare hands get one joint, a stone knife three or four.
+- The rest is put on the map as a carcass (`World::a_carcass_lies_here`): a
+  `Meat` node carrying the turn it was killed (`ResourceNode::killed_on`).
+- The hunter knows where it is.
+- Skins, horn and fangs are butchered as before.
+
+A carcass is food like any other to whoever knows of it:
+- It is cut with a `Gather`, at what a turn of cutting takes off it
+  (`JOINTS_A_TURN_OF_CUTTING_TAKES` at the edge's factor). The knife decides
+  how fast, and never how much is wasted.
+- A joint cut off it is as old as the kill.
+- It is never eaten where it stands; it has to be cut.
+- It is weighed against a berry bush in what its joints cut into, three
+  portions a joint (`portions_in_one_off`). Weighed by the joint at the worth
+  of a portion, it read as a third of what was on it and lost every time.
+- It is gone five days after the kill (`HOW_LONG_A_CARCASS_LIES`, half what
+  raw meat keeps in a pack).
+- A food gather that will land on a carcass asks for butchery
+  (`the_node_this_gather_takes`, pulled out of `gathering` so the two cannot
+  disagree). So taking a carcass apart bare-handed is now a job a stone knife
+  can be weighed against.
+
+**Fix: telling people about a kill.** A kill seen within the five days, with
+more joints on it than the hunter has room for in his pack
+(`kills_worth_telling_of`):
+- puts him in the speaking round every turn rather than six in a hundred;
+- is said first, and truthfully;
+- for each listener who had not heard of it, is a gift. The listener's bond
+  with him rises (`WHAT_A_SHARED_KILL_IS_WORTH_TO_HIM`, three hundredths of
+  the scale, as a good meeting does), and it answers a tenth of his Social
+  drive against three hundredths for being listened to at all.
+
+**And remembering a kill.** A kill one has been told of is kept in mind until
+it rots (`forget_what_does_not_matter`). Weighed with everything else, hearsay
+in country one does not know, wanted only if hungry that turn, it was the
+first place to go. Those told of a kill had forgotten it by the next turn and
+were told again: 5,764 tellings in two years on smooth seed 7, all about three
+kills.
+
+**Measured, smooth 1–12, two years from 12 founders, against #330:**
+
+| | #330 | #331 |
+|---|---|---|
+| births, deaths | 82, 0 | 82, 0 |
+| people at two years | 226 | 226 |
+| food in the pits | 122,347 | 121,396 |
+| kills | 2 | 5 |
+| joints on them | – | 35 |
+| cut at the kill | – | 4 |
+| cut later by the hunter | – | 14 |
+| cut by anybody else | – | 0 |
+| left to rot | – | 17, on 4 carcasses |
+| kills told of | – | 17 tellings, plus 231 turns with nobody in earshot |
+
+Births were the same on every seed. Every joint was cut with bare hands.
+
+What the steps on the way showed:
+- **Carcass alone:** 25 of 40 joints rotted and nobody was told; the bar for
+  telling was a fixed ten joints. It is now the hunter's pack room.
+- **Then telling, before the memory fix:** the 5,764 tellings above.
+- **Counting `Work` as knife work too**, so that cutting a joint or fish into
+  portions asked for a knife: 18,549 wants of a stone knife in two years and
+  not one made. Births fell from 82 to 74 with two deaths by mishap, and
+  others came to carcasses 24 times. Not kept. A stone knife wants a knapped
+  tip and a lashing, and the lashing wants flax; the fetch for it is where
+  every tool chain in these runs stalls (`fetch_what_the_making_of_it_wants`).
+
+**What still stands between a carcass and a supper:**
+- **Nobody makes a knife.** Every cut in every run was bare-handed. That is the
+  tool chain, not the carcass.
+- **Those told do not go.** An ordinary hungry agent walks to the nearest food
+  it knows of (`known_source_position`). Only the desperate weigh the best
+  (`the_best_food_anywhere`), so a kill out past the hedges is never chosen.
+- **Kills are rare:** five in twenty-four settlement-years.
+- **Carrying for a share is not done.** "An agent offering a portion of the
+  meat to agents who help transport the meat" wants an agreement between two
+  agents and a load carried for somebody else, and this model has neither.
+
+**Tests (`carcass_tests`):**
+- `the_rest_of_a_kill_is_left_on_the_bone`
+- `a_knife_takes_more_off_a_carcass_than_bare_hands`
+- `meat_off_a_carcass_is_as_old_as_the_kill`
+- `a_carcass_goes_off`
+- `a_hunter_calls_people_over_to_his_kill`
+- `food_off_a_carcass_is_knife_work`
+- `a_kill_you_were_told_of_is_not_forgotten_by_the_next_turn`
+- `a_carcass_is_worth_more_than_a_bush_the_same_walk_away`
+
+The seed-0 yearly dice count moved from 1,014,941 to 1,065,822. Seed 4242's
+120-turn count did not move.
+
+### 332. Knives: an edge in the kit, and what kept it out
+
+"Fix the tool-making chain so agents make knives."
+
+**Where the chain broke.** Counted on smooth seed 2 over a year, every adult
+without an edge, asked what stood between them and a stone knife:
+
+- **Nobody wanted one.** A better tool is made when the job in hand asks for
+  its trade (`would_a_better_tool_pay`), and no job asks for a knife. Butchery
+  was inside `Hunt`. Cutting portions (`Work`) is not a job that function
+  maps. Tearing by hand is inside `Eat`, which is never interrupted for a
+  tool. The spare-turn making (`what_i_would_make`) put the knife third,
+  behind hunting and woodcutting, and only took a step that could be done
+  from the pack.
+- **A full pack.** Stone is five to the unit and packs run full. Asked for
+  stone, `could_this_gather_come_to_anything` refused 11 of 12 adults by
+  midsummer, because only somebody already on a making errand was exempt,
+  and the fetch is asked before the errand is set.
+- **No flax half the year.** A stone knife is a knapped tip and a lashing,
+  and lashing is flax. Flax stood at 2,300–3,200 units near camp to day 180,
+  then none from day 210 to the year's end. Tips piled up in packs (14 by
+  midwinter) with nothing to bind them.
+- **Making errands gave up on a missing stone.** An errand took the making
+  steps only, and was dropped as "stuck" the moment the pack was short of
+  anything (`next_step_towards_making`).
+- **And the discovered thong could not be planned with.** Putting a hide
+  where the flax goes makes lashing (`THONG_FOR_CORD`), and finding it out
+  records only "lashing", which everybody already knows. No `Making` turns a
+  hide into cord, so the discovery changes nothing anybody plans. Not changed
+  here.
+
+**Fix.**
+- **A struck flake is an edge** (`FLAKE_FOR_BUTCHERING`): the knapped tip
+  helps butchery at 1.4 against a knife's 1.8 and bare hands' 0.15, and dulls
+  in twelve jobs. Two stones and nothing else, all year round.
+- **The kit** (`Agent::what_my_kit_is_short_of`). For a grown person with
+  none, the humblest edge they know how to make, which is a flake. For one
+  with an edge and no lashing, a lashing for the next knife, kept in the pack
+  (`what_stays_in_the_pack`).
+- **The edge first in a spare turn**, ahead of the pottering. Carving wants a
+  knife anyway, so a person with no edge was not carving bowls. The cord comes
+  after the pottering, because the pottering is where bowls come from
+  (`knife_chain_tests`). A step towards the kit is held on to as an errand
+  (`hold_on_to_the_making`).
+- **A kit errand fetches what it is short of** (`how_i_would_come_by` in the
+  errand) rather than being given up. Only the kit: every making fetching
+  sent people round chains that end in a tool they have not got (a digging
+  stick is whittled with a knife in the hand). That was 68,694 turns of it in
+  eight months on one world, a fifth fewer births across twelve, and five dead
+  of thirst and hunger.
+- **A full pack does not refuse a making's stone** when there is something to
+  put down for it (`could_this_gather_come_to_anything_for`,
+  `Agent::room_i_could_make`). The gather puts down what is worth least,
+  never the making's own materials (`set_down_to_make_room`,
+  `what_my_makings_want`). A pack full of food is still full: asked for stone
+  regardless, it came back "Inventory full" 2,130 times in a year.
+- **Only what the storehouse has a name for is offered to it**
+  (`what_i_can_spare`). With flakes about, tinder (three to a scraped stick)
+  was the most of anything in a pack, and every turn spent putting it by came
+  back "Unknown item type: tinder", 791 times in a year on one world. The
+  food went unstored, and the breeding gate, which reads the store, stayed
+  shut.
+
+**Tried and taken out:**
+- **Striking a flake before tearing a joint by hand.** Hands get half of what
+  a cut does. On smooth seed 8 it took the first year's store from 57,968 to
+  385, as hungry people went for stone instead of eating.
+- **Errands for every making, and the better-tool fetch taken on as an
+  errand.** That is the 68,694 turns above.
+
+**Edges, smooth seed 2, adults out of twelve, every thirty days:**
+
+| day | 30 | 60 | 90 | 120 | 150 | 180 | 210 | 240 | 270 | 300 | 330 | 360 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| #331 | 5 | 8 | 7 | 6 | 4 | 1 | 0 | 0 | 0 | 0 | 0 | 0 |
+| #332 | 10 | 10 | 7 | 6 | 6 | 6 | 6 | 6 | 6 | 7 | 8 | 8 |
+
+Hafted stone knives are 4–5 to day 60 and gone by day 120. Flakes carry the
+rest of the year: with a flake the kit has its edge, and a knife is only an
+upgrade, made when a job asks for it and flax is to hand.
+
+**Measured, two years from 12 founders:**
+
+| | #331 | #332 |
+|---|---|---|
+| smooth 1–12: births, deaths | 82, 0 | 88, 3 (2 a mishap, 1 hunger) |
+| smooth: people at two years | 226 | 229 |
+| smooth: food in pits | 121,396 | 140,901 |
+| scattered 1–8: births, deaths | 59, 0 | 34, 0 |
+| scattered: people at two years | 155 | 130 |
+| scattered: food in pits | 57,251 | 57,547 |
+| butchery cuts with an edge | 0 | 34 of 60 |
+
+Births on scattered terrain were lower on every seed: 5 5 3 7 2 1 3 8
+against 8 6 8 11 5 5 8 8. On scattered seed 3 the first year's store was
+13,479 against 61,489. Packs at midsummer held 9.1 dried legumes a head
+against about 2 of grain and roots, pits ended the year at 1,294 against
+5,903, and the breeding gate (which reads the store) saw no mating attempt
+all year against 10,692. By the end of the second year the store was ahead
+(66,000 against 51,000).
+
+So food is being carried rather than put in the ground in the first year.
+**Why an edge in the kit does that is not found.** "A mishap" is the
+crafting injury (`making.rs`, `A_MISHAP`): it never takes the last point of
+health, but it is booked as the cause when it was the last harm before a
+death, and more knapping means more of it.
+
+**Tests (`kit_tests`):**
+- `a_struck_flake_is_an_edge`
+- `somebody_with_no_edge_knaps_one_first`
+- `somebody_with_an_edge_keeps_a_cord_for_the_next`
+- `a_full_pack_does_not_keep_the_makings_of_an_edge_out`
+- `a_making_short_of_stone_goes_for_stone`
+- `tinder_is_not_offered_to_the_store`
+- `a_pack_full_of_food_is_not_asked_for_stone`
+
+`the_undirected_working_comes_first_and_that_is_where_bowls_come_from` and
+`a_making_somebody_chose_is_held_on_to` now give their person an edge: both
+are about somebody who has one, and somebody without takes the edge on
+first.
+
+The seed-0 yearly dice count moved from 1,065,822 to 1,052,931. Seed 4242's
+120-turn count did not move.
+
+### 333. The edge after the pottering, not before it
+
+#332 cost scattered worlds their births: 34 against 59 over two years, lower
+on all eight seeds. The first year's store was the part that fell. On
+scattered seed 3 the larder at the year's end was 13,479 against 61,489, and
+the breeding gate, which reads the larder, saw no mating attempt all year.
+
+**Taken apart on that seed and year,** one piece of #332 off at a time
+(larder at day 360):
+
+| | larder |
+|---|---|
+| #332 | 13,479 |
+| without the flake as an edge | 52,906 |
+| without the edge first in a spare turn | 64,965 |
+| without the spare lashing | 65,229 |
+| without the kit errand | 49,291 |
+| without making room for a making | 78,397 |
+
+**What this table does and does not say.** Every one of them puts the larder
+back, so #332's 13,479 is one seed's year falling badly rather than any one
+piece doing it. What it does point at is the edge being taken on ahead of
+the pottering. Founders arrive with a knife, it wears through between the
+second and the fourth month, and from then on, through the months the winter
+store is laid in, the spare turn went on a flake instead of on the pottering.
+The pottering is where bowls come from (`knife_chain_tests`). So the edge now
+comes after it, with the spare cord: `Agent::what_my_kit_is_short_of` in the
+Utility branch, behind the pottering and the vessel.
+
+**Measured, two years from 12 founders:**
+
+| | #331 | #332 | #333 |
+|---|---|---|---|
+| smooth 1–12: births, deaths | 82, 0 | 88, 3 | 81, 3 |
+| smooth: food in pits | 121,396 | 140,901 | 146,796 |
+| scattered 1–8: births, deaths | 59, 0 | 34, 0 | 47, 2 |
+| scattered: food in pits | 57,251 | 57,547 | 71,293 |
+| butchery cuts with an edge | 0 | 34 of 60 | 36 of 63 |
+
+Births by scattered seed were 5 8 5 8 5 4 6 6 against #331's 8 6 8 11 5 5 8
+8. The five deaths across both terrains were 3 of hunger and 2 booked to a
+crafting mishap.
+
+**What is left against #331.** Births are 9% under it (128 against 141), and
+lower on six scattered seeds of eight, while there is about a fifth more food
+in the pits on both terrains. Births and the store have come apart, which the
+breeding gate reading the store does not explain on its own. Not found.
+
+**Test:** `kit_tests::somebody_with_no_edge_knaps_one_after_the_pottering`
+replaces `somebody_with_no_edge_knaps_one_first`. The kit still names the
+flake and the step towards it, and the pottering is taken ahead of it.
+
+The seed-0 yearly dice count moved from 1,052,931 to 1,135,991. Seed 4242's
+120-turn count did not move.
+
+### 334. The natural bindings, and a cord that cannot cut anybody
+
+"Is flax the only source of lashing?" It was. There were three ways to a
+lashing, all of them fibre that stands only from spring to the end of
+summer:
+- flax;
+- cotton;
+- flax left in water, which is retting, a discovery.
+
+A hide put where the flax goes makes cord (`THONG_FOR_CORD`), but finding that
+out recorded only "lashing", which everybody knows, and no `Making` turns a
+hide into cord. So nobody could plan with it.
+
+The development matrix's cordage path starts with "Stage 0: natural bindings -
+vines, strips of bark, rawhide thongs, twisted grasses, tendons/sinew". The
+stage table (`stage.rs`) listed all five and claimed the stage stood on flax
+and cotton alone.
+
+**Fix: three of the five, all obvious, after the fibres in the table:**
+- **Sinew** (`LASHING_FROM_SINEW`): one length makes two lashings. Every beast
+  taken apart gives a length of tendon for every three joints on it
+  (`JOINTS_TO_A_LENGTH_OF_SINEW`, in `the_beast_comes_down`).
+- **Strips of bark** (`LASHING_FROM_BARK`): one piece of wood makes two short
+  lashings. Wood stands all year.
+- **Rawhide thong** (`LASHING_FROM_RAWHIDE`): one hide makes three. It comes
+  last, since a hide might have been a coat.
+
+Vines and twisted grasses are not here. Nothing on the map is a vine, and grass
+is grazing, not a thing anybody gathers. Cordage's Stage 0 now says it stands
+in part, and why.
+
+**And the injury roll.** The first cut of this cost nine lives. Every making
+rolled for a cut or a burn alike, a quarter of a beginner's attempts at
+anything. Counted on smooth seed 2 over a year, once a lashing could be had
+from wood all year:
+
+| making | times | hurt |
+|---|---|---|
+| lashing from bark | 2,751 | 702 |
+| lashing from flax | 709 | 189 |
+| wheel | 503 | 157 |
+| knapped tip | 449 | 120 |
+
+Over twenty settlements, makings went from about 50,000 to 128,000, and nine
+deaths were booked to "a mishap". Twisting a cord, peeling bark and splitting
+a tendon have nothing in them to cut anybody. A making can now hurt only when
+it works stone, flint or metal, wants a tool in the hand, or is done over a
+fire (`could_this_making_hurt`). Tailoring keeps its own roll; awls and
+needles prick. Bark gives two lengths to a branch, not one.
+
+**Measured, two years from 12 founders:**
+
+| | #331 | #333 | #334 first cut | #334 |
+|---|---|---|---|---|
+| smooth 1–12: births, deaths | 82, 0 | 81, 3 | 71, 9 | 83, 7 |
+| smooth: food in pits | 121,396 | 146,796 | 190,926 | 151,965 |
+| scattered 1–8: births, deaths | 59, 0 | 47, 2 | 50, 2 | 63, 1 |
+| scattered: food in pits | 57,251 | 71,293 | 79,376 | 92,923 |
+
+Births by seed:
+- smooth: 6 8 7 10 8 2 2 9 7 10 6 8;
+- scattered: 9 4 5 11 9 10 7 8, against #331's 8 6 8 11 5 5 8 8.
+
+The eight deaths were 5 booked to a mishap (knapping and the like, which can
+still cut), 2 of thirst and 1 of hunger. Edges did 83 of 174 butchery cuts.
+
+On smooth seed 2, with the first cut, edges came back in the winter. From day
+300 people held three to six lashings with no flax standing anywhere, and by
+the year's end carried three or four stone knives and five or six handaxes.
+Before, they carried none. Nobody held any edge from day 210 to day 270. The
+spare cord and the edge come after the pottering (#333), and the summer has
+little room for either.
+
+**What is left.** The deaths: eight against #331's none, five of them still
+booked to a mishap. Making overall stays at about twice what it was before
+lashing could be had all year (115,853 makings). The wheels are a fair share
+of that, and whether anybody needs them is a question of its own.
+
+**Tests:**
+- `kit_tests::a_lashing_can_be_had_from_bark_when_there_is_no_flax`
+- `kit_tests::sinew_is_a_lashing`
+- `kit_tests::only_a_making_with_something_sharp_or_hot_in_it_can_hurt`
+- `carcass_tests::the_rest_of_a_kill_is_left_on_the_bone` now also asks for
+  the sinew.
+- `making_tests::there_is_more_than_one_way_to_make_a_lashing` now counts six
+  ways and asks that the three natural bindings are obvious.
+- `making_tests::nothing_in_the_chain_asks_for_a_thing_that_cannot_be_had`
+  knows sinew comes off a kill.
+- The seed-0 yearly dice count moved from 1,135,991 to 1,018,105, and seed
+  4242's 120-turn count from 7,639 to 7,743.
+
+### 335. A hand at each thing, the wheel down the path, and meat nobody had to kill
+
+Three asks in one:
+
+> "Crafting is a skill which should improve over time with experience. The
+> result should be lesser chance of injury, faster Crafting, and higher
+> quality output. Crafting should not be a general skill, but based on the
+> object being crafted. Why are agents crafting wheels? ... Why are few agents
+> going for free meat? ... Preparation should drive the utilization of free
+> meat for at least some agents."
+
+**Practice at each thing (`Skills::made`).** Every making, or spoiled try,
+counts one towards the hand at that thing. The level comes of the count:
+`-10 + 20(1 - e^(-n/30))`, so the first ten teach the most, thirty is about
+two-thirds of the climb, and a hundred is mastery. The trade is kept as what
+carries over, and only as a floor three levels under it
+(`WHAT_A_NEW_THING_COSTS_THE_TRADE`). A hundred lashings make a man good at
+lashings and only as good at a bow as his trade takes him. The hand at the
+thing (`level_at_making`) now decides:
+- the odds of a cut and of spoiling the makings (the skill category's
+  chances, as before, but at the thing's level);
+- the quality and life of what comes out (`a_tool_fresh_from_these_hands_out_of`);
+- how long it holds the maker. An ordinary hand does eight effort of making
+  in a period (`WHAT_A_PERIOD_OF_MAKING_COMES_TO`), and periods are effort / 8
+  / hand, rounded, at least one. `ActionResult::took_periods` carries it to
+  `busy_until`. A beginner at a handaxe takes two periods, a master one;
+- the energy: effort / sqrt(hand). A spoiled try now costs its energy too.
+
+Founders arrive having made every obvious thing as often as it takes to stand
+at their trade's level, so a founder's spear is what it always was.
+
+**The wheel.** It was a discovery with nothing in front of it: anybody
+holding two wood, a lashing and a handaxe could have the thought. And once
+somebody had it, `what_i_would_try_out` made wheels to see them made until four
+were spare, and remade whatever was set down to make room. #334 counted 503 in
+one seed-year. Two fixes:
+- `what_has_to_be_known_first`: the wheel waits on fired pottery and a metal
+  axe, the handcart on the wheel. `Agent::what_i_could_find_out` is the list
+  the noticing, likeness and looking paths now walk.
+- Curiosity makes a new thing three times and stops
+  (`MADE_OFTEN_ENOUGH_TO_HAVE_SEEN_IT`). Measured with the gate alone, the
+  same loop moved to the bow: 606 bows over four smooth settlements, 217 of
+  them with a cut. With both, 222.
+
+On scattered maps the gate is met inside the first year. Ore lies near camp, a
+metal axe is found by swapping a part (`TrySwapping`), and clay gives pottery.
+So wheels are still made there: 17, 17 and 14 in three of eight settlements
+over two years, against 500 to 1,000 per settlement with the gate and no limit
+on curiosity. The wheel is where it belongs on the path; the metal is what
+comes too early on those maps.
+
+**Meat lying in the wood.** A kill was gone back to only for a meal, and
+weighed as one against a berry bush. Before this, over twenty settlements and
+two years, 42 kills left 381 joints lying, 196 of them rotted, and 12 people
+ever cut at somebody else's kill. Now Preparedness goes for it in any season
+(`a_kill_worth_fetching`, above salting and drying in `putting_food_by`):
+- from age 12, with room for a joint in the pack;
+- only a kill reachable with a day of it left after the walk;
+- priced as a patch is (`what_this_patch_is_worth`).
+
+It gathers where it lies within reach and walks there where it does not. A
+trip for "meat" asks for an edge, as a trip for food at a carcass does.
+
+**Measured, two years from 12 founders:**
+
+| | #334 | gate + practice + kills | and curiosity limited |
+|---|---|---|---|
+| smooth 1–12: births, deaths | 83, 7 | 84, 2 | 84, 4 |
+| smooth: food in pits | 151,965 | 164,487 | 128,796 |
+| scattered 1–8: births, deaths | 63, 1 | 50, 2 | 69, 0 |
+| scattered: food in pits | 92,923 | 89,842 | 109,111 |
+| makings | 115,853 | 74,806 | 62,013 |
+| deaths by a mishap | 5 | 0 | 0 |
+| kills, joints left, rotted | 42, 381, 196 | 38, 332, 33 | 35, 318, 64 |
+| joints cut by others, by how many | 88, 12 | 143, 28 | 120, 19 |
+
+Births by seed:
+- smooth: 8 2 9 10 7 7 8 4 5 8 7 9;
+- scattered: 8 11 10 8 5 10 6 11.
+
+The four deaths are all thirst, all in smooth seed 8. Of 54,148 makings, 4,012
+drew blood (7.4%): knapped tips most, then digging sticks, handaxes and bows.
+Bows are the one thing beginners are often slow at (304 of 747 took two
+periods); everything else in the kit is made in one.
+
+The seed-0 yearly dice count moved from 1,018,105 to 984,596, and seed 4242's
+120-turn count from 7,743 to 7,934.
+
+### 336. Metal slowed: no reading it in a cold stone, and twenty evenings at the fire
+
+"Slow the metal chain down on scattered maps." Every one of eight scattered
+settlements ran metal out of ore in its first year, some sixty lumps of it,
+and two of them went on to metal axes and so to the wheel (#335). Smooth
+maps have no ore near camp and were never affected.
+
+**What made it fast.** Looking closely at a thing in the pack
+(`Action::Examine`) told a curious person what it went into up to half the
+time, and ore went into the shiny lump. But "rock + fire = ?" is, in the
+lump's own docstring, "nothing an agent can work out by looking at it". A man
+turned a lump of ore over in his hands and knew it would run in a fire.
+
+**What made the first fixes come out wrong, in turn:**
+- **Pottery first** (`what_has_to_be_known_first`: the lump waits on
+  stoneware) holds nothing back. Everybody knows pottery inside a month,
+  learned from a lump that hardens in the embers.
+- **A cooking fire a tenth as hot** stopped metal altogether: none in eight
+  settlements over five years. Ore is in a pack at a fire about seventeen
+  half-hours a year in a settlement, and a tenth of that is a discovery a
+  century.
+- **A practised potter** (thirty firings) would also have stopped it. Pots
+  are fired nought to four times a settlement in three years.
+- **Ore watched by the half hour** let one keen ore-carrier pass any
+  threshold in weeks. One man had a hundred half-hours in his first month,
+  another thirteen hundred in two years, so metal still came on day thirty
+  and day sixty. Many of those half-hours were asleep: noticing never asked
+  whether anybody was awake.
+- **Ore went out of mind.** Nobody keeps in mind where something lies that
+  makes nothing they know, so every ore site was forgotten within a month.
+  Whatever was going to come of a bright stone came in the first month or
+  never.
+
+**The chain now:**
+- Looking at a thing does not reveal anything made over a fire (`examining`,
+  `what_i_would_look_at`).
+- Nobody notices anything asleep (`somebody_notices_something`).
+- An evening at a fire with two lumps of ore in the pack, awake and curious,
+  counts once a day as ore watched (`ORE_WATCHED_IN_A_FIRE`). The twentieth
+  such evening shows it run (`TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS`,
+  `how_practised_first`).
+- A pot fired with ore beside it shows it one time in four, for somebody far
+  enough along (`what_firing_this_might_show`).
+- Curiosity fetches ore only from somebody who knows pottery.
+- Somebody far enough along to wonder about a discovery keeps the nearest
+  few places of its raw makings in mind, as for the tools they know.
+- A working now counts towards the hand at that one thing, as a making does
+  (#335).
+
+**Measured on scattered ground, 12 founders.** Over four years the keenest
+ore-watcher in each settlement had between six and twenty-one evenings, half
+of them in the first two months. With twenty to see it:
+
+| seed | evenings watched | first metal |
+|---|---|---|
+| 4 | 21 | day 600 |
+| 1 | 21 | day 1,020 |
+| 2 | 18 by day 1,080 | none by day 1,080 |
+| 5 | 17 by day 1,440 | none in four years |
+| 3, 7 | 10 or fewer | none |
+
+Before this, all eight ran metal inside the first year.
+
+The seed-0 yearly dice count moved from 984,596 to 939,765, and seed 4242's
+120-turn count from 7,934 to 7,954.
+
+Over two years from 12 founders, against #335 (smooth 1–12, scattered 1–8):
+
+| | #335 | #336 |
+|---|---|---|
+| smooth: births, deaths | 84, 4 | 89, 1 |
+| scattered: births, deaths | 69, 0 | 66, 0 |
+| metal made (lumps, blades and the rest) | in all eight scattered | 6, in one |
+| wheels made | 48 | 0 |
+| makings | 62,013 | 49,225 |
+
+Births by seed:
+- smooth: 11 6 9 7 6 4 9 7 5 10 7 8;
+- scattered: 11 8 8 8 9 7 6 9.
+
+The one death is of thirst.

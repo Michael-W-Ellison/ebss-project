@@ -37,7 +37,11 @@ impl Simulation {
             .with_energy_cost(1.0);
         }
 
-        let could_be_for: Vec<&'static str> = making::everything_to_find_out()
+        let could_be_for: Vec<&'static str> = self.population.agents[agent_index]
+            .what_i_could_find_out()
+            // What a fire does to a thing is not in the thing: "rock + fire =
+            // ?" is "nothing an agent can work out by looking at it" (#336).
+            .filter(|step| !step.over_a_fire)
             .filter(|step| step.needs.iter().any(|(needs, _)| needs == what))
             .map(|step| step.makes)
             .chain(
@@ -164,6 +168,9 @@ impl Simulation {
 
             agent.inventory.add_item(made);
             agent.skills.practise(working.hands, 12, turn_now);
+            // And one more of these done, which is what a practised hand at
+            // this one thing comes of (#335, #336).
+            agent.skills.made_one(working.makes);
 
             // Having done it once he can do it on purpose. For the
             // obvious ones this is a formality; for the rest it is the
@@ -171,6 +178,17 @@ impl Simulation {
             // hand and a fire that will not light finds out what
             // shavings are for by making some.
             agent.found_out_how_to(working.makes);
+
+            // And a pot fire with a bright stone beside it may show more than
+            // a pot (`what_firing_this_might_show`).
+            if let Some((beside, how_many, shows, odds)) = making::what_firing_this_might_show(working.makes) {
+                let could_see_it = agent.what_i_could_find_out().any(|step| step.makes == shows)
+                    && !agent.knows_how_to_make(shows);
+                if could_see_it && agent.how_many_i_have(beside) >= how_many && rng.gen_bool(odds) {
+                    agent.found_out_how_to(shows);
+                    debug!("Agent {} saw a {beside} run in the pot fire ({shows})", agent.id);
+                }
+            }
         }
 
         // And the edge that did it is the worse for it

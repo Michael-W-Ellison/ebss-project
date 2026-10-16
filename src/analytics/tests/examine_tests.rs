@@ -135,20 +135,51 @@ fn you_cannot_look_at_what_you_are_not_holding() {
     assert!(!result.success, "it has to be in your hand");
 }
 
-/// A bright stone is a thing with something in it, and looking at it long
-/// enough tells you.
+/// A lump of bright metal is a thing with something in it, and looking at it
+/// long enough tells you it will take an edge.
 #[test]
 fn looking_long_enough_at_a_strange_thing_tells_you_what_it_is_for() {
-    // What iron goes into that nobody arrives knowing
-    let waiting = making::everything_to_find_out()
-        .find(|step| step.needs.iter().any(|(needs, _)| *needs == "iron"))
-        .expect("a bright stone is a step towards something");
-
     let mut found_out = 0;
 
     for _ in 0..400 {
         let mut simulation = a_person();
+        give(&mut simulation, "shinylump", 4);
+
+        simulation.execute_action(
+            &Action::Examine {
+                what: "shinylump".to_string(),
+            },
+            0,
+        );
+
+        if simulation.population.agents[0]
+            .what_i_found_out()
+            .contains("metalblade")
+        {
+            found_out += 1;
+        }
+    }
+
+    assert!(
+        found_out > 0,
+        "four hundred good long looks at a lump of metal should tell somebody something"
+    );
+    assert!(
+        found_out < 200,
+        "and it should not be a thing that works half the time: {found_out} of 400"
+    );
+}
+
+/// But what a fire does to a stone is not in the stone. "Rock + fire = ?" is
+/// nothing anybody works out by looking (#336), and looking at ore was most
+/// of how a settlement on ore-bearing ground came to metal in its first year.
+#[test]
+fn looking_at_ore_in_the_cold_does_not_tell_you_it_will_run() {
+    for _ in 0..400 {
+        let mut simulation = a_person();
         give(&mut simulation, "iron", 4);
+        // Even somebody who has fired a pot
+        simulation.population.agents[0].found_out_how_to("stoneware");
 
         simulation.execute_action(
             &Action::Examine {
@@ -157,22 +188,13 @@ fn looking_long_enough_at_a_strange_thing_tells_you_what_it_is_for() {
             0,
         );
 
-        if simulation.population.agents[0]
-            .what_i_found_out()
-            .contains(waiting.makes)
-        {
-            found_out += 1;
-        }
+        assert!(
+            !simulation.population.agents[0]
+                .what_i_found_out()
+                .contains("shinylump"),
+            "looking at a stone does not show what a fire does to it"
+        );
     }
-
-    assert!(
-        found_out > 0,
-        "four hundred good long looks at a bright stone should tell somebody something"
-    );
-    assert!(
-        found_out < 200,
-        "and it should not be a thing that works half the time: {found_out} of 400"
-    );
 }
 
 /// Having seen it, he can do it on purpose.
@@ -220,26 +242,26 @@ fn a_strange_thing_in_the_pack_is_what_gets_looked_at() {
         "a handful of flax and a couple of cores raise no questions"
     );
 
-    give(&mut simulation, "iron", 2);
+    give(&mut simulation, "shinylump", 2);
 
     // Whether he gets round to it on a given turn is a roll, so this asks
     // whether it is a thing he would do at all
     let would = (0..60)
         .filter_map(|_| simulation.population.agents[0].what_i_would_look_at())
-        .any(|what| what == "iron");
+        .any(|what| what == "shinylump");
 
-    assert!(would, "a bright stone in the pack is a question");
+    assert!(would, "a lump of bright metal in the pack is a question");
 }
 
 /// And stops once he knows the answer.
 #[test]
 fn nobody_keeps_looking_at_a_thing_they_have_worked_out() {
     let mut simulation = a_person();
-    give(&mut simulation, "iron", 2);
+    give(&mut simulation, "shinylump", 2);
 
-    // Everything a bright stone leads to, already known
+    // Everything a lump of metal leads to, already known
     let answers: Vec<&'static str> = making::everything_to_find_out()
-        .filter(|step| step.needs.iter().any(|(needs, _)| *needs == "iron"))
+        .filter(|step| step.needs.iter().any(|(needs, _)| *needs == "shinylump"))
         .map(|step| step.makes)
         .collect();
 
@@ -249,10 +271,10 @@ fn nobody_keeps_looking_at_a_thing_they_have_worked_out() {
 
     let would = (0..60)
         .filter_map(|_| simulation.population.agents[0].what_i_would_look_at())
-        .any(|what| what == "iron");
+        .any(|what| what == "shinylump");
 
     assert!(
         !would,
-        "a man who knows what a bright stone is for does not stand looking at one"
+        "a man who knows what a lump of metal is for does not stand looking at one"
     );
 }

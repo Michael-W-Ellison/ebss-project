@@ -124,11 +124,21 @@ impl Simulation {
                     && species.where_it_sits() != crate::environment::TrophicRole::PrimaryConsumer;
                 Some((animal.position, worth, animal.id, hunts, animal.species_id.clone()))
             })
+            // Only what hunts is a threat to another beast. Every animal
+            // looked through every other for the few that hunt, which with
+            // three thousand head on the big map was nine million looks a
+            // turn. Dropping the rest here keeps the hunters in the order
+            // they were, so the worst is chosen exactly as it was. See
+            // ISSUES_FOUND #306.
+            .filter(|(_, _, _, hunts, _)| *hunts)
             .collect();
 
-        let mut made_up_their_minds: Vec<(uuid::Uuid, AnimalState)> = Vec::new();
+        // Where in the list each one stands, kept with what it decided, so the
+        // deciding is applied without looking anybody up. See ISSUES_FOUND
+        // #306.
+        let mut made_up_their_minds: Vec<(usize, AnimalState)> = Vec::new();
 
-        for animal in self.world.animals.get_all().iter() {
+        for (at, animal) in self.world.animals.get_all().iter().enumerate() {
             if !animal.is_alive() || !animal.is_wild() {
                 continue;
             }
@@ -171,7 +181,7 @@ impl Simulation {
             let stands = nerve > 0.0 && mine * nerve >= coming * Self::WHAT_IT_TAKES_TO_TURN_AND_FACE;
 
             made_up_their_minds.push((
-                animal.id,
+                at,
                 if stands {
                     AnimalState::Attacking { target_id: who }
                 } else {
@@ -182,14 +192,8 @@ impl Simulation {
             ));
         }
 
-        for (which, made_up) in made_up_their_minds {
-            if let Some(animal) = self
-                .world
-                .animals
-                .get_all_mut()
-                .iter_mut()
-                .find(|animal| animal.id == which)
-            {
+        for (at, made_up) in made_up_their_minds {
+            if let Some(animal) = self.world.animals.get_all_mut().get_mut(at) {
                 animal.state = made_up;
                 animal.state_timer = Self::HOW_LONG_A_BEAST_KEEPS_ITS_NERVE;
             }
@@ -207,9 +211,9 @@ impl Simulation {
         let width = self.world.grid.width as i32;
         let height = self.world.grid.height as i32;
 
-        let mut bolted: Vec<(uuid::Uuid, (i32, i32))> = Vec::new();
+        let mut bolted: Vec<(usize, (i32, i32))> = Vec::new();
 
-        for animal in self.world.animals.get_all().iter() {
+        for (at, animal) in self.world.animals.get_all().iter().enumerate() {
             let AnimalState::Fleeing { from_position } = animal.state else {
                 continue;
             };
@@ -234,18 +238,12 @@ impl Simulation {
             );
 
             if self.is_passable_tile(landed.0, landed.1) {
-                bolted.push((animal.id, landed));
+                bolted.push((at, landed));
             }
         }
 
-        for (which, to) in bolted {
-            if let Some(animal) = self
-                .world
-                .animals
-                .get_all_mut()
-                .iter_mut()
-                .find(|animal| animal.id == which)
-            {
+        for (at, to) in bolted {
+            if let Some(animal) = self.world.animals.get_all_mut().get_mut(at) {
                 animal.position = to;
                 animal.use_stamina(Self::WHAT_BOLTING_COSTS_A_BEAST);
             }
@@ -254,6 +252,29 @@ impl Simulation {
 
     /// What a beast is worth in a fight, on the same scale everything else is
     /// reckoned on: how sound it is, and what it can do with that.
+    /// Whether a beast of this kind would ever strike a person of this age.
+    ///
+    /// It hunts, its blow does something, and it is not too small to take
+    /// them. This is the whole of what makes a beast dangerous here: nothing
+    /// else strikes anybody of its own accord. It is asked both where the
+    /// beasts strike and where people size them up, so that nobody is
+    /// frightened of, or squares up to, a thing that would never touch them
+    /// (#327).
+    pub(in crate::analytics) fn could_it_take(species: &crate::environment::fauna::AnimalSpecies, years_old: u32) -> bool {
+        Self::a_hunter(species)
+            && !(Self::too_small_for_the_grown(species) && years_old >= Self::TOO_BIG_FOR_A_SMALL_HUNTER)
+    }
+
+    /// It hunts, and its blow does something.
+    pub(in crate::analytics) fn a_hunter(species: &crate::environment::fauna::AnimalSpecies) -> bool {
+        !species.prey_species.is_empty() && species.attack_damage > 0.0
+    }
+
+    /// Several times smaller than a grown person.
+    pub(in crate::analytics) fn too_small_for_the_grown(species: &crate::environment::fauna::AnimalSpecies) -> bool {
+        species.mass_kg * Self::HOW_MUCH_BIGGER_A_MAN_CAN_BE < Self::WHAT_A_GROWN_PERSON_WEIGHS
+    }
+
     pub(in crate::analytics) fn what_a_beast_is_worth_in_a_fight(health: f32, full: f32, damage: f32) -> f32 {
         let condition = (health / full.max(1.0)).clamp(0.0, 1.0);
         condition * (damage / 20.0).clamp(0.1, 2.0)
@@ -348,10 +369,7 @@ impl Simulation {
             // weight. An eagle does not take a man; it struck six times in a
             // year on four seeds once people walked the country (ISSUES_FOUND
             // #274).
-            if species.mass_kg * Self::HOW_MUCH_BIGGER_A_MAN_CAN_BE < Self::WHAT_A_GROWN_PERSON_WEIGHS
-                && self.population.agents[*agent_index].state.years_old()
-                    >= Self::TOO_BIG_FOR_A_SMALL_HUNTER
-            {
+            if !Self::could_it_take(species, self.population.agents[*agent_index].state.years_old()) {
                 continue;
             }
 
@@ -373,6 +391,10 @@ impl Simulation {
         }
 
         for (animal_id, what_it_was, agent_index, damage, fed) in strikes {
+            // And a blow from one makes a stranger of the kind again
+            if let Some(species) = self.world.animals.get_species(&what_it_was) {
+                self.population.agents[agent_index].familiar_with.remove(&species.name);
+            }
             // Standing there while something bites you is a fight, and how it
             // goes is what the agent takes away from it. This is where the
             // record mostly comes from: agents seldom set upon one another,
@@ -413,6 +435,13 @@ impl Simulation {
                 }
 
                 agent.take_damage(landed);
+
+                // "Agents should not be peacefully sleeping while being
+                // attacked." Whatever they were about, sleep included, is
+                // broken off, and they decide again now.
+                agent.busy_until = 0;
+                agent.state.next_decision_at = agent.state.next_decision_at.min(current_turn);
+
                 agent.emotions.record_attack(
                     crate::agents::EmotionSource::Creature(what_it_was.clone()),
                     current_turn,

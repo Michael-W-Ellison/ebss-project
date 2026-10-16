@@ -342,6 +342,36 @@ fn the_travois_comes_before_the_cart() {
     assert!(TRAVOIS.effort < HANDCART.effort);
 }
 
+/// "Why are agents crafting wheels? That sort of technology should be far down
+/// the development path." Wood, a lashing and a handaxe are in every pack, so
+/// the thought cannot wait on them; it waits on the potter's wheel and metal.
+#[test]
+fn nobody_thinks_of_a_wheel_before_pottery_and_metal() {
+    use crate::agents::{AgentConfig, Population};
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let agent = &mut population.agents[0];
+
+    let could_find = |agent: &crate::agents::Agent, what: &str| {
+        agent.what_i_could_find_out().any(|step| step.makes == what)
+    };
+
+    assert!(could_find(agent, "bow"), "a bow waits on nothing but the thought");
+    assert!(!could_find(agent, "wheel"), "a stone-age people does not think of a wheel");
+    assert!(!could_find(agent, "handcart"));
+
+    agent.found_out_how_to("stoneware");
+    assert!(!could_find(agent, "wheel"), "pottery alone is not enough");
+
+    agent.found_out_how_to("metalaxe");
+    assert!(could_find(agent, "wheel"), "with pottery and a metal axe it is");
+    assert!(!could_find(agent, "handcart"), "and the cart waits on the wheel");
+
+    agent.found_out_how_to("wheel");
+    assert!(could_find(agent, "handcart"));
+}
+
 /// A pair of hands holds very little, and everything past that wants something
 /// to put it in.
 ///

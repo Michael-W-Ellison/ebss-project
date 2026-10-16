@@ -123,6 +123,80 @@ pub const LASHING_FROM_COTTON: Making = Making {
     wants_in_hand: None,
 };
 
+/// Whether a making can hurt the hands that do it.
+///
+/// Striking stone can - a flake flies, an edge slips - and so can anything
+/// worked with an edge in the hand or over a fire. Twisting a cord, peeling
+/// bark off a branch, splitting a tendon and tying a lashing cannot: there is
+/// nothing in them to cut anybody. The injury roll was made for every making
+/// alike, a quarter of a beginner's attempts at anything, so when a lashing
+/// could be had from wood all year a settlement stripped bark 2,751 times in
+/// a year, was hurt 702 times doing it, and lost nine people across twenty
+/// worlds to wounds booked as "a mishap" (#334).
+pub fn could_this_making_hurt(step: &Making) -> bool {
+    step.over_a_fire
+        || step.wants_in_hand.is_some()
+        || step.needs.iter().any(|(what, _)| {
+            matches!(*what, "stone" | "flint" | "knappedtip" | "metalblade" | "iron" | "shinylump")
+        })
+}
+
+/// The natural bindings: what a people ties things together with before
+/// anybody has twisted a fibre. "Stage 0: natural bindings - vines, strips of
+/// bark, rawhide thongs, twisted grasses, tendons and sinew."
+///
+/// Lashing was flax or cotton and nothing else, and both stand only from the
+/// spring to the end of the summer. From the seventh month to the spring
+/// nobody anywhere could make a length of cord, so a knife that wore out in
+/// the autumn stayed unmade until the flax came up, while the knapped tips
+/// for it piled up in packs (#332, #334). Weak, short and quick to rot, all of
+/// them, which is why flax was worth working out; but there all year.
+///
+/// Vines and twisted grasses are not here: nothing on the map is a vine, and
+/// grass is grazing, not a thing anybody gathers.
+///
+/// Tendon and sinew, dried and split: the strongest of the natural bindings,
+/// and what comes off every beast that is taken apart
+/// (`Simulation::the_beast_comes_down`).
+pub const LASHING_FROM_SINEW: Making = Making {
+    makes: "lashing",
+    how_many: 2,
+    needs: &[("sinew", 1)],
+    hands: SkillType::Crafting,
+    effort: 3.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// Strips of bark peeled off a green branch: two short lengths off a branch,
+/// and they rot, but there is wood standing in every month of the year.
+pub const LASHING_FROM_BARK: Making = Making {
+    makes: "lashing",
+    how_many: 2,
+    needs: &[("wood", 1)],
+    hands: SkillType::Crafting,
+    effort: 5.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
+/// A hide cut round and round into a thong: a long length and a strong one,
+/// at the price of a skin that might have been a coat - so it comes last of
+/// the ways to a lashing, and `THONG_FOR_CORD` is what finding it out used to
+/// teach.
+pub const LASHING_FROM_RAWHIDE: Making = Making {
+    makes: "lashing",
+    how_many: 3,
+    needs: &[("hides", 1)],
+    hands: SkillType::Crafting,
+    effort: 4.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
 /// A flake struck off a core: the edge that every stone tool is built round.
 pub const KNAPPED_TIP: Making = Making {
     makes: "knappedtip",
@@ -1191,6 +1265,9 @@ pub const EVERY_STEP: &[Making] = &[
     LASHING,
     LASHING_FROM_COTTON,
     LASHING_FROM_RETTED,
+    LASHING_FROM_SINEW,
+    LASHING_FROM_BARK,
+    LASHING_FROM_RAWHIDE,
     KNAPPED_TIP,
     KNAPPED_TIP_FROM_FLINT,
     DIGGING_STICK,
@@ -1217,6 +1294,76 @@ pub const EVERY_STEP: &[Making] = &[
 /// The steps nobody arrives knowing.
 pub fn everything_to_find_out() -> impl Iterator<Item = &'static Making> {
     EVERY_STEP.iter().filter(|step| !step.obvious)
+}
+
+/// What somebody has to know already before a discovery can occur to them.
+///
+/// "Why are agents crafting wheels? That sort of technology should be far down
+/// the development path." It was one rung up from the travois: anybody holding
+/// two pieces of wood, a lashing and a handaxe could have the thought, and
+/// those are the four commonest things in a stone-age pack. Measured over two
+/// years the wheel was the busiest making in the settlement.
+///
+/// A disc that turns true on an axle came long after the potter's wheel, and
+/// was cut with metal: the first carts are copper-age. So the wheel waits on
+/// fired pottery and a metal axe, and the handcart waits on the wheel. Nothing
+/// else in the chain is held back this way; its makings already do that.
+pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
+    match what {
+        "wheel" => &["stoneware", "metalaxe"],
+        "handcart" => &["wheel"],
+        // Ore does not run in a cooking fire. The first copper ran in a
+        // potter's kiln, so nobody has the thought before they have fired a
+        // pot (#336).
+        "shinylump" => &["stoneware"],
+        _ => &[],
+    }
+}
+
+/// How many times somebody has to have done a thing before a discovery can
+/// occur to them, beyond merely knowing how (`what_has_to_be_known_first`).
+///
+/// A man does not see metal run the first time a bright stone sits in his
+/// fire; he sees a hot stone. One settlement ran metal on day thirty because
+/// somebody carried ore to the fire in the first month and the roll came up.
+/// So the thought waits on somebody who has sat a good many evenings at a fire
+/// with ore in the pack (`ORE_WATCHED_IN_A_FIRE`, counted by
+/// `somebody_notices_something`) before it can come to them at all (#336).
+pub fn how_practised_first(what: &str) -> &'static [(&'static str, u32)] {
+    match what {
+        "shinylump" => &[(ORE_WATCHED_IN_A_FIRE, TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS)],
+        _ => &[],
+    }
+}
+
+/// What the practice record calls an evening spent at a fire with ore in the
+/// pack, counted once a day however long it ran.
+pub const ORE_WATCHED_IN_A_FIRE: &str = "ore watched in a fire";
+
+/// And how many of those evenings it takes to see it: the twentieth shows
+/// it. Ore comes to a fire seldom and in bursts - over four years on
+/// eight settlements on ore-bearing ground, the keenest person in each sat at
+/// a fire with it on between six and twenty-one evenings, half of them in the
+/// first two months - so twenty is the second or third year for a settlement
+/// with somebody who keeps a bright stone about, and later than four for the
+/// rest. At fifteen one settlement had it by day sixty; counted by the half
+/// hour, by day thirty.
+pub const TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS: u32 = 20;
+
+/// What else a firing of this might show somebody, if they have the stuff for
+/// it in their pack: what has to be beside it, how much, what it shows, and
+/// the odds of seeing it on one firing.
+///
+/// A pot fire is the hottest fire a stone-age people builds, and the first
+/// metal anybody ran came out of one: a bright stone beside the pots, and a
+/// bead of something that was not stone in the ash afterwards. It is the
+/// second road to metal beside a curious man at a cooking fire, and both want
+/// the ore in the pack, which is what makes either slow (#336).
+pub fn what_firing_this_might_show(makes: &str) -> Option<(&'static str, u32, &'static str, f64)> {
+    match makes {
+        "stoneware" => Some(("iron", 2, "shinylump", 0.25)),
+        _ => None,
+    }
 }
 
 /// Whether a named thing is already part of something everybody understands.
@@ -1720,6 +1867,25 @@ pub const SPEAR_FOR_FISHING: Tool = Tool {
     how_long_it_lasts: 25.0,
 };
 
+/// A flake struck off a core is an edge before it is anything else.
+///
+/// Most of what was ever butchered in the stone age was butchered with an
+/// unretouched flake: struck, used, and dropped when it dulled. It wants two
+/// stones and nothing else, where a hafted knife wants a lashing too - and
+/// lashing is flax, and flax stands only from spring to the end of summer. So
+/// a people whose knives wore through in the autumn went without any edge at
+/// all until the spring, and kept fifteen in a hundred of every carcass, with
+/// the flakes for the knives they could not bind piling up in their packs
+/// (#332).
+///
+/// Below a knife, since there is nothing to hold it by, and quick to dull.
+pub const FLAKE_FOR_BUTCHERING: Tool = Tool {
+    called: "knappedtip",
+    helps: SkillType::Leatherworking,
+    how_much_better: 1.4,
+    how_long_it_lasts: 12.0,
+};
+
 /// A knife is for taking a carcass apart.
 pub const KNIFE_FOR_BUTCHERING: Tool = Tool {
     called: "stoneknife",
@@ -1818,6 +1984,7 @@ pub const EVERY_TOOL: &[Tool] = &[
     SHOVEL_FOR_BUILDING,
     SPEAR_FOR_HUNTING,
     SPEAR_FOR_FISHING,
+    FLAKE_FOR_BUTCHERING,
     KNIFE_FOR_BUTCHERING,
     KNIFE_FOR_CRAFTING,
     METAL_KNIFE_FOR_BUTCHERING,

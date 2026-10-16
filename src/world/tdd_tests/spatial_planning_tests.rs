@@ -63,7 +63,7 @@ fn test_cluster_related_production_buildings() {
 
 #[test]
 fn test_minimize_travel_time_from_agent_position() {
-    let world = World::new(WorldConfig::default());
+    let world = World::new(WorldConfig::default()).all_open_grass();
     let planner = SpatialPlanner::new(&world);
 
     let agent_pos = (15, 15, 0);

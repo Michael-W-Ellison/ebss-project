@@ -207,7 +207,7 @@ impl Simulation {
         budget: usize,
     ) -> Option<Vec<(i32, i32)>> {
         use std::cmp::Reverse;
-        use std::collections::{BTreeMap, BinaryHeap};
+        use std::collections::BinaryHeap;
 
         if from == target {
             return Some(Vec::new());
@@ -218,24 +218,59 @@ impl Simulation {
         let still_to_go =
             |at: (i32, i32)| ((at.0 - target.0).abs() + (at.1 - target.1).abs()) as u32;
 
+        // **The bookkeeping in flat tables, kept between searches.** It was
+        // two ordered maps built afresh for every search, and in smooth
+        // country, where a lake is a kilometre across and a walk round it
+        // looks at a hundred thousand cells, that was nearly all of what a
+        // year cost: one fresh world took an hour for its first thirty days
+        // (#315). The tables are the size of the map and are cleared by
+        // stamping, not by writing them out; the order things are looked at
+        // in is exactly what it was, so every route is the same route.
+        let mut scratch = self.route_scratch.borrow_mut();
+        scratch.ready_for(wide as usize * high as usize);
+        let stamp = scratch.stamp;
+        let cell = |at: (i32, i32)| at.1 as usize * wide as usize + at.0 as usize;
+        struct Book<'a> {
+            stamps: &'a mut Vec<u32>,
+            walked: &'a mut Vec<u32>,
+            came_from: &'a mut Vec<u32>,
+            stamp: u32,
+        }
+        impl Book<'_> {
+            fn walked(&self, at: usize) -> Option<u32> {
+                (self.stamps[at] == self.stamp).then(|| self.walked[at])
+            }
+            fn set(&mut self, at: usize, so_far: u32, back: u32) {
+                self.stamps[at] = self.stamp;
+                self.walked[at] = so_far;
+                self.came_from[at] = back;
+            }
+        }
+        let crate::analytics::RouteScratch { stamps, walked, came_from, .. } = &mut *scratch;
+        let mut book = Book { stamps, walked, came_from, stamp };
+        let none = u32::MAX;
+
         // Ordered by estimate, then by the way walked, then by position, so
         // that ties always break the same way and a run is repeatable.
         let mut open: BinaryHeap<Reverse<(u32, u32, i32, i32)>> = BinaryHeap::new();
-        let mut came_from: BTreeMap<(i32, i32), (i32, i32)> = BTreeMap::new();
-        let mut walked: BTreeMap<(i32, i32), u32> = BTreeMap::new();
         open.push(Reverse((still_to_go(from), 0, from.0, from.1)));
-        walked.insert(from, 0);
+        book.set(cell(from), 0, none);
 
         let mut looked_at = 0usize;
         while let Some(Reverse((_, so_far, x, y))) = open.pop() {
             let here = (x, y);
-            if walked.get(&here).is_some_and(|&best| best < so_far) {
+            if book.walked(cell(here)).is_some_and(|best| best < so_far) {
                 continue;
             }
             if here == target {
                 let mut route = vec![here];
                 let mut at = here;
-                while let Some(&back) = came_from.get(&at) {
+                loop {
+                    let back = book.came_from[cell(at)];
+                    if back == none {
+                        break;
+                    }
+                    let back = ((back % wide as u32) as i32, (back / wide as u32) as i32);
                     if back == from {
                         break;
                     }
@@ -262,11 +297,10 @@ impl Simulation {
                     continue;
                 }
                 let further = so_far + 1;
-                if walked.get(&next).is_some_and(|&best| best <= further) {
+                if book.walked(cell(next)).is_some_and(|best| best <= further) {
                     continue;
                 }
-                walked.insert(next, further);
-                came_from.insert(next, here);
+                book.set(cell(next), further, cell(here) as u32);
                 open.push(Reverse((further + still_to_go(next), further, next.0, next.1)));
             }
         }
@@ -703,6 +737,19 @@ impl Simulation {
             return action;
         }
 
+        // An errand to somewhere this one has no way to is over, before it
+        // is kept to: kept to, it is refused at the water every turn until it
+        // runs out of patience (#323).
+        if self.population.agents[agent_index].errand.as_ref().is_some_and(|errand| {
+            !self.world.can_walk_between((here.0, here.1), (errand.going_to.0, errand.going_to.1))
+        }) {
+            self.population.agents[agent_index].errand = None;
+            *self
+                .what_a_threat_came_to
+                .entry("errand: no way there".to_string())
+                .or_insert(0) += 1;
+        }
+
         if let Some(errand) = self.population.agents[agent_index].errand.clone() {
             // A different drive at the head of the queue is not on its own a
             // change of situation: two drives within a whisker of each other
@@ -752,7 +799,24 @@ impl Simulation {
                     return action;
                 }
 
-                match self.next_step_towards_making(&wanted, &self.population.agents[agent_index]) {
+                // The step if one can be taken - and for the kit, the
+                // makings if not: an edge short of a stone is a reason to go
+                // and get one, not a reason to give the edge up (#332).
+                //
+                // Only for the kit. Every making fetching what it was short
+                // of sent people round chains that end in a tool they have
+                // not got - a digging stick is whittled with a knife in the
+                // hand - fetching the wood, failing the whittling, giving up
+                // and taking it on again: 68,694 turns of it in eight months
+                // on one world, a fifth fewer births and five dead of thirst
+                // and hunger across twelve.
+                let agent = &self.population.agents[agent_index];
+                let next = if agent.what_my_kit_is_short_of() == Some(wanted.as_str()) {
+                    self.how_i_would_come_by(&wanted, agent)
+                } else {
+                    self.next_step_towards_making(&wanted, agent)
+                };
+                match next {
                     Some(step) => {
                         if let Some(errand) = self.population.agents[agent_index].errand.as_mut() {
                             errand.turns_on_it += 1;
@@ -1294,11 +1358,26 @@ impl Simulation {
             // by the request rather than by the node, because the request is
             // what the agent has decided to do.
             Action::Gather { resource_type } => {
-                let _ = agent_index;
                 match resource_type.as_str() {
                     "wood" => SkillType::Woodcutting,
                     "stone" | "iron" | "coal" | "clay" | "sand" => SkillType::Mining,
                     "grain" | "flax" | "cotton" => SkillType::Farming,
+                    // Except that food off a carcass is cut, and what it is
+                    // cut with is a knife. Named by the request alone, a man
+                    // taking a deer apart with his fingers was picking
+                    // berries as far as this knew, so nothing ever set him
+                    // wanting an edge and the knives his people walked in
+                    // with were all gone by midsummer and never made again
+                    // (#331).
+                    "food"
+                        if self
+                            .the_node_this_gather_takes(agent_index, crate::world::ResourceType::Food)
+                            .is_some_and(|(node, _)| self.world.resources[node].is_a_carcass()) =>
+                    {
+                        SkillType::Leatherworking
+                    }
+                    // And a trip for meat is always a trip to a carcass.
+                    "meat" => SkillType::Leatherworking,
                     "food" | "greens" | "roots" | "herbs" => SkillType::Herbalism,
                     "fish" => SkillType::Fishing,
                     // Water wants nothing but hands, and a request for
@@ -1465,11 +1544,19 @@ impl Simulation {
             // having and the agent stood there for want of a length of flax.
             // `fetch_what_the_making_of_it_wants` is the same errand
             // `make_what_this_wants` runs one case over.
-            *self
-                .what_a_threat_came_to
-                .entry("tool: gone to fetch what the making wants".to_string())
-                .or_insert(0) += 1;
-            return self.fetch_what_the_making_of_it_wants(action, agent_index, better.called);
+            //
+            // Counted only when it does send him somewhere. It was counted
+            // whether or not it did, and over a year on one world 69 in 70
+            // of the count were a digging stick nobody could get the makings
+            // of, with the turn going on as it was (#331).
+            let fetching = self.fetch_what_the_making_of_it_wants(action.clone(), agent_index, better.called);
+            if fetching != action {
+                *self
+                    .what_a_threat_came_to
+                    .entry("tool: gone to fetch what the making wants".to_string())
+                    .or_insert(0) += 1;
+            }
+            return fetching;
         };
 
         let instead = Action::Craft {
@@ -1571,11 +1658,19 @@ impl Simulation {
         let short_of =
             crate::environment::making::everything_wanting_knowing(wanted, &holding, &knows);
 
+        // The kit is fetched for with a full pack, because what it is made
+        // of goes in ahead of whatever is worth least (`set_down_to_make_room`
+        // keeps to `what_my_makings_want`); anything else waits for room.
+        let for_the_kit = agent.what_my_kit_is_short_of() == Some(wanted)
+            || agent
+                .errand
+                .as_ref()
+                .is_some_and(|errand| errand.to_make.is_some());
         let here = agent.state.position;
         let raw = short_of
             .iter()
             .filter(|what| agent.have_i_seen(what))
-            .find(|what| self.could_this_gather_come_to_anything(agent, here, what))?;
+            .find(|what| self.could_this_gather_come_to_anything_for(agent, here, what, for_the_kit))?;
 
         let instead = Action::Gather {
             resource_type: raw.to_string(),
@@ -1699,12 +1794,23 @@ impl Simulation {
         action: Action,
         agent_index: usize,
     ) -> Action {
-        if !matches!(action, Action::Craft { .. }) {
+        let agent = &self.population.agents[agent_index];
+        if agent.errand.is_some() {
             return action;
         }
 
-        let agent = &self.population.agents[agent_index];
-        if agent.errand.is_some() {
+        // A step towards what the kit is short of - a stone fetched for a
+        // knife as much as the knapping - is held on to as that making, so
+        // the fetching is followed by the knapping and the knapping by the
+        // knife (#332).
+        if let Some(kit) = agent.what_my_kit_is_short_of() {
+            if self.how_i_would_come_by(kit, agent).as_ref() == Some(&action) {
+                self.take_the_making_on(kit, agent_index);
+                return action;
+            }
+        }
+
+        if !matches!(action, Action::Craft { .. }) {
             return action;
         }
 
@@ -1731,7 +1837,7 @@ impl Simulation {
 
     /// Take a making on as an errand, so that a chain several turns long is
     /// walked rather than restarted.
-    fn take_the_making_on(&mut self, wanted: &str, agent_index: usize) {
+    pub(in crate::analytics) fn take_the_making_on(&mut self, wanted: &str, agent_index: usize) {
         let Some(for_drive) = self.population.agents[agent_index].what_presses_hardest() else {
             return;
         };

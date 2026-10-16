@@ -262,7 +262,10 @@ impl Simulation {
             Self::FORAGE_RADIUS,
         ) {
             let resource = &self.world.resources[i];
-            if Self::edible_item_for(resource.resource_type).is_some() && resource.anything_to_take() {
+            if Self::edible_item_for(resource.resource_type).is_some()
+                && resource.anything_to_take()
+                && !resource.is_a_carcass()
+            {
                 let distance = agent_pos.distance_to(&resource.position);
                 if distance <= Self::FORAGE_RADIUS {
                     let bad = remembers.how_bad_is_it_there(resource.position, now);
@@ -811,7 +814,22 @@ impl Simulation {
 
         food.set_preparation(how, turn_now);
 
+        // **And carried under its own name from now on**, as what comes off
+        // a fire is (`prepared_item_id`). One stack holds one preparation,
+        // and a merge takes the one that spoils faster. Dried in place, the
+        // first raw handful gathered after it turned the whole stack raw
+        // again: it spoiled at the raw rate, and weighed what raw food weighs.
+        // It had gone into the pack at its dried weight, a third of that, so
+        // by midsummer eleven people in twelve carried more than their packs
+        // could hold, up to 94 against 42 (#320).
         let how_many = item.quantity;
+        let prefix = if how == PreparationState::Smoked { "smoked_" } else { "dried_" };
+        let named = format!("{prefix}{what}");
+        if let Some(mut dried) = agent.inventory.remove_item(what, how_many) {
+            // Lighter than it went in, so there is room for it
+            dried.item_id = named;
+            agent.inventory.add_item(dried);
+        }
         agent
             .skills
             .practise(crate::agents::SkillType::Cooking, 14, turn_now);
@@ -875,7 +893,14 @@ impl Simulation {
             let harm = rng.gen_range(
                 Self::WHAT_A_BAD_PLANT_DOES.0..=Self::WHAT_A_BAD_PLANT_DOES.1,
             );
-            agent.take_damage(harm);
+            // **A poisoning, not a blow.** This came in by `take_damage`,
+            // which is the door a blow comes in by, and did everything a blow
+            // does: booked as "a blow", so a death of a bad plant was reckoned
+            // a death in combat; opened a wound as a blow of that weight
+            // would, which could go bad; and was softened by standing near a
+            // building, as though walls kept poison out. It is an illness, and
+            // it goes straight to the body. See ISSUES_FOUND #309.
+            agent.state.lose_health(harm, crate::agents::AgentState::ILLNESS);
 
             debug!(
                 "Agent {} was poisoned by plant {kind} ({harm:.0} damage, {:.0} health left)",

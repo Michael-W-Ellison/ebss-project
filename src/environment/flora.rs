@@ -306,6 +306,22 @@ impl FloraRegistry {
         self.species.values().collect()
     }
 
+    /// Every species laid out by its number (`SpeciesId::number`), so a pass
+    /// over many plants reads each one's kind out of a slot rather than
+    /// matching its name against every name. A number with no species in this
+    /// book is `None`, as `get` would say.
+    pub fn by_number(&self) -> Vec<Option<&PlantSpecies>> {
+        let mut table: Vec<Option<&PlantSpecies>> = Vec::new();
+        for (name, species) in &self.species {
+            let number = SpeciesId::called(name).number();
+            if table.len() <= number {
+                table.resize(number + 1, None);
+            }
+            table[number] = Some(species);
+        }
+        table
+    }
+
     pub fn get_trees(&self) -> Vec<&PlantSpecies> {
         self.species.values().filter(|s| s.is_tree).collect()
     }
@@ -1528,6 +1544,11 @@ impl SpeciesId {
         Self(upto as u16)
     }
 
+    /// The number itself, for a table laid out by species.
+    pub fn number(&self) -> usize {
+        self.0 as usize
+    }
+
     /// The name this stands for.
     pub fn as_str(&self) -> &'static str {
         Self::names()[self.0 as usize]
@@ -2163,6 +2184,16 @@ impl PlantManager {
         self.registry.as_ref()?.get(species_id)
     }
 
+    /// Put the book of species back after a load.
+    ///
+    /// It is not saved (`#[serde(skip)]`), and without it nothing grows,
+    /// seeds or dies back. See ISSUES_FOUND #305.
+    pub fn the_registry_back(&mut self) {
+        if self.registry.is_none() {
+            self.registry = Some(FloraRegistry::new());
+        }
+    }
+
     /// Turn all plants (growth, regrowth)
     pub fn take_a_turn(&mut self) {
         let registry = match &self.registry {
@@ -2622,7 +2653,10 @@ impl PlantManager {
         use crate::world::soil::Soil;
         use crate::world::Position;
 
-        let Some(registry) = self.registry.clone() else {
+        // Borrowed, not cloned. This is asked for every cell every grazer
+        // reaches, and a copy of every species with its names and lists each
+        // time was a third of a late-year turn. See ISSUES_FOUND #306.
+        let Some(registry) = self.registry.as_ref() else {
             return;
         };
         let Some(plant) = self.plants.get_mut(which) else {

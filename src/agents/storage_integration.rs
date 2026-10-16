@@ -38,16 +38,27 @@ pub fn butchered_item_id(material_id: &str) -> &str {
     }
 }
 
-/// Strip the preparation prefix from an item id.
+/// What a prepared thing is carried as: `cooked_`, `burnt_`, `dried_` or
+/// `smoked_` in front of what it was.
+pub const PREPARED_AS: [&str; 4] = ["cooked_", "burnt_", "dried_", "smoked_"];
+
+/// An item id with whatever has been done to it taken off the front.
 ///
-/// Food that has been over a fire is carried under its own id - `cooked_fish`,
-/// `burnt_meat` - because one inventory stack can hold only one preparation
-/// state. Underneath it is still fish and still meat.
+/// Food that has been over a fire, or dried, or smoked, is carried under its
+/// own id - `cooked_fish`, `burnt_meat`, `dried_legumes` - because one
+/// inventory stack can hold only one preparation state. Underneath it is
+/// still fish, meat and legumes.
+pub fn without_preparation(id: &str) -> &str {
+    let mut id = id;
+    while let Some(under) = PREPARED_AS.iter().find_map(|prefix| id.strip_prefix(prefix)) {
+        id = under;
+    }
+    id
+}
+
+/// Strip the preparation prefix from an item id, and the cut off the end.
 pub fn base_item_id(id: &str) -> &str {
-    let id = id
-        .strip_prefix("cooked_")
-        .or_else(|| id.strip_prefix("burnt_"))
-        .unwrap_or(id);
+    let id = without_preparation(id);
 
     // And a thing that has been cut up is still the thing it was cut off.
     //

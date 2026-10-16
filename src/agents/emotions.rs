@@ -117,6 +117,25 @@ impl EmotionState {
         self.should_flee() || self.should_attack()
     }
 
+    /// Something has just struck this one, and it is still there.
+    ///
+    /// However it was sized up, it is now at least enough to act on: anger
+    /// enough to face it for somebody in a state to, fear enough to go for
+    /// somebody who is not. Feeling more than that already, nothing changes.
+    pub fn struck_by(&mut self, source: EmotionSource, face_it: bool) {
+        let fear = self.fear_sources.get(&source).copied().unwrap_or(0.0);
+        let anger = self.anger_sources.get(&source).copied().unwrap_or(0.0);
+        if fear > Self::AFRAID_ENOUGH_TO_ACT || anger > Self::ANGRY_ENOUGH_TO_ACT {
+            return;
+        }
+        const AND_A_LITTLE: f32 = 0.01;
+        if face_it {
+            self.set_anger(source, Self::ANGRY_ENOUGH_TO_ACT + AND_A_LITTLE);
+        } else {
+            self.set_fear(source, Self::AFRAID_ENOUGH_TO_ACT + AND_A_LITTLE);
+        }
+    }
+
     /// Record being struck, by whatever struck.
     ///
     /// `EmotionSource` rather than a bare id, because the two callers are a
@@ -444,7 +463,7 @@ impl EmotionState {
     /// thing in front of you; this asks whether you are in any state to face
     /// it, and being afraid of three things at once is exactly the state it is
     /// about.
-    const TOO_FRIGHTENED_TO_STAND: f32 = 0.3;
+    pub const TOO_FRIGHTENED_TO_STAND: f32 = 0.3;
 
     /// The worst single thing angering this one, whatever kind of thing it is.
     ///
@@ -466,6 +485,30 @@ impl EmotionState {
             .values()
             .copied()
             .fold(0.0_f32, f32::max)
+    }
+
+    /// Afraid or angry enough at something that is there, a beast or a
+    /// person, to be answering it.
+    ///
+    /// `in_danger` reads every fear, the fear of going without among them, and
+    /// that is what puts somebody parched or hungry on the minute clock. That
+    /// clock is load-bearing: taken away from want, births over two years on
+    /// eight worlds fell from 55 to 40 and four died of thirst. But the beast
+    /// is given its minutes only against somebody answering a beast or a
+    /// person. Somebody parched far from camp, gathering and tilling a minute
+    /// at a time, gave the boar beside them a strike every one of those
+    /// minutes: seven in a half hour, and dead (#325).
+    pub fn threatened_by_something_there(&self) -> bool {
+        let worst_there = |sources: &BTreeMap<EmotionSource, f32>| {
+            sources
+                .iter()
+                .filter(|(source, _)| matches!(source, EmotionSource::Creature(_) | EmotionSource::Agent(_)))
+                .map(|(_, amount)| *amount)
+                .fold(0.0_f32, f32::max)
+        };
+        worst_there(&self.fear_sources) > Self::AFRAID_ENOUGH_TO_ACT
+            || (worst_there(&self.anger_sources) > Self::ANGRY_ENOUGH_TO_ACT
+                && self.fear < Self::TOO_FRIGHTENED_TO_STAND)
     }
 
     /// Check if agent is emotionally distressed
@@ -1455,6 +1498,23 @@ mod tests {
         emotions.add_anger(EmotionSource::Creature("rabbit".to_string()), 0.6);
 
         assert!(emotions.should_attack());
+    }
+
+    /// Going without is no reason to give a beast its minutes (#325).
+    #[test]
+    fn going_without_is_not_a_threat_that_is_there() {
+        let mut emotions = EmotionState::new();
+        emotions.add_fear(EmotionSource::Event("unmet survival needs".to_string()), 0.9);
+        emotions.add_anger(EmotionSource::Event("a bad harvest".to_string()), 0.9);
+
+        assert!(emotions.in_danger(), "want still takes the half hour a minute at a time");
+        assert!(!emotions.threatened_by_something_there());
+
+        emotions.add_fear(
+            EmotionSource::Creature("boar".to_string()),
+            ThreatAssessment::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU,
+        );
+        assert!(emotions.threatened_by_something_there(), "but a boar is there");
     }
 
     #[test]

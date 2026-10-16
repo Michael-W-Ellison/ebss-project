@@ -51,7 +51,15 @@ impl Simulation {
             (*duration).max(1) * crate::environment::seasons::MINUTES_PER_TURN,
             quality_factors.calculate_quality(),
         );
-        agent.wake_up(current_turn);
+        // **And asleep until the night is over, not until this turn is.** The
+        // sleep is reckoned here all at once, and this woke the sleeper on the
+        // spot, so through every turn of the night that followed the body
+        // was awake to everything that asked: it mended at a waking man's
+        // rate, a fifth of a sleeper's, and tired as though it were up and
+        // about. Measured on a big-map seed, not one turn in 71,852 of grown
+        // people's had anybody asleep in it. They wake when the hold the
+        // sleep put on them is over, or when danger breaks it - see
+        // `one_persons_turn`. See ISSUES_FOUND #310.
 
         let energy_restored = agent.state.energy - energy_before;
 
@@ -98,6 +106,45 @@ impl Simulation {
             if minutes > 0.0 { minutes } else { 1.0 }
         };
         let can_cover = ((left * cells_a_minute).floor() as u32).max(1);
+
+        // **Somewhere there is no way to is not walked at.** With no route,
+        // a walk took single steps towards the place, and against a river
+        // they went one way and back again, each step a success, until the
+        // turn was spent, and the next turn the same (#321). On seed 2 that
+        // was a walk in six. It is refused now, before a step is taken, so
+        // whatever chose it hears that it came to nothing.
+        let from = self.population.agents[agent_index].state.position;
+        if !self.world.can_walk_between((from.0, from.1), (target.0, target.1)) {
+            *self
+                .what_a_threat_came_to
+                .entry("walk: no way there".to_string())
+                .or_insert(0) += 1;
+            if std::env::var("WALK_DETAIL").is_ok() {
+                let why = match self.population.agents[agent_index].errand.as_ref() {
+                    Some(errand) => format!("errand for {:?}", errand.for_drive),
+                    None => format!("no errand, pressing {:?}", self.population.agents[agent_index].what_presses_hardest()),
+                };
+                *self.what_a_threat_came_to.entry(format!("walk: no way there, {why}")).or_insert(0) += 1;
+            }
+            // And an errand to there is over. It holds its place across
+            // turns, so it would have been refused again every turn until it
+            // ran out of patience: thirty-nine and two hundred times, on two
+            // worlds, for one errand (#321).
+            let agent = &mut self.population.agents[agent_index];
+            if agent.errand.as_ref().is_some_and(|errand| {
+                !self.world.can_walk_between((from.0, from.1), (errand.going_to.0, errand.going_to.1))
+            }) {
+                agent.errand = None;
+                *self
+                    .what_a_threat_came_to
+                    .entry("errand: no way there".to_string())
+                    .or_insert(0) += 1;
+            }
+            return ActionResult::failure(format!(
+                "No way from ({}, {}) to ({}, {})",
+                from.0, from.1, target.0, target.1
+            ));
+        }
 
         let mut last = self.a_step_toward(target, agent_index);
         if !last.success {
@@ -150,6 +197,12 @@ impl Simulation {
         let mut the_way = self
             .the_way_there((start.0, start.1), (target.0, target.1), Self::AS_FAR_AS_A_ROUTE_IS_LOOKED_FOR)
             .map(|route| route.into_iter().collect::<std::collections::VecDeque<_>>());
+        if the_way.is_none() {
+            *self
+                .what_a_threat_came_to
+                .entry("walk: no route found".to_string())
+                .or_insert(0) += 1;
+        }
         let mut saw_trouble_at: Option<(i32, i32)> = None;
 
         while walked < can_cover {

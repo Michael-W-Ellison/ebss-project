@@ -175,6 +175,18 @@ impl InventoryItem {
     pub fn absorb(&mut self, other: InventoryItem) {
         let mine = self.quantity;
         let theirs = other.quantity;
+
+        // **And what a unit of the stack weighs, blended the same way.** It
+        // kept the first stack's figure, so ten two-unit stones and ten
+        // half-unit pebbles weighed forty together, and a made thing (weighed
+        // by the work in it) merged into a found one took on the found one's
+        // weight. A pack that let something in at what it weighed then
+        // carried it at what the stack said (#320).
+        if mine + theirs > 0 {
+            self.weight_per_unit = (self.weight_per_unit * mine as f32
+                + other.weight_per_unit * theirs as f32)
+                / (mine + theirs) as f32;
+        }
         self.quantity += other.quantity;
 
         self.food_data = match (self.food_data.take(), other.food_data) {
@@ -447,8 +459,20 @@ impl Inventory {
             return false; // No room for new item type
         }
 
-        // Check weight limit
-        let item_weight = item.total_weight();
+        // Check weight limit, against what the pack would weigh afterwards.
+        //
+        // Not just against what the newcomer weighs: a stack that takes it in
+        // blends the two (`absorb`), and what the blend weighs a unit can
+        // differ from either. A third of a stack's weight went in as dried
+        // food and came out as raw, and nothing here saw it (#320).
+        let item_weight = match self.items.get(&item.item_id) {
+            Some(existing) => {
+                let mut merged = existing.clone();
+                merged.absorb(item.clone());
+                merged.total_weight() - existing.total_weight()
+            }
+            None => item.total_weight(),
+        };
         if self.current_weight() + item_weight > self.effective_max_weight() {
             // What will not go in is not carried, and something ought to know
             // it happened - see `what_would_not_go_in`.
@@ -1069,6 +1093,20 @@ pub struct AgentState {
     /// time to spare, and so leaves the rest of the half hour to decide on.
     #[serde(default)]
     pub walked_with_time_to_spare: bool,
+    /// The minute this one next decides what to do, on the clock that counts
+    /// minutes.
+    ///
+    /// Everybody used to decide at the same moment, once a half hour, so the
+    /// whole of a settlement's thinking fell in one step and the step was as
+    /// slow as all of it together. Each person now keeps their own half hour,
+    /// begun at their own minute of it, so the deciding is spread across the
+    /// thirty minutes. Nought until the first turn sets it.
+    #[serde(default)]
+    pub next_decision_at: u32,
+    /// Whether this one is taking things a minute at a time, because
+    /// something that menaces them is in sight.
+    #[serde(default)]
+    pub deciding_by_the_minute: bool,
     pub turns_without_water: u32, // Count dehydration duration
     /// What this body has to pass, waiting to be left on the ground.
     ///
@@ -1158,6 +1196,8 @@ impl AgentState {
             minutes_walked: 0.0,
             walking_effort: 0.0,
             walked_with_time_to_spare: false,
+            next_decision_at: 0,
+            deciding_by_the_minute: false,
             turns_without_water: 0,
             waste_carried: 0.0,
             ailing: None,
@@ -1742,6 +1782,24 @@ pub struct Agent {
     /// because the test is `busy_until > now` rather than `>=`.
     #[serde(default)]
     pub busy_until: u32,
+    /// How used this one has got to each kind of beast, by name, from
+    /// nought (a stranger) to nearly one (part of the furniture).
+    ///
+    /// "If a potential threat is nearby but continues to not actively harm
+    /// the agent, they should adjust their fear level. An unknown animal or
+    /// situation might cause fear at first only to eventually be ignored as
+    /// an agent adjusts to it." Every half hour a kind of beast is about and
+    /// does no harm, it counts for a little less; a blow from one puts it
+    /// back to a stranger at once; and a kind not seen for a long while is
+    /// slowly forgotten. See `Simulation::feel_again_about_what_is_round`.
+    #[serde(default)]
+    pub familiar_with: std::collections::BTreeMap<String, f32>,
+
+    /// The day this one last sat at a fire with ore in the pack, so that an
+    /// evening of it counts once however many half hours it ran to - see
+    /// `making::ORE_WATCHED_IN_A_FIRE` (#336).
+    #[serde(default)]
+    pub last_evening_watching_ore: Option<u32>,
 
     /// The tile this one last stepped off, so that a walk does not turn
     /// straight back onto it - see `Simulation::moving`.
@@ -1966,6 +2024,26 @@ pub struct Agent {
     pub cached_healing_bonus: f32,
     /// Cached defense bonus from nearby religious buildings
     pub cached_defense_bonus: f32,
+
+    /// Where this one lives: the middle of the camp they last slept in, or the
+    /// place their camp last moved to. `None` until the first night.
+    ///
+    /// Home was the middle of every grown person in the world, so there could
+    /// only ever be one camp: anybody who went off for water or better ground
+    /// was walked back to the others that evening, however far it was. Each
+    /// person keeps their own now, and the camp is whoever lives near it
+    /// (`Simulation::where_this_one_sleeps`). See ISSUES_FOUND #314.
+    ///
+    /// Last in the struct, with a default, because saves are positional: a
+    /// checkpoint written before it existed reads it as `None`.
+    #[serde(default)]
+    pub hearth: Option<(i32, i32)>,
+
+    /// The tick the hearth was last moved to somewhere new, as against
+    /// settling where the camp already was. A camp that has just moved does
+    /// not move again for a while (`Simulation::A_CAMP_STAYS_AT_LEAST`).
+    #[serde(default)]
+    pub hearth_moved_at: u32,
 }
 
 impl Agent {
@@ -1973,6 +2051,8 @@ impl Agent {
         let mut agent = Self {
             id: crate::core::dice::name(),
             busy_until: 0,
+            familiar_with: std::collections::BTreeMap::new(),
+            last_evening_watching_ore: None,
             stepped_from: None,
             state: AgentState::new(),
             drives: if config.random_weights {
@@ -2037,6 +2117,8 @@ impl Agent {
             fatigue: super::fatigue::FatigueState::new(),
             cached_healing_bonus: 1.0,
             cached_defense_bonus: 1.0,
+            hearth: None,
+            hearth_moved_at: 0,
         };
 
         // Initialize default behavior trees for each drive type
@@ -2338,6 +2420,12 @@ impl Agent {
                     && item.food_data.is_none()
                     && !name.contains("food")
             })
+            // Only what the storehouse has a name for. Tinder comes three to
+            // a scraped stick, so it was the most of anything in a pack that
+            // had a flake to scrape with, and every turn spent putting it by
+            // came back "Unknown item type: tinder" - 791 of them in a year
+            // on one world (#332).
+            .filter(|(name, _)| crate::agents::storage_integration::id_to_item_type(name).is_some())
             .max_by_key(|(_, item)| item.quantity)
             .map(|(name, item)| {
                 (name.clone(), item.quantity - Self::how_much_of_this_to_keep(name))
@@ -2434,14 +2522,64 @@ impl Agent {
     /// what is being carried is the means to something the carrier is going to
     /// want tonight. See ISSUES_FOUND #224.
     fn what_stays_in_the_pack(name: &str) -> u32 {
-        if name == "wood" {
-            Self::ENOUGH_WOOD_TO_HAND
-        } else {
-            0
+        match name {
+            "wood" => Self::ENOUGH_WOOD_TO_HAND,
+            // The cord for the next knife - see `what_my_kit_is_short_of`
+            "lashing" => 2,
+            _ => 0,
         }
     }
 
     pub fn what_i_would_set_down(&self) -> Option<String> {
+        self.what_i_would_set_down_keeping(&[])
+    }
+
+    /// Everything that goes into what this one is making - the errand's
+    /// making and what the kit is short of - down to the raw stuff: the
+    /// things not to put down to make room for the rest of it (#332).
+    pub fn what_my_makings_want(&self) -> Vec<&'static str> {
+        fn into(what: &str, depth: usize, out: &mut Vec<&'static str>) {
+            if depth > 4 {
+                return;
+            }
+            for step in crate::environment::making::every_way_to_make(what) {
+                for (needed, _) in step.needs {
+                    if !out.contains(needed) {
+                        out.push(needed);
+                        into(needed, depth + 1, out);
+                    }
+                }
+            }
+        }
+
+        let mut wanted = Vec::new();
+        let making = self.errand.as_ref().and_then(|errand| errand.to_make.clone());
+        for what in making.as_deref().into_iter().chain(self.what_my_kit_is_short_of()) {
+            into(what, 0, &mut wanted);
+        }
+        wanted
+    }
+
+    /// How much room this one could make in the pack without putting down
+    /// food, the kit, or anything in `keep`: what `what_i_would_set_down_keeping`
+    /// would offer, all of it, less what stays in the pack regardless.
+    pub fn room_i_could_make(&self, keep: &[&str]) -> f32 {
+        self.inventory
+            .get_all_items()
+            .iter()
+            .filter(|(_, item)| item.quantity > 0)
+            .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
+            .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
+            .filter(|(name, _)| !keep.contains(&name.as_str()))
+            .map(|(name, item)| {
+                item.quantity.saturating_sub(Self::what_stays_in_the_pack(name)) as f32
+                    * item.what_one_of_them_weighs()
+            })
+            .sum()
+    }
+
+    /// The same, never choosing any of `keep`.
+    pub fn what_i_would_set_down_keeping(&self, keep: &[&str]) -> Option<String> {
         // Food that has gone past eating goes before anything else.
         //
         // Food was never set down, rotten or not, so a pack that filled with
@@ -2487,6 +2625,7 @@ impl Agent {
             .filter(|(_, item)| item.quantity > 0)
             .filter(|(_, item)| item.food_data.is_none() && !item.is_food())
             .filter(|(name, _)| !Self::is_this_part_of_the_kit(name))
+            .filter(|(name, _)| !keep.contains(&name.as_str()))
             .max_by(|a, b| {
                 let load = |item: &InventoryItem| item.quantity as f32 * item.weight_per_unit;
                 // Anything with something to spare goes before anything that
@@ -3382,6 +3521,10 @@ impl Agent {
     /// tonight's supper.
     const DAYS_OF_FOOD_THEY_WALK_IN_WITH: f32 = 2.0;
 
+    /// How many times somebody makes a new thing out of curiosity before the
+    /// novelty is gone.
+    pub const MADE_OFTEN_ENOUGH_TO_HAVE_SEEN_IT: u32 = 3;
+
     /// Whether this agent can do a step at all.
     ///
     /// Everything a stone-age people arrives knowing is `obvious`; everything
@@ -3389,6 +3532,30 @@ impl Agent {
     /// found it out - or were shown - can do it.
     pub fn knows_how_to(&self, step: &crate::environment::making::Making) -> bool {
         step.obvious || self.found_out.contains(step.makes)
+    }
+
+    /// The discoveries this agent is far enough along to have.
+    ///
+    /// Everything nobody arrives knowing, less what waits on something this
+    /// agent has not got to yet (`what_has_to_be_known_first`) or has not yet
+    /// done often enough (`how_practised_first`).
+    pub fn what_i_could_find_out(
+        &self,
+    ) -> impl Iterator<Item = &'static crate::environment::making::Making> + '_ {
+        crate::environment::making::everything_to_find_out().filter(|step| {
+            self.knows_what_comes_before(step.makes)
+                && crate::environment::making::how_practised_first(step.makes)
+                    .iter()
+                    .all(|(done, times)| self.skills.times_made(done) >= *times)
+        })
+    }
+
+    /// Whether this agent knows everything a discovery waits on
+    /// (`what_has_to_be_known_first`), whatever practice it waits on besides.
+    pub fn knows_what_comes_before(&self, what: &str) -> bool {
+        crate::environment::making::what_has_to_be_known_first(what)
+            .iter()
+            .all(|first| self.found_out.contains(*first) || self.knows_how_to_make(first))
     }
 
     /// Whether this agent knows any way at all of making a named thing.
@@ -3728,11 +3895,18 @@ impl Agent {
     /// do it again to see it happen, with no use in mind for what comes out.
     /// That is how the next link in the chain gets into his hands at all:
     /// nobody can want a metal knife before anybody has seen a metal blade.
+    ///
+    /// Only until he has seen it happen a few times. Without that the thought
+    /// never wore off: whatever was put down to make room was made again, and
+    /// a settlement made five hundred wheels a year and six hundred bows in
+    /// two, for nobody to use (#335). A thing he wants for a use is wanted by
+    /// another road - `what_i_would_rather_have` - and is not held back here.
     pub fn what_i_would_try_out(&self) -> Option<String> {
         let holding = |what: &str| self.how_many_i_have(what);
 
         crate::environment::making::everything_to_find_out()
             .filter(|step| self.knows_how_to(step))
+            .filter(|step| self.skills.times_made(step.makes) < Self::MADE_OFTEN_ENOUGH_TO_HAVE_SEEN_IT)
             .filter(|step| holding(step.makes) < crate::environment::making::A_FEW_SPARE)
             .filter(|step| {
                 step.wants_in_hand
@@ -3759,7 +3933,8 @@ impl Agent {
                 return false;
             }
 
-            making::everything_to_find_out()
+            self.what_i_could_find_out()
+                .filter(|step| !step.over_a_fire)
                 .filter(|step| step.needs.iter().any(|(needs, _)| *needs == what))
                 .map(|step| step.makes)
                 .chain(
@@ -4197,6 +4372,78 @@ impl Agent {
             })
             .map(|step| step.makes.to_string())
     }
+
+    /// What this one's own kit is short of, that is worth going out of the
+    /// way to put right whatever the job in hand happens to be.
+    ///
+    /// **An edge.** Everything that comes off an animal, every fish and
+    /// joint cut into portions, every hide scraped and every stick carved
+    /// wants one, and with none a carcass keeps fifteen in a hundred of
+    /// itself. Founders walk in with a stone knife (`WHAT_THEY_CARRY`); it is
+    /// worn through in thirty jobs, and nothing made another, because nothing
+    /// ever asked for one - a better tool is wanted when the job in hand asks
+    /// for its trade (`would_a_better_tool_pay`), and no job asks for a knife
+    /// that cannot be done without one. Counted on one world, adults carrying
+    /// any edge went from eight in twelve to none by the seventh month, and
+    /// stayed at none (#332).
+    ///
+    /// **And a lashing for the next one.** Lashing is flax, flax stands only
+    /// from spring to the end of summer, and a knife wants a lashing: knives
+    /// that wore out in the autumn were not replaced until the spring, while
+    /// the knapped tips for them piled up in packs. Somebody with an edge
+    /// keeps the cord for its successor.
+    ///
+    /// The humblest edge this one knows how to make: the knife, which wants
+    /// a tip and a lashing, before the handaxe, which wants the haft as well.
+    pub fn what_my_kit_is_short_of(&self) -> Option<&'static str> {
+        if let Some(edge) = self.the_edge_i_am_without() {
+            return Some(edge);
+        }
+
+        if self.state.years_old() >= Self::OLD_ENOUGH_TO_KEEP_A_KIT
+            && self.how_many_i_have("lashing") == 0
+            && self.knows_how_to_make("lashing")
+        {
+            return Some("lashing");
+        }
+
+        None
+    }
+
+    /// The first half of `what_my_kit_is_short_of`: the edge, for somebody
+    /// with none.
+    ///
+    /// Apart because the two do not sit in the same place in a spare turn.
+    /// An edge comes before the pottering, since nearly every working wants
+    /// one; a spare cord comes after it, because the pottering is where bowls
+    /// come from (`knife_chain_tests`).
+    pub fn the_edge_i_am_without(&self) -> Option<&'static str> {
+        use super::SkillType;
+
+        if self.state.years_old() < Self::OLD_ENOUGH_TO_KEEP_A_KIT {
+            return None;
+        }
+
+        if self.what_i_have_to_work_with(SkillType::Leatherworking).is_none() {
+            let mut edges: Vec<&'static crate::environment::making::Tool> =
+                crate::environment::making::what_helps_with(SkillType::Leatherworking)
+                    .filter(|tool| self.knows_how_to_make(tool.called))
+                    .collect();
+            edges.sort_by_key(|tool| {
+                crate::environment::making::every_way_to_make(tool.called)
+                    .map(|step| step.needs.len())
+                    .min()
+                    .unwrap_or(usize::MAX)
+            });
+            return edges.first().map(|tool| tool.called);
+        }
+
+        None
+    }
+
+    /// Old enough to keep a kit of one's own: to knap a flake and twist a
+    /// cord rather than borrow a parent's.
+    pub const OLD_ENOUGH_TO_KEEP_A_KIT: u32 = 12;
 
     /// And the thing that making is a step *towards*.
     ///
@@ -4700,9 +4947,16 @@ impl Agent {
         let tool = *self.what_i_have_to_work_with(trade)?;
         let hand = self.skills.hand_for(tool.helps);
 
+        // A tool with no working life recorded is not one this can wear: it
+        // reads as whole (`durability_percentage`), and it used to be read
+        // here as already finished, "broken" on its first use and then whole
+        // again for ever after, because the broken one stayed in the pack.
+        // Now that a finished tool is thrown away it would simply vanish
+        // (#319). Every tool anybody makes or arrives with has one recorded
+        // (`a_tool_fresh_from_these_hands`).
         let (left, how_many) = {
             let item = self.inventory.get_item(tool.called)?;
-            (item.current_durability.unwrap_or(0.0) - 1.0, item.quantity)
+            (item.current_durability? - 1.0, item.quantity)
         };
 
         if left > 0.0 {
@@ -4710,13 +4964,19 @@ impl Agent {
             return None;
         }
 
-        // One of them is finished. If there is another in the pack it comes
-        // out fresh; if there is not, what is left is a broken tool. The
-        // finished one goes through `remove_item` rather than having its
-        // count knocked down in place, so that what the agent is carrying
-        // gets lighter along with it.
+        // One of them is finished, and it is thrown away. It goes through
+        // `remove_item` rather than having its count knocked down in place,
+        // so that what the agent is carrying gets lighter along with it. If
+        // there is another in the pack it comes out fresh.
+        //
+        // **The last one used to stay in the pack, broken.** Nothing could
+        // use it - every reader of a tool asks for durability above nothing,
+        // and nothing mends one - and only making another of the same thing
+        // threw it out. So a people whose handaxes wore out in their first
+        // two months carried them for the rest of the year (#316), in a pack
+        // the load already filled.
+        self.inventory.remove_item(tool.called, 1);
         if how_many > 1 {
-            self.inventory.remove_item(tool.called, 1);
             let fresh = crate::environment::making::how_long_this_one_lasts(&tool, hand);
             if let Some(item) = self.inventory.get_item_mut(tool.called) {
                 item.current_durability = Some(fresh);
@@ -4724,7 +4984,6 @@ impl Agent {
             }
             None
         } else {
-            self.inventory.get_item_mut(tool.called)?.current_durability = Some(0.0);
             Some(tool.called.to_string())
         }
     }
@@ -4772,7 +5031,8 @@ impl Agent {
             let trade = crate::environment::making::how_to_make(called)
                 .map(|step| step.hands)
                 .unwrap_or(tool.helps);
-            let hand = self.skills.hand_for(trade);
+            // The hand at this thing, not at the trade in general (#335).
+            let hand = self.skills.hand_at_making(called, trade);
 
             // What the hand would turn out, and what it is working with will
             // let it. Skill alone used to decide this, so a master with
@@ -4876,6 +5136,17 @@ impl Agent {
                 .unwrap_or(i32::MIN);
             if already < hand {
                 self.skills.set_skill_level(trade, hand);
+            }
+        }
+
+        // And they have made everything a stone-age people knows how to make
+        // before, as often as it takes to have the hand they arrive with at
+        // the trade it belongs to: a founder is as good at a spear as he was
+        // the day before he walked in, and no better.
+        for step in crate::environment::making::EVERY_STEP.iter().filter(|step| step.obvious) {
+            if let Some(trade) = self.skills.get_skill_if_exists(step.hands) {
+                let times = super::skills::Skills::makings_for_level(trade.level);
+                self.skills.have_made_before(step.makes, times);
             }
         }
 
@@ -6854,6 +7125,35 @@ impl Agent {
     /// run, which is the only time `what_the_larder_says` is empty for a live
     /// agent.
     pub fn enough_put_by_for_a_child(&self) -> bool {
+        // **A surplus, once there is one to count.** What follows asks for a
+        // whole winter's eating to be in the store on the day of conceiving.
+        // A store is full in autumn and drawn down to its bottom by spring
+        // whether or not the year was a good one, so that question shut the
+        // gate for every grown person from midwinter to late summer, every
+        // year, in settlements whose stores never once ran short: measured on
+        // two big-map seeds, the pits stood at 0.6 to 0.7 of the whole
+        // settlement's winter even at the bottom of the year, and in 180 days
+        // from midwinter nobody on one of them was ever let breed. A child a
+        // year was what came of it.
+        //
+        // What a surplus is, is what is still there when the winter is over.
+        // Once a winter has been seen through without the store running dry,
+        // the question is whether what it left over would have carried what
+        // this one's children cost a winter: the small ones already here and
+        // the one more. It is the same answer all year, so the chances fall
+        // across the year on each one's own fertile day rather than all in
+        // one autumn (#255). And it limits itself: more mouths eat more of the
+        // store, what the winter leaves shrinks, and the gate closes again. A
+        // winter that ran the store dry leaves nothing counted, and the
+        // stricter question below comes back. See ISSUES_FOUND #307.
+        let theirs = self.the_small_ones_i_answer_for.max(0.0) + what_a_body_this_age_eats(0);
+        if let (Some(took), Some(left)) = (
+            self.state.winters_seen.what_a_gap_takes(),
+            self.state.winters_seen.what_a_gap_leaves(),
+        ) {
+            return left >= took * theirs;
+        }
+
         let gap = super::provision::how_long_the_land_gives_nothing() as f32;
         // And the children already here. This asked a parent for their own
         // winter and one newborn's whatever they were feeding already, so a
@@ -8461,11 +8761,16 @@ impl Agent {
         };
 
         // Check if food is harmful (severely spoiled)
+        //
+        // Booked as an illness, which is what it is. It went down as "a blow",
+        // and a death that blows hold the most of is reckoned a death in
+        // combat: a man who ate rotten meat was killed in a fight, by
+        // whoever last struck him. See ISSUES_FOUND #309.
         if food_data.is_harmful() {
             self.inventory.remove_item(item_id, 1);
             self.food_i_ate = self.food_i_ate.saturating_add(1);
             let damage = 10.0;
-            self.state.lose_health(damage, AgentState::A_BLOW);
+            self.state.lose_health(damage, AgentState::ILLNESS);
             return EatResult::MadeSick(damage);
         }
 
@@ -10706,6 +11011,10 @@ impl Agent {
     /// be; the scale only has to separate a seam from the last of one.
     const A_PLACE_WORTH_REMEMBERING: u32 = 12;
 
+    /// How many of the places he knows of each of his tools' makings a man
+    /// keeps in mind, nearest first. See `forget_what_does_not_matter`.
+    pub const NEAREST_MAKINGS_KEPT_IN_MIND: usize = 3;
+
     pub fn forget_what_does_not_matter(&mut self, current_turn: u32) {
         if self.exploration_knowledge.known_resources.len()
             <= Self::WHAT_A_MAN_CAN_HOLD_IN_MIND
@@ -10716,6 +11025,87 @@ impl Agent {
         // Asked once rather than once per place: the sweep runs every turn for
         // every living agent, and a lookup per place per need is real time.
         let what_the_trails_say = self.patterns.what_every_place_is_worth();
+
+        // **Where the makings of a missing tool are.** Stone answers no drive
+        // that presses: it is filed under Shelter, which is quiet most of the
+        // time. So a head full of fishing spots and berry patches let every
+        // stone it knew go first. A place is only discovered the first time
+        // its tile comes into view, so a forgotten seam beside the camp was
+        // never seen again. On smooth country, with a hundred and more fish
+        // and plants in sight of a riverside camp, a whole people had
+        // forgotten every stone within days. When the handaxes they arrived
+        // with wore out, nobody could take a step towards another, and on two
+        // worlds of four nobody could dig a pit all year (#316).
+        //
+        // So a man keeps the nearest few places he knows of each raw thing the
+        // tools of his work are made of: "retained longer if an agent has an
+        // interest in the topic". Every tool he knows how to make, whether or
+        // not he carries one now, because the one he carries wears out.
+        let to_keep: std::collections::BTreeSet<crate::world::Position> = {
+            let holding_none = |_: &str| 0;
+            let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
+            let mut makings: std::collections::BTreeSet<crate::world::ResourceType> =
+                Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
+                    .iter()
+                    .flat_map(|trade| crate::environment::making::what_helps_with(*trade))
+                    .filter(|tool| self.knows_how_to_make(tool.called))
+                    .flat_map(|tool| {
+                        crate::environment::making::everything_wanting_knowing(tool.called, &holding_none, &knows)
+                    })
+                    .filter_map(crate::world::ResourceType::called)
+                    .collect();
+
+            // And the raw stuff of a discovery he is far enough along to
+            // wonder about and has not made. Ore makes nothing a stone-age
+            // people knows, so every place anybody had seen it went out of
+            // mind inside a month, nobody fetched any again, and whatever was
+            // going to come of a bright stone at the fire came in the first
+            // month or never (#336).
+            makings.extend(
+                crate::environment::making::everything_to_find_out()
+                    .filter(|step| !self.knows_how_to(step))
+                    .filter(|step| self.knows_what_comes_before(step.makes))
+                    .flat_map(|step| step.needs.iter().map(|(what, _)| *what))
+                    .filter_map(crate::world::ResourceType::called),
+            );
+            let here = crate::world::Position::new(self.state.position.0, self.state.position.1);
+            let mut keep = std::collections::BTreeSet::new();
+            for making in makings {
+                let mut places: Vec<crate::world::Position> = self
+                    .exploration_knowledge
+                    .known_resources
+                    .iter()
+                    .filter(|(_, what)| **what == making)
+                    .map(|(where_it_is, _)| *where_it_is)
+                    .collect();
+                places.sort_by_key(|where_it_is| here.distance_to(where_it_is));
+                keep.extend(places.into_iter().take(Self::NEAREST_MAKINGS_KEPT_IN_MIND));
+            }
+
+            // And a kill with meat on it, for as long as it lasts. It is the
+            // one thing on the map that will not be there next week, so it is
+            // the last thing to let slip this week - and weighed with the rest
+            // it was the first: heard of rather than seen, out in country not
+            // lived in, wanted only by whoever happened to be hungry that
+            // turn. Somebody told where a kill lay had forgotten it by the
+            // next turn and was told again, five thousand times in two years
+            // on one world, and never once went (#331).
+            keep.extend(
+                self.exploration_knowledge
+                    .known_resources
+                    .iter()
+                    .filter(|(_, what)| **what == crate::world::ResourceType::Meat)
+                    .filter(|(where_it_is, _)| {
+                        self.exploration_knowledge
+                            .when_i_saw_it(where_it_is)
+                            .is_some_and(|then| {
+                                current_turn.saturating_sub(then) < crate::world::World::HOW_LONG_A_CARCASS_LIES
+                            })
+                    })
+                    .map(|(where_it_is, _)| *where_it_is),
+            );
+            keep
+        };
 
         let mut worth: Vec<(crate::world::Position, f32)> = self
             .exploration_knowledge
@@ -10812,7 +11202,11 @@ impl Agent {
         worth.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let to_forget = worth.len() - Self::WHAT_A_MAN_CAN_HOLD_IN_MIND;
-        for (where_it_is, _) in worth.into_iter().take(to_forget) {
+        for (where_it_is, _) in worth
+            .into_iter()
+            .filter(|(where_it_is, _)| !to_keep.contains(where_it_is))
+            .take(to_forget)
+        {
             self.exploration_knowledge.known_resources.remove(&where_it_is);
             self.exploration_knowledge.who_told_me.remove(&where_it_is);
             self.exploration_knowledge
