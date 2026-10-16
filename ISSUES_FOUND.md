@@ -25469,3 +25469,19 @@ Before this, all eight ran metal inside the first year.
 
 The seed-0 yearly dice count moved from 984,596 to 939,765, and seed 4242's
 120-turn count from 7,934 to 7,954.
+
+Over two years from 12 founders, against #335 (smooth 1–12, scattered 1–8):
+
+| | #335 | #336 |
+|---|---|---|
+| smooth: births, deaths | 84, 4 | 89, 1 |
+| scattered: births, deaths | 69, 0 | 66, 0 |
+| metal made (lumps, blades and the rest) | in all eight scattered | 6, in one |
+| wheels made | 48 | 0 |
+| makings | 62,013 | 49,225 |
+
+Births by seed:
+- smooth: 11 6 9 7 6 4 9 7 5 10 7 8;
+- scattered: 11 8 8 8 9 7 6 9.
+
+The one death is of thirst.
