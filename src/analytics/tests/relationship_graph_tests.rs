@@ -180,12 +180,14 @@ fn a_blow_lands_on_the_relationship_as_well_as_the_body() {
     let attacker = simulation.population.agents[0].id;
     let struck = simulation.population.agents[1].id;
 
-    // They were friends before it
+    // They were friends before it, and two who get on: how close two people
+    // can come is set by how well their natures suit (#338)
     for index in 0..2 {
         let other = if index == 0 { struck } else { attacker };
         let bond = simulation.population.agents[index]
             .relationships
             .get_or_create_relationship(other, 0);
+        bond.affinity = 1.0;
         bond.strengthen(0.8);
         bond.settle_what_we_are();
     }
