@@ -1531,6 +1531,12 @@ impl Population {
     ///
     /// Agents with active survival drives (hunger/thirst) will not engage in social
     /// interactions - they must prioritize finding food and water over socializing.
+    /// How much two natures suiting each other counts, beside the bond they
+    /// already have, in who sits down with whom (#338). At one, two who
+    /// share three traits (an affinity of 0.45) are sought out as if their
+    /// bond were 0.45 warmer, and a cruel man is shunned as if 0.3 colder.
+    pub const WHAT_GETTING_ON_COUNTS_FOR: f32 = 1.0;
+
     pub fn process_social_interactions(&mut self) {
         use crate::agents::social_interactions::{
             SocialInteractionType,
@@ -1629,17 +1635,34 @@ impl Population {
         // all of them and every bond rose together (#337). A day's company is
         // a few people now - the ones a person is closest to first - and how
         // many depends on the person (`how_many_i_sit_down_with`).
-        interactions.sort_by(|(a1, b1), (a2, b2)| {
-            let closeness = |i: usize, j: usize| {
-                let them = self.agents[j].id;
-                self.agents[i]
+        //
+        // Closest, and best suited. By the bond alone, whoever happened to be
+        // sat beside on the first days was the company for good, and how well
+        // two natures go together set only how close they could ever get: in
+        // forty settlements no trait moved a person's number of friends, and
+        // the mean bond by no more than five per cent (#338). People seek out
+        // the company they get on with, and shun a cruel man's.
+        let wanted = |i: usize, j: usize| {
+            let bond = |me: usize, them: usize| {
+                self.agents[me]
                     .relationships
-                    .get_relationship(&them)
+                    .get_relationship(&self.agents[them].id)
                     .map(|bond| bond.bond_strength)
                     .unwrap_or(0.0)
             };
-            closeness(*a2, *b2).total_cmp(&closeness(*a1, *b1))
-        });
+            let suits = |me: usize, them: usize| {
+                super::Relationship::affinity_between(&self.agents[me].traits, &self.agents[them].traits)
+            };
+            (bond(i, j) + bond(j, i)) / 2.0
+                + Self::WHAT_GETTING_ON_COUNTS_FOR * (suits(i, j) + suits(j, i)) / 2.0
+        };
+        let mut interactions: Vec<((usize, usize), f32)> = interactions
+            .into_iter()
+            .map(|(i, j)| ((i, j), wanted(i, j)))
+            .collect();
+        interactions.sort_by(|(_, left), (_, right)| right.total_cmp(left));
+        let interactions: Vec<(usize, usize)> =
+            interactions.into_iter().map(|(pair, _)| pair).collect();
         let mut sat_with = vec![0usize; self.agents.len()];
         let interactions: Vec<(usize, usize)> = interactions
             .into_iter()

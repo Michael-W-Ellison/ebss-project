@@ -800,7 +800,7 @@ impl Relationship {
     /// The nearest a bond between these two can come.
     ///
     /// Blood and a pair bond are not held back by temperament. Anybody else
-    /// is: two people made to clash can be civil at best (0.35), two of a
+    /// is: two people made to clash can be civil at best (0.25), two of a
     /// kind can be as close as friends get (0.9), and most pairs, neither,
     /// come to about 0.6 if they keep each other's company.
     pub fn how_close_we_could_be(&self) -> f32 {
@@ -814,7 +814,7 @@ impl Relationship {
     }
 
     /// The bond ceiling for two people whose natures clash at every turn.
-    pub const LEAST_CLOSE_PEOPLE_CAN_BE_MADE: f32 = 0.35;
+    pub const LEAST_CLOSE_PEOPLE_CAN_BE_MADE: f32 = 0.25;
 
     /// And for two who are made for each other.
     pub const CLOSEST_FRIENDS_GET: f32 = 0.9;

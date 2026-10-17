@@ -688,3 +688,32 @@ fn every_roof_this_names_is_one_that_can_be_put_up() {
          a tent rather than say so"
     );
 }
+
+/// Nobody helps himself from a neighbour's pack to see what happens (#338).
+///
+/// Taking is answered by the want for the thing, where a person's nature
+/// says whether they take or bargain. Offered as the next untried verb, a
+/// few people in forty settlements tried their neighbours' packs a thousand
+/// times and more each, a kind-hearted man the most of anybody.
+#[test]
+fn curiosity_never_reaches_into_a_neighbours_pack() {
+    let mut simulation = one_person_on_bare_ground();
+    simulation.population.spawn_agent(AgentConfig::default());
+    let at = simulation.population.agents[0].state.position;
+    simulation.population.agents[1].state.position = at;
+    simulation.population.agents[1]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("berries".to_string(), 3, 0.1));
+
+    // However stale everything else he could do here becomes
+    for _ in 0..200 {
+        let Some((verb, key)) = simulation.what_i_have_tried_least_here(&simulation.population.agents[0])
+        else {
+            break;
+        };
+        assert_ne!(verb.done_by, Some("takefrom"), "curiosity reached for {key}");
+        for _ in 0..20 {
+            simulation.population.agents[0].lessons.record_particular(&key, true);
+        }
+    }
+}
