@@ -25686,3 +25686,72 @@ The middle column is the rule that was measured and set aside.
 - No trait moves the mean bond by more than about 10%. The shaping shows in
   who is partnered and how many friends a person keeps, not in the average
   over everybody they know.
+
+### 339. Why no trait moves a person's average bond: talk sets every bond
+
+#338 left one result open: no trait moved a person's mean bond, taken over
+everybody they know, by more than about 10%. This is the investigation; no
+model code changes with it.
+
+**How.** Six settlements (smooth and scattered, seeds 1, 3 and 5), two years.
+A probe totalled how far each process moved the bonds that are neither
+family nor a pair, and dumped every bond at the end with its affinity and
+ceiling: 1,128 bonds, 1,006 of them between people who are not kin.
+
+**What moves a bond that is not kin, over two years in six settlements:**
+
+| process | total change | changes |
+|---|---|---|
+| passing news (+0.001 each, up to 0.5) | +6,263 | 6.4 million |
+| left untended (3% a day of the way back to 0.2) | −5,505 | 620,000 |
+| traits clashing, a turn at a time | −843 | 2.9 million |
+| every deed together: company, gifts, teaching, help | +309 | 84,000 |
+| standing near somebody (up to 0.3) | +212 | 381,000 |
+| seeing somebody (up to 0.3) | +109 | 34,000 |
+| blows and other harms | −152 | 13,000 |
+
+**Talking is twenty times everything people do for each other.** Each piece
+of news passed adds 0.001 to the bond on both sides, up to 0.5. That is
+about nine a day for every bond. Against the daily fade it settles every
+acquaintance just under 0.5, whoever the two are: 82% of these bonds stand
+between 0.4 and 0.6, most between 0.46 and 0.49. Only four were at 0.5
+exactly, so none of them counts as a friend (the probe counts over 0.5).
+
+**Deeds are too small to lift a bond out of that band.** A day's company is
+worth +0.01 to +0.03, scaled by the room left below the ceiling. At 0.48 with
+a ceiling of 0.575 that comes to about +0.003, while the fade takes 0.008 a
+day. So the ceilings above 0.5 that affinity sets are never reached:
+
+| affinity of the pair | bonds | mean ceiling | mean bond |
+|---|---|---|---|
+| below −0.3 | 128 | 0.42 | 0.39 |
+| −0.3 to −0.1 | 69 | 0.51 | 0.44 |
+| −0.1 to 0.05 | 562 | 0.575 | 0.46 |
+| 0.05 to 0.2 | 186 | 0.62 | 0.46 |
+| 0.2 to 0.4 | 56 | 0.65 | 0.44 |
+| 0.4 and over | 5 | 0.74 | 0.38 |
+
+Nature shows only where it pulls the ceiling below the band. That is a pair
+who clash, 13% of these bonds. Two who are made for each other stand where
+two strangers do.
+
+**And most pairs have nothing between them to read.** The median affinity is
+exactly 0: most pairs share no trait and clash on none, so 56% of these
+bonds have the same ceiling, 0.575.
+
+**What the per-person average measures.** It is a person's own bonds,
+nearly all at the level talk sets. The spread from one person to the next is
+small (standard deviation 0.037). Most of it is how many kin and partners
+they have (correlation 0.55), since those stand near 1.0. And charm,
+kindness and cruelty work on how *others* feel about a person, which a
+person's own average does not include.
+
+**What would let nature show** (not done):
+- Talk should make somebody a familiar face (0.3), not a near-friend, and
+  count once a day for a pair rather than once for each piece of news. Being
+  closer than that would then rest on company and deeds.
+- Deeds should be sized against the fade, so that regular company holds a
+  bond near the ceiling the two natures allow, and its absence lets it
+  slide.
+- How others feel about a person should be measured alongside the person's
+  own average.
