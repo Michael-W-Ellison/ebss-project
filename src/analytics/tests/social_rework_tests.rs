@@ -267,3 +267,63 @@ fn an_honest_man_counts_a_theft_dearer() {
     let greedy = agent.what_taking_it_would_cost_me(2, 0.4);
     assert!(honest > greedy * 10.0, "{honest} against {greedy}");
 }
+
+// --------------------------------------------------------------------------
+// Talk and company (#339)
+// --------------------------------------------------------------------------
+
+/// Talking makes somebody a face you know, and no more, however much is
+/// said: talk counts once a day for a pair.
+#[test]
+fn talk_makes_a_familiar_face_and_no_more() {
+    let mut bond = a_bond_between(&traits(&[Trait::Glutton]), &traits(&[Trait::Goth]));
+    let a_day = crate::environment::seasons::TICKS_PER_DAY;
+
+    let before = bond.bond_strength;
+    for word in 0..50 {
+        bond.have_a_word(word);
+    }
+    assert!(
+        bond.bond_strength - before <= Relationship::WHAT_A_DAY_OF_TALK_IS_WORTH + 1e-6,
+        "fifty words in a day counted {}",
+        bond.bond_strength - before
+    );
+
+    for day in 1..400 {
+        bond.have_a_word(day * a_day);
+        bond.a_day_untended(&traits(&[Trait::Glutton]));
+    }
+    assert!(bond.bond_strength <= Relationship::A_FAMILIAR_FACE + 1e-6, "{}", bond.bond_strength);
+    assert!(bond.bond_strength > 0.25, "talked to every day: {}", bond.bond_strength);
+}
+
+/// A good turn a day holds a bond near what the two natures allow, so two of
+/// a kind come to stand nearer than two with nothing between them, and two
+/// who clash further off; and left alone, any of them slides back.
+#[test]
+fn keeping_company_brings_a_bond_to_what_the_two_natures_allow() {
+    let a_year_of_it = |mine: &[Trait], theirs: &[Trait]| {
+        let mine = traits(mine);
+        let mut bond = a_bond_between(&mine, &traits(theirs));
+        for day in 0..365 {
+            bond.positive_interaction(2, day);
+            bond.a_day_untended(&mine);
+        }
+        (bond.bond_strength, bond.how_close_we_could_be(), bond)
+    };
+
+    let (kind, kind_ceiling, mut kept) =
+        a_year_of_it(&[Trait::Empathic, Trait::Forgiving, Trait::Builder], &[Trait::Empathic, Trait::Forgiving, Trait::Builder]);
+    let (plain, plain_ceiling, _) = a_year_of_it(&[Trait::Glutton], &[Trait::Goth]);
+    let (clash, _, _) = a_year_of_it(&[Trait::Believer, Trait::Honest], &[Trait::Atheist, Trait::Dishonest]);
+
+    assert!(kind > plain && plain > clash, "{kind} {plain} {clash}");
+    assert!(kind > 0.8 * kind_ceiling, "{kind} of {kind_ceiling}");
+    assert!(plain > 0.8 * plain_ceiling, "{plain} of {plain_ceiling}");
+    assert!(plain > Relationship::GETTING_ON_WITH_SOMEBODY, "company every day makes a friend: {plain}");
+
+    for _ in 0..60 {
+        kept.a_day_untended(&traits(&[Trait::Empathic]));
+    }
+    assert!(kept.bond_strength < 0.5, "two months apart: {}", kept.bond_strength);
+}

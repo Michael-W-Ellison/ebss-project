@@ -3087,28 +3087,20 @@ impl Population {
 
                     // Strengthen relationship through gossip interaction.
                     //
-                    // **As far as getting on, and no further.** This had no
+                    // **As far as a familiar face, once a day.** This had no
                     // ceiling, and talking is the commonest thing people do:
                     // a quarter of a million exchanges in a settlement's first
-                    // quarter, half of everything that drew anybody closer,
-                    // so everybody talked their way to nearly 1.0 with
-                    // everybody (#296). Chatting with a man makes him
-                    // somebody you get on with; more than that is earned by
-                    // what you do for each other. See
-                    // `Relationship::GETTING_ON_WITH_SOMEBODY`.
+                    // quarter, so everybody talked their way to nearly 1.0
+                    // with everybody (#296). Capped at getting on (0.5), it
+                    // still set every bond that was not kin, just under 0.5
+                    // whoever the two were (#339). See
+                    // `Relationship::have_a_word`.
                     let uuid_i = self.agents[i].id;
-                    let getting_on = crate::agents::emotions::Relationship::GETTING_ON_WITH_SOMEBODY;
                     if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&uuid_j) {
-                        if rel.bond_strength < getting_on {
-                            rel.bond_strength = (rel.bond_strength + 0.001).min(getting_on);
-                        }
-                        rel.total_interactions += 1;
+                        rel.have_a_word(current_turn);
                     }
                     if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&uuid_i) {
-                        if rel.bond_strength < getting_on {
-                            rel.bond_strength = (rel.bond_strength + 0.001).min(getting_on);
-                        }
-                        rel.total_interactions += 1;
+                        rel.have_a_word(current_turn);
                     }
                 }
             }

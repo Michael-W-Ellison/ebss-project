@@ -725,6 +725,10 @@ pub struct Relationship {
     /// they meet decides how near that they get (#338).
     #[serde(default)]
     pub affinity: f32,
+    /// The day these two last had a word, so that talk counts once a day
+    /// for a pair rather than once for each thing said (#339).
+    #[serde(default)]
+    pub last_day_talked: Option<u32>,
 }
 
 impl Relationship {
@@ -747,6 +751,7 @@ impl Relationship {
             last_interaction_turn: 0,
             total_interactions: 0,
             affinity: 0.0,
+            last_day_talked: None,
         }
     }
 
@@ -760,6 +765,7 @@ impl Relationship {
             last_interaction_turn: current_turn,
             total_interactions: 0,
             affinity: 0.0,
+            last_day_talked: None,
         }
     }
 
@@ -1034,11 +1040,49 @@ impl Relationship {
     /// Record a positive interaction (for compatibility with social network system)
     /// Delta is converted to bond strength change (typically 0-10 -> 0.0-0.1)
     pub fn positive_interaction(&mut self, delta: i8, current_turn: u32) {
-        let bond_change = (delta as f32) * 0.01; // Convert delta to 0.0-1.0 scale
+        let bond_change = (delta as f32) * Self::WHAT_A_GOOD_TURN_IS_WORTH;
         self.strengthen(bond_change);
         self.last_interaction_turn = current_turn;
         self.total_interactions += 1;
         self.settle_what_we_are();
+    }
+
+    /// What one step of a good turn done (`positive_interaction`) is worth,
+    /// before the room left below the ceiling scales it.
+    ///
+    /// Sized against the fade (`WHAT_A_DAY_UNTENDED_TAKES`), so that two
+    /// people who keep each other's company come to stand near the ceiling
+    /// their natures allow, and two who stop slide back. It was 0.01: a day's
+    /// company came to about +0.003 near a bond of 0.48 while the fade took
+    /// 0.008, so no deed lifted a bond to where affinity would have let it go,
+    /// and two people made for each other stood where two strangers did
+    /// (#339). At this, one good turn a day of the ordinary size holds a pair
+    /// with nothing between them at about 0.52, two who clash at about 0.39
+    /// and two of a kind at about 0.74.
+    pub const WHAT_A_GOOD_TURN_IS_WORTH: f32 = 0.06;
+
+    /// What a day of talk is worth to a pair, as far as a familiar face.
+    pub const WHAT_A_DAY_OF_TALK_IS_WORTH: f32 = 0.01;
+
+    /// A word with somebody: as far as a familiar face, and once a day.
+    ///
+    /// Each thing passed on added 0.001 up to 0.5, about nine a day for every
+    /// pair, which against the fade settled every acquaintance just under
+    /// 0.5 whoever the two were: talk was twenty times every deed together,
+    /// and set every bond that was not kin (#339). Talking with a man makes
+    /// him somebody you know; being more than that rests on keeping company
+    /// and what is done.
+    pub fn have_a_word(&mut self, now: u32) {
+        let day = now / crate::environment::seasons::TICKS_PER_DAY;
+        self.total_interactions += 1;
+        if self.last_day_talked == Some(day) {
+            return;
+        }
+        self.last_day_talked = Some(day);
+        if self.bond_strength < Self::A_FAMILIAR_FACE {
+            self.bond_strength =
+                (self.bond_strength + Self::WHAT_A_DAY_OF_TALK_IS_WORTH).min(Self::A_FAMILIAR_FACE);
+        }
     }
 
     /// Record a negative interaction (for compatibility with social network system)
