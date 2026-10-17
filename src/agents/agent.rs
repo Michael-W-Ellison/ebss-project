@@ -7008,25 +7008,14 @@ impl Agent {
         self.inventory.max_weight
     }
 
-    /// Whether this agent could be the other parent of a child somebody else
-    /// carries: grown, alive and not infertile.
-    ///
-    /// Carrying or nursing a child stops a body conceiving, not its partner's,
-    /// and either of a pair may carry. While mating was with anybody in reach
-    /// it did not matter that the one nursing was out of it altogether: there
-    /// was always somebody else. Once it was only within a pair (#338), the
-    /// partner of somebody nursing was out of it too, for two or three years
-    /// at a time, and births halved.
-    pub fn could_be_the_other_parent(&self) -> bool {
-        self.state.is_alive
-            && self.state.life_stage.can_reproduce()
-            && !self.traits.has(crate::core::traits::Trait::Infertile)
-    }
-
-    /// Check if agent can reproduce (basic capability check): could conceive
-    /// a child and carry it.
+    /// Check if agent can reproduce (basic capability check)
     pub fn can_reproduce(&self) -> bool {
-        if !self.could_be_the_other_parent() {
+        if !self.state.is_alive || !self.state.life_stage.can_reproduce() {
+            return false;
+        }
+
+        // Infertile agents cannot reproduce
+        if self.traits.has(crate::core::traits::Trait::Infertile) {
             return false;
         }
 
@@ -7043,6 +7032,12 @@ impl Agent {
         // birth, and a settlement of six grown people had eight or twelve
         // small children by its fourth winter and starved in it. See
         // ISSUES_FOUND #262.
+        //
+        // And since only a pair has a child (#338), this keeps the partner
+        // waiting as well: one pregnancy to a couple at a time, and the next
+        // when the last is weaned. Letting the other partner carry meanwhile
+        // was tried, and doubled what a couple bore against what a couple of
+        // people do.
         if self.nursing_a_child {
             return false;
         }
@@ -7274,19 +7269,10 @@ impl Agent {
         self.expects_to_be_able_to_feed_a_child()
     }
 
-    /// Whether this agent would have a child with its partner, whichever of
-    /// the two carries it: the same question of the stores, without asking
-    /// that this one is free to carry. See `could_be_the_other_parent`.
-    pub fn would_have_a_child_with_a_partner(&self) -> bool {
-        self.could_be_the_other_parent() && self.expects_to_be_able_to_feed_a_child()
-    }
 
     /// Get fertility level (0.0 to 1.0)
-    ///
-    /// As the other parent: whether this one can carry is asked separately,
-    /// by `can_carry_a_child`.
     pub fn fertility(&self) -> f32 {
-        if !self.could_be_the_other_parent() {
+        if !self.can_reproduce() {
             return 0.0;
         }
 

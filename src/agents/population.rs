@@ -1242,13 +1242,12 @@ impl Population {
         }
 
         // Find potential mating pairs
-        // Use would_have_a_child_with_a_partner(), which checks both capability AND survival state;
-        // which of a pair is free to carry is `can_mate`'s to ask.
+        // Use should_attempt_reproduction() which checks both capability AND survival state
         // Agents with active hunger/thirst drives are excluded - they must secure food first
         let alive_agents: Vec<usize> = self.agents
             .iter()
             .enumerate()
-            .filter(|(_, a)| a.would_have_a_child_with_a_partner())
+            .filter(|(_, a)| a.should_attempt_reproduction())
             .filter(|(_, a)| !self.is_on_cooldown(a.id))
             .map(|(i, _)| i)
             .collect();
