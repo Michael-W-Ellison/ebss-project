@@ -25569,3 +25569,120 @@ held by fewer than 8 adults are left out.
   for a `Partner` relationship, which is never made.
 - `Population::process_gossip`, where Gossip people spread twisted rumours,
   is never called.
+
+### 338. Traits shape relationships, pairs, and the way a want is met
+
+"Stop bonds saturating so traits can shape relationships. Merge the
+duplicate traits. Mating should only occur between agents in a
+relationship. Yes, generosity and theft should be tied to traits. Drive
+demand forces action, but traits influence the type of action taken to
+satisfy a drive." This follows #337's measurement, and is measured the same
+way: forty settlements (smooth 1–24, scattered 1–16), two years, 12
+founders, a rank test of each trait's holders against everybody else.
+
+**What changed:**
+- **Duplicate traits merged.** Hottempered, Sociable, Introverted,
+  Empathetic and Manipulative were separate variants that no founder or
+  mutation ever drew. They are gone, and old saves read them back as
+  Hot-Headed, Extrovert, Introvert, Empathic and Manipulator.
+- **Bonds have a ceiling set by the two natures.** `affinity_between` reads
+  shared traits, clashes, and what each makes of the other (charm and
+  kindness draw people; cruelty and coldness put them off). A kindness fills
+  part of the room left below the ceiling: 0.25 for two who clash at every
+  turn, 0.9 for two of a kind, family and partners 1.0. Warmth left
+  untended fades back to 0.2. A grudge wears off, faster for a Forgiving
+  person and hardly at all for a Vengeful one.
+- **A day's company is a few people.** Two people a day, three for an
+  Extrovert, one for an Introvert. The company is chosen by bond *and* how
+  well the two natures suit (`WHAT_GETTING_ON_COUNTS_FOR`). By bond alone,
+  whoever sat nearby in the first days stayed company for good, and no trait
+  changed how many friends anybody had.
+- **Only a pair has a child.** Unpaired adults warm enough to each other on
+  both sides pair off; a pair comes apart on a death or a soured bond.
+  Somebody unpaired courts the unpaired adult they are warmest to. Either
+  partner wanting a child is enough, and a partner out of reach is walked
+  to.
+- **One pregnancy to a couple at a time.** While either partner carries or
+  nurses, the couple waits. Letting the other partner carry meanwhile was
+  measured (below) and set aside: it kept births near the old rate, but gave
+  a couple twice what a couple of people bear.
+- **A person's nature picks how a want is met.** `Trait::inclines_to` says
+  how readily each trait gives, tells, talks, trades or takes.
+  - The social drive draws between giving, telling and talking by those
+    weights.
+  - Somebody readier to take than to trade looks at taking first.
+  - What a theft costs is scaled by temperament.
+  - A generous nature gives to people it thinks less well of.
+- **Curiosity no longer reaches into a neighbour's pack.** Its
+  next-untried-verb path offered taking to anybody. In the first
+  measurement, a few people tried their neighbours' packs a thousand times
+  and more each; the most was a Kind-Hearted person, at 1,942 tries for one
+  that came off. Greedy people hardly tried at all.
+
+**Where the settlement stands** (#337 against now):
+
+| | #337 | #338 |
+|---|---|---|
+| friends each (bond over 0.5) | about 12 | 1.7 |
+| mean bond | 0.78 | 0.49 |
+| partnered adults | none | 90% |
+| mating attempts per adult a day | 2.4 | 1.4 |
+| gifts per adult a day | 0.4 | 0.19 |
+| takings in two years | 191, by 29 people | 25, by 18 |
+| attacks | 2,450, by 214 people | 2,597, by 174 |
+| believes what it is told (all hearings pooled) | 97.2% | 93.8% |
+
+**Traits that now visibly change behaviour** (holders against everybody
+else):
+
+| behaviour | trait | holders | others |
+|---|---|---|---|
+| gives, per 100 adult days (median) | Altruist | 30.3 | 11.7 |
+| | Kind-Hearted | 1.63× | |
+| | Caretaker | 1.45× | |
+| | Greedy, Callous | 3.5 | 12.6 |
+| | Cruel | 2.1 | 13.1 |
+| takes, per 1000 adult days | Greedy | 0.82 | 0.05 |
+| | Honest | 0 | 0.08 |
+| partnered | Cruel | 48% | 93% |
+| | Callous | 59% | 91% |
+| friends (mean) | Cruel | 1.24 | 1.71 |
+| | Callous | 1.18 | 1.70 |
+| | Intolerant | 1.38 | 1.69 |
+| socialises (median) | Extrovert | 1.76× | |
+| | Romantic | 1.52× | |
+| | Introvert | 0.62× | |
+| tells what it knows (median) | Gossip | 2.11× | |
+
+What #337 found still holds for lying, twisting, belief and attacks:
+Dishonest and Manipulator people lie, twist and strike; Suspicious and
+Skeptic people doubt; Forgiving, Calm and Pacifist people hardly strike.
+Cruel people socialise four times as often as others because half of them
+have nobody, and courting is socialising.
+
+**Births.** One pregnancy to a couple brings births down to about the rate
+a couple of people manage:
+
+| | before pairs (#336) | either partner may carry | one pregnancy to a couple |
+|---|---|---|---|
+| smooth 1–12 | 89 | 79 | 51 |
+| scattered 1–8 | 66 | 61 | 37 |
+| all forty | - | - | 177, 4.4 a settlement |
+
+By seed, one pregnancy to a couple:
+- smooth: 4 2 6 6 4 4 3 5 4 4 4 5;
+- scattered: 5 5 5 5 4 5 4 4.
+
+The middle column is the rule that was measured and set aside.
+
+**Deaths.** Five people in forty settlements, all of thirst: three in smooth
+8 (days 659–664, one a child) and two in smooth 11 (days 400 and 401). Smooth
+8 lost one person to thirst before this change too. Not looked into here.
+
+**Still open:**
+- Mating is attempted about 1.4 times an adult a day, now with a partner,
+  when a conception can come at most once a cycle. That was 2.4 a day
+  before pairs existed.
+- No trait moves the mean bond by more than about 10%. The shaping shows in
+  who is partnered and how many friends a person keeps, not in the average
+  over everybody they know.
