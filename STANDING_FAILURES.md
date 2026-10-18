@@ -28,18 +28,20 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #340): `cargo test --lib` in one piece.
-2,866 tests run: 2,861 passed, 1 failed, 4 ignored, in 1,257 s. #340 moves
-neither dice count: neither fixed world has anybody on a salt marsh. They
-stand at 7,852 (seed 4242, 120 turns) and 989,726 (seed 0, a year), set by
-#339. The one failure is left red, as #339 found it, still 23 of 96:
-- **`clothing_tests::a_cold_agent_ends_up_dressed`**: 23 of 96 worlds
-  dressed, against a bar of a quarter (24). Its rate was measured at 29 and
-  30 of 96 (#300). Nothing #339 changed reaches a man alone in a world: the
-  daily company pass no longer draws a die for a roll it no longer makes,
-  so every later draw in all 96 worlds moved. With a dummy draw put back in
-  its place the test passes again. It is the same kind of threshold as the
-  two below, set near the rate it measures, and is not re-baselined.
+**Last full run** (ISSUES_FOUND #341): `cargo test --lib` in one piece.
+2,866 tests run: 2,861 passed, 1 failed, 4 ignored, in 1,097 s. The one was
+the yearly dice count, which #341 moves; recorded anew and passing on its
+own. The dice counts are 7,852 (seed 4242, 120 turns) and 976,851 (seed 0,
+a year).
+
+**`clothing_tests::a_cold_agent_ends_up_dressed` is off this list** (#341).
+It read 23 of 96 against a bar of 24. What it measured was a man who wanted
+a coat and was never pressed to make one, over a window that had shrunk
+from fifty days to twelve and a half, in 96 worlds that any change upstream
+dealt afresh. Somebody chilly with the makings on them now dresses on the
+spot. The test counts in days and seeds each world before building it. It
+asks for nine in ten dressed within a day and reads 96 of 96 (3 of 96
+without the change). That leaves:
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
