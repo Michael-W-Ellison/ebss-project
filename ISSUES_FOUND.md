@@ -25816,3 +25816,59 @@ and how others felt about a person was not measured.
   Not looked into here.
 - How others feel about a person is now measured, but only in the bond
   dump, not yet in the per-trait report.
+
+### 340. Smooth seed 8's winter thirst: a household drinking where it stood on a salt marsh
+
+Smooth seed 8 lost people to thirst early each winter: one in #336's run,
+three in each of #338's two runs, nine in #339's (days 652–667). It looked
+like a dry season. It was not.
+
+**How.** A probe replayed the same world exactly, reproducing the nine
+deaths on the same days. Each half hour from day 630 it logged everybody
+running short of water: where they stood, the ground under them, what they
+carried, and the three nearest fresh sources with what could be drawn from
+each. Every action and its result was logged too, and the water sources
+within 60 tiles of camp once a day.
+
+**What it showed.**
+- **Water was plentiful.** Wetland and riverbank sources holding hundreds
+  of units lay 10 to 30 tiles from camp all winter.
+- **All six adults who died stood on one tile, (481, 458), a salt marsh,
+  for about a fortnight.** Each had 28 tiles to the nearest fresh water and
+  never walked it. The three children who died were with them.
+- Their actions were one thing over and over. The first to die had 465
+  turns of `Gather water` refused with "No water sources nearby" and 112 of
+  "Drank salt water" from day 640 to their death on day 652; the others the
+  same in proportion.
+
+**Why.** `known_source_position` finds the nearest water a person can
+smell, remembers or has seen, and it did not ask whether the water was
+salt. Standing on a salt marsh, the nearest water a person knew of was the
+marsh under their feet:
+1. The fetch-water way found it within a pace and offered `Gather` there.
+2. The gather, which does ask, refused salt water to anybody not yet dry
+   enough to drink the sea, so the turn came to nothing.
+3. The next turn asked the same question and got the same answer.
+4. At hydration 0.25 they would drink the sea. Six people then shared one
+   marsh spring that refills about a unit a pass in winter: each drink put
+   a little water in, and the salt took more back out over the following
+   days.
+
+**Fix.** Known water leaves salt out for anybody not yet dry enough to
+drink the sea, as `water_action` and the gather already did. Somebody dying
+of thirst still takes what is there.
+
+**Measured** over forty settlements, two years, against #339's run:
+
+| | #339 | #340 |
+|---|---|---|
+| births | 177 | 177 |
+| deaths | 11 | 3 |
+| of thirst | 9, all smooth seed 8 | 0 |
+
+Births are the same in every seed range: no other world reached this. Smooth
+seed 8's nine now live; its one death is a blow on day 702. The other two
+deaths are of hunger (scattered seed 2, smooth seed 17), as before.
+
+Test: `salt_tests::the_water_a_man_goes_to_is_fresh_unless_he_is_past_caring`.
+It fails with the salt check removed.
