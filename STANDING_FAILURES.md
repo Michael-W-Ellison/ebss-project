@@ -28,11 +28,11 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #339): `cargo test --lib` in one piece.
-2,865 tests run: 2,858 passed, 3 failed, 4 ignored, in 1,078 s. Two were the
-dice counts, which #339 moves; recorded anew and passing on their own. The
-dice counts are 7,852 (seed 4242, 120 turns) and 989,726 (seed 0, a year).
-The third is left red:
+**Last full run** (ISSUES_FOUND #340): `cargo test --lib` in one piece.
+2,866 tests run: 2,861 passed, 1 failed, 4 ignored, in 1,257 s. #340 moves
+neither dice count: neither fixed world has anybody on a salt marsh. They
+stand at 7,852 (seed 4242, 120 turns) and 989,726 (seed 0, a year), set by
+#339. The one failure is left red, as #339 found it, still 23 of 96:
 - **`clothing_tests::a_cold_agent_ends_up_dressed`**: 23 of 96 worlds
   dressed, against a bar of a quarter (24). Its rate was measured at 29 and
   30 of 96 (#300). Nothing #339 changed reaches a man alone in a world: the
