@@ -742,9 +742,31 @@ impl Simulation {
         // Water smelled or remembered over a river is no answer to thirst:
         // walked at, it was refused at the bank every turn, and someone parched
         // stood there (#323).
+        // And salt water is no answer to thirst either, for anybody not yet
+        // dry enough to drink the sea - the same question `water_action` and
+        // the gather itself ask. Asked of nothing here, the nearest water a
+        // man knew of could be a salt marsh: standing on one, he was sent to
+        // drink where he stood, the gather refused it as salt, and he was sent
+        // again the next turn. In smooth seed 8 a household did that every
+        // half hour for a fortnight of early winter with fresh water 28 tiles
+        // off, took to the salt when they were dry enough, and nine died of
+        // thirst (#340).
+        let would_drink_the_sea = agent.would_i_drink_the_sea();
+        let fit_to_drink = |candidate: &(i32, i32, i32)| {
+            !matches!(memory_type, crate::core::memory::SpatialMemoryType::Water)
+                || would_drink_the_sea
+                || !self
+                    .world
+                    .grid
+                    .get_tile(&crate::world::Position::new(candidate.0, candidate.1))
+                    .is_some_and(|tile| tile.terrain.is_the_water_salt())
+        };
         let can_be_got_to = |candidate: &(i32, i32, i32)| {
-            self.world
-                .can_walk_between((agent_position.0, agent_position.1), (candidate.0, candidate.1))
+            fit_to_drink(candidate)
+                && self.world.can_walk_between(
+                    (agent_position.0, agent_position.1),
+                    (candidate.0, candidate.1),
+                )
         };
 
         let smelled = agent
