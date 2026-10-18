@@ -28,15 +28,18 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #338): `cargo test --lib` in one piece.
-2,863 tests run: 2,856 passed, 3 failed, 4 ignored, in 993 s. Two were the
-dice counts, which #338 moves. The third,
-`a_blow_lands_on_the_relationship_as_well_as_the_body`, built its two
-friends out of two strangers with nothing in common, who can no longer come
-that close; the fixture now gives them natures that suit. All three were
-fixed and pass on their own. The dice counts are 7,905 (seed 4242, 120
-turns) and 1,000,911 (seed 0, a year). That
-leaves:
+**Last full run** (ISSUES_FOUND #339): `cargo test --lib` in one piece.
+2,865 tests run: 2,858 passed, 3 failed, 4 ignored, in 1,078 s. Two were the
+dice counts, which #339 moves; recorded anew and passing on their own. The
+dice counts are 7,852 (seed 4242, 120 turns) and 989,726 (seed 0, a year).
+The third is left red:
+- **`clothing_tests::a_cold_agent_ends_up_dressed`**: 23 of 96 worlds
+  dressed, against a bar of a quarter (24). Its rate was measured at 29 and
+  30 of 96 (#300). Nothing #339 changed reaches a man alone in a world: the
+  daily company pass no longer draws a die for a roll it no longer makes,
+  so every later draw in all 96 worlds moved. With a dummy draw put back in
+  its place the test passes again. It is the same kind of threshold as the
+  two below, set near the rate it measures, and is not re-baselined.
 - The two multi-generation tests below, which are ignored long runs.
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed

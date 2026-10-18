@@ -224,7 +224,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Down to 7,905 for #338: bonds held to what two natures allow, a few
     // people's company a day, pairs, and a want met the way a nature reaches
     // for.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_905;
+    // Down to 7,852 for #339: talk makes only a familiar face, a good turn
+    // is sized against the fade, and a day's company is kept without a roll
+    // for it.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_852;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -497,7 +500,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Up 6.5% to 1,000,911 for #338: bonds held to what two natures allow,
     // company chosen by how well two natures suit, only a pair has a child,
     // one at a time, and curiosity does not try a neighbour's pack.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_000_911;
+    // Down 1.1% to 989,726 for #339: talk makes only a familiar face, a good
+    // turn is sized against the fade, a day's company is kept without a roll
+    // for it, and a friendship left alone fades over ten weeks, not three.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 989_726;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
