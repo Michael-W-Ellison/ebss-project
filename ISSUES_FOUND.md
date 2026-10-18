@@ -25972,8 +25972,8 @@ material and something to sew with.
 `repeatable_tests::a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year`
 runs seed 0 for a year of turns and asserts how many draws the dice stream
 gave. It failed in the full run after #341, as it does after nearly every
-change to the model. This looks at whether it is doing its job. No code
-changes with it.
+change to the model. This looks at whether it is doing its job, and adds
+the test it pointed to.
 
 **What it is for.** A count that moves without the model having been changed
 means something took a branch on an input the seed does not fix. Three other
@@ -26016,7 +26016,18 @@ model. A count that moves on a commit meant to change nothing (a speed fix,
 a rename, a refactor) is the case to stop and look at.
 
 **One thing it cannot do on its own:** tell a deliberate change from drift
-when both land in the same commit. A test that runs seed 0 in two child
-processes of the test binary and compares the two counts would check
-between-run determinism directly, with no constant to keep. It would never
-fail on a deliberate change. Not done.
+when both land in the same commit.
+
+**Added for that:** `the_same_seed_is_the_same_world_in_another_process`. It
+starts the test binary twice more, side by side, each running only
+`one_process_reports_seed_zero`. That plays seed 0 for a month and prints
+the world's fingerprint and the draws it took. The parent asserts the two
+agree. There is no recorded number, so it holds through any deliberate
+change and fails only when two runs of the same code disagree. It takes
+about 7 seconds.
+
+Proved on a sabotage. `Simulation::new` was made to draw one die for each
+unit of the process id modulo 7 (removed again after):
+- `the_same_seed_is_the_same_world`, inside one process, still passed.
+- The new test failed: 83,776 draws in one process, 82,318 in the other,
+  and different fingerprints.
