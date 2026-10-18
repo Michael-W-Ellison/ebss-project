@@ -25879,8 +25879,8 @@ It fails with the salt check removed.
 200 flax in his pack and a patch of flax three paces off. It sets his ideal
 temperature to 45 so that the weather is always colder than he wants. It
 asks that he be dressed in at least a quarter of 96 worlds within 600 turns.
-It reads 23 of 96 and has been on both sides of its bar for months. This is
-the investigation; no model code changes with it.
+It reads 23 of 96 and has been on both sides of its bar for months. Below
+are the investigation, then what was changed and measured.
 
 **How.** A probe ran the same fixture over the same 96 seeds for 2,400
 turns, logging every action. For the first 600 turns it measured his body
@@ -25936,10 +25936,33 @@ the drive that would act on it does not.
   96 worlds swing by about ±4, and the bar (24) sits inside that. #339
   moved it from passing to 23 by removing one die drawn once a day.
 
-**What would fix it** (not done):
-- Let chill press. When somebody is chilly, poorly dressed and could make
-  something on the spot, making it should be an answer the decision layer
-  reaches without waiting for the Shelter drive to win. Or chill while bare
-  should weigh enough in the Shelter drive to press by day.
-- Give the test the fifty days its comment says (2,400 turns), and seed
-  before each world is built so that the 96 worlds stay the same 96.
+**What was done.**
+- **Chill presses.** Somebody who wants more clothing puts on a garment they
+  carry, or makes one out of what is in their pack if they have something
+  to sew with (`dressing_on_the_spot`). It sits in the ordinary decision
+  just after the freezing override, with eating what is carried, below
+  anything that kills.
+- **The test has its fifty days and its own worlds.** It counts in days of
+  half-hour turns, and seeds each world before building it as well as
+  after. It now asks for nine in ten worlds dressed within the first day.
+
+**Measured.** In the test's 96 worlds:
+
+| | dressed within a day | within fifty days |
+|---|---|---|
+| without the change | 3 | 78 |
+| with it | 96 | 96 |
+
+In settlements, two years each:
+
+| | worlds | births | deaths | grown people dressed at the end |
+|---|---|---|---|---|
+| without the change | 12 | 50 | 1 | 32 of 143 (22%) |
+| with it, same 12 | 12 | 50 | 0 | 44 of 144 (31%) |
+| with it | 40 | 179 | 1 | 147 of 479 (31%) |
+
+The forty settlements had 177 births and 3 deaths before this (#340). So
+dressing on the spot costs a settlement nothing measurable, and a third
+more of its grown people end the second year in something. Most still do
+not: to dress on the spot a person has to be chilly and carry both the
+material and something to sew with.
