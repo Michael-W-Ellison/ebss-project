@@ -25872,3 +25872,74 @@ deaths are of hunger (scattered seed 2, smooth seed 17), as before.
 
 Test: `salt_tests::the_water_a_man_goes_to_is_fresh_unless_he_is_past_caring`.
 It fails with the salt check removed.
+
+### 341. The cold-agent clothing test: a chilly man is never pressed to dress, and the window shrank fourfold
+
+`clothing_tests::a_cold_agent_ends_up_dressed` puts one man in a world with
+200 flax in his pack and a patch of flax three paces off. It sets his ideal
+temperature to 45 so that the weather is always colder than he wants. It
+asks that he be dressed in at least a quarter of 96 worlds within 600 turns.
+It reads 23 of 96 and has been on both sides of its bar for months. This is
+the investigation; no model code changes with it.
+
+**How.** A probe ran the same fixture over the same 96 seeds for 2,400
+turns, logging every action. For the first 600 turns it measured his body
+temperature and the air's. It also counted how often the clothing check
+(`wants_more_clothing`) said he wanted more, and how often the Shelter drive
+was pressing.
+
+**What happens in 96 worlds:**
+
+| | worlds |
+|---|---|
+| has something to sew with from the first turn | 96 |
+| dressed within 600 turns (12.5 days) | 31 |
+| dressed within 1,200 turns (25 days) | 56 |
+| dressed within 2,400 turns (50 days) | 79 |
+| alive and still bare at 2,400 | 16 |
+| died first | 1 |
+
+The median time to dress is 832 turns, about 17 days, for a man with the
+material and the tool on him from the start.
+
+**Why he takes so long: he wants a coat, and nothing makes him go and make
+one.**
+- His body warms itself towards whatever the ideal is: it cancels up to
+  0.6 of cooling a step and recovers 5% of the gap. With the ideal at 45 he
+  sits at about 43.4 in air of about 11°.
+- That is chilly by the clothing check, which allows half a degree: it
+  wanted more clothing on 87% of turns.
+- It is chilly by the Shelter drive too (0.8 below ideal), but chill counts
+  for 0.3 against that drive's threshold of 0.5, so it never presses by day
+  on its own. At night it does, and being under shelter then puts the
+  drive to 0. "Exposed", worth 0.55, wants him a full 2° below ideal or an
+  active exposure, and he is 1.6° below. **The Shelter drive was pressing on
+  1% of his turns.**
+- Making clothing is reached from the Shelter arm. In these worlds every
+  garment was made while some other drive was at the top of his list
+  (Social 43 times, Preparedness 38, Curiosity 24, Reproduction 12):
+  incidentally, never because he was cold. How cold the world was barely
+  mattered: dressed within 600 turns in 6 of the 12 worlds below 10°, and
+  25 of the 84 between 10° and 20°.
+
+The comment at `CHILLY_MARGIN` states the intent: "nobody waits until they
+are hypothermic to think about a coat". The clothing check holds to that;
+the drive that would act on it does not.
+
+**Why the test flips.**
+- **The window shrank fourfold.** It was written when a turn was two hours
+  (twelve a day), and its comment still says fifty days. Since 30-minute
+  turns, 600 turns is 12.5 days. At fifty days the rate is 79 of 96.
+- **The 96 worlds are a chain.** Each world is built before the dice are
+  seeded, from whatever the world before it left in the stream. So any
+  change anywhere upstream deals a different 96 worlds. At a rate near 30%,
+  96 worlds swing by about ±4, and the bar (24) sits inside that. #339
+  moved it from passing to 23 by removing one die drawn once a day.
+
+**What would fix it** (not done):
+- Let chill press. When somebody is chilly, poorly dressed and could make
+  something on the spot, making it should be an answer the decision layer
+  reaches without waiting for the Shelter drive to win. Or chill while bare
+  should weigh enough in the Shelter drive to press by day.
+- Give the test the fifty days its comment says (2,400 turns), and seed
+  before each world is built so that the 96 worlds stay the same 96.
