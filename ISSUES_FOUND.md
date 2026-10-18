@@ -25966,3 +25966,57 @@ dressing on the spot costs a settlement nothing measurable, and a third
 more of its grown people end the second year in something. Most still do
 not: to dress on the spot a person has to be chilly and carry both the
 material and something to sew with.
+
+### 342. The yearly dice-count check: working as meant, and what it costs
+
+`repeatable_tests::a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year`
+runs seed 0 for a year of turns and asserts how many draws the dice stream
+gave. It failed in the full run after #341, as it does after nearly every
+change to the model. This looks at whether it is doing its job. No code
+changes with it.
+
+**What it is for.** A count that moves without the model having been changed
+means something took a branch on an input the seed does not fix. Three other
+guards cover parts of this:
+- `the_same_seed_is_the_same_world` runs one seed twice in one process.
+- `every_roll_comes_from_the_one_stream` bans `thread_rng`, `rand::random`
+  and `Uuid::new_v4` from the source.
+- `nothing_decides_anything_by_walking_an_unordered_table` bans `HashMap`
+  and `HashSet`.
+
+None of the three can see a difference *between* runs from some cause they
+do not name, because the first stays inside one process. A count recorded
+in one process and asserted in another is what can. That is the instrument
+#94 found the last faults with: one seed run as two processes and diffed.
+
+**What it has done.**
+- The constant has been rewritten 102 times since 8 September, about two
+  and a half times a day, on nearly every commit that changed the model.
+  Each time the commit says what was changed. A moved count on a
+  deliberate change is expected, and the check says nothing then.
+- Where it earns its keep is a change meant to change nothing. #287's speed
+  fixes moved it by 3% through one fix (planning a walk before its first
+  step). That fix was taken out; the three kept fixes put the count back to
+  exactly 688,955, which is the proof they changed nothing that happens.
+
+**Whether it holds.**
+- **Across processes.** In this session it has been run in the full suite
+  and again on its own after every change, in separate processes, and the
+  two have agreed every time (989,726, then 976,851).
+- **Across build profiles.** A debug build gives the same count as the
+  release build the suite uses, so neither the optimiser nor
+  floating-point code generation changes a branch. Both counts pass in
+  debug.
+- It costs about 80 seconds of a full run.
+
+**Verdict.** The check is sound and catches what it is for. Its cost is
+procedural: it has to be re-recorded with every model change, and that is
+only safe if whoever re-records it knows the change was meant to change the
+model. A count that moves on a commit meant to change nothing (a speed fix,
+a rename, a refactor) is the case to stop and look at.
+
+**One thing it cannot do on its own:** tell a deliberate change from drift
+when both land in the same commit. A test that runs seed 0 in two child
+processes of the test binary and compares the two counts would check
+between-run determinism directly, with no constant to keep. It would never
+fail on a deliberate change. Not done.
