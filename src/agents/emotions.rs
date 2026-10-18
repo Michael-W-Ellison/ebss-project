@@ -894,8 +894,15 @@ impl Relationship {
     pub const WHERE_AN_UNTENDED_BOND_SETTLES: f32 = 0.2;
 
     /// How much of the way back it goes in a day: a friendship left alone
-    /// is half gone in about three weeks.
-    pub const WHAT_A_DAY_UNTENDED_TAKES: f32 = 0.03;
+    /// is half gone in about ten weeks.
+    ///
+    /// It was half gone in three (0.03 a day). Who is about camp of an
+    /// evening changes from day to day, so two friends sit down together
+    /// every few days rather than every day, and against that fade a bond
+    /// kept up as often as that stood at about 0.35 whatever the two were
+    /// like: a pair made for each other no nearer than a pair who clashed
+    /// (#339).
+    pub const WHAT_A_DAY_UNTENDED_TAKES: f32 = 0.01;
 
     /// And how much of a grudge a day lets go of, for somebody neither
     /// forgiving nor vengeful.
@@ -1056,9 +1063,10 @@ impl Relationship {
     /// company came to about +0.003 near a bond of 0.48 while the fade took
     /// 0.008, so no deed lifted a bond to where affinity would have let it go,
     /// and two people made for each other stood where two strangers did
-    /// (#339). At this, one good turn a day of the ordinary size holds a pair
-    /// with nothing between them at about 0.52, two who clash at about 0.39
-    /// and two of a kind at about 0.74.
+    /// (#339). At this, a good turn of the ordinary size every four days
+    /// holds a pair with nothing between them at about 0.50, two who clash at
+    /// about 0.39 and two of a kind at about 0.61; one every day, nearer
+    /// still.
     pub const WHAT_A_GOOD_TURN_IS_WORTH: f32 = 0.06;
 
     /// What a day of talk is worth to a pair, as far as a familiar face.
