@@ -70,6 +70,29 @@ impl Simulation {
         cold_now || the_drive_is_pressing
     }
 
+    /// Dressing, where it can be done on the spot: pulling on a garment
+    /// already carried, or making one out of what is in the pack.
+    ///
+    /// Somebody chilly wants a coat (`wants_more_clothing`), and the only way
+    /// to one ran through the Shelter drive - which being chilly does not
+    /// carry over its threshold by day, and which a roof puts to nothing by
+    /// night. A man with the flax and the awl on him, wanting a coat, made
+    /// one only when some other drive happened to wander past it: over 96
+    /// worlds a median of seventeen days, and sixteen still bare at fifty
+    /// (#341). A garment made is a turn's work and it is done with, so it
+    /// sits here with eating what is carried, below anything that kills.
+    pub(in crate::analytics) fn dressing_on_the_spot(agent: &crate::agents::Agent) -> Option<Action> {
+        if !Self::wants_more_clothing(agent) {
+            return None;
+        }
+
+        if let Some(garment) = Self::garment_to_put_on(agent) {
+            return Some(Action::WearClothing { garment });
+        }
+
+        Self::garment_to_make(agent).map(|garment| Action::MakeClothing { garment })
+    }
+
     /// Whether this one of mine is bare enough that I should clothe it.
     ///
     /// A child cannot clothe itself - it cannot gather flax, has no skill to

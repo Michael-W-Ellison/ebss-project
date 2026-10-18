@@ -633,6 +633,12 @@ impl Simulation {
             return (Action::SeekShelter, false);
         }
 
+        // And chilly, with a coat to pull on or the makings of one about him.
+        // See `dressing_on_the_spot`.
+        if let Some(dressing) = Self::dressing_on_the_spot(agent) {
+            return (dressing, false);
+        }
+
         // Everything else the agent wants, in the order it wants it
         let mut ranked: Vec<(DriveType, f32)> = DriveType::all()
             .into_iter()
