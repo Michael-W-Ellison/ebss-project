@@ -1543,9 +1543,6 @@ impl Population {
             should_greet, select_conversation_topic,
         };
         use crate::core::DriveType;
-        use rand::Rng;
-
-        let mut rng = crate::core::dice::roll();
         let current_turn = self.current_turn;
 
         // Collect interaction pairs (to avoid borrowing issues)
@@ -1570,14 +1567,14 @@ impl Population {
 
             let _agent1_id = self.agents[i].id;
             let agent1_pos = self.agents[i].state.position;
-            let agent1_social_drive = self.agents[i].drives.get(DriveType::Social)
-                .map(|d| d.value)
-                .unwrap_or(0.0);
 
-            // Only socialize if social drive is somewhat active (>0.3)
-            if agent1_social_drive < 0.3 {
-                continue;
-            }
+            // A day's company is kept whether or not anybody is lonely at
+            // the moment it is reckoned. It asked for a social drive over 0.3
+            // at midnight, and then a roll of about one in eight for each
+            // pair: in a settlement of twelve that came to one or two
+            // sittings a day all told, a pair sat down together about once a
+            // month, and no friendship was kept up against the fade (#339).
+            // Who sits with whom, and how many, is decided below.
 
             // Calculate social range based on personality traits
             let agent1_social_range_sq = calculate_social_range_squared(&self.agents[i].traits.traits);
@@ -1613,13 +1610,6 @@ impl Population {
 
                 // Must be within social interaction range
                 if distance_squared > max_social_range_sq {
-                    continue;
-                }
-
-                // Check if they should interact
-                // Higher social drive = higher interaction probability
-                let interaction_probability = (agent1_social_drive * 0.3).min(0.5);
-                if !rng.gen_bool(interaction_probability as f64) {
                     continue;
                 }
 
