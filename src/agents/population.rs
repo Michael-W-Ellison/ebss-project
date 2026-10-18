@@ -1662,10 +1662,26 @@ impl Population {
         interactions.sort_by(|(_, left), (_, right)| right.total_cmp(left));
         let interactions: Vec<(usize, usize)> =
             interactions.into_iter().map(|(pair, _)| pair).collect();
+        // Kin and a partner are company a person keeps anyway, and do not
+        // take one of the day's places. They did, and a partner, being the
+        // closest of all, took one every day: an Introvert had nobody else,
+        // anybody else one, and three in five friendships went untended a
+        // month at a time and faded to a face known by talk alone (#339).
+        let kin = |i: usize, j: usize| {
+            self.agents[i]
+                .relationships
+                .get_relationship(&self.agents[j].id)
+                .is_some_and(|bond| {
+                    bond.is_family() || bond.relationship_type == crate::agents::emotions::RelationshipType::Partner
+                })
+        };
         let mut sat_with = vec![0usize; self.agents.len()];
         let interactions: Vec<(usize, usize)> = interactions
             .into_iter()
             .filter(|(i, j)| {
+                if kin(*i, *j) {
+                    return true;
+                }
                 let room = sat_with[*i] < self.agents[*i].how_many_i_sit_down_with()
                     && sat_with[*j] < self.agents[*j].how_many_i_sit_down_with();
                 if room {
