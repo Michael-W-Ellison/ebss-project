@@ -25746,12 +25746,73 @@ they have (correlation 0.55), since those stand near 1.0. And charm,
 kindness and cruelty work on how *others* feel about a person, which a
 person's own average does not include.
 
-**What would let nature show** (not done):
-- Talk should make somebody a familiar face (0.3), not a near-friend, and
-  count once a day for a pair rather than once for each piece of news. Being
-  closer than that would then rest on company and deeds.
-- Deeds should be sized against the fade, so that regular company holds a
-  bond near the ceiling the two natures allow, and its absence lets it
-  slide.
-- How others feel about a person should be measured alongside the person's
-  own average.
+**What was done.** The first two of three proposals, and two more that
+measuring them showed were needed:
+1. **Talk makes a familiar face, once a day.** A pair's talk counts once a
+   day (+0.01), up to 0.3. On its own this left every bond that is not kin
+   at 0.3 instead of just under 0.5, still whoever the two were.
+2. **A good turn is sized against the fade.** One step of a good turn is
+   0.06, up from 0.01, scaled as before by the room left below the ceiling.
+3. **Kin and a partner do not take one of the day's places.** A partner,
+   the closest of all, took one of a person's two daily places every day.
+   Only 16% of friendships had been kept up in the last week; a typical one
+   had last been kept up 46 days before.
+4. **A day's company is kept whether or not anybody is lonely at
+   midnight.** The pass asked for a social drive over 0.3 at midnight, then
+   rolled about one in eight for each pair. In a settlement of twelve that
+   came to one or two sittings a day all told (9 to 12 now, about 3 of them
+   kin), so a pair sat down together about once a month.
+5. **A friendship left alone is half gone in ten weeks, not three** (1% a
+   day, down from 3%). Who is about camp of an evening changes from day to
+   day, so friends sit together every few days, not every day. Against the
+   old fade, even a bond kept up that often stood at about 0.35 whatever
+   the two were like.
+
+**Measured** over forty settlements, two years, set against the run before
+any of this (#338):
+
+| | #338 | now |
+|---|---|---|
+| mean bond, all a person knows | 0.489 | 0.418 |
+| spread of that from person to person (standard deviation) | 0.049 | 0.039 |
+| friends each (bond over 0.5) | 1.68 | 2.43 |
+| births, forty settlements | 177 | 177 |
+| deaths | 5 | 11 |
+
+Bonds that are not kin, by how well the two natures suit:
+
+| affinity | bonds | mean bond | over 0.5 |
+|---|---|---|---|
+| below −0.3 | 782 | 0.30 | 0.0% |
+| −0.3 to −0.1 | 833 | 0.34 | 0.1% |
+| −0.1 to 0.05 | 3,323 | 0.36 | 3.3% |
+| 0.05 to 0.2 | 1,129 | 0.39 | 17% |
+| 0.2 and over | 419 | 0.38 | 18% |
+
+By trait, holders against everybody else:
+
+| trait | own mean bond | friends | how others feel about them |
+|---|---|---|---|
+| Introvert | −14% | 1.47 vs 2.52 | 0.353 vs 0.380 |
+| Extrovert | +9% | 3.64 vs 2.40 | 0.420 vs 0.377 |
+| Intolerant | −8% | 1.81 vs 2.46 | 0.389 vs 0.377 |
+| Cruel | −5% | 2.03 vs 2.46 | 0.348 vs 0.380 |
+| Charismatic | 0% | 2.56 vs 2.43 | 0.400 vs 0.376 |
+| Kind-Hearted | 0% | 2.45 vs 2.43 | 0.395 vs 0.377 |
+| Manipulator | −1% | 2.50 vs 2.43 | 0.354 vs 0.380 |
+
+In #338's run, only Callous moved its own mean bond by more than 5% (−8%),
+and how others felt about a person was not measured.
+
+**Still open:**
+- The best-suited pairs (affinity 0.2 and over) stand no nearer than the
+  next group down. They are mostly bonds towards Charismatic or
+  Kind-Hearted people, whom many want to sit with. Each person keeps only
+  two people's company a day, so most of those who seek them out get no
+  turn.
+- Smooth seed 8 lost nine people to thirst in fifteen days (days 652–667).
+  The same seed lost three to thirst at about the same time of year in each
+  of the two runs before this, so it is a dry-season problem of that map.
+  Not looked into here.
+- How others feel about a person is now measured, but only in the bond
+  dump, not yet in the per-trait report.
