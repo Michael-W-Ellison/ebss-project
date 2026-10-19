@@ -1392,7 +1392,7 @@ name = "Cloaks"
 path = "clothing"
 stage = 1
 role = "technique"
-model = ["wear:wool_cloak", "wear:linen_cloak", "wear:cotton_cloak", "wear:bark_cloak"]
+model = ["wear:wool_cloak", "wear:bark_cloak"]
 
 [[tech]]
 id = "clothing.1.capes"
@@ -1516,7 +1516,7 @@ name = "Head coverings"
 path = "clothing"
 stage = 3
 role = "technique"
-model = ["wear:linen_hood", "wear:cotton_hood"]
+model = ["wear:linen_hood"]
 
 [[tech]]
 id = "clothing.4.cut_pattern_pieces"
@@ -10915,4 +10915,8 @@ reason = "Cutting a fish into portions is below the document's grain; it is what
 
 [[unlisted]]
 model = "wear:cotton_cloak"
+reason = "Cotton cloth: the document names linen, hemp and wool cloth (textile.3) and not cotton."
+
+[[unlisted]]
+model = "wear:cotton_hood"
 reason = "Cotton cloth: the document names linen, hemp and wool cloth (textile.3) and not cotton."
