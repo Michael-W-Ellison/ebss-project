@@ -67,8 +67,10 @@ fn the_makings_of(simulation: &mut Simulation, what: &str) -> bool {
 fn a_job_that_wants_a_knife_becomes_the_making_of_one() {
     let mut simulation = one_person();
 
-    // The materials for the job, and the materials for the tool, and no tool
+    // The materials for the job, and the materials for the tool, and no tool,
+    // for somebody who has found out how to make one (a knife is Stage 1)
     give(&mut simulation, "hide", 4);
+    simulation.population.agents[0].found_out_how_to("stoneknife");
     assert!(the_makings_of(&mut simulation, "stoneknife"));
 
     let job = Action::Work {

@@ -24,6 +24,7 @@ fn a_person() -> Simulation {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (25, 25, 0);
 
     let everything: Vec<(String, u32)> = simulation.population.agents[0]

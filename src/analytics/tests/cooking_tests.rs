@@ -185,6 +185,7 @@ fn an_agent_lights_a_fire_and_cooks_on_it() {
     population.spawn_agent(AgentConfig::default());
 
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
 
     {
         let agent = &mut simulation.population.agents[0];
@@ -247,6 +248,7 @@ fn an_agent_with_nothing_worth_cooking_lights_no_fire() {
     population.spawn_agent(AgentConfig::default());
 
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     {
         let agent = &mut simulation.population.agents[0];
         agent.inventory.max_weight = 500.0;
@@ -304,6 +306,7 @@ fn ruined_food_smells_of_decay() {
     population.spawn_agent(AgentConfig::default());
 
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (30, 30, 0);
     simulation.population.agents[1].state.position = (30, 34, 0);
 

@@ -10,12 +10,22 @@
 //! `tools/tech_txt_to_catalogue.py`, whose docstring says what each field
 //! means.
 //!
-//! What a person knows is still `Agent::found_out`, and how a thing is made is
-//! still `making.rs`; the catalogue does not decide either. It says where in
-//! the document each of those things sits, which is what the tech-tree panel
-//! shows and what `technology_catalogue_tests` holds the making chain to.
+//! **It decides when a thing can be known.** How a thing is made is
+//! `making.rs`, and what a person has found out is `Agent::found_out`; what
+//! everybody is born knowing, and what has to be known before something else
+//! can be, is here:
+//!
+//! - A product or garment is born knowledge when one of its listings is
+//!   innate - Stage 0, unless the listing says otherwise and why - or when
+//!   the document has no line for it at all (`[[unlisted]]`).
+//! - Everything else is found out, and waits on the products of the listings
+//!   its own listings `need`. The document's own common prerequisites are
+//!   where most of those come from: cordage and a needle before sewing, a
+//!   container before fermenting, lines before nets.
+//!
+//! `technology_catalogue_tests` holds the making chain to it.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 use serde::Deserialize;
@@ -113,4 +123,73 @@ impl Catalogue {
 pub fn the_catalogue() -> &'static Catalogue {
     static CAT: OnceLock<Catalogue> = OnceLock::new();
     CAT.get_or_init(|| toml::from_str(CATALOGUE).expect("data/technology.toml reads"))
+}
+
+/// What the catalogue says about knowing things, worked out once.
+struct Knowing {
+    /// Model links everybody is born knowing (`make:lashing`, `wear:fur_coat`)
+    born: BTreeSet<&'static str>,
+    /// For each model link, the products that have to be known first
+    gates: BTreeMap<&'static str, Vec<&'static str>>,
+}
+
+fn knowing() -> &'static Knowing {
+    static KNOWING: OnceLock<Knowing> = OnceLock::new();
+    KNOWING.get_or_init(|| {
+        let cat = the_catalogue();
+        let by_id: BTreeMap<&str, &Tech> = cat.tech.iter().map(|t| (t.id.as_str(), t)).collect();
+
+        let mut born: BTreeSet<&'static str> = cat.unlisted.iter().map(|u| u.model.as_str()).collect();
+        let mut gates: BTreeMap<&'static str, BTreeSet<&'static str>> = BTreeMap::new();
+        for t in &cat.tech {
+            for link in &t.model {
+                if t.innate() {
+                    born.insert(link.as_str());
+                }
+                let this = link.strip_prefix("make:");
+                for needed in t.needs.iter().filter_map(|n| by_id.get(n.as_str())) {
+                    for first in needed.makes().filter(|p| Some(*p) != this) {
+                        gates.entry(link.as_str()).or_default().insert(first);
+                    }
+                }
+            }
+        }
+        Knowing {
+            born,
+            gates: gates.into_iter().map(|(k, v)| (k, v.into_iter().collect())).collect(),
+        }
+    })
+}
+
+/// Whether everybody is born knowing a model link (`make:basket`).
+pub fn is_born_knowledge(link: &str) -> bool {
+    knowing().born.contains(link)
+}
+
+/// The products that have to be known before a model link can be.
+pub fn what_comes_before(link: &str) -> &'static [&'static str] {
+    knowing().gates.get(link).map(Vec::as_slice).unwrap_or(&[])
+}
+
+/// Whether everybody is born knowing how to make a product of the making chain.
+pub fn born_knowing_how_to_make(product: &str) -> bool {
+    static BORN: OnceLock<BTreeSet<&'static str>> = OnceLock::new();
+    BORN.get_or_init(|| knowing().born.iter().filter_map(|l| l.strip_prefix("make:")).collect())
+        .contains(product)
+}
+
+/// The products that have to be known before a product can be found out.
+pub fn what_comes_before_making(product: &str) -> &'static [&'static str] {
+    static GATES: OnceLock<BTreeMap<&'static str, &'static [&'static str]>> = OnceLock::new();
+    GATES
+        .get_or_init(|| {
+            knowing()
+                .gates
+                .iter()
+                .filter_map(|(l, v)| l.strip_prefix("make:").map(|p| (p, v.as_slice())))
+                .collect()
+        })
+        .get(product)
+        .copied()
+        .unwrap_or(&[])
 }

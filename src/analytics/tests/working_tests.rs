@@ -23,6 +23,7 @@ use crate::world::{World, WorldConfig};
 fn a_person() -> Simulation {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
+    crate::analytics::tests::the_kit_before_stage_zero(&mut population.agents[0]);
     Simulation::new(World::new(WorldConfig::default()), population)
 }
 
@@ -311,7 +312,7 @@ fn a_practised_hand_wastes_less_of_the_core() {
 fn scraping_a_stick_is_a_thing_to_find_out() {
     let obvious: Vec<&str> = making::EVERY_WORKING
         .iter()
-        .filter(|working| working.obvious)
+        .filter(|working| working.born_known())
         .map(|working| working.verb)
         .collect();
     let found_out: Vec<&str> = making::every_working_to_find_out()

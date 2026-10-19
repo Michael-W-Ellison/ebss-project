@@ -24,6 +24,7 @@ fn somebody_and_a_full_pit() -> crate::analytics::Simulation {
     population.spawn_agent(AgentConfig::default());
     let mut simulation =
         crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (10, 10, 0);
 
     let mut buried = InventoryItem::new_with_weight("food".to_string(), 60, 0.5);
@@ -109,6 +110,7 @@ fn one_fed_and_one_with_nothing() -> crate::analytics::Simulation {
     population.spawn_agent(AgentConfig::default());
     let mut simulation =
         crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
 
     simulation.population.agents[0].state.position = (10, 10, 0);
     simulation.population.agents[1].state.position = (10, 10, 0);

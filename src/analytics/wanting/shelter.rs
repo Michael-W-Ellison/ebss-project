@@ -240,6 +240,7 @@ impl Simulation {
 
         crate::agents::equipment::GARMENT_RECIPES
             .iter()
+            .filter(|recipe| agent.knows_how_to_make_garment(recipe.id))
             .filter(|recipe| Self::can_spare_material(agent, recipe))
             .filter(|recipe| {
                 Self::worth_making(

@@ -9,7 +9,8 @@
 use crate::agents::{Agent, AgentConfig, InventoryItem, Population, SkillType};
 use crate::analytics::Simulation;
 use crate::environment::making::{
-    self, HAND_AXE, KNAPPED_TIP, LASHING, LASHING_FROM_COTTON, SPEAR, STONE_KNIFE,
+    self, DIGGING_STICK, HAND_AXE, KNAPPED_TIP, LASHING, LASHING_FROM_COTTON, SHARPENED_STICK, SPEAR,
+    STONE_KNIFE,
 };
 use crate::environment::Action;
 use crate::world::{World, WorldConfig};
@@ -191,7 +192,7 @@ fn there_is_more_than_one_way_to_make_a_lashing() {
     );
     for natural in ["sinew", "wood", "hides"] {
         assert!(
-            ways.iter().any(|w| w.obvious && w.needs.iter().any(|(what, _)| *what == natural)),
+            ways.iter().any(|w| w.born_known() && w.needs.iter().any(|(what, _)| *what == natural)),
             "a lashing from {natural} is a natural binding, and nobody has to find it out"
         );
     }
@@ -206,7 +207,11 @@ fn there_is_more_than_one_way_to_make_a_lashing() {
 
 // --- working back from a thing wanted ---------------------------------------
 
-/// A man with the makings of a spear is told to make a spear.
+/// A man with the makings of a hand axe is told to make a hand axe.
+///
+/// These used the spear, which is the same three things - wood, a knapped tip
+/// and a lashing - and is Stage 2 now, found out once there is a knife. The
+/// hand axe is Stage 0, so the planner has the same chain to walk.
 #[test]
 fn a_man_with_everything_makes_the_thing_itself() {
     let mut population = Population::new();
@@ -216,13 +221,13 @@ fn a_man_with_everything_makes_the_thing_itself() {
     carrying(agent, "knappedtip", 2);
     carrying(agent, "lashing", 2);
 
-    let step = making::what_to_do_first("spear", &holding_of(agent))
-        .expect("a spear should be makeable out of its own parts");
-    assert_eq!(step.makes, "spear");
+    let step = making::what_to_do_first("handaxe", &holding_of(agent))
+        .expect("a hand axe should be makeable out of its own parts");
+    assert_eq!(step.makes, "handaxe");
 }
 
-/// A man with flax and stone and no spear is told to twist cordage, not that
-/// he cannot have a spear.
+/// A man with flax and stone and no hand axe is told to twist cordage, not that
+/// he cannot have a hand axe.
 #[test]
 fn a_man_short_of_a_part_is_told_to_make_the_part() {
     let mut population = Population::new();
@@ -231,11 +236,11 @@ fn a_man_short_of_a_part_is_told_to_make_the_part() {
     carrying(agent, "wood", 1);
     carrying(agent, "flax", 4);
 
-    let step = making::what_to_do_first("spear", &holding_of(agent))
-        .expect("flax in the pack is a step towards a spear");
+    let step = making::what_to_do_first("handaxe", &holding_of(agent))
+        .expect("flax in the pack is a step towards a hand axe");
     assert_eq!(
         step.makes, "lashing",
-        "the part of a spear he can do today is the cordage"
+        "the part of a hand axe he can do today is the cordage"
     );
 }
 
@@ -245,11 +250,13 @@ fn a_man_with_only_stone_is_sent_to_knap() {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let agent = &mut population.agents[0];
+    // Founders carry knapped flakes (Stage 0); this one has none on him
+    empty_the_pack(agent);
     carrying(agent, "wood", 1);
     carrying(agent, "stone", 4);
 
-    let step = making::what_to_do_first("spear", &holding_of(agent))
-        .expect("stone in the pack is a step towards a spear");
+    let step = making::what_to_do_first("handaxe", &holding_of(agent))
+        .expect("stone in the pack is a step towards a hand axe");
     assert_eq!(step.makes, "knappedtip");
 }
 
@@ -262,15 +269,15 @@ fn a_man_with_nothing_is_told_what_to_go_and_get() {
     empty_the_pack(agent);
 
     assert!(
-        making::what_to_do_first("spear", &holding_of(agent)).is_none(),
+        making::what_to_do_first("handaxe", &holding_of(agent)).is_none(),
         "there is no step to take with an empty pack"
     );
 
-    let wanting = making::what_is_wanting("spear", &holding_of(agent))
+    let wanting = making::what_is_wanting("handaxe", &holding_of(agent))
         .expect("an empty pack is short of something findable");
     assert!(
         ["wood", "stone", "flax", "cotton"].contains(&wanting),
-        "a spear wants wood, stone or fibre; it asked for {wanting}"
+        "a hand axe wants wood, stone or fibre; it asked for {wanting}"
     );
 }
 
@@ -283,7 +290,7 @@ fn a_man_with_plenty_of_a_part_stops_making_it() {
     carrying(agent, "flax", 40);
     carrying(agent, "lashing", making::A_FEW_SPARE + 1);
 
-    let step = making::what_to_do_first("spear", &holding_of(agent));
+    let step = making::what_to_do_first("handaxe", &holding_of(agent));
     assert!(
         step.map(|s| s.makes) != Some("lashing"),
         "a man standing in a flax meadow with rope to spare should not spend \
@@ -301,7 +308,7 @@ fn a_founder_carries_what_his_people_can_make() {
     population.spawn_agent(AgentConfig::default());
     let founder = &population.agents[0];
 
-    for (what, _, _) in [("handaxe", 0, 0.0), ("stoneknife", 0, 0.0)] {
+    for (what, _, _) in [("handaxe", 0, 0.0), ("knappedtip", 0, 0.0)] {
         assert!(
             founder.inventory.get_item(what).is_some(),
             "a founder should be carrying a {what}"
@@ -313,9 +320,11 @@ fn a_founder_carries_what_his_people_can_make() {
     }
 }
 
-/// A founder wants a spear, because he has not got one.
+/// A founder wants something to hunt with, because he has not got one. What
+/// his people knows at Stage 0 is the sharpened stick; the stone-tipped spear
+/// is found out.
 #[test]
-fn a_founder_sets_about_getting_himself_a_spear() {
+fn a_founder_sets_about_getting_himself_something_to_hunt_with() {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let agent = &mut population.agents[0];
@@ -327,8 +336,8 @@ fn a_founder_sets_about_getting_himself_a_spear() {
         .what_i_would_make(true)
         .expect("a man with wood, stone and flax has something to be getting on with");
     assert!(
-        ["spear", "knappedtip", "lashing"].contains(&what.as_str()),
-        "he should be working towards a spear, not making {what}"
+        ["sharpenedstick", "knappedtip", "lashing"].contains(&what.as_str()),
+        "he should be working towards something to hunt with, not making {what}"
     );
 }
 
@@ -376,12 +385,14 @@ fn making_a_thing_spends_the_makings_and_leaves_the_thing() {
     );
 }
 
-/// A tip and a lashing and a stick make a spear, in that order, one turn each.
+/// A tip and a lashing and a stick make a spear, in that order, one turn each,
+/// for somebody who has found out how.
 #[test]
 fn a_spear_can_be_made_out_of_what_was_made_before_it() {
     let mut simulation = one_agent_world();
     a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
     let agent = &mut simulation.population.agents[0];
+    agent.found_out_how_to("spear");
     empty_the_pack(agent);
     carrying(agent, "wood", 1);
     carrying(agent, "stone", 2);
@@ -412,6 +423,7 @@ fn a_man_short_of_a_part_is_told_which_part() {
     let mut simulation = one_agent_world();
     a_hand_that_does_not_spoil_things(&mut simulation.population.agents[0]);
     let agent = &mut simulation.population.agents[0];
+    agent.found_out_how_to("spear");
     empty_the_pack(agent);
     carrying(agent, "wood", 1);
 
@@ -483,13 +495,20 @@ fn every_tool_a_people_wants_can_be_got_from_raw_material() {
     }
 }
 
-/// The stone age is what a people arrives knowing; anything past it is not.
+/// Stage 0 is what a people arrives knowing; anything past it is not.
 #[test]
 fn a_stone_age_people_arrives_knowing_the_stone_age() {
-    for step in [KNAPPED_TIP, SPEAR, HAND_AXE, STONE_KNIFE, LASHING] {
+    for step in [KNAPPED_TIP, HAND_AXE, LASHING, SHARPENED_STICK, DIGGING_STICK] {
         assert!(
-            step.obvious,
-            "{} is what a stone-age people brought with them",
+            step.born_known(),
+            "{} is Stage 0, what a stone-age people brought with them",
+            step.makes
+        );
+    }
+    for step in [STONE_KNIFE, SPEAR] {
+        assert!(
+            !step.born_known(),
+            "{} is Stage 1 or 2 of the tool path, and found out",
             step.makes
         );
     }

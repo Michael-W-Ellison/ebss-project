@@ -265,7 +265,7 @@ fn being_one_part_short_is_what_prompts_it() {
     let (instead_of_making, instead_of, put_in) = proposed.unwrap();
     let step = making::how_to_make(&instead_of_making).expect("a real step");
 
-    assert!(step.obvious, "and a job he knows how to do");
+    assert!(step.born_known(), "and a job he knows how to do");
     assert!(
         step.needs.iter().any(|(what, _)| *what == instead_of),
         "the part left out is a part the step wanted"
@@ -296,7 +296,7 @@ fn nobody_substitutes_into_a_job_they_cannot_do() {
     {
         let step = making::how_to_make(&instead_of_making).expect("a real step");
         assert!(
-            step.obvious,
+            step.born_known(),
             "he proposed to vary {instead_of_making}, which he has never made"
         );
     }

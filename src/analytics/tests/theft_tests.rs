@@ -25,6 +25,8 @@ fn two_people() -> Simulation {
     population.spawn_agent(AgentConfig::default());
 
     let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
+    crate::analytics::tests::plain_ground_about(&mut simulation, (25, 25), 12);
 
     for who in 0..2 {
         simulation.population.agents[who].state.position = (25, 25, 0);

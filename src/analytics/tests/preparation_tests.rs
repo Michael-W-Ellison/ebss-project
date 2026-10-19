@@ -32,6 +32,7 @@ fn one_person() -> Simulation {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (25, 25, 0);
     simulation.population.agents[0]
         .inventory
@@ -114,7 +115,7 @@ fn a_vessel_wants_wood_and_wants_knowing_about() {
     let carving = making::how_to_work("carve", "wood").expect("wood carves");
     assert!(carving.holds.is_some_and(|held| held > 0.0));
     assert!(
-        carving.obvious,
+        carving.born_known(),
         "weaving a basket out of flax is obvious in this table and hollowing \
          out a block of wood is no greater a leap - and gating it kept the \
          entire fluid family inert"

@@ -83,7 +83,7 @@ fn a_fire_where_he_stands(simulation: &mut Simulation) {
 fn nobody_is_born_knowing_how_to_work_metal() {
     for step in [SHINY_LUMP, METAL_BLADE, METAL_KNIFE] {
         assert!(
-            !step.obvious,
+            !step.born_known(),
             "{} should be a thing somebody has to find out",
             step.makes
         );
@@ -96,7 +96,7 @@ fn nobody_is_born_knowing_how_to_work_metal() {
     assert!(!founder.knows_how_to_make("shinylump"));
     assert!(!founder.knows_how_to_make("metalknife"));
     assert!(
-        founder.knows_how_to_make("spear"),
+        founder.knows_how_to_make("handaxe"),
         "but he can still make the things his people brought with them"
     );
 }

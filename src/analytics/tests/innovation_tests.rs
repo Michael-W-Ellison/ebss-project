@@ -78,11 +78,11 @@ fn a_chain_is_not_a_family() {
 /// craft that arrives complete cannot grow.
 #[test]
 fn the_sibling_technique_is_not_something_anybody_is_born_with() {
-    assert!(KNAPPED_TIP.obvious, "knapping ordinary stone is the start");
-    assert!(LASHING.obvious, "so is twisting flax");
+    assert!(KNAPPED_TIP.born_known(), "knapping ordinary stone is the start");
+    assert!(LASHING.born_known(), "so is twisting flax");
 
     assert!(
-        !KNAPPED_TIP_FROM_FLINT.obvious,
+        !KNAPPED_TIP_FROM_FLINT.born_known(),
         "that flint knaps finer is the thing to work out"
     );
     // And cotton is **not** one of them, on the measurement rather than on
@@ -98,7 +98,7 @@ fn the_sibling_technique_is_not_something_anybody_is_born_with() {
     // idle. Flint alone was measured free: 219,208 person-days against
     // 215,149, blocks disagreeing in direction, 46 worlds emptied against 48.
     assert!(
-        LASHING_FROM_COTTON.obvious,
+        LASHING_FROM_COTTON.born_known(),
         "cotton was made a discovery again, and it was measured as too dear"
     );
 }

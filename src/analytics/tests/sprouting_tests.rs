@@ -33,6 +33,7 @@ fn a_person_standing_on(ground: TerrainType, where_it_is: Position) -> Simulatio
     population.spawn_agent(AgentConfig::default());
 
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (where_it_is.x, where_it_is.y, 0);
     simulation
 }

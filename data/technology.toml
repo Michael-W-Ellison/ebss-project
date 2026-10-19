@@ -1020,6 +1020,7 @@ path = "textile"
 stage = 2
 role = "technique"
 model = ["wear:wool_cloak"]
+needs = ["tool.1.knives"]
 
 [[tech]]
 id = "textile.2.barkcloth_beating"
@@ -1049,6 +1050,7 @@ path = "textile"
 stage = 2
 role = "product"
 model = ["wear:wool_cloak", "wear:bark_cloak"]
+needs = ["tool.1.knives"]
 
 [[tech]]
 id = "textile.2.blankets"
@@ -1099,6 +1101,8 @@ path = "textile"
 stage = 3
 role = "technique"
 model = ["wear:linen_cloak", "wear:linen_shirt", "wear:linen_hood"]
+needs = ["rope_cordage_and_net_making.4.retting"]
+note = "Linen is retted flax: the cloth waits on retting."
 
 [[tech]]
 id = "textile.3.tunics"
@@ -1393,6 +1397,8 @@ path = "clothing"
 stage = 1
 role = "technique"
 model = ["wear:wool_cloak", "wear:bark_cloak"]
+needs = ["tool.1.knives"]
+note = "Cutting tools improve tailoring (tech.txt, common prerequisites): a cloak cut to shape waits on a knife."
 
 [[tech]]
 id = "clothing.1.capes"
@@ -1436,6 +1442,8 @@ path = "clothing"
 stage = 2
 role = "technique"
 model = ["wear:leather_tunic"]
+needs = ["tool.1.awls"]
+note = "Sewn: cordage and an awl to pierce the hide (tech.txt, common prerequisites; tool.1 awls)."
 
 [[tech]]
 id = "clothing.2.leg_coverings"
@@ -1444,6 +1452,7 @@ path = "clothing"
 stage = 2
 role = "technique"
 model = ["wear:leather_pants"]
+needs = ["tool.1.awls"]
 
 [[tech]]
 id = "clothing.2.mitts"
@@ -1474,6 +1483,7 @@ path = "clothing"
 stage = 3
 role = "technique"
 model = ["wear:linen_shirt"]
+needs = ["tool.1.awls"]
 
 [[tech]]
 id = "clothing.3.skirts"
@@ -1517,6 +1527,7 @@ path = "clothing"
 stage = 3
 role = "technique"
 model = ["wear:linen_hood"]
+needs = ["tool.1.awls"]
 
 [[tech]]
 id = "clothing.4.cut_pattern_pieces"
@@ -2750,6 +2761,8 @@ path = "food_preservation"
 stage = 2
 role = "technique"
 model = ["make:ale"]
+needs = ["woodworking_and_carpentry.1.carving_bowls_clubs_shafts_paddles_and"]
+note = "Containers enable fermentation (tech.txt, common prerequisites): a carved bowl is the first one."
 
 [[tech]]
 id = "food_preservation.2.vinegar_production"
@@ -2793,6 +2806,7 @@ path = "food_preservation"
 stage = 2
 role = "product"
 model = ["make:ale"]
+needs = ["woodworking_and_carpentry.1.carving_bowls_clubs_shafts_paddles_and"]
 note = "FERMENT_FRUIT: the model's 'ale' is fermented fruit."
 
 [[tech]]
@@ -3431,6 +3445,8 @@ path = "leatherworking"
 stage = 2
 role = "technique"
 model = ["wear:hide_armor"]
+needs = ["tool.1.knives"]
+note = "Cutting tools improve hide shaping (tech.txt, common prerequisites)."
 
 [[tech]]
 id = "leatherworking.2.cut_strips_of_cordage_and_bindings"
@@ -3453,6 +3469,7 @@ path = "leatherworking"
 stage = 2
 role = "product"
 model = ["wear:hide_armor"]
+needs = ["tool.1.knives"]
 
 [[tech]]
 id = "leatherworking.2.drums"
@@ -4214,6 +4231,7 @@ stage = 2
 role = "technique"
 model = ["make:shovel", "make:spear"]
 same_as = ["tool.2.hafting_with_resin_sinew_rawhide"]
+needs = ["tool.1.knives"]
 
 [[tech]]
 id = "woodworking_and_carpentry.2.lashings_pegs_and_sockets"
@@ -4243,6 +4261,7 @@ path = "woodworking_and_carpentry"
 stage = 2
 role = "technique"
 model = ["make:bow", "make:spear"]
+needs = ["tool.1.knives"]
 
 [[tech]]
 id = "woodworking_and_carpentry.3.posts_and_beams"
@@ -4539,6 +4558,7 @@ stage = 3
 role = "technique"
 model = ["make:fishingnet"]
 same_as = ["fishing_and_aquaculture.2.gill_nets"]
+needs = ["rope_cordage_and_net_making.2.fishing_line"]
 
 [[tech]]
 id = "rope_cordage_and_net_making.3.carrying_nets"
@@ -6843,6 +6863,7 @@ path = "fishing_and_aquaculture"
 stage = 2
 role = "technique"
 model = ["make:fishingnet"]
+needs = ["rope_cordage_and_net_making.2.fishing_line"]
 
 [[tech]]
 id = "fishing_and_aquaculture.2.seine_like_nets"
@@ -7191,7 +7212,8 @@ path = "pottery_ceramics_beyond_stoneware"
 stage = 4
 role = "technique"
 model = ["make:bricks"]
-needs = ["stoneware.2.simple_updraft_kilns"]
+needs = ["stoneware.0.pit_firing"]
+note = "A brick is fired the way a pot is, so it waits on a fired pot."
 
 [[tech]]
 id = "pottery_ceramics_beyond_stoneware.4.floor_tiles"
@@ -7890,6 +7912,8 @@ name = "Choppers"
 path = "tool"
 stage = 0
 role = "technique"
+model = ["make:knappedtip", "make:meatportions", "make:fishportions"]
+note = "A crude flaked edge: the model's knapped tip, and an input to the hand axe, so it is born knowledge with it. It is also what a carcass or a fish is first cut up with."
 
 [[tech]]
 id = "tool.0.digging_sticks"
@@ -7953,6 +7977,8 @@ name = "Awls"
 path = "tool"
 stage = 1
 role = "technique"
+model = ["make:stoneknife"]
+note = "The model sews with whatever edge is in hand (verbs::SEW, `how_well_made_is_what_i_work_this_trade_with`): the stone knife is its awl."
 
 [[tech]]
 id = "tool.1.drills"
@@ -7998,6 +8024,7 @@ path = "tool"
 stage = 2
 role = "technique"
 model = ["make:shovel", "make:spear"]
+needs = ["tool.1.knives"]
 
 [[tech]]
 id = "tool.2.bone_antler_needles_fishhooks_wedges"
@@ -8335,6 +8362,7 @@ path = "weapon"
 stage = 2
 role = "technique"
 model = ["make:spear", "do:Hunt"]
+needs = ["tool.1.knives"]
 
 [[tech]]
 id = "weapon.2.javelins"
@@ -8372,6 +8400,7 @@ path = "weapon"
 stage = 3
 role = "technique"
 model = ["make:bow"]
+needs = ["tool.1.knives"]
 
 [[tech]]
 id = "weapon.3.better_arrows_and_points"
@@ -8885,6 +8914,8 @@ name = "Carrying water by hand in skins, gourds, shells, baskets lined with pitc
 path = "water_system"
 stage = 0
 role = "technique"
+model = ["make:bowl"]
+note = "The model's one vessel stands in for the skin, gourd and shell: carrying water is Stage 0 here, carving a bowl to do it is Stage 1 of woodworking."
 
 [[tech]]
 id = "water_system.1.water_skins"
@@ -10904,14 +10935,6 @@ name = "Dairy and traction systems tied to farming calendars"
 path = "animal_husbandry"
 stage = 7
 role = "technique"
-
-[[unlisted]]
-model = "make:meatportions"
-reason = "Cutting a carcass into portions is below the document's grain; it is what a knife is for (tool.1.knives)."
-
-[[unlisted]]
-model = "make:fishportions"
-reason = "Cutting a fish into portions is below the document's grain; it is what a knife is for (tool.1.knives)."
 
 [[unlisted]]
 model = "wear:cotton_cloak"

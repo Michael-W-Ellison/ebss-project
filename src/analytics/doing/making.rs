@@ -991,6 +991,10 @@ impl Simulation {
 
         let agent = &mut self.population.agents[agent_index];
 
+        if !agent.knows_how_to_make_garment(garment) {
+            return ActionResult::failure(format!("Does not know how to make a {}", recipe.name));
+        }
+
         if !agent
             .inventory
             .has_item(recipe.material_item, recipe.material_amount)

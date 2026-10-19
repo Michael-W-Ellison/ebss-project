@@ -26154,3 +26154,127 @@ once every few days.
 **Full suite.** 2,845 tests: all pass but the yearly dice count, which
 this moves, in 1,191 s. That is 2,866 at #341, plus 2 (#342), plus 7
 (#343), less the 30 deleted.
+
+### 345. Stages 0 to 2 of the survival paths, from the technology catalogue
+
+**What was asked.** Implement stages 0-2 of the survival paths: Stage 0 is
+what agents start knowing, later stages are found out, some of them gated
+behind other discoveries rather than coming in a line.
+
+**The catalogue now decides it.**
+- What is born knowledge:
+  - A product or garment is born knowledge when one of its catalogue
+    listings is innate (Stage 0 unless it says otherwise and why), or when
+    the document has no line for it.
+  - `Making::born_known` and `Working::born_known` ask
+    `catalogue::born_knowing_how_to_make`.
+  - `obvious` now only says whether a way is the plain way of making a thing
+    or a variant to work out. Flint for stone in a knapped tip is the one
+    variant.
+- What waits on what: `what_has_to_be_known_first` is the products of the
+  listings a thing's listings `need`. The wheel, handcart and shiny-lump
+  gates (#66, #336) are carried there and pinned by a test.
+- Garments: nobody stumbles on a shirt the way they stumble on a tool, so a
+  garment that is not Stage 0 comes within reach once what it waits on is
+  known (`Agent::knows_how_to_make_garment`). The check runs where garments
+  are chosen and where they are made.
+- `stage.rs`: its Stage 0 born-knowledge lists are read from the catalogue
+  (`Path::born_knowing`), so the two cannot disagree.
+
+**Stage 0 (born):**
+- lashing from the natural bindings, flint, a knapped edge, the hand axe,
+  the digging stick and sharpened stick;
+- scraped leather, cutting into portions and strips, drying;
+- the bowl, which is the water path's Stage 0 vessel ("carrying water in
+  skins, gourds, shells");
+- fur coat and hat, bark cloak and boots.
+
+**Stage 1 and 2, now found out:**
+- basket, leather bag, fishing rod (a line), sling and stone knife;
+- spear, shovel, travois and bow.
+
+**The gates**, from tech.txt's common prerequisites:
+- a knife before hafting (spear, shovel, bow), before cut cloaks and before
+  hardened-hide armour;
+- an awl before sewn garments - tool.1 "awls", and the model's awl is the
+  knife, since it sews with whatever edge is in hand;
+- retted flax before linen;
+- a line before nets;
+- a container (the bowl) before fermenting;
+- a fired pot before fired bricks.
+
+The knapped edge moved to Stage 0 (`tool.0.choppers`) because the hand axe
+wants one. Born knowledge that needed something found out to make would be
+born knowledge in name only; `born_knowledge_can_be_made_from_born_knowledge`
+holds it.
+
+**Founders carry Stage 0.** The kit was a hand axe, a stone knife and a
+basket. The knife and basket are Stage 1, and a founder has to be able to
+replace what he carries (`what_founders_carry_is_something_their_people_can_make`).
+- So the kit is now a hand axe and two flakes; a flake is already a
+  butchering edge.
+- The sharpened stick and digging stick are shaped with the hand axe
+  (tech.txt's Stage 0 toolkit) where they wanted a knife.
+- Without the basket a founder holds what two hands hold, 12 against 42.
+
+**Measured**, forty settlements (smooth 1-24, scattered 1-16), two years,
+against #344:
+
+| | #344 | #345 |
+|---|---|---|
+| births | 174 | 158 |
+| deaths | 1 (hunger) | 1 (hunger) |
+
+- Paired by seed, -0.40 births a settlement, sd 2.2, t = -1.14: within
+  noise.
+- An earlier build of the same change, with a clothing gate that could not
+  open, gave 165 and no deaths. Taken together births may run a few percent
+  lower; it is not a measured difference yet.
+
+**When things are found out** - worlds of 40, and the median day it first
+appeared in a settlement:
+
+| | #344 | #345 |
+|---|---|---|
+| stone knife | born | 40, day 9.5 |
+| basket | born (first woven day 39) | 40, day 9 |
+| spear | born | 40, day 15 |
+| fishing rod | born | 40, day 50 |
+| bow | 39, day 33 | 40, day 56.5 |
+| shovel | born | 22, day 96.5 |
+| fishing net | 18, day 297 | 19, day 306 |
+| leather bag | born | 4, day 640 |
+| sling, travois | born | 0 |
+
+**What does not arrive.** The sling, the travois and (mostly) the leather
+bag are not found out in two years. Each wants hides in the pack of somebody
+curious and awake, and hides do not stay in packs. Survival does not notice;
+whether they should come sooner is a design question. The needle (Stage 2)
+was found in 1 world of 40 before and after, which is why sewing waits on
+the awl and not on it.
+
+**Fixtures.** About fifty tests were built on the old kit: a basket's room
+in the pack, or a knife to reach for.
+- `the_kit_before_stage_zero` gives a fixture exactly that kit back, so it
+  goes on testing what it was written for.
+- Planner tests that used the spear use the hand axe, the same three
+  makings at Stage 0.
+- Two fixtures that stood on whatever the generated map put there now stand
+  on plains (`plain_ground_about`). Agents are spawned before the world is
+  built and draw dice doing it, so a different kit dealt them a different map.
+
+**Dice counts.** 7,852 -> 7,457 (seed 4242, 120 turns) and 980,424 ->
+979,590 (seed 0, a year), recorded.
+
+**Full suite.**
+- The last run in one piece: 2,836 tests, 2,825 passed, 6 failed, 5
+  ignored, 1,326 s.
+- Two of the six were the dice counts, recorded above.
+- The other four (the cold man's awl, the errand fixture's pack, and the
+  two map fixtures) were fixed and pass on their own, with the catalogue and
+  Stage 0 tests.
+
+**Not done here.** Stage 0-2 listings the model has no machinery for stay
+unlinked: smoking, brining, pit ovens, weirs and traps, shellfish, water
+skins, and others. The luxury drive is tagged in the catalogue and drives
+nothing yet. Tool quality still changes yield rather than time.

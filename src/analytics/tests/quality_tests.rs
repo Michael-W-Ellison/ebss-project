@@ -22,6 +22,7 @@ use crate::agents::{Agent, AgentConfig, Population, SkillType};
 fn one_person() -> Population {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
+    crate::analytics::tests::the_kit_before_stage_zero(&mut population.agents[0]);
     population
 }
 

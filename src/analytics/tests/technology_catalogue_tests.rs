@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::agents::equipment::GARMENT_RECIPES;
 use crate::agents::Agent;
-use crate::environment::catalogue::{the_catalogue, Catalogue, Tech};
+use crate::environment::catalogue::{self, the_catalogue, Catalogue, Tech};
 use crate::environment::making::{self, EVERY_STEP, EVERY_WORKING};
 use crate::environment::stage::EVERY_PATH;
 use crate::environment::Action;
@@ -43,13 +43,13 @@ fn every_product() -> BTreeSet<&'static str> {
         .collect()
 }
 
-/// Products some people can make without finding anything out first.
+/// Products everybody can make without finding anything out first.
 fn obvious_products() -> BTreeSet<&'static str> {
     EVERY_STEP
         .iter()
-        .filter(|m| m.obvious)
+        .filter(|m| m.born_known())
         .map(|m| m.makes)
-        .chain(EVERY_WORKING.iter().filter(|w| w.obvious).map(|w| w.makes))
+        .chain(EVERY_WORKING.iter().filter(|w| w.born_known()).map(|w| w.makes))
         .collect()
 }
 
@@ -281,27 +281,152 @@ fn a_stage_zero_listing_that_is_a_discovery_here_says_why() {
     );
 }
 
-/// Every gate in `what_has_to_be_known_first` is carried by the catalogue: some
-/// listing for the gated thing `needs` a listing for each thing it waits on.
+/// A product of the making chain is born knowledge exactly when the catalogue
+/// says so, and a way of making it that is not the plain way is never born
+/// knowledge: it is a variant to be worked out (flint for stone).
 #[test]
-fn every_gate_in_the_making_chain_is_in_the_catalogue() {
-    let cat = catalogue();
-    let by_id: BTreeMap<&str, &Tech> = cat.tech.iter().map(|t| (t.id.as_str(), t)).collect();
-    let mut missing = Vec::new();
+fn what_is_born_knowledge_is_the_catalogues_to_say() {
     for product in every_product() {
-        for first in making::what_has_to_be_known_first(product) {
-            let carried = cat.tech.iter().filter(|t| t.makes().any(|p| p == product)).any(|t| {
-                t.needs
-                    .iter()
-                    .filter_map(|n| by_id.get(n.as_str()))
-                    .any(|n| n.makes().any(|p| p == *first))
-            });
-            if !carried {
-                missing.push(format!("{product} waits on {first}"));
-            }
+        let catalogue_says = catalogue::born_knowing_how_to_make(product);
+        let model_says = obvious_products().contains(product);
+        assert_eq!(
+            model_says, catalogue_says,
+            "{product}: the making chain and the catalogue disagree about whether it is born knowledge"
+        );
+    }
+    for step in EVERY_STEP.iter().filter(|s| !s.obvious) {
+        assert!(
+            EVERY_STEP.iter().any(|other| other.makes == step.makes && other.obvious),
+            "{} has a variant way and no plain one",
+            step.makes
+        );
+    }
+}
+
+/// Born knowledge can be made from born knowledge: a thing everybody knows
+/// how to make has a born way whose made inputs everybody knows how to make
+/// too. A knapped edge went to Stage 0 for this - the hand axe wants one.
+#[test]
+fn born_knowledge_can_be_made_from_born_knowledge() {
+    let products = every_product();
+    let born = obvious_products();
+    let mut short = Vec::new();
+    for product in &born {
+        let by_making = EVERY_STEP.iter().filter(|s| s.makes == *product && s.born_known()).any(|s| {
+            s.needs.iter().all(|(what, _)| !products.contains(what) || born.contains(what))
+        });
+        let by_working = EVERY_WORKING
+            .iter()
+            .filter(|w| w.makes == *product && w.born_known())
+            .any(|w| !products.contains(w.to) || born.contains(w.to));
+        if !by_making && !by_working {
+            short.push(*product);
         }
     }
-    assert!(missing.is_empty(), "gates the catalogue does not carry:\n  {}", missing.join("\n  "));
+    assert!(short.is_empty(), "born knowledge that wants something found out to make: {short:?}");
+}
+
+/// A `needs` that gates something points at a listing that is one product,
+/// so "what has to be known first" is a list of things, not of choices.
+#[test]
+fn a_gate_names_one_thing() {
+    let cat = catalogue();
+    let by_id: BTreeMap<&str, &Tech> = cat.tech.iter().map(|t| (t.id.as_str(), t)).collect();
+    for t in cat.tech.iter().filter(|t| !t.model.is_empty()) {
+        for n in &t.needs {
+            let target = by_id[n.as_str()];
+            assert_eq!(
+                target.makes().count(),
+                1,
+                "{} needs {n}, which is {:?} in the model: a gate is one product",
+                t.id,
+                target.model
+            );
+        }
+    }
+}
+
+/// Nothing waits, however far round, on itself.
+#[test]
+fn no_gate_waits_on_itself() {
+    fn reaches(from: &str, to: &str, depth: usize) -> bool {
+        depth < 32
+            && making::what_has_to_be_known_first(from)
+                .iter()
+                .any(|first| *first == to || reaches(first, to, depth + 1))
+    }
+    for product in every_product() {
+        assert!(!reaches(product, product, 0), "{product} waits on itself");
+    }
+}
+
+/// Born knowledge waits on nothing; a garment that is not born knowledge
+/// waits on something, or it would be born knowledge by another name.
+#[test]
+fn what_is_found_out_waits_on_something_and_what_is_born_on_nothing() {
+    for product in obvious_products() {
+        assert!(
+            making::what_has_to_be_known_first(product).is_empty(),
+            "{product} is born knowledge and waits on {:?}",
+            making::what_has_to_be_known_first(product)
+        );
+    }
+    for garment in every_garment() {
+        let link = format!("wear:{garment}");
+        if !catalogue::is_born_knowledge(&link) {
+            assert!(
+                !catalogue::what_comes_before(&link).is_empty(),
+                "{garment} is not born knowledge and waits on nothing, so nobody would ever make it"
+            );
+        }
+    }
+}
+
+/// The gates decided and measured before the catalogue held them (#66, #336)
+/// are the ones it holds.
+#[test]
+fn the_wheel_and_the_metal_wait_where_they_were_put() {
+    let first = making::what_has_to_be_known_first;
+    assert_eq!(first("wheel"), &["metalaxe", "stoneware"]);
+    assert_eq!(first("handcart"), &["wheel"]);
+    assert_eq!(first("shinylump"), &["stoneware"]);
+}
+
+/// Stages 0 to 2 of the survival paths, as the model carries them. Stage 0 is
+/// what a people arrives knowing; later stages are found out, and wait where
+/// tech.txt's common prerequisites put them.
+#[test]
+fn the_survival_paths_start_where_the_document_starts_them() {
+    let born = obvious_products();
+    for product in [
+        "lashing", "flint", "knappedtip", "handaxe", "diggingstick", "sharpenedstick",
+        "leather", "meatstrips", "fishstrips", "bowl",
+    ] {
+        assert!(born.contains(product), "{product} is Stage 0");
+    }
+    for product in [
+        "basket", "leatherbag", "fishingrod", "sling", "stoneknife", "spear", "shovel",
+        "travois", "bow", "fishingnet", "claypot", "tinder", "flour",
+    ] {
+        assert!(!born.contains(product), "{product} is found out");
+    }
+    let first = making::what_has_to_be_known_first;
+    assert_eq!(first("spear"), &["stoneknife"], "hafting a point wants a knife");
+    assert_eq!(first("shovel"), &["stoneknife"]);
+    assert_eq!(first("bow"), &["stoneknife"]);
+    assert_eq!(first("fishingnet"), &["fishingrod"], "lines before nets");
+    assert_eq!(first("ale"), &["bowl"], "a container before fermenting");
+    assert_eq!(first("bricks"), &["stoneware"]);
+
+    let garment = |g: &str| catalogue::what_comes_before(&format!("wear:{g}")).to_vec();
+    assert!(catalogue::is_born_knowledge("wear:fur_coat"));
+    assert!(catalogue::is_born_knowledge("wear:bark_cloak"));
+    assert_eq!(garment("leather_tunic"), vec!["stoneknife"], "sewn: an awl, which is the knife");
+    assert_eq!(garment("leather_pants"), vec!["stoneknife"]);
+    assert_eq!(garment("wool_cloak"), vec!["stoneknife"], "cut to shape: a knife");
+    assert_eq!(garment("hide_armor"), vec!["stoneknife"]);
+    assert_eq!(garment("linen_cloak"), vec!["rettedflax"], "linen is retted flax");
+    assert_eq!(garment("linen_shirt"), vec!["rettedflax", "stoneknife"]);
 }
 
 /// The status goods the design names - figurines, ceremonial dress and

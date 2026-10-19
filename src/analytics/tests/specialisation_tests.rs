@@ -312,6 +312,8 @@ fn a_dedicated_tailor_wastes_less_and_makes_better() {
         for _ in 0..200 {
             let agent = &mut simulation.population.agents[0];
             agent.skills.get_skill_mut(SkillType::Leatherworking).level = level;
+            // Linen waits on retted flax (Stage 3 cloth); this tailor has it
+            agent.found_out_how_to("rettedflax");
 
             // A fresh bench every time: nothing worn, nothing in the pack but
             // the material, so what varies between the two runs is the hand
