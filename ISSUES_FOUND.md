@@ -26031,3 +26031,66 @@ unit of the process id modulo 7 (removed again after):
 - `the_same_seed_is_the_same_world`, inside one process, still passed.
 - The new test failed: 83,776 draws in one process, 82,318 in the other,
   and different fingerprints.
+
+### 343. tech.txt as data: the catalogue, and where the model disagrees with it
+
+**What was asked.** Build the technology document into one system that
+matters, starting by turning it into structured data and checking it
+against the making chain *before* any behaviour changes.
+
+**What there is now.**
+- `data/technology.toml`: every listing in tech.txt - 35 paths, 255
+  stages, 1,461 listings - with an id (`path.stage.name`), the stage
+  titles, and each listing's role (technique, product, food, example).
+- 113 listings carry a hand-decided `model` link saying what they are
+  here: `make:` a making-chain product, `wear:` a garment, `build:` a
+  building, `do:` an action, `born:` something everybody knows from birth.
+  Beside it: `same_as` (the same discovery under another path - a matching
+  name is not taken as one, since "knives" is stone in tool.1 and bronze in
+  tool.5), `needs` (gating across paths), `drive` and `innate`.
+- Figurines (two paths), ceremonial dress and embroidery are
+  `drive = "luxury"`.
+- Stage 0 is innate unless a listing says otherwise and why. Two do: the
+  hand-shaped clay vessel and its pit firing, kept as discoveries by #199's
+  measurement.
+- `[[unlisted]]`: the model's things the document has no line for -
+  cutting meat and fish into portions, and the two cotton garments
+  (tech.txt names linen, hemp and wool cloth, not cotton).
+- `tools/tech_txt_to_catalogue.py` regenerates the file from tech.txt and
+  keeps the hand-decided fields; a decided entry whose listing has left the
+  document stops the run. Two runs give the same bytes.
+- `environment::catalogue` reads it (`the_catalogue()`).
+
+**The checks** (`technology_catalogue_tests`), which fail the suite:
+- the catalogue is the whole document, in `stage::EVERY_PATH`'s order,
+  with every stage non-empty;
+- every link names a real product, garment, building, action or
+  birthright (buildings and actions are spelled as values, so a renamed
+  variant breaks the build);
+- every product and garment has a listing or an `[[unlisted]]` reason,
+  and nothing is both - this caught the cotton cloak on its first run;
+- a stage-0 listing that is a discovery here says why;
+- every gate in `what_has_to_be_known_first` (wheel on a fired pot and a
+  metal axe, handcart on the wheel, shiny lump on a fired pot) is carried
+  as a `needs`;
+- the status goods answer the luxury drive.
+
+**What the report says** (`what_the_catalogue_says_about_the_model`):
+- *The model gives away early.* Basket, bowl, fishing rod, knapped tip,
+  leather bag, sling and stone knife are born-known here and stage 1 in the
+  document; shovel, spear (hafting) and travois are stage 2. Every garment
+  is born-known; the document puts cloaks at stage 1, sewn leather at
+  stage 2, woven linen at stage 3.
+- *The model holds back.* Clay pot and pit firing (#199).
+- *Out of order.* The model's metal blade comes after smelting (document
+  stage 3); the document has cold-hammered native copper blades at stage 1,
+  which the model has no road to.
+- *Coverage.* Of the stage 0-2 listings, the survival paths are partly
+  linked (tools 10 of 18, cordage 6 of 16, food preservation 7 of 26);
+  writing, communication, governance, measurement, sanitation, masonry,
+  maritime and water systems have no links at all.
+
+**What it does not do yet.** Nothing in the simulation reads the
+catalogue - `found_out` and `making.rs` still decide everything - and
+`stage.rs`'s Stage 0 table is still separate. Both are for the next step,
+once the stages 0-2 work is asked for.
