@@ -26094,3 +26094,63 @@ against the making chain *before* any behaviour changes.
 catalogue - `found_out` and `making.rs` still decide everything - and
 `stage.rs`'s Stage 0 table is still separate. Both are for the next step,
 once the stages 0-2 work is asked for.
+
+### 344. One technology system: the two registries that decided nothing are gone
+
+**What was asked.** Build tech into one system that matters, and clear out
+the two dead registries.
+
+**What they were.**
+- `world::technology` (`TechnologyTree`, `TechEra`): a Stone-to-Medieval
+  tree held on `World` and read only by the GUI's tech-tree panel.
+- `environment::technology` (`TechnologyRegistry`, `TechnologyKnowledge`):
+  five technologies ("fire", "wooden_tools", "flint_knapping",
+  "stone_tools", "iron_working").
+  - Every agent carried a `technology_knowledge`.
+  - The population rolled a random "discovery" for every curious agent
+    every few days, and ran an all-pairs teaching pass every turn.
+
+**Not quite dead.** The legacy Craft table checked `technology_knowledge`:
+wooden, stone and iron axes, pickaxes and hammers, and the iron sword.
+Measured before touching it - forty settlements (smooth 1-24, scattered
+1-16), two years, with a probe counting what that table made and refused:
+**zero of each**. Nothing asks for those items any more; the wanting code
+names making-chain products.
+
+**What changed.**
+- Both registries are deleted, with the agent field, the discovery roll,
+  the teaching pass, and their 30 tests.
+- The legacy table now waits on the making chain:
+  - wooden tools on wood shaped (`sharpenedstick`);
+  - stone tools on a hafted stone head (`spear`);
+  - iron tools on worked metal (`metalaxe`).
+  When the stages 0-2 work moves those, the old table follows.
+- The tech-tree panels (egui and bevy) now draw the making chain.
+  - One node per discovery (`everything_to_find_out` and the workings),
+    known by whoever has it in `found_out`.
+  - Its prerequisites come from `what_has_to_be_known_first`.
+  - It is placed at its earliest stage in tech.txt, from the catalogue
+    (#343). Columns are Stage 0-3 and 4+.
+- `test_simulation` reports `found_out`.
+- `OWNERSHIP.md`: Technology has one owner.
+
+**Measured**, the same forty settlements, two years:
+
+| | before | after |
+|---|---|---|
+| births | 179 | 174 |
+| deaths | 1 (hunger) | 1 (hunger) |
+| legacy table made / refused | 0 / 0 | 0 / 0 |
+
+Paired by seed: -0.125 births a settlement, sd 1.47, t = -0.54. Seeds move
+both ways, as a moved dice stream does. What is found out matches:
+- 40 of 40 worlds for each of the thirteen early discoveries;
+- the rarer ones within noise (fishing net 11 -> 18 worlds, bread 10 -> 6).
+
+**Dice count.** Seed 0 over a year: 976,851 -> 980,424 (+0.4%), recorded.
+Seed 4242 over 120 turns is unchanged at 7,852; the discovery roll was
+once every few days.
+
+**Full suite.** 2,845 tests: all pass but the yearly dice count, which
+this moves, in 1,191 s. That is 2,866 at #341, plus 2 (#342), plus 7
+(#343), less the 30 deleted.

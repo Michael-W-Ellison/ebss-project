@@ -28,11 +28,13 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #341): `cargo test --lib` in one piece.
-2,866 tests run: 2,861 passed, 1 failed, 4 ignored, in 1,097 s. The one was
-the yearly dice count, which #341 moves; recorded anew and passing on its
-own. The dice counts are 7,852 (seed 4242, 120 turns) and 976,851 (seed 0,
-a year).
+**Last full run** (ISSUES_FOUND #344): `cargo test --release --lib` in one
+piece. 2,845 tests run: 2,839 passed, 1 failed, 5 ignored, in 1,191 s. The
+one was the yearly dice count, which #344 moves (the old technology
+registry's roll is gone); recorded anew and passing on its own. The dice
+counts are 7,852 (seed 4242, 120 turns) and 980,424 (seed 0, a year). The
+fifth ignored test is `repeatable_tests::one_process_reports_seed_zero`,
+which only runs as a child of the two-process test (#342).
 
 **`clothing_tests::a_cold_agent_ends_up_dressed` is off this list** (#341).
 It read 23 of 96 against a bar of 24. What it measured was a man who wanted
