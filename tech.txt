@@ -110,7 +110,7 @@ Woven grass, reeds, or leaf mats
 Plant-fiber cordage
  
 
-Stage 1: Cordage and simple fiver use
+Stage 1: Cordage and simple fiber use
 
 Twisted plant fibers
 Sinew thread
@@ -161,7 +161,7 @@ Drop spindle refinement
 Better retting and fiber preparation
 Dyed yarns
 Seams, hems, fitted garments
-Mixed textiles: wool-lines, plant-animal blends
+Mixed textiles: wool-linen, plant-animal blends
 
 Products:
 Better-fitted clothing
@@ -192,7 +192,7 @@ Stage 6: Mechanized or proto-industrial textile production
 Spinning wheels
 Horizontal treadle looms
 Fulling
-More standardized dying
+More standardized dyeing
 Bulk cloth production
 
 Products:
@@ -221,7 +221,7 @@ Capes
 Loincloths
 Shawls
 Tied tunic-like wraps
-Bone/wood pins and toggels
+Bone/wood pins and toggles
  
 
 Stage 2: Sewn hide and skin garments
@@ -264,7 +264,7 @@ Reinforced cuffs/knees/elbows
 Stage 6: Specialized clothing systems
 
 Workwear
-Cold-weather laying systems
+Cold-weather layering systems
 Rain gear from oiled/waxed textiles or treated leather
 Ceremonial dress
 Military garments/uniform-like forms
@@ -289,7 +289,7 @@ Figurines
 Hearth fittings
  
 
-Stage1: Improved pottery forming
+Stage 1: Improved pottery forming
 
 Better clay selection
 Tempering with sand, grog, shell, fiber
@@ -320,7 +320,7 @@ Products:
 Tableware
 Transport amphorae
 Standardized jars
-Ceramic pips, tiles, weights
+Ceramic pipes, tiles, weights
  
 
 Stage 4: Slips, burnishing, and simple glazing
@@ -387,7 +387,7 @@ Wooden troughs
 Woven bins
  
 
-Storage 2: Dry caching and elevated storage
+Stage 2: Dry caching and elevated storage
 
 Raised racks
 Hanging storage
@@ -462,7 +462,7 @@ Stage 1: Simple moccasin or sandal forms
 One-piece hide moccasins
 Plant-fiber sandals
 Wooden pad soles in some environments
-Throng fastening
+Thong fastening
  
 
 Stage 2: Tanned leather introduction
@@ -564,7 +564,7 @@ Stage 2: Fermentation
 Lactic fermentation
 Alcohol fermentation
 Vinegar production
-Fermented grains, vegetables, diary, and fish products
+Fermented grains, vegetables, dairy, and fish products
 
 Products:
 Sauerkraut-like foods
@@ -703,8 +703,7 @@ Stage 0: Raw hide use
 
 Fresh hides used as wraps, lashings, bedding, shields, and coverings
 Scraped hide dried in shape
-Fur-on hide retained for warmed
-
+Fur-on hide retained for warmth
 
 Products: 
 Basic containers
@@ -835,7 +834,7 @@ Digging clay pits
 Breaking rock from exposed outcrops
 Harvesting peat from bogs
 Collecting shell, lime-rich stone, gypsum, or chalk where exposed
-Scaping salt from flats or evaporative basins
+Scraping salt from flats or evaporative basins
  
 
 Stage 2: Quarrying and shallow pit extraction
@@ -848,7 +847,7 @@ Shallow trench mining for ore-bearing material
 Fire-setting rock in limited contexts
  
 
-Stage 3: Material sorting and benefaction
+Stage 3: Material sorting and beneficiation
 
 Selecting ore-bearing rock
 Crushing and washing
@@ -864,7 +863,7 @@ Stone:
 Dimension stone cutting
 Better wedge splitting
 Transport of blocks
-Selection by use: toolstone, grindseone, building stone, lime stone
+Selection by use: toolstone, grindstone, building stone, lime stone
 
 Clay:
 Dedicated clay pits
@@ -1126,7 +1125,7 @@ Designated defecation area away from camp
 Separate sleeping, cooking, and butchery zones
 Waste heaps placed downhill/downwind
 Burial of some refuse
-Burning of dry trash were possible
+Burning of dry trash where possible
  
 
 Stage 2: Simple burial, pits, and midden use
@@ -2015,7 +2014,6 @@ Swords
 Knives
 Arrowheads
 
- 
 
 Stage 6: Steel refinement and weapon specialization
 
@@ -2085,7 +2083,7 @@ Weapon/tool blanks
 Stage 5: Alloying
 
 Bronze and other useful alloys
-Better hardness, toughness, easting performance
+Better hardness, toughness, casting performance
 More predictable metallurgy
  
 
@@ -2150,7 +2148,7 @@ Selection of preferred springs over surface water
 
 Stage 2: Protected sources
 
-Spring boxed
+Spring boxing
 Lined collection pits
 Covered cistern pits
 Simple filtration through cloth, sand, gravel, charcoal
@@ -2264,7 +2262,7 @@ Barber-surgeon type roles
 Lancing abscesses
 Tooth extraction
 Basic amputation in extremis
-Improves cautery and stitching tools
+Improved cautery and stitching tools
  
 
 Stage 5: Institutional and civic health measures
@@ -2416,7 +2414,7 @@ Simple irrigation or runoff capture
 Animal or human manuring
 Granaries
 Seasonal planting calendars
-Dedicated stable crops
+Dedicated staple crops
 
 Products:
 Cereal fields
@@ -2537,7 +2535,7 @@ Stage 0: Dry stone use
 Unmortared fieldstone walls
 Cairns
 Hearth rings
-Simple retraining walls
+Simple retaining walls
  
 
 Stage 1: Rubble construction
@@ -2696,7 +2694,7 @@ Common prerequisites
 
 Cordage enables sewing, nets, loom use, and footwear assembly
 Fire control enables pottery, drying, smoking, and hide treatment
-Containers enable formation, storage, and liquid processing
+Containers enable formentation, storage, and liquid processing
 Cutting tools improve tailoring, hide shaping, and clay finishing
 Domestic fiber plant/animals accelerate cloth development
 Fuel supply and kiln design are required for stoneware
