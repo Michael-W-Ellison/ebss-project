@@ -68,12 +68,17 @@ pub enum MatingResult {
 /// - Both must be capable of reproduction AND have their survival needs met
 /// - Agents that are hungry or thirsty will not attempt reproduction
 pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria) -> bool {
-    // Both must be alive, able to reproduce, AND have survival needs met
+    // Both must be alive, able to reproduce, AND have survival needs met.
+    //
+    // Neither carrying nor nursing, either: one pregnancy to a couple at a
+    // time (#338). Either of a pair could carry, so a couple could otherwise
+    // have a second child on the way while the first was at the breast -
+    // twice what a couple of people bear.
     if !agent1.should_attempt_reproduction() || !agent2.should_attempt_reproduction() {
         return false;
     }
 
-    // Two different people, and neither of them already carrying.
+    // Two different people.
     //
     // "Agents are gender neutral. There are no male/female agents, merely
     // child and adult agents." This required one of each, so a pair drawn
@@ -82,10 +87,6 @@ pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria
     // turns of action, half of every candidate pair was thrown away on a
     // distinction the specification does not have.
     if agent1.id == agent2.id {
-        return false;
-    }
-
-    if agent1.is_pregnant() || agent2.is_pregnant() {
         return false;
     }
 
@@ -112,7 +113,11 @@ pub fn can_mate(agent1: &Agent, agent2: &Agent, criteria: &MateSelectionCriteria
         return false;
     }
 
-    true
+    // And only a pair. "Mating should only occur between agents in a
+    // relationship": any two adults in reach of each other on a fertile day
+    // could make a child, so the model had about 2.4 matings an adult a day
+    // and no couples (#337, #338). See `Population::pair_off`.
+    agent1.are_we_a_pair(agent2.id) && agent2.are_we_a_pair(agent1.id)
 }
 
 
@@ -496,6 +501,11 @@ mod tests {
         with_a_full_larder(&mut other);
         with_a_full_larder(&mut carrier);
 
+        // And they are a pair: only a pair has children (#338)
+        let (a, b) = (other.id, carrier.id);
+        other.pair_with(b, 0);
+        carrier.pair_with(a, 0);
+
         (other, carrier)
     }
 
@@ -622,7 +632,7 @@ mod tests {
         );
     }
 
-    /// Any two grown people can pair.
+    /// Any two grown people can pair - once they are a pair (#338).
     ///
     /// This was `test_cannot_mate_same_gender` and it asserted the opposite:
     /// two males or two females were refused. "Agents are gender neutral.
@@ -650,8 +660,16 @@ mod tests {
 
         let criteria = MateSelectionCriteria::default();
         assert!(
+            !can_mate(&agent1, &agent2, &criteria),
+            "two grown people who are not a pair have no child together"
+        );
+
+        let (a, b) = (agent1.id, agent2.id);
+        agent1.pair_with(b, 0);
+        agent2.pair_with(a, 0);
+        assert!(
             can_mate(&agent1, &agent2, &criteria),
-            "two grown people, and nothing else to say about them"
+            "two grown people who are, and nothing else to say about them"
         );
     }
 
@@ -665,7 +683,7 @@ mod tests {
         assert!(!can_mate(&agent, &agent, &criteria));
     }
 
-    /// And nobody already carrying one starts another.
+    /// And nobody already carrying one starts another, nor their partner.
     #[test]
     fn nobody_already_carrying_starts_another() {
         // Seeded: `Agent::new` draws a random weight per drive, so how many
@@ -680,6 +698,9 @@ mod tests {
 
         with_a_full_larder(&mut agent1);
         with_a_full_larder(&mut agent2);
+        let (a, b) = (agent1.id, agent2.id);
+        agent1.pair_with(b, 0);
+        agent2.pair_with(a, 0);
 
         let criteria = MateSelectionCriteria::default();
         assert!(can_mate(&agent1, &agent2, &criteria));
@@ -721,15 +742,20 @@ mod tests {
         assert!(!can_mate(&infant, &adult, &criteria));
     }
 
+    /// One pregnancy to a couple at a time: while either is carrying or
+    /// nursing, the other does not start another (#338).
     #[test]
-    fn test_cannot_mate_when_pregnant() {
+    fn a_couple_has_one_child_at_a_time() {
         let (other, mut carrier) = create_mating_pair();
-
-        // Female is pregnant
-        carrier.pregnancy = Some(PregnancyState::new(0, other.id));
-
         let criteria = MateSelectionCriteria::default();
-        assert!(!can_mate(&other, &carrier, &criteria));
+        assert!(can_mate(&other, &carrier, &criteria));
+
+        carrier.pregnancy = Some(PregnancyState::new(0, other.id));
+        assert!(!can_mate(&other, &carrier, &criteria), "one carrying");
+
+        carrier.pregnancy = None;
+        carrier.nursing_a_child = true;
+        assert!(!can_mate(&other, &carrier, &criteria), "one nursing");
     }
 
     #[test]

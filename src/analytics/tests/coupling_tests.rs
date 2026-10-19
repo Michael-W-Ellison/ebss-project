@@ -46,6 +46,9 @@ fn a_couple(wishes: [f32; 2]) -> (Simulation, usize) {
     }
 
     let ids: Vec<_> = simulation.population.agents.iter().map(|a| a.id).collect();
+    // A couple is a pair: only a pair has children (#338)
+    simulation.population.agents[0].pair_with(ids[1], 0);
+    simulation.population.agents[1].pair_with(ids[0], 0);
     let carrier = if ids[0] <= ids[1] { 0 } else { 1 };
     (simulation, carrier)
 }

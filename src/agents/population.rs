@@ -410,6 +410,13 @@ impl Population {
             self.process_social_interactions();
         }
 
+        // And what is not kept up fades, and who is warm enough pairs off,
+        // once a day (#338)
+        if current_turn % crate::environment::seasons::ONCE_A_DAY == 0 {
+            self.let_bonds_fade();
+            self.pair_off();
+        }
+
         // Process trait-based proximity effects (every 10 turns)
         // Handles: Romantic partner happiness, Mediator calming, Intolerant stranger penalty
         if current_turn % crate::environment::seasons::ONCE_A_DAY == 0 {
@@ -577,6 +584,111 @@ impl Population {
     /// Decay relationships when agents don't interact
     ///
     /// Relationships fade over time if agents don't spend time together.
+    /// Who pairs off with whom, and which pairs come apart, once a day.
+    ///
+    /// Two adults neither of whom has a partner, warm enough to each other on
+    /// both sides (`Agent::WARM_ENOUGH_TO_PAIR`), and not family, become a
+    /// pair - the warmest pairs first, so that a man is taken by whoever he
+    /// is closest to. A pair whose partner has died, or whose bond has soured
+    /// past `Agent::COLD_ENOUGH_TO_PART`, is a pair no longer. Only a pair
+    /// can make a child (`reproduction::can_mate`).
+    pub fn pair_off(&mut self) {
+        let now = self.current_turn;
+        let alive: std::collections::BTreeSet<Uuid> = self
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .map(|agent| agent.id)
+            .collect();
+
+        // Pairs that have ended
+        let mut partings: Vec<(Uuid, Uuid)> = Vec::new();
+        for agent in self.agents.iter().filter(|agent| agent.state.is_alive) {
+            if let Some(partner) = agent.my_partner() {
+                let soured = agent
+                    .relationships
+                    .get_relationship(&partner)
+                    .is_some_and(|bond| bond.bond_strength < super::Agent::COLD_ENOUGH_TO_PART);
+                if !alive.contains(&partner) || soured {
+                    partings.push((agent.id, partner));
+                }
+            }
+        }
+        for (one, other) in partings {
+            if let Some(agent) = self.agents.iter_mut().find(|agent| agent.id == one) {
+                agent.part_from(other);
+            }
+            if let Some(agent) = self.agents.iter_mut().find(|agent| agent.id == other) {
+                agent.part_from(one);
+            }
+        }
+
+        // And pairs that form
+        let free: Vec<usize> = self
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, agent)| agent.state.is_alive && agent.state.life_stage.can_reproduce())
+            .filter(|(_, agent)| agent.my_partner().is_none())
+            .map(|(index, _)| index)
+            .collect();
+
+        let mut candidates: Vec<(f32, usize, usize)> = Vec::new();
+        for (n, &i) in free.iter().enumerate() {
+            for &j in &free[n + 1..] {
+                let (a, b) = (&self.agents[i], &self.agents[j]);
+                let related = a.parent_ids.contains(&b.id)
+                    || b.parent_ids.contains(&a.id)
+                    || a.parent_ids.iter().any(|parent| b.parent_ids.contains(parent));
+                if related {
+                    continue;
+                }
+                let warmth = |from: &super::Agent, to: Uuid| {
+                    from.relationships
+                        .get_relationship(&to)
+                        .filter(|bond| !bond.is_family())
+                        .map(|bond| bond.bond_strength)
+                };
+                let (Some(ab), Some(ba)) = (warmth(a, b.id), warmth(b, a.id)) else {
+                    continue;
+                };
+                let asks = |who: &super::Agent| {
+                    if who.traits.has(Trait::Romantic) {
+                        super::Agent::WARM_ENOUGH_FOR_A_ROMANTIC
+                    } else {
+                        super::Agent::WARM_ENOUGH_TO_PAIR
+                    }
+                };
+                if ab >= asks(a) && ba >= asks(b) {
+                    candidates.push((ab.min(ba), i, j));
+                }
+            }
+        }
+        candidates.sort_by(|x, y| y.0.total_cmp(&x.0));
+        let mut taken: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
+        for (_, i, j) in candidates {
+            if taken.contains(&i) || taken.contains(&j) {
+                continue;
+            }
+            taken.insert(i);
+            taken.insert(j);
+            let (id_i, id_j) = (self.agents[i].id, self.agents[j].id);
+            self.agents[i].pair_with(id_j, now);
+            self.agents[j].pair_with(id_i, now);
+            *self.stats.how_it_went.entry("a pair formed".to_string()).or_insert(0) += 1;
+        }
+    }
+
+    /// A day of bonds left to themselves - see `Relationship::a_day_untended`.
+    fn let_bonds_fade(&mut self) {
+        for agent in self.agents.iter_mut().filter(|agent| agent.state.is_alive) {
+            let traits = agent.traits.clone();
+            for bond in agent.relationships.get_all_mut().values_mut() {
+                bond.a_day_untended(&traits);
+            }
+        }
+    }
+
     fn decay_relationships(&mut self) {
         // First, collect agent positions to avoid borrowing issues
         let agent_positions: std::collections::BTreeMap<Uuid, (i32, i32, i32)> =
@@ -1161,7 +1273,11 @@ impl Population {
                         .map(|d| d.is_active())
                         .unwrap_or(false);
 
-                    if drive1 && drive2 {
+                    // A pair wants a child between them, not each on the
+                    // same day: either of them wanting one is enough. Asking
+                    // for both at once, of one partner rather than of anybody
+                    // in reach, halved births (#338).
+                    if drive1 || drive2 {
                         // Which of the two carries it: whichever is on their
                         // own fertile day - see `does_this_one_carry`. Each
                         // person still has one chance a cycle, their own.
@@ -1187,6 +1303,7 @@ impl Population {
                         // One chance a cycle, on the carrier's own day of it,
                         // and with one partner - see `DAYS_IN_A_CYCLE`.
                         if tried_this_turn.contains(&carrier_idx)
+                            || !carrier.can_carry_a_child()
                             || !carrier.could_conceive_now(self.current_turn)
                         {
                             continue;
@@ -1413,6 +1530,12 @@ impl Population {
     ///
     /// Agents with active survival drives (hunger/thirst) will not engage in social
     /// interactions - they must prioritize finding food and water over socializing.
+    /// How much two natures suiting each other counts, beside the bond they
+    /// already have, in who sits down with whom (#338). At one, two who
+    /// share three traits (an affinity of 0.45) are sought out as if their
+    /// bond were 0.45 warmer, and a cruel man is shunned as if 0.3 colder.
+    pub const WHAT_GETTING_ON_COUNTS_FOR: f32 = 1.0;
+
     pub fn process_social_interactions(&mut self) {
         use crate::agents::social_interactions::{
             SocialInteractionType,
@@ -1420,9 +1543,6 @@ impl Population {
             should_greet, select_conversation_topic,
         };
         use crate::core::DriveType;
-        use rand::Rng;
-
-        let mut rng = crate::core::dice::roll();
         let current_turn = self.current_turn;
 
         // Collect interaction pairs (to avoid borrowing issues)
@@ -1447,14 +1567,14 @@ impl Population {
 
             let _agent1_id = self.agents[i].id;
             let agent1_pos = self.agents[i].state.position;
-            let agent1_social_drive = self.agents[i].drives.get(DriveType::Social)
-                .map(|d| d.value)
-                .unwrap_or(0.0);
 
-            // Only socialize if social drive is somewhat active (>0.3)
-            if agent1_social_drive < 0.3 {
-                continue;
-            }
+            // A day's company is kept whether or not anybody is lonely at
+            // the moment it is reckoned. It asked for a social drive over 0.3
+            // at midnight, and then a roll of about one in eight for each
+            // pair: in a settlement of twelve that came to one or two
+            // sittings a day all told, a pair sat down together about once a
+            // month, and no friendship was kept up against the fade (#339).
+            // Who sits with whom, and how many, is decided below.
 
             // Calculate social range based on personality traits
             let agent1_social_range_sq = calculate_social_range_squared(&self.agents[i].traits.traits);
@@ -1493,16 +1613,74 @@ impl Population {
                     continue;
                 }
 
-                // Check if they should interact
-                // Higher social drive = higher interaction probability
-                let interaction_probability = (agent1_social_drive * 0.3).min(0.5);
-                if !rng.gen_bool(interaction_probability as f64) {
-                    continue;
-                }
-
                 interactions.push((i, j));
             }
         }
+
+        // Nobody sits down with everybody in a day.
+        //
+        // This made a conversation for every pair in reach that rolled for
+        // it, every day, so each person in a settlement of a dozen talked with
+        // all of them and every bond rose together (#337). A day's company is
+        // a few people now - the ones a person is closest to first - and how
+        // many depends on the person (`how_many_i_sit_down_with`).
+        //
+        // Closest, and best suited. By the bond alone, whoever happened to be
+        // sat beside on the first days was the company for good, and how well
+        // two natures go together set only how close they could ever get: in
+        // forty settlements no trait moved a person's number of friends, and
+        // the mean bond by no more than five per cent (#338). People seek out
+        // the company they get on with, and shun a cruel man's.
+        let wanted = |i: usize, j: usize| {
+            let bond = |me: usize, them: usize| {
+                self.agents[me]
+                    .relationships
+                    .get_relationship(&self.agents[them].id)
+                    .map(|bond| bond.bond_strength)
+                    .unwrap_or(0.0)
+            };
+            let suits = |me: usize, them: usize| {
+                super::Relationship::affinity_between(&self.agents[me].traits, &self.agents[them].traits)
+            };
+            (bond(i, j) + bond(j, i)) / 2.0
+                + Self::WHAT_GETTING_ON_COUNTS_FOR * (suits(i, j) + suits(j, i)) / 2.0
+        };
+        let mut interactions: Vec<((usize, usize), f32)> = interactions
+            .into_iter()
+            .map(|(i, j)| ((i, j), wanted(i, j)))
+            .collect();
+        interactions.sort_by(|(_, left), (_, right)| right.total_cmp(left));
+        let interactions: Vec<(usize, usize)> =
+            interactions.into_iter().map(|(pair, _)| pair).collect();
+        // Kin and a partner are company a person keeps anyway, and do not
+        // take one of the day's places. They did, and a partner, being the
+        // closest of all, took one every day: an Introvert had nobody else,
+        // anybody else one, and three in five friendships went untended a
+        // month at a time and faded to a face known by talk alone (#339).
+        let kin = |i: usize, j: usize| {
+            self.agents[i]
+                .relationships
+                .get_relationship(&self.agents[j].id)
+                .is_some_and(|bond| {
+                    bond.is_family() || bond.relationship_type == crate::agents::emotions::RelationshipType::Partner
+                })
+        };
+        let mut sat_with = vec![0usize; self.agents.len()];
+        let interactions: Vec<(usize, usize)> = interactions
+            .into_iter()
+            .filter(|(i, j)| {
+                if kin(*i, *j) {
+                    return true;
+                }
+                let room = sat_with[*i] < self.agents[*i].how_many_i_sit_down_with()
+                    && sat_with[*j] < self.agents[*j].how_many_i_sit_down_with();
+                if room {
+                    sat_with[*i] += 1;
+                    sat_with[*j] += 1;
+                }
+                room
+            })
+            .collect();
 
         // Process each interaction
         for (i, j) in interactions {
@@ -1787,7 +1965,7 @@ impl Population {
         }
 
         // Introvert: less likely to share
-        if agent.traits.has(Trait::Introvert) || agent.traits.has(Trait::Introverted) {
+        if agent.traits.has(Trait::Introvert) {
             probability -= 0.20;
         }
 
@@ -2915,28 +3093,20 @@ impl Population {
 
                     // Strengthen relationship through gossip interaction.
                     //
-                    // **As far as getting on, and no further.** This had no
+                    // **As far as a familiar face, once a day.** This had no
                     // ceiling, and talking is the commonest thing people do:
                     // a quarter of a million exchanges in a settlement's first
-                    // quarter, half of everything that drew anybody closer,
-                    // so everybody talked their way to nearly 1.0 with
-                    // everybody (#296). Chatting with a man makes him
-                    // somebody you get on with; more than that is earned by
-                    // what you do for each other. See
-                    // `Relationship::GETTING_ON_WITH_SOMEBODY`.
+                    // quarter, so everybody talked their way to nearly 1.0
+                    // with everybody (#296). Capped at getting on (0.5), it
+                    // still set every bond that was not kin, just under 0.5
+                    // whoever the two were (#339). See
+                    // `Relationship::have_a_word`.
                     let uuid_i = self.agents[i].id;
-                    let getting_on = crate::agents::emotions::Relationship::GETTING_ON_WITH_SOMEBODY;
                     if let Some(rel) = self.agents[i].relationships.get_relationship_mut(&uuid_j) {
-                        if rel.bond_strength < getting_on {
-                            rel.bond_strength = (rel.bond_strength + 0.001).min(getting_on);
-                        }
-                        rel.total_interactions += 1;
+                        rel.have_a_word(current_turn);
                     }
                     if let Some(rel) = self.agents[j].relationships.get_relationship_mut(&uuid_i) {
-                        if rel.bond_strength < getting_on {
-                            rel.bond_strength = (rel.bond_strength + 0.001).min(getting_on);
-                        }
-                        rel.total_interactions += 1;
+                        rel.have_a_word(current_turn);
                     }
                 }
             }
@@ -3047,7 +3217,7 @@ impl Population {
                 }
                 // Strengthen bond
                 if let Some(rel) = self.agents[learner_idx].relationships.get_relationship_mut(&teacher_id) {
-                    rel.bond_strength = (rel.bond_strength + 0.05).min(1.0);
+                    rel.strengthen(0.05);
                 }
 
                 // Teacher recognizes learner
@@ -3058,7 +3228,7 @@ impl Population {
                 }
                 // Strengthen bond
                 if let Some(rel) = self.agents[teacher_idx].relationships.get_relationship_mut(&learner_id) {
-                    rel.bond_strength = (rel.bond_strength + 0.03).min(1.0);
+                    rel.strengthen(0.03);
                 }
 
                 // Log the learning event for debugging/analytics
@@ -3395,13 +3565,13 @@ fn calculate_social_range_squared(traits: &[Trait]) -> f32 {
     for trait_item in traits {
         match trait_item {
             // Traits that increase social range
-            Trait::Extrovert | Trait::Sociable => range += 3.0,
+            Trait::Extrovert => range += 3.0,
             Trait::Charismatic => range += 2.0,
             Trait::Explorer => range += 1.0,
             Trait::Curious => range += 1.0,
 
             // Traits that decrease social range
-            Trait::Introvert | Trait::Introverted => range -= 2.0,
+            Trait::Introvert => range -= 2.0,
             Trait::Mute => range -= 1.0,
             Trait::Anxious => range -= 1.0,
             Trait::Paranoid => range -= 2.0,

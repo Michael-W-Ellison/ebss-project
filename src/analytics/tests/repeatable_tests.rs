@@ -221,7 +221,13 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // holds an unpractised hand longer than a period.
     // Up to 7,954 for #336: nobody notices anything asleep, and the makings
     // of a discovery somebody wonders about are kept in mind.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_954;
+    // Down to 7,905 for #338: bonds held to what two natures allow, a few
+    // people's company a day, pairs, and a want met the way a nature reaches
+    // for.
+    // Down to 7,852 for #339: talk makes only a familiar face, a good turn
+    // is sized against the fade, and a day's company is kept without a roll
+    // for it.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_852;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -491,7 +497,15 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 4.6% to 939,765 for #336: ore is not read in a cold stone, nobody
     // notices anything asleep, and metal waits on twenty evenings at a fire
     // with ore in the pack.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 939_765;
+    // Up 6.5% to 1,000,911 for #338: bonds held to what two natures allow,
+    // company chosen by how well two natures suit, only a pair has a child,
+    // one at a time, and curiosity does not try a neighbour's pack.
+    // Down 1.1% to 989,726 for #339: talk makes only a familiar face, a good
+    // turn is sized against the fade, a day's company is kept without a roll
+    // for it, and a friendship left alone fades over ten weeks, not three.
+    // Down 1.3% to 976,851 for #341: somebody chilly with the makings on
+    // them dresses on the spot.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 976_851;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
@@ -500,6 +514,91 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
         rolled, WHAT_SEED_0_ROLLS_IN_A_YEAR,
         "seed 0 rolled {rolled} times over a year where it has always rolled \
          {WHAT_SEED_0_ROLLS_IN_A_YEAR}"
+    );
+}
+
+/// How long each process runs in `the_same_seed_is_the_same_world_in_another_process`:
+/// a month, long enough for the seasons to have begun to turn and the herds
+/// and the people to have met, and short enough to run on every change.
+const A_MONTH_OF_TURNS: usize =
+    (crate::environment::seasons::PLANNING_PERIODS_PER_DAY * 30) as usize;
+
+/// The environment variable that tells the helper below it was started by
+/// the two-process test rather than by somebody running `--ignored`.
+const SPEAK_UP_FOR_THE_PARENT: &str = "EBSS_REPEATABLE_CHILD";
+
+/// The other half of `the_same_seed_is_the_same_world_in_another_process`:
+/// run in a child process, it plays seed 0 for a month and says what came of
+/// it on one line the parent can read.
+#[test]
+#[ignore = "run by the_same_seed_is_the_same_world_in_another_process, in a process of its own"]
+fn one_process_reports_seed_zero() {
+    if std::env::var(SPEAK_UP_FOR_THE_PARENT).is_err() {
+        return;
+    }
+    let (fingerprint, rolled) = a_world_from(0, A_MONTH_OF_TURNS);
+    println!("SEED-ZERO-AFTER-A-MONTH {fingerprint} {rolled}");
+}
+
+/// The same seed in two processes is the same world (#342).
+///
+/// `the_same_seed_is_the_same_world` runs both of its worlds in one process,
+/// so it cannot see anything that varies from one run of the program to the
+/// next: a hash seeded per process, the operating system's randomness, an
+/// address, the clock. Those are what #94 had to find by running one seed as
+/// two processes and diffing them, and until now the only standing guard
+/// against their coming back was `a_fixed_world_rolls_a_recorded_number_of_
+/// times_over_a_whole_year`, which compares against a number recorded in some
+/// earlier process - and so has to be re-recorded on every change to the
+/// model, and cannot tell a deliberate change from drift when both land in
+/// one commit.
+///
+/// This starts the test binary twice more, each running only
+/// `one_process_reports_seed_zero`, and compares what the two report. There is
+/// no recorded number: it holds through any deliberate change and fails only
+/// when two runs of the same code disagree.
+#[test]
+fn the_same_seed_is_the_same_world_in_another_process() {
+    use std::process::{Command, Stdio};
+
+    let me = std::env::current_exe().expect("the test binary knows where it is");
+    let helper = module_path!()
+        .split_once("::")
+        .map(|(_, rest)| format!("{rest}::one_process_reports_seed_zero"))
+        .expect("this test sits inside the crate");
+
+    let start = || {
+        Command::new(&me)
+            .args([helper.as_str(), "--exact", "--ignored", "--nocapture", "--test-threads=1"])
+            .env(SPEAK_UP_FOR_THE_PARENT, "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("the test binary can be started again")
+    };
+    // Both at once: two processes, two hash seeds, two sets of addresses
+    let (first, second) = (start(), start());
+
+    let report = |child: std::process::Child| {
+        let out = child.wait_with_output().expect("the child process finishes");
+        assert!(out.status.success(), "the child process failed: {:?}", out.status);
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            // Anywhere on the line: the harness writes its own `test ... `
+            // in front of whatever the test prints
+            .find_map(|line| {
+                line.split_once("SEED-ZERO-AFTER-A-MONTH ")
+                    .map(|(_, said)| said.trim().to_string())
+            })
+            .expect("the child process reports the world it ran")
+    };
+    let (once, again) = (report(first), report(second));
+
+    assert_eq!(
+        once, again,
+        "seed 0 came out differently in two runs of the same binary (fingerprint, \
+         then draws taken), so something the seed does not fix differs from one \
+         process to the next - see the module note above and ISSUES_FOUND #94"
     );
 }
 

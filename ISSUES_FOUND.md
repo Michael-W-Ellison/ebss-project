@@ -25485,3 +25485,549 @@ Births by seed:
 - scattered: 11 8 8 8 9 7 6 9.
 
 The one death is of thirst.
+
+### 337. Measured: what personality does to how people deal with each other
+
+"Do agents change their interactions due to their personality traits?" Read
+off the code, a good deal does: drive leanings, trust, lying, the cost of
+theft, bonds from compatibility, and the proximity effects. Nobody had
+measured whether any of it shows. This is that measurement, and no model code
+changes with it.
+
+**How.** Forty settlements (smooth 1–24, scattered 1–16), two years each, 12
+founders. A probe logged every social action by who did it, to whom and
+whether it came off; every lie told to a room, and who believed it; every
+claim passed on one to one, with whether it was twisted and how far it was
+believed; and every question asked and whether the answer was taken. At the
+end each person's traits and bonds were written down. 466 people lived at
+least 60 days past twelve. Each trait's holders are set against everybody
+else with a rank test (Mann–Whitney), so a few people with hundreds of social
+actions do not swamp the means, and rare events are given as counts. Traits
+held by fewer than 8 adults are left out.
+
+**Where the settlement stands, whoever is in it:**
+- Everybody is friends with everybody. Each person ends on about 12 friends,
+  mean bond 0.78, and 0.02 enemies.
+- People believe 97.8% of what they are told, and 97.7% of lies.
+- About 2.4 mating attempts per adult a day, 89% of them "succeeding".
+- Gifts are 0.4 a day each.
+- Theft is 191 takings by 29 of 466 people in two years; trade is 194.
+- Attacks are 2,450, by 214 people.
+- No relationship is ever a `Partner`: nothing assigns it.
+
+**Traits that visibly change behaviour** (holders against everybody else):
+
+| behaviour | trait | holders | others |
+|---|---|---|---|
+| lies to a room, per 100 adult days (median) | Dishonest | 18.1 | 0 |
+| | Manipulator | 10.6 | 0 |
+| twists what it passes on (median share) | Manipulator, Imaginative, Dishonest | about 2% | 0 |
+| believes what it is told | Suspicious | 71% | 99.9% |
+| | Skeptic | 90% | 99.9% |
+| believes a lie | Suspicious | 70% | 100% |
+| takes the answer to a question | Suspicious | 6% | 100% |
+| confidence in what it is told | Manipulator, Suspicious | 0.67 | 0.97 |
+| | Trusting | 0.99 | 0.96 |
+| is believed | Cruel | 88% | 99.6% |
+| attacks, per 1000 adult days | Dishonest | 43.8 | 5.2 |
+| | Manipulator | 36.7 | 4.7 |
+| | Vengeful | 20.8 | 6.2 |
+| | Aggressive | 13.8 | 6.9 |
+| | Pacifist, Forgiving, Calm | 0.4–0.5 | 7.7 |
+| is attacked | Hot-Headed | 23.1 | 5.8 |
+| socialises, per 100 adult days (median) | Extrovert | 61.5 | 41.9 |
+| | Charismatic | 60.4 | 41.9 |
+| | Romantic | 53.6 | 41.9 |
+| | Introvert | 31.5 | 43.8 |
+| shares what it knows (median) | Extrovert | 69.6 | 43.6 |
+
+**What barely registers, or runs the wrong way:**
+- **Bonds.** No trait moves the number of friends, and the mean bond moves
+  by about 5% at most (Hot-Headed, Lazy and Cold-Hearted lower; Altruist
+  higher). Compatibility is read every turn, but living side by side fills
+  every bond up regardless.
+- **Generosity.** Altruists give 0.69 times as often as everybody else,
+  Kind-Hearted 0.90, Caretakers 1.14, Greedy 1.04 and Cruel 1.04. Giving is
+  not a matter of temperament.
+- **Theft.** Greedy people stole nothing and one Honest person in twelve
+  stole nine times. With every bond near its top, what a theft costs among
+  friends swamps the Honest and Greedy multipliers.
+- **Mating.** Romantic people try 1.21 times as often.
+- **Cruel** people attack a tenth as often as everybody else.
+- **Gossip** people socialise 1.14 times as often, against a 1.4 leaning.
+- **Trusting** has nothing to raise: everybody already believes nearly
+  everything.
+
+**Traits that can never show, whatever they are written to do:**
+- Sociable, Introverted, Hottempered, Empathetic and Manipulative are
+  checked in the code but are in neither the founders' draw nor the
+  mutation pool. They are near-twins of Extrovert, Introvert, Hot-Headed,
+  Empathic and Manipulator, which are drawn, so every branch on them is dead.
+- Paranoid, Mute, Deaf, Blind and the rest of the mutation-only traits did
+  not appear in any adult in two years.
+- The Romantic partner-proximity and Insecure partner-jealousy effects look
+  for a `Partner` relationship, which is never made.
+- `Population::process_gossip`, where Gossip people spread twisted rumours,
+  is never called.
+
+### 338. Traits shape relationships, pairs, and the way a want is met
+
+"Stop bonds saturating so traits can shape relationships. Merge the
+duplicate traits. Mating should only occur between agents in a
+relationship. Yes, generosity and theft should be tied to traits. Drive
+demand forces action, but traits influence the type of action taken to
+satisfy a drive." This follows #337's measurement, and is measured the same
+way: forty settlements (smooth 1–24, scattered 1–16), two years, 12
+founders, a rank test of each trait's holders against everybody else.
+
+**What changed:**
+- **Duplicate traits merged.** Hottempered, Sociable, Introverted,
+  Empathetic and Manipulative were separate variants that no founder or
+  mutation ever drew. They are gone, and old saves read them back as
+  Hot-Headed, Extrovert, Introvert, Empathic and Manipulator.
+- **Bonds have a ceiling set by the two natures.** `affinity_between` reads
+  shared traits, clashes, and what each makes of the other (charm and
+  kindness draw people; cruelty and coldness put them off). A kindness fills
+  part of the room left below the ceiling: 0.25 for two who clash at every
+  turn, 0.9 for two of a kind, family and partners 1.0. Warmth left
+  untended fades back to 0.2. A grudge wears off, faster for a Forgiving
+  person and hardly at all for a Vengeful one.
+- **A day's company is a few people.** Two people a day, three for an
+  Extrovert, one for an Introvert. The company is chosen by bond *and* how
+  well the two natures suit (`WHAT_GETTING_ON_COUNTS_FOR`). By bond alone,
+  whoever sat nearby in the first days stayed company for good, and no trait
+  changed how many friends anybody had.
+- **Only a pair has a child.** Unpaired adults warm enough to each other on
+  both sides pair off; a pair comes apart on a death or a soured bond.
+  Somebody unpaired courts the unpaired adult they are warmest to. Either
+  partner wanting a child is enough, and a partner out of reach is walked
+  to.
+- **One pregnancy to a couple at a time.** While either partner carries or
+  nurses, the couple waits. Letting the other partner carry meanwhile was
+  measured (below) and set aside: it kept births near the old rate, but gave
+  a couple twice what a couple of people bear.
+- **A person's nature picks how a want is met.** `Trait::inclines_to` says
+  how readily each trait gives, tells, talks, trades or takes.
+  - The social drive draws between giving, telling and talking by those
+    weights.
+  - Somebody readier to take than to trade looks at taking first.
+  - What a theft costs is scaled by temperament.
+  - A generous nature gives to people it thinks less well of.
+- **Curiosity no longer reaches into a neighbour's pack.** Its
+  next-untried-verb path offered taking to anybody. In the first
+  measurement, a few people tried their neighbours' packs a thousand times
+  and more each; the most was a Kind-Hearted person, at 1,942 tries for one
+  that came off. Greedy people hardly tried at all.
+
+**Where the settlement stands** (#337 against now):
+
+| | #337 | #338 |
+|---|---|---|
+| friends each (bond over 0.5) | about 12 | 1.7 |
+| mean bond | 0.78 | 0.49 |
+| partnered adults | none | 90% |
+| mating attempts per adult a day | 2.4 | 1.4 |
+| gifts per adult a day | 0.4 | 0.19 |
+| takings in two years | 191, by 29 people | 25, by 18 |
+| attacks | 2,450, by 214 people | 2,597, by 174 |
+| believes what it is told (all hearings pooled) | 97.2% | 93.8% |
+
+**Traits that now visibly change behaviour** (holders against everybody
+else):
+
+| behaviour | trait | holders | others |
+|---|---|---|---|
+| gives, per 100 adult days (median) | Altruist | 30.3 | 11.7 |
+| | Kind-Hearted | 1.63× | |
+| | Caretaker | 1.45× | |
+| | Greedy, Callous | 3.5 | 12.6 |
+| | Cruel | 2.1 | 13.1 |
+| takes, per 1000 adult days | Greedy | 0.82 | 0.05 |
+| | Honest | 0 | 0.08 |
+| partnered | Cruel | 48% | 93% |
+| | Callous | 59% | 91% |
+| friends (mean) | Cruel | 1.24 | 1.71 |
+| | Callous | 1.18 | 1.70 |
+| | Intolerant | 1.38 | 1.69 |
+| socialises (median) | Extrovert | 1.76× | |
+| | Romantic | 1.52× | |
+| | Introvert | 0.62× | |
+| tells what it knows (median) | Gossip | 2.11× | |
+
+What #337 found still holds for lying, twisting, belief and attacks:
+Dishonest and Manipulator people lie, twist and strike; Suspicious and
+Skeptic people doubt; Forgiving, Calm and Pacifist people hardly strike.
+Cruel people socialise four times as often as others because half of them
+have nobody, and courting is socialising.
+
+**Births.** One pregnancy to a couple brings births down to about the rate
+a couple of people manage:
+
+| | before pairs (#336) | either partner may carry | one pregnancy to a couple |
+|---|---|---|---|
+| smooth 1–12 | 89 | 79 | 51 |
+| scattered 1–8 | 66 | 61 | 37 |
+| all forty | - | - | 177, 4.4 a settlement |
+
+By seed, one pregnancy to a couple:
+- smooth: 4 2 6 6 4 4 3 5 4 4 4 5;
+- scattered: 5 5 5 5 4 5 4 4.
+
+The middle column is the rule that was measured and set aside.
+
+**Deaths.** Five people in forty settlements, all of thirst: three in smooth
+8 (days 659–664, one a child) and two in smooth 11 (days 400 and 401). Smooth
+8 lost one person to thirst before this change too. Not looked into here.
+
+**Still open:**
+- Mating is attempted about 1.4 times an adult a day, now with a partner,
+  when a conception can come at most once a cycle. That was 2.4 a day
+  before pairs existed.
+- No trait moves the mean bond by more than about 10%. The shaping shows in
+  who is partnered and how many friends a person keeps, not in the average
+  over everybody they know.
+
+### 339. Why no trait moves a person's average bond: talk sets every bond
+
+#338 left one result open: no trait moved a person's mean bond, taken over
+everybody they know, by more than about 10%. This is the investigation; no
+model code changes with it.
+
+**How.** Six settlements (smooth and scattered, seeds 1, 3 and 5), two years.
+A probe totalled how far each process moved the bonds that are neither
+family nor a pair, and dumped every bond at the end with its affinity and
+ceiling: 1,128 bonds, 1,006 of them between people who are not kin.
+
+**What moves a bond that is not kin, over two years in six settlements:**
+
+| process | total change | changes |
+|---|---|---|
+| passing news (+0.001 each, up to 0.5) | +6,263 | 6.4 million |
+| left untended (3% a day of the way back to 0.2) | −5,505 | 620,000 |
+| traits clashing, a turn at a time | −843 | 2.9 million |
+| every deed together: company, gifts, teaching, help | +309 | 84,000 |
+| standing near somebody (up to 0.3) | +212 | 381,000 |
+| seeing somebody (up to 0.3) | +109 | 34,000 |
+| blows and other harms | −152 | 13,000 |
+
+**Talking is twenty times everything people do for each other.** Each piece
+of news passed adds 0.001 to the bond on both sides, up to 0.5. That is
+about nine a day for every bond. Against the daily fade it settles every
+acquaintance just under 0.5, whoever the two are: 82% of these bonds stand
+between 0.4 and 0.6, most between 0.46 and 0.49. Only four were at 0.5
+exactly, so none of them counts as a friend (the probe counts over 0.5).
+
+**Deeds are too small to lift a bond out of that band.** A day's company is
+worth +0.01 to +0.03, scaled by the room left below the ceiling. At 0.48 with
+a ceiling of 0.575 that comes to about +0.003, while the fade takes 0.008 a
+day. So the ceilings above 0.5 that affinity sets are never reached:
+
+| affinity of the pair | bonds | mean ceiling | mean bond |
+|---|---|---|---|
+| below −0.3 | 128 | 0.42 | 0.39 |
+| −0.3 to −0.1 | 69 | 0.51 | 0.44 |
+| −0.1 to 0.05 | 562 | 0.575 | 0.46 |
+| 0.05 to 0.2 | 186 | 0.62 | 0.46 |
+| 0.2 to 0.4 | 56 | 0.65 | 0.44 |
+| 0.4 and over | 5 | 0.74 | 0.38 |
+
+Nature shows only where it pulls the ceiling below the band. That is a pair
+who clash, 13% of these bonds. Two who are made for each other stand where
+two strangers do.
+
+**And most pairs have nothing between them to read.** The median affinity is
+exactly 0: most pairs share no trait and clash on none, so 56% of these
+bonds have the same ceiling, 0.575.
+
+**What the per-person average measures.** It is a person's own bonds,
+nearly all at the level talk sets. The spread from one person to the next is
+small (standard deviation 0.037). Most of it is how many kin and partners
+they have (correlation 0.55), since those stand near 1.0. And charm,
+kindness and cruelty work on how *others* feel about a person, which a
+person's own average does not include.
+
+**What was done.** The first two of three proposals, and two more that
+measuring them showed were needed:
+1. **Talk makes a familiar face, once a day.** A pair's talk counts once a
+   day (+0.01), up to 0.3. On its own this left every bond that is not kin
+   at 0.3 instead of just under 0.5, still whoever the two were.
+2. **A good turn is sized against the fade.** One step of a good turn is
+   0.06, up from 0.01, scaled as before by the room left below the ceiling.
+3. **Kin and a partner do not take one of the day's places.** A partner,
+   the closest of all, took one of a person's two daily places every day.
+   Only 16% of friendships had been kept up in the last week; a typical one
+   had last been kept up 46 days before.
+4. **A day's company is kept whether or not anybody is lonely at
+   midnight.** The pass asked for a social drive over 0.3 at midnight, then
+   rolled about one in eight for each pair. In a settlement of twelve that
+   came to one or two sittings a day all told (9 to 12 now, about 3 of them
+   kin), so a pair sat down together about once a month.
+5. **A friendship left alone is half gone in ten weeks, not three** (1% a
+   day, down from 3%). Who is about camp of an evening changes from day to
+   day, so friends sit together every few days, not every day. Against the
+   old fade, even a bond kept up that often stood at about 0.35 whatever
+   the two were like.
+
+**Measured** over forty settlements, two years, set against the run before
+any of this (#338):
+
+| | #338 | now |
+|---|---|---|
+| mean bond, all a person knows | 0.489 | 0.418 |
+| spread of that from person to person (standard deviation) | 0.049 | 0.039 |
+| friends each (bond over 0.5) | 1.68 | 2.43 |
+| births, forty settlements | 177 | 177 |
+| deaths | 5 | 11 |
+
+Bonds that are not kin, by how well the two natures suit:
+
+| affinity | bonds | mean bond | over 0.5 |
+|---|---|---|---|
+| below −0.3 | 782 | 0.30 | 0.0% |
+| −0.3 to −0.1 | 833 | 0.34 | 0.1% |
+| −0.1 to 0.05 | 3,323 | 0.36 | 3.3% |
+| 0.05 to 0.2 | 1,129 | 0.39 | 17% |
+| 0.2 and over | 419 | 0.38 | 18% |
+
+By trait, holders against everybody else:
+
+| trait | own mean bond | friends | how others feel about them |
+|---|---|---|---|
+| Introvert | −14% | 1.47 vs 2.52 | 0.353 vs 0.380 |
+| Extrovert | +9% | 3.64 vs 2.40 | 0.420 vs 0.377 |
+| Intolerant | −8% | 1.81 vs 2.46 | 0.389 vs 0.377 |
+| Cruel | −5% | 2.03 vs 2.46 | 0.348 vs 0.380 |
+| Charismatic | 0% | 2.56 vs 2.43 | 0.400 vs 0.376 |
+| Kind-Hearted | 0% | 2.45 vs 2.43 | 0.395 vs 0.377 |
+| Manipulator | −1% | 2.50 vs 2.43 | 0.354 vs 0.380 |
+
+In #338's run, only Callous moved its own mean bond by more than 5% (−8%),
+and how others felt about a person was not measured.
+
+**Still open:**
+- The best-suited pairs (affinity 0.2 and over) stand no nearer than the
+  next group down. They are mostly bonds towards Charismatic or
+  Kind-Hearted people, whom many want to sit with. Each person keeps only
+  two people's company a day, so most of those who seek them out get no
+  turn.
+- Smooth seed 8 lost nine people to thirst in fifteen days (days 652–667).
+  The same seed lost three to thirst at about the same time of year in each
+  of the two runs before this, so it is a dry-season problem of that map.
+  Not looked into here.
+- How others feel about a person is now measured, but only in the bond
+  dump, not yet in the per-trait report.
+
+### 340. Smooth seed 8's winter thirst: a household drinking where it stood on a salt marsh
+
+Smooth seed 8 lost people to thirst early each winter: one in #336's run,
+three in each of #338's two runs, nine in #339's (days 652–667). It looked
+like a dry season. It was not.
+
+**How.** A probe replayed the same world exactly, reproducing the nine
+deaths on the same days. Each half hour from day 630 it logged everybody
+running short of water: where they stood, the ground under them, what they
+carried, and the three nearest fresh sources with what could be drawn from
+each. Every action and its result was logged too, and the water sources
+within 60 tiles of camp once a day.
+
+**What it showed.**
+- **Water was plentiful.** Wetland and riverbank sources holding hundreds
+  of units lay 10 to 30 tiles from camp all winter.
+- **All six adults who died stood on one tile, (481, 458), a salt marsh,
+  for about a fortnight.** Each had 28 tiles to the nearest fresh water and
+  never walked it. The three children who died were with them.
+- Their actions were one thing over and over. The first to die had 465
+  turns of `Gather water` refused with "No water sources nearby" and 112 of
+  "Drank salt water" from day 640 to their death on day 652; the others the
+  same in proportion.
+
+**Why.** `known_source_position` finds the nearest water a person can
+smell, remembers or has seen, and it did not ask whether the water was
+salt. Standing on a salt marsh, the nearest water a person knew of was the
+marsh under their feet:
+1. The fetch-water way found it within a pace and offered `Gather` there.
+2. The gather, which does ask, refused salt water to anybody not yet dry
+   enough to drink the sea, so the turn came to nothing.
+3. The next turn asked the same question and got the same answer.
+4. At hydration 0.25 they would drink the sea. Six people then shared one
+   marsh spring that refills about a unit a pass in winter: each drink put
+   a little water in, and the salt took more back out over the following
+   days.
+
+**Fix.** Known water leaves salt out for anybody not yet dry enough to
+drink the sea, as `water_action` and the gather already did. Somebody dying
+of thirst still takes what is there.
+
+**Measured** over forty settlements, two years, against #339's run:
+
+| | #339 | #340 |
+|---|---|---|
+| births | 177 | 177 |
+| deaths | 11 | 3 |
+| of thirst | 9, all smooth seed 8 | 0 |
+
+Births are the same in every seed range: no other world reached this. Smooth
+seed 8's nine now live; its one death is a blow on day 702. The other two
+deaths are of hunger (scattered seed 2, smooth seed 17), as before.
+
+Test: `salt_tests::the_water_a_man_goes_to_is_fresh_unless_he_is_past_caring`.
+It fails with the salt check removed.
+
+### 341. The cold-agent clothing test: a chilly man is never pressed to dress, and the window shrank fourfold
+
+`clothing_tests::a_cold_agent_ends_up_dressed` puts one man in a world with
+200 flax in his pack and a patch of flax three paces off. It sets his ideal
+temperature to 45 so that the weather is always colder than he wants. It
+asks that he be dressed in at least a quarter of 96 worlds within 600 turns.
+It reads 23 of 96 and has been on both sides of its bar for months. Below
+are the investigation, then what was changed and measured.
+
+**How.** A probe ran the same fixture over the same 96 seeds for 2,400
+turns, logging every action. For the first 600 turns it measured his body
+temperature and the air's. It also counted how often the clothing check
+(`wants_more_clothing`) said he wanted more, and how often the Shelter drive
+was pressing.
+
+**What happens in 96 worlds:**
+
+| | worlds |
+|---|---|
+| has something to sew with from the first turn | 96 |
+| dressed within 600 turns (12.5 days) | 31 |
+| dressed within 1,200 turns (25 days) | 56 |
+| dressed within 2,400 turns (50 days) | 79 |
+| alive and still bare at 2,400 | 16 |
+| died first | 1 |
+
+The median time to dress is 832 turns, about 17 days, for a man with the
+material and the tool on him from the start.
+
+**Why he takes so long: he wants a coat, and nothing makes him go and make
+one.**
+- His body warms itself towards whatever the ideal is: it cancels up to
+  0.6 of cooling a step and recovers 5% of the gap. With the ideal at 45 he
+  sits at about 43.4 in air of about 11°.
+- That is chilly by the clothing check, which allows half a degree: it
+  wanted more clothing on 87% of turns.
+- It is chilly by the Shelter drive too (0.8 below ideal), but chill counts
+  for 0.3 against that drive's threshold of 0.5, so it never presses by day
+  on its own. At night it does, and being under shelter then puts the
+  drive to 0. "Exposed", worth 0.55, wants him a full 2° below ideal or an
+  active exposure, and he is 1.6° below. **The Shelter drive was pressing on
+  1% of his turns.**
+- Making clothing is reached from the Shelter arm. In these worlds every
+  garment was made while some other drive was at the top of his list
+  (Social 43 times, Preparedness 38, Curiosity 24, Reproduction 12):
+  incidentally, never because he was cold. How cold the world was barely
+  mattered: dressed within 600 turns in 6 of the 12 worlds below 10°, and
+  25 of the 84 between 10° and 20°.
+
+The comment at `CHILLY_MARGIN` states the intent: "nobody waits until they
+are hypothermic to think about a coat". The clothing check holds to that;
+the drive that would act on it does not.
+
+**Why the test flips.**
+- **The window shrank fourfold.** It was written when a turn was two hours
+  (twelve a day), and its comment still says fifty days. Since 30-minute
+  turns, 600 turns is 12.5 days. At fifty days the rate is 79 of 96.
+- **The 96 worlds are a chain.** Each world is built before the dice are
+  seeded, from whatever the world before it left in the stream. So any
+  change anywhere upstream deals a different 96 worlds. At a rate near 30%,
+  96 worlds swing by about ±4, and the bar (24) sits inside that. #339
+  moved it from passing to 23 by removing one die drawn once a day.
+
+**What was done.**
+- **Chill presses.** Somebody who wants more clothing puts on a garment they
+  carry, or makes one out of what is in their pack if they have something
+  to sew with (`dressing_on_the_spot`). It sits in the ordinary decision
+  just after the freezing override, with eating what is carried, below
+  anything that kills.
+- **The test has its fifty days and its own worlds.** It counts in days of
+  half-hour turns, and seeds each world before building it as well as
+  after. It now asks for nine in ten worlds dressed within the first day.
+
+**Measured.** In the test's 96 worlds:
+
+| | dressed within a day | within fifty days |
+|---|---|---|
+| without the change | 3 | 78 |
+| with it | 96 | 96 |
+
+In settlements, two years each:
+
+| | worlds | births | deaths | grown people dressed at the end |
+|---|---|---|---|---|
+| without the change | 12 | 50 | 1 | 32 of 143 (22%) |
+| with it, same 12 | 12 | 50 | 0 | 44 of 144 (31%) |
+| with it | 40 | 179 | 1 | 147 of 479 (31%) |
+
+The forty settlements had 177 births and 3 deaths before this (#340). So
+dressing on the spot costs a settlement nothing measurable, and a third
+more of its grown people end the second year in something. Most still do
+not: to dress on the spot a person has to be chilly and carry both the
+material and something to sew with.
+
+### 342. The yearly dice-count check: working as meant, and what it costs
+
+`repeatable_tests::a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year`
+runs seed 0 for a year of turns and asserts how many draws the dice stream
+gave. It failed in the full run after #341, as it does after nearly every
+change to the model. This looks at whether it is doing its job, and adds
+the test it pointed to.
+
+**What it is for.** A count that moves without the model having been changed
+means something took a branch on an input the seed does not fix. Three other
+guards cover parts of this:
+- `the_same_seed_is_the_same_world` runs one seed twice in one process.
+- `every_roll_comes_from_the_one_stream` bans `thread_rng`, `rand::random`
+  and `Uuid::new_v4` from the source.
+- `nothing_decides_anything_by_walking_an_unordered_table` bans `HashMap`
+  and `HashSet`.
+
+None of the three can see a difference *between* runs from some cause they
+do not name, because the first stays inside one process. A count recorded
+in one process and asserted in another is what can. That is the instrument
+#94 found the last faults with: one seed run as two processes and diffed.
+
+**What it has done.**
+- The constant has been rewritten 102 times since 8 September, about two
+  and a half times a day, on nearly every commit that changed the model.
+  Each time the commit says what was changed. A moved count on a
+  deliberate change is expected, and the check says nothing then.
+- Where it earns its keep is a change meant to change nothing. #287's speed
+  fixes moved it by 3% through one fix (planning a walk before its first
+  step). That fix was taken out; the three kept fixes put the count back to
+  exactly 688,955, which is the proof they changed nothing that happens.
+
+**Whether it holds.**
+- **Across processes.** In this session it has been run in the full suite
+  and again on its own after every change, in separate processes, and the
+  two have agreed every time (989,726, then 976,851).
+- **Across build profiles.** A debug build gives the same count as the
+  release build the suite uses, so neither the optimiser nor
+  floating-point code generation changes a branch. Both counts pass in
+  debug.
+- It costs about 80 seconds of a full run.
+
+**Verdict.** The check is sound and catches what it is for. Its cost is
+procedural: it has to be re-recorded with every model change, and that is
+only safe if whoever re-records it knows the change was meant to change the
+model. A count that moves on a commit meant to change nothing (a speed fix,
+a rename, a refactor) is the case to stop and look at.
+
+**One thing it cannot do on its own:** tell a deliberate change from drift
+when both land in the same commit.
+
+**Added for that:** `the_same_seed_is_the_same_world_in_another_process`. It
+starts the test binary twice more, side by side, each running only
+`one_process_reports_seed_zero`. That plays seed 0 for a month and prints
+the world's fingerprint and the draws it took. The parent asserts the two
+agree. There is no recorded number, so it holds through any deliberate
+change and fails only when two runs of the same code disagree. It takes
+about 7 seconds.
+
+Proved on a sabotage. `Simulation::new` was made to draw one die for each
+unit of the process id modulo 7 (removed again after):
+- `the_same_seed_is_the_same_world`, inside one process, still passed.
+- The new test failed: 83,776 draws in one process, 82,318 in the other,
+  and different fingerprints.

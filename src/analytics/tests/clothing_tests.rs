@@ -15,6 +15,7 @@ use crate::agents::equipment::{garment_recipe, ClothingTemplate, GARMENT_RECIPES
 use crate::agents::skills::Quality;
 use crate::agents::{AgentConfig, EquipmentSlot, InventoryItem, Population, SkillType};
 use crate::analytics::Simulation;
+use crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
 use crate::environment::Action;
 use crate::world::{Position, ResourceNode, ResourceType, World, WorldConfig};
 
@@ -276,13 +277,32 @@ fn a_cold_agent_ends_up_dressed() {
     // quarter, under the measurement. The worse news is the measurement: in
     // seven worlds in ten a freezing man with flax in his pack never makes
     // anything to wear (#300).
+    //
+    // **What it was measuring was a man who wanted a coat and was never
+    // pressed to make one** (#341). Wanting one is `wants_more_clothing`, and
+    // he did on 87% of his turns; making one was reached only through the
+    // Shelter drive, which chill does not carry over its threshold by day and
+    // a roof puts to nothing by night. The coats he made, he made when some
+    // other drive happened past them: over the same 96 worlds, given the
+    // fifty days this always meant to give him, a median of seventeen days
+    // and sixteen still bare at the end. And the "fifty days" had been twelve
+    // and a half since a turn became half an hour, and the 96 worlds were a
+    // chain that any change upstream dealt afresh.
+    //
+    // Now a man chilly with the makings on him dresses on the spot
+    // (`dressing_on_the_spot`), the window is fifty days of half-hour turns,
+    // and each world is seeded before it is built. Measured: dressed within
+    // the first day in 96 of 96 worlds, where without that the same 96 manage
+    // 78 within fifty days. The bar is nine in ten within a day, under the
+    // measurement.
     let worlds = 96;
-    let dressed = (0..worlds).filter(|which| a_cold_man_dresses(9_140 + which)).count();
+    let in_a_day = (0..worlds).filter(|which| a_cold_man_dresses(9_140 + which, 1)).count();
+    eprintln!("a cold man dressed within a day in {in_a_day} of {worlds} worlds");
 
     assert!(
-        dressed * 4 >= worlds as usize,
-        "a cold man with flax to hand should end up wearing something in a \
-         good few of the worlds he could be dropped into: {dressed} of {worlds}"
+        in_a_day * 10 >= worlds as usize * 9,
+        "a chilly man with flax and an awl on him should make himself \
+         something to wear the day he is cold: {in_a_day} of {worlds}"
     );
 }
 
@@ -395,8 +415,15 @@ fn nobody_strips_themselves_for_a_child_who_is_already_dressed() {
     );
 }
 
-/// One cold man, flax in the pack and flax next door, fifty days.
-fn a_cold_man_dresses(seed: u64) -> bool {
+/// One cold man, flax in the pack and flax next door, for so many days.
+fn a_cold_man_dresses(seed: u64, days: u32) -> bool {
+    // **And seeded before the world is built, too** (#341). Built from
+    // whatever the world before it left in the stream, the 96 worlds were a
+    // chain: a world that ran longer, or one die drawn once a day anywhere
+    // in the model, dealt every world after it differently, and at a rate
+    // near a third 96 worlds swing by about four either way - which is where
+    // the bar sat.
+    crate::core::dice::seed(seed.wrapping_mul(7_919).wrapping_add(13));
     let mut world = World::new(WorldConfig::default());
 
     let mut population = Population::new();
@@ -435,13 +462,12 @@ fn a_cold_man_dresses(seed: u64) -> bool {
     // which recomputes it from the climate before anyone decides anything.
     simulation.population.agents[0].body_temperature.ideal = 45.0;
 
-    // Fifty days, and it has to stay fifty: a lone man kept permanently
-    // freezing does not live two hundred, so widening the window trades a
-    // coin-flip on whether he dresses for a certainty that he dies. This
-    // test is marginal by construction and is one of the standing failures -
-    // it is about whether the clothing chain can be reached at all, and what
-    // it actually measures is how many other errands a world gives a man.
-    for _ in 0..600 {
+    // Counted in days of half-hour turns. This was 600 turns, written as
+    // fifty days when a turn was two hours; since a turn became half an hour
+    // 600 was twelve and a half days, and nothing said so (#341). A lone man
+    // kept permanently freezing does not live two hundred days, so a long
+    // window trades whether he dresses for whether he dies.
+    for _ in 0..(days * PLANNING_PERIODS_PER_DAY) {
         simulation.take_a_turn();
 
         // Some of these worlds kill him. A man who died is a man who did not

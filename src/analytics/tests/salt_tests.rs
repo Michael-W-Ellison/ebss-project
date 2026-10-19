@@ -651,3 +651,50 @@ fn a_world_with_flats_has_salt_on_them() {
         "every world that has flats in it should have salt on them"
     );
 }
+
+/// Water a man knows of is fresh water, until he is dry enough to drink the
+/// sea (#340).
+///
+/// Standing on a salt marsh with a spring he knew of twenty paces off, the
+/// nearest water he knew of was the marsh under his feet. He was sent to drink
+/// there, refused it as salt, and sent there again the next turn; in smooth
+/// seed 8 a household did that for a fortnight and nine of them died of
+/// thirst.
+#[test]
+fn the_water_a_man_goes_to_is_fresh_unless_he_is_past_caring() {
+    use crate::agents::senses::ScentType;
+    use crate::core::memory::SpatialMemoryType;
+
+    let mut simulation = one_person();
+    let marsh = Position::new(25, 25);
+    let spring = Position::new(45, 25);
+    for x in 20..=50 {
+        for y in 20..=30 {
+            if let Some(tile) = simulation.world.grid.get_tile_mut(&Position::new(x, y)) {
+                tile.terrain.terrain_type = TerrainType::Plains;
+            }
+        }
+    }
+    if let Some(tile) = simulation.world.grid.get_tile_mut(&marsh) {
+        tile.terrain.terrain_type = TerrainType::SaltMarsh;
+    }
+    for at in [marsh, spring] {
+        simulation.world.resources.push(ResourceNode::new(ResourceType::Water, at, 50));
+        simulation.population.agents[0]
+            .exploration_knowledge
+            .known_resources
+            .insert(at, ResourceType::Water);
+    }
+    simulation.world.file_the_nodes();
+
+    let to = |simulation: &Simulation| {
+        let agent = &simulation.population.agents[0];
+        simulation.known_source_position(agent, (25, 25, 0), ScentType::Water, SpatialMemoryType::Water)
+    };
+
+    simulation.population.agents[0].state.physiology.hydration = 0.6;
+    assert_eq!(to(&simulation), Some((45, 25, 0)), "parched, he walks to the spring");
+
+    simulation.population.agents[0].state.physiology.hydration = 0.2;
+    assert_eq!(to(&simulation), Some((25, 25, 0)), "dying, the marsh will do");
+}

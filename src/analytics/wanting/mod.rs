@@ -212,6 +212,42 @@ impl Simulation {
         }
     }
 
+    /// How much a gift counts for, beside telling and talking, for somebody
+    /// of no particular leaning with something to give. Above them, because a
+    /// gift says more; not so far above that a gossip still hands things over
+    /// before saying anything.
+    pub(in crate::analytics) const WHAT_A_GIFT_WEIGHS: f32 = 1.5;
+
+    /// How much readier to take than to trade somebody has to be before they
+    /// look at taking first.
+    pub(in crate::analytics) const SOONER_TAKE_THAN_TRADE: f32 = 1.5;
+
+    /// Which of the ways open to a want this one goes about it by.
+    ///
+    /// Each way's own weight (nought where it cannot be done here) times how
+    /// readily this person reaches for it (`TraitSet::how_readily_i`), and one
+    /// drawn in proportion: what somebody is like tilts what they do without
+    /// deciding it outright, so a kind man still sometimes just talks.
+    pub(in crate::analytics) fn the_way_this_one_goes_about_it(
+        agent: &crate::agents::Agent,
+        ways: &[(crate::core::traits::AWay, f32)],
+    ) -> crate::core::traits::AWay {
+        use rand::Rng;
+        let weighed: Vec<(crate::core::traits::AWay, f32)> = ways
+            .iter()
+            .map(|(way, open)| (*way, open * agent.traits.how_readily_i(*way)))
+            .collect();
+        let total: f32 = weighed.iter().map(|(_, weight)| weight).sum();
+        let mut roll = crate::core::dice::roll().gen::<f32>() * total;
+        for (way, weight) in &weighed {
+            if roll < *weight {
+                return *way;
+            }
+            roll -= weight;
+        }
+        weighed.last().map(|(way, _)| *way).unwrap_or(crate::core::traits::AWay::Talk)
+    }
+
     /// Generate an action based on drive type and position
     pub(in crate::analytics) fn generate_action_for_drive(drive_type: DriveType, position: (i32, i32, i32)) -> Action {
         use rand::Rng;
@@ -595,6 +631,12 @@ impl Simulation {
         // condition that chose it. See ISSUES_FOUND #233.
         if agent.needs_shelter() && self.nearest_shelter_from(agent_position).is_some() {
             return (Action::SeekShelter, false);
+        }
+
+        // And chilly, with a coat to pull on or the makings of one about him.
+        // See `dressing_on_the_spot`.
+        if let Some(dressing) = Self::dressing_on_the_spot(agent) {
+            return (dressing, false);
         }
 
         // Everything else the agent wants, in the order it wants it
@@ -1186,6 +1228,25 @@ impl Simulation {
                     .map(|them| Action::Mate {
                         target_agent_id: them,
                     })
+                    // A partner out of reach is gone to (#338)
+                    .or_else(|| {
+                        let partner = agent.my_partner()?;
+                        let them = self
+                            .population
+                            .agents
+                            .iter()
+                            .find(|them| them.id == partner && them.state.is_alive)?;
+                        let (x, y, _) = them.state.position;
+                        let paces = (x - agent_position.0).abs().max((y - agent_position.1).abs());
+                        (paces > Self::CLOSE_ENOUGH_TO_COURT)
+                            .then_some(Action::Move { target: (x, y, agent_position.2) })
+                    })
+                    // And with nobody to have one with, keep company with
+                    // whoever might become somebody (#338)
+                    .or_else(|| {
+                        self.somebody_to_court(agent, agent_position)
+                            .map(|them| Action::Socialize { target_agent_id: them })
+                    })
             }
 
             // Making a thing needs something to make it out of, and a step
@@ -1267,6 +1328,19 @@ impl Simulation {
                 // had nothing to carve with returned a refused `Work` every
                 // turn instead of burying or drying anything. A branch that
                 // can refuse must not stand in front of branches that cannot.
+                // Somebody who would sooner help themselves than bargain
+                // looks first at who has it (#338). For everybody else taking
+                // is the last thing tried, below.
+                .or_else(|| {
+                    use crate::core::traits::AWay;
+                    let sooner_take = agent.traits.how_readily_i(AWay::Take)
+                        > agent.traits.how_readily_i(AWay::Trade) * Self::SOONER_TAKE_THAN_TRADE;
+                    if !sooner_take {
+                        return None;
+                    }
+                    self.somebody_to_take_from(agent, agent_position)
+                        .map(|from| Action::TakeFrom { from })
+                })
                 .or_else(|| {
                     // Somebody standing here with the thing, who wants what is
                     // going spare. A trade is quicker than a walk.
@@ -1502,14 +1576,27 @@ impl Simulation {
                     return None;
                 }
 
-                // Handing somebody something they need is the plainest sociable
-                // act there is, and it costs the giver, which is what makes it
-                // one. It comes before talking because a gift says more.
-                if let Some(to) = self.somebody_to_give_to(agent, agent_position) {
-                    return Some(Action::GiveTo { to });
-                }
+                // The drive says somebody's company is wanted. What sort of
+                // person this is says what they do with it (#338): a generous
+                // one hands something over, a gossip tells what they know, an
+                // extrovert simply talks. Giving was taken first by everybody
+                // with anything to give and anybody to give it to, and the
+                // rest was a coin between telling and talking - so an
+                // Altruist gave less often than a Cruel man (#337).
+                use crate::core::traits::AWay;
+                let give_to = self.somebody_to_give_to(agent, agent_position);
+                let ways = [
+                    (AWay::Give, if give_to.is_some() { Self::WHAT_A_GIFT_WEIGHS } else { 0.0 }),
+                    (AWay::Share, 1.0),
+                    (AWay::Talk, 1.0),
+                ];
+                let chosen = Self::the_way_this_one_goes_about_it(agent, &ways);
 
-                Some(Self::generate_action_for_drive(drive_type, agent_position))
+                Some(match chosen {
+                    AWay::Give => Action::GiveTo { to: give_to? },
+                    AWay::Share => Action::ShareInformation { target_agent_id: uuid::Uuid::nil() },
+                    _ => Action::Socialize { target_agent_id: uuid::Uuid::nil() },
+                })
             }
 
             // The rest keep the simple mapping they had

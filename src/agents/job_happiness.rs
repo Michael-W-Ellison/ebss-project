@@ -148,11 +148,9 @@ pub fn trait_job_happiness(trait_type: Trait, job: JobCategory) -> f32 {
 
         // Extrovert trait - loves social interaction
         (Trait::Extrovert, JobCategory::Social) => 5.0,
-        (Trait::Sociable, JobCategory::Social) => 5.0,
 
         // Introvert trait - dislikes social work
         (Trait::Introvert, JobCategory::Social) => -3.0,
-        (Trait::Introverted, JobCategory::Social) => -3.0,
 
         // Brave/Protector traits - enjoy hunting dangerous prey
         (Trait::Brave, JobCategory::Hunting) => 3.0,

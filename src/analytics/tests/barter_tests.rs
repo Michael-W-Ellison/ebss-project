@@ -64,6 +64,9 @@ fn two_people() -> Simulation {
                 crate::agents::RelationshipType::Friend,
             );
             bond.bond_strength = 0.8;
+            // And are made to get on, so that 0.8 is not already as close
+            // as they could be (#338)
+            bond.affinity = 1.0;
             simulation.population.agents[who]
                 .relationships
                 .add_relationship(bond);

@@ -276,6 +276,15 @@ impl Simulation {
                 !(verb.family == crate::environment::verbs::Family::Combat
                     && verb.targets == crate::environment::verbs::Targets::APerson)
             })
+            // **Nor helps himself from a neighbour's pack to see what
+            // happens.** Taking is a thing done for want of something, and
+            // that want has its branch, where a person's nature decides
+            // whether they take or bargain (#338). Offered here it was the
+            // next untried verb whoever was asking: in forty settlements a
+            // few people tried a neighbour's pack a thousand times and more
+            // each for a handful that came off, a kind-hearted man the most
+            // of anybody, while greedy people hardly tried at all.
+            .filter(|(verb, _)| verb.done_by != Some("takefrom"))
             .max_by(|(_, left), (_, right)| {
                 let mine = agent.lessons.how_new_is_this(left);
                 let theirs = agent.lessons.how_new_is_this(right);

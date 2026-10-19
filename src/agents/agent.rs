@@ -3521,6 +3521,62 @@ impl Agent {
     /// tonight's supper.
     const DAYS_OF_FOOD_THEY_WALK_IN_WITH: f32 = 2.0;
 
+    /// Whoever this one is paired with, if anybody.
+    pub fn my_partner(&self) -> Option<Uuid> {
+        self.relationships
+            .get_all()
+            .values()
+            .find(|bond| bond.relationship_type == super::emotions::RelationshipType::Partner)
+            .map(|bond| bond.other_agent)
+    }
+
+    /// Whether this one counts that one as its partner.
+    pub fn are_we_a_pair(&self, them: Uuid) -> bool {
+        self.relationships
+            .get_relationship(&them)
+            .is_some_and(|bond| bond.relationship_type == super::emotions::RelationshipType::Partner)
+    }
+
+    /// Take that one as a partner.
+    pub fn pair_with(&mut self, them: Uuid, current_turn: u32) {
+        let bond = self.relationships.get_or_create_relationship(them, current_turn);
+        bond.relationship_type = super::emotions::RelationshipType::Partner;
+    }
+
+    /// And stop being a pair with them: what is left is whatever the bond
+    /// itself now says they are.
+    pub fn part_from(&mut self, them: Uuid) {
+        if let Some(bond) = self.relationships.get_relationship_mut(&them) {
+            if bond.relationship_type == super::emotions::RelationshipType::Partner {
+                bond.relationship_type = super::emotions::RelationshipType::Acquaintance;
+                bond.settle_what_we_are();
+            }
+        }
+    }
+
+    /// How warm two people have to be to each other, on both sides, before
+    /// they pair off. A friend, and a little more; a romantic heart asks less.
+    pub const WARM_ENOUGH_TO_PAIR: f32 = 0.5;
+    pub const WARM_ENOUGH_FOR_A_ROMANTIC: f32 = 0.42;
+
+    /// And how far a pair bond can sour before it breaks.
+    pub const COLD_ENOUGH_TO_PART: f32 = 0.0;
+
+    /// How many people this one sits down with in a day, at most.
+    ///
+    /// Two for most, three for somebody who cannot get enough company and one
+    /// for somebody who wants little of it.
+    pub fn how_many_i_sit_down_with(&self) -> usize {
+        use crate::core::traits::Trait;
+        if self.traits.has(Trait::Extrovert) {
+            3
+        } else if self.traits.has(Trait::Introvert) {
+            1
+        } else {
+            2
+        }
+    }
+
     /// How many times somebody makes a new thing out of curiosity before the
     /// novelty is gone.
     pub const MADE_OFTEN_ENOUGH_TO_HAVE_SEEN_IT: u32 = 3;
@@ -6976,6 +7032,12 @@ impl Agent {
         // birth, and a settlement of six grown people had eight or twelve
         // small children by its fourth winter and starved in it. See
         // ISSUES_FOUND #262.
+        //
+        // And since only a pair has a child (#338), this keeps the partner
+        // waiting as well: one pregnancy to a couple at a time, and the next
+        // when the last is weaned. Letting the other partner carry meanwhile
+        // was tried, and doubled what a couple bore against what a couple of
+        // people do.
         if self.nursing_a_child {
             return false;
         }
@@ -7206,6 +7268,7 @@ impl Agent {
 
         self.expects_to_be_able_to_feed_a_child()
     }
+
 
     /// Get fertility level (0.0 to 1.0)
     pub fn fertility(&self) -> f32 {
@@ -8200,7 +8263,7 @@ impl Agent {
             // Social interactions reward Extrovert, penalize Introvert
             crate::environment::Action::Socialize { .. } |
             crate::environment::Action::ShareInformation { .. } => {
-                if self.traits.has(Trait::Extrovert) || self.traits.has(Trait::Sociable) {
+                if self.traits.has(Trait::Extrovert) {
                     happiness_bonus += Trait::Extrovert.happiness_gain() * 0.03;
                     reward_reason = "social_joy".to_string();
                 }
@@ -8208,7 +8271,7 @@ impl Agent {
                     happiness_bonus += 0.02;
                 }
                 // Introverts lose happiness from socializing
-                if self.traits.has(Trait::Introvert) || self.traits.has(Trait::Introverted) {
+                if self.traits.has(Trait::Introvert) {
                     happiness_bonus -= 0.02;
                 }
             }
@@ -8216,7 +8279,7 @@ impl Agent {
             // Sleeping rewards introverts who enjoy solitude
             crate::environment::Action::Sleep { .. } => {
                 // Introverts gain slight happiness from being alone/resting
-                if self.traits.has(Trait::Introvert) || self.traits.has(Trait::Introverted) {
+                if self.traits.has(Trait::Introvert) {
                     happiness_bonus += 0.01;
                     reward_reason = "peaceful_solitude".to_string();
                 }
@@ -9573,7 +9636,7 @@ impl Agent {
         if let Some(relationship) = self.relationships.get_relationship_mut(&helper_id) {
             // Bond improvement scaled by help amount (0.01 to 0.05)
             let bond_increase = (help_amount * 0.1).min(0.05);
-            relationship.bond_strength = (relationship.bond_strength + bond_increase).min(1.0);
+            relationship.strengthen(bond_increase);
             relationship.time_together += 1;
         } else {
             // Create new positive relationship if none exists
@@ -9596,7 +9659,7 @@ impl Agent {
         let mut helper_happiness = (help_amount * 0.2).min(0.3);
 
         // Empathetic trait bonus: extra happiness from helping others
-        if self.traits.has_trait(&Trait::Empathetic) {
+        if self.traits.has_trait(&Trait::Empathic) {
             helper_happiness += 0.15; // Significant bonus for empathetic helpers
         }
 
@@ -11609,25 +11672,18 @@ impl Agent {
     /// included. `bonds` is what this agent currently gets from the people it
     /// would be stealing in front of, on the same 0..1 scale a bond is on.
     pub fn what_taking_it_would_cost_me(&self, watching: usize, bonds: f32) -> f32 {
-        use crate::core::traits::Trait;
-
         // What the eyes are worth. Doing it in front of nobody still costs
         // something, because the victim always knows.
         let seen = 1.0 + watching as f32 * Self::WHAT_ANOTHER_PAIR_OF_EYES_ADDS;
 
         let mut cost = bonds.clamp(0.0, 1.0) * seen * Self::WHAT_A_BOND_IS_WORTH_KEEPING;
 
-        // Temperament does not decide this any more, but it does weigh it: an
-        // honest man sees more at stake in being a thief and a greedy one
-        // sees less
-        if self.traits.has(Trait::Honest) {
-            cost *= 1.6;
-        }
-        if self.traits.has(Trait::Greedy) {
-            cost *= 0.6;
-        }
-
-        cost
+        // Temperament does not decide this, but it weighs it: an honest man
+        // sees far more at stake in being a thief, and a greedy or callous one
+        // far less (`AWay::Take`, #338). It used to be Honest and Greedy alone,
+        // and at half again either way, which a settlement of close friends
+        // swamped: Greedy people stole nothing in two years (#337).
+        cost / self.traits.how_readily_i(crate::core::traits::AWay::Take)
     }
 
     /// What each further witness adds to what a theft costs.
@@ -11857,7 +11913,7 @@ impl Agent {
         }
 
         // Manipulative/Manipulator: 30% lie chance
-        if self.traits.has(Trait::Manipulative) || self.traits.has(Trait::Manipulator) {
+        if self.traits.has(Trait::Manipulator) {
             lie_chance += 0.3;
         }
 
