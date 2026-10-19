@@ -61,6 +61,7 @@ wrong place, move the owner and update this file. Do not add a second one.
 | **Buildings** | `world::buildings` | What can be built, what it costs, what it does | - |
 | **Agents** | `agents::agent::Agent` for the whole, `agents::physiology` for the body's arithmetic, `agents::provision` for what a store is worth in days | Three files, three distinct facts - not drift, but the boundary is worth keeping in mind |
 | **Processes** | `environment::making` | The steps a people can put together and what comes of them - the specification's "there are actions which can be taken, and there are outcomes of those actions" | `world::production` and `environment::crafting` also describe processes; see **split** below |
+| **Technology** | `environment::making` for how a thing is made and what waits on what (`what_has_to_be_known_first`), `Agent::found_out` for who knows it, `environment::catalogue` (`data/technology.toml`) for where it sits in tech.txt | **held**: `technology_catalogue_tests`. The two registries that used to split this - `world::technology` and `environment::technology` - are gone (#344) |
 | **Decisions** | `analytics::wanting` | Given a drive, what would answer it | - |
 | **World_interaction** | `analytics::doing` | One module per family of verbs, and the dispatcher | - |
 | **Discussions** | `analytics::between_us` for the act, `agents::gossip` for distortion and truth-tracking, `agents::shared_knowledge` for what a settlement holds in common | - |
@@ -71,7 +72,6 @@ wrong place, move the owner and update this file. Do not add a second one.
 
 | Subject | The two | What to do |
 |---|---|---|
-| **Technology** | `world::technology` (`pub struct Technology`, `TechnologyTree`) and `environment::technology` (`pub struct Technology`, `TechnologyRegistry`). **Both re-exported at crate level**, so two different types share one name and a glob import can pick either. Nothing imports `world::technology` by path; four things import `environment::technology` | #233 |
 | **Actions** | `world::actions` (1,575 lines, `pub enum Action` - the live one) and `environment::action` (210 lines), both re-exported. `environment::verbs` owns the *matrix* - what each verb targets, requires and changes - which is a different fact and correctly separate | #233 |
 | **Crafting** | `world::crafting` (`RecipeRegistry`) and `environment::crafting` (`RecipeBook`), plus `environment::making` above | #233 |
 | **Emotions** | `agents::emotions` (1,710 lines, 16 importers) and `core::emotions` (230 lines, re-exported, imported by path nowhere) | #233 |

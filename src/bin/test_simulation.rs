@@ -486,48 +486,31 @@ fn print_population_status(population: &Population, turn: u32) {
             }
         }
 
-        // Calculate technology statistics
-        use std::collections::BTreeSet;
-        
-
-        let mut all_known_techs: BTreeSet<String> = BTreeSet::new();
-        let mut tech_discovery_counts: BTreeMap<String, usize> = BTreeMap::new();
-        let mut total_original_discoveries = 0;
-        let mut agents_with_tech = 0;
-
+        // What has been found out: the making chain's discoveries, and who has them
+        let mut found_by: BTreeMap<String, usize> = BTreeMap::new();
+        let mut agents_with_any = 0;
         for agent in &population.agents {
-            let agent_techs: Vec<_> = agent.technology_knowledge
-                .known_technologies
-                .keys()
-                .collect();
-
-            if !agent_techs.is_empty() {
-                agents_with_tech += 1;
+            let found = agent.what_i_found_out();
+            if !found.is_empty() {
+                agents_with_any += 1;
             }
-
-            for tech_id in agent_techs {
-                all_known_techs.insert(tech_id.clone());
-                *tech_discovery_counts.entry(tech_id.clone()).or_insert(0) += 1;
+            for what in found {
+                *found_by.entry(what.clone()).or_insert(0) += 1;
             }
-
-            total_original_discoveries += agent.technology_knowledge.original_discoveries.len();
         }
 
-        // Display technology statistics
-        if !all_known_techs.is_empty() {
+        if !found_by.is_empty() {
             println!("   Technology & Knowledge:");
-            println!("     • Discovered Technologies: {}", all_known_techs.len());
-            println!("     • Agents with Knowledge:   {}/{}", agents_with_tech, count);
-            println!("     • Original Discoveries:    {}", total_original_discoveries);
+            println!("     • Things Found Out:        {}", found_by.len());
+            println!("     • Agents Who Found Any:    {}/{}", agents_with_any, count);
 
-            // Sort technologies by how many agents know them
-            let mut tech_vec: Vec<_> = tech_discovery_counts.iter().collect();
-            tech_vec.sort_by(|a, b| b.1.cmp(a.1));
+            let mut by_count: Vec<_> = found_by.iter().collect();
+            by_count.sort_by(|a, b| b.1.cmp(a.1));
 
-            println!("     • Most Known Technologies:");
-            for (tech_id, agent_count) in tech_vec.iter().take(5) {
+            println!("     • Most Widely Known:");
+            for (what, agent_count) in by_count.iter().take(5) {
                 let percentage = (**agent_count as f32 / count) * 100.0;
-                println!("       - {}: {} agents ({:.0}%)", tech_id, agent_count, percentage);
+                println!("       - {}: {} agents ({:.0}%)", what, agent_count, percentage);
             }
         }
     }

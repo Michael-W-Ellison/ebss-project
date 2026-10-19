@@ -16,7 +16,6 @@ use crate::core::traits::TraitSet;
 use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
 use super::transport::TransportSystem;
-use crate::environment::TechnologyKnowledge;
 use crate::world::nutrition::{FoodData, NutritionalState, EatResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1824,7 +1823,6 @@ pub struct Agent {
     pub knowledge: KnowledgeBase,
     pub observational_learning: ObservationalLearning,
     pub transport: TransportSystem,
-    pub technology_knowledge: TechnologyKnowledge,
     pub exploration_knowledge: super::exploration::ExplorationKnowledge, // Map discovery and exploration
     /// How many times this one has been laid up by each thing.
     ///
@@ -2075,7 +2073,6 @@ impl Agent {
             knowledge: KnowledgeBase::default(),
             observational_learning: ObservationalLearning::default(),
             transport: TransportSystem::default(),
-            technology_knowledge: TechnologyKnowledge::default(),
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             times_laid_up: std::collections::BTreeMap::new(),
             found_out: Self::what_anybody_is_born_knowing(),

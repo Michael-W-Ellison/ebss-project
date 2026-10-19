@@ -1,7 +1,6 @@
 // src/agents/population.rs
 use crate::agents::{Agent, AgentConfig, LifeStage, SharedKnowledge, Trait};
 use crate::agents::{can_mate, reproduce, attempt_impregnation, give_birth, MateSelectionCriteria, PregnancyState};
-use crate::environment::technology::TechnologyRegistry;
 #[cfg(feature = "gui")]
 use crate::gui::events::{SimulationEvent, SimulationEventType, DeathCause};
 #[cfg(not(feature = "gui"))]
@@ -146,7 +145,6 @@ pub struct Population {
     pub unhappiness_tracker: BTreeMap<Uuid, u32>, // Track how long agents have been unhappy
     pub current_turn: u32, // Current simulation turn for survival mechanics
     pub shared_knowledge: SharedKnowledge, // Shared resource/world information between agents
-    pub technology_registry: TechnologyRegistry, // Global technology discovery tracking
     /// Events that occurred this turn (for GUI timeline)
     pub pending_events: Vec<SimulationEvent>,
     /// Where bodies fell since the simulation last collected them, and what
@@ -160,9 +158,6 @@ pub struct Population {
 
 impl Population {
     pub fn new() -> Self {
-        let mut registry = TechnologyRegistry::new();
-        Self::initialize_basic_technologies(&mut registry);
-
         Self {
             agents: Vec::new(),
             stats: PopulationStats::default(),
@@ -172,7 +167,6 @@ impl Population {
             unhappiness_tracker: BTreeMap::new(),
             current_turn: 0,
             shared_knowledge: SharedKnowledge::new(),
-            technology_registry: registry,
             pending_events: Vec::new(),
             bodies_where_they_fell: Vec::new(),
             what_the_dead_left: Vec::new(),
@@ -181,9 +175,6 @@ impl Population {
 
     /// Create a new population with custom configuration
     pub fn with_config(config: PopulationConfig) -> Self {
-        let mut registry = TechnologyRegistry::new();
-        Self::initialize_basic_technologies(&mut registry);
-
         Self {
             agents: Vec::new(),
             stats: PopulationStats::default(),
@@ -193,7 +184,6 @@ impl Population {
             unhappiness_tracker: BTreeMap::new(),
             current_turn: 0,
             shared_knowledge: SharedKnowledge::new(),
-            technology_registry: registry,
             pending_events: Vec::new(),
             bodies_where_they_fell: Vec::new(),
             what_the_dead_left: Vec::new(),
@@ -201,52 +191,6 @@ impl Population {
     }
 
     /// Initialize basic Stone Age technologies
-    fn initialize_basic_technologies(registry: &mut TechnologyRegistry) {
-        use crate::environment::technology::Technology;
-
-        // Fire making - everyone starts with this
-        let fire = Technology::new("fire".to_string(), "Fire Making".to_string())
-            .with_description("Creating and controlling fire for warmth and cooking".to_string())
-            .with_discovery_chance(1.0); // Already known
-
-        // Basic wooden tools - easy to discover
-        let wooden_tools = Technology::new("wooden_tools".to_string(), "Wooden Tools".to_string())
-            .with_description("Crafting basic tools from wood".to_string())
-            .with_required_materials(vec!["wood".to_string()])
-            .with_discovery_chance(0.3)
-            .with_accidental_discovery(0.01);
-
-        // Flint knapping - stone age advancement
-        let flint_knapping = Technology::new("flint_knapping".to_string(), "Flint Knapping".to_string())
-            .with_description("Shaping flint into sharp tools and weapons".to_string())
-            .with_required_materials(vec!["stone".to_string()])
-            .with_prerequisites(vec!["wooden_tools".to_string()])
-            .with_discovery_chance(0.2)
-            .with_curiosity_threshold(0.4);
-
-        // Stone tools - requires flint knapping
-        let stone_tools = Technology::new("stone_tools".to_string(), "Stone Tool Crafting".to_string())
-            .with_description("Creating durable tools from stone and wood".to_string())
-            .with_required_materials(vec!["stone".to_string(), "wood".to_string()])
-            .with_prerequisites(vec!["flint_knapping".to_string()])
-            .with_discovery_chance(0.25);
-
-        // Iron working - advanced technology
-        let iron_working = Technology::new("iron_working".to_string(), "Iron Working".to_string())
-            .with_description("Smelting and working iron into tools".to_string())
-            .with_required_materials(vec!["iron".to_string(), "coal".to_string()])
-            .with_prerequisites(vec!["fire".to_string(), "stone_tools".to_string()])
-            .with_discovery_chance(0.05)
-            .with_curiosity_threshold(0.6)
-            .with_accidental_discovery(0.001);
-
-        registry.register(fire);
-        registry.register(wooden_tools);
-        registry.register(flint_knapping);
-        registry.register(stone_tools);
-        registry.register(iron_working);
-    }
-
     /// Spawn a new agent
     pub fn spawn_agent(&mut self, config: AgentConfig) {
         let mut agent = Agent::new(config);
@@ -306,14 +250,6 @@ impl Population {
         // A founder has lived somewhere before this. They arrive with the
         // hands of a grown person and what they can carry.
         agent.give_them_a_stone_age_start();
-
-        // Give new agents basic starting knowledge
-        
-        agent.technology_knowledge.add_initial_technology(
-            "fire".to_string(),
-            agent.id,
-            self.current_turn as u64
-        );
 
         // And how to put a handle on a stone. Crafting checks a technology as
         // well as a skill, and a people who arrive knowing how to knap but not
@@ -448,14 +384,6 @@ impl Population {
             if agent.state.is_alive {
                 agent.forget_what_does_not_matter(now);
             }
-        }
-
-        // Share technologies between nearby agents
-        self.share_technologies();
-
-        // Attempt technology discovery (every 50 turns to reduce overhead)
-        if current_turn % crate::environment::seasons::ONCE_EVERY_FEW_DAYS == 0 {
-            self.discover_technologies();
         }
 
         // Process unhappiness tracking and abandonments
@@ -730,194 +658,6 @@ impl Population {
                     }
                 }
             }
-        }
-    }
-
-    /// Share technologies between nearby agents
-    ///
-    /// Agents teach technologies they know to nearby agents through conversation.
-    fn share_technologies(&mut self) {
-        use crate::environment::technology::DiscoveryMethod;
-
-        // Pre-compute squared distance threshold (avoids sqrt)
-        const SHARE_RANGE_SQUARED: f32 = 25.0; // 5.0 * 5.0
-
-        // Process all pairs of nearby agents
-        for i in 0..self.agents.len() {
-            for j in (i + 1)..self.agents.len() {
-                let agent1_id = self.agents[i].id;
-                let agent2_id = self.agents[j].id;
-                let agent1_pos = self.agents[i].state.position;
-                let agent2_pos = self.agents[j].state.position;
-
-                // Calculate squared distance (avoid expensive sqrt)
-                let dx = (agent1_pos.0 - agent2_pos.0) as f32;
-                let dy = (agent1_pos.1 - agent2_pos.1) as f32;
-                let distance_squared = dx * dx + dy * dy;
-
-                // Only share when very close (within 5 tiles)
-                if distance_squared <= SHARE_RANGE_SQUARED {
-                    // Get technologies each agent knows
-                    let agent1_techs: Vec<_> = self.agents[i]
-                        .technology_knowledge
-                        .known_technologies
-                        .keys()
-                        .cloned()
-                        .collect();
-
-                    let agent2_techs: Vec<_> = self.agents[j]
-                        .technology_knowledge
-                        .known_technologies
-                        .keys()
-                        .cloned()
-                        .collect();
-
-                    // Get relationship trust (for teaching confidence)
-                    let trust_1_to_2 = self.agents[i]
-                        .relationships
-                        .get_relationship(&agent2_id)
-                        .map(|r| (r.bond_strength + 1.0) / 2.0) // Map -1..1 to 0..1
-                        .unwrap_or(0.5);
-
-                    let trust_2_to_1 = self.agents[j]
-                        .relationships
-                        .get_relationship(&agent1_id)
-                        .map(|r| (r.bond_strength + 1.0) / 2.0)
-                        .unwrap_or(0.5);
-
-                    // Agent 1 teaches Agent 2
-                    for tech_id in &agent1_techs {
-                        if !agent2_techs.contains(tech_id) {
-                            let teacher_confidence = self.agents[i]
-                                .technology_knowledge
-                                .teaching_confidence(tech_id);
-
-                            // Only teach if confident enough
-                            if teacher_confidence > 0.5 {
-                                self.agents[j].technology_knowledge.learn_from_agent(
-                                    tech_id.clone(),
-                                    agent2_id,
-                                    DiscoveryMethod::Instruction,
-                                    teacher_confidence,
-                                    trust_2_to_1,
-                                    self.current_turn as u64,
-                                );
-                            }
-                        }
-                    }
-
-                    // Agent 2 teaches Agent 1
-                    for tech_id in &agent2_techs {
-                        if !agent1_techs.contains(tech_id) {
-                            let teacher_confidence = self.agents[j]
-                                .technology_knowledge
-                                .teaching_confidence(tech_id);
-
-                            if teacher_confidence > 0.5 {
-                                self.agents[i].technology_knowledge.learn_from_agent(
-                                    tech_id.clone(),
-                                    agent1_id,
-                                    DiscoveryMethod::Instruction,
-                                    teacher_confidence,
-                                    trust_1_to_2,
-                                    self.current_turn as u64,
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Attempt technology discovery through experimentation
-    ///
-    /// Curious agents with required materials may discover new technologies.
-    fn discover_technologies(&mut self) {
-        use crate::environment::technology::DiscoveryMethod;
-        use crate::core::DriveType;
-        use rand::Rng;
-        let mut rng = crate::core::dice::roll();
-
-        let current_turn = self.current_turn;
-
-        // Collect discoveries to be made (to avoid borrowing issues)
-        // (agent_idx, tech_id, agent_uuid, position)
-        let mut discoveries: Vec<(usize, String, Uuid, (i32, i32))> = Vec::new();
-
-        // Get list of discoverable technologies for each agent
-        for agent_idx in 0..self.agents.len() {
-            let agent = &self.agents[agent_idx];
-
-            // Check curiosity drive
-            let curiosity = agent.drives
-                .get(DriveType::Curiosity)
-                .map(|d| d.value)
-                .unwrap_or(0.0);
-
-            // Only curious agents experiment
-            if curiosity < 0.3 {
-                continue;
-            }
-
-            // Get known technologies
-            let known_techs = agent.technology_knowledge.known_technologies.clone();
-
-            // Get technologies available for discovery
-            let available_techs = self.technology_registry.available_for_discovery(&known_techs);
-
-            for tech in available_techs {
-                // Check if agent meets curiosity threshold
-                if curiosity < tech.curiosity_threshold {
-                    continue;
-                }
-
-                // Check if agent has required materials in inventory
-                let has_materials = tech.required_materials.iter().all(|material| {
-                    agent.inventory.get_item(material).is_some()
-                });
-
-                if !has_materials {
-                    continue;
-                }
-
-                // Attempt discovery
-                let discovery_roll: f32 = rng.gen();
-                if discovery_roll < tech.discovery_chance * curiosity {
-                    // Record discovery for later
-                    let pos = (agent.state.position.0, agent.state.position.1);
-                    discoveries.push((agent_idx, tech.id.clone(), agent.id, pos));
-                    break; // Only one discovery per turn per agent
-                }
-            }
-        }
-
-        // Now apply all discoveries
-        for (agent_idx, tech_id, agent_id, pos) in discoveries {
-            let is_world_first = self.technology_registry.record_first_discovery(
-                tech_id.clone(),
-                agent_id,
-                current_turn as u64,
-            );
-
-            // Emit technology discovery event
-            self.pending_events.push(SimulationEvent::new(
-                self.current_turn,
-                SimulationEventType::TechnologyDiscovered {
-                    tech_id: tech_id.clone(),
-                    discoverer_id: agent_id,
-                    is_world_first,
-                },
-                Some(pos),
-            ));
-
-            self.agents[agent_idx].technology_knowledge.discover_technology(
-                tech_id,
-                agent_id,
-                DiscoveryMethod::Experimentation,
-                current_turn as u64,
-                is_world_first,
-            );
         }
     }
 
