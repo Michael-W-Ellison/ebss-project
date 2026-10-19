@@ -18,6 +18,7 @@ use crate::core::DriveType;
 
 pub mod making;
 pub mod stage;
+pub mod catalogue;
 pub mod verbs;
 pub mod tags;
 mod material;
