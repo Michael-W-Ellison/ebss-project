@@ -33,6 +33,7 @@ fn a_settlement(how_many: usize) -> Simulation {
         population.spawn_agent(AgentConfig::default());
     }
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     for who in 0..how_many {
         simulation.population.agents[who].state.position = (25, 25, 0);
         simulation.population.agents[who]

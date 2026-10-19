@@ -94,14 +94,13 @@ fn every_stage_says_what_it_cannot_do() {
 #[test]
 fn the_stage_table_and_the_making_tables_cannot_drift() {
     for path in EVERY_PATH {
-        let stage = path.stage_zero();
-        for born in stage.born_knowing {
+        for born in path.born_knowing() {
             let by_making = making::EVERY_STEP
                 .iter()
-                .any(|step| step.makes == *born && step.obvious);
+                .any(|step| step.makes == born && step.born_known());
             let by_working = making::EVERY_WORKING
                 .iter()
-                .any(|working| working.makes == *born && working.obvious);
+                .any(|working| working.makes == born && working.born_known());
 
             assert!(
                 by_making || by_working,
@@ -135,10 +134,10 @@ fn a_stage_zero_product_that_is_also_discovered_has_a_road_that_needs_no_discove
 
         let obvious_road = making::EVERY_STEP
             .iter()
-            .any(|other| other.makes == step.makes && other.obvious)
+            .any(|other| other.makes == step.makes && other.born_known())
             || making::EVERY_WORKING
                 .iter()
-                .any(|working| working.makes == step.makes && working.obvious);
+                .any(|working| working.makes == step.makes && working.born_known());
 
         assert!(
             obvious_road,
@@ -165,7 +164,7 @@ fn the_stoneware_path_is_declared_short_and_the_recipe_agrees() {
     let shaping = making::how_to_work("mold", "clay").expect("clay molds");
     assert_eq!(shaping.makes, "claypot");
     assert!(
-        !shaping.obvious,
+        !shaping.born_known(),
         "shaping clay stays a discovery until something asks whether what a \
          working makes is worth making"
     );
@@ -173,7 +172,7 @@ fn the_stoneware_path_is_declared_short_and_the_recipe_agrees() {
     let firing = making::how_to_work("fire", "claypot").expect("a pot fires");
     assert_eq!(firing.makes, "stoneware");
     assert!(
-        !firing.obvious,
+        !firing.born_known(),
         "and a kiln and a fuel supply are what stoneware wants, so firing was \
          never Stage 0 either"
     );
@@ -185,7 +184,7 @@ fn the_stoneware_path_is_declared_short_and_the_recipe_agrees() {
          specification says it should"
     );
     assert!(
-        stage.born_knowing.is_empty(),
+        Path::Stoneware.born_knowing().is_empty(),
         "and claims no born knowledge it cannot back"
     );
 }
@@ -260,10 +259,7 @@ fn the_water_path_is_only_half_here() {
         "drinking works and carrying barely does"
     );
     assert!(
-        Path::WaterSystems
-            .stage_zero()
-            .born_knowing
-            .contains(&"bowl"),
+        Path::WaterSystems.born_knowing().contains(&"bowl"),
         "the one vessel a people is born able to make"
     );
 }
@@ -284,7 +280,7 @@ fn the_paths_this_world_does_not_carry_at_all_are_named_anyway() {
             path.called()
         );
         assert!(
-            path.stage_zero().born_knowing.is_empty(),
+            path.born_knowing().is_empty(),
             "{} cannot claim born knowledge it has no machinery for",
             path.called()
         );
@@ -305,7 +301,7 @@ fn the_paths_this_world_does_not_carry_at_all_are_named_anyway() {
 
 /// Nothing is obvious that no stage grants.
 ///
-/// `Agent::knows_how_to` is `step.obvious || self.found_out.contains(..)`, so
+/// `Agent::knows_how_to` is `step.born_known() || self.found_out.contains(..)`, so
 /// the obvious flag *is* what a founder starts knowing. If a step is obvious
 /// and no path claims it, a people begins with a technology the Stage 0 table
 /// never handed them - which is the table quietly not being the answer to
@@ -316,12 +312,12 @@ fn nothing_is_born_known_that_no_stage_grants() {
 
     let mut ungranted: Vec<&str> = making::EVERY_STEP
         .iter()
-        .filter(|step| step.obvious)
+        .filter(|step| step.born_known())
         .map(|step| step.makes)
         .chain(
             making::EVERY_WORKING
                 .iter()
-                .filter(|working| working.obvious)
+                .filter(|working| working.born_known())
                 .map(|working| working.makes),
         )
         .filter(|makes| !granted.contains(*makes))

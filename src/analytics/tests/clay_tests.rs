@@ -169,7 +169,7 @@ fn clay_holds_a_shape_and_it_is_a_discovery() {
 
     assert_eq!(working.makes, "claypot");
     assert!(
-        !working.obvious,
+        !working.born_known(),
         "nobody arrives knowing what clay does; it has to be found out"
     );
     assert!(
@@ -224,7 +224,7 @@ fn a_fired_pot_holds_things() {
 
     assert_eq!(working.makes, "stoneware");
     assert!(working.over_a_fire, "a fire is the whole point");
-    assert!(!working.obvious, "and nobody is born knowing it");
+    assert!(!working.born_known(), "and nobody is born knowing it");
     assert!(
         working.holds.is_some_and(|held| held > 0.0),
         "what comes out holds water"
@@ -239,7 +239,7 @@ fn bricks_are_their_own_discovery() {
 
     assert_eq!(working.makes, "bricks");
     assert!(working.over_a_fire);
-    assert!(!working.obvious);
+    assert!(!working.born_known());
     assert_ne!(
         working.makes,
         making::how_to_work("fire", "claypot").unwrap().makes,

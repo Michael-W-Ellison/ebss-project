@@ -227,7 +227,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Down to 7,852 for #339: talk makes only a familiar face, a good turn
     // is sized against the fade, and a day's company is kept without a roll
     // for it.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_852;
+    // Down to 7,457 for #345: the technology catalogue decides what is born
+    // knowledge, founders carry Stage 0 (a hand axe and flakes), and the
+    // knife, basket and spear are found out.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_457;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -505,7 +508,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // for it, and a friendship left alone fades over ten weeks, not three.
     // Down 1.3% to 976,851 for #341: somebody chilly with the makings on
     // them dresses on the spot.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 976_851;
+    // Up 0.4% to 980,424 for #344: the old technology registry and its
+    // discovery roll every few days are gone.
+    // Down 0.1% to 979,590 for #345: stages 0-2 from the technology
+    // catalogue - Stage 0 born, the rest found out behind its gates.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 979_590;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

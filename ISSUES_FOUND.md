@@ -26031,3 +26031,250 @@ unit of the process id modulo 7 (removed again after):
 - `the_same_seed_is_the_same_world`, inside one process, still passed.
 - The new test failed: 83,776 draws in one process, 82,318 in the other,
   and different fingerprints.
+
+### 343. tech.txt as data: the catalogue, and where the model disagrees with it
+
+**What was asked.** Build the technology document into one system that
+matters, starting by turning it into structured data and checking it
+against the making chain *before* any behaviour changes.
+
+**What there is now.**
+- `data/technology.toml`: every listing in tech.txt - 35 paths, 255
+  stages, 1,461 listings - with an id (`path.stage.name`), the stage
+  titles, and each listing's role (technique, product, food, example).
+- 113 listings carry a hand-decided `model` link saying what they are
+  here: `make:` a making-chain product, `wear:` a garment, `build:` a
+  building, `do:` an action, `born:` something everybody knows from birth.
+  Beside it: `same_as` (the same discovery under another path - a matching
+  name is not taken as one, since "knives" is stone in tool.1 and bronze in
+  tool.5), `needs` (gating across paths), `drive` and `innate`.
+- Figurines (two paths), ceremonial dress and embroidery are
+  `drive = "luxury"`.
+- Stage 0 is innate unless a listing says otherwise and why. Two do: the
+  hand-shaped clay vessel and its pit firing, kept as discoveries by #199's
+  measurement.
+- `[[unlisted]]`: the model's things the document has no line for -
+  cutting meat and fish into portions, and the two cotton garments
+  (tech.txt names linen, hemp and wool cloth, not cotton).
+- `tools/tech_txt_to_catalogue.py` regenerates the file from tech.txt and
+  keeps the hand-decided fields; a decided entry whose listing has left the
+  document stops the run. Two runs give the same bytes.
+- `environment::catalogue` reads it (`the_catalogue()`).
+
+**The checks** (`technology_catalogue_tests`), which fail the suite:
+- the catalogue is the whole document, in `stage::EVERY_PATH`'s order,
+  with every stage non-empty;
+- every link names a real product, garment, building, action or
+  birthright (buildings and actions are spelled as values, so a renamed
+  variant breaks the build);
+- every product and garment has a listing or an `[[unlisted]]` reason,
+  and nothing is both - this caught the cotton cloak on its first run;
+- a stage-0 listing that is a discovery here says why;
+- every gate in `what_has_to_be_known_first` (wheel on a fired pot and a
+  metal axe, handcart on the wheel, shiny lump on a fired pot) is carried
+  as a `needs`;
+- the status goods answer the luxury drive.
+
+**What the report says** (`what_the_catalogue_says_about_the_model`):
+- *The model gives away early.* Basket, bowl, fishing rod, knapped tip,
+  leather bag, sling and stone knife are born-known here and stage 1 in the
+  document; shovel, spear (hafting) and travois are stage 2. Every garment
+  is born-known; the document puts cloaks at stage 1, sewn leather at
+  stage 2, woven linen at stage 3.
+- *The model holds back.* Clay pot and pit firing (#199).
+- *Out of order.* The model's metal blade comes after smelting (document
+  stage 3); the document has cold-hammered native copper blades at stage 1,
+  which the model has no road to.
+- *Coverage.* Of the stage 0-2 listings, the survival paths are partly
+  linked (tools 10 of 18, cordage 6 of 16, food preservation 7 of 26);
+  writing, communication, governance, measurement, sanitation, masonry,
+  maritime and water systems have no links at all.
+
+**What it does not do yet.** Nothing in the simulation reads the
+catalogue - `found_out` and `making.rs` still decide everything - and
+`stage.rs`'s Stage 0 table is still separate. Both are for the next step,
+once the stages 0-2 work is asked for.
+
+### 344. One technology system: the two registries that decided nothing are gone
+
+**What was asked.** Build tech into one system that matters, and clear out
+the two dead registries.
+
+**What they were.**
+- `world::technology` (`TechnologyTree`, `TechEra`): a Stone-to-Medieval
+  tree held on `World` and read only by the GUI's tech-tree panel.
+- `environment::technology` (`TechnologyRegistry`, `TechnologyKnowledge`):
+  five technologies ("fire", "wooden_tools", "flint_knapping",
+  "stone_tools", "iron_working").
+  - Every agent carried a `technology_knowledge`.
+  - The population rolled a random "discovery" for every curious agent
+    every few days, and ran an all-pairs teaching pass every turn.
+
+**Not quite dead.** The legacy Craft table checked `technology_knowledge`:
+wooden, stone and iron axes, pickaxes and hammers, and the iron sword.
+Measured before touching it - forty settlements (smooth 1-24, scattered
+1-16), two years, with a probe counting what that table made and refused:
+**zero of each**. Nothing asks for those items any more; the wanting code
+names making-chain products.
+
+**What changed.**
+- Both registries are deleted, with the agent field, the discovery roll,
+  the teaching pass, and their 30 tests.
+- The legacy table now waits on the making chain:
+  - wooden tools on wood shaped (`sharpenedstick`);
+  - stone tools on a hafted stone head (`spear`);
+  - iron tools on worked metal (`metalaxe`).
+  When the stages 0-2 work moves those, the old table follows.
+- The tech-tree panels (egui and bevy) now draw the making chain.
+  - One node per discovery (`everything_to_find_out` and the workings),
+    known by whoever has it in `found_out`.
+  - Its prerequisites come from `what_has_to_be_known_first`.
+  - It is placed at its earliest stage in tech.txt, from the catalogue
+    (#343). Columns are Stage 0-3 and 4+.
+- `test_simulation` reports `found_out`.
+- `OWNERSHIP.md`: Technology has one owner.
+
+**Measured**, the same forty settlements, two years:
+
+| | before | after |
+|---|---|---|
+| births | 179 | 174 |
+| deaths | 1 (hunger) | 1 (hunger) |
+| legacy table made / refused | 0 / 0 | 0 / 0 |
+
+Paired by seed: -0.125 births a settlement, sd 1.47, t = -0.54. Seeds move
+both ways, as a moved dice stream does. What is found out matches:
+- 40 of 40 worlds for each of the thirteen early discoveries;
+- the rarer ones within noise (fishing net 11 -> 18 worlds, bread 10 -> 6).
+
+**Dice count.** Seed 0 over a year: 976,851 -> 980,424 (+0.4%), recorded.
+Seed 4242 over 120 turns is unchanged at 7,852; the discovery roll was
+once every few days.
+
+**Full suite.** 2,845 tests: all pass but the yearly dice count, which
+this moves, in 1,191 s. That is 2,866 at #341, plus 2 (#342), plus 7
+(#343), less the 30 deleted.
+
+### 345. Stages 0 to 2 of the survival paths, from the technology catalogue
+
+**What was asked.** Implement stages 0-2 of the survival paths: Stage 0 is
+what agents start knowing, later stages are found out, some of them gated
+behind other discoveries rather than coming in a line.
+
+**The catalogue now decides it.**
+- What is born knowledge:
+  - A product or garment is born knowledge when one of its catalogue
+    listings is innate (Stage 0 unless it says otherwise and why), or when
+    the document has no line for it.
+  - `Making::born_known` and `Working::born_known` ask
+    `catalogue::born_knowing_how_to_make`.
+  - `obvious` now only says whether a way is the plain way of making a thing
+    or a variant to work out. Flint for stone in a knapped tip is the one
+    variant.
+- What waits on what: `what_has_to_be_known_first` is the products of the
+  listings a thing's listings `need`. The wheel, handcart and shiny-lump
+  gates (#66, #336) are carried there and pinned by a test.
+- Garments: nobody stumbles on a shirt the way they stumble on a tool, so a
+  garment that is not Stage 0 comes within reach once what it waits on is
+  known (`Agent::knows_how_to_make_garment`). The check runs where garments
+  are chosen and where they are made.
+- `stage.rs`: its Stage 0 born-knowledge lists are read from the catalogue
+  (`Path::born_knowing`), so the two cannot disagree.
+
+**Stage 0 (born):**
+- lashing from the natural bindings, flint, a knapped edge, the hand axe,
+  the digging stick and sharpened stick;
+- scraped leather, cutting into portions and strips, drying;
+- the bowl, which is the water path's Stage 0 vessel ("carrying water in
+  skins, gourds, shells");
+- fur coat and hat, bark cloak and boots.
+
+**Stage 1 and 2, now found out:**
+- basket, leather bag, fishing rod (a line), sling and stone knife;
+- spear, shovel, travois and bow.
+
+**The gates**, from tech.txt's common prerequisites:
+- a knife before hafting (spear, shovel, bow), before cut cloaks and before
+  hardened-hide armour;
+- an awl before sewn garments - tool.1 "awls", and the model's awl is the
+  knife, since it sews with whatever edge is in hand;
+- retted flax before linen;
+- a line before nets;
+- a container (the bowl) before fermenting;
+- a fired pot before fired bricks.
+
+The knapped edge moved to Stage 0 (`tool.0.choppers`) because the hand axe
+wants one. Born knowledge that needed something found out to make would be
+born knowledge in name only; `born_knowledge_can_be_made_from_born_knowledge`
+holds it.
+
+**Founders carry Stage 0.** The kit was a hand axe, a stone knife and a
+basket. The knife and basket are Stage 1, and a founder has to be able to
+replace what he carries (`what_founders_carry_is_something_their_people_can_make`).
+- So the kit is now a hand axe and two flakes; a flake is already a
+  butchering edge.
+- The sharpened stick and digging stick are shaped with the hand axe
+  (tech.txt's Stage 0 toolkit) where they wanted a knife.
+- Without the basket a founder holds what two hands hold, 12 against 42.
+
+**Measured**, forty settlements (smooth 1-24, scattered 1-16), two years,
+against #344:
+
+| | #344 | #345 |
+|---|---|---|
+| births | 174 | 158 |
+| deaths | 1 (hunger) | 1 (hunger) |
+
+- Paired by seed, -0.40 births a settlement, sd 2.2, t = -1.14: within
+  noise.
+- An earlier build of the same change, with a clothing gate that could not
+  open, gave 165 and no deaths. Taken together births may run a few percent
+  lower; it is not a measured difference yet.
+
+**When things are found out** - worlds of 40, and the median day it first
+appeared in a settlement:
+
+| | #344 | #345 |
+|---|---|---|
+| stone knife | born | 40, day 9.5 |
+| basket | born (first woven day 39) | 40, day 9 |
+| spear | born | 40, day 15 |
+| fishing rod | born | 40, day 50 |
+| bow | 39, day 33 | 40, day 56.5 |
+| shovel | born | 22, day 96.5 |
+| fishing net | 18, day 297 | 19, day 306 |
+| leather bag | born | 4, day 640 |
+| sling, travois | born | 0 |
+
+**What does not arrive.** The sling, the travois and (mostly) the leather
+bag are not found out in two years. Each wants hides in the pack of somebody
+curious and awake, and hides do not stay in packs. Survival does not notice;
+whether they should come sooner is a design question. The needle (Stage 2)
+was found in 1 world of 40 before and after, which is why sewing waits on
+the awl and not on it.
+
+**Fixtures.** About fifty tests were built on the old kit: a basket's room
+in the pack, or a knife to reach for.
+- `the_kit_before_stage_zero` gives a fixture exactly that kit back, so it
+  goes on testing what it was written for.
+- Planner tests that used the spear use the hand axe, the same three
+  makings at Stage 0.
+- Two fixtures that stood on whatever the generated map put there now stand
+  on plains (`plain_ground_about`). Agents are spawned before the world is
+  built and draw dice doing it, so a different kit dealt them a different map.
+
+**Dice counts.** 7,852 -> 7,457 (seed 4242, 120 turns) and 980,424 ->
+979,590 (seed 0, a year), recorded.
+
+**Full suite.**
+- The last run in one piece: 2,836 tests, 2,825 passed, 6 failed, 5
+  ignored, 1,326 s.
+- Two of the six were the dice counts, recorded above.
+- The other four (the cold man's awl, the errand fixture's pack, and the
+  two map fixtures) were fixed and pass on their own, with the catalogue and
+  Stage 0 tests.
+
+**Not done here.** Stage 0-2 listings the model has no machinery for stay
+unlinked: smoking, brining, pit ovens, weirs and traps, shellfish, water
+skins, and others. The luxury drive is tagged in the catalogue and drives
+nothing yet. Tool quality still changes yield rather than time.

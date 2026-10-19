@@ -109,6 +109,7 @@ fn somebody_holding(what: &str, how_many: u32) -> crate::analytics::Simulation {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let mut simulation = crate::analytics::Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
 
     simulation.population.agents[0]
         .inventory
@@ -228,7 +229,7 @@ fn the_cheapest_answer_to_a_piercing_tool_is_one_days_work() {
         .expect("something makes flint");
 
     assert!(
-        cheapest.obvious,
+        cheapest.born_known(),
         "flint is the cheap answer to the sewing gate and nobody is born \
          knowing how to make it"
     );

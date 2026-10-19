@@ -21,6 +21,7 @@ fn a_deer_about_to_fall() -> (Simulation, uuid::Uuid) {
     world.animals.get_all_mut().clear();
     let deer = world.spawn_animal("deer".to_string(), (30, 31)).expect("a deer should spawn");
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (30, 30, 0);
     simulation.population.agents[0].inventory.max_weight = 500.0;
     nothing_to_cut_with(&mut simulation);
@@ -38,7 +39,7 @@ fn a_deer_about_to_fall() -> (Simulation, uuid::Uuid) {
 /// Founders walk in with a handaxe and a stone knife (`WHAT_THEY_CARRY`);
 /// these hands have neither.
 fn nothing_to_cut_with(simulation: &mut Simulation) {
-    for tool in ["stoneknife", "handaxe", "metalknife"] {
+    for tool in ["stoneknife", "knappedtip", "handaxe", "metalknife"] {
         let held = simulation.population.agents[0]
             .inventory
             .get_item(tool)
@@ -105,6 +106,7 @@ fn a_turn_at_the_carcass_with(in_the_pack: Option<&str>) -> u32 {
     population.spawn_agent(AgentConfig::default());
     world.animals.get_all_mut().clear();
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     let here = Position::new(30, 30);
     simulation.population.agents[0].state.position = (30, 30, 0);
     simulation.population.agents[0].inventory.max_weight = 500.0;
@@ -158,6 +160,7 @@ fn meat_off_a_carcass_is_as_old_as_the_kill() {
     population.spawn_agent(AgentConfig::default());
     world.animals.get_all_mut().clear();
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     let here = Position::new(30, 30);
     simulation.population.agents[0].state.position = (30, 30, 0);
     simulation.population.agents[0].inventory.max_weight = 500.0;
@@ -267,6 +270,7 @@ fn food_off_a_carcass_is_knife_work() {
     world.resources.clear();
     world.file_the_nodes();
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     let here = Position::new(30, 30);
     simulation.population.agents[0].state.position = (30, 30, 0);
     let now = simulation.current_turn;
@@ -335,6 +339,7 @@ fn a_carcass_is_worth_more_than_a_bush_the_same_walk_away() {
     world.resources.clear();
     world.file_the_nodes();
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (30, 30, 0);
     let now = simulation.current_turn;
 

@@ -17,7 +17,6 @@ use bevy_egui::EguiPlugin;
 use ebss::prelude::*;
 use ebss::world::World as EbssWorld;
 use ebss::agents::PopulationConfig;
-use ebss::world::TechnologyTree;
 use ebss::gui::{
     SimulationCommand as GuiCommand, SimulationSnapshot, SimState as GuiSimState,
     EntitySelection as GuiEntitySelection, SelectedAgentData, SelectedBuildingData,
@@ -170,8 +169,7 @@ fn run_simulation_thread(
 
     let mut simulation = Simulation::new(world, population);
 
-    // Technology tree for the simulation
-    let tech_tree = TechnologyTree::new();
+    // What has been found out, in order, for the tech-tree panel
     let discovery_history: Vec<(u32, String)> = Vec::new();
 
     // Simulation state
@@ -308,7 +306,6 @@ fn run_simulation_thread(
             if *request {
                 *request = false;
                 let snapshot = tech_tree_to_snapshot(
-                    &tech_tree,
                     &simulation.population,
                     &discovery_history,
                 );

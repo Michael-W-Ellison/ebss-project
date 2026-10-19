@@ -25,7 +25,9 @@ fn somebody_in_the_corner() -> crate::analytics::Simulation {
     population.spawn_agent(AgentConfig::default());
     let mut simulation =
         crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (0, 0, 0);
+    crate::analytics::tests::plain_ground_about(&mut simulation, (0, 0), 8);
     simulation
 }
 

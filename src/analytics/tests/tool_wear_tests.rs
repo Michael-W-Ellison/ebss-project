@@ -62,7 +62,7 @@ fn every_tool_is_a_thing_these_people_can_make() {
     // Everything a people arrives knowing how to make is stone or wood, and
     // stone and wood go quickly.
     for tool in making::EVERY_TOOL {
-        if !making::how_to_make(tool.called).is_some_and(|step| step.obvious) {
+        if !making::how_to_make(tool.called).is_some_and(|step| step.born_known()) {
             continue;
         }
         assert!(
@@ -83,7 +83,7 @@ fn a_metal_edge_beats_a_stone_one() {
     assert!(metal.how_much_better > stone.how_much_better);
     assert!(metal.how_long_it_lasts > stone.how_long_it_lasts * 2.0);
     assert!(
-        !making::how_to_make("metalknife").unwrap().obvious,
+        !making::how_to_make("metalknife").unwrap().born_known(),
         "and it is not something anybody arrives knowing"
     );
 }
@@ -465,6 +465,8 @@ fn making_the_same_thing_over_and_over_improves_it() {
     use crate::environment::Action;
 
     let mut simulation = one_agent_world();
+    // A spear is found out (Stage 2 of the weapon path); this one has.
+    simulation.population.agents[0].found_out_how_to("spear");
 
     fn spear_from(simulation: &mut Simulation) -> (Option<crate::agents::skills::Quality>, f32) {
         {

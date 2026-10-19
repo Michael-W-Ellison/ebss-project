@@ -526,6 +526,7 @@ fn a_mother_of_an_infant_carries_what_anybody_carries() {
     population.agents.push(infant);
 
     let mut simulation = Simulation::new(a_world(), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.feed_the_small_children();
 
     for index in 0..2 {
@@ -575,6 +576,7 @@ fn feeding_a_small_child_comes_out_of_the_parent() {
     population.agents.push(child);
 
     let mut simulation = Simulation::new(a_world(), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     let was = simulation.population.agents[0].state.physiology.reserve;
 
     simulation.feed_the_small_children();
@@ -604,6 +606,7 @@ fn a_parent_below_a_fifth_has_nothing_to_give() {
     population.agents.push(child);
 
     let mut simulation = Simulation::new(a_world(), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     let capacity = simulation.population.agents[0].state.physiology.reserve_capacity;
     simulation.population.agents[0].state.physiology.reserve = capacity * 0.1;
 
@@ -623,6 +626,7 @@ fn a_child_under_ten_cannot_cook() {
     let mut population = Population::new();
     population.agents.push(somebody_of(7, (25, 25, 0)));
     let mut simulation = Simulation::new(a_world(), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
 
     let mut rng = crate::core::dice::roll();
     let refused = simulation.cooking(&"generic".to_string(), 0, &mut rng);
@@ -909,6 +913,7 @@ fn a_gift_of_food_is_still_food() {
     population.spawn_agent(AgentConfig::default());
     population.spawn_agent(AgentConfig::default());
     let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
 
     // A dried stack, which is the most a settlement can do to keep something.
     let database = FoodDatabase::new();
@@ -972,6 +977,7 @@ fn a_gift_goes_in_as_far_as_it_will() {
     population.spawn_agent(AgentConfig::default());
     population.spawn_agent(AgentConfig::default());
     let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
 
     let database = FoodDatabase::new();
     let mut stack = InventoryItem::new_with_weight("fish".to_string(), 20, 0.5);

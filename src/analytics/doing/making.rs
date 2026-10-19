@@ -597,32 +597,35 @@ impl Simulation {
         use crate::world::{ItemType, ResourceType};
         use crate::agents::skills::SkillType;
 
-        // Define skill and technology-based crafting recipes
-        // Format: (recipe, required_skill_level, required_technology)
+        // Define skill and knowledge-based crafting recipes
+        // Format: (recipe, required_skill_level, what has to be known first)
         // Skill levels: -10 to 10, where 0 is untrained adult
-        // Technology: Optional technology ID that must be known
+        // Knowledge: a making-chain product the agent must know how to make,
+        // so these tools wait on the same discoveries as everything else:
+        // shaping wood (a sharpened stick), hafting a stone head (a spear),
+        // and working metal (a metal axe).
         let skill_gated_recipes: Vec<(Recipe, i32, Option<&str>)> = vec![
-            // BEGINNER (skill -10 to 0): Basic wooden tools - requires wooden_tools technology
+            // BEGINNER (skill -10 to 0): Basic wooden tools - wait on shaping wood
             (Recipe {
                 name: "Craft Wooden Axe",
                 inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                 outputs: vec![ProductionOutput::new(ItemType::WoodenAxe, 1)],
                 base_time: 80,
-            }, -5, Some("wooden_tools")),  // Very easy, needs wooden tools tech
+            }, -5, Some("sharpenedstick")),  // Very easy, once wood can be shaped
 
             (Recipe {
                 name: "Craft Wooden Pickaxe",
                 inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                 outputs: vec![ProductionOutput::new(ItemType::WoodenPickaxe, 1)],
                 base_time: 80,
-            }, -5, Some("wooden_tools")),
+            }, -5, Some("sharpenedstick")),
 
             (Recipe {
                 name: "Craft Wooden Hammer",
                 inputs: vec![ResourceRequirement::new(ResourceType::Wood, 3)],
                 outputs: vec![ProductionOutput::new(ItemType::WoodenHammer, 1)],
                 base_time: 80,
-            }, -5, Some("wooden_tools")),
+            }, -5, Some("sharpenedstick")),
 
             (Recipe {
                 name: "Craft Wooden Spear",
@@ -632,9 +635,9 @@ impl Simulation {
                 ],
                 outputs: vec![ProductionOutput::new(ItemType::WoodenSpear, 1)],
                 base_time: 85,
-            }, 1, Some("wooden_tools")),
+            }, 1, Some("sharpenedstick")),
 
-            // NOVICE (skill 0-3): Stone tools - requires stone_tools technology
+            // NOVICE (skill 0-3): Stone tools - wait on hafting a stone head
             (Recipe {
                 name: "Craft Stone Axe",
                 inputs: vec![
@@ -643,7 +646,7 @@ impl Simulation {
                 ],
                 outputs: vec![ProductionOutput::new(ItemType::StoneAxe, 1)],
                 base_time: 90,
-            }, 0, Some("stone_tools")),  // Requires basic training + stone tools tech
+            }, 0, Some("spear")),  // Requires basic training + hafting
 
             (Recipe {
                 name: "Craft Stone Pickaxe",
@@ -653,7 +656,7 @@ impl Simulation {
                 ],
                 outputs: vec![ProductionOutput::new(ItemType::StonePickaxe, 1)],
                 base_time: 90,
-            }, 0, Some("stone_tools")),
+            }, 0, Some("spear")),
 
             (Recipe {
                 name: "Craft Stone Hammer",
@@ -663,9 +666,9 @@ impl Simulation {
                 ],
                 outputs: vec![ProductionOutput::new(ItemType::StoneHammer, 1)],
                 base_time: 90,
-            }, 0, Some("stone_tools")),
+            }, 0, Some("spear")),
 
-            // APPRENTICE (skill 3-5): Iron tools - requires iron_working technology
+            // APPRENTICE (skill 3-5): Iron tools - wait on working metal
             (Recipe {
                 name: "Craft Iron Axe",
                 inputs: vec![
@@ -674,7 +677,7 @@ impl Simulation {
                 ],
                 outputs: vec![ProductionOutput::new(ItemType::IronAxe, 1)],
                 base_time: 100,
-            }, 3, Some("iron_working")),  // Requires experience + iron working tech
+            }, 3, Some("metalaxe")),  // Requires experience + metalworking
 
             (Recipe {
                 name: "Craft Iron Pickaxe",
@@ -684,7 +687,7 @@ impl Simulation {
                 ],
                 outputs: vec![ProductionOutput::new(ItemType::IronPickaxe, 1)],
                 base_time: 100,
-            }, 3, Some("iron_working")),
+            }, 3, Some("metalaxe")),
 
             (Recipe {
                 name: "Craft Iron Hammer",
@@ -694,9 +697,9 @@ impl Simulation {
                 ],
                 outputs: vec![ProductionOutput::new(ItemType::IronHammer, 1)],
                 base_time: 100,
-            }, 3, Some("iron_working")),
+            }, 3, Some("metalaxe")),
 
-            // JOURNEYMAN (skill 5-8): Advanced weapons - requires iron_working technology
+            // JOURNEYMAN (skill 5-8): Advanced weapons - wait on working metal
             (Recipe {
                 name: "Craft Iron Sword",
                 inputs: vec![
@@ -705,19 +708,17 @@ impl Simulation {
                 ],
                 outputs: vec![ProductionOutput::new(ItemType::IronSword, 1)],
                 base_time: 120,
-            }, 5, Some("iron_working")),  // Requires significant experience + iron working tech
+            }, 5, Some("metalaxe")),  // Requires significant experience + metalworking
         ];
 
-        // Get agent's crafting skill level and known technologies
-        let (agent_skill_level, agent_known_techs) = {
-            let agent = &mut self.population.agents[agent_index];
-            let skill = agent.skills.get_skill(SkillType::Crafting).level;
-            let techs: std::collections::BTreeSet<String> = agent.technology_knowledge
-                .known_technologies.keys().cloned().collect();
-            (skill, techs)
-        };
+        // Get agent's crafting skill level, and what the agent knows how to make
+        let agent_skill_level = self.population.agents[agent_index]
+            .skills
+            .get_skill(SkillType::Crafting)
+            .level;
+        let knows = |what: &str| self.population.agents[agent_index].knows_how_to_make(what);
 
-        // Filter recipes by skill level AND technology - only show recipes agent can craft
+        // Filter recipes by skill level AND knowledge - only show recipes agent can craft
         let available_recipes: Vec<(&Recipe, i32, Option<&str>)> = skill_gated_recipes
             .iter()
             .filter(|(_, required_skill, required_tech)| {
@@ -726,9 +727,9 @@ impl Simulation {
                     return false;
                 }
 
-                // Check technology requirement
-                if let Some(tech_id) = required_tech {
-                    if !agent_known_techs.contains(*tech_id) {
+                // Check what has to be known first
+                if let Some(first) = required_tech {
+                    if !knows(first) {
                         return false;
                     }
                 }
@@ -763,9 +764,9 @@ impl Simulation {
                         required_skill, agent_skill_level));
                 }
 
-                if let Some(tech_id) = required_tech {
-                    if !agent_known_techs.contains(*tech_id) {
-                        reasons.push(format!("missing technology '{}'", tech_id));
+                if let Some(first) = required_tech {
+                    if !knows(first) {
+                        reasons.push(format!("does not know how to make a {}", first));
                     }
                 }
 
@@ -989,6 +990,10 @@ impl Simulation {
         };
 
         let agent = &mut self.population.agents[agent_index];
+
+        if !agent.knows_how_to_make_garment(garment) {
+            return ActionResult::failure(format!("Does not know how to make a {}", recipe.name));
+        }
 
         if !agent
             .inventory

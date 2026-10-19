@@ -35,6 +35,7 @@ fn one_person() -> Simulation {
     population.spawn_agent(AgentConfig::default());
 
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (25, 25, 0);
     simulation.population.agents[0]
         .inventory

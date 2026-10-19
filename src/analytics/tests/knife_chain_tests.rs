@@ -249,7 +249,7 @@ fn the_undirected_working_comes_first_and_that_is_where_bowls_come_from() {
     // whole reason it must not be demoted.
     let carving = making::how_to_work("carve", "wood").expect("wood carves");
     assert!(carving.holds.is_some_and(|held| held > 0.0));
-    assert!(carving.obvious, "and anybody can do it");
+    assert!(carving.born_known(), "and anybody can do it");
 }
 
 /// The directed want is still in the chain behind it, and is reached by

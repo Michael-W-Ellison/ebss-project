@@ -33,6 +33,7 @@ fn somebody_at_a_half_dug_burrow() -> crate::analytics::Simulation {
     population.spawn_agent(AgentConfig::default());
     let mut simulation =
         crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (10, 10, 0);
 
     // A fresh world is seeded with roofs of its own, and this fixture is about
@@ -208,7 +209,7 @@ fn nobody_carries_what_they_have_no_use_for() {
 /// And what everybody is born knowing a use for is worth carrying.
 #[test]
 fn what_there_is_a_use_for_is_worth_carrying() {
-    let born_knowing = |step: &crate::environment::making::Making| step.obvious;
+    let born_knowing = |step: &crate::environment::making::Making| step.born_known();
 
     assert!(
         crate::environment::making::is_this_any_use_to("stone", &born_knowing),
@@ -251,6 +252,7 @@ fn a_pit_with_room_in_it_is_not_enough_hole_for_a_winter() {
     population.spawn_agent(AgentConfig::default());
     let mut simulation =
         crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (25, 25, 0);
     simulation.world.pits.clear();
 
@@ -293,6 +295,7 @@ fn nobody_digs_on_top_of_a_hole_that_is_still_going_spare() {
     population.spawn_agent(AgentConfig::default());
     let mut simulation =
         crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.world.pits.clear();
     simulation.world.pits.push(Pit {
         where_it_is: Position::new(25, 25),
@@ -328,6 +331,7 @@ fn somebody_standing_on_a_full_pit() -> crate::analytics::Simulation {
     population.spawn_agent(AgentConfig::default());
     let mut simulation =
         crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (25, 25, 0);
     simulation.world.pits.clear();
 
@@ -470,6 +474,7 @@ fn somebody_on_open_ground() -> crate::analytics::Simulation {
     population.spawn_agent(AgentConfig::default());
     let mut simulation =
         crate::analytics::Simulation::new(World::new(WorldConfig::default()), population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (10, 10, 0);
     simulation.world.buildings.clear();
     simulation.population.agents[0]

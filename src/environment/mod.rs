@@ -18,6 +18,7 @@ use crate::core::DriveType;
 
 pub mod making;
 pub mod stage;
+pub mod catalogue;
 pub mod verbs;
 pub mod tags;
 mod material;
@@ -26,7 +27,6 @@ mod crafting;
 mod plugin;
 mod registry;
 mod structure;
-pub mod technology;
 mod heat_source;
 pub mod smelting;
 pub mod clothing_recipes;
@@ -49,7 +49,6 @@ pub use crafting::*;
 pub use plugin::*;
 pub use registry::*;
 pub use structure::*;
-pub use technology::*;
 pub use heat_source::*;
 pub use flora::{PlantSpecies, FloraRegistry, ClimateZone, GrowthStage, PlantSize, Plant, PlantManager, PlantDrop};
 pub use fauna::{
@@ -539,8 +538,6 @@ impl ItemStack {
 }
 
 #[cfg(test)]
-#[path = "tests/technology_progression_tests.rs"]
-mod technology_progression_tests;
 
 #[cfg(test)]
 mod tests {

@@ -34,6 +34,7 @@ fn one_person() -> Simulation {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (25, 25, 0);
     simulation.population.agents[0]
         .inventory
@@ -151,7 +152,7 @@ fn taking_a_carcass_apart_is_not_a_discovery() {
         let working = making::how_to_work(verb, to)
             .unwrap_or_else(|| panic!("{to} should come apart"));
         assert!(
-            working.obvious,
+            working.born_known(),
             "there is nothing to find out about a carcass coming apart"
         );
         assert!(working.makes.ends_with("portions"));

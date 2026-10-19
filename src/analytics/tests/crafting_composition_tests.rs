@@ -345,6 +345,8 @@ fn a_making_somebody_chose_is_held_on_to() {
     let mut population = Population::with_config(PopulationConfig::default());
     population.spawn_agent(AgentConfig::default());
     let mut simulation = crate::analytics::Simulation::new(world, population);
+    // Room for the knife below, which a basket's worth of pack had
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
 
     {
         let agent = &mut simulation.population.agents[0];
@@ -356,10 +358,16 @@ fn a_making_somebody_chose_is_held_on_to() {
                 .inventory
                 .add_item(InventoryItem::new_with_weight(what.to_string(), 8, 0.5));
         }
-        // And an edge, as founders walk in with: somebody with none takes
-        // the edge on first, and the edge is the step (#332).
+        // And an edge: somebody with none takes the edge on first, and the
+        // edge is the step (#332).
         let knife = agent.a_tool_fresh_from_these_hands("stoneknife", 1, 0.5);
         agent.inventory.add_item(knife);
+        // And a making of more than one stage to be on the way to. At Stage 0
+        // the hunting want is a sharpened stick, which is one stage; the
+        // spear, which this one has found out, is three.
+        agent.found_out_how_to("stoneknife");
+        agent.found_out_how_to("spear");
+
         agent.errand = None;
         // Something has to be pressing for an errand to be set out on, and in
         // the live model the arm was reached because this one was.

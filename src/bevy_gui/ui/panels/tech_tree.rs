@@ -22,27 +22,27 @@ struct EraColumn {
 
 const ERAS: &[EraColumn] = &[
     EraColumn {
-        name: "Stone Age",
+        name: "Stage 0",
         color: Color32::from_rgb(139, 119, 101),
         header_color: Color32::from_rgb(101, 67, 33),
     },
     EraColumn {
-        name: "Copper Age",
+        name: "Stage 1",
         color: Color32::from_rgb(184, 115, 51),
         header_color: Color32::from_rgb(140, 90, 40),
     },
     EraColumn {
-        name: "Bronze Age",
+        name: "Stage 2",
         color: Color32::from_rgb(205, 127, 50),
         header_color: Color32::from_rgb(160, 100, 40),
     },
     EraColumn {
-        name: "Iron Age",
+        name: "Stage 3",
         color: Color32::from_rgb(112, 128, 144),
         header_color: Color32::from_rgb(70, 80, 90),
     },
     EraColumn {
-        name: "Medieval",
+        name: "Stage 4+",
         color: Color32::from_rgb(128, 0, 128),
         header_color: Color32::from_rgb(75, 0, 130),
     },

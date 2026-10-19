@@ -4,7 +4,7 @@
 use crate::agents::{Agent, Population, FatigueSeverity, JobCategory};
 use crate::analytics::Simulation;
 use crate::core::DriveType;
-use crate::world::{World, Position, BuildingState, Building, ResourceNode, TechEra, TechnologyTree};
+use crate::world::{World, Position, BuildingState, Building, ResourceNode};
 use super::state::*;
 
 /// Generate a world snapshot for GUI rendering
@@ -553,48 +553,56 @@ fn resource_uses(resource_type: crate::world::ResourceType) -> Vec<String> {
     }
 }
 
+/// The panels draw stages 0 to 3 a column each and everything later in one.
+const LAST_STAGE_COLUMN: usize = 4;
+
 /// Generate technology tree snapshot for GUI
+///
+/// The tree is the making chain: one node for every product somebody has to
+/// find out how to make (`making::everything_to_find_out` and the workings),
+/// known by whoever has it in `Agent::found_out`, waiting on
+/// `what_has_to_be_known_first`. Where it sits - the "era" - is the earliest
+/// stage tech.txt lists it at, read from the technology catalogue.
 pub fn tech_tree_to_snapshot(
-    tech_tree: &TechnologyTree,
     population: &Population,
     discovery_history: &[(u32, String)],
 ) -> TechTreeSnapshot {
+    use crate::environment::catalogue::the_catalogue;
+    use crate::environment::making;
+    use std::collections::BTreeSet;
+
+    let catalogue = the_catalogue();
+    let products: BTreeSet<&'static str> = making::everything_to_find_out()
+        .map(|m| m.makes)
+        .chain(making::every_working_to_find_out().map(|w| w.makes))
+        .collect();
+
+    let living: Vec<_> = population.agents.iter().filter(|a| a.state.is_alive).collect();
     let mut nodes = Vec::new();
     let mut total_discovered = 0;
-    let mut highest_era = TechEra::StoneAge;
+    let mut highest_stage: Option<usize> = None;
 
-    for tech in tech_tree.all() {
-        let era_index = match tech.era {
-            TechEra::StoneAge => 0,
-            TechEra::CopperAge => 1,
-            TechEra::BronzeAge => 2,
-            TechEra::IronAge => 3,
-            TechEra::Medieval => 4,
-        };
+    for product in &products {
+        let listing = catalogue.earliest(&format!("make:{product}"));
+        let stage = listing.map(|t| t.stage).unwrap_or(0);
+        let era = listing
+            .and_then(|t| catalogue.path(&t.path).map(|p| (t, p)))
+            .map(|(t, p)| format!("Stage {} - {}", t.stage, p.name))
+            .unwrap_or_else(|| "Not in tech.txt".to_string());
+        let prerequisites: Vec<String> = making::what_has_to_be_known_first(product)
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
 
-        // Count agents who know this tech (using technology_knowledge from environment module)
-        let agents_with_knowledge = population.agents.iter()
-            .filter(|a| a.state.is_alive && a.technology_knowledge.known_technologies.contains_key(tech.id))
-            .count();
+        let agents_with_knowledge =
+            living.iter().filter(|a| a.what_i_found_out().contains(*product)).count();
+        let can_be_discovered = living.iter().any(|a| {
+            !a.what_i_found_out().contains(*product) && a.knows_what_comes_before(product)
+        });
 
-        // Check if any agent can discover this (has all prerequisites)
-        let can_be_discovered = population.agents.iter()
-            .filter(|a| a.state.is_alive)
-            .any(|a| {
-                // Check if agent has all prerequisites
-                let has_all_prereqs = tech.prerequisites.iter()
-                    .all(|prereq| a.technology_knowledge.known_technologies.contains_key(*prereq));
-                has_all_prereqs && !a.technology_knowledge.known_technologies.contains_key(tech.id)
-            });
-
-        // Determine status
-        let any_agent_knows = agents_with_knowledge > 0;
-
-        let status = if any_agent_knows {
+        let status = if agents_with_knowledge > 0 {
             total_discovered += 1;
-            if tech.era > highest_era {
-                highest_era = tech.era;
-            }
+            highest_stage = Some(highest_stage.map_or(stage, |h| h.max(stage)));
             TechStatus::Discovered
         } else if can_be_discovered {
             TechStatus::Discoverable
@@ -602,32 +610,33 @@ pub fn tech_tree_to_snapshot(
             TechStatus::Unknown
         };
 
-        // Find first discoverer and turn from history
-        let (first_discoverer, discovery_turn) = discovery_history.iter()
-            .find(|(_, id)| id == tech.id)
-            .map(|(turn, _)| {
-                let discoverer = population.agents.iter()
-                    .find(|a| a.technology_knowledge.known_technologies.contains_key(tech.id))
-                    .map(|a| a.id);
-                (discoverer, Some(*turn))
-            })
-            .unwrap_or((None, None));
+        let discovery_turn = discovery_history
+            .iter()
+            .find(|(_, id)| id == product)
+            .map(|(turn, _)| *turn);
+        let first_discoverer = discovery_turn.and_then(|_| {
+            living.iter().find(|a| a.what_i_found_out().contains(*product)).map(|a| a.id)
+        });
 
-        // Build unlocks list
-        let unlocks: Vec<String> = tech.unlocks_recipes.iter()
-            .map(|item| format!("{:?}", item))
+        // What knowing it opens: the things that wait on it.
+        let unlocks: Vec<String> = products
+            .iter()
+            .filter(|other| making::what_has_to_be_known_first(other).contains(product))
+            .map(|s| s.to_string())
             .collect();
 
         nodes.push(TechNodeData {
-            id: tech.id.to_string(),
-            name: tech.name.to_string(),
-            description: tech.description.to_string(),
-            era: tech.era.name().to_string(),
-            era_index,
+            id: product.to_string(),
+            name: listing.map(|t| t.name.clone()).unwrap_or_else(|| product.to_string()),
+            description: listing
+                .and_then(|t| t.note.clone())
+                .unwrap_or_else(|| listing.map(|t| t.id.clone()).unwrap_or_default()),
+            era,
+            era_index: stage.min(LAST_STAGE_COLUMN),
             status,
-            discovery_progress: 0, // Progress tracking not used in current implementation
+            discovery_progress: 0,
             agents_with_knowledge,
-            prerequisites: tech.prerequisites.iter().map(|s| s.to_string()).collect(),
+            prerequisites,
             unlocks,
             first_discoverer,
             discovery_turn,
@@ -635,10 +644,12 @@ pub fn tech_tree_to_snapshot(
     }
 
     TechTreeSnapshot {
+        total_technologies: nodes.len(),
         nodes,
-        current_era: highest_era.name().to_string(),
+        current_era: highest_stage
+            .map(|s| format!("Stage {s}"))
+            .unwrap_or_else(|| "Stage 0".to_string()),
         total_discovered,
-        total_technologies: tech_tree.all().len(),
         discovery_history: discovery_history.to_vec(),
     }
 }

@@ -22,6 +22,7 @@ fn one_person_with_nothing() -> Simulation {
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
     let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].state.position = (30, 30, 0);
     simulation.population.agents[0].inventory.get_all_items_mut().clear();
     simulation

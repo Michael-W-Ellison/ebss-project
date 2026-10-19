@@ -360,9 +360,10 @@ impl Simulation {
         // to make.
         //
         // The predicates here are the executor's own - `every_way_to_make` is
-        // what `crafting` looks the recipe up in, `garment_recipe` is what
-        // `making_clothing` refuses on - so this cannot drift from what would
-        // actually happen. Asking the question here rather than letting the
+        // what `crafting` looks the recipe up in, `garment_recipe` and
+        // `knows_how_to_make_garment` are what `making_clothing` refuses on -
+        // so this cannot drift from what would actually happen. Asking the
+        // question here rather than letting the
         // turn be spent is what `what_i_have_tried_least_here` says its filter
         // is for: "reaching for a verb that cannot be built spends the turn on
         // nothing and teaches nothing."
@@ -373,7 +374,9 @@ impl Simulation {
         };
         let a_garment = || {
             let named = what.clone()?;
-            crate::agents::equipment::garment_recipe(&named).map(|_| named)
+            crate::agents::equipment::garment_recipe(&named)
+                .filter(|_| agent.knows_how_to_make_garment(&named))
+                .map(|_| named)
         };
 
         // And for the handful whose *target* is somebody but whose action

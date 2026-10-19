@@ -20,6 +20,7 @@ fn test_simulation_can_be_saved_to_file() {
     population.spawn_agent(AgentConfig::default());
 
     let mut sim = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut sim);
 
     // Run for a few turns to generate state
     sim.take_a_turn();
@@ -49,6 +50,7 @@ fn test_simulation_can_be_loaded_from_file() {
     population.spawn_agent(AgentConfig::default());
 
     let mut sim = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut sim);
     sim.take_a_turn();
     sim.take_a_turn();
 
@@ -78,6 +80,7 @@ fn test_loaded_simulation_can_resume() {
     }
 
     let mut sim = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut sim);
 
     // Run for 10 turns
     for _ in 0..10 {
@@ -114,6 +117,7 @@ fn test_agent_state_preserved_across_save_load() {
     population.spawn_agent(AgentConfig::default());
 
     let mut sim = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut sim);
 
     // Modify agent state
     if let Some(agent) = sim.population.agents.first_mut() {
@@ -148,6 +152,7 @@ fn test_world_state_preserved_across_save_load() {
     let population = Population::new();
 
     let mut sim = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut sim);
 
     // Run world for a bit to generate state
     sim.world.climate.take_a_turn();
@@ -174,6 +179,7 @@ fn test_drive_values_preserved_across_save_load() {
     population.spawn_agent(AgentConfig::default());
 
     let mut sim = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut sim);
 
     // Accumulate some drive values
     for _ in 0..50 {
@@ -240,6 +246,7 @@ fn test_multiple_save_load_cycles() {
     population.spawn_agent(AgentConfig::default());
 
     let mut sim = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut sim);
 
     // Cycle 1: Run 5 turns, save, load
     for _ in 0..5 {
@@ -276,6 +283,7 @@ fn test_inventory_preserved_across_save_load() {
     population.spawn_agent(AgentConfig::default());
 
     let mut sim = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut sim);
 
     // A founder walks in with a couple of days of food already, so what this
     // test is about is that whatever is in the pack comes back out of the save

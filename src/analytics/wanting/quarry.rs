@@ -339,6 +339,7 @@ impl Simulation {
 
         let wants = crate::agents::equipment::GARMENT_RECIPES.iter().any(|recipe| {
             matches!(recipe.material_item, "hides" | "leather" | "wool")
+                && agent.knows_how_to_make_garment(recipe.id)
                 && Self::worth_making(
                     Self::garment_warmth(recipe, quality),
                     Self::warmth_worn(agent, recipe.slot),
@@ -354,6 +355,7 @@ impl Simulation {
         // it has never had.
         let can_already_make = crate::agents::equipment::GARMENT_RECIPES.iter().any(|recipe| {
             matches!(recipe.material_item, "hides" | "leather" | "wool")
+                && agent.knows_how_to_make_garment(recipe.id)
                 && Self::worth_making(
                     Self::garment_warmth(recipe, quality),
                     Self::warmth_worn(agent, recipe.slot),

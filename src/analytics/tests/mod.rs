@@ -93,6 +93,7 @@ pub mod innovation_tests;
 pub mod map_memory_tests;
 pub mod goal_tests;
 pub mod stage_zero_tests;
+pub mod technology_catalogue_tests;
 pub mod durability_tests;
 pub mod quality_tests;
 pub mod retention_tests;
@@ -132,3 +133,43 @@ pub mod carcass_tests;
 pub mod kit_tests;
 pub mod practice_tests;
 pub mod social_rework_tests;
+
+/// What founders walked in with before Stage 0 took the basket and the stone
+/// knife out of the kit (ISSUES_FOUND #345): a hand axe, a knife and a
+/// basket, and no loose flakes.
+///
+/// For a fixture that is about something else and was built on that kit - a
+/// pack with a basket's room in it, or a knife to reach for. Founders now
+/// carry a hand axe and two flakes (`Agent::WHAT_THEY_CARRY`), and their
+/// people find the knife and the basket out within a fortnight or so.
+pub(crate) fn the_kit_before_stage_zero(agent: &mut crate::agents::Agent) {
+    agent.inventory.remove_item("knappedtip", 2);
+    for (what, how_many, each) in [("stoneknife", 1, 0.5), ("basket", 1, 1.0)] {
+        let item = agent.a_tool_fresh_from_these_hands(what, how_many, each);
+        agent.inventory.add_item(item);
+    }
+    agent.take_up_the_cart();
+}
+
+/// `the_kit_before_stage_zero` for everybody in a simulation.
+pub(crate) fn everybody_with_the_kit_before_stage_zero(simulation: &mut crate::analytics::Simulation) {
+    for agent in simulation.population.agents.iter_mut() {
+        the_kit_before_stage_zero(agent);
+    }
+}
+
+/// Plains for `reach` paces about a point, so a fixture that is about walking
+/// or running is not about whatever the generated map happened to put there.
+/// Agents are spawned before the world is built and draw dice doing it, so a
+/// change to what they carry deals a fixture a different map.
+pub(crate) fn plain_ground_about(simulation: &mut crate::analytics::Simulation, at: (i32, i32), reach: i32) {
+    use crate::world::{Position, Terrain, TerrainType};
+    for dx in -reach..=reach {
+        for dy in -reach..=reach {
+            let here = Position::new(at.0 + dx, at.1 + dy);
+            if let Some(tile) = simulation.world.grid.get_tile_mut(&here) {
+                tile.terrain = Terrain::new(TerrainType::Plains);
+            }
+        }
+    }
+}

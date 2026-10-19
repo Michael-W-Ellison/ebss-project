@@ -164,7 +164,8 @@ fn a_practised_hand_is_quicker() {
     );
 }
 
-/// A founder is as good at a spear as the day before he walked in.
+/// A founder is as good at a hand axe as the day before he walked in. (It was
+/// the spear, which is found out now; the hand axe is Stage 0.)
 #[test]
 fn founders_arrive_practised_at_what_they_have_always_made() {
     let mut population = Population::new();
@@ -178,10 +179,15 @@ fn founders_arrive_practised_at_what_they_have_always_made() {
         .map(|skill| skill.level)
         .expect("a founder knows the crafting trade");
 
-    assert!(founder.skills.times_made("spear") > 0);
+    assert!(founder.skills.times_made("handaxe") > 0);
     assert!(
-        founder.skills.level_at_making("spear", SkillType::Crafting) >= trade,
-        "a spear is a thing he has made"
+        founder.skills.level_at_making("handaxe", SkillType::Crafting) >= trade,
+        "a hand axe is a thing he has made"
+    );
+    assert_eq!(
+        founder.skills.times_made("spear"),
+        0,
+        "and a spear is not: his people has not found it out yet"
     );
     // A bow is not, and he comes to it a little under the trade
     assert_eq!(founder.skills.times_made("bow"), 0);

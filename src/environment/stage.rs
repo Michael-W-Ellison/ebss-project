@@ -25,12 +25,11 @@
 //! not carry at all - and before this file there was no way to say that
 //! sentence, let alone check it.
 //!
-//! It is **not** a second source of truth about recipes. Where a path says a
-//! people is born knowing how to make a thing, `born_knowing` names the thing
-//! and `the_stage_table_and_the_making_tables_cannot_drift` holds the two to
-//! each other: a product claimed here that still wants discovering in
-//! `making.rs` fails the suite. That is the whole of the coupling, and it is
-//! deliberate - the recipe tables stay the place a recipe lives.
+//! It is **not** a source of truth about what anybody knows. What a people is
+//! born knowing how to make on each path is the technology catalogue's Stage 0
+//! (`Path::born_knowing`, from `data/technology.toml`), and the recipe tables
+//! stay the place a recipe lives. This table says, in words, where the world
+//! stands against each path's start.
 //!
 //! # The one disagreement, and what measuring it turned up
 //!
@@ -148,14 +147,6 @@ pub struct Stage {
     pub held_back_by: &'static [&'static str],
     /// Whether this model carries it.
     pub standing: Standing,
-    /// The products of `making.rs` that this stage says everybody knows how
-    /// to make.
-    ///
-    /// Named by product, because that is how `Making::obvious` and
-    /// `Agent::found_out` are both keyed. Every name here must be the output
-    /// of at least one step the tables call obvious - see
-    /// `the_stage_table_and_the_making_tables_cannot_drift`.
-    pub born_knowing: &'static [&'static str],
 }
 
 /// Every path, for counting what a people has and what it has not.
@@ -198,6 +189,26 @@ pub const EVERY_PATH: &[Path] = &[
 ];
 
 impl Path {
+    /// The products of `making.rs` everybody is born knowing how to make on
+    /// this path: what the technology catalogue's innate Stage 0 listings for
+    /// it are, in the making chain.
+    pub fn born_knowing(&self) -> Vec<&'static str> {
+        let cat = crate::environment::catalogue::the_catalogue();
+        let name = format!("{self:?}");
+        let Some(row) = cat.path.iter().find(|p| p.model == name) else {
+            return Vec::new();
+        };
+        let mut born: Vec<&'static str> = cat
+            .tech
+            .iter()
+            .filter(|t| t.path == row.id && t.stage == 0 && t.innate())
+            .flat_map(|t| t.makes())
+            .collect();
+        born.sort();
+        born.dedup();
+        born
+    }
+
     /// What this path is called, short and stable.
     pub fn called(&self) -> &'static str {
         match self {
@@ -265,10 +276,9 @@ impl Path {
                 // bundle with the bundle held off the ground. The wheel and
                 // the handcart above it are discoveries, correctly.
                 standing: Standing::Stands(
-                    "a pack with a capacity, a sling and a travois in the obvious half of \
-                     the making table, and a wheel and a handcart in the discovered half",
+                    "a pack with a capacity is born knowledge; a travois is Stage 2 and \
+                     found out, and the wheel and the handcart wait far behind it",
                 ),
-                born_knowing: &["sling", "travois", "basket"],
             },
 
             // ---- what covers a body ---------------------------------------
@@ -294,7 +304,6 @@ impl Path {
                     "hides, cordage and woven flax are all here; there is no cloth, no \
                      spinning and no loom, so the path has a start and no next step",
                 ),
-                born_knowing: &["lashing", "basket"],
             },
 
             Path::Clothing => Stage {
@@ -314,7 +323,6 @@ impl Path {
                     "`clothing_recipes.rs` and the exposure model: garments have \
                      insulation, are worn on slots, and cold is what makes somebody make one",
                 ),
-                born_knowing: &["leather", "leatherbag"],
             },
 
             Path::Footwear => Stage {
@@ -331,7 +339,6 @@ impl Path {
                     "bark boots exist in `clothing_recipes.rs`; nothing in the model asks \
                      for them, because feet are not a place the exposure model wounds",
                 ),
-                born_knowing: &[],
             },
 
             // ---- earth and fire -------------------------------------------
@@ -358,7 +365,6 @@ impl Path {
                      afford to: shaping clay stays a discovery, because a people that \
                      starts knowing how spends its winters making shapes worth nothing",
                 ),
-                born_knowing: &[],
             },
 
             Path::PotteryBeyondStoneware => Stage {
@@ -377,7 +383,6 @@ impl Path {
                     "clay makes pots and bricks and nothing else: there is no ornament in \
                      this model, and nothing values a thing for being looked at",
                 ),
-                born_knowing: &[],
             },
 
             Path::FireFuelAndEnergy => Stage {
@@ -399,7 +404,6 @@ impl Path {
                     "hearths, firewood and cooking over a fire all work; nobody carries an \
                      ember, so a fire that goes out is started from nothing every time",
                 ),
-                born_knowing: &[],
             },
 
             // ---- keeping things -------------------------------------------
@@ -419,7 +423,6 @@ impl Path {
                     "the larder: a dug pit with a cover, a temperature, and a spoilage \
                      clock that a pit slows and the open air does not",
                 ),
-                born_knowing: &["basket", "leatherbag"],
             },
 
             Path::FoodPreservation => Stage {
@@ -442,7 +445,6 @@ impl Path {
                     "cutting strips is obvious, laying them out is the one thing everybody \
                      is born knowing, and the weather decides whether it works",
                 ),
-                born_knowing: &["meatstrips", "fishstrips"],
             },
 
             Path::CookingAndFoodProcessing => Stage {
@@ -467,7 +469,6 @@ impl Path {
                     "portioning is obvious, cooking wants a fire and ruins what should not \
                      have gone near one, and grinding grain is still a discovery",
                 ),
-                born_knowing: &["meatportions", "fishportions"],
             },
 
             // ---- the raw materials ----------------------------------------
@@ -487,10 +488,10 @@ impl Path {
                     "limited flexibility and lifespan",
                 ],
                 standing: Standing::Stands(
-                    "scraping a hide is obvious and is where the leatherworking skill \
-                     lives; sewing a bag out of what comes off it is obvious too",
+                    "scraping a hide is born knowledge and is where the leatherworking \
+                     skill lives; sewing a bag out of what comes off it is Stage 1 and \
+                     found out",
                 ),
-                born_knowing: &["leather", "leatherbag"],
             },
 
             Path::MiningAndExtraction => Stage {
@@ -508,7 +509,6 @@ impl Path {
                     "surface deposits of stone, clay and salt, a mining skill, and a \
                      deposit that runs out and is remembered as having run out",
                 ),
-                born_knowing: &["flint"],
             },
 
             Path::Woodworking => Stage {
@@ -525,7 +525,6 @@ impl Path {
                     "a digging stick and a sharpened stick are both obvious, and a carved \
                      bowl - the one real shaping step - is obvious too",
                 ),
-                born_knowing: &["diggingstick", "sharpenedstick", "bowl"],
             },
 
             Path::Cordage => Stage {
@@ -549,7 +548,6 @@ impl Path {
                      rawhide, is obvious, and retting past it is a discovery; vines and \
                      twisted grasses are not on the map",
                 ),
-                born_knowing: &["lashing"],
             },
 
             // ---- what people do with each other ---------------------------
@@ -568,7 +566,6 @@ impl Path {
                     "bartering a surplus, gated on trust rather than on proximity, and a \
                      relationship that a bad trade costs",
                 ),
-                born_knowing: &[],
             },
 
             Path::GovernanceAndLabour => Stage {
@@ -591,7 +588,6 @@ impl Path {
                     "households, kinship and feeding children from a parent's stores are \
                      all here; there is no leader, and nothing anybody can tell anybody to do",
                 ),
-                born_knowing: &[],
             },
 
             Path::Communication => Stage {
@@ -610,7 +606,6 @@ impl Path {
                     "asking, answering, earshot, and a claim that can be a lie and can be \
                      caught being one",
                 ),
-                born_knowing: &[],
             },
 
             Path::WritingAndCounting => Stage {
@@ -628,7 +623,6 @@ impl Path {
                     "memory that fades at a rate set by how the thing was learned, lessons \
                      keyed on a situation, and ownership held as recognition and nothing else",
                 ),
-                born_knowing: &[],
             },
 
             Path::MeasurementAndStandards => Stage {
@@ -649,7 +643,6 @@ impl Path {
                     "the larder reckoning counts days of food and a pack counts what it \
                      holds; both are exact numbers nobody could actually have measured",
                 ),
-                born_knowing: &[],
             },
 
             Path::WasteAndSanitation => Stage {
@@ -674,7 +667,6 @@ impl Path {
                     "waste that can be smelled, avoided and learned from, and ground that \
                      takes what is dropped on it back into the soil",
                 ),
-                born_knowing: &[],
             },
 
             // ---- getting food ---------------------------------------------
@@ -693,7 +685,6 @@ impl Path {
                     "foraging on a bearing year, a remembered patch to go back to, grain \
                      thrown out that comes up, and farming proper as a discovery past it",
                 ),
-                born_knowing: &[],
             },
 
             Path::FishingAndAquaculture => Stage {
@@ -708,11 +699,10 @@ impl Path {
                 can_do: &["crabs, molluscs, frogs, turtles and aquatic plants"],
                 held_back_by: &["very local", "labour-intensive", "seasonal", "low output"],
                 standing: Standing::Part(
-                    "a rod is obvious, the run is on the calendar and a net is a discovery; \
-                     there is no shellfish and no wading, so a river is a thing you fish and \
-                     not a thing you pick over",
+                    "a rod - a line - is Stage 1 and found out, a net waits on it, and the \
+                     run is on the calendar; there is no shellfish and no wading, so a \
+                     river is a thing you fish and not a thing you pick over",
                 ),
-                born_knowing: &["fishingrod"],
             },
 
             Path::AnimalHusbandry => Stage {
@@ -729,7 +719,6 @@ impl Path {
                     "hunting pressure does shape prey - animals grow shy where they are \
                      hunted - and nothing follows a camp, scavenges waste, or is tolerated",
                 ),
-                born_knowing: &[],
             },
 
             // ---- tools and what is done with them --------------------------
@@ -747,10 +736,10 @@ impl Path {
                 can_do: &["cutting", "crushing", "scraping", "digging"],
                 held_back_by: &["blunt", "wears out fast", "made badly by hands that have not practised"],
                 standing: Standing::Stands(
-                    "knapping ordinary stone, a hand axe, a stone knife and a shovel are \
-                     all obvious; knapping flint proper is the discovery past them",
+                    "knapping ordinary stone and a hand axe are born knowledge; a stone \
+                     knife is Stage 1 and found out, a hafted shovel waits on the knife, \
+                     and knapping flint proper is the discovery past ordinary stone",
                 ),
-                born_knowing: &["knappedtip", "handaxe", "stoneknife", "shovel"],
             },
 
             Path::Weapons => Stage {
@@ -765,10 +754,10 @@ impl Path {
                 can_do: &["simple, low-skill production", "effective at close range"],
                 held_back_by: &["close range only", "nothing that kills at a distance"],
                 standing: Standing::Stands(
-                    "a sharpened stick and a stone-tipped spear are obvious and a bow is a \
-                     discovery, which is the whole of the Stage 0 limit spelled as a flag",
+                    "a sharpened stick is born knowledge; a stone-tipped spear and a bow \
+                     are found out and wait on a knife, which is the Stage 0 limit spelled \
+                     as gates",
                 ),
-                born_knowing: &["sharpenedstick", "spear", "sling"],
             },
 
             Path::Metalworking => Stage {
@@ -784,7 +773,6 @@ impl Path {
                     "the whole metal chain - a shiny lump, a blade, a knife, an axe, a \
                      spear - is a discovery, and none of it is obvious",
                 ),
-                born_knowing: &[],
             },
 
             Path::AnimalPoweredAndMechanical => Stage {
@@ -804,7 +792,6 @@ impl Path {
                     "every step in the making table costs effort out of a pair of hands and \
                      nothing else does any work anywhere in the model",
                 ),
-                born_knowing: &[],
             },
 
             // ---- where people live -----------------------------------------
@@ -824,7 +811,6 @@ impl Path {
                     "a shelter that is built out of what is to hand, that shelters against \
                      the exposure model, and that a people without timber digs instead",
                 ),
-                born_knowing: &[],
             },
 
             Path::ShelterSystems => Stage {
@@ -849,7 +835,6 @@ impl Path {
                     "a shelter has a condition and keeps the weather off; there is no \
                      smoke, no floor, no damp and no ventilation inside it",
                 ),
-                born_knowing: &[],
             },
 
             Path::Masonry => Stage {
@@ -867,7 +852,6 @@ impl Path {
                     "stone is a material for tools and for building, and nothing is ever \
                      stacked: there is no wall, no cairn and no hearth ring",
                 ),
-                born_knowing: &[],
             },
 
             Path::DomesticGoods => Stage {
@@ -888,10 +872,10 @@ impl Path {
                     "no dedicated furniture",
                 ],
                 standing: Standing::Part(
-                    "a carved bowl, a woven basket and a sewn bag are all obvious; nothing \
+                    "a carved bowl is born knowledge, and a woven basket and a sewn bag \
+                     are Stage 1 and found out; nothing \
                      furnishes a shelter, and sleeping is not a thing a place is better at",
                 ),
-                born_knowing: &["bowl", "basket", "leatherbag"],
             },
 
             Path::WaterSystems => Stage {
@@ -914,7 +898,6 @@ impl Path {
                      than nothing; the carrying half is one carved bowl that almost nobody \
                      ever makes",
                 ),
-                born_knowing: &["bowl"],
             },
 
             Path::MedicineAndPublicHealth => Stage {
@@ -939,7 +922,6 @@ impl Path {
                     "medicinal plants that do something, and illness that kills nine deaths \
                      in ten with nothing between the two - see ISSUES_FOUND #202",
                 ),
-                born_knowing: &[],
             },
 
             Path::DefensiveInfrastructure => Stage {
@@ -964,7 +946,6 @@ impl Path {
                      that is dangerous; nothing is built, nobody keeps watch, and a store is \
                      not hidden",
                 ),
-                born_knowing: &[],
             },
 
             Path::MaritimeAndBoatbuilding => Stage {
@@ -977,7 +958,6 @@ impl Path {
                     "water is something to drink and fish in and nothing crosses it: there \
                      is no swimming, no float and no crossing",
                 ),
-                born_knowing: &[],
             },
         }
     }
@@ -992,7 +972,7 @@ impl Path {
 pub fn everything_a_people_starts_knowing() -> std::collections::BTreeSet<&'static str> {
     EVERY_PATH
         .iter()
-        .flat_map(|path| path.stage_zero().born_knowing.iter().copied())
+        .flat_map(|path| path.born_knowing())
         .collect()
 }
 

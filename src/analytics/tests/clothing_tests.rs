@@ -103,6 +103,8 @@ fn a_cold_agent_makes_a_cloak_and_wears_it() {
             .inventory
             .add_item(InventoryItem::new_with_weight("flax".to_string(), 200, 1.0));
         agent.body_temperature.current = 34.0;
+        // A linen cloak waits on retting (Stage 3 cloth); this one knows it
+        agent.found_out_how_to("rettedflax");
     }
 
     assert_eq!(
@@ -306,6 +308,42 @@ fn a_cold_agent_ends_up_dressed() {
     );
 }
 
+/// Linen is found out, and furs are not: a cold man with flax and no
+/// retting makes nothing of the flax, and a cold man with hides makes a fur
+/// coat, which is Stage 0 of the clothing path.
+#[test]
+fn a_cold_man_wears_what_his_people_knows_how_to_make() {
+    let world = World::new(WorldConfig::default());
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+    {
+        let agent = &mut simulation.population.agents[0];
+        agent.inventory.max_weight = 500.0;
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight("flax".to_string(), 200, 1.0));
+        agent.body_temperature.current = 34.0;
+    }
+    let position = simulation.population.agents[0].state.position;
+
+    assert!(!simulation.population.agents[0].knows_how_to_make_garment("linen_cloak"));
+    let with_flax = simulation.clothing_action(&simulation.population.agents[0], position, true);
+    assert!(
+        !matches!(&with_flax, Some(Action::MakeClothing { garment }) if garment.starts_with("linen")),
+        "nobody here has retted flax, so there is no linen: {with_flax:?}"
+    );
+
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("hides".to_string(), 20, 1.0));
+    let with_hides = simulation.clothing_action(&simulation.population.agents[0], position, true);
+    assert!(
+        matches!(&with_hides, Some(Action::MakeClothing { garment }) if garment == "fur_coat" || garment == "fur_hat"),
+        "furs are born knowledge: {with_hides:?}"
+    );
+}
+
 /// A parent with a coat hands it to a child who has none.
 ///
 /// Clothing hangs off two drives: Shelter is a coat for yourself, Protection
@@ -437,6 +475,9 @@ fn a_cold_man_dresses(seed: u64, days: u32) -> bool {
     ));
 
     let mut simulation = Simulation::new(world, population);
+    // "Flax and an awl on him": the awl was the founders' knife, which is
+    // Stage 1 now; this man has one, as the kit before Stage 0 gave him.
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
     simulation.population.agents[0].inventory.max_weight = 500.0;
 
     // Seeded here rather than at the top, because building the world and the
@@ -456,6 +497,13 @@ fn a_cold_man_dresses(seed: u64, days: u32) -> bool {
     simulation.population.agents[0]
         .inventory
         .add_item(InventoryItem::new_with_weight("flax".to_string(), 200, 1.0));
+
+    // Linen is Stage 3 of the textile path and waits on retted flax, and
+    // sewing on an awl, which is the knife (`knows_how_to_make_garment`);
+    // this is a man whose people have got that far, because the test is
+    // about whether he dresses, not about whether linen has been found out.
+    simulation.population.agents[0].found_out_how_to("rettedflax");
+    simulation.population.agents[0].found_out_how_to("stoneknife");
 
     // An agent that wants to be warmer than this weather will ever make it.
     // Forcing the current temperature instead would not survive the turn,

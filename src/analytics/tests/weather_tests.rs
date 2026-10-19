@@ -96,7 +96,7 @@ fn a_fish_can_be_cut_into_strips() {
     let quartering = making::how_to_work("cut", "fish").expect("a fish comes apart");
     assert_eq!(quartering.makes, "fishportions");
     assert!(
-        quartering.obvious,
+        quartering.born_known(),
         "there is nothing to discover about a fish coming apart"
     );
 

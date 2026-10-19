@@ -16,7 +16,6 @@ use crate::core::traits::TraitSet;
 use super::gossip::KnowledgeBase;
 use super::observational_learning::ObservationalLearning;
 use super::transport::TransportSystem;
-use crate::environment::TechnologyKnowledge;
 use crate::world::nutrition::{FoodData, NutritionalState, EatResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1824,7 +1823,6 @@ pub struct Agent {
     pub knowledge: KnowledgeBase,
     pub observational_learning: ObservationalLearning,
     pub transport: TransportSystem,
-    pub technology_knowledge: TechnologyKnowledge,
     pub exploration_knowledge: super::exploration::ExplorationKnowledge, // Map discovery and exploration
     /// How many times this one has been laid up by each thing.
     ///
@@ -2075,7 +2073,6 @@ impl Agent {
             knowledge: KnowledgeBase::default(),
             observational_learning: ObservationalLearning::default(),
             transport: TransportSystem::default(),
-            technology_knowledge: TechnologyKnowledge::default(),
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             times_laid_up: std::collections::BTreeMap::new(),
             found_out: Self::what_anybody_is_born_knowing(),
@@ -3496,15 +3493,13 @@ impl Agent {
     /// stockpile.
     ///
     /// They are the same named things the chain in `environment::making`
-    /// turns out, so that what a founder wears through is a thing his people
-    /// know how to replace.
-    /// And a basket, because a people that walked in carrying two days of food
-    /// carried it in something. Without one an agent holds what two hands hold
-    /// and nothing else - see `WHAT_TWO_HANDS_HOLD`.
-    pub(crate) const WHAT_THEY_CARRY: [(&'static str, u32, f32); 3] = [
+    /// turns out, and Stage 0 of it, so that what a founder wears through is a
+    /// thing his people know how to replace: a hand axe, and flakes to cut
+    /// with. A stone knife and a basket are Stage 1 of the tool and storage
+    /// paths - things this people finds out, not things it walks in with.
+    pub(crate) const WHAT_THEY_CARRY: [(&'static str, u32, f32); 2] = [
         ("handaxe", 1, 2.0),
-        ("stoneknife", 1, 0.5),
-        ("basket", 1, 1.0),
+        ("knappedtip", 2, 0.3),
     ];
 
     /// And what they arrive with in the way of food.
@@ -3587,7 +3582,7 @@ impl Agent {
     /// past that is a thing somebody had to find out, and only the people who
     /// found it out - or were shown - can do it.
     pub fn knows_how_to(&self, step: &crate::environment::making::Making) -> bool {
-        step.obvious || self.found_out.contains(step.makes)
+        step.born_known() || self.found_out.contains(step.makes)
     }
 
     /// The discoveries this agent is far enough along to have.
@@ -3617,6 +3612,33 @@ impl Agent {
     /// Whether this agent knows any way at all of making a named thing.
     pub fn knows_how_to_make(&self, what: &str) -> bool {
         crate::environment::making::every_way_to_make(what).any(|step| self.knows_how_to(step))
+    }
+
+    /// Whether this agent knows how to make a garment.
+    ///
+    /// A garment is not found out the way a tool is - nobody stumbles on a
+    /// shirt over a fire - so one the technology catalogue does not put at
+    /// Stage 0 comes within reach as soon as what it waits on is known: a
+    /// sewn shirt once there is an awl (the knife), linen once flax can be retted
+    /// (`catalogue::what_comes_before`).
+    pub fn knows_how_to_make_garment(&self, garment: &str) -> bool {
+        use crate::environment::catalogue;
+        let link = format!("wear:{garment}");
+        catalogue::is_born_knowledge(&link)
+            || catalogue::what_comes_before(&link)
+                .iter()
+                .all(|first| self.knows_how_to_get(first))
+    }
+
+    /// Whether this agent knows any way to a product of the making chain, by
+    /// a making or by a working: retted flax and a needle are both workings,
+    /// which `knows_how_to_make` does not look at.
+    pub fn knows_how_to_get(&self, what: &str) -> bool {
+        self.found_out.contains(what)
+            || self.knows_how_to_make(what)
+            || crate::environment::making::EVERY_WORKING
+                .iter()
+                .any(|working| working.makes == what && working.born_known())
     }
 
     /// Write down that this agent has found out how to do something.
@@ -3726,12 +3748,12 @@ impl Agent {
         // Something somebody worked out how to make
         if making::EVERY_WORKING
             .iter()
-            .any(|working| working.makes == item_id && !working.obvious)
+            .any(|working| working.makes == item_id && !working.born_known())
         {
             return Some(item_id.to_string());
         }
 
-        if making::how_to_make(item_id).is_some_and(|step| !step.obvious) {
+        if making::how_to_make(item_id).is_some_and(|step| !step.born_known()) {
             return Some(item_id.to_string());
         }
 
@@ -4029,7 +4051,7 @@ impl Agent {
 
         let could: Vec<&'static making::Working> = making::EVERY_WORKING
             .iter()
-            .filter(|working| working.obvious || self.found_out.contains(working.makes))
+            .filter(|working| working.born_known() || self.found_out.contains(working.makes))
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
             .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
             .filter(|working| self.how_many_i_have(working.makes) < making::A_FEW_SPARE)
@@ -4123,7 +4145,7 @@ impl Agent {
             })
             .find_map(|(id, item)| {
                 making::how_to_work("cut", id)
-                    .filter(|working| working.obvious || self.found_out.contains(working.makes))
+                    .filter(|working| working.born_known() || self.found_out.contains(working.makes))
                     .filter(|working| item.quantity >= working.how_much)
             })
     }
@@ -4225,7 +4247,7 @@ impl Agent {
             })
             .find_map(|(id, item)| {
                 making::how_to_work("cut", id)
-                    .filter(|working| working.obvious || self.found_out.contains(working.makes))
+                    .filter(|working| working.born_known() || self.found_out.contains(working.makes))
                     .filter(|working| item.quantity >= working.how_much)
                     .map(|working| (working.verb.to_string(), working.to.to_string()))
             })
@@ -4380,7 +4402,7 @@ impl Agent {
         crate::environment::making::EVERY_WORKING
             .iter()
             .filter(|working| working.holds.is_some_and(|held| held > 0.0))
-            .filter(|working| working.obvious || self.found_out.contains(working.makes))
+            .filter(|working| working.born_known() || self.found_out.contains(working.makes))
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
             .max_by(|a, b| {
                 a.holds
@@ -4435,8 +4457,8 @@ impl Agent {
     /// **An edge.** Everything that comes off an animal, every fish and
     /// joint cut into portions, every hide scraped and every stick carved
     /// wants one, and with none a carcass keeps fifteen in a hundred of
-    /// itself. Founders walk in with a stone knife (`WHAT_THEY_CARRY`); it is
-    /// worn through in thirty jobs, and nothing made another, because nothing
+    /// itself. Founders once walked in with a stone knife; it was worn through
+    /// in thirty jobs, and nothing made another, because nothing
     /// ever asked for one - a better tool is wanted when the job in hand asks
     /// for its trade (`would_a_better_tool_pay`), and no job asks for a knife
     /// that cannot be done without one. Counted on one world, adults carrying
@@ -5199,7 +5221,7 @@ impl Agent {
         // before, as often as it takes to have the hand they arrive with at
         // the trade it belongs to: a founder is as good at a spear as he was
         // the day before he walked in, and no better.
-        for step in crate::environment::making::EVERY_STEP.iter().filter(|step| step.obvious) {
+        for step in crate::environment::making::EVERY_STEP.iter().filter(|step| step.born_known()) {
             if let Some(trade) = self.skills.get_skill_if_exists(step.hands) {
                 let times = super::skills::Skills::makings_for_level(trade.level);
                 self.skills.have_made_before(step.makes, times);

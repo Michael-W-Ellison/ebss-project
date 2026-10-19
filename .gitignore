@@ -37,3 +37,4 @@ target/
 
 # Measurement working files: run outputs and harness binaries.
 scratchpad/
+__pycache__/

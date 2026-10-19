@@ -42,10 +42,12 @@ pub struct Making {
     pub hands: SkillType,
     /// What it costs to do once, in energy
     pub effort: f32,
-    /// Whether a people arriving here already know it.
+    /// Whether this is the plain way of making the thing.
     ///
-    /// The things a stone-age people bring with them: cordage, knapping, a
-    /// hafted tool, a tent. Everything else is a thing to find out.
+    /// Whether the *thing* is born knowledge or found out is the technology
+    /// catalogue's to say (`born_known`). This says whether, knowing the
+    /// thing, a person knows this way of making it too, or has to work it out
+    /// separately: flint for stone in a knapped tip is the one way that does.
     pub obvious: bool,
     /// Whether it wants a fire burning where the work is done.
     ///
@@ -61,6 +63,12 @@ pub struct Making {
 }
 
 impl Making {
+    /// Whether anybody arriving here already knows this way of making it:
+    /// the plain way, of a thing the technology catalogue puts at Stage 0.
+    pub fn born_known(&self) -> bool {
+        self.obvious && crate::environment::catalogue::born_knowing_how_to_make(self.makes)
+    }
+
     /// Whether these makings are all to hand.
     pub fn makings_to_hand(&self, holding: impl Fn(&str) -> u32) -> bool {
         self.needs
@@ -239,7 +247,9 @@ pub const KNAPPED_TIP_FROM_FLINT: Making = Making {
 /// times in fourteen thousand agent-turns.
 ///
 /// It is a stick and an afternoon, which is the point: the first upgrade a
-/// people can afford has to be one they can afford on their first day.
+/// people can afford has to be one they can afford on their first day. It is
+/// shaped with the hand axe, which is Stage 0 of the tool path; the knife is
+/// Stage 1.
 pub const DIGGING_STICK: Making = Making {
     makes: "diggingstick",
     how_many: 1,
@@ -248,7 +258,7 @@ pub const DIGGING_STICK: Making = Making {
     effort: 5.0,
     obvious: true,
     over_a_fire: false,
-    wants_in_hand: Some("stoneknife"),
+    wants_in_hand: Some("handaxe"),
 };
 
 /// Cord and a pouch of stone: what a people hunts with when it has no spear.
@@ -296,7 +306,7 @@ pub const BOW: Making = Making {
     needs: &[("wood", 2), ("lashing", 2)],
     hands: SkillType::Crafting,
     effort: 12.0,
-    obvious: false,
+    obvious: true,
     over_a_fire: false,
     wants_in_hand: Some("stoneknife"),
 };
@@ -331,7 +341,7 @@ pub const FISHING_NET: Making = Making {
     needs: &[("lashing", 4)],
     hands: SkillType::Crafting,
     effort: 14.0,
-    obvious: false,
+    obvious: true,
     over_a_fire: false,
     wants_in_hand: None,
 };
@@ -407,7 +417,7 @@ pub const WHEEL: Making = Making {
     needs: &[("wood", 2), ("lashing", 1)],
     hands: SkillType::Carpentry,
     effort: 16.0,
-    obvious: false,
+    obvious: true,
     over_a_fire: false,
     wants_in_hand: Some("handaxe"),
 };
@@ -429,7 +439,7 @@ pub const HANDCART: Making = Making {
     needs: &[("wheel", 2), ("wood", 3), ("lashing", 2)],
     hands: SkillType::Carpentry,
     effort: 20.0,
-    obvious: false,
+    obvious: true,
     over_a_fire: false,
     wants_in_hand: Some("handaxe"),
 };
@@ -449,7 +459,7 @@ pub const SHARPENED_STICK: Making = Making {
     effort: 4.0,
     obvious: true,
     over_a_fire: false,
-    wants_in_hand: Some("stoneknife"),
+    wants_in_hand: Some("handaxe"),
 };
 
 /// Stick, tip, lashing.
@@ -500,7 +510,7 @@ pub const SHINY_LUMP: Making = Making {
     needs: &[("iron", 2)],
     hands: SkillType::Crafting,
     effort: 10.0,
-    obvious: false,
+    obvious: true,
     over_a_fire: true,
     wants_in_hand: None,
 };
@@ -512,7 +522,7 @@ pub const METAL_BLADE: Making = Making {
     needs: &[("shinylump", 1)],
     hands: SkillType::Crafting,
     effort: 12.0,
-    obvious: false,
+    obvious: true,
     over_a_fire: false,
     wants_in_hand: Some("handaxe"),
 };
@@ -524,7 +534,7 @@ pub const METAL_KNIFE: Making = Making {
     needs: &[("metalblade", 1), ("lashing", 1)],
     hands: SkillType::Crafting,
     effort: 6.0,
-    obvious: false,
+    obvious: true,
     over_a_fire: false,
     wants_in_hand: None,
 };
@@ -558,7 +568,7 @@ pub struct Working {
     pub hands: SkillType,
     /// What it costs to do once
     pub effort: f32,
-    /// Whether a people arriving here already know it
+    /// Whether this is the plain way of making the thing (see `Making::obvious`)
     pub obvious: bool,
     /// How much liquid what comes out will hold, if it holds any.
     ///
@@ -634,7 +644,7 @@ pub const SCRAPE_A_STICK: Working = Working {
     how_many: 3,
     hands: SkillType::Leatherworking,
     effort: 3.0,
-    obvious: false,
+    obvious: true,
     holds: None,
     feeds: None,
     wants_water: 0.0,
@@ -654,7 +664,7 @@ pub const CRUSH_GRAIN: Working = Working {
     how_many: 3,
     hands: SkillType::Mining,
     effort: 7.0,
-    obvious: false,
+    obvious: true,
     holds: None,
     feeds: Some(crate::world::ItemType::Flour),
     wants_water: 0.0,
@@ -693,7 +703,7 @@ pub const MOLD_CLAY: Working = Working {
     // person eats, carries things in, or builds with; a shape in unfired clay
     // is the first that makes nothing at all, and a people that starts
     // knowing how spends its winters making them. See ISSUES_FOUND.md #199.
-    obvious: false,
+    obvious: true,
     holds: None,
     feeds: None,
     // Clay out of a riverbank is already wet, and asking for carried water
@@ -723,7 +733,7 @@ pub const FIRE_A_POT: Working = Working {
     how_many: 1,
     hands: SkillType::Crafting,
     effort: 8.0,
-    obvious: false,
+    obvious: true,
     holds: Some(WHAT_A_FIRED_POT_HOLDS),
     feeds: None,
     wants_water: 0.0,
@@ -744,7 +754,7 @@ pub const FIRE_BRICKS: Working = Working {
     how_many: 2,
     hands: SkillType::Crafting,
     effort: 10.0,
-    obvious: false,
+    obvious: true,
     holds: None,
     feeds: None,
     wants_water: 0.0,
@@ -929,7 +939,7 @@ pub const SOAK_FLAX: Working = Working {
     how_many: 3,
     hands: SkillType::Crafting,
     effort: 4.0,
-    obvious: false,
+    obvious: true,
     holds: None,
     feeds: None,
     wants_water: 2.0,
@@ -949,7 +959,7 @@ pub const FERMENT_FRUIT: Working = Working {
     how_many: 3,
     hands: SkillType::Cooking,
     effort: 5.0,
-    obvious: false,
+    obvious: true,
     holds: None,
     feeds: Some(crate::world::ItemType::Ale),
     wants_water: 3.0,
@@ -971,7 +981,7 @@ pub const BOIL_FLOUR: Working = Working {
     how_many: 3,
     hands: SkillType::Cooking,
     effort: 6.0,
-    obvious: false,
+    obvious: true,
     holds: None,
     feeds: Some(crate::world::ItemType::Bread),
     wants_water: 2.0,
@@ -1017,7 +1027,7 @@ pub const GRIND_NUTS: Working = Working {
     how_many: 3,
     hands: SkillType::Mining,
     effort: 8.0,
-    obvious: false,
+    obvious: true,
     holds: None,
     feeds: Some(crate::world::ItemType::Flour),
     wants_water: 0.0,
@@ -1038,7 +1048,7 @@ pub const SPLIT_WOOD: Working = Working {
     how_many: 3,
     hands: SkillType::Crafting,
     effort: 6.0,
-    obvious: false,
+    obvious: true,
     holds: None,
     feeds: None,
     wants_water: 0.0,
@@ -1059,12 +1069,20 @@ pub const DRILL_ANTLER: Working = Working {
     how_many: 2,
     hands: SkillType::Crafting,
     effort: 9.0,
-    obvious: false,
+    obvious: true,
     holds: None,
     feeds: None,
     wants_water: 0.0,
     over_a_fire: false,
 };
+
+impl Working {
+    /// Whether anybody arriving here already knows this working (see
+    /// `Making::born_known`).
+    pub fn born_known(&self) -> bool {
+        self.obvious && crate::environment::catalogue::born_knowing_how_to_make(self.makes)
+    }
+}
 
 /// The working of that verb on that thing, if there is one.
 pub fn how_to_work(verb: &str, to: &str) -> Option<&'static Working> {
@@ -1076,7 +1094,7 @@ pub fn how_to_work(verb: &str, to: &str) -> Option<&'static Working> {
 
 /// The workings nobody arrives knowing.
 pub fn every_working_to_find_out() -> impl Iterator<Item = &'static Working> {
-    EVERY_WORKING.iter().filter(|working| !working.obvious)
+    EVERY_WORKING.iter().filter(|working| !working.born_known())
 }
 
 /// Putting the wrong thing in the right place.
@@ -1242,7 +1260,7 @@ pub const METAL_AXE: Making = Making {
     needs: &[("wood", 1), ("metalblade", 1), ("lashing", 1)],
     hands: SkillType::Crafting,
     effort: 9.0,
-    obvious: false,
+    obvious: true,
     over_a_fire: false,
     wants_in_hand: None,
 };
@@ -1254,7 +1272,7 @@ pub const METAL_SPEAR: Making = Making {
     needs: &[("wood", 1), ("metalblade", 1), ("lashing", 1)],
     hands: SkillType::Crafting,
     effort: 9.0,
-    obvious: false,
+    obvious: true,
     over_a_fire: false,
     wants_in_hand: None,
 };
@@ -1293,7 +1311,7 @@ pub const EVERY_STEP: &[Making] = &[
 
 /// The steps nobody arrives knowing.
 pub fn everything_to_find_out() -> impl Iterator<Item = &'static Making> {
-    EVERY_STEP.iter().filter(|step| !step.obvious)
+    EVERY_STEP.iter().filter(|step| !step.born_known())
 }
 
 /// What somebody has to know already before a discovery can occur to them.
@@ -1301,23 +1319,16 @@ pub fn everything_to_find_out() -> impl Iterator<Item = &'static Making> {
 /// "Why are agents crafting wheels? That sort of technology should be far down
 /// the development path." It was one rung up from the travois: anybody holding
 /// two pieces of wood, a lashing and a handaxe could have the thought, and
-/// those are the four commonest things in a stone-age pack. Measured over two
-/// years the wheel was the busiest making in the settlement.
+/// those are the four commonest things in a stone-age pack. So the wheel waits
+/// on fired pottery and a metal axe, the handcart on the wheel, and ore does
+/// not run in a cooking fire - the first copper ran in a potter's kiln - so
+/// the shiny lump waits on a fired pot (#336).
 ///
-/// A disc that turns true on an axle came long after the potter's wheel, and
-/// was cut with metal: the first carts are copper-age. So the wheel waits on
-/// fired pottery and a metal axe, and the handcart waits on the wheel. Nothing
-/// else in the chain is held back this way; its makings already do that.
+/// Those gates, and every other, are the technology catalogue's: the products
+/// of the listings that the thing's own listings `need`
+/// (`catalogue::what_comes_before_making`).
 pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
-    match what {
-        "wheel" => &["stoneware", "metalaxe"],
-        "handcart" => &["wheel"],
-        // Ore does not run in a cooking fire. The first copper ran in a
-        // potter's kiln, so nobody has the thought before they have fired a
-        // pot (#336).
-        "shinylump" => &["stoneware"],
-        _ => &[],
-    }
+    crate::environment::catalogue::what_comes_before_making(what)
 }
 
 /// How many times somebody has to have done a thing before a discovery can
@@ -1380,13 +1391,13 @@ pub fn what_firing_this_might_show(makes: &str) -> Option<(&'static str, u32, &'
 pub fn is_a_familiar_thing(what: &str) -> bool {
     EVERY_STEP
         .iter()
-        .filter(|step| step.obvious)
+        .filter(|step| step.born_known())
         .any(|step| {
             step.makes == what || step.needs.iter().any(|(needs, _)| *needs == what)
         })
         || EVERY_WORKING
             .iter()
-            .filter(|working| working.obvious)
+            .filter(|working| working.born_known())
             .any(|working| working.to == what || working.makes == what)
 }
 
@@ -1509,7 +1520,7 @@ const AS_FAR_BACK_AS_ANYBODY_PLANS: usize = 4;
 /// back from the thing wanted through what it is short of, and returns the
 /// first step along the way whose makings are actually in the pack.
 pub fn what_to_do_first(what: &str, holding: &impl Fn(&str) -> u32) -> Option<&'static Making> {
-    what_to_do_first_knowing(what, holding, &|step: &Making| step.obvious)
+    what_to_do_first_knowing(what, holding, &|step: &Making| step.born_known())
 }
 
 /// The same, for somebody who knows more than he was born knowing.
@@ -1664,7 +1675,7 @@ pub const A_FEW_SPARE: u32 = 4;
 /// spear with an empty pack it answers wood, then stone, then flax, in the
 /// order the spear needs them.
 pub fn what_is_wanting(what: &str, holding: &impl Fn(&str) -> u32) -> Option<&'static str> {
-    wanting(what, holding, &|step: &Making| step.obvious, 0)
+    wanting(what, holding, &|step: &Making| step.born_known(), 0)
 }
 
 fn wanting(

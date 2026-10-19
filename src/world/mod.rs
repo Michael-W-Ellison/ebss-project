@@ -60,7 +60,6 @@ pub mod grid;
 pub mod render;
 pub mod production;
 pub mod economy;
-pub mod technology;
 pub mod climate;
 pub mod combat;
 pub mod crafting;
@@ -88,7 +87,6 @@ pub use grid::{Grid, Position};
 pub use render::AsciiRenderer;
 pub use production::{Recipe, Quality, ResourceRequirement, ProductionOutput};
 pub use economy::{TradeOffer, Marketplace, MarketData, CompletedTrade, MarketStatistics};
-pub use technology::{Technology, TechnologyTree, KnownTechnologies, TechEra, DiscoveryEvent};
 pub use climate::{ClimateManager, terrain_to_biome};
 pub use resource_spawning::{
     NaturalisticResourceConfig, NaturalisticSpawner, TerrainResourceMapper,
@@ -135,8 +133,6 @@ pub struct World {
     pub buildings: Vec<Building>,
     pub storehouse_inventory: Inventory,
     pub marketplace: Marketplace,
-    #[serde(skip)]
-    pub tech_tree: TechnologyTree, // Global technology tree (not serialized, recreated)
     pub climate: ClimateManager,
     pub heat_sources: HeatSourceRegistry,
     pub animals: AnimalManager,
@@ -1325,7 +1321,6 @@ impl World {
             buildings: Vec::new(),
             storehouse_inventory: Inventory::new(10000), // Large capacity
             marketplace: Marketplace::new(),
-            tech_tree: TechnologyTree::new(),
             climate: ClimateManager::default(),
             heat_sources: HeatSourceRegistry::new(),
             // What a map will hold at the very outside. These are not the
