@@ -232,7 +232,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // knife, basket and spear are found out.
     // Up to 7,903 for #346: hunter-gatherers first - no longhouse waiting,
     // sowing and gardens found out in stages, and a cache no anchor.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_903;
+    // Up to 8,703 for #347: the shallows and fish traps, a wasting body wants
+    // no child, and partners go halfway to each other.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 8_703;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -516,7 +518,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // catalogue - Stage 0 born, the rest found out behind its gates.
     // Down 0.2% to 977,779 for #346: hunter-gatherers first, agriculture in
     // the document's three stages.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 977_779;
+    // Up 6.3% to 1,039,760 for #347: the shallows and fish traps, a wasting
+    // body wants no child, and partners go halfway to each other.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_039_760;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
