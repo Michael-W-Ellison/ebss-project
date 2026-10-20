@@ -512,6 +512,33 @@ impl Simulation {
     /// meaning to.
     pub(in crate::analytics) const OFFAL_SHARE: f32 = 0.35;
 
+    /// The chance a thrust or a cast comes to something, for a hand of this
+    /// skill with tackle this good (`how_fast_my_tools_make_this_go`) in a
+    /// reach this thick, nought to one.
+    pub(in crate::analytics) fn odds_of_a_cast(skill: f32, tackle: f32, thickness: f32) -> f32 {
+        let hand = (skill / 10.0).clamp(0.0, 0.5) + (tackle - 1.0) * 0.3;
+        (Self::A_THRUST_THAT_TELLS + 0.4 * thickness + hand).clamp(0.0, 0.9)
+    }
+
+    /// And the chance a turn picking over the shallows of a reach this thick
+    /// comes to a fish, a handful of shellfish or a crab.
+    ///
+    /// Steadier than a thrust and smaller: no skill and no tackle come into
+    /// it, and what the edge of a thin reach holds is still there to be
+    /// turned over when the fish have gone deep.
+    pub(in crate::analytics) fn odds_in_the_shallows(thickness: f32) -> f32 {
+        Self::WHAT_THE_SHALLOWS_GIVE_A_HAND
+            * (Self::WHAT_THIN_SHALLOWS_GIVE + (1.0 - Self::WHAT_THIN_SHALLOWS_GIVE) * thickness)
+    }
+
+    /// How often a turn picking over a full reach's shallows comes to
+    /// something.
+    pub(in crate::analytics) const WHAT_THE_SHALLOWS_GIVE_A_HAND: f32 = 0.8;
+
+    /// And what share of that the shallows of an empty-looking reach still
+    /// give.
+    pub(in crate::analytics) const WHAT_THIN_SHALLOWS_GIVE: f32 = 0.6;
+
     /// The reach an agent standing here can work, if there is one.
     pub(in crate::analytics) fn reach_within_cast(
         &self,
@@ -553,12 +580,6 @@ impl Simulation {
     ) -> Option<Action> {
         use crate::agents::practices::Undertaking;
 
-        // Somebody who has stood in the water a dozen times and come out with
-        // nothing stops going to the water.
-        if !agent.lessons.worth_trying(Undertaking::Fishing) {
-            return None;
-        }
-
         // Fishing is what an agent does when it wants food or wants a store of
         // it. Both, in a settlement beside a river, most of the year.
         let hunger = agent
@@ -583,8 +604,25 @@ impl Simulation {
             return None;
         }
 
-        if self.reach_within_cast(agent_position).is_some() {
-            return Some(Action::Fish);
+        // Fish in his own traps come first, whatever he has come to believe
+        // about standing in a river: a catch is a catch.
+        if let Some(going) = self.fish_in_my_traps(agent, agent_position) {
+            return Some(going);
+        }
+
+        // And somebody else's, if nobody is looking and it is worth it.
+        if let Some(whose) = self.a_trap_worth_robbing(agent, agent_position) {
+            return Some(Action::RobFishTrap { whose });
+        }
+
+        // Somebody who has stood in the water a dozen times and come out with
+        // nothing stops going to the water.
+        if !agent.lessons.worth_trying(Undertaking::Fishing) {
+            return None;
+        }
+
+        if let Some(reach) = self.reach_within_cast(agent_position) {
+            return Some(self.how_to_work_this_water(agent, reach));
         }
 
         // Otherwise walk to the best water within reason: the thickest reach,
@@ -623,6 +661,199 @@ impl Simulation {
         Some(Action::Move {
             target: (best.x, best.y, agent_position.2),
         })
+    }
+
+    /// A trap of this one's with fish in it: empty it if it is within a cast,
+    /// walk to it if it is within a line's walk.
+    ///
+    /// The same bound a trapline keeps (`AS_FAR_AS_A_LINE_IS_WORTH_WALKING`):
+    /// traps are set round where a people is, and one left behind when the
+    /// camp moved on is the river's again.
+    pub(in crate::analytics) fn fish_in_my_traps(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let here = (agent_position.0, agent_position.1);
+        let paces = |trap: &crate::world::FishTrap| (trap.at.x - here.0).abs().max((trap.at.y - here.1).abs());
+        let nearest = self
+            .world
+            .fish_traps
+            .iter()
+            .filter(|trap| trap.set_by == agent.id && trap.holds > 0)
+            .filter(|trap| paces(trap) <= Self::AS_FAR_AS_A_LINE_IS_WORTH_WALKING)
+            .min_by_key(|trap| paces(trap))?;
+
+        if paces(nearest) <= Self::CLOSE_ENOUGH_TO_A_SNARE {
+            Some(Action::CheckFishTraps)
+        } else {
+            Some(Action::Move {
+                target: (nearest.at.x, nearest.at.y, agent_position.2),
+            })
+        }
+    }
+
+    /// Somebody else's trap within reach with fish in it, that this agent
+    /// would empty: weighed the way taking from somebody's pack is weighed -
+    /// what it would answer against who would see it (`would_i_take_it`).
+    ///
+    /// A trap is an easier thing to rob than a man, because its owner is
+    /// seldom standing beside it. Never a trap of family or a partner's: that
+    /// is not theft in a band, it is supper.
+    pub(in crate::analytics) fn a_trap_worth_robbing(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        use crate::agents::RelationshipType;
+
+        let here = (agent_position.0, agent_position.1);
+        let trap = self
+            .world
+            .fish_traps
+            .iter()
+            .filter(|trap| trap.set_by != agent.id && trap.holds > 0)
+            .filter(|trap| {
+                (trap.at.x - here.0).abs().max((trap.at.y - here.1).abs()) <= Self::CLOSE_ENOUGH_TO_A_SNARE
+            })
+            .filter(|trap| {
+                !agent.relationships.get_relationship(&trap.set_by).is_some_and(|bond| {
+                    bond.is_family() || bond.relationship_type == RelationshipType::Partner
+                })
+            })
+            .max_by_key(|trap| trap.holds)?;
+
+        // Whoever is looking, and the owner, who is not but will know: the
+        // trap remembers who emptied it (`going_round_the_traps`).
+        let what_the_owner_is_to_me = agent
+            .relationships
+            .get_relationship(&trap.set_by)
+            .map_or(0.0, |bond| bond.bond_strength);
+        let cost = self
+            .what_taking_here_would_cost(agent, agent_position)
+            .max(agent.what_taking_it_would_cost_me(1, what_the_owner_is_to_me));
+        let gain = agent.what_taking_this_would_answer("fish", trap.holds);
+        agent.would_i_take_it(gain, cost).then_some(trap.set_by)
+    }
+
+    /// What to do with a reach within a cast.
+    ///
+    /// Set a trap in it if he has one with him and it is not already trapped;
+    /// make one if he knows how and has the makings, while he keeps fewer
+    /// than he can; and otherwise whichever of a thrust and picking over the
+    /// shallows he expects to bring more out of it. For somebody with no
+    /// tackle and no hand for it, on a thin reach, that is the shallows.
+    pub(in crate::analytics) fn how_to_work_this_water(
+        &self,
+        agent: &crate::agents::Agent,
+        reach: crate::world::Position,
+    ) -> Action {
+        use crate::agents::SkillType;
+
+        let traps_kept = self.world.fish_traps.iter().filter(|trap| trap.set_by == agent.id).count();
+        let room_for_one = traps_kept < Self::TRAPS_IN_THE_WATER
+            && !self.world.fish_traps.iter().any(|trap| trap.at == reach);
+        if room_for_one && agent.knows_how_to_do("SetFishTrap") {
+            if agent.how_many_i_have("fishtrap") > 0 {
+                return Action::SetFishTrap;
+            }
+            let trap = &crate::environment::making::FISH_TRAP;
+            if agent.knows_how_to(trap) && trap.makings_to_hand(|what| agent.how_many_i_have(what)) {
+                return Action::Craft {
+                    item_type: trap.makes.to_string(),
+                };
+            }
+        }
+
+        let standing = self.world.nodes_on(reach).next().map(|r| r.amount).unwrap_or(0);
+        let thickness = (standing as f32 / Self::A_GOOD_REACH).clamp(0.0, 1.0);
+        let skill = agent
+            .skills
+            .get_skill_if_exists(SkillType::Fishing)
+            .map(|skill| skill.level)
+            .unwrap_or(-10) as f32;
+        let tackle = agent.how_fast_my_tools_make_this_go(SkillType::Fishing);
+        let a_cast = Self::odds_of_a_cast(skill, tackle, thickness)
+            * ((Self::FISH_PER_CAST as f32 * tackle).round()).max(1.0);
+        let by_hand = Self::odds_in_the_shallows(thickness);
+
+        if by_hand > a_cast && agent.knows_how_to_do("ForageShallows") {
+            Action::ForageShallows
+        } else {
+            Action::Fish
+        }
+    }
+
+    /// Traps in the water: make one, carry it to a reach nobody has trapped,
+    /// and set it.
+    ///
+    /// Beside the snares in the Preparedness ladder, and for the same reason:
+    /// a trap is food put by that keeps itself alive until it is wanted. It
+    /// has to be asked for here rather than only at the waterside, because
+    /// measured that way nobody ever made one - twelve people in sixteen knew
+    /// how inside a fortnight, and in two years nobody was once standing at a
+    /// reach with two wood and two lashing in their pack.
+    pub(in crate::analytics) fn putting_traps_in_the_water(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        if !agent.knows_how_to_do("SetFishTrap") {
+            return None;
+        }
+        let hunger = agent.drives.get(DriveType::Hunger).map(|drive| drive.urgency()).unwrap_or(0.0);
+        let putting_by = agent
+            .drives
+            .get(DriveType::Preparedness)
+            .map(|drive| drive.urgency())
+            .unwrap_or(0.0);
+        if hunger.max(putting_by) < Self::WORTH_SETTING_STRING {
+            return None;
+        }
+        let kept = self.world.fish_traps.iter().filter(|trap| trap.set_by == agent.id).count();
+        let carried = agent.how_many_i_have("fishtrap") as usize;
+        if kept + carried.min(1) > Self::TRAPS_IN_THE_WATER {
+            return None;
+        }
+        let untrapped = |at: crate::world::Position| !self.world.fish_traps.iter().any(|trap| trap.at == at);
+
+        // The nearest reach worth a trap that nobody has trapped, within the
+        // walk a man would make to fish.
+        let here = crate::world::Position::new(agent_position.0, agent_position.1);
+        let paces = |at: crate::world::Position| (at.x - here.x).abs().max((at.y - here.y).abs());
+        let water = self
+            .nodes_known_to(agent, here, Self::WORTH_WALKING_TO_WATER as u32)
+            .filter(|resource| resource.resource_type.grows_in_water())
+            .filter(|resource| resource.amount > 0)
+            .map(|resource| resource.position)
+            .filter(|at| untrapped(*at) && paces(*at) <= Self::WORTH_WALKING_TO_WATER)
+            .min_by_key(|at| paces(*at))?;
+
+        if carried == 0 {
+            if kept >= Self::TRAPS_IN_THE_WATER {
+                return None;
+            }
+            let holding = |what: &str| agent.how_many_i_have(what);
+            let knows = |step: &crate::environment::making::Making| agent.knows_how_to(step);
+            let in_hand = |what: &str| agent.how_many_i_have(what) > 0;
+            return crate::environment::making::what_to_do_first_that_can_be_done(
+                crate::environment::making::FISH_TRAP.makes,
+                &holding,
+                &knows,
+                &in_hand,
+                false,
+            )
+            .map(|step| Action::Craft {
+                item_type: step.makes.to_string(),
+            });
+        }
+
+        match self.reach_within_cast(agent_position) {
+            Some(reach) if untrapped(reach) => Some(Action::SetFishTrap),
+            _ => Some(Action::Move {
+                target: (water.x, water.y, agent_position.2),
+            }),
+        }
     }
 
     /// How much an agent has to want food before it will go and stand in a river

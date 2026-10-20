@@ -494,8 +494,9 @@ impl Simulation {
             Action::Cook { .. } => Some(ActionType::Cooking),
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
+            Action::ScatterSeed => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
-            Action::TakeFrom { .. } => Some(ActionType::Social),
+            Action::TakeFrom { .. } | Action::RobFishTrap { .. } => Some(ActionType::Social),
             Action::FleeFrom { .. } => Some(ActionType::Combat),
             Action::Examine { .. } => Some(ActionType::Crafting),
             Action::PickUp { .. } | Action::PutDown { .. } => Some(ActionType::Mining),
@@ -513,6 +514,7 @@ impl Simulation {
             // have to doctoring.
             Action::Treat { .. } => Some(ActionType::ProblemSolving),
             Action::Fish => Some(ActionType::Mining), // Taking something off the world
+            Action::ForageShallows | Action::SetFishTrap | Action::CheckFishTraps => Some(ActionType::Mining),
             Action::SetSnare | Action::CheckSnares => Some(ActionType::Mining),
             Action::LightFire => Some(ActionType::Cooking), // Getting a fire going is half of cooking
             Action::Eat { food_type } if food_type == "cooked" || food_type == "prepared" => {

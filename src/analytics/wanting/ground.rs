@@ -234,6 +234,12 @@ impl Simulation {
         use crate::world::Position;
         use rand::Rng;
 
+        // Composting is Stage 2 of the agricultural path, and comes with
+        // gardens: a people with no field has nowhere to tip it
+        if !agent.knows_how_to_do("SpreadMuck") {
+            return None;
+        }
+
         // Nothing to tip out
         let carrying_refuse = agent
             .inventory
@@ -282,6 +288,82 @@ impl Simulation {
         None
     }
 
+    /// Scattering gathered seed on good ground near camp: Stage 1 of the
+    /// agricultural path.
+    ///
+    /// Not a field. Nothing is broken; a handful of what was gathered is
+    /// thrown down where it might come up, which is what a gathering people
+    /// does once it has seen its own leavings come up as food. Done by
+    /// somebody with the day's needs met and food on their mind, carrying
+    /// something sown, standing on empty ground near camp, and not where the
+    /// camp has already got a good many stands of its own coming up.
+    pub(in crate::analytics) fn sowing_action(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Practice;
+        use crate::world::Position;
+        use rand::Rng;
+
+        if !agent.knows_how_to_do("ScatterSeed") || !agent.immediate_needs_met() {
+            return None;
+        }
+
+        let wants_to_provide = agent
+            .drives
+            .get(DriveType::Sustenance)
+            .map(|drive| drive.is_active())
+            .unwrap_or(false);
+        if !wants_to_provide {
+            return None;
+        }
+
+        Self::seed_worth_scattering(agent)?;
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        let camp = self.where_the_camp_is(agent_position)?;
+        if camp.distance_to(&here) > Self::A_SHORT_WALK * 2 {
+            return None;
+        }
+
+        let takes_seed = self
+            .world
+            .grid
+            .get_tile(&here)
+            .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
+            .unwrap_or(false);
+        if !takes_seed || self.world.nodes_on(here).next().is_some() {
+            return None;
+        }
+
+        let sown_about_here = self
+            .world
+            .resources
+            .iter()
+            .filter(|node| node.sown_by.is_some() && node.position.distance_to(&camp) <= Self::A_SHORT_WALK * 2)
+            .count();
+        if sown_about_here >= Self::STANDS_A_CAMP_SOWS {
+            return None;
+        }
+
+        let curiosity = agent
+            .drives
+            .get(DriveType::Curiosity)
+            .map(|drive| drive.value)
+            .unwrap_or(0.0);
+        let roll = crate::core::dice::roll().gen::<f32>();
+        if !agent.practices.would_try(Practice::Sowing, curiosity, roll) {
+            return None;
+        }
+
+        Some(Action::ScatterSeed)
+    }
+
+    /// How many sown stands a camp keeps coming up about it before nobody
+    /// bothers throwing more: a handful of patches, not a field.
+    pub(in crate::analytics) const STANDS_A_CAMP_SOWS: usize = 12;
+
     /// Breaking ground, and walking to somewhere worth breaking.
     ///
     /// Wild food regrows about four times slower than a grown settlement eats
@@ -297,6 +379,13 @@ impl Simulation {
         // Only somebody with nothing more pressing on. The drive itself only
         // climbs in an agent that is fed, watered, rested and warm.
         if !agent.immediate_needs_met() {
+            return None;
+        }
+
+        // A garden is Stage 2 of the agricultural path: found out by somebody
+        // who has scattered seed and gathered from what came up, or shown by
+        // somebody who has (`Agent::ACTIONS_FOUND_OUT_BY_THEMSELVES`).
+        if !agent.knows_how_to_do("TillSoil") {
             return None;
         }
 
@@ -485,6 +574,12 @@ impl Simulation {
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
         use crate::world::Position;
+
+        // Propagation from cuttings is Stage 2 of the agricultural path, and
+        // comes with gardens
+        if !agent.knows_how_to_do("PlantCutting") {
+            return None;
+        }
 
         let here = Position::new(agent_position.0, agent_position.1);
         let camp = self.where_the_camp_is(agent_position)?;

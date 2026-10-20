@@ -87,6 +87,8 @@ fn every_action() -> BTreeSet<String> {
     let nobody = uuid::Uuid::nil();
     let s = String::new;
     [
+        Action::Eat { food_type: s() },
+        Action::Sleep { duration: 0 },
         Action::Gather { resource_type: s() },
         Action::HarvestPlant { plant_id: nobody },
         Action::Hunt { animal_id: nobody, weapon: None },
@@ -97,6 +99,7 @@ fn every_action() -> BTreeSet<String> {
         Action::Cook { food_type: s() },
         Action::MakeClothing { garment: s() },
         Action::WearClothing { garment: s() },
+        Action::ScatterSeed,
         Action::TillSoil,
         Action::TendField,
         Action::Dry { what: s() },
@@ -110,6 +113,9 @@ fn every_action() -> BTreeSet<String> {
         Action::PlantCutting,
         Action::SpreadMuck,
         Action::Fish,
+        Action::ForageShallows,
+        Action::SetFishTrap,
+        Action::CheckFishTraps,
         Action::SetSnare,
         Action::CheckSnares,
         Action::Treat { who: None },
@@ -326,8 +332,9 @@ fn born_knowledge_can_be_made_from_born_knowledge() {
     assert!(short.is_empty(), "born knowledge that wants something found out to make: {short:?}");
 }
 
-/// A `needs` that gates something points at a listing that is one product,
-/// so "what has to be known first" is a list of things, not of choices.
+/// A `needs` that gates something points at a listing that is one thing in
+/// the model - a product, or an action - so "what has to be known first" is
+/// a list of things, not of choices.
 #[test]
 fn a_gate_names_one_thing() {
     let cat = catalogue();
@@ -336,9 +343,9 @@ fn a_gate_names_one_thing() {
         for n in &t.needs {
             let target = by_id[n.as_str()];
             assert_eq!(
-                target.makes().count(),
+                target.model.len(),
                 1,
-                "{} needs {n}, which is {:?} in the model: a gate is one product",
+                "{} needs {n}, which is {:?} in the model: a gate is one thing",
                 t.id,
                 target.model
             );
@@ -421,12 +428,12 @@ fn the_survival_paths_start_where_the_document_starts_them() {
     let garment = |g: &str| catalogue::what_comes_before(&format!("wear:{g}")).to_vec();
     assert!(catalogue::is_born_knowledge("wear:fur_coat"));
     assert!(catalogue::is_born_knowledge("wear:bark_cloak"));
-    assert_eq!(garment("leather_tunic"), vec!["stoneknife"], "sewn: an awl, which is the knife");
-    assert_eq!(garment("leather_pants"), vec!["stoneknife"]);
-    assert_eq!(garment("wool_cloak"), vec!["stoneknife"], "cut to shape: a knife");
-    assert_eq!(garment("hide_armor"), vec!["stoneknife"]);
-    assert_eq!(garment("linen_cloak"), vec!["rettedflax"], "linen is retted flax");
-    assert_eq!(garment("linen_shirt"), vec!["rettedflax", "stoneknife"]);
+    assert_eq!(garment("leather_tunic"), vec!["make:stoneknife"], "sewn: an awl, which is the knife");
+    assert_eq!(garment("leather_pants"), vec!["make:stoneknife"]);
+    assert_eq!(garment("wool_cloak"), vec!["make:stoneknife"], "cut to shape: a knife");
+    assert_eq!(garment("hide_armor"), vec!["make:stoneknife"]);
+    assert_eq!(garment("linen_cloak"), vec!["make:rettedflax"], "linen is retted flax");
+    assert_eq!(garment("linen_shirt"), vec!["make:rettedflax", "make:stoneknife"]);
 }
 
 /// The status goods the design names - figurines, ceremonial dress and
@@ -443,6 +450,42 @@ fn the_status_goods_answer_the_luxury_drive() {
         }
     }
     assert!(found >= 4, "the document lists them ({found} found)");
+}
+
+/// The agricultural path in three stages (#346). Gathering is born; scattering
+/// gathered seed is Stage 1 and found out; a garden is Stage 2, found out, and
+/// waits on sowing; cuttings and muck come with gardens.
+#[test]
+fn agriculture_comes_in_the_documents_three_stages() {
+    use crate::agents::{AgentConfig, Population};
+    assert!(catalogue::is_born_knowledge("do:HarvestPlant"));
+    assert!(catalogue::is_born_knowledge("do:Gather"));
+    for later in ["do:ScatterSeed", "do:TillSoil", "do:TendField", "do:PlantCutting", "do:SpreadMuck"] {
+        assert!(!catalogue::is_born_knowledge(later), "{later} is found out");
+    }
+    assert_eq!(catalogue::what_comes_before("do:TillSoil"), &["do:ScatterSeed"]);
+    assert_eq!(catalogue::what_comes_before("do:TendField"), &["do:ScatterSeed"]);
+    assert_eq!(catalogue::what_comes_before("do:PlantCutting"), &["do:TillSoil"]);
+    assert_eq!(catalogue::what_comes_before("do:SpreadMuck"), &["do:TillSoil"]);
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let founder = &mut population.agents[0];
+    for action in ["ScatterSeed", "TillSoil", "TendField", "PlantCutting", "SpreadMuck"] {
+        assert!(!founder.knows_how_to_do(action), "a founder is a gatherer: {action}");
+    }
+
+    founder.found_out_how_to("do:ScatterSeed");
+    assert!(founder.knows_how_to_do("TendField"), "weeding comes with sowing");
+    assert!(
+        !founder.knows_how_to_do("TillSoil"),
+        "a garden is found out by itself, not handed over with sowing"
+    );
+    assert!(!founder.knows_how_to_do("PlantCutting"));
+
+    founder.found_out_how_to("do:TillSoil");
+    assert!(founder.knows_how_to_do("PlantCutting"), "cuttings come with gardens");
+    assert!(founder.knows_how_to_do("SpreadMuck"), "and so does muck");
 }
 
 // --------------------------------------------------------------------------
@@ -518,4 +561,18 @@ fn what_the_catalogue_says_about_the_model() {
         println!("  {:<22} {}", u.model, u.reason);
     }
     assert!(!earliest.is_empty());
+}
+
+/// The fishing path's first two stages: picking over the shallows is born
+/// knowledge, and a trap is found out, with setting and emptying one coming
+/// with it.
+#[test]
+fn the_fishing_path_starts_in_the_shallows() {
+    assert!(catalogue::is_born_knowledge("do:ForageShallows"));
+    assert!(catalogue::is_born_knowledge("do:Fish"), "spearing in shallow water is Stage 0");
+    assert!(!catalogue::born_knowing_how_to_make("fishtrap"), "a trap is Stage 1");
+    for doing in ["do:SetFishTrap", "do:CheckFishTraps"] {
+        assert!(!catalogue::is_born_knowledge(doing));
+        assert_eq!(catalogue::what_comes_before(doing), ["make:fishtrap"], "{doing}");
+    }
 }

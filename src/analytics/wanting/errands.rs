@@ -1387,7 +1387,7 @@ impl Simulation {
                     _ => return None,
                 }
             }
-            Action::Fish { .. } => SkillType::Fishing,
+            Action::Fish { .. } | Action::ForageShallows | Action::CheckFishTraps => SkillType::Fishing,
             // A trapper is a hunter. There is no `SkillType::Trapping`
             // because there is nothing a separate one would do that this
             // does not - what a snare wants is a knowledge of where things

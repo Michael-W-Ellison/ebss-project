@@ -129,7 +129,8 @@ pub fn the_catalogue() -> &'static Catalogue {
 struct Knowing {
     /// Model links everybody is born knowing (`make:lashing`, `wear:fur_coat`)
     born: BTreeSet<&'static str>,
-    /// For each model link, the products that have to be known first
+    /// For each model link, the model links that have to be known first
+    /// (`make:stoneknife`, `do:ScatterSeed`)
     gates: BTreeMap<&'static str, Vec<&'static str>>,
 }
 
@@ -146,10 +147,9 @@ fn knowing() -> &'static Knowing {
                 if t.innate() {
                     born.insert(link.as_str());
                 }
-                let this = link.strip_prefix("make:");
                 for needed in t.needs.iter().filter_map(|n| by_id.get(n.as_str())) {
-                    for first in needed.makes().filter(|p| Some(*p) != this) {
-                        gates.entry(link.as_str()).or_default().insert(first);
+                    for first in needed.model.iter().filter(|first| *first != link) {
+                        gates.entry(link.as_str()).or_default().insert(first.as_str());
                     }
                 }
             }
@@ -166,7 +166,7 @@ pub fn is_born_knowledge(link: &str) -> bool {
     knowing().born.contains(link)
 }
 
-/// The products that have to be known before a model link can be.
+/// The model links that have to be known before a model link can be.
 pub fn what_comes_before(link: &str) -> &'static [&'static str] {
     knowing().gates.get(link).map(Vec::as_slice).unwrap_or(&[])
 }
@@ -180,16 +180,19 @@ pub fn born_knowing_how_to_make(product: &str) -> bool {
 
 /// The products that have to be known before a product can be found out.
 pub fn what_comes_before_making(product: &str) -> &'static [&'static str] {
-    static GATES: OnceLock<BTreeMap<&'static str, &'static [&'static str]>> = OnceLock::new();
+    static GATES: OnceLock<BTreeMap<&'static str, Vec<&'static str>>> = OnceLock::new();
     GATES
         .get_or_init(|| {
             knowing()
                 .gates
                 .iter()
-                .filter_map(|(l, v)| l.strip_prefix("make:").map(|p| (p, v.as_slice())))
+                .filter_map(|(l, v)| {
+                    let product = l.strip_prefix("make:")?;
+                    Some((product, v.iter().filter_map(|g| g.strip_prefix("make:")).collect()))
+                })
                 .collect()
         })
         .get(product)
-        .copied()
+        .map(Vec::as_slice)
         .unwrap_or(&[])
 }

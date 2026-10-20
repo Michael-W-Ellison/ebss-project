@@ -2008,6 +2008,7 @@ name = "Hanging meats or plants"
 path = "storage"
 stage = 0
 role = "technique"
+model = ["do:Dry"]
 
 [[tech]]
 id = "storage.0.piles_of_stone_wood_fuel_and"
@@ -2022,6 +2023,8 @@ name = "Caches in cool shade"
 path = "storage"
 stage = 0
 role = "technique"
+model = ["do:Excavate", "do:Cover"]
+note = "A pit is a cache a band comes back to (#346)."
 
 [[tech]]
 id = "storage.0.natural_caves"
@@ -2652,6 +2655,7 @@ name = "Cool storage in caves or shaded pits"
 path = "food_preservation"
 stage = 0
 role = "technique"
+model = ["do:Excavate", "do:Cover"]
 
 [[tech]]
 id = "food_preservation.0.meat_strips"
@@ -2990,6 +2994,7 @@ name = "Raw consumption where tolerable"
 path = "cooking_and_food_processing"
 stage = 0
 role = "technique"
+model = ["do:Eat"]
 
 [[tech]]
 id = "cooking_and_food_processing.0.roasting_directly_on_coals"
@@ -3331,6 +3336,7 @@ name = "Fur-on hide retained for warmth"
 path = "leatherworking"
 stage = 0
 role = "technique"
+model = ["wear:fur_coat"]
 
 [[tech]]
 id = "leatherworking.0.basic_containers"
@@ -6783,6 +6789,7 @@ name = "Hand gathering of shellfish"
 path = "fishing_and_aquaculture"
 stage = 0
 role = "technique"
+model = ["do:ForageShallows"]
 
 [[tech]]
 id = "fishing_and_aquaculture.0.spearing_fish_in_shallow_water"
@@ -6798,6 +6805,7 @@ name = "Collecting stranded fish"
 path = "fishing_and_aquaculture"
 stage = 0
 role = "technique"
+model = ["do:ForageShallows"]
 
 [[tech]]
 id = "fishing_and_aquaculture.0.crude_clubs_baskets_and_digging_tools"
@@ -6812,6 +6820,7 @@ name = "Harvest of crabs, mollusks, frogs, turtles, and aquatic plants"
 path = "fishing_and_aquaculture"
 stage = 0
 role = "technique"
+model = ["do:ForageShallows"]
 
 [[tech]]
 id = "fishing_and_aquaculture.1.barbed_wooden_or_bone_spears"
@@ -6841,6 +6850,9 @@ name = "Small traps and weirs"
 path = "fishing_and_aquaculture"
 stage = 1
 role = "technique"
+model = ["make:fishtrap", "do:SetFishTrap", "do:CheckFishTraps"]
+needs = ["fishing_and_aquaculture.1.basket_traps"]
+note = "A trap of withies and lashing set in a reach fills while nobody watches it; the setter goes round and empties it. Setting and emptying one comes with knowing how to make one."
 
 [[tech]]
 id = "fishing_and_aquaculture.1.basket_traps"
@@ -6848,6 +6860,8 @@ name = "Basket traps"
 path = "fishing_and_aquaculture"
 stage = 1
 role = "technique"
+model = ["make:fishtrap"]
+same_as = ["fishing_and_aquaculture.1.small_traps_and_weirs"]
 
 [[tech]]
 id = "fishing_and_aquaculture.1.wading_and_torch_fishing"
@@ -9224,6 +9238,7 @@ name = "Rest"
 path = "medicine_and_public_health"
 stage = 0
 role = "technique"
+model = ["do:Sleep"]
 
 [[tech]]
 id = "medicine_and_public_health.0.splinting_with_sticks"
@@ -9260,6 +9275,7 @@ name = "Empirical use of a few soothing plants"
 path = "medicine_and_public_health"
 stage = 0
 role = "technique"
+model = ["do:Treat"]
 
 [[tech]]
 id = "medicine_and_public_health.0.isolation_of_obviously_sick_individuals_in"
@@ -9534,6 +9550,7 @@ name = "Simple hearths"
 path = "fire_fuel_and_energy"
 stage = 0
 role = "technique"
+model = ["do:LightFire"]
 
 [[tech]]
 id = "fire_fuel_and_energy.0.dry_wood_brush_dung_peat_as"
@@ -9541,6 +9558,7 @@ name = "Dry wood, brush, dung, peat as found"
 path = "fire_fuel_and_energy"
 stage = 0
 role = "technique"
+model = ["do:Gather"]
 
 [[tech]]
 id = "fire_fuel_and_energy.1.friction_fire"
@@ -9810,6 +9828,8 @@ name = "Seasonal return to productive patches"
 path = "agricultural"
 stage = 0
 role = "technique"
+model = ["do:Gather"]
+note = "Place memory: a forager remembers where food stood and goes back to it (exploration_knowledge, nodes_known_to)."
 
 [[tech]]
 id = "agricultural.0.accidental_reseeding_near_camps"
@@ -9817,6 +9837,7 @@ name = "Accidental reseeding near camps"
 path = "agricultural"
 stage = 0
 role = "technique"
+note = "Carried by the midden and by dropped sprouted grain coming up of themselves (happening::soil); not anything anybody does. It is what teaches Stage 1."
 
 [[tech]]
 id = "agricultural.0.protection_of_useful_wild_plants_from"
@@ -9838,6 +9859,8 @@ name = "Broadcast sowing of gathered seed"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["do:ScatterSeed"]
+note = "Found out by seeing seed come up where it was thrown away or dropped (what_was_dropped_comes_up, what_was_dropped_takes_root), or by watching somebody do it."
 
 [[tech]]
 id = "agricultural.1.weeding_around_useful_plants"
@@ -9845,6 +9868,8 @@ name = "Weeding around useful plants"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["do:TendField"]
+needs = ["agricultural.1.broadcast_sowing_of_gathered_seed"]
 
 [[tech]]
 id = "agricultural.1.controlled_burning"
@@ -9887,7 +9912,9 @@ name = "Small garden plots near dwellings"
 path = "agricultural"
 stage = 2
 role = "technique"
-model = ["do:TillSoil", "do:TendField"]
+model = ["do:TillSoil"]
+needs = ["agricultural.1.broadcast_sowing_of_gathered_seed"]
+note = "Found out by gathering, often enough, from stands you sowed yourself (Agent::GATHERED_FROM_SOWN_BEFORE_GARDENS), or by watching somebody break ground who already sows."
 
 [[tech]]
 id = "agricultural.2.propagation_from_cuttings_tubers_and_saved"
@@ -9896,6 +9923,7 @@ path = "agricultural"
 stage = 2
 role = "technique"
 model = ["do:TakeCutting", "do:PlantCutting"]
+needs = ["agricultural.2.small_garden_plots_near_dwellings"]
 
 [[tech]]
 id = "agricultural.2.composting_and_midden_enrichment"
@@ -9904,6 +9932,7 @@ path = "agricultural"
 stage = 2
 role = "technique"
 model = ["do:SpreadMuck"]
+needs = ["agricultural.2.small_garden_plots_near_dwellings"]
 
 [[tech]]
 id = "agricultural.2.reliable_vegetables_legumes_tubers_herbs_and"

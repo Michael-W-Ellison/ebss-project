@@ -183,6 +183,20 @@ fn watch_a_practice(watcher: &mut Agent, broadcast: &BroadcastAction) {
             .practices
             .learn_from_watching(Practice::SpreadingMuck);
     }
+
+    // And the stages of the agricultural path: seeing seed thrown on the
+    // ground is how scattering it is passed on, and seeing ground broken for
+    // it is how a garden is - to somebody who already sows. Without this a
+    // farmer's children would have to find gardens out for themselves.
+    if broadcast.details.contains("ScatterSeed") {
+        watcher.found_out_how_to("do:ScatterSeed");
+        watcher.practices.learn_from_watching(Practice::Sowing);
+    }
+
+    if broadcast.details.contains("TillSoil") && watcher.knows_how_to_do("ScatterSeed") {
+        watcher.found_out_how_to("do:TillSoil");
+        watcher.practices.learn_from_watching(Practice::Farming);
+    }
 }
 
 /// Skill experience a child gains from watching an adult work.

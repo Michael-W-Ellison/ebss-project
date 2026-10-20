@@ -26278,3 +26278,261 @@ in the pack, or a knife to reach for.
 unlinked: smoking, brining, pit ovens, weirs and traps, shellfish, water
 skins, and others. The luxury drive is tagged in the catalogue and drives
 nothing yet. Tool quality still changes yield rather than time.
+
+### 346. Hunter-gatherers first: agriculture in the document's three stages
+
+**What was asked.** Agents start as hunter-gatherers. A settlement is only
+viable once agriculture is discovered and worked. Agriculture follows
+tech.txt's stages. The free longhouse goes. And nothing should stop a band
+settling before it farms except its ground running out.
+
+**What it was.**
+- Farming was one practice, learned within months from seeing midden
+  scraps or dropped sprouted grain come up (#10, #12).
+- Every world started with a finished longhouse at its centre.
+- A camp would not move while any pit within a forage held food (#314).
+
+**Stage 0: gathering** - born, as it was.
+
+**Stage 1: broadcast sowing of gathered seed.**
+- A new action, `ScatterSeed`. A handful of gathered seed is thrown on open
+  ground near camp, nothing is broken, and what comes up is a stand like
+  any other.
+- The stand remembers who threw it (`ResourceNode::sown_by`).
+- What teaches it is what used to teach farming: seeing seed come up out of
+  the midden, or where sprouted grain fell (`found_out` holds
+  `do:ScatterSeed`). Watching somebody sow passes it on.
+- A camp keeps a dozen sown stands about it at most
+  (`STANDS_A_CAMP_SOWS`).
+- Weeding (`TendField`) comes with it.
+
+**Stage 2: gardens.**
+- Breaking ground (`TillSoil`, the old farming) is found out by gathering
+  from stands you sowed yourself, twelve times
+  (`GATHERED_FROM_SOWN_BEFORE_GARDENS`).
+- It is shown to somebody who already sows by watching them break ground.
+- Cuttings and muck come with gardens.
+- An established farmer still never moves on, and stays by a standing
+  crop.
+
+**How it is decided.** The catalogue gates actions as it gates products:
+- `needs` may name a `do:` listing.
+- `Agent::knows(link)` answers for any model link.
+- `knows_how_to_do` answers born, found out, or - for an action not found
+  out by anything of its own - within reach once what it waits on is known.
+  Sowing and breaking ground are the two found out by themselves
+  (`ACTIONS_FOUND_OUT_BY_THEMSELVES`).
+
+**No free longhouse.** Worlds start with nothing built.
+
+**A cache is not an anchor.** `moving_on` no longer refuses to move a
+gathering camp away from food in a pit.
+- Measured with the rule in place: 28 bands in 40 never moved in two years,
+  most of them with no garden to stay for, because a gathering people buries
+  every surplus and there was nearly always something in a pit.
+- #314's reason for the rule was camps ranging away from the winter's pits
+  when farming lapsed. That cannot happen to a farmer now: `moving_on`
+  returns before it for anybody farming or beside a crop.
+
+**Measured**, forty settlements (smooth 1-24, scattered 1-16), two years:
+
+| | before | stages | stages, caches not anchors |
+|---|---|---|---|
+| births | 158 | 129 | 130 |
+| deaths | 1 (hunger) | 0 | 3 (hunger) |
+| camp moves (settlements that moved) | 9 (3) | 59 (12) | 531 (25) |
+| sowing found (median day) | - | 39 (231) | 39 (224) |
+| gardens found (median day) | - | 32 (465) | 31 (416) |
+
+By terrain:
+
+| | smooth births | smooth moves | scattered births | scattered moves |
+|---|---|---|---|---|
+| before | 102 | 3 | 56 | 6 |
+| stages, caches not anchors | 105 | 35 | 25 | 496 |
+
+- On smooth ground - the default, 24 of the 40 - nothing is lost. Bands move
+  camp a little, find sowing in their first year and gardens in their
+  second.
+- On scattered ground, a gathering band without farming raises few
+  children: births halved as soon as farming was staged, before the cache
+  rule changed.
+  - With the rule changed, those bands move camp about every three weeks.
+  - Moves mostly stop once gardens arrive: of 496 scattered moves, 58 came
+    after the band's gardens.
+  - That is the asked-for result - no settlement thrives before agriculture
+    - and where it shows is on poor ground.
+- Paired by seed, births against "before" are -0.70 a settlement
+  (t = -1.92), all of it on scattered ground.
+- The three hunger deaths were in three different worlds (two scattered,
+  one smooth), two of them in the last week of the second winter.
+
+**Fixtures.**
+- Three tests stood on the free longhouse; they get it back through
+  `the_longhouse_there_used_to_be`.
+- Five that make a farmer by belief now also have the farmer know gardens.
+- The volunteer tests now expect sowing, not farming.
+- `nobody_moves_on_from_food_in_store` is now
+  `a_gathering_people_moves_on_from_a_cache`.
+- New tests:
+  - `scattered_seed_is_a_stand_that_knows_its_sower`;
+  - `gathering_from_what_you_sowed_leads_to_a_garden`;
+  - `a_gatherer_does_not_break_ground`;
+  - `agriculture_comes_in_the_documents_three_stages`.
+
+**Full suite.** 2,840 tests: all pass but the two dice counts, which this
+moves - 7,457 -> 7,903 (seed 4242, 120 turns) and 979,590 -> 977,779 (seed
+0, a year), recorded.
+
+### 347. Food getting: the shallows and fish traps; the partner chase that walked people to death
+
+The first of the unlinked survival machinery the user asked for, food
+getting, from the fishing path's first two stages.
+
+**Picking over the shallows** (`Action::ForageShallows`, Stage 0, born
+knowledge: hand gathering of shellfish, stranded fish, crabs and the like).
+- Steadier than a thrust and smaller: no skill or tackle comes into it.
+  `odds_in_the_shallows` against `odds_of_a_cast` - the same formula the
+  thrust already used, now shared.
+- `how_to_work_this_water` sends whoever expects more from it to the
+  shallows: somebody with no tackle and no hand for it, at a thin reach.
+
+**Fish traps** (`Action::SetFishTrap`, `Action::CheckFishTraps`, a
+`fishtrap` making of 2 wood and 2 lashing; Stage 1, found out like the rod).
+- A trap is set in a reach (`World::fish_traps`) and fills from it while
+  nobody watches: about four fish a day on a full reach, in proportion to how
+  full, up to four in the trap. What goes in comes out of the reach.
+- Setting and emptying one come with knowing how to make one: the catalogue's
+  "small traps and weirs" needs "basket traps", so the gate is `make:fishtrap`.
+- Three traps a person, one a reach.
+- Decisions:
+  - fish in one's own traps within a line's walk are gone to and taken, ahead
+    of the lessons gate (a catch is a catch);
+  - at a reach, a trap in the pack is set, or made there if the makings are in
+    hand;
+  - and in the Preparedness ladder after the snares
+    (`putting_traps_in_the_water`): make one where you stand, carry it to the
+    nearest untrapped reach, set it. **Without this nobody made one**: in eight
+    worlds twelve people in sixteen knew how inside a fortnight, and nobody was
+    once standing at water with two wood and two lashing on them.
+
+**Catalogue.** The fishing listings are linked, and so is the existing
+machinery that had no line: hearths (`do:LightFire`), fuel as found and
+returning to good ground (`do:Gather`), caches and cool storage
+(`do:Excavate`, `do:Cover`), hanging (`do:Dry`), eating raw (`do:Eat`), rest
+(`do:Sleep`), soothing plants (`do:Treat`), fur on the hide
+(`wear:fur_coat`).
+
+**What it uncovered, measured on the way.**
+- First measure with traps working: nine smooth worlds, hunger deaths 1 -> 9
+  (t = 2.5), with 41,000 fish out of the traps.
+- *Not* the hunger drive. Emptying a trap took a tenth off hunger with nothing
+  eaten, as the snares and spearing do; taken off (getting food is not eating
+  it), deaths were no better - 7 in the first four worlds.
+- A day-by-day probe of the dead found it. Healthy through the first year,
+  traps and all; the second year's lean stretch took the reserve from 0.95 to
+  0.6; and then **50 to 140 walks a day after a partner**, the reserve 0.5 to
+  0.19 and health 100 to nought in two months.
+  - The partner walk of #338 went to where the partner stood. Two partners
+    wanting each other each walked to where the other had been, passed, and
+    did it again, all day.
+  - And nothing stopped a body living off its own reserve from wanting a
+    child.
+  - Traps made it common: whatever put the second year's store over the child
+    gate for more couples put more couples on the road.
+- Fixes:
+  - `should_attempt_reproduction` is false for a wasting body (below half its
+    reserve). A starving body does not conceive.
+  - The walk to a partner goes halfway. Two closing on each other meet; one
+    going to a partner who stays put is there in a few walks.
+
+**Measured**, forty settlements (smooth 1-24, scattered 1-16), two years,
+against #346:
+
+| | before | traps | paired t |
+|---|---|---|---|
+| births | 130 | 139 | +0.61 |
+| scattered births | 25 | 37 | +0.92 |
+| deaths | 3 (all hunger) | 7 (5 hunger, 1 thirst, 1 illness) | +1.43 |
+| alive at day 720 | 607 | 612 | +0.35 |
+| camp moves | 531 | 350 | -2.66 |
+| sowing found (median day) | 39 (224) | 40 (197) | |
+| gardens found (median day) | 31 (416) | 37 (385) | |
+
+- Traps were found in all forty worlds, median day 9. In two years they gave
+  134,000 fish, against 42,000 speared and 12,000 picked out of the shallows.
+- Four of the five hunger deaths fell in the last three weeks of the second
+  winter (days 695-716), where the baseline's fall too; the difference is not
+  significant.
+- Births do not move with all that fish. What a trap brings in mostly stands
+  in for food got another way; the gates on children are the stores.
+- Scattered bands still move on - 336 moves, against 496 - so a trap line
+  does not pin a camp to spent ground.
+
+**Tests.**
+- `the_shallows_feed_somebody_with_nothing_in_their_hands`;
+- `a_fish_trap_fills_by_itself_and_is_emptied`;
+- `a_hungry_trapper_goes_to_the_traps_and_sets_more`;
+- `a_trap_is_made_carried_to_the_water_and_set`;
+- `the_fishing_path_starts_in_the_shallows`;
+- `a_wasting_body_does_not_try_for_a_child`;
+- `partners_apart_meet_rather_than_pass`.
+
+#### 347, continued: trap robbing
+
+**The full suite after #347** failed `a_settlement_ends_up_with_enemies_in_it`, and
+not by bad luck. Twelve settlements at day 83, before and after:
+- before, 4 had somebody fallen out, 8 soured bonds in all;
+- after, 1 had, with 1 soured bond.
+
+Why, counted in six settlements over 90 days:
+
+| | before | traps |
+|---|---|---|
+| blows landed | 13 | 1 |
+| lies | 154 | 98 |
+| gifts given | 16 | 91 |
+| socialising and news | 13,882 | 9,254 |
+
+Fed people stopped fighting.
+
+The user chose to give a fed band something real to fall out over, rather
+than change the test or the traps: **somebody emptying a trap that is not
+theirs is theft** (`Action::RobFishTrap`).
+- Weighed the way taking from a pack is weighed (`would_i_take_it`): what it
+  answers against who would see it. A trap's owner is seldom beside it but
+  always finds out, so the owner's bond is counted as a pair of eyes too.
+  Somebody starving takes regardless, as with any theft.
+- Never a trap of family or a partner's.
+- Anybody close enough sees it (`seen_taking`, the onlooker half of
+  `taking_from` drawn out to be shared). Otherwise the trap remembers who
+  (`FishTrap::robbed`), and the owner finds out on the next round. Either way
+  it lands through `they_took_something_of_mine`, like any theft: the bond,
+  anger or fear, and trust.
+
+**Measured**, forty settlements, against #346 and against traps alone:
+
+| | #346 | traps | traps and robbing | paired t, against #346 |
+|---|---|---|---|---|
+| births | 130 | 139 | 177 | +3.84 |
+| scattered births | 25 | 37 | 51 | +2.36 |
+| alive at day 720 | 607 | 612 | 652 | +3.47 |
+| hunger deaths | 3 | 5 | 4 | +0.44 |
+| camp moves | 531 | 350 | 351 | -2.25 |
+| sowing found (median day) | 39 (224) | 40 (197) | 40 (216) | |
+| gardens found (median day) | 31 (416) | 37 (385) | 39 (366) | |
+
+- 8,754 robberies in forty worlds took 21,209 fish, about a seventh of what
+  came out of traps.
+- **Births rise with robbing**, and significantly (+38 against traps alone,
+  t = 2.60). The fish a trap holds go to whoever is hungry and standing at
+  it, not only to whoever set it. A theft that feeds somebody without a trap
+  of their own is, in what it does for a band's children, a share.
+- Scattered settlements now have about the births they had before farming was
+  staged (#345: 56; here 51), still with no garden for most of the first
+  year.
+
+**Tests.**
+- `a_robbed_trap_is_found_out_on_the_round`;
+- `a_partner_or_a_fed_friend_leaves_a_trap_alone`;
+- `a_settlement_ends_up_with_enemies_in_it` passes again.

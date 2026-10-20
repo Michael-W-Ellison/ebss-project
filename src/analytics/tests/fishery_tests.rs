@@ -430,3 +430,269 @@ fn a_river_settlement_keeps_its_ground() {
          the same settlement without one: {with_fish:.3} against {without:.3}"
     );
 }
+
+/// One person standing on the bank of this file's river, beside a reach
+/// holding this many fish.
+fn somebody_at_a_reach_holding(fish: u32) -> Simulation {
+    let mut world = a_world_with_a_river();
+    world.resources.retain(|r| r.resource_type != ResourceType::Fish);
+    let mut reach = ResourceNode::new(ResourceType::Fish, Position::new(2, 0), 60);
+    reach.amount = fish;
+    world.resources.push(reach);
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    population.agents[0].state.position = (2, 1, 0);
+    Simulation::new(world, population)
+}
+
+/// Picking over the shallows: Stage 0 of the fishing path, and steady.
+///
+/// Somebody with nothing in their hands, at a reach that is nearly fished
+/// out, gets more off its edge by turning over stones than by standing in it
+/// waiting to thrust - and is sent to do that.
+#[test]
+fn the_shallows_feed_somebody_with_nothing_in_their_hands() {
+    let thin = 4;
+    let picked = |doing: &Action| {
+        crate::core::dice::seed(4_101);
+        let mut simulation = somebody_at_a_reach_holding(thin);
+        for _ in 0..40 {
+            simulation.population.agents[0].state.position = (2, 1, 0);
+            simulation.execute_action(doing, 0);
+        }
+        thin - what_is_in_the_reach(&simulation.world)
+    };
+    let by_picking = picked(&Action::ForageShallows);
+    let by_thrusting = picked(&Action::Fish);
+
+    assert!(by_picking > 0, "the edge of a thin reach still gives something");
+    assert!(
+        by_picking >= by_thrusting,
+        "and gives a bare hand more than a thrust does: {by_picking} picked against {by_thrusting} speared"
+    );
+
+    let simulation = somebody_at_a_reach_holding(thin);
+    assert_eq!(
+        simulation.how_to_work_this_water(&simulation.population.agents[0], Position::new(2, 0)),
+        Action::ForageShallows,
+        "somebody with no tackle at a thin reach picks over the shallows"
+    );
+
+    let mut simulation = somebody_at_a_reach_holding(60);
+    let net = simulation.population.agents[0].a_tool_fresh_from_these_hands("fishingnet", 1, 1.0);
+    simulation.population.agents[0].inventory.add_item(net);
+    assert_eq!(
+        simulation.how_to_work_this_water(&simulation.population.agents[0], Position::new(2, 0)),
+        Action::Fish,
+        "and somebody with a net at a full reach casts it"
+    );
+}
+
+/// A trap set in a reach fills from the reach while nobody watches it, and
+/// the one who set it empties it.
+#[test]
+fn a_fish_trap_fills_by_itself_and_is_emptied() {
+    use crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
+    use crate::world::FishTrap;
+
+    crate::core::dice::seed(4_102);
+    let mut simulation = somebody_at_a_reach_holding(60);
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new("fishtrap".to_string(), 1));
+
+    let set = simulation.execute_action(&Action::SetFishTrap, 0);
+    assert!(set.success, "a trap in the pack at a reach can be set: {:?}", set.message);
+    assert_eq!(simulation.population.agents[0].how_many_i_have("fishtrap"), 0, "the trap left the pack");
+    assert_eq!(simulation.world.fish_traps.len(), 1);
+
+    for _ in 0..2 * PLANNING_PERIODS_PER_DAY {
+        simulation.world.take_a_turn();
+    }
+    let holds = simulation.world.fish_traps[0].holds;
+    assert!(
+        holds > 0 && holds <= FishTrap::WHAT_A_TRAP_HOLDS,
+        "two days in a full reach puts fish in a trap, and no more than it holds: {holds}"
+    );
+
+    let emptied = simulation.execute_action(&Action::CheckFishTraps, 0);
+    assert!(emptied.success, "{:?}", emptied.message);
+    assert_eq!(simulation.world.fish_traps[0].holds, 0, "the trap is empty again");
+    assert!(
+        simulation.population.agents[0].how_many_i_have("fish") >= holds,
+        "and what was in it is in the pack"
+    );
+}
+
+/// What sends somebody to the traps: fish in one of their own, near enough.
+/// And somebody who knows how to make a trap and has the makings, standing at
+/// an untrapped reach, makes one there and then sets it.
+#[test]
+fn a_hungry_trapper_goes_to_the_traps_and_sets_more() {
+    use crate::core::drives::DriveType;
+    use crate::world::FishTrap;
+
+    let mut simulation = somebody_at_a_reach_holding(60);
+    let agent = &mut simulation.population.agents[0];
+    if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
+        hunger.value = 1.0;
+    }
+    agent.found_out_how_to("fishtrap");
+    agent.inventory.add_item(InventoryItem::new("wood".to_string(), 2));
+    agent.inventory.add_item(InventoryItem::new("lashing".to_string(), 2));
+    assert!(agent.knows_how_to_do("SetFishTrap"), "setting a trap comes with knowing how to make one");
+
+    let at = (2, 1, 0);
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.fishing_action(agent, at),
+        Some(Action::Craft { item_type: "fishtrap".to_string() }),
+        "the makings and the knowing, at an untrapped reach: make a trap"
+    );
+
+    let id = agent.id;
+    simulation.world.fish_traps.push(FishTrap {
+        at: Position::new(5, 0),
+        set_by: id,
+        set_at: 0,
+        holds: 3,
+        robbed: None,
+    });
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.fishing_action(agent, at),
+        Some(Action::CheckFishTraps),
+        "fish in a trap of his own within reach come first"
+    );
+    assert_eq!(
+        simulation.fishing_action(agent, (12, 1, 0)),
+        Some(Action::Move { target: (5, 0, 0) }),
+        "and one a short walk off is walked to"
+    );
+}
+
+/// A trap is made and carried to the water in a spare turn, as a snare line
+/// is set: somebody who knows how, wanting to put food by, makes one where
+/// they stand, walks it to a reach nobody has trapped, and sets it there.
+#[test]
+fn a_trap_is_made_carried_to_the_water_and_set() {
+    use crate::core::drives::DriveType;
+
+    let mut simulation = somebody_at_a_reach_holding(60);
+    let agent = &mut simulation.population.agents[0];
+    if let Some(putting_by) = agent.drives.get_mut(DriveType::Preparedness) {
+        putting_by.value = 1.0;
+    }
+    agent.found_out_how_to("fishtrap");
+    agent.inventory.add_item(InventoryItem::new("wood".to_string(), 2));
+    agent.inventory.add_item(InventoryItem::new("lashing".to_string(), 2));
+
+    let away = (8, 4, 0);
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.putting_traps_in_the_water(agent, away),
+        Some(Action::Craft { item_type: "fishtrap".to_string() }),
+        "the makings and the knowing, with water in walking distance: make a trap"
+    );
+
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new("fishtrap".to_string(), 1));
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.putting_traps_in_the_water(agent, away),
+        Some(Action::Move { target: (2, 0, 0) }),
+        "a trap in the pack is walked to the water"
+    );
+    assert_eq!(
+        simulation.putting_traps_in_the_water(agent, (2, 1, 0)),
+        Some(Action::SetFishTrap),
+        "and set in it"
+    );
+}
+
+/// An owner and somebody else at this file's river: the owner's trap holds
+/// four fish, the owner is far off, and the other stands at the trap wanting
+/// food as much as `hunger` says.
+fn a_full_trap_and_somebody_at_it(hunger: f32) -> Simulation {
+    use crate::core::drives::DriveType;
+    use crate::world::FishTrap;
+
+    let mut simulation = somebody_at_a_reach_holding(60);
+    simulation.population.spawn_agent(AgentConfig::default());
+    let owner = simulation.population.agents[1].id;
+    simulation.population.agents[1].state.position = (40, 40, 0);
+    simulation.world.fish_traps.push(FishTrap {
+        at: Position::new(2, 0),
+        set_by: owner,
+        set_at: 0,
+        holds: 4,
+        robbed: None,
+    });
+    if let Some(drive) = simulation.population.agents[0].drives.get_mut(DriveType::Hunger) {
+        drive.value = hunger;
+    }
+    simulation
+}
+
+/// Trap robbing: a hungry person who owes the owner nothing empties the
+/// trap, and the owner, who was not there, finds out on the next round and
+/// holds it against them.
+#[test]
+fn a_robbed_trap_is_found_out_on_the_round() {
+    let mut simulation = a_full_trap_and_somebody_at_it(1.0);
+    let (thief, owner) = (simulation.population.agents[0].id, simulation.population.agents[1].id);
+
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.a_trap_worth_robbing(agent, (2, 1, 0)),
+        Some(owner),
+        "a starving stranger at a full trap takes what is in it"
+    );
+
+    let robbed = simulation.execute_action(&Action::RobFishTrap { whose: owner }, 0);
+    assert!(robbed.success, "{:?}", robbed.message);
+    assert_eq!(simulation.population.agents[0].how_many_i_have("fish"), 4);
+    assert_eq!(simulation.world.fish_traps[0].holds, 0);
+    assert_eq!(simulation.world.fish_traps[0].robbed, Some((thief, 4)), "the trap remembers who");
+
+    simulation.population.agents[1].state.position = (2, 1, 0);
+    let before = simulation.population.agents[1]
+        .relationships
+        .get_relationship(&thief)
+        .map_or(0.0, |bond| bond.bond_strength);
+    simulation.execute_action(&Action::CheckFishTraps, 1);
+    let after = simulation.population.agents[1]
+        .relationships
+        .get_relationship(&thief)
+        .map_or(0.0, |bond| bond.bond_strength);
+    assert!(
+        after < before && after < 0.0,
+        "the owner comes round, finds it emptied, and thinks the less of the thief: {before} -> {after}"
+    );
+    assert_eq!(simulation.world.fish_traps[0].robbed, None, "and it is found out once");
+}
+
+/// Nobody robs a partner's trap, and a fed friend leaves one alone.
+#[test]
+fn a_partner_or_a_fed_friend_leaves_a_trap_alone() {
+    let mut simulation = a_full_trap_and_somebody_at_it(1.0);
+    let owner = simulation.population.agents[1].id;
+    simulation.population.agents[0].pair_with(owner, 0);
+    let agent = &simulation.population.agents[0];
+    assert_eq!(simulation.a_trap_worth_robbing(agent, (2, 1, 0)), None, "a partner's fish are supper");
+
+    let mut simulation = a_full_trap_and_somebody_at_it(0.2);
+    let owner = simulation.population.agents[1].id;
+    simulation.population.agents[0]
+        .relationships
+        .get_or_create_relationship(owner, 0)
+        .bond_strength = 0.8;
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.a_trap_worth_robbing(agent, (2, 1, 0)),
+        None,
+        "somebody barely hungry does not rob a friend"
+    );
+}

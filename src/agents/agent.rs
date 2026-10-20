@@ -3627,8 +3627,65 @@ impl Agent {
         catalogue::is_born_knowledge(&link)
             || catalogue::what_comes_before(&link)
                 .iter()
-                .all(|first| self.knows_how_to_get(first))
+                .all(|first| self.knows(first))
     }
+
+    /// Whether this agent knows a model link of the technology catalogue, of
+    /// whatever kind: `make:basket`, `wear:linen_cloak`, `do:TillSoil`.
+    pub fn knows(&self, link: &str) -> bool {
+        match link.split_once(':') {
+            Some(("make", what)) => self.knows_how_to_get(what),
+            Some(("wear", what)) => self.knows_how_to_make_garment(what),
+            Some(("do", what)) => self.knows_how_to_do(what),
+            _ => crate::environment::catalogue::is_born_knowledge(link),
+        }
+    }
+
+    /// Whether this agent knows how to do something the catalogue names as an
+    /// action (`do:ScatterSeed`).
+    ///
+    /// Born knowledge, or found out (`found_out` holds `do:<action>`), or -
+    /// for an action that is not found out by anything of its own - within
+    /// reach once what it waits on is known: cuttings and muck come with
+    /// gardens. The ones found out by something of their own are
+    /// `ACTIONS_FOUND_OUT_BY_THEMSELVES`.
+    pub fn knows_how_to_do(&self, action: &str) -> bool {
+        use crate::environment::catalogue;
+        let link = format!("do:{action}");
+        if catalogue::is_born_knowledge(&link) || self.found_out.contains(&link) {
+            return true;
+        }
+        let first = catalogue::what_comes_before(&link);
+        !first.is_empty()
+            && !Self::ACTIONS_FOUND_OUT_BY_THEMSELVES.contains(&action)
+            && first.iter().all(|before| self.knows(before))
+    }
+
+    /// The actions somebody has to find out for themselves, by something that
+    /// happens to them, rather than coming within reach as soon as what they
+    /// wait on is known.
+    ///
+    /// - Scattering seed (Stage 1 of the agricultural path) is found out by
+    ///   seeing what was thrown away come up (`what_was_dropped_comes_up`,
+    ///   `what_was_dropped_takes_root`).
+    /// - Breaking ground for a garden (Stage 2) is found out by gathering,
+    ///   often enough, from stands you sowed yourself.
+    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 2] = ["ScatterSeed", "TillSoil"];
+
+    /// What the practice record calls a handful of seed thrown on the ground.
+    pub const SEED_SCATTERED: &'static str = "scatterseed";
+
+    /// And a gathering from a stand this one sowed.
+    pub const A_SOWN_STAND_GATHERED: &'static str = "gatheredfromwhatisowed";
+
+    /// How many times somebody has to have gathered from stands they sowed
+    /// before breaking ground for a garden occurs to them.
+    ///
+    /// The document's Stage 1 to Stage 2 is the step from helping wild
+    /// stands along to growing food on purpose in broken ground near home,
+    /// and it took generations. Here it takes a good many seasons of seeing
+    /// your own scattered seed come back as food.
+    pub const GATHERED_FROM_SOWN_BEFORE_GARDENS: u32 = 12;
 
     /// Whether this agent knows any way to a product of the making chain, by
     /// a making or by a working: retted flax and a needle are both workings,
@@ -7283,8 +7340,18 @@ impl Agent {
     /// been going short, and is carrying enough food to feed a child as well
     /// as itself. Being un-hungry for a moment is not enough: it says nothing
     /// about whether the next meal exists.
+    ///
+    /// Nor anybody whose body is living off its own reserve. A wasting body
+    /// does not conceive, and wanting a child while wasting walked people to
+    /// death: in the second year of a trapping world a man at a third of his
+    /// reserve spent a hundred turns a day walking after his partner, and the
+    /// reserve went from a half to nothing in two months (#347).
     pub fn should_attempt_reproduction(&self) -> bool {
         if !self.can_reproduce() {
+            return false;
+        }
+
+        if self.state.physiology.is_wasting() {
             return false;
         }
 
@@ -7506,12 +7573,17 @@ impl Agent {
             Action::Eat { food_type } => format!("eat:{food_type}"),
             Action::Mate { .. } => "mate".to_string(),
             Action::Fish => "fish".to_string(),
+            Action::ForageShallows => "forageshallows".to_string(),
+            Action::SetFishTrap => "setfishtrap".to_string(),
+            Action::RobFishTrap { .. } => "robfishtrap".to_string(),
+            Action::CheckFishTraps => "checkfishtraps".to_string(),
             Action::SetSnare => "setsnare".to_string(),
             Action::CheckSnares => "checksnares".to_string(),
             Action::Hunt { .. } => "hunt".to_string(),
             Action::MakeClothing { garment } => format!("makeclothing:{garment}"),
             Action::Cook { .. } => "cook".to_string(),
             Action::LightFire => "lightfire".to_string(),
+            Action::ScatterSeed => "scatterseed".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),
@@ -7629,7 +7701,9 @@ impl Agent {
             // is a hunter, and folding it into `Foraging` would teach him
             // about picking herbs rather than about giving them.
             Action::Treat { .. } => Undertaking::Healing,
-            Action::Fish => Undertaking::Fishing,
+            Action::Fish | Action::ForageShallows | Action::CheckFishTraps => Undertaking::Fishing,
+            // Like a snare: setting one is not evidence about whether it pays
+            Action::SetFishTrap => return,
 
             // Going round the line is trapping. **Setting string is not, and
             // counting it as trapping is why nobody could ever find out that
@@ -7647,6 +7721,7 @@ impl Agent {
             Action::CheckSnares => Undertaking::Trapping,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
+            | Action::ScatterSeed
             | Action::SpreadMuck
             | Action::TendField
             | Action::TakeCutting

@@ -218,6 +218,9 @@ fn nobody_farms_on_an_empty_stomach() {
         agent
             .practices
             .saw_it_work(crate::agents::practices::Practice::Farming);
+        // And a garden is a thing it has found out (Stage 2, #346)
+        agent.found_out_how_to("do:ScatterSeed");
+        agent.found_out_how_to("do:TillSoil");
     }
 
     assert!(

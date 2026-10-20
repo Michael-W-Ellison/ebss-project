@@ -14,6 +14,7 @@ use crate::world::{ItemType, World, WorldConfig};
 fn people(how_many: usize) -> Simulation {
     let mut world = World::new(WorldConfig::default());
     world.animals.get_all_mut().clear();
+    crate::analytics::tests::the_longhouse_there_used_to_be(&mut world);
     let mut population = Population::new();
     for _ in 0..how_many {
         population.spawn_agent(AgentConfig::default());

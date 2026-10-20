@@ -837,13 +837,39 @@ impl Simulation {
             agent.inventory.add_item(taken);
         }
 
-        // And whoever else was standing there saw it. A thief in a
-        // camp of forty is a thief to forty people.
+        // And whoever else was standing there saw it, and it cost him.
+        self.seen_taking(agent_index, Some(them), "takefrom", &theirs.0, took, turn_now);
+
+        debug!("Agent {me} helped himself to {took} {} of {robbed}'s", theirs.0);
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Utility, -0.35)
+            .with_energy_cost(2.0)
+            .with_message(format!("Took {took} {} from somebody", theirs.0))
+    }
+
+    /// Whoever was standing close enough to see `agent_index` take `took` of
+    /// `what`, other than the one robbed (`but_not`), holds it against the
+    /// thief as though it had been theirs, and learns to dread doing it
+    /// (`did`, as `Agent::what_was_tried` names it) without having tried it;
+    /// and being seen is what it costs the thief. A thief in a camp of forty
+    /// is a thief to forty people. Returns how many saw it.
+    pub(in crate::analytics) fn seen_taking(
+        &mut self,
+        agent_index: usize,
+        but_not: Option<usize>,
+        did: &str,
+        what: &str,
+        took: u32,
+        turn_now: u32,
+    ) -> usize {
+        let me = self.population.agents[agent_index].id;
+        let how_strong_the_thief_is = self.population.agents[agent_index].own_strength();
         let here = self.population.agents[agent_index].state.position;
         let mut who_saw_it = 0;
 
         for onlooker in 0..self.population.agents.len() {
-            if onlooker == agent_index || onlooker == them {
+            if onlooker == agent_index || Some(onlooker) == but_not {
                 continue;
             }
             if !self.population.agents[onlooker].state.is_alive {
@@ -858,7 +884,7 @@ impl Simulation {
                 self.population.agents[onlooker]
                     .they_took_something_of_mine(
                         me,
-                        &theirs.0,
+                        what,
                         took,
                         turn_now,
                         how_strong_the_thief_is,
@@ -873,7 +899,7 @@ impl Simulation {
                 // caught at.
                 self.population.agents[onlooker].patterns.taught_to_dread(
                     DriveType::Utility,
-                    crate::agents::patterns::Element::Did("takefrom".to_string()),
+                    crate::agents::patterns::Element::Did(did.to_string()),
                     DriveType::Social,
                     crate::agents::patterns::Patterns::WHAT_WATCHING_IT_HAPPEN_TEACHES,
                 );
@@ -892,12 +918,7 @@ impl Simulation {
             self.population.agents[agent_index].this_cost_me(DriveType::Social, cost, turn_now);
         }
 
-        debug!("Agent {me} helped himself to {took} {} of {robbed}'s", theirs.0);
-
-        ActionResult::success()
-            .with_drive_change(DriveType::Utility, -0.35)
-            .with_energy_cost(2.0)
-            .with_message(format!("Took {took} {} from somebody", theirs.0))
+        who_saw_it
     }
 
     /// `Action::AskAbout`.

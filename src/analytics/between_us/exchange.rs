@@ -533,6 +533,37 @@ impl Simulation {
             .iter()
             .position(|other| other.id == agent.id)?;
 
+        let cost = self.what_taking_here_would_cost(agent, agent_position);
+
+        self.population
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, them)| them.id != agent.id && them.state.is_alive)
+            .filter(|(_, them)| {
+                (them.state.position.0 - agent_position.0)
+                    .abs()
+                    .max((them.state.position.1 - agent_position.1).abs())
+                    <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
+            })
+            // The best thing anybody standing here has that this agent wants
+            .filter_map(|(them, they)| {
+                let (what, how_many) = self.what_i_would_hand_over(them, me)?;
+                let gain = agent.what_taking_this_would_answer(&what, how_many);
+                Some((they.id, gain))
+            })
+            .filter(|(_, gain)| agent.would_i_take_it(*gain, cost))
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(who, _)| who)
+    }
+
+    /// What taking something here, now, would cost this agent: who would see
+    /// it, and what they are to it.
+    pub(in crate::analytics) fn what_taking_here_would_cost(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> f32 {
         // Who would see it. The same reckoning a liar makes about the people
         // in earshot - it is the same kind of decision.
         let watching: Vec<&crate::agents::Agent> = self
@@ -566,28 +597,7 @@ impl Simulation {
                 / watching.len() as f32
         };
 
-        let cost = agent.what_taking_it_would_cost_me(watching.len(), bonds);
-
-        self.population
-            .agents
-            .iter()
-            .enumerate()
-            .filter(|(_, them)| them.id != agent.id && them.state.is_alive)
-            .filter(|(_, them)| {
-                (them.state.position.0 - agent_position.0)
-                    .abs()
-                    .max((them.state.position.1 - agent_position.1).abs())
-                    <= Self::CLOSE_ENOUGH_TO_HAND_SOMETHING_OVER
-            })
-            // The best thing anybody standing here has that this agent wants
-            .filter_map(|(them, they)| {
-                let (what, how_many) = self.what_i_would_hand_over(them, me)?;
-                let gain = agent.what_taking_this_would_answer(&what, how_many);
-                Some((they.id, gain))
-            })
-            .filter(|(_, gain)| agent.would_i_take_it(*gain, cost))
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(who, _)| who)
+        agent.what_taking_it_would_cost_me(watching.len(), bonds)
     }
 
     /// How generous somebody has to feel about a person before handing them
