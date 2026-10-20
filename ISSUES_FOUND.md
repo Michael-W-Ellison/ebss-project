@@ -26510,29 +26510,62 @@ theirs is theft** (`Action::RobFishTrap`).
   it lands through `they_took_something_of_mine`, like any theft: the bond,
   anger or fear, and trust.
 
-**Measured**, forty settlements, against #346 and against traps alone:
+**What it set off: the minute clock read a grudge wherever the thief was.**
+- The first full suite with robbing failed
+  `a_settlement_stops_doing_what_does_not_work`: 43% of all actions failed.
+- The same settlement took 360,864 actions in 6,000 turns, against 118,497
+  before robbing.
+- Nearly all of the extra were one thing: 157,000 failed gathers ("No food
+  sources nearby"), every one of them by somebody on the minute clock.
+- Everybody who saw a trap robbed was angry enough at the thief to act on it.
+  `in_danger` and `threatened_by_something_there` read that anger wherever
+  the thief was. A beast's hold fades once it is out of sight; a grudge
+  against a neighbour is held for days. So the watchers spent the next half
+  day deciding minute by minute, falling back on a gather that came to
+  nothing.
+- **And the births that the first measure of robbing showed (130 -> 177,
+  t = 3.84) were this**: people taking three times the actions find more food.
+  Measured again with it fixed, the gain is gone (below).
 
-| | #346 | traps | traps and robbing | paired t, against #346 |
-|---|---|---|---|---|
-| births | 130 | 139 | 177 | +3.84 |
-| scattered births | 25 | 37 | 51 | +2.36 |
-| alive at day 720 | 607 | 612 | 652 | +3.47 |
-| hunger deaths | 3 | 5 | 4 | +0.44 |
-| camp moves | 531 | 350 | 351 | -2.25 |
-| sowing found (median day) | 39 (224) | 40 (197) | 40 (216) | |
-| gardens found (median day) | 31 (416) | 37 (385) | 39 (366) | |
+Fixed:
+- `EmotionState::in_danger_from` and `threatened_by_any_of` count only what
+  the caller says is about.
+- `Simulation::is_it_about` counts a person only within sight
+  (`WITHIN_SIGHT`). That is used for the minute clock and for not sleeping
+  through danger.
+- Beasts and the fear of going without are as they were.
+- A robbery found out afterwards is a grudge (`hold_a_grudge`): the same cost
+  to the bond and trust, weighing on the bond while it is held, but held short
+  of acting on. Seen happening, it is answered as any theft is.
+- The same settlement now takes 144,880 actions, 11.5% failing; it was 10.9%
+  before robbing.
 
-- 8,754 robberies in forty worlds took 21,209 fish, about a seventh of what
-  came out of traps.
-- **Births rise with robbing**, and significantly (+38 against traps alone,
-  t = 2.60). The fish a trap holds go to whoever is hungry and standing at
-  it, not only to whoever set it. A theft that feeds somebody without a trap
-  of their own is, in what it does for a band's children, a share.
-- Scattered settlements now have about the births they had before farming was
-  staged (#345: 56; here 51), still with no garden for most of the first
-  year.
+**Measured**, forty settlements, two years, everything in #347 against #346:
+
+| | #346 | #347 | paired t |
+|---|---|---|---|
+| births | 130 | 127 | -0.21 |
+| scattered births | 25 | 24 | -0.08 |
+| deaths (all hunger) | 3 | 3 | 0 |
+| alive at day 720 | 607 | 604 | -0.20 |
+| camp moves | 531 | 361 | -1.66 |
+| sowing found (median day) | 39 (224) | 39 (223) | |
+| gardens found (median day) | 31 (416) | 37 (343) | |
+
+- Traps were found in every world, median day 9. In two years they gave
+  132,000 fish to their owners and 29,000 to 12,304 robberies; 54,000 more
+  were speared and 16,000 picked out of the shallows.
+- **None of it moves births or deaths.** The fish stands in for food got
+  another way; a band's children are gated by its stores.
+- It is the user's own ask that a gathering band not thrive before
+  agriculture, so that is where this leaves it.
+- What changes is the pace of farming: gardens come in 37 worlds, not 31, and
+  about ten weeks sooner, and bands on scattered ground move camp less.
 
 **Tests.**
 - `a_robbed_trap_is_found_out_on_the_round`;
 - `a_partner_or_a_fed_friend_leaves_a_trap_alone`;
+- `a_thief_out_of_sight_is_no_danger`;
+- `a_grudge_is_held_short_of_acting` and
+  `danger_from_a_person_counts_only_while_they_are_about` (in `emotions`);
 - `a_settlement_ends_up_with_enemies_in_it` passes again.
