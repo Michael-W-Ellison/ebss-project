@@ -1373,12 +1373,10 @@ impl World {
             .spread_over(config.size.0 * config.size.1);
         world.generate_resources(&for_this_map);
 
-        // Build initial longhouse at center
-        let center = (config.size.0 / 2, config.size.1 / 2);
-        world.add_building(Building::new(
-            BuildingType::Longhouse,
-            Position::new(center.0 as i32, center.1 as i32),
-        ));
+        // No building is waiting. A finished longhouse used to stand at the
+        // centre of every new world; a people that arrives as hunters and
+        // gatherers puts up what it can carry or find, and a longhouse is a
+        // settled people's building (ISSUES_FOUND #346).
 
         // Stock the country with what grows on it
         world.prime_the_springs();

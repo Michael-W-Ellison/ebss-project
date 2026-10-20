@@ -173,3 +173,15 @@ pub(crate) fn plain_ground_about(simulation: &mut crate::analytics::Simulation, 
         }
     }
 }
+
+/// The finished longhouse every world used to start with at its centre, for a
+/// fixture built on it. Worlds start with nothing built now: founders arrive
+/// as hunters and gatherers (ISSUES_FOUND #346).
+pub(crate) fn the_longhouse_there_used_to_be(world: &mut crate::world::World) {
+    use crate::world::{Building, BuildingType, Position};
+    let (width, height) = (world.grid.width as i32, world.grid.height as i32);
+    world.add_building(Building::new(
+        BuildingType::Longhouse,
+        Position::new(width / 2, height / 2),
+    ));
+}

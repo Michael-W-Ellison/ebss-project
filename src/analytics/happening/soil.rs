@@ -65,9 +65,10 @@ impl Simulation {
             debug!("Something came up on the midden at {where_it_is:?}");
 
             // And whoever is close enough to see it takes the lesson: what
-            // they threw away last season is standing here as food. This is
-            // the only thing in the world that teaches farming outright -
-            // everything else is somebody breaking ground on a hunch.
+            // they threw away last season is standing here as food. It used
+            // to teach farming outright; what it teaches is Stage 1 of the
+            // agricultural path, that seed thrown on the ground comes up.
+            // Breaking ground is Stage 2, and comes of doing this.
             for agent in self
                 .population
                 .agents
@@ -78,12 +79,21 @@ impl Simulation {
                     + (agent.state.position.1 - where_it_is.y).abs();
 
                 if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
-                    agent
-                        .practices
-                        .saw_it_work(crate::agents::practices::Practice::Farming);
+                    Self::seeing_seed_come_up_teaches_sowing(agent);
                 }
             }
         }
+    }
+
+    /// What seeing seed come up as food teaches: that seed thrown on the
+    /// ground comes back, which is Stage 1 of the agricultural path -
+    /// scattering gathered seed (`Action::ScatterSeed`). Two such sights and
+    /// it is settled practice.
+    pub(in crate::analytics) fn seeing_seed_come_up_teaches_sowing(agent: &mut crate::agents::Agent) {
+        agent.found_out_how_to("do:ScatterSeed");
+        agent
+            .practices
+            .saw_it_work(crate::agents::practices::Practice::Sowing);
     }
 
     /// What a fair trade is worth to a bond, and what a gift is.
@@ -171,7 +181,7 @@ impl Simulation {
     /// somebody happened to be standing on, and the next time anybody walks
     /// past there is a plant. Whoever is near enough to see it takes the
     /// lesson, the same as with the midden - this is the second of the two
-    /// accidents that teach a people what seed is for.
+    /// accidents that teach a people what seed is for (Stage 1: sowing).
     pub(in crate::analytics) fn what_was_dropped_takes_root(&mut self) {
         use crate::world::{Position, ResourceNode, ResourceType};
         use rand::Rng;
@@ -239,9 +249,7 @@ impl Simulation {
                     + (agent.state.position.1 - where_it_fell.y).abs();
 
                 if apart <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP {
-                    agent
-                        .practices
-                        .saw_it_work(crate::agents::practices::Practice::Farming);
+                    Self::seeing_seed_come_up_teaches_sowing(agent);
                 }
             }
         }

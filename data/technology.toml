@@ -9817,6 +9817,7 @@ name = "Accidental reseeding near camps"
 path = "agricultural"
 stage = 0
 role = "technique"
+note = "Carried by the midden and by dropped sprouted grain coming up of themselves (happening::soil); not anything anybody does. It is what teaches Stage 1."
 
 [[tech]]
 id = "agricultural.0.protection_of_useful_wild_plants_from"
@@ -9838,6 +9839,8 @@ name = "Broadcast sowing of gathered seed"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["do:ScatterSeed"]
+note = "Found out by seeing seed come up where it was thrown away or dropped (what_was_dropped_comes_up, what_was_dropped_takes_root), or by watching somebody do it."
 
 [[tech]]
 id = "agricultural.1.weeding_around_useful_plants"
@@ -9845,6 +9848,8 @@ name = "Weeding around useful plants"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["do:TendField"]
+needs = ["agricultural.1.broadcast_sowing_of_gathered_seed"]
 
 [[tech]]
 id = "agricultural.1.controlled_burning"
@@ -9887,7 +9892,9 @@ name = "Small garden plots near dwellings"
 path = "agricultural"
 stage = 2
 role = "technique"
-model = ["do:TillSoil", "do:TendField"]
+model = ["do:TillSoil"]
+needs = ["agricultural.1.broadcast_sowing_of_gathered_seed"]
+note = "Found out by gathering, often enough, from stands you sowed yourself (Agent::GATHERED_FROM_SOWN_BEFORE_GARDENS), or by watching somebody break ground who already sows."
 
 [[tech]]
 id = "agricultural.2.propagation_from_cuttings_tubers_and_saved"
@@ -9896,6 +9903,7 @@ path = "agricultural"
 stage = 2
 role = "technique"
 model = ["do:TakeCutting", "do:PlantCutting"]
+needs = ["agricultural.2.small_garden_plots_near_dwellings"]
 
 [[tech]]
 id = "agricultural.2.composting_and_midden_enrichment"
@@ -9904,6 +9912,7 @@ path = "agricultural"
 stage = 2
 role = "technique"
 model = ["do:SpreadMuck"]
+needs = ["agricultural.2.small_garden_plots_near_dwellings"]
 
 [[tech]]
 id = "agricultural.2.reliable_vegetables_legumes_tubers_herbs_and"

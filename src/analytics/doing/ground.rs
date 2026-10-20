@@ -60,6 +60,65 @@ impl Simulation {
         self.population.agents[agent_index].saw_a_stand_on((at.x, at.y), it_says, full);
     }
 
+    /// `Action::ScatterSeed`: a handful of gathered seed thrown on good
+    /// ground where the agent stands.
+    ///
+    /// Stage 1 of the agricultural path. Nothing is broken and nothing is
+    /// tended; the seed comes up, or does not, as a stand like any other, and
+    /// it remembers who threw it (`ResourceNode::sown_by`), because gathering
+    /// from your own stand is what teaches that this works.
+    pub(in crate::analytics) fn scattering_seed(&mut self, agent_index: usize) -> ActionResult {
+        use crate::world::{Position, ResourceNode};
+
+        let at = self.population.agents[agent_index].state.position;
+        let here = Position::new(at.0, at.1);
+
+        let takes_seed = self
+            .world
+            .grid
+            .get_tile(&here)
+            .map(|tile| tile.terrain.can_be_tilled() || tile.terrain.is_cultivated())
+            .unwrap_or(false);
+        if !takes_seed {
+            return ActionResult::failure("Nothing would come up here".to_string());
+        }
+        if self.world.nodes_on(here).next().is_some() {
+            return ActionResult::failure("Something already grows here".to_string());
+        }
+
+        let Some((seed, crop)) = Self::seed_worth_scattering(&self.population.agents[agent_index]) else {
+            return ActionResult::failure("No seed to scatter".to_string());
+        };
+
+        let sower = {
+            let agent = &mut self.population.agents[agent_index];
+            agent.inventory.remove_item(seed, 1);
+            agent.skills.made_one(crate::agents::Agent::SEED_SCATTERED);
+            agent.id
+        };
+
+        let mut stand = ResourceNode::new(crop, here, Self::WHAT_ONE_SEED_COMES_TO);
+        stand.amount = 1;
+        stand.sown_by = Some(sower);
+        self.world.put_a_node_down(stand);
+
+        ActionResult::success()
+            .with_energy_cost(3.0)
+            .with_message(format!("Scattered {seed} at {here:?}"))
+    }
+
+    /// The seed in a pack worth throwing on the ground: something that feeds
+    /// somebody, the first of `what_can_be_sown` that is carried.
+    pub(in crate::analytics) fn seed_worth_scattering(
+        agent: &crate::agents::Agent,
+    ) -> Option<(&'static str, crate::world::ResourceType)> {
+        Self::what_can_be_sown()
+            .into_iter()
+            .filter(|(_, _, feeds_anybody)| *feeds_anybody)
+            .find(|(called, _, _)| agent.how_many_i_have(called) > 0)
+            .map(|(called, crop, _)| (called, crop))
+    }
+
     /// `Action::TillSoil`.
     pub(in crate::analytics) fn tilling_soil(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::{Position, ResourceNode};

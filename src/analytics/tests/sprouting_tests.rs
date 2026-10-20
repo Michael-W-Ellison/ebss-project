@@ -194,7 +194,7 @@ fn nothing_takes_root_on_bare_rock() {
 
 /// And whoever is standing there when it happens learns what seed does.
 #[test]
-fn seeing_a_dropped_seed_come_up_teaches_farming() {
+fn seeing_a_dropped_seed_come_up_teaches_sowing() {
     let where_it_is = Position::new(25, 25);
     let mut simulation = a_person_standing_on(TerrainType::Plains, where_it_is);
 
@@ -222,14 +222,15 @@ fn seeing_a_dropped_seed_come_up_teaches_farming() {
     assert!(
         simulation.population.agents[0]
             .practices
-            .confidence(Practice::Farming)
-            > 0.0,
+            .confidence(Practice::Sowing)
+            > 0.0
+            && simulation.population.agents[0].knows_how_to_do("ScatterSeed"),
         "the man whose pack it fell out of is standing over the evidence"
     );
     assert_eq!(
         simulation.population.agents[1]
             .practices
-            .confidence(Practice::Farming),
+            .confidence(Practice::Sowing),
         0.0,
         "the man forty tiles away is not"
     );

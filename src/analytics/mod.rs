@@ -494,6 +494,7 @@ impl Simulation {
             Action::Cook { .. } => Some(ActionType::Cooking),
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
+            Action::ScatterSeed => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
             Action::TakeFrom { .. } => Some(ActionType::Social),
             Action::FleeFrom { .. } => Some(ActionType::Combat),

@@ -53,6 +53,10 @@ fn a_camp_at(camp: Position) -> Simulation {
     let mut simulation = Simulation::new(world, population);
     for agent in &mut simulation.population.agents {
         agent.state.position = (camp.x, camp.y, 0);
+        // Propagation from cuttings is Stage 2 of the agricultural path and
+        // comes with gardens (#346); these are people who have got there
+        agent.found_out_how_to("do:ScatterSeed");
+        agent.found_out_how_to("do:TillSoil");
     }
     simulation
 }

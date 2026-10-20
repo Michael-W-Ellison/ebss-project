@@ -608,15 +608,132 @@ fn a_volunteer_on_the_midden_teaches_whoever_sees_it() {
     assert!(
         simulation.population.agents[0]
             .practices
-            .confidence(Practice::Farming)
-            > 0.0,
+            .confidence(Practice::Sowing)
+            > 0.0
+            && simulation.population.agents[0].knows_how_to_do("ScatterSeed"),
         "the one standing beside it learns what it is looking at"
     );
     assert_eq!(
         simulation.population.agents[1]
             .practices
-            .confidence(Practice::Farming),
+            .confidence(Practice::Sowing),
         0.0,
         "and the one forty tiles away learns nothing"
+    );
+}
+
+// --------------------------------------------------------------------------
+// The stages: scattering seed, then breaking ground (#346)
+// --------------------------------------------------------------------------
+
+/// One gatherer on open grass, nothing growing where they stand.
+fn a_gatherer_on_open_grass(where_it_is: Position) -> Simulation {
+    let mut world = World::new(WorldConfig::default());
+    world
+        .resources
+        .retain(|resource| resource.position != where_it_is);
+    if let Some(tile) = world.grid.get_tile_mut(&where_it_is) {
+        tile.terrain = Terrain::new(TerrainType::Plains);
+    }
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(world, population);
+    crate::analytics::tests::everybody_with_the_kit_before_stage_zero(&mut simulation);
+    simulation.population.agents[0].state.position = (where_it_is.x, where_it_is.y, 0);
+    simulation
+}
+
+/// Seed thrown on open grass comes up as a stand, not a field, and the stand
+/// knows who threw it.
+#[test]
+fn scattered_seed_is_a_stand_that_knows_its_sower() {
+    use crate::agents::InventoryItem;
+    let where_it_is = Position::new(25, 25);
+    let mut simulation = a_gatherer_on_open_grass(where_it_is);
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("grain".to_string(), 3, 0.2));
+
+    let result = simulation.execute_action(&Action::ScatterSeed, 0);
+    assert!(result.success, "{:?}", result.message);
+
+    let sower = simulation.population.agents[0].id;
+    let stand = simulation
+        .world
+        .resources
+        .iter()
+        .find(|node| node.position == where_it_is)
+        .expect("something stands where the seed went");
+    assert_eq!(stand.resource_type, ResourceType::Grain);
+    assert_eq!(stand.sown_by, Some(sower));
+    assert!(
+        !simulation
+            .world
+            .grid
+            .get_tile(&where_it_is)
+            .unwrap()
+            .terrain
+            .is_cultivated(),
+        "nothing was broken: it is still grass"
+    );
+    assert_eq!(simulation.population.agents[0].how_many_i_have("grain"), 2);
+}
+
+/// Gathering from your own stands, often enough, is what leads to breaking
+/// ground for a garden - and nothing before it does.
+#[test]
+fn gathering_from_what_you_sowed_leads_to_a_garden() {
+    let where_it_is = Position::new(25, 25);
+    let mut simulation = a_gatherer_on_open_grass(where_it_is);
+    simulation.population.agents[0].found_out_how_to("do:ScatterSeed");
+    let sower = simulation.population.agents[0].id;
+
+    let mut stand = ResourceNode::new(ResourceType::Grain, where_it_is, 400);
+    stand.amount = 400;
+    stand.sown_by = Some(sower);
+    simulation.world.resources.push(stand);
+
+    let mut armfuls = 0;
+    for _ in 0..60 {
+        if simulation.population.agents[0].knows_how_to_do("TillSoil") {
+            break;
+        }
+        simulation.population.agents[0].inventory.remove_item("grain", 1_000);
+        let result = simulation.execute_action(
+            &Action::Gather {
+                resource_type: "food".to_string(),
+            },
+            0,
+        );
+        if result.success {
+            armfuls += 1;
+        }
+    }
+
+    let agent = &simulation.population.agents[0];
+    assert!(
+        agent.knows_how_to_do("TillSoil"),
+        "{armfuls} armfuls off a stand he sowed and he never thought of breaking ground"
+    );
+    assert!(
+        armfuls >= crate::agents::Agent::GATHERED_FROM_SOWN_BEFORE_GARDENS,
+        "and not before it had paid him {} times: {armfuls}",
+        crate::agents::Agent::GATHERED_FROM_SOWN_BEFORE_GARDENS
+    );
+    assert!(agent.practices.confidence(Practice::Farming) > 0.0);
+}
+
+/// A gatherer does not break ground, however hungry for next year, until a
+/// garden is something they know of.
+#[test]
+fn a_gatherer_does_not_break_ground() {
+    let where_it_is = Position::new(25, 25);
+    let simulation = a_gatherer_on_open_grass(where_it_is);
+    let agent = &simulation.population.agents[0];
+    assert!(!agent.knows_how_to_do("TillSoil"));
+    assert_eq!(
+        simulation.farming_action(agent, agent.state.position),
+        None,
+        "no garden before Stage 2"
     );
 }

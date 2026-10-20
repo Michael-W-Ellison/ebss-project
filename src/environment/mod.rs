@@ -251,6 +251,10 @@ pub enum Action {
     MakeClothing { garment: String },
     /// Put on a garment the agent is carrying
     WearClothing { garment: String },
+    /// Throw a handful of gathered seed on good ground where the agent stands,
+    /// without breaking it: Stage 1 of the agricultural path, "broadcast
+    /// sowing of gathered seed". What comes up is a stand, not a field.
+    ScatterSeed,
     /// Break the grass where the agent stands into a field, and sow it
     TillSoil,
     /// Go over a standing field pulling weeds out of it and picking pests off
@@ -379,6 +383,7 @@ impl Action {
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather
             Action::LightFire => Some(DriveType::Sustenance), // A fire is for the food that goes on it
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
+            Action::ScatterSeed => Some(DriveType::Sustenance), // A stand is next season's food
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
             Action::TakeFrom { .. } => Some(DriveType::Utility),

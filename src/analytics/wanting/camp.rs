@@ -499,19 +499,23 @@ impl Simulation {
 
         // **A move of camp, or a day's trip.** Whether the camp itself goes
         // is a question about where this one lives: not straight after a
-        // move, and not away from food in store, because a people with
-        // something in a pit by the camp eat out of it rather than walk off
-        // and leave it. Without the store rule, every winter, when farming
-        // lapsed for want of a crop to show for it, the camp went back to
-        // ranging a whole camp at a time, up to once a week, away from the
-        // pits holding the winter (#314).
+        // move. Not away from food in store, either, was the rule - a people
+        // with something in a pit by the camp eats out of it rather than
+        // walking off - and it was written when farming came within months
+        // and lapsed every winter, which sent camps ranging away from the
+        // pits holding the winter (#314). For a gathering people it pinned
+        // the camp for good: they bury every surplus, so there was nearly
+        // always something in a pit, and 28 bands in 40 never moved in two
+        // years with no garden to stay for (#346). A pit is a cache a band
+        // comes back to on its round, not a reason to stay; the farmer, who
+        // has a reason to stay, never reaches this.
         //
         // Otherwise this one still goes for the day, judged from where they
         // stand, as everybody always did: before there was a hearth this was
         // the long foraging trip, out to the best ground they knew and back
         // to the others at night, and it fed people.
         let lives = Self::where_this_one_lives(agent);
-        if !self.moved_lately(agent) && !self.food_in_store_near(lives) {
+        if !self.moved_lately(agent) {
             if let Some((there, carrying)) = self.better_ground_from((lives.0, lives.1, agent_position.2), agent) {
                 // As many go as the ground there will feed, by the same
                 // measure that says this ground is stripped.

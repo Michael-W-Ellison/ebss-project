@@ -3627,8 +3627,65 @@ impl Agent {
         catalogue::is_born_knowledge(&link)
             || catalogue::what_comes_before(&link)
                 .iter()
-                .all(|first| self.knows_how_to_get(first))
+                .all(|first| self.knows(first))
     }
+
+    /// Whether this agent knows a model link of the technology catalogue, of
+    /// whatever kind: `make:basket`, `wear:linen_cloak`, `do:TillSoil`.
+    pub fn knows(&self, link: &str) -> bool {
+        match link.split_once(':') {
+            Some(("make", what)) => self.knows_how_to_get(what),
+            Some(("wear", what)) => self.knows_how_to_make_garment(what),
+            Some(("do", what)) => self.knows_how_to_do(what),
+            _ => crate::environment::catalogue::is_born_knowledge(link),
+        }
+    }
+
+    /// Whether this agent knows how to do something the catalogue names as an
+    /// action (`do:ScatterSeed`).
+    ///
+    /// Born knowledge, or found out (`found_out` holds `do:<action>`), or -
+    /// for an action that is not found out by anything of its own - within
+    /// reach once what it waits on is known: cuttings and muck come with
+    /// gardens. The ones found out by something of their own are
+    /// `ACTIONS_FOUND_OUT_BY_THEMSELVES`.
+    pub fn knows_how_to_do(&self, action: &str) -> bool {
+        use crate::environment::catalogue;
+        let link = format!("do:{action}");
+        if catalogue::is_born_knowledge(&link) || self.found_out.contains(&link) {
+            return true;
+        }
+        let first = catalogue::what_comes_before(&link);
+        !first.is_empty()
+            && !Self::ACTIONS_FOUND_OUT_BY_THEMSELVES.contains(&action)
+            && first.iter().all(|before| self.knows(before))
+    }
+
+    /// The actions somebody has to find out for themselves, by something that
+    /// happens to them, rather than coming within reach as soon as what they
+    /// wait on is known.
+    ///
+    /// - Scattering seed (Stage 1 of the agricultural path) is found out by
+    ///   seeing what was thrown away come up (`what_was_dropped_comes_up`,
+    ///   `what_was_dropped_takes_root`).
+    /// - Breaking ground for a garden (Stage 2) is found out by gathering,
+    ///   often enough, from stands you sowed yourself.
+    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 2] = ["ScatterSeed", "TillSoil"];
+
+    /// What the practice record calls a handful of seed thrown on the ground.
+    pub const SEED_SCATTERED: &'static str = "scatterseed";
+
+    /// And a gathering from a stand this one sowed.
+    pub const A_SOWN_STAND_GATHERED: &'static str = "gatheredfromwhatisowed";
+
+    /// How many times somebody has to have gathered from stands they sowed
+    /// before breaking ground for a garden occurs to them.
+    ///
+    /// The document's Stage 1 to Stage 2 is the step from helping wild
+    /// stands along to growing food on purpose in broken ground near home,
+    /// and it took generations. Here it takes a good many seasons of seeing
+    /// your own scattered seed come back as food.
+    pub const GATHERED_FROM_SOWN_BEFORE_GARDENS: u32 = 12;
 
     /// Whether this agent knows any way to a product of the making chain, by
     /// a making or by a working: retted flax and a needle are both workings,
@@ -7512,6 +7569,7 @@ impl Agent {
             Action::MakeClothing { garment } => format!("makeclothing:{garment}"),
             Action::Cook { .. } => "cook".to_string(),
             Action::LightFire => "lightfire".to_string(),
+            Action::ScatterSeed => "scatterseed".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),
@@ -7647,6 +7705,7 @@ impl Agent {
             Action::CheckSnares => Undertaking::Trapping,
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
+            | Action::ScatterSeed
             | Action::SpreadMuck
             | Action::TendField
             | Action::TakeCutting

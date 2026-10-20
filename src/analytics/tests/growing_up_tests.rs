@@ -20,6 +20,7 @@ use crate::world::{World, WorldConfig};
 fn a_world() -> World {
     let mut world = World::new(WorldConfig::default());
     world.animals.get_all_mut().clear();
+    crate::analytics::tests::the_longhouse_there_used_to_be(&mut world);
     world
 }
 

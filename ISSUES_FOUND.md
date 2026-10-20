@@ -26278,3 +26278,104 @@ in the pack, or a knife to reach for.
 unlinked: smoking, brining, pit ovens, weirs and traps, shellfish, water
 skins, and others. The luxury drive is tagged in the catalogue and drives
 nothing yet. Tool quality still changes yield rather than time.
+
+### 346. Hunter-gatherers first: agriculture in the document's three stages
+
+**What was asked.** Agents start as hunter-gatherers. A settlement is only
+viable once agriculture is discovered and worked. Agriculture follows
+tech.txt's stages. The free longhouse goes. And nothing should stop a band
+settling before it farms except its ground running out.
+
+**What it was.**
+- Farming was one practice, learned within months from seeing midden
+  scraps or dropped sprouted grain come up (#10, #12).
+- Every world started with a finished longhouse at its centre.
+- A camp would not move while any pit within a forage held food (#314).
+
+**Stage 0: gathering** - born, as it was.
+
+**Stage 1: broadcast sowing of gathered seed.**
+- A new action, `ScatterSeed`. A handful of gathered seed is thrown on open
+  ground near camp, nothing is broken, and what comes up is a stand like
+  any other.
+- The stand remembers who threw it (`ResourceNode::sown_by`).
+- What teaches it is what used to teach farming: seeing seed come up out of
+  the midden, or where sprouted grain fell (`found_out` holds
+  `do:ScatterSeed`). Watching somebody sow passes it on.
+- A camp keeps a dozen sown stands about it at most
+  (`STANDS_A_CAMP_SOWS`).
+- Weeding (`TendField`) comes with it.
+
+**Stage 2: gardens.**
+- Breaking ground (`TillSoil`, the old farming) is found out by gathering
+  from stands you sowed yourself, twelve times
+  (`GATHERED_FROM_SOWN_BEFORE_GARDENS`).
+- It is shown to somebody who already sows by watching them break ground.
+- Cuttings and muck come with gardens.
+- An established farmer still never moves on, and stays by a standing
+  crop.
+
+**How it is decided.** The catalogue gates actions as it gates products:
+- `needs` may name a `do:` listing.
+- `Agent::knows(link)` answers for any model link.
+- `knows_how_to_do` answers born, found out, or - for an action not found
+  out by anything of its own - within reach once what it waits on is known.
+  Sowing and breaking ground are the two found out by themselves
+  (`ACTIONS_FOUND_OUT_BY_THEMSELVES`).
+
+**No free longhouse.** Worlds start with nothing built.
+
+**A cache is not an anchor.** `moving_on` no longer refuses to move a
+gathering camp away from food in a pit.
+- Measured with the rule in place: 28 bands in 40 never moved in two years,
+  most of them with no garden to stay for, because a gathering people buries
+  every surplus and there was nearly always something in a pit.
+- #314's reason for the rule was camps ranging away from the winter's pits
+  when farming lapsed. That cannot happen to a farmer now: `moving_on`
+  returns before it for anybody farming or beside a crop.
+
+**Measured**, forty settlements (smooth 1-24, scattered 1-16), two years:
+
+| | before | stages | stages, caches not anchors |
+|---|---|---|---|
+| births | 158 | 129 | 130 |
+| deaths | 1 (hunger) | 0 | 3 (hunger) |
+| camp moves (settlements that moved) | 9 (3) | 59 (12) | 531 (25) |
+| sowing found (median day) | - | 39 (231) | 39 (224) |
+| gardens found (median day) | - | 32 (465) | 31 (416) |
+
+By terrain:
+
+| | smooth births | smooth moves | scattered births | scattered moves |
+|---|---|---|---|---|
+| before | 102 | 3 | 56 | 6 |
+| stages, caches not anchors | 105 | 35 | 25 | 496 |
+
+- On smooth ground - the default, 24 of the 40 - nothing is lost. Bands move
+  camp a little, find sowing in their first year and gardens in their
+  second.
+- On scattered ground, a gathering band without farming raises few
+  children: births halved as soon as farming was staged, before the cache
+  rule changed.
+  - With the rule changed, those bands move camp about every three weeks.
+  - Moves mostly stop once gardens arrive: of 496 scattered moves, 58 came
+    after the band's gardens.
+  - That is the asked-for result - no settlement thrives before agriculture
+    - and where it shows is on poor ground.
+- Paired by seed, births against "before" are -0.70 a settlement
+  (t = -1.92), all of it on scattered ground.
+- The three hunger deaths were in three different worlds (two scattered,
+  one smooth), two of them in the last week of the second winter.
+
+**Fixtures.**
+- Three tests stood on the free longhouse; they get it back through
+  `the_longhouse_there_used_to_be`.
+- Five that make a farmer by belief now also have the farmer know gardens.
+- The volunteer tests now expect sowing, not farming.
+- `nobody_moves_on_from_food_in_store` is now
+  `a_gathering_people_moves_on_from_a_cache`.
+- New tests:
+  - `scattered_seed_is_a_stand_that_knows_its_sower`;
+  - `gathering_from_what_you_sowed_leads_to_a_garden`;
+  - `a_gatherer_does_not_break_ground`;
+  - `agriculture_comes_in_the_documents_three_stages`.

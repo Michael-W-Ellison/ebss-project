@@ -1178,6 +1178,7 @@ impl Simulation {
                 .or_else(|| self.muck_action(agent, agent_position))
                 .or_else(|| self.moving_to_farmland(agent, agent_position))
                 .or_else(|| self.farming_action(agent, agent_position))
+                .or_else(|| self.sowing_action(agent, agent_position))
                 .or_else(|| self.transplanting_action(agent, agent_position))
                 .or_else(|| self.moving_on(agent, agent_position))
                 .or_else(|| self.fishing_action(agent, agent_position)),

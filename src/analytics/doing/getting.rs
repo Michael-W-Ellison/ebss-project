@@ -408,6 +408,9 @@ impl Simulation {
             // Harvest resource
             let where_it_grew = self.world.resources[resource_index].position;
             let killed_on = self.world.resources[resource_index].killed_on;
+            // Read before the harvest: an emptied stand is taken up
+            // (`did_that_empty_it`) and its index goes to another node
+            let sown_by = self.world.resources[resource_index].sown_by;
             let harvested = {
                 let node = &mut self.world.resources[resource_index];
                 let taken = node.harvest(harvest_amount);
@@ -472,6 +475,27 @@ impl Simulation {
                             .exploration_knowledge
                             .found_none_at(where_it_grew, now);
                     }
+                }
+            }
+
+            // What a stand you sowed yourself teaches: that sowing on purpose
+            // works (Stage 1), and, often enough, that the ground could be
+            // broken for it (Stage 2, `GATHERED_FROM_SOWN_BEFORE_GARDENS`).
+            if harvested > 0 && sown_by == Some(self.population.agents[agent_index].id) {
+                let agent = &mut self.population.agents[agent_index];
+                agent
+                    .practices
+                    .record_outcome(crate::agents::practices::Practice::Sowing, true);
+                agent.skills.made_one(crate::agents::Agent::A_SOWN_STAND_GATHERED);
+                if agent.skills.times_made(crate::agents::Agent::A_SOWN_STAND_GATHERED)
+                    >= crate::agents::Agent::GATHERED_FROM_SOWN_BEFORE_GARDENS
+                    && agent.knows_how_to_do("ScatterSeed")
+                    && agent.found_out_how_to("do:TillSoil")
+                {
+                    agent
+                        .practices
+                        .saw_it_work(crate::agents::practices::Practice::Farming);
+                    debug!("Agent {} thought of breaking ground for what it sows", agent.id);
                 }
             }
 

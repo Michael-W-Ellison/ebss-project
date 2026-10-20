@@ -964,6 +964,16 @@ pub struct ResourceNode {
     /// is cut off it is as old as it is - see `World::a_carcass_lies_here`.
     #[serde(default)]
     pub killed_on: Option<u32>,
+
+    /// Who scattered the seed this stand grew from, if anybody did.
+    ///
+    /// Stage 1 of the agricultural path is "broadcast sowing of gathered
+    /// seed": a handful thrown on good ground near camp, which comes up as a
+    /// stand like any other. Gathering from a stand you sowed yourself is the
+    /// evidence that sowing on purpose works, and enough of it is what leads
+    /// on to breaking ground for a garden (ISSUES_FOUND #346).
+    #[serde(default)]
+    pub sown_by: Option<uuid::Uuid>,
 }
 
 impl ResourceNode {
@@ -1024,6 +1034,7 @@ impl ResourceNode {
             taken_since_it_ripened: 0,
             asleep_since: None,
             killed_on: None,
+            sown_by: None,
         }
     }
 

@@ -23,6 +23,14 @@ pub enum Practice {
     /// Carrying spoiled food, bones and refuse onto a field, on the theory
     /// that it does the ground good
     SpreadingMuck,
+    /// Scattering gathered seed on good ground near camp, so that a stand
+    /// comes up where there was none: Stage 1 of the agricultural path.
+    ///
+    /// What teaches it is the midden and the dropped grain - seeing what was
+    /// thrown away come up as food. That used to teach farming outright; it
+    /// teaches this, and farming (Stage 2) is what comes of doing this and
+    /// gathering from what came up.
+    Sowing,
     /// Breaking ground and putting seed in it on purpose, rather than walking
     /// to wherever food happens to be growing.
     ///
