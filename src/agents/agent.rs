@@ -11528,6 +11528,33 @@ impl Agent {
         current_turn: u32,
         how_strong_they_are: f32,
     ) {
+        self.robbed(thief, what, how_many, current_turn, how_strong_they_are, true);
+    }
+
+    /// And finding out afterwards that somebody took something of this
+    /// agent's - a trap emptied by somebody long gone. The same cost to the
+    /// bond and the same mark against them, but held as a grudge
+    /// (`EmotionState::hold_a_grudge`): there is nobody there to face or run
+    /// from.
+    pub fn found_out_they_took_something_of_mine(
+        &mut self,
+        thief: uuid::Uuid,
+        what: &str,
+        how_many: u32,
+        current_turn: u32,
+    ) {
+        self.robbed(thief, what, how_many, current_turn, 0.0, false);
+    }
+
+    fn robbed(
+        &mut self,
+        thief: uuid::Uuid,
+        what: &str,
+        how_many: u32,
+        current_turn: u32,
+        how_strong_they_are: f32,
+        they_are_here: bool,
+    ) {
         use super::EmotionSource;
 
         // What it costs depends on how much was taken and how much this agent
@@ -11545,16 +11572,20 @@ impl Agent {
         // like. It is the same appraisal the wolves get, pointed at a person:
         // see `ThreatAssessment` and `DriveType::Aggression`. What was taken
         // decides how much, and who took it decides which.
-        let judged = super::ThreatAssessment::assess(
-            self.own_strength(),
-            how_strong_they_are,
-            EmotionSource::Agent(thief),
-        );
+        if they_are_here {
+            let judged = super::ThreatAssessment::assess(
+                self.own_strength(),
+                how_strong_they_are,
+                EmotionSource::Agent(thief),
+            );
 
-        if judged.can_overcome {
-            self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+            if judged.can_overcome {
+                self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+            } else {
+                self.emotions.add_fear(EmotionSource::Agent(thief), cost);
+            }
         } else {
-            self.emotions.add_fear(EmotionSource::Agent(thief), cost);
+            self.emotions.hold_a_grudge(EmotionSource::Agent(thief), cost);
         }
 
         let bond = self

@@ -117,6 +117,29 @@ impl EmotionState {
         self.should_flee() || self.should_attack()
     }
 
+    /// The same, counting only what `about` says is about.
+    ///
+    /// A grudge or a dread of a person is held for days, long after they have
+    /// walked away. A beast's hold fades once it is out of sight; a person's
+    /// does not. So the minute clock, which is for something in front of you,
+    /// asks whether the person is there (`Simulation::is_it_about`). Counted
+    /// wherever the person was, a settlement where people emptied each other's
+    /// fish traps kept everybody who had seen it on the minute clock for the
+    /// next half day, and took three times the actions to live the same days
+    /// (#347).
+    pub fn in_danger_from(&self, about: impl Fn(&EmotionSource) -> bool) -> bool {
+        let worst = |sources: &BTreeMap<EmotionSource, f32>| {
+            sources
+                .iter()
+                .filter(|(source, _)| about(source))
+                .map(|(_, amount)| *amount)
+                .fold(0.0_f32, f32::max)
+        };
+        worst(&self.fear_sources) > Self::AFRAID_ENOUGH_TO_ACT
+            || (worst(&self.anger_sources) > Self::ANGRY_ENOUGH_TO_ACT
+                && self.fear < Self::TOO_FRIGHTENED_TO_STAND)
+    }
+
     /// Something has just struck this one, and it is still there.
     ///
     /// However it was sized up, it is now at least enough to act on: anger
@@ -194,6 +217,28 @@ impl EmotionState {
         self.anger_sources.insert(source, new_amount.min(1.0));
         self.update_totals();
     }
+
+    /// A grudge against somebody who is not there.
+    ///
+    /// Anger, and it weighs on the bond every turn it is held
+    /// (`Relationship::let_it_tell`), but held short of what it takes to act
+    /// on: there is nobody in front of you to turn on, so it does not put
+    /// anybody on the minute clock the way somebody standing over you does.
+    /// Found out after the fact, a robbery is this. Treated as anger at
+    /// somebody present, a settlement emptying each other's fish traps kept a
+    /// third of itself on the minute clock and took three times the actions
+    /// for the same days (#347).
+    pub fn hold_a_grudge(&mut self, source: EmotionSource, amount: f32) {
+        let most = Self::ANGRY_ENOUGH_TO_ACT * Self::A_GRUDGE_STOPS_SHORT;
+        let held = self.anger_sources.get(&source).copied().unwrap_or(0.0);
+        if held >= most {
+            return;
+        }
+        self.set_anger(source, (held + amount).min(most));
+    }
+
+    /// How close to acting on it a grudge comes.
+    const A_GRUDGE_STOPS_SHORT: f32 = 0.9;
 
     /// Add fear toward a source
     pub fn add_fear(&mut self, source: EmotionSource, amount: f32) {
@@ -499,16 +544,15 @@ impl EmotionState {
     /// at a time, gave the boar beside them a strike every one of those
     /// minutes: seven in a half hour, and dead (#325).
     pub fn threatened_by_something_there(&self) -> bool {
-        let worst_there = |sources: &BTreeMap<EmotionSource, f32>| {
-            sources
-                .iter()
-                .filter(|(source, _)| matches!(source, EmotionSource::Creature(_) | EmotionSource::Agent(_)))
-                .map(|(_, amount)| *amount)
-                .fold(0.0_f32, f32::max)
-        };
-        worst_there(&self.fear_sources) > Self::AFRAID_ENOUGH_TO_ACT
-            || (worst_there(&self.anger_sources) > Self::ANGRY_ENOUGH_TO_ACT
-                && self.fear < Self::TOO_FRIGHTENED_TO_STAND)
+        self.threatened_by_any_of(|_| true)
+    }
+
+    /// The same, counting only the beasts and people `about` says are about
+    /// - see `in_danger_from`.
+    pub fn threatened_by_any_of(&self, about: impl Fn(&EmotionSource) -> bool) -> bool {
+        self.in_danger_from(|source| {
+            matches!(source, EmotionSource::Creature(_) | EmotionSource::Agent(_)) && about(source)
+        })
     }
 
     /// Check if agent is emotionally distressed
@@ -1728,6 +1772,35 @@ mod tests {
             ThreatAssessment::AS_AFRAID_AS_ONE_THING_CAN_MAKE_YOU,
         );
         assert!(emotions.threatened_by_something_there(), "but a boar is there");
+    }
+
+    /// A grudge weighs and does not send you after anybody: however often the
+    /// same person wrongs you out of sight, it is held short of acting (#347).
+    #[test]
+    fn a_grudge_is_held_short_of_acting() {
+        let mut emotions = EmotionState::new();
+        let them = EmotionSource::Agent(Uuid::new_v4());
+        for _ in 0..10 {
+            emotions.hold_a_grudge(them.clone(), 0.55);
+        }
+        assert!(emotions.anger_sources[&them] > 0.0, "it is held");
+        assert!(!emotions.should_attack(), "and not acted on");
+    }
+
+    /// The minute clock counts a person only while they are about (#347).
+    #[test]
+    fn danger_from_a_person_counts_only_while_they_are_about() {
+        let mut emotions = EmotionState::new();
+        let them = Uuid::new_v4();
+        emotions.add_anger(EmotionSource::Agent(them), 0.5);
+
+        assert!(emotions.in_danger(), "angry enough at somebody to face them");
+        assert!(
+            !emotions.in_danger_from(|source| !matches!(source, EmotionSource::Agent(_))),
+            "but not while they are not there"
+        );
+        assert!(!emotions.threatened_by_any_of(|_| false));
+        assert!(emotions.threatened_by_any_of(|_| true), "and when they are, as before");
     }
 
     #[test]

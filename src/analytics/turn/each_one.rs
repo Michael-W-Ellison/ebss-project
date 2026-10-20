@@ -233,7 +233,25 @@ impl Simulation {
     pub(in crate::analytics) fn something_is_after_me(&self, at: usize) -> bool {
         let agent = &self.population.agents[at];
         agent.state.years_old() >= crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL
-            && agent.emotions.threatened_by_something_there()
+            && agent.emotions.threatened_by_any_of(|source| self.is_it_about(at, source))
+    }
+
+    /// Whether what an agent fears or is angry at is about: a person only
+    /// while they are within sight, anything else as the feeling says. A
+    /// beast's hold on somebody fades once it is out of view; a grudge
+    /// against a neighbour is held for days, and the minute clock is for
+    /// something in front of you (#347).
+    pub(in crate::analytics) fn is_it_about(&self, at: usize, source: &crate::agents::EmotionSource) -> bool {
+        let crate::agents::EmotionSource::Agent(them) = source else {
+            return true;
+        };
+        let here = self.population.agents[at].state.position;
+        self.population.agents.iter().any(|other| {
+            other.id == *them
+                && other.state.is_alive
+                && (other.state.position.0 - here.0).abs().max((other.state.position.1 - here.1).abs())
+                    <= Self::WITHIN_SIGHT
+        })
     }
 
     /// Fewer minutes than this left of the half hour is not enough to start
@@ -300,8 +318,11 @@ impl Simulation {
             // function again on the same tick, and has to find him free.
             {
                 let now = self.current_turn;
+                let in_danger = self.population.agents[agent_index]
+                    .emotions
+                    .in_danger_from(|source| self.is_it_about(agent_index, source));
                 let agent = &mut self.population.agents[agent_index];
-                if agent.emotions.in_danger() {
+                if in_danger {
                     agent.busy_until = 0;
                 } else if agent.busy_until > now {
                     return;
