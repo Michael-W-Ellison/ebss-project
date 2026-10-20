@@ -28,10 +28,14 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #346): `cargo test --release --lib` in one
-piece. 2,840 tests run: 2,833 passed, 2 failed, 5 ignored, in 1,133 s.
-- The two were the dice counts, which #346 moves; they are recorded anew.
-- The dice counts are 7,903 (seed 4242, 120 turns) and 977,779 (seed 0, a
+**Last full run** (ISSUES_FOUND #347): `cargo test --release --lib` in one
+piece. 2,852 tests run: 2,845 passed, 2 failed, 5 ignored, in 1,274 s.
+- One failure was the year's dice count, which the trap robbing moves; it is
+  recorded anew.
+- The other was `every_roll_comes_from_the_one_stream`, on two of #347's own
+  new tests making ids with `Uuid::new_v4`; they use fixed ids now and it
+  passes.
+- The dice counts are 8,703 (seed 4242, 120 turns) and 1,011,830 (seed 0, a
   year).
 - The fifth ignored test is `repeatable_tests::one_process_reports_seed_zero`,
   which only runs as a child of the two-process test (#342).

@@ -1779,7 +1779,7 @@ mod tests {
     #[test]
     fn a_grudge_is_held_short_of_acting() {
         let mut emotions = EmotionState::new();
-        let them = EmotionSource::Agent(Uuid::new_v4());
+        let them = EmotionSource::Agent(Uuid::from_u128(7));
         for _ in 0..10 {
             emotions.hold_a_grudge(them.clone(), 0.55);
         }
@@ -1791,7 +1791,7 @@ mod tests {
     #[test]
     fn danger_from_a_person_counts_only_while_they_are_about() {
         let mut emotions = EmotionState::new();
-        let them = Uuid::new_v4();
+        let them = Uuid::from_u128(7);
         emotions.add_anger(EmotionSource::Agent(them), 0.5);
 
         assert!(emotions.in_danger(), "angry enough at somebody to face them");

@@ -520,7 +520,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // the document's three stages.
     // Up 6.3% to 1,039,760 for #347: the shallows and fish traps, a wasting
     // body wants no child, and partners go halfway to each other.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_039_760;
+    // Down 2.7% to 1,011,830 for #347's trap robbing: somebody else's trap is
+    // theft, and a person is a danger only while they are in sight.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_011_830;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
