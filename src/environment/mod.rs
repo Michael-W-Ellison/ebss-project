@@ -331,6 +331,14 @@ pub enum Action {
     SpreadMuck,
     /// Take what the run is carrying, from the reach the agent is standing at
     Fish,
+    /// Pick over the shallows by hand at the reach the agent is standing at:
+    /// shellfish, crabs, a fish stranded in a pool. Stage 0 of the fishing
+    /// path - slow, small, and nearly sure.
+    ForageShallows,
+    /// Set a fish trap the agent is carrying in the reach it is standing at
+    SetFishTrap,
+    /// Take what is in this agent's fish traps within reach
+    CheckFishTraps,
     /// Set a snare on the ground the agent is standing on
     SetSnare,
     /// Walk the line and take what has gone into it
@@ -371,6 +379,9 @@ impl Action {
             Action::Hunt { .. } => Some(DriveType::Hunger), // Hunting for food
             Action::Fight { .. } => Some(DriveType::Aggression), // Driving a thing off, not eating it
             Action::Fish => Some(DriveType::Hunger), // A fish is a meal first
+            Action::ForageShallows => Some(DriveType::Hunger),
+            Action::SetFishTrap => Some(DriveType::Preparedness),
+            Action::CheckFishTraps => Some(DriveType::Hunger),
             // Setting a line is putting food by against a want you have not
             // felt yet, which is what Preparedness is; going round it is a
             // meal. Two different wants, one activity, and that is the

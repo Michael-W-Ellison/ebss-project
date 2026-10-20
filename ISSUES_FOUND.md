@@ -26383,3 +26383,97 @@ By terrain:
 **Full suite.** 2,840 tests: all pass but the two dice counts, which this
 moves - 7,457 -> 7,903 (seed 4242, 120 turns) and 979,590 -> 977,779 (seed
 0, a year), recorded.
+
+### 347. Food getting: the shallows and fish traps; the partner chase that walked people to death
+
+The first of the unlinked survival machinery the user asked for, food
+getting, from the fishing path's first two stages.
+
+**Picking over the shallows** (`Action::ForageShallows`, Stage 0, born
+knowledge: hand gathering of shellfish, stranded fish, crabs and the like).
+- Steadier than a thrust and smaller: no skill or tackle comes into it.
+  `odds_in_the_shallows` against `odds_of_a_cast` - the same formula the
+  thrust already used, now shared.
+- `how_to_work_this_water` sends whoever expects more from it to the
+  shallows: somebody with no tackle and no hand for it, at a thin reach.
+
+**Fish traps** (`Action::SetFishTrap`, `Action::CheckFishTraps`, a
+`fishtrap` making of 2 wood and 2 lashing; Stage 1, found out like the rod).
+- A trap is set in a reach (`World::fish_traps`) and fills from it while
+  nobody watches: about four fish a day on a full reach, in proportion to how
+  full, up to four in the trap. What goes in comes out of the reach.
+- Setting and emptying one come with knowing how to make one: the catalogue's
+  "small traps and weirs" needs "basket traps", so the gate is `make:fishtrap`.
+- Three traps a person, one a reach.
+- Decisions:
+  - fish in one's own traps within a line's walk are gone to and taken, ahead
+    of the lessons gate (a catch is a catch);
+  - at a reach, a trap in the pack is set, or made there if the makings are in
+    hand;
+  - and in the Preparedness ladder after the snares
+    (`putting_traps_in_the_water`): make one where you stand, carry it to the
+    nearest untrapped reach, set it. **Without this nobody made one**: in eight
+    worlds twelve people in sixteen knew how inside a fortnight, and nobody was
+    once standing at water with two wood and two lashing on them.
+
+**Catalogue.** The fishing listings are linked, and so is the existing
+machinery that had no line: hearths (`do:LightFire`), fuel as found and
+returning to good ground (`do:Gather`), caches and cool storage
+(`do:Excavate`, `do:Cover`), hanging (`do:Dry`), eating raw (`do:Eat`), rest
+(`do:Sleep`), soothing plants (`do:Treat`), fur on the hide
+(`wear:fur_coat`).
+
+**What it uncovered, measured on the way.**
+- First measure with traps working: nine smooth worlds, hunger deaths 1 -> 9
+  (t = 2.5), with 41,000 fish out of the traps.
+- *Not* the hunger drive. Emptying a trap took a tenth off hunger with nothing
+  eaten, as the snares and spearing do; taken off (getting food is not eating
+  it), deaths were no better - 7 in the first four worlds.
+- A day-by-day probe of the dead found it. Healthy through the first year,
+  traps and all; the second year's lean stretch took the reserve from 0.95 to
+  0.6; and then **50 to 140 walks a day after a partner**, the reserve 0.5 to
+  0.19 and health 100 to nought in two months.
+  - The partner walk of #338 went to where the partner stood. Two partners
+    wanting each other each walked to where the other had been, passed, and
+    did it again, all day.
+  - And nothing stopped a body living off its own reserve from wanting a
+    child.
+  - Traps made it common: whatever put the second year's store over the child
+    gate for more couples put more couples on the road.
+- Fixes:
+  - `should_attempt_reproduction` is false for a wasting body (below half its
+    reserve). A starving body does not conceive.
+  - The walk to a partner goes halfway. Two closing on each other meet; one
+    going to a partner who stays put is there in a few walks.
+
+**Measured**, forty settlements (smooth 1-24, scattered 1-16), two years,
+against #346:
+
+| | before | traps | paired t |
+|---|---|---|---|
+| births | 130 | 139 | +0.61 |
+| scattered births | 25 | 37 | +0.92 |
+| deaths | 3 (all hunger) | 7 (5 hunger, 1 thirst, 1 illness) | +1.43 |
+| alive at day 720 | 607 | 612 | +0.35 |
+| camp moves | 531 | 350 | -2.66 |
+| sowing found (median day) | 39 (224) | 40 (197) | |
+| gardens found (median day) | 31 (416) | 37 (385) | |
+
+- Traps were found in all forty worlds, median day 9. In two years they gave
+  134,000 fish, against 42,000 speared and 12,000 picked out of the shallows.
+- Four of the five hunger deaths fell in the last three weeks of the second
+  winter (days 695-716), where the baseline's fall too; the difference is not
+  significant.
+- Births do not move with all that fish. What a trap brings in mostly stands
+  in for food got another way; the gates on children are the stores.
+- Scattered bands still move on - 336 moves, against 496 - so a trap line
+  does not pin a camp to spent ground.
+
+**Tests.**
+- `the_shallows_feed_somebody_with_nothing_in_their_hands`;
+- `a_fish_trap_fills_by_itself_and_is_emptied`;
+- `a_hungry_trapper_goes_to_the_traps_and_sets_more`;
+- `a_trap_is_made_carried_to_the_water_and_set`;
+- `the_fishing_path_starts_in_the_shallows`;
+- `a_wasting_body_does_not_try_for_a_child`;
+- `partners_apart_meet_rather_than_pass`.

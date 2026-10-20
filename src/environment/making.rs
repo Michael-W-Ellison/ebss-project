@@ -329,6 +329,24 @@ pub const FISHING_ROD: Making = Making {
     wants_in_hand: Some("stoneknife"),
 };
 
+/// Withies and cord woven into a trap that fish swim into and cannot find
+/// their way out of.
+///
+/// Stage 1 of the fishing path: "small traps and weirs, basket traps". It is
+/// set in a reach and left (`Action::SetFishTrap`), so it feeds a people
+/// without anybody standing in cold water - which is what makes a river worth
+/// coming back to on a round.
+pub const FISH_TRAP: Making = Making {
+    makes: "fishtrap",
+    how_many: 1,
+    needs: &[("wood", 2), ("lashing", 2)],
+    hands: SkillType::Crafting,
+    effort: 8.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: None,
+};
+
 /// Cordage, and a great deal of it.
 ///
 /// The best thing a stone-age people can put in the water and the most
@@ -1297,6 +1315,7 @@ pub const EVERY_STEP: &[Making] = &[
     BOW,
     FISHING_ROD,
     FISHING_NET,
+    FISH_TRAP,
     SHOVEL,
     HANDCART,
     SPEAR,

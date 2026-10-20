@@ -166,6 +166,15 @@ pub struct World {
     #[serde(default)]
     pub snares: Vec<crate::environment::small_life::Snare>,
 
+    /// Fish traps and weirs set in the water, and what is in them.
+    ///
+    /// Stage 1 of the fishing path: "small traps and weirs, basket traps". A
+    /// trap is set at a reach and left, and it fills from what that reach is
+    /// carrying - a fished-out reach fills nothing - so a people that sets a
+    /// few and goes round them eats off the water without standing in it.
+    #[serde(default)]
+    pub fish_traps: Vec<FishTrap>,
+
     /// Pits dug in the ground, and what is keeping in them.
     ///
     /// A settlement had nowhere to put anything. The storehouse is a single
@@ -289,6 +298,41 @@ pub struct Dropped {
     /// a thing lying in it.
     #[serde(default)]
     pub dried_in_the_sun: u32,
+}
+
+/// A fish trap or weir set at a reach, and how many fish are in it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FishTrap {
+    /// The reach it is set in
+    pub at: Position,
+    pub set_by: uuid::Uuid,
+    pub set_at: u32,
+    /// How many fish are in it now
+    pub holds: u32,
+}
+
+impl World {
+    /// What a reach carries when it is running full, for a trap - the same
+    /// figure a man fishing it is measured against
+    /// (`Simulation::A_GOOD_REACH`).
+    pub const A_GOOD_REACH_FOR_A_TRAP: f32 = 60.0;
+}
+
+impl FishTrap {
+    /// As many fish as a trap holds before it holds no more: a wicker trap
+    /// is a few fish, not a reach.
+    pub const WHAT_A_TRAP_HOLDS: u32 = 4;
+
+    /// The chance in a turn that a fish goes in, on a reach running full
+    /// (`Simulation::A_GOOD_REACH` or better). A trap on a full reach fills
+    /// in about a day; on a thin one, when it does. A turn is one of the
+    /// world's planning periods, as it is for the snares.
+    pub const WHAT_A_FULL_REACH_PUTS_IN: f32 =
+        Self::WHAT_A_FULL_REACH_PUTS_IN_A_DAY / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
+
+    /// Fish into a trap in a day on a reach running full: a basket trap
+    /// checked morning and evening has a few in it each time.
+    pub const WHAT_A_FULL_REACH_PUTS_IN_A_DAY: f32 = 4.0;
 }
 
 /// A hole in the ground with food in it.
@@ -1349,6 +1393,7 @@ impl World {
             pieces: std::sync::OnceLock::new(),
             dropped: Vec::new(),
             snares: Vec::new(),
+            fish_traps: Vec::new(),
             pits: Vec::new(),
             where_it_was_worked_out: std::collections::BTreeSet::new(),
             what_dried_in_the_sun: Vec::new(),
@@ -2898,6 +2943,31 @@ impl World {
                 &mut rng,
             );
             self.snares = snares;
+        }
+
+        // And what has swum into the fish traps, out of the reach each is set
+        // in: a trap takes from the water, so the reach is the less for it.
+        if !self.fish_traps.is_empty() {
+            use rand::Rng;
+            let mut rng = crate::core::dice::roll();
+            for index in 0..self.fish_traps.len() {
+                if self.fish_traps[index].holds >= FishTrap::WHAT_A_TRAP_HOLDS {
+                    continue;
+                }
+                let at = self.fish_traps[index].at;
+                let Some(&number) = self.node_numbers_on(at).first() else {
+                    continue;
+                };
+                let standing = self.resources[number].amount;
+                if standing == 0 {
+                    continue;
+                }
+                let thickness = (standing as f32 / Self::A_GOOD_REACH_FOR_A_TRAP).clamp(0.0, 1.0);
+                if rng.gen::<f32>() < FishTrap::WHAT_A_FULL_REACH_PUTS_IN * thickness {
+                    self.resources[number].amount -= 1;
+                    self.fish_traps[index].holds += 1;
+                }
+            }
         }
 
         // Update plants: growth on what the ground and sky give them, and the

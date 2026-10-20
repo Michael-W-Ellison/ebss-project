@@ -1477,8 +1477,7 @@ impl Simulation {
         let spear = self.population.agents[agent_index]
             .how_fast_my_tools_make_this_go(crate::agents::SkillType::Fishing);
 
-        let hand = (skill / 10.0).clamp(0.0, 0.5) + (spear - 1.0) * 0.3;
-        let odds = (Self::A_THRUST_THAT_TELLS + 0.4 * thickness + hand).clamp(0.0, 0.9);
+        let odds = Self::odds_of_a_cast(skill, spear, thickness);
 
         if spear > 1.0 {
             self.population.agents[agent_index]
@@ -1544,6 +1543,158 @@ impl Simulation {
             .with_drive_change(DriveType::Sustenance, -0.2)
             .with_energy_cost(Self::WHAT_A_THRUST_COSTS)
             .with_message(format!("Took {} fish out of the water", taken))
+    }
+
+    /// `Action::ForageShallows`: picking over the shallows by hand.
+    ///
+    /// Stage 0 of the fishing path - "hand gathering of shellfish, collecting
+    /// stranded fish, harvest of crabs, mollusks, frogs, turtles and aquatic
+    /// plants". No tool and no skill to speak of: a person wading the edge of
+    /// a reach with something in it comes out with a little most of the time.
+    /// It takes from the reach like any fishing does.
+    pub(in crate::analytics) fn picking_over_the_shallows(&mut self, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
+        let agent_position = self.population.agents[agent_index].state.position;
+        let Some(reach) = self.reach_within_cast(agent_position) else {
+            return ActionResult::failure("No water in reach".to_string());
+        };
+
+        let standing = self.world.nodes_on(reach).next().map(|r| r.amount).unwrap_or(0);
+        if standing == 0 {
+            return ActionResult::failure("The shallows are picked over".to_string());
+        }
+
+        let thickness = (standing as f32 / Self::A_GOOD_REACH).clamp(0.0, 1.0);
+        if rng.gen::<f32>() > Self::odds_in_the_shallows(thickness) {
+            return ActionResult::failure("Nothing in the shallows".to_string())
+                .with_energy_cost(Self::WHAT_A_THRUST_COSTS);
+        }
+
+        let taken = match self.world.get_resource_at_mut(&reach) {
+            Some(resource) if resource.amount > 0 => {
+                resource.amount -= 1;
+                1
+            }
+            _ => 0,
+        };
+        if let Some(&number) = self.world.node_numbers_on(reach).first() {
+            self.world.did_that_empty_it(number);
+        }
+        if taken == 0 {
+            return ActionResult::failure("The shallows are picked over".to_string());
+        }
+
+        let food_data = self
+            .food_database
+            .create_food_data(&crate::world::inventory::ItemType::Fish, self.current_turn);
+        let agent = &mut self.population.agents[agent_index];
+        let mut picked = crate::agents::InventoryItem::new_with_weight("fish".to_string(), taken, 0.8);
+        picked.food_data = food_data;
+        if !agent.inventory.add_item(picked) {
+            return ActionResult::failure("No room for it".to_string());
+        }
+        agent.state.waste_carried +=
+            taken as f32 * crate::world::Soil::WHAT_A_FISH_LEAVES * Self::OFFAL_SHARE;
+        agent.skills.practise(crate::agents::SkillType::Fishing, 4, turn_now);
+
+        // Nothing comes off hunger for it: picking something up is not
+        // eating it. Measured with a tenth off hunger here and on the traps,
+        // a settlement emptying its traps seventeen thousand times in two
+        // years felt fed by the emptying and starved: nine deaths of hunger
+        // in nine worlds against one.
+        ActionResult::success()
+            .with_drive_change(DriveType::Sustenance, -0.05)
+            .with_energy_cost(Self::WHAT_A_THRUST_COSTS)
+            .with_message("Picked something out of the shallows".to_string())
+    }
+
+    /// How many fish traps one person keeps in the water: a handful, not a
+    /// fence across the river.
+    pub(in crate::analytics) const TRAPS_IN_THE_WATER: usize = 3;
+
+    /// `Action::SetFishTrap`: a trap from the pack set in the reach in cast.
+    pub(in crate::analytics) fn setting_a_fish_trap(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
+        let agent_id = self.population.agents[agent_index].id;
+        let agent_position = self.population.agents[agent_index].state.position;
+
+        if self.population.agents[agent_index].how_many_i_have("fishtrap") == 0 {
+            return ActionResult::failure("No trap to set".to_string());
+        }
+        let Some(reach) = self.reach_within_cast(agent_position) else {
+            return ActionResult::failure("No water in reach".to_string());
+        };
+        let mine = self.world.fish_traps.iter().filter(|trap| trap.set_by == agent_id).count();
+        if mine >= Self::TRAPS_IN_THE_WATER {
+            return ActionResult::failure("As many traps as I can keep".to_string());
+        }
+        if self.world.fish_traps.iter().any(|trap| trap.at == reach) {
+            return ActionResult::failure("There is a trap in this reach already".to_string());
+        }
+
+        self.population.agents[agent_index].inventory.remove_item("fishtrap", 1);
+        self.world.fish_traps.push(crate::world::FishTrap {
+            at: reach,
+            set_by: agent_id,
+            set_at: turn_now,
+            holds: 0,
+        });
+        self.population.agents[agent_index]
+            .skills
+            .practise(crate::agents::SkillType::Fishing, 4, turn_now);
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.1)
+            .with_energy_cost(Self::WHAT_A_THRUST_COSTS)
+            .with_message("Set a fish trap".to_string())
+    }
+
+    /// `Action::CheckFishTraps`: take what is in this one's traps within a
+    /// cast. What will not fit stays in the trap.
+    pub(in crate::analytics) fn going_round_the_traps(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
+        let agent_id = self.population.agents[agent_index].id;
+        let at = self.population.agents[agent_index].state.position;
+        let reach = Self::CLOSE_ENOUGH_TO_A_SNARE;
+
+        let within: Vec<usize> = (0..self.world.fish_traps.len())
+            .filter(|&i| {
+                let trap = &self.world.fish_traps[i];
+                trap.set_by == agent_id
+                    && (trap.at.x - at.0).abs().max((trap.at.y - at.1).abs()) <= reach
+            })
+            .collect();
+        if within.is_empty() {
+            return ActionResult::failure("No trap of mine within reach".to_string());
+        }
+
+        let mut took = 0;
+        for &i in &within {
+            let holds = self.world.fish_traps[i].holds;
+            if holds == 0 {
+                continue;
+            }
+            let food_data = self
+                .food_database
+                .create_food_data(&crate::world::inventory::ItemType::Fish, self.current_turn);
+            let mut catch = crate::agents::InventoryItem::new_with_weight("fish".to_string(), holds, 0.8);
+            catch.food_data = food_data;
+            if self.population.agents[agent_index].inventory.add_item(catch) {
+                self.world.fish_traps[i].holds = 0;
+                took += holds;
+                self.population.agents[agent_index].state.waste_carried +=
+                    holds as f32 * crate::world::Soil::WHAT_A_FISH_LEAVES * Self::OFFAL_SHARE;
+            }
+        }
+
+        let agent = &mut self.population.agents[agent_index];
+        agent.skills.practise(crate::agents::SkillType::Fishing, 3, turn_now);
+        if took == 0 {
+            return ActionResult::failure("The traps are empty".to_string())
+                .with_energy_cost(Self::WHAT_A_ROUND_COSTS);
+        }
+        // Food put by, not food eaten - see `picking_over_the_shallows`.
+        ActionResult::success()
+            .with_drive_change(DriveType::Sustenance, -0.15)
+            .with_energy_cost(Self::WHAT_A_ROUND_COSTS)
+            .with_message(format!("Took {took} fish out of the traps"))
     }
 
     /// How many snares one person keeps going.

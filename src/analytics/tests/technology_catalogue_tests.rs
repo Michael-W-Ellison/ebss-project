@@ -87,6 +87,8 @@ fn every_action() -> BTreeSet<String> {
     let nobody = uuid::Uuid::nil();
     let s = String::new;
     [
+        Action::Eat { food_type: s() },
+        Action::Sleep { duration: 0 },
         Action::Gather { resource_type: s() },
         Action::HarvestPlant { plant_id: nobody },
         Action::Hunt { animal_id: nobody, weapon: None },
@@ -111,6 +113,9 @@ fn every_action() -> BTreeSet<String> {
         Action::PlantCutting,
         Action::SpreadMuck,
         Action::Fish,
+        Action::ForageShallows,
+        Action::SetFishTrap,
+        Action::CheckFishTraps,
         Action::SetSnare,
         Action::CheckSnares,
         Action::Treat { who: None },
@@ -556,4 +561,18 @@ fn what_the_catalogue_says_about_the_model() {
         println!("  {:<22} {}", u.model, u.reason);
     }
     assert!(!earliest.is_empty());
+}
+
+/// The fishing path's first two stages: picking over the shallows is born
+/// knowledge, and a trap is found out, with setting and emptying one coming
+/// with it.
+#[test]
+fn the_fishing_path_starts_in_the_shallows() {
+    assert!(catalogue::is_born_knowledge("do:ForageShallows"));
+    assert!(catalogue::is_born_knowledge("do:Fish"), "spearing in shallow water is Stage 0");
+    assert!(!catalogue::born_knowing_how_to_make("fishtrap"), "a trap is Stage 1");
+    for doing in ["do:SetFishTrap", "do:CheckFishTraps"] {
+        assert!(!catalogue::is_born_knowledge(doing));
+        assert_eq!(catalogue::what_comes_before(doing), ["make:fishtrap"], "{doing}");
+    }
 }

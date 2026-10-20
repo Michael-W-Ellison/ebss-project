@@ -832,7 +832,7 @@ impl Simulation {
     /// something else is not curiosity, it is starving with your dinner in
     /// your hand.
     fn is_it_already_in_his_hand(doing: &Action) -> bool {
-        matches!(doing, Action::Eat { .. } | Action::CheckSnares)
+        matches!(doing, Action::Eat { .. } | Action::CheckSnares | Action::CheckFishTraps)
     }
 
     /// How long a need goes unanswered before an agent stops taking its own
@@ -1229,7 +1229,14 @@ impl Simulation {
                     .map(|them| Action::Mate {
                         target_agent_id: them,
                     })
-                    // A partner out of reach is gone to (#338)
+                    // A partner out of reach is gone to (#338) - halfway.
+                    //
+                    // Walking to where the partner stood, when the partner
+                    // wanted the same thing, sent each to where the other had
+                    // been: they passed, and did it again, a hundred times a
+                    // day, and the walking starved one of them (#347). Two
+                    // who each go halfway meet; one going halfway to a partner
+                    // who stays put is there in a few walks.
                     .or_else(|| {
                         let partner = agent.my_partner()?;
                         let them = self
@@ -1239,8 +1246,15 @@ impl Simulation {
                             .find(|them| them.id == partner && them.state.is_alive)?;
                         let (x, y, _) = them.state.position;
                         let paces = (x - agent_position.0).abs().max((y - agent_position.1).abs());
-                        (paces > Self::CLOSE_ENOUGH_TO_COURT)
-                            .then_some(Action::Move { target: (x, y, agent_position.2) })
+                        if paces <= Self::CLOSE_ENOUGH_TO_COURT {
+                            return None;
+                        }
+                        let target = if paces <= 2 * Self::CLOSE_ENOUGH_TO_COURT {
+                            (x, y)
+                        } else {
+                            ((x + agent_position.0).div_euclid(2), (y + agent_position.1).div_euclid(2))
+                        };
+                        Some(Action::Move { target: (target.0, target.1, agent_position.2) })
                     })
                     // And with nobody to have one with, keep company with
                     // whoever might become somebody (#338)
@@ -1398,7 +1412,10 @@ impl Simulation {
                 // order the yield asks for: a twelfth snare is worth nothing
                 // if the eleven are never visited.
                 .or_else(|| self.going_round_is_due(agent, agent_position))
-                .or_else(|| self.lengthening_the_line(agent, agent_position)),
+                .or_else(|| self.lengthening_the_line(agent, agent_position))
+                // And the same in the water, with a trap that has to be made
+                // and carried there first.
+                .or_else(|| self.putting_traps_in_the_water(agent, agent_position)),
 
             // Nothing in the world is fine enough to want yet - see
             // ISSUES_FOUND.md #5. Until something is, this need has no answer

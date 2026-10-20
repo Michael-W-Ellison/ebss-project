@@ -258,3 +258,56 @@ fn the_higher_ids_fertile_day_is_a_chance_too() {
     }
     assert!(carried_by_the_higher > 0, "nobody of the higher id ever conceived");
 }
+
+/// A body living off its own reserve does not try for a child (#347).
+#[test]
+fn a_wasting_body_does_not_try_for_a_child() {
+    let (mut simulation, _) = a_couple([1.0, 1.0]);
+    assert!(
+        simulation.population.agents[0].should_attempt_reproduction(),
+        "fed, with a winter put by: the fixture wants a child"
+    );
+
+    let body = &mut simulation.population.agents[0].state.physiology;
+    body.reserve = body.reserve_capacity * 0.3;
+    assert!(
+        !simulation.population.agents[0].should_attempt_reproduction(),
+        "at three tenths of the reserve, wanting a child is not what this body does"
+    );
+}
+
+/// Two partners apart who both go to the other meet, rather than passing and
+/// passing again (#347). Each goes halfway, in turn, and they are within
+/// courting distance in a handful of walks.
+#[test]
+fn partners_apart_meet_rather_than_pass() {
+    let (mut simulation, _) = a_couple([1.0, 1.0]);
+    simulation.population.agents[0].state.position = (20, 20, 0);
+    simulation.population.agents[1].state.position = (100, 20, 0);
+
+    let mut walks = 0;
+    for turn in 0..12 {
+        let who = turn % 2;
+        let at = simulation.population.agents[who].state.position;
+        let doing = simulation.what_this_drive_offers(
+            DriveType::Reproduction,
+            &simulation.population.agents[who],
+            at,
+        );
+        if let Some(Action::Move { target }) = doing {
+            simulation.population.agents[who].state.position = target;
+            walks += 1;
+        }
+    }
+
+    let (a, b) = (
+        simulation.population.agents[0].state.position,
+        simulation.population.agents[1].state.position,
+    );
+    let apart = (a.0 - b.0).abs().max((a.1 - b.1).abs());
+    assert!(
+        apart <= crate::analytics::Simulation::CLOSE_ENOUGH_TO_COURT,
+        "two who go to each other end up together: {apart} apart after {walks} walks"
+    );
+    assert!(walks <= 8, "and in a handful of walks, not {walks}");
+}

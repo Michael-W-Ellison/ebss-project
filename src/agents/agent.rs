@@ -7340,8 +7340,18 @@ impl Agent {
     /// been going short, and is carrying enough food to feed a child as well
     /// as itself. Being un-hungry for a moment is not enough: it says nothing
     /// about whether the next meal exists.
+    ///
+    /// Nor anybody whose body is living off its own reserve. A wasting body
+    /// does not conceive, and wanting a child while wasting walked people to
+    /// death: in the second year of a trapping world a man at a third of his
+    /// reserve spent a hundred turns a day walking after his partner, and the
+    /// reserve went from a half to nothing in two months (#347).
     pub fn should_attempt_reproduction(&self) -> bool {
         if !self.can_reproduce() {
+            return false;
+        }
+
+        if self.state.physiology.is_wasting() {
             return false;
         }
 
@@ -7563,6 +7573,9 @@ impl Agent {
             Action::Eat { food_type } => format!("eat:{food_type}"),
             Action::Mate { .. } => "mate".to_string(),
             Action::Fish => "fish".to_string(),
+            Action::ForageShallows => "forageshallows".to_string(),
+            Action::SetFishTrap => "setfishtrap".to_string(),
+            Action::CheckFishTraps => "checkfishtraps".to_string(),
             Action::SetSnare => "setsnare".to_string(),
             Action::CheckSnares => "checksnares".to_string(),
             Action::Hunt { .. } => "hunt".to_string(),
@@ -7687,7 +7700,9 @@ impl Agent {
             // is a hunter, and folding it into `Foraging` would teach him
             // about picking herbs rather than about giving them.
             Action::Treat { .. } => Undertaking::Healing,
-            Action::Fish => Undertaking::Fishing,
+            Action::Fish | Action::ForageShallows | Action::CheckFishTraps => Undertaking::Fishing,
+            // Like a snare: setting one is not evidence about whether it pays
+            Action::SetFishTrap => return,
 
             // Going round the line is trapping. **Setting string is not, and
             // counting it as trapping is why nobody could ever find out that
