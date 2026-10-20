@@ -7575,6 +7575,7 @@ impl Agent {
             Action::Fish => "fish".to_string(),
             Action::ForageShallows => "forageshallows".to_string(),
             Action::SetFishTrap => "setfishtrap".to_string(),
+            Action::RobFishTrap { .. } => "robfishtrap".to_string(),
             Action::CheckFishTraps => "checkfishtraps".to_string(),
             Action::SetSnare => "setsnare".to_string(),
             Action::CheckSnares => "checksnares".to_string(),

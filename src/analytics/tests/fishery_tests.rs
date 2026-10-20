@@ -557,6 +557,7 @@ fn a_hungry_trapper_goes_to_the_traps_and_sets_more() {
         set_by: id,
         set_at: 0,
         holds: 3,
+        robbed: None,
     });
     let agent = &simulation.population.agents[0];
     assert_eq!(
@@ -608,5 +609,90 @@ fn a_trap_is_made_carried_to_the_water_and_set() {
         simulation.putting_traps_in_the_water(agent, (2, 1, 0)),
         Some(Action::SetFishTrap),
         "and set in it"
+    );
+}
+
+/// An owner and somebody else at this file's river: the owner's trap holds
+/// four fish, the owner is far off, and the other stands at the trap wanting
+/// food as much as `hunger` says.
+fn a_full_trap_and_somebody_at_it(hunger: f32) -> Simulation {
+    use crate::core::drives::DriveType;
+    use crate::world::FishTrap;
+
+    let mut simulation = somebody_at_a_reach_holding(60);
+    simulation.population.spawn_agent(AgentConfig::default());
+    let owner = simulation.population.agents[1].id;
+    simulation.population.agents[1].state.position = (40, 40, 0);
+    simulation.world.fish_traps.push(FishTrap {
+        at: Position::new(2, 0),
+        set_by: owner,
+        set_at: 0,
+        holds: 4,
+        robbed: None,
+    });
+    if let Some(drive) = simulation.population.agents[0].drives.get_mut(DriveType::Hunger) {
+        drive.value = hunger;
+    }
+    simulation
+}
+
+/// Trap robbing: a hungry person who owes the owner nothing empties the
+/// trap, and the owner, who was not there, finds out on the next round and
+/// holds it against them.
+#[test]
+fn a_robbed_trap_is_found_out_on_the_round() {
+    let mut simulation = a_full_trap_and_somebody_at_it(1.0);
+    let (thief, owner) = (simulation.population.agents[0].id, simulation.population.agents[1].id);
+
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.a_trap_worth_robbing(agent, (2, 1, 0)),
+        Some(owner),
+        "a starving stranger at a full trap takes what is in it"
+    );
+
+    let robbed = simulation.execute_action(&Action::RobFishTrap { whose: owner }, 0);
+    assert!(robbed.success, "{:?}", robbed.message);
+    assert_eq!(simulation.population.agents[0].how_many_i_have("fish"), 4);
+    assert_eq!(simulation.world.fish_traps[0].holds, 0);
+    assert_eq!(simulation.world.fish_traps[0].robbed, Some((thief, 4)), "the trap remembers who");
+
+    simulation.population.agents[1].state.position = (2, 1, 0);
+    let before = simulation.population.agents[1]
+        .relationships
+        .get_relationship(&thief)
+        .map_or(0.0, |bond| bond.bond_strength);
+    simulation.execute_action(&Action::CheckFishTraps, 1);
+    let after = simulation.population.agents[1]
+        .relationships
+        .get_relationship(&thief)
+        .map_or(0.0, |bond| bond.bond_strength);
+    assert!(
+        after < before && after < 0.0,
+        "the owner comes round, finds it emptied, and thinks the less of the thief: {before} -> {after}"
+    );
+    assert_eq!(simulation.world.fish_traps[0].robbed, None, "and it is found out once");
+}
+
+/// Nobody robs a partner's trap, and a fed friend leaves one alone.
+#[test]
+fn a_partner_or_a_fed_friend_leaves_a_trap_alone() {
+    let mut simulation = a_full_trap_and_somebody_at_it(1.0);
+    let owner = simulation.population.agents[1].id;
+    simulation.population.agents[0].pair_with(owner, 0);
+    let agent = &simulation.population.agents[0];
+    assert_eq!(simulation.a_trap_worth_robbing(agent, (2, 1, 0)), None, "a partner's fish are supper");
+
+    let mut simulation = a_full_trap_and_somebody_at_it(0.2);
+    let owner = simulation.population.agents[1].id;
+    simulation.population.agents[0]
+        .relationships
+        .get_or_create_relationship(owner, 0)
+        .bond_strength = 0.8;
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.a_trap_worth_robbing(agent, (2, 1, 0)),
+        None,
+        "somebody barely hungry does not rob a friend"
     );
 }

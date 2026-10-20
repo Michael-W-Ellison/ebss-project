@@ -496,7 +496,7 @@ impl Simulation {
             Action::TillSoil => Some(ActionType::Farming),
             Action::ScatterSeed => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
-            Action::TakeFrom { .. } => Some(ActionType::Social),
+            Action::TakeFrom { .. } | Action::RobFishTrap { .. } => Some(ActionType::Social),
             Action::FleeFrom { .. } => Some(ActionType::Combat),
             Action::Examine { .. } => Some(ActionType::Crafting),
             Action::PickUp { .. } | Action::PutDown { .. } => Some(ActionType::Mining),

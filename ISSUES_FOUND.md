@@ -26477,3 +26477,62 @@ against #346:
 - `the_fishing_path_starts_in_the_shallows`;
 - `a_wasting_body_does_not_try_for_a_child`;
 - `partners_apart_meet_rather_than_pass`.
+
+#### 347, continued: trap robbing
+
+**The full suite after #347** failed `a_settlement_ends_up_with_enemies_in_it`, and
+not by bad luck. Twelve settlements at day 83, before and after:
+- before, 4 had somebody fallen out, 8 soured bonds in all;
+- after, 1 had, with 1 soured bond.
+
+Why, counted in six settlements over 90 days:
+
+| | before | traps |
+|---|---|---|
+| blows landed | 13 | 1 |
+| lies | 154 | 98 |
+| gifts given | 16 | 91 |
+| socialising and news | 13,882 | 9,254 |
+
+Fed people stopped fighting.
+
+The user chose to give a fed band something real to fall out over, rather
+than change the test or the traps: **somebody emptying a trap that is not
+theirs is theft** (`Action::RobFishTrap`).
+- Weighed the way taking from a pack is weighed (`would_i_take_it`): what it
+  answers against who would see it. A trap's owner is seldom beside it but
+  always finds out, so the owner's bond is counted as a pair of eyes too.
+  Somebody starving takes regardless, as with any theft.
+- Never a trap of family or a partner's.
+- Anybody close enough sees it (`seen_taking`, the onlooker half of
+  `taking_from` drawn out to be shared). Otherwise the trap remembers who
+  (`FishTrap::robbed`), and the owner finds out on the next round. Either way
+  it lands through `they_took_something_of_mine`, like any theft: the bond,
+  anger or fear, and trust.
+
+**Measured**, forty settlements, against #346 and against traps alone:
+
+| | #346 | traps | traps and robbing | paired t, against #346 |
+|---|---|---|---|---|
+| births | 130 | 139 | 177 | +3.84 |
+| scattered births | 25 | 37 | 51 | +2.36 |
+| alive at day 720 | 607 | 612 | 652 | +3.47 |
+| hunger deaths | 3 | 5 | 4 | +0.44 |
+| camp moves | 531 | 350 | 351 | -2.25 |
+| sowing found (median day) | 39 (224) | 40 (197) | 40 (216) | |
+| gardens found (median day) | 31 (416) | 37 (385) | 39 (366) | |
+
+- 8,754 robberies in forty worlds took 21,209 fish, about a seventh of what
+  came out of traps.
+- **Births rise with robbing**, and significantly (+38 against traps alone,
+  t = 2.60). The fish a trap holds go to whoever is hungry and standing at
+  it, not only to whoever set it. A theft that feeds somebody without a trap
+  of their own is, in what it does for a band's children, a share.
+- Scattered settlements now have about the births they had before farming was
+  staged (#345: 56; here 51), still with no garden for most of the first
+  year.
+
+**Tests.**
+- `a_robbed_trap_is_found_out_on_the_round`;
+- `a_partner_or_a_fed_friend_leaves_a_trap_alone`;
+- `a_settlement_ends_up_with_enemies_in_it` passes again.

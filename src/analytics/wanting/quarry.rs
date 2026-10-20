@@ -610,6 +610,11 @@ impl Simulation {
             return Some(going);
         }
 
+        // And somebody else's, if nobody is looking and it is worth it.
+        if let Some(whose) = self.a_trap_worth_robbing(agent, agent_position) {
+            return Some(Action::RobFishTrap { whose });
+        }
+
         // Somebody who has stood in the water a dozen times and come out with
         // nothing stops going to the water.
         if !agent.lessons.worth_trying(Undertaking::Fishing) {
@@ -686,6 +691,49 @@ impl Simulation {
                 target: (nearest.at.x, nearest.at.y, agent_position.2),
             })
         }
+    }
+
+    /// Somebody else's trap within reach with fish in it, that this agent
+    /// would empty: weighed the way taking from somebody's pack is weighed -
+    /// what it would answer against who would see it (`would_i_take_it`).
+    ///
+    /// A trap is an easier thing to rob than a man, because its owner is
+    /// seldom standing beside it. Never a trap of family or a partner's: that
+    /// is not theft in a band, it is supper.
+    pub(in crate::analytics) fn a_trap_worth_robbing(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<uuid::Uuid> {
+        use crate::agents::RelationshipType;
+
+        let here = (agent_position.0, agent_position.1);
+        let trap = self
+            .world
+            .fish_traps
+            .iter()
+            .filter(|trap| trap.set_by != agent.id && trap.holds > 0)
+            .filter(|trap| {
+                (trap.at.x - here.0).abs().max((trap.at.y - here.1).abs()) <= Self::CLOSE_ENOUGH_TO_A_SNARE
+            })
+            .filter(|trap| {
+                !agent.relationships.get_relationship(&trap.set_by).is_some_and(|bond| {
+                    bond.is_family() || bond.relationship_type == RelationshipType::Partner
+                })
+            })
+            .max_by_key(|trap| trap.holds)?;
+
+        // Whoever is looking, and the owner, who is not but will know: the
+        // trap remembers who emptied it (`going_round_the_traps`).
+        let what_the_owner_is_to_me = agent
+            .relationships
+            .get_relationship(&trap.set_by)
+            .map_or(0.0, |bond| bond.bond_strength);
+        let cost = self
+            .what_taking_here_would_cost(agent, agent_position)
+            .max(agent.what_taking_it_would_cost_me(1, what_the_owner_is_to_me));
+        let gain = agent.what_taking_this_would_answer("fish", trap.holds);
+        agent.would_i_take_it(gain, cost).then_some(trap.set_by)
     }
 
     /// What to do with a reach within a cast.

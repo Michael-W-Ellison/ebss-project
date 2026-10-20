@@ -1636,6 +1636,7 @@ impl Simulation {
             set_by: agent_id,
             set_at: turn_now,
             holds: 0,
+            robbed: None,
         });
         self.population.agents[agent_index]
             .skills
@@ -1663,6 +1664,28 @@ impl Simulation {
             .collect();
         if within.is_empty() {
             return ActionResult::failure("No trap of mine within reach".to_string());
+        }
+
+        // A trap somebody else emptied is found out on the round. In a band
+        // this size everybody knows everybody's tracks, and the fish that
+        // should have been there are as good as a witness.
+        for &i in &within {
+            if let Some((thief, how_many)) = self.world.fish_traps[i].robbed.take() {
+                let how_strong_they_are = self
+                    .population
+                    .agents
+                    .iter()
+                    .find(|them| them.id == thief)
+                    .map(|them| them.own_strength())
+                    .unwrap_or(1.0);
+                self.population.agents[agent_index].they_took_something_of_mine(
+                    thief,
+                    "fish",
+                    how_many,
+                    turn_now,
+                    how_strong_they_are,
+                );
+            }
         }
 
         let mut took = 0;
@@ -1695,6 +1718,62 @@ impl Simulation {
             .with_drive_change(DriveType::Sustenance, -0.15)
             .with_energy_cost(Self::WHAT_A_ROUND_COSTS)
             .with_message(format!("Took {took} fish out of the traps"))
+    }
+
+    /// `Action::RobFishTrap`: empty somebody else's trap within reach.
+    ///
+    /// Theft, and it is treated as theft: whoever stands close enough sees it
+    /// (`seen_taking`), and the owner finds out on the next round whether
+    /// anybody saw or not. A fed band has little to quarrel about, and this
+    /// is the thing about a trap that gives it something.
+    pub(in crate::analytics) fn robbing_a_fish_trap(&mut self, whose: uuid::Uuid, agent_index: usize, turn_now: u32) -> ActionResult {
+        let at = self.population.agents[agent_index].state.position;
+        let reach = Self::CLOSE_ENOUGH_TO_A_SNARE;
+        let Some(i) = (0..self.world.fish_traps.len()).find(|&i| {
+            let trap = &self.world.fish_traps[i];
+            trap.set_by == whose
+                && trap.holds > 0
+                && (trap.at.x - at.0).abs().max((trap.at.y - at.1).abs()) <= reach
+        }) else {
+            return ActionResult::failure("No trap of theirs with anything in it".to_string());
+        };
+
+        let holds = self.world.fish_traps[i].holds;
+        let food_data = self
+            .food_database
+            .create_food_data(&crate::world::inventory::ItemType::Fish, self.current_turn);
+        let mut catch = crate::agents::InventoryItem::new_with_weight("fish".to_string(), holds, 0.8);
+        catch.food_data = food_data;
+        if !self.population.agents[agent_index].inventory.add_item(catch) {
+            return ActionResult::failure("No room for it".to_string());
+        }
+
+        self.world.fish_traps[i].holds = 0;
+
+        // An owner standing close enough sees it like anybody else and holds
+        // it against the thief there and then; otherwise the trap keeps it
+        // for the owner's next round.
+        let owner_saw_it = self
+            .population
+            .agents
+            .iter()
+            .find(|them| them.id == whose && them.state.is_alive)
+            .is_some_and(|them| {
+                (them.state.position.0 - at.0).abs().max((them.state.position.1 - at.1).abs())
+                    <= Self::CLOSE_ENOUGH_TO_SEE_IT_COME_UP
+            });
+        self.seen_taking(agent_index, None, "robfishtrap", "fish", holds, turn_now);
+        if !owner_saw_it {
+            let thief = self.population.agents[agent_index].id;
+            let trap = &mut self.world.fish_traps[i];
+            let already = trap.robbed.map_or(0, |(_, n)| n);
+            trap.robbed = Some((thief, already + holds));
+        }
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Sustenance, -0.1)
+            .with_energy_cost(Self::WHAT_A_ROUND_COSTS)
+            .with_message(format!("Took {holds} fish out of somebody else's trap"))
     }
 
     /// How many snares one person keeps going.

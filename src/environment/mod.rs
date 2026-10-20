@@ -339,6 +339,9 @@ pub enum Action {
     SetFishTrap,
     /// Take what is in this agent's fish traps within reach
     CheckFishTraps,
+    /// Empty somebody else's fish trap within reach. Theft, and it will be
+    /// found out.
+    RobFishTrap { whose: uuid::Uuid },
     /// Set a snare on the ground the agent is standing on
     SetSnare,
     /// Walk the line and take what has gone into it
@@ -382,6 +385,7 @@ impl Action {
             Action::ForageShallows => Some(DriveType::Hunger),
             Action::SetFishTrap => Some(DriveType::Preparedness),
             Action::CheckFishTraps => Some(DriveType::Hunger),
+            Action::RobFishTrap { .. } => Some(DriveType::Hunger),
             // Setting a line is putting food by against a want you have not
             // felt yet, which is what Preparedness is; going round it is a
             // meal. Two different wants, one activity, and that is the

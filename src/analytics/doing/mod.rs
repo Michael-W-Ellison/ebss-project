@@ -120,6 +120,7 @@ impl Simulation {
             Action::Fish => self.fishing(agent_index, &mut rng, turn_now),
             Action::ForageShallows => self.picking_over_the_shallows(agent_index, &mut rng, turn_now),
             Action::SetFishTrap => self.setting_a_fish_trap(agent_index, turn_now),
+            Action::RobFishTrap { whose } => self.robbing_a_fish_trap(*whose, agent_index, turn_now),
             Action::CheckFishTraps => self.going_round_the_traps(agent_index, turn_now),
             Action::SetSnare => self.setting_a_snare(agent_index, turn_now),
             Action::CheckSnares => self.going_round_the_line(agent_index, turn_now),

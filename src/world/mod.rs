@@ -309,6 +309,10 @@ pub struct FishTrap {
     pub set_at: u32,
     /// How many fish are in it now
     pub holds: u32,
+    /// Who last emptied it that was not its owner, and of how many - found
+    /// out on the owner's next round.
+    #[serde(default)]
+    pub robbed: Option<(uuid::Uuid, u32)>,
 }
 
 impl World {
