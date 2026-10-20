@@ -230,7 +230,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Down to 7,457 for #345: the technology catalogue decides what is born
     // knowledge, founders carry Stage 0 (a hand axe and flakes), and the
     // knife, basket and spear are found out.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_457;
+    // Up to 7,903 for #346: hunter-gatherers first - no longhouse waiting,
+    // sowing and gardens found out in stages, and a cache no anchor.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_903;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -512,7 +514,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // discovery roll every few days are gone.
     // Down 0.1% to 979,590 for #345: stages 0-2 from the technology
     // catalogue - Stage 0 born, the rest found out behind its gates.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 979_590;
+    // Down 0.2% to 977,779 for #346: hunter-gatherers first, agriculture in
+    // the document's three stages.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 977_779;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

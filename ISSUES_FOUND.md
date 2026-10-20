@@ -26379,3 +26379,7 @@ By terrain:
   - `gathering_from_what_you_sowed_leads_to_a_garden`;
   - `a_gatherer_does_not_break_ground`;
   - `agriculture_comes_in_the_documents_three_stages`.
+
+**Full suite.** 2,840 tests: all pass but the two dice counts, which this
+moves - 7,457 -> 7,903 (seed 4242, 120 turns) and 979,590 -> 977,779 (seed
+0, a year), recorded.
