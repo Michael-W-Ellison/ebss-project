@@ -26569,3 +26569,108 @@ Fixed:
 - `a_grudge_is_held_short_of_acting` and
   `danger_from_a_person_counts_only_while_they_are_about` (in `emotions`);
 - `a_settlement_ends_up_with_enemies_in_it` passes again.
+
+### 348. Food keeping: smoking, brine, caches, racks, stone boiling, pit ovens
+
+The second of the unlinked survival machinery the user asked for. Two
+choices were the user's:
+- **drying needs dry weather**, so that smoking has a reason to exist;
+- **boiling needs a vessel**: a fired pot, or stone boiling. `Boil` had never
+  asked for one, though its own note said it should.
+
+**Smoking** (`Action::Smoke`, Stage 1 of preservation, found out).
+- Drying beside a lit fire used to give smoked food, unasked, to everybody.
+  Now it gives dried food. Six times by the hearth (`DRIED_BY_THE_HEARTH`) and
+  somebody notices that what hung nearest the smoke kept, and kept through the
+  wet: `do:Smoke`.
+- `Dry` is refused while it rains or snows, unless under a roof
+  (`too_wet_to_dry_here`). Smoke works in any weather.
+- Smoked food keeps half as well as dried (the tags as they were).
+
+**Brine** (`Action::Brine`, Stage 1).
+- Salt and water in a vessel: Pickled, which keeps better than dry salt.
+- Comes to whoever knows dry salting. Boiling the sea now records `do:Salt`,
+  which nothing did, so the catalogue could never see that anybody knew it.
+
+**Caches** (`Action::Cache`, Stage 0, born).
+- Four stones piled over a hollow on ground a pit will not go into - the
+  forest floor a camp sleeps on (#315) - is a store, covered from the first.
+- Any store in the shade of trees ages at three quarters the rate:
+  "caches in cool shade".
+
+**Racks** (`Action::PutUpRack`, `Action::HangUp`, Stage 2, found out).
+- Three poles and two cords (`World::racks`).
+- Found out by days of rain with food that wanted drying
+  (`who_was_rained_off_drying`, six days). Being rained off drying can only
+  be counted world-side: the decision never asks to dry in the wet.
+- Food hung on one dries twice as fast, takes half the rain, and stays until
+  it is taken down; what has dried is taken down (`what_has_dried_on_a_rack`)
+  and goes to the store like anything else.
+
+**Stone boiling** (`Action::StoneBoil`, Stage 1).
+- Comes to whoever can make a basket.
+- A basket, bag, bowl or clay pot of water and the hearth's own stones: eight
+  at once, against five over the flames, and nothing burns.
+- Chosen over the flames for more than a fire takes at once.
+- **The first cut asked for the stones and the water to be carried, and in
+  ten worlds nobody stone-boiled once**: hardly anybody carries stones, and
+  nobody carries water. The stones are the fire's, and the water can be filled
+  from water within reach.
+
+**Pit ovens** (`Action::PitOven`, Stage 1, found out).
+- Found out after thirty batches off a fire.
+- Twenty at once, nothing burnt, for two wood and ground that will take a
+  hole - which gives up its own stones, as digging a store does. The first
+  cut asked for four stones carried, and nobody had them.
+
+**Boil wants a vessel**: a fired pot (`stoneware`) over the fire, or stone
+boiling (`something_to_boil_it_in`).
+
+Cooking over the flames, stone boiling and pit ovens are one batch step
+(`cooking_a_batch`), told apart by how much goes in and whether a lapse burns
+it. Drying, smoking and brining are one keeping step (`keeping_it`).
+
+**Measured**, forty settlements, two years, against #347:
+
+| | #347 | #348 | paired t |
+|---|---|---|---|
+| births | 127 | 145 | +1.61 |
+| deaths (all hunger) | 3 | 1 | -1.00 |
+| alive at day 720 | 604 | 624 | +1.75 |
+| camp moves | 361 | 300 | -0.94 |
+| sowing found (median day) | 39 (223) | 40 (206) | |
+| gardens found (median day) | 37 (343) | 39 (423) | |
+
+How often the new ways were used:
+
+| | times | worlds (of 40) |
+|---|---|---|
+| stone boiling | 4,152 | 40 |
+| hung on a rack | 1,672 | 38 |
+| caches | 683 | 40 |
+| smoked | 481 | 38 |
+| racks put up | 267 | 40 |
+| pit ovens | 39 | 23 |
+
+- The old ways still carry nearly everything: 137,027 dryings, 138,241
+  burials, 122,651 batches cooked over the flames.
+- **Salt is all but absent**: one boiling of the sea, one salting and one
+  brining in forty worlds. The sea has to be within four cells of a lit fire,
+  in autumn, under cloud. That gap is older than this; brine waits on salt.
+- Nothing measured is significantly worse. Births and survivors are up, but
+  not significantly.
+- Gardens are found in two more worlds but later in the median. That is not
+  explained here and may be noise.
+
+**Tests.**
+- `food_hung_over_a_fire_is_smoked` held the old behaviour and is replaced by
+  `drying_by_the_hearth_is_how_smoking_is_found_out` and
+  `smoke_does_in_the_rain_what_the_sun_cannot`.
+- New, in `food_keeping_tests`:
+  - `the_catalogue_knows_how_food_keeping_comes`;
+  - `brine_keeps_better_than_dry_salt`;
+  - `a_cache_goes_where_a_pit_will_not` (with the cool shade);
+  - `food_on_a_rack_dries_and_is_taken_down`;
+  - `stones_in_a_vessel_of_water_cook_without_burning`;
+  - `boiling_wants_a_vessel`;
+  - `a_pit_oven_cooks_most_of_a_pack_at_once`.

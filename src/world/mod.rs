@@ -175,6 +175,15 @@ pub struct World {
     #[serde(default)]
     pub fish_traps: Vec<FishTrap>,
 
+    /// Racks of poles and cord, where food is hung to dry.
+    ///
+    /// Stage 2 of storage: "raised racks, hanging storage". Food hung on one
+    /// is off the ground and sheds the rain, dries through quicker with the
+    /// air all round it, and stays where it was hung until somebody takes it
+    /// down.
+    #[serde(default)]
+    pub racks: Vec<Position>,
+
     /// Pits dug in the ground, and what is keeping in them.
     ///
     /// A settlement had nowhere to put anything. The storehouse is a single
@@ -1033,8 +1042,26 @@ impl World {
         let now = self.turn;
         let mut buried_and_lost = 0u64;
 
+        let shaded: std::collections::BTreeSet<Position> = self
+            .pits
+            .iter()
+            .map(|pit| pit.where_it_is)
+            .filter(|at| {
+                self.grid
+                    .get_tile(at)
+                    .is_some_and(|tile| tile.terrain.terrain_type == TerrainType::Forest)
+            })
+            .collect();
+
         for pit in self.pits.iter_mut() {
-            let in_here = pit.how_fast_things_go_off_in_here();
+            // A store in the cool of the trees keeps better than one out in
+            // the open sun: "caches in cool shade".
+            let shade = if shaded.contains(&pit.where_it_is) {
+                Self::WHAT_THE_SHADE_OF_TREES_KEEPS
+            } else {
+                1.0
+            };
+            let in_here = pit.how_fast_things_go_off_in_here() * shade;
 
             for item in pit.holds.iter_mut() {
                 item.goes_off(now, in_here);
@@ -1058,6 +1085,26 @@ impl World {
         self.food_that_rotted_in_the_ground =
             self.food_that_rotted_in_the_ground.saturating_add(buried_and_lost);
     }
+
+    /// What a store in the shade of trees ages at, against one in the open.
+    pub const WHAT_THE_SHADE_OF_TREES_KEEPS: f32 = 0.75;
+
+    /// Whether a rack stands at a place, or one step off it.
+    pub fn a_rack_within_reach(&self, at: Position) -> Option<Position> {
+        self.racks
+            .iter()
+            .copied()
+            .find(|rack| (rack.x - at.x).abs().max((rack.y - at.y).abs()) <= Self::WITHIN_REACH_OF_A_RACK)
+    }
+
+    /// How far off a rack can be hung from.
+    pub const WITHIN_REACH_OF_A_RACK: i32 = 1;
+
+    /// How much faster a thing dries hung up than laid on the ground, with
+    /// the air all round it; and how much of the rain it takes, hung up and
+    /// shedding it.
+    pub const WHAT_A_RACK_DOES_FOR_DRYING: u32 = 2;
+    pub const WHAT_OF_THE_RAIN_A_RACK_TAKES: f32 = 0.5;
 
     /// Whether a thing laid out will dry through before it turns.
     ///
@@ -1212,12 +1259,15 @@ impl World {
             .map(|building| building.position)
             .collect();
 
+        let racks: std::collections::BTreeSet<Position> = self.racks.iter().copied().collect();
+
         for left in self.dropped.iter_mut() {
             if left.item.food_data.is_none() {
                 continue;
             }
 
             let sheltered = under_a_roof.contains(&left.where_it_is);
+            let hung_up = racks.contains(&left.where_it_is) && !sheltered;
             let thin_enough_to_dry = Self::will_this_dry(&left.item.item_id);
             let drying = sunny && thin_enough_to_dry && !sheltered;
 
@@ -1228,7 +1278,8 @@ impl World {
             let mut out_in_it = crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
 
             if drying {
-                left.dried_in_the_sun += Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
+                let air = if hung_up { Self::WHAT_A_RACK_DOES_FOR_DRYING } else { 1 };
+                left.dried_in_the_sun += Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT * air;
             } else {
                 // Rain gets at everything, and how much depends on how hard
                 // it is coming down. Sun gets at anything too thick to dry
@@ -1241,6 +1292,8 @@ impl World {
                     0.0
                 } else if sunny && !thin_enough_to_dry {
                     1.0
+                } else if hung_up {
+                    how_hard_it_rains * Self::WHAT_OF_THE_RAIN_A_RACK_TAKES
                 } else {
                     how_hard_it_rains
                 };
@@ -1300,6 +1353,11 @@ impl World {
             }
 
             let lain = now.saturating_sub(left.since);
+
+            // What is hung on a rack stays there until somebody takes it down
+            if racks.contains(&left.where_it_is) {
+                return true;
+            }
 
             let gone = if left.item.food_data.is_some() {
                 lain >= Self::HOW_LONG_A_THING_LIES_THERE / 4
@@ -1397,6 +1455,7 @@ impl World {
             pieces: std::sync::OnceLock::new(),
             dropped: Vec::new(),
             snares: Vec::new(),
+            racks: Vec::new(),
             fish_traps: Vec::new(),
             pits: Vec::new(),
             where_it_was_worked_out: std::collections::BTreeSet::new(),

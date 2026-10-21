@@ -69,6 +69,41 @@ impl Simulation {
         }
     }
 
+    /// A day of rain, for everybody carrying food that wanted drying.
+    ///
+    /// Rained off often enough, and somebody thinks to get it up off the
+    /// ground, where the wet runs off it and the air gets all round: a rack
+    /// (Stage 2 of storage, #348). Counted once a day, and only for somebody
+    /// out under the sky with something to dry.
+    pub(in crate::analytics) fn who_was_rained_off_drying(&mut self) {
+        if self.current_turn % crate::environment::seasons::TICKS_PER_DAY != 0 {
+            return;
+        }
+        if self.world.climate.weather.weather_type.precipitation_intensity() <= 0.0 {
+            return;
+        }
+        let under_a_roof: std::collections::BTreeSet<(i32, i32)> = self
+            .world
+            .buildings
+            .iter()
+            .map(|building| (building.position.x, building.position.y))
+            .collect();
+        for agent in self.population.agents.iter_mut() {
+            if !agent.state.is_alive
+                || under_a_roof.contains(&(agent.state.position.0, agent.state.position.1))
+                || agent.what_i_could_dry().is_none()
+            {
+                continue;
+            }
+            agent.skills.made_one(crate::agents::Agent::RAINED_OFF_DRYING);
+            if agent.skills.times_made(crate::agents::Agent::RAINED_OFF_DRYING)
+                >= crate::agents::Agent::RAINED_OFF_BEFORE_A_RACK
+            {
+                agent.found_out_how_to("do:PutUpRack");
+            }
+        }
+    }
+
     /// Process environmental damage for all agents
     pub fn process_environmental_damage(&mut self) {
         use crate::agents::body::{BodyPartType, InjuryType, CripplingType};

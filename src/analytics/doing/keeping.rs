@@ -546,4 +546,136 @@ impl Simulation {
             .with_energy_cost(1.0)
             .with_message(format!("Put down {how_many} {what}"))
     }
+
+    /// `Action::Cache`: a hollow on ground a pit will not go into, with
+    /// stones piled over it - a store, covered from the first.
+    ///
+    /// Stage 0 of storage, "caches in cool shade". A camp under the trees
+    /// sleeps on ground that will not take a hole (#315), and up to now the
+    /// only answer was to walk off it to dig. What goes in afterwards goes in
+    /// the way it would go in a pit (`Action::Cover`).
+    pub(in crate::analytics) fn caching(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::{Pit, Position};
+
+        let here = {
+            let at = self.population.agents[agent_index].state.position;
+            Position::new(at.0, at.1)
+        };
+        if self.world.pit_at(here).is_some() {
+            return ActionResult::failure("There is a store here already".to_string());
+        }
+        if !self.world.grid.get_tile(&here).is_some_and(|tile| tile.terrain.is_walkable()) {
+            return ActionResult::failure("Nowhere here to pile stones".to_string());
+        }
+        let agent = &mut self.population.agents[agent_index];
+        if agent.how_many_i_have("stone") < Self::STONES_TO_A_CAIRN {
+            return ActionResult::failure("Not stones enough for a cairn".to_string());
+        }
+        agent.inventory.remove_item("stone", Self::STONES_TO_A_CAIRN);
+        agent.memory.remember_location(
+            crate::core::memory::SpatialMemoryType::Storage,
+            (here.x, here.y, 0),
+        );
+        agent
+            .skills
+            .practise(crate::agents::SkillType::Mining, 10, turn_now);
+        let whose = agent.id;
+        self.world.pits.push(Pit {
+            where_it_is: here,
+            holds: Vec::new(),
+            covered: true,
+            dug: turn_now,
+            belongs: crate::world::Belongs::To(whose),
+        });
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.1)
+            .with_energy_cost(6.0)
+            .with_message("Piled stones over a cache".to_string())
+    }
+
+    /// How many stones a cairn over a cache takes.
+    pub(in crate::analytics) const STONES_TO_A_CAIRN: u32 = 4;
+
+    /// `Action::PutUpRack`: poles and cord, put up where this one stands.
+    pub(in crate::analytics) fn putting_up_a_rack(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::Position;
+
+        let at = self.population.agents[agent_index].state.position;
+        let here = Position::new(at.0, at.1);
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_how_to_do("PutUpRack") {
+            return ActionResult::failure("Nobody here has thought to put food up off the ground".to_string());
+        }
+        if self.world.a_rack_within_reach(here).is_some() {
+            return ActionResult::failure("There is a rack here already".to_string());
+        }
+        if agent.how_many_i_have("wood") < Self::WOOD_TO_A_RACK
+            || agent.how_many_i_have("lashing") < Self::LASHING_TO_A_RACK
+        {
+            return ActionResult::failure("Not the poles and cord for a rack".to_string());
+        }
+        let agent = &mut self.population.agents[agent_index];
+        agent.inventory.remove_item("wood", Self::WOOD_TO_A_RACK);
+        agent.inventory.remove_item("lashing", Self::LASHING_TO_A_RACK);
+        agent
+            .skills
+            .practise(crate::agents::SkillType::Crafting, 10, turn_now);
+        self.world.racks.push(here);
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.1)
+            .with_energy_cost(8.0)
+            .with_message("Put up a rack".to_string())
+    }
+
+    /// What a rack takes: three poles and two lengths of cord.
+    pub(in crate::analytics) const WOOD_TO_A_RACK: u32 = 3;
+    pub(in crate::analytics) const LASHING_TO_A_RACK: u32 = 2;
+
+    /// `Action::HangUp`: a stack of raw food hung on a rack within reach.
+    ///
+    /// It dries there in the sun as it would on the ground, twice as fast,
+    /// and half the rain gets at it; and it stays until somebody takes it
+    /// down (`Action::PickUp`, standing at the rack).
+    pub(in crate::analytics) fn hanging_up(&mut self, what: &String, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::nutrition::{Piece, PreparationState};
+        use crate::world::Position;
+
+        let at = self.population.agents[agent_index].state.position;
+        let Some(rack) = self.world.a_rack_within_reach(Position::new(at.0, at.1)) else {
+            return ActionResult::failure("No rack within reach".to_string());
+        };
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_how_to_do("HangUp") {
+            return ActionResult::failure("Nobody here knows to hang it up".to_string());
+        }
+        if Piece::of(what) == Piece::Whole || !crate::world::World::will_this_dry(what) {
+            return ActionResult::failure(format!("{what} would not dry hung up like that"));
+        }
+        let worth_it = agent.inventory.get_item(what).is_some_and(|item| {
+            item.food_data.as_ref().is_some_and(|food| {
+                food.preparation == PreparationState::Raw && food.freshness >= Self::TOO_FAR_GONE_TO_KEEP
+            })
+        });
+        if !worth_it {
+            return ActionResult::failure(format!("No {what} worth hanging up"));
+        }
+        let agent = &mut self.population.agents[agent_index];
+        let how_many = agent.inventory.get_item(what).map_or(0, |item| item.quantity);
+        let Some(item) = agent.inventory.remove_item(what, how_many) else {
+            return ActionResult::failure(format!("No {what} to hang up"));
+        };
+        self.world.dropped.push(crate::world::Dropped {
+            item,
+            where_it_is: rack,
+            since: turn_now,
+            dried_in_the_sun: 0,
+        });
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.3)
+            .with_energy_cost(2.0)
+            .with_message(format!("Hung {how_many} {what} up on the rack"))
+    }
 }

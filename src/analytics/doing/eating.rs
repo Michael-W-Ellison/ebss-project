@@ -481,6 +481,36 @@ impl Simulation {
             None => return ActionResult::failure("No lit fire within reach".to_string()),
         };
 
+        let cooked = self.cooking_a_batch(agent_index, food_type, fire_id, Self::COOK_BATCH, true, Some(rng));
+
+        // Enough suppers over a fire, and somebody buries the next one with
+        // the stones out of it (#348).
+        if cooked.success {
+            let agent = &mut self.population.agents[agent_index];
+            agent.skills.made_one(crate::agents::Agent::A_BATCH_OFF_THE_FIRE);
+            if agent.skills.times_made(crate::agents::Agent::A_BATCH_OFF_THE_FIRE)
+                >= crate::agents::Agent::BATCHES_BEFORE_A_PIT_OVEN
+            {
+                agent.found_out_how_to("do:PitOven");
+            }
+        }
+        cooked
+    }
+
+    /// A batch of what this one carries, put to the heat of the fire
+    /// `fire_id`: up to `most` of one thing, and over the flames only what
+    /// fits over the flames. With `rng` somebody has to watch it and a lapse
+    /// burns it; without, it is in a pit or a pot of water and nothing burns.
+    /// A whole joint does not go in either way.
+    fn cooking_a_batch(
+        &mut self,
+        agent_index: usize,
+        food_type: &str,
+        fire_id: uuid::Uuid,
+        most: u32,
+        over_the_flames: bool,
+        rng: Option<&mut rand::rngs::StdRng>,
+    ) -> ActionResult {
         // Which of the things it is carrying goes on the fire
         let chosen = {
             let agent = &self.population.agents[agent_index];
@@ -518,7 +548,12 @@ impl Simulation {
             .get_skill_if_exists(crate::agents::SkillType::Cooking)
             .map(|skill| skill.level)
             .unwrap_or(-10);
-        let attentive = rng.gen::<f32>() >= Self::burn_chance(practice);
+        // Nothing burns in a pit or in a pot of water: the heat is in the
+        // stones and the stones do not flare.
+        let attentive = match rng {
+            Some(rng) => rng.gen::<f32>() >= Self::burn_chance(practice),
+            None => true,
+        };
 
         let outcome = if attentive {
             outcome
@@ -539,9 +574,15 @@ impl Simulation {
         // about how small it was cut. Cut into strips and most of a
         // pack is ready at the end of one turn; left as joints and it
         // takes several.
-        let over_the_flames = crate::world::nutrition::Piece::of(&chosen)
-            .how_many_fit_over_a_fire();
-        let quantity = carried.min(Self::COOK_BATCH).min(over_the_flames);
+        let piece = crate::world::nutrition::Piece::of(&chosen);
+        let room = if over_the_flames {
+            piece.how_many_fit_over_a_fire()
+        } else if piece == crate::world::nutrition::Piece::Whole {
+            0
+        } else {
+            most
+        };
+        let quantity = carried.min(most).min(room);
 
         if quantity == 0 {
             return ActionResult::failure(format!("No {} to cook", chosen));
@@ -639,6 +680,14 @@ impl Simulation {
             return ActionResult::failure("No lit fire to boil it over".to_string());
         }
 
+        // And something to boil it in, which this never asked: a pot that
+        // will stand the fire, or water in a basket or a bag brought to the
+        // boil with stones out of it (#348).
+        let Some(with_stones) = Self::something_to_boil_it_in(&self.population.agents[agent_index]) else {
+            return ActionResult::failure("Nothing to boil it in".to_string());
+        };
+
+        let _ = with_stones;
         let turn_now = self.current_turn;
         let agent = &mut self.population.agents[agent_index];
 
@@ -654,12 +703,114 @@ impl Simulation {
         agent.skills.practise(crate::agents::SkillType::Cooking, 8, turn_now);
         agent.lessons.record_particular("boil", true);
         agent.found_out_how_to("salt");
+        // And salt in the hand is the start of salting, which the catalogue
+        // has to know about for brine to follow it
+        agent.found_out_how_to("do:Salt");
 
         ActionResult::success()
             .with_drive_change(DriveType::Preparedness, -0.15)
             .with_energy_cost(9.0)
             .with_message(format!("Boiled the sea down for {came_out} salt"))
     }
+
+    /// What this one has to boil water in: `Some(false)` for a fired pot
+    /// over the fire, `Some(true)` for stone boiling - a basket, bag or bowl,
+    /// with the stones out of the hearth's ring - and `None` for nothing.
+    ///
+    /// The stones are the fire's, not the pack's. Asked of the pack, nobody
+    /// ever boiled anything: hardly anybody carries stones about (#348).
+    pub(in crate::analytics) fn something_to_boil_it_in(agent: &crate::agents::Agent) -> Option<bool> {
+        if agent.how_many_i_have("stoneware") > 0 {
+            return Some(false);
+        }
+        let a_vessel = Self::VESSELS_TO_BOIL_IN_WITH_STONES
+            .iter()
+            .any(|vessel| agent.how_many_i_have(vessel) > 0);
+        (agent.knows_how_to_do("StoneBoil") && a_vessel).then_some(true)
+    }
+
+    /// What will hold water while stones out of the fire boil it, which is
+    /// anything that holds water and would burn over a flame.
+    pub(in crate::analytics) const VESSELS_TO_BOIL_IN_WITH_STONES: [&'static str; 4] =
+        ["basket", "leatherbag", "bowl", "claypot"];
+
+    /// `Action::StoneBoil`: cooking in a vessel of water, with stones out of
+    /// the fire.
+    ///
+    /// Stage 1 of cooking, and come to by whoever can make a basket. More
+    /// at once than over the flames, and nothing burns: the heat is in the
+    /// stones, which are the hearth's own. The water is what is carried,
+    /// spent, or else filled from water within reach.
+    pub(in crate::analytics) fn stone_boiling(&mut self, agent_index: usize) -> ActionResult {
+        if self.population.agents[agent_index].state.years_old() < Self::OLD_ENOUGH_TO_COOK {
+            return ActionResult::failure("Too young to cook".to_string());
+        }
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_how_to_do("StoneBoil") {
+            return ActionResult::failure("Nobody here knows to boil with stones".to_string());
+        }
+        if Self::something_to_boil_it_in(agent) != Some(true) {
+            return ActionResult::failure("Nothing to boil it in".to_string());
+        }
+        let carried = agent.how_much_water_i_carry() >= Self::WHAT_A_BOILING_TAKES;
+        if !carried && !self.drinkable_water_within_reach(agent, agent.state.position) {
+            return ActionResult::failure("No water to boil".to_string());
+        }
+        let Some((fire_id, _)) = self.nearest_fire_from(agent.state.position, Self::FIRE_REACH, true) else {
+            return ActionResult::failure("No lit fire to heat the stones in".to_string());
+        };
+
+        let cooked = self.cooking_a_batch(agent_index, "generic", fire_id, Self::WHAT_A_BOILING_COOKS, false, None);
+        if cooked.success && carried {
+            self.population.agents[agent_index].draw_from_what_i_carry(Self::WHAT_A_BOILING_TAKES);
+        }
+        cooked
+    }
+
+    /// How much water a boiling takes, and how much goes in it.
+    pub(in crate::analytics) const WHAT_A_BOILING_TAKES: f32 = 1.0;
+    pub(in crate::analytics) const WHAT_A_BOILING_COOKS: u32 = 8;
+
+    /// `Action::PitOven`: a big batch buried with stones out of the fire.
+    ///
+    /// Stage 1 of cooking, found out after enough suppers over a fire. Most
+    /// of a pack at once and nothing burnt, for the wood to heat the stones
+    /// and a hole to put them in - and the hole gives up its own stones, as
+    /// digging a store does. Asked of the pack, nobody ever had them (#348).
+    pub(in crate::analytics) fn pit_roasting(&mut self, agent_index: usize) -> ActionResult {
+        if self.population.agents[agent_index].state.years_old() < Self::OLD_ENOUGH_TO_COOK {
+            return ActionResult::failure("Too young to cook".to_string());
+        }
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_how_to_do("PitOven") {
+            return ActionResult::failure("Nobody here knows to cook in the ground".to_string());
+        }
+        let here = crate::world::Position::new(agent.state.position.0, agent.state.position.1);
+        if !self.is_ground_a_pit_will_go_in(here) {
+            return ActionResult::failure("No ground here to dig an oven in".to_string());
+        }
+        if agent.how_many_i_have("wood") < Self::WOOD_FOR_A_PIT_OVEN {
+            return ActionResult::failure("Not wood enough to heat the stones".to_string());
+        }
+        let Some((fire_id, _)) = self.nearest_fire_from(agent.state.position, Self::FIRE_REACH, true) else {
+            return ActionResult::failure("No lit fire to heat the stones in".to_string());
+        };
+
+        let cooked = self.cooking_a_batch(agent_index, "generic", fire_id, Self::WHAT_A_PIT_OVEN_COOKS, false, None);
+        if cooked.success {
+            self.population.agents[agent_index]
+                .inventory
+                .remove_item("wood", Self::WOOD_FOR_A_PIT_OVEN);
+            return cooked.with_energy_cost(Self::WHAT_A_PIT_OVEN_COSTS);
+        }
+        cooked
+    }
+
+    /// A pit oven: the wood that heats the stones, burnt; what it costs to
+    /// dig and fill; and how much goes in.
+    pub(in crate::analytics) const WOOD_FOR_A_PIT_OVEN: u32 = 2;
+    pub(in crate::analytics) const WHAT_A_PIT_OVEN_COSTS: f32 = 8.0;
+    pub(in crate::analytics) const WHAT_A_PIT_OVEN_COOKS: u32 = 20;
 
     /// `Action::Salt`.
     pub(in crate::analytics) fn salting(&mut self, what: &String, agent_index: usize) -> ActionResult {
@@ -749,26 +900,27 @@ impl Simulation {
     pub(in crate::analytics) fn drying(&mut self, what: &String, agent_index: usize, turn_now: u32) -> ActionResult {
         use crate::world::nutrition::PreparationState;
 
-        let over_a_fire = self
-            .nearest_fire_from(
-                self.population.agents[agent_index].state.position,
-                Self::WITHIN_REACH_OF_THE_HEARTH,
-                true,
-            )
+        let at = self.population.agents[agent_index].state.position;
+        let by_the_hearth = self
+            .nearest_fire_from(at, Self::WITHIN_REACH_OF_THE_HEARTH, true)
             .is_some();
-
-        let agent = &mut self.population.agents[agent_index];
 
         // Nobody is born knowing this. It has to be watched once -
         // somebody's cut fish left out in the sun, keeping where a
         // whole one would have turned. See `who_saw_that_dry`.
-        if !agent
+        if !self.population.agents[agent_index]
             .what_i_found_out()
             .contains(Self::THAT_LAYING_IT_OUT_KEEPS_IT)
         {
             return ActionResult::failure(
                 "Nobody here knows what laying it out would do".to_string(),
             );
+        }
+
+        // Not in the rain. Laid out wet, a thing turns before it dries, and
+        // that is what smoking over a fire is for - see `smoking` (#348).
+        if self.too_wet_to_dry_here(at) {
+            return ActionResult::failure("It will not dry in the wet".to_string());
         }
 
         // And a whole beast does not dry however long you leave it
@@ -781,66 +933,172 @@ impl Simulation {
             ));
         }
 
-        let Some(item) = agent.inventory.get_item_mut(what) else {
-            return ActionResult::failure(format!("No {what} to dry"));
+        let how_many = match self.keeping_it(what, agent_index, PreparationState::Dried, "dried_", turn_now) {
+            Ok(how_many) => how_many,
+            Err(refused) => return refused,
         };
 
-        let Some(food) = item.food_data.as_mut() else {
-            return ActionResult::failure(format!("{what} is not food"));
-        };
-
-        // Only raw food is worth drying. Anything already preserved
-        // is done, and anything cooked has had its chance.
-        if food.preparation != PreparationState::Raw {
-            return ActionResult::failure(format!("That {what} is already seen to"));
+        // Dried within reach of a fire that is burning, often enough, and
+        // somebody notices that what hung nearest the smoke kept best, and
+        // kept through the wet. Drying beside the hearth used to give smoked
+        // food to everybody, unasked; smoking is Stage 1 of preservation,
+        // and found out (#348).
+        if by_the_hearth {
+            let agent = &mut self.population.agents[agent_index];
+            agent.skills.made_one(crate::agents::Agent::DRIED_BY_THE_HEARTH);
+            if agent.skills.times_made(crate::agents::Agent::DRIED_BY_THE_HEARTH)
+                >= crate::agents::Agent::DRIED_BY_THE_HEARTH_BEFORE_SMOKING
+            {
+                agent.found_out_how_to("do:Smoke");
+            }
         }
 
-        // And it has to still be worth keeping. You cannot dry
-        // something that has already turned - all that gets you is
-        // dry carrion.
-        if food.freshness < Self::TOO_FAR_GONE_TO_KEEP {
-            return ActionResult::failure(format!("That {what} is past saving"));
-        }
-
-        // In the air, or in the smoke of a fire. Smoke is quicker and
-        // works in any weather; laid out in the open it keeps longer,
-        // and it is the only one of the two a people without fire can
-        // do at all.
-        let how = if over_a_fire {
-            PreparationState::Smoked
-        } else {
-            PreparationState::Dried
-        };
-
-        food.set_preparation(how, turn_now);
-
-        // **And carried under its own name from now on**, as what comes off
-        // a fire is (`prepared_item_id`). One stack holds one preparation,
-        // and a merge takes the one that spoils faster. Dried in place, the
-        // first raw handful gathered after it turned the whole stack raw
-        // again: it spoiled at the raw rate, and weighed what raw food weighs.
-        // It had gone into the pack at its dried weight, a third of that, so
-        // by midsummer eleven people in twelve carried more than their packs
-        // could hold, up to 94 against 42 (#320).
-        let how_many = item.quantity;
-        let prefix = if how == PreparationState::Smoked { "smoked_" } else { "dried_" };
-        let named = format!("{prefix}{what}");
-        if let Some(mut dried) = agent.inventory.remove_item(what, how_many) {
-            // Lighter than it went in, so there is room for it
-            dried.item_id = named;
-            agent.inventory.add_item(dried);
-        }
-        agent
-            .skills
-            .practise(crate::agents::SkillType::Cooking, 14, turn_now);
-
-        debug!("Agent {} {} {how_many} {what}", agent.id, how.name());
+        debug!("Agent {} dried {how_many} {what}", self.population.agents[agent_index].id);
 
         ActionResult::success()
             .with_drive_change(DriveType::Preparedness, -0.4)
             .with_energy_cost(Self::WHAT_DRYING_COSTS)
-            .with_message(format!("{} {how_many} {what}", how.name()))
+            .with_message(format!("Dried {how_many} {what}"))
     }
+
+    /// Whether it is too wet here for anything laid out to dry: rain or snow
+    /// coming down, and no roof overhead.
+    pub(in crate::analytics) fn too_wet_to_dry_here(&self, at: (i32, i32, i32)) -> bool {
+        self.world.climate.weather.weather_type.precipitation_intensity() > 0.0
+            && !self
+                .world
+                .buildings
+                .iter()
+                .any(|building| building.position.x == at.0 && building.position.y == at.1)
+    }
+
+    /// What drying, smoking and brining have in common: a stack of raw food
+    /// still worth keeping comes out of the pack changed, and goes back in
+    /// under its own name, `prefix` in front of what it was.
+    ///
+    /// **Under its own name**, as what comes off a fire is
+    /// (`prepared_item_id`). One stack holds one preparation, and a merge
+    /// takes the one that spoils faster. Dried in place, the first raw
+    /// handful gathered after it turned the whole stack raw again: it spoiled
+    /// at the raw rate, and weighed what raw food weighs. It had gone into the
+    /// pack at its dried weight, a third of that, so by midsummer eleven
+    /// people in twelve carried more than their packs could hold, up to 94
+    /// against 42 (#320).
+    ///
+    /// Whether it is the right shape for it is the caller's to ask.
+    fn keeping_it(
+        &mut self,
+        what: &str,
+        agent_index: usize,
+        how: crate::world::nutrition::PreparationState,
+        prefix: &str,
+        turn_now: u32,
+    ) -> Result<u32, ActionResult> {
+        use crate::world::nutrition::PreparationState;
+
+        let agent = &mut self.population.agents[agent_index];
+        let Some(item) = agent.inventory.get_item_mut(what) else {
+            return Err(ActionResult::failure(format!("No {what} to keep")));
+        };
+        let Some(food) = item.food_data.as_mut() else {
+            return Err(ActionResult::failure(format!("{what} is not food")));
+        };
+
+        // Only raw food is worth it. Anything already preserved is done, and
+        // anything cooked has had its chance.
+        if food.preparation != PreparationState::Raw {
+            return Err(ActionResult::failure(format!("That {what} is already seen to")));
+        }
+
+        // And it has to still be worth keeping: dry carrion is carrion.
+        if food.freshness < Self::TOO_FAR_GONE_TO_KEEP {
+            return Err(ActionResult::failure(format!("That {what} is past saving")));
+        }
+
+        food.set_preparation(how, turn_now);
+        let how_many = item.quantity;
+        if let Some(mut kept) = agent.inventory.remove_item(what, how_many) {
+            kept.item_id = format!("{prefix}{what}");
+            agent.inventory.add_item(kept);
+        }
+        agent
+            .skills
+            .practise(crate::agents::SkillType::Cooking, 14, turn_now);
+        Ok(how_many)
+    }
+
+    /// `Action::Smoke`: food hung in the smoke of a low fire.
+    ///
+    /// Stage 1 of preservation, found out by drying beside the hearth. It
+    /// keeps half as well as food dried in the sun and it is the one way of
+    /// keeping a thing that does not care what the sky is doing.
+    pub(in crate::analytics) fn smoking(&mut self, what: &String, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::nutrition::{Piece, PreparationState};
+
+        if !self.population.agents[agent_index].knows_how_to_do("Smoke") {
+            return ActionResult::failure("Nobody here has found out what smoke does to it".to_string());
+        }
+        let at = self.population.agents[agent_index].state.position;
+        if self
+            .nearest_fire_from(at, Self::WITHIN_REACH_OF_THE_HEARTH, true)
+            .is_none()
+        {
+            return ActionResult::failure("No fire to hang it over".to_string());
+        }
+        if Piece::of(what) == Piece::Whole {
+            return ActionResult::failure(format!("{what} would have to be cut up before it would take the smoke"));
+        }
+
+        let how_many = match self.keeping_it(what, agent_index, PreparationState::Smoked, "smoked_", turn_now) {
+            Ok(how_many) => how_many,
+            Err(refused) => return refused,
+        };
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.4)
+            .with_energy_cost(Self::WHAT_DRYING_COSTS)
+            .with_message(format!("Smoked {how_many} {what}"))
+    }
+
+    /// `Action::Brine`: food put down in salt water in a vessel.
+    ///
+    /// Stage 1 of preservation beside dry salting, and come to by whoever
+    /// knows that: the same salt, gone further in water, and keeping better
+    /// than rubbed in.
+    pub(in crate::analytics) fn brining(&mut self, what: &String, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::nutrition::{Piece, PreparationState};
+
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_how_to_do("Brine") {
+            return ActionResult::failure("Nobody here knows to put it down in salt water".to_string());
+        }
+        if agent.how_many_i_have("salt") < Self::WHAT_IT_TAKES_TO_SALT_A_LOT {
+            return ActionResult::failure("No salt for a brine".to_string());
+        }
+        if agent.how_much_water_i_carry() < Self::WHAT_A_BRINE_TAKES {
+            return ActionResult::failure("Nothing with water in it to put it down in".to_string());
+        }
+        if Piece::of(what) == Piece::Whole {
+            return ActionResult::failure(format!("{what} would have to be cut up before it would take the brine"));
+        }
+
+        let how_many = match self.keeping_it(what, agent_index, PreparationState::Pickled, "brined_", turn_now) {
+            Ok(how_many) => how_many,
+            Err(refused) => return refused,
+        };
+        let agent = &mut self.population.agents[agent_index];
+        agent.inventory.remove_item("salt", Self::WHAT_IT_TAKES_TO_SALT_A_LOT);
+        agent.draw_from_what_i_carry(Self::WHAT_A_BRINE_TAKES);
+        agent.lessons.record_particular(&format!("brine:{what}"), true);
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.3)
+            .with_energy_cost(3.0)
+            .with_message(format!("Put {how_many} {what} down in brine"))
+    }
+
+    /// How much water a brine takes.
+    pub(in crate::analytics) const WHAT_A_BRINE_TAKES: f32 = 1.0;
 
     /// `Action::Taste`.
     pub(in crate::analytics) fn tasting(&mut self, agent_index: usize, rng: &mut rand::rngs::StdRng) -> ActionResult {

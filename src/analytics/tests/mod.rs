@@ -99,6 +99,7 @@ pub mod quality_tests;
 pub mod retention_tests;
 pub mod working_together_tests;
 pub mod keeping_tests;
+pub mod food_keeping_tests;
 pub mod larder_tests;
 pub mod sacrifice_tests;
 pub mod theft_tests;

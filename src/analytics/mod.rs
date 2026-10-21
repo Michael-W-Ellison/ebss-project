@@ -492,6 +492,9 @@ impl Simulation {
             Action::CollectAnimalProduct { .. } => Some(ActionType::Crafting), // Animal husbandry
             Action::HarvestPlant { .. } => Some(ActionType::Crafting), // Plant farming
             Action::Cook { .. } => Some(ActionType::Cooking),
+            Action::StoneBoil | Action::PitOven => Some(ActionType::Cooking),
+            Action::Smoke { .. } | Action::Brine { .. } | Action::HangUp { .. } => Some(ActionType::Cooking),
+            Action::Cache | Action::PutUpRack => Some(ActionType::Building),
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
             Action::ScatterSeed => Some(ActionType::Farming),

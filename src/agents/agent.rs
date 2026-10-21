@@ -3670,7 +3670,29 @@ impl Agent {
     ///   `what_was_dropped_takes_root`).
     /// - Breaking ground for a garden (Stage 2) is found out by gathering,
     ///   often enough, from stands you sowed yourself.
-    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 2] = ["ScatterSeed", "TillSoil"];
+    /// - Smoking over a low fire (Stage 1 of preservation) by drying food
+    ///   within reach of a burning hearth, often enough.
+    /// - A rack (Stage 2 of storage) by being rained off drying, often
+    ///   enough.
+    /// - A pit oven (Stage 1 of cooking) by enough suppers over a fire.
+    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 5] =
+        ["ScatterSeed", "TillSoil", "Smoke", "PutUpRack", "PitOven"];
+
+    /// What the practice record calls food dried within reach of a burning
+    /// hearth, and how much of it before somebody notices that what hung in
+    /// the smoke kept, and kept through the wet.
+    pub const DRIED_BY_THE_HEARTH: &'static str = "driedbythehearth";
+    pub const DRIED_BY_THE_HEARTH_BEFORE_SMOKING: u32 = 6;
+
+    /// What it calls being rained off drying, and how often before somebody
+    /// thinks to get food up off the ground and out of the wet.
+    pub const RAINED_OFF_DRYING: &'static str = "rainedoffdrying";
+    pub const RAINED_OFF_BEFORE_A_RACK: u32 = 6;
+
+    /// What it calls a batch off a fire, and how many suppers before
+    /// somebody buries the next one with the stones out of it.
+    pub const A_BATCH_OFF_THE_FIRE: &'static str = "abatchoffthefire";
+    pub const BATCHES_BEFORE_A_PIT_OVEN: u32 = 30;
 
     /// What the practice record calls a handful of seed thrown on the ground.
     pub const SEED_SCATTERED: &'static str = "scatterseed";
@@ -7595,6 +7617,13 @@ impl Agent {
             Action::Dry { what } => format!("dry:{what}"),
             Action::Boil => "boil".to_string(),
             Action::Salt { what } => format!("salt:{what}"),
+            Action::Smoke { what } => format!("smoke:{what}"),
+            Action::Brine { what } => format!("brine:{what}"),
+            Action::Cache => "cache".to_string(),
+            Action::PutUpRack => "putuprack".to_string(),
+            Action::HangUp { what } => format!("hangup:{what}"),
+            Action::StoneBoil => "stoneboil".to_string(),
+            Action::PitOven => "pitoven".to_string(),
             Action::Excavate => "excavate".to_string(),
             Action::Cover { what } => format!("cover:{what}"),
             Action::PickUp { what } => format!("pickup:{what}"),
@@ -7731,7 +7760,14 @@ impl Agent {
             Action::Excavate | Action::Cover { .. } => Undertaking::Farming,
             // Making food outlast the week it was got in is cookery, which is
             // where the rest of what a fire is for already lives
-            Action::Dry { .. } => Undertaking::Cooking,
+            Action::Dry { .. }
+            | Action::Smoke { .. }
+            | Action::Brine { .. }
+            | Action::HangUp { .. }
+            | Action::StoneBoil
+            | Action::PitOven => Undertaking::Cooking,
+            Action::Cache => Undertaking::Farming,
+            Action::PutUpRack => Undertaking::Building,
             Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
             Action::Gather { .. } => Undertaking::Foraging,
             Action::Build { .. } => Undertaking::Building,

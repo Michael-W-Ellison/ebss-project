@@ -165,6 +165,9 @@ impl Simulation {
         // And whoever was standing near enough to watch a thing dry out in
         // the sun now knows something they did not
         self.who_saw_that_dry();
+        // And whoever had food to dry on a day of rain is a day nearer
+        // thinking of a rack
+        self.who_was_rained_off_drying();
         self.what_the_fire_hardened();
         self.who_came_back_to_look();
 

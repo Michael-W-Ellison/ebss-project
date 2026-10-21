@@ -285,6 +285,25 @@ pub enum Action {
     /// Rub salt into food, which keeps it about seven times as long as
     /// leaving it alone and does not need a week of sun
     Salt { what: String },
+    /// Hang food in the smoke of a low fire. It keeps half as well as food
+    /// dried in the sun and it works in any weather. Found out, by drying
+    /// beside the hearth.
+    Smoke { what: String },
+    /// Put food down in salt water in a vessel. Takes a whole fish, which dry
+    /// salt does not.
+    Brine { what: String },
+    /// Pile stones over a hollow on ground a pit will not go into: a cache.
+    Cache,
+    /// Put up a rack of poles and cord to hang food on
+    PutUpRack,
+    /// Hang food on a rack within reach, to dry off the ground and out of
+    /// the wet
+    HangUp { what: String },
+    /// Cook in a vessel of water with stones out of the fire: no pot that
+    /// would stand the fire, and nothing burns
+    StoneBoil,
+    /// Bury a big batch with stones out of the fire and let it cook
+    PitOven,
     /// Dig a pit in the ground here, to keep things in
     Excavate,
     /// Put something into the pit here and put the earth back over it
@@ -410,6 +429,12 @@ impl Action {
             Action::Dry { .. } => Some(DriveType::Preparedness),
             Action::Boil => Some(DriveType::Preparedness),
             Action::Salt { .. } => Some(DriveType::Preparedness),
+            Action::Smoke { .. }
+            | Action::Brine { .. }
+            | Action::Cache
+            | Action::PutUpRack
+            | Action::HangUp { .. } => Some(DriveType::Preparedness),
+            Action::StoneBoil | Action::PitOven => Some(DriveType::Sustenance),
             Action::Excavate => Some(DriveType::Preparedness),
             Action::Cover { .. } => Some(DriveType::Preparedness),
             Action::PickUp { .. } => Some(DriveType::Utility),
