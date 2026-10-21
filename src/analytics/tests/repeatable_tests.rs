@@ -529,7 +529,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 4.9% to 980,526 for #349: windbreaks, lean-tos, brush huts put up
     // in one go, bedding over a sleeping place, graded cover, a tent that can
     // be finished, and fish traps that take fish.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 980_526;
+    // Up 3.6% to 1,016,134 for #350: brush does not anchor a camp, a burrow
+    // tried for its own sake keeps digging_in's rules, and an open hole
+    // fills in.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_016_134;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
