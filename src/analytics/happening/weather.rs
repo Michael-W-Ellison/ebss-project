@@ -309,8 +309,10 @@ impl Simulation {
 
             let environmental_temp = climate.temperature;
 
-            // Check if agent has shelter: a finished roof, or the trees
-            let mut has_shelter = self.world.is_out_of_the_weather_at(&agent_pos);
+            // Check if agent has shelter: a finished roof, or the trees - and
+            // what cover there is short of a roof (#349)
+            let cover_here = self.world.cover_at(&agent_pos);
+            let mut has_shelter = cover_here.is_some_and(|cover| cover.is_a_roof());
 
             // The young are kept warm by whoever is looking after them.
             //
@@ -336,8 +338,23 @@ impl Simulation {
             }
 
             // Update agent's body temperature based on climate, taking cover
-            // into account so that reaching shelter actually warms the agent
-            agent.update_temperature_with_shelter(&climate, has_shelter);
+            // into account so that reaching shelter actually warms the agent:
+            // as much as the cover holds, and a child by its carer as a roof.
+            let cover = match cover_here {
+                Some(cover) if cover.is_a_roof() || !has_shelter => Some(cover),
+                _ if has_shelter => Some(crate::world::Cover::FULL),
+                _ => None,
+            };
+            let on_bedding = agent.fatigue.is_sleeping && self.world.bedding_at(&agent_pos);
+            agent.update_temperature_under(&climate, cover, on_bedding);
+
+            // Behind a windbreak the wind does not get at anybody
+            let out_of_the_wind = cover.is_some_and(|cover| cover.keeps_off_wind);
+            let weather_here = if out_of_the_wind && !has_shelter {
+                crate::environment::Weather { base_wind_speed: 0.0, ..weather.clone() }
+            } else {
+                weather.clone()
+            };
 
             // Check if agent has water access:
             // 1. Water containers in inventory (waterskin, water_flask, water_bucket)
@@ -360,7 +377,7 @@ impl Simulation {
 
             // Update exposure and apply damage
             let damage = agent.update_exposure(
-                &weather,
+                &weather_here,
                 environmental_temp,
                 has_shelter,
                 has_water_access,

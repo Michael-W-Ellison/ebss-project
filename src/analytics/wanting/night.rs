@@ -53,6 +53,25 @@ impl Simulation {
         (asleep, heading_home, turns_left)
     }
 
+    /// What somebody about to sleep where they stand does first, from what
+    /// is in the pack (#349): with no roof over them, they put brush up;
+    /// under one, or with no brush for it, they lay boughs to lie on if
+    /// there are none here already.
+    pub(in crate::analytics) fn brush_before_bed(
+        &self,
+        agent: &crate::agents::Agent,
+        here: (i32, i32, i32),
+    ) -> Option<Action> {
+        let at = crate::world::Position::new(here.0, here.1);
+        if !self.world.is_out_of_the_weather_at(&at) {
+            if let Some(build) = self.cover_i_could_put_up(agent, here) {
+                return Some(build);
+            }
+        }
+        (!self.world.bedding_at(&at) && agent.how_many_i_have("wood") >= Self::WHAT_BEDDING_TAKES)
+            .then_some(Action::LayBedding)
+    }
+
     /// The nearest clean ground out of the weather within
     /// `NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS`, for somebody about to sleep
     /// where they are not: under a finished roof, or among trees.
@@ -178,6 +197,14 @@ impl Simulation {
             // one in the pack.
             Some("night: let be, a remedy")
         } else if matches!(action, Action::Sleep { .. }) {
+            // Going to bed where they stand, they put brush over it or lay
+            // boughs under it first, if the pack holds them (#349)
+            if asleep && !agent.fatigue.is_sleeping {
+                if let Some(brush) = self.brush_before_bed(agent, agent.state.position) {
+                    *self.what_a_threat_came_to.entry("night: brush before bed".to_string()).or_insert(0) += 1;
+                    return brush;
+                }
+            }
             Some("night: asleep already")
         } else {
             None
@@ -253,10 +280,20 @@ impl Simulation {
         // 0-3 the weather killed fifteen where it had killed five (#299).
         let out_of_the_weather = if asleep { self.somewhere_out_of_the_weather(here) } else { None };
 
+        // **And nobody with brush in the pack sleeps in the open** (#349),
+        // when there is no roof or trees in reach to walk to.
+        let brush = if asleep && off_the_midden.is_none() && out_of_the_weather.is_none() {
+            self.brush_before_bed(agent, here)
+        } else {
+            None
+        };
+
         let instead = if let Some(cover) = out_of_the_weather {
             Action::Move { target: cover }
         } else if let Some(clean) = off_the_midden {
             Action::Move { target: clean }
+        } else if let Some(brush) = brush {
+            brush
         } else if asleep {
             // Until first light, a stretch at a time: a night is a sleep,
             // not scraps of one, but nothing wakes a sleeper but danger, and

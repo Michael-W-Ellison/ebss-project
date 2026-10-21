@@ -2292,6 +2292,10 @@ impl Population {
             }
             // And digging one in teaches the same hands, without the hides
             BuildingType::Burrow => vec![(SkillType::Construction, 5), (SkillType::Mining, 5)],
+            // And brush teaches the hands that will later raise a frame
+            BuildingType::Windbreak | BuildingType::LeanTo | BuildingType::BrushHut => {
+                vec![(SkillType::Construction, 5)]
+            }
             BuildingType::Workshop => vec![(SkillType::Crafting, 10)],
             BuildingType::Farm => vec![(SkillType::Farming, 10)],
             BuildingType::Bakery => vec![(SkillType::Cooking, 10)],

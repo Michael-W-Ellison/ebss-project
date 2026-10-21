@@ -494,7 +494,7 @@ impl Simulation {
             Action::Cook { .. } => Some(ActionType::Cooking),
             Action::StoneBoil | Action::PitOven => Some(ActionType::Cooking),
             Action::Smoke { .. } | Action::Brine { .. } | Action::HangUp { .. } => Some(ActionType::Cooking),
-            Action::Cache | Action::PutUpRack => Some(ActionType::Building),
+            Action::Cache | Action::PutUpRack | Action::LayBedding => Some(ActionType::Building),
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
             Action::ScatterSeed => Some(ActionType::Farming),

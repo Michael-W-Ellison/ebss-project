@@ -92,6 +92,9 @@ impl Simulation {
             // of its life saying so.
             "tent" | "skintent" => BuildingType::SkinTent,
             "burrow" | "dugout" => BuildingType::Burrow,
+            "windbreak" => BuildingType::Windbreak,
+            "leanto" | "lean-to" => BuildingType::LeanTo,
+            "brushhut" | "hut" => BuildingType::BrushHut,
             "shelter" => BuildingType::SkinTent,
             "smallhouse" => BuildingType::SmallHouse,
             "mediumhouse" => BuildingType::MediumHouse,
@@ -129,7 +132,19 @@ impl Simulation {
         let mut has_all_resources = true;
         let mut missing_resources = Vec::new();
 
-        if let Some(wants) = by_class {
+        // A roof already going up here is carried on with on the strength of
+        // what went into it when it was started (#349): asking for its
+        // materials again refused every turn of work on a tent whose builder
+        // had put them all into it.
+        let carrying_on = self.world.buildings.iter().any(|roof| {
+            roof.position == Position::new(position.0, position.1)
+                && roof.building_type == building_type
+                && !roof.is_completed()
+        });
+
+        if carrying_on {
+            // Nothing more to take
+        } else if let Some(wants) = by_class {
             let holding = |what: &str| agent.how_many_i_have(what);
 
             match crate::environment::tags::what_would_be_used(wants, &holding) {
@@ -235,7 +250,10 @@ impl Simulation {
             );
 
             if finished {
-                self.dig_the_store_under_the_roof(here, agent_index, turn_now);
+                // A store goes under a roof that will stand; brush will not
+                if !what.falls_apart() {
+                    self.dig_the_store_under_the_roof(here, agent_index, turn_now);
+                }
                 return ActionResult::success()
                     .with_drive_change(DriveType::Construction, -0.4)
                     .with_energy_cost(20.0)
@@ -249,6 +267,30 @@ impl Simulation {
                     "Worked on the {what:?} ({:.0}% up)",
                     how_far * 100.0
                 ));
+        }
+
+        // Brush goes up where its builder stands: it is cover for tonight,
+        // not a site chosen for a settlement, and a lean-to against a tree is
+        // what a lean-to is (#349). Only another building stands in its way.
+        if building_type.falls_apart() {
+            if self.world.buildings.iter().any(|b| b.position == here) {
+                return ActionResult::failure("Something is built here already".to_string());
+            }
+            let agent = &mut self.population.agents[agent_index];
+            for (what, how_many) in &taking {
+                agent.inventory.remove_item(what, *how_many);
+            }
+            let mut building = Building::new_under_construction(building_type, here).with_what_was_brought();
+            building.now_belongs_to(crate::world::Belongs::To(agent.id));
+            self.world.add_building(building);
+            self.population.agents[agent_index].memory.remember_location(
+                crate::core::memory::SpatialMemoryType::Shelter,
+                (here.x, here.y, 0),
+            );
+            return ActionResult::success()
+                .with_drive_change(DriveType::Construction, -0.2)
+                .with_energy_cost(10.0)
+                .with_message(format!("Started a {building_type:?}"));
         }
 
         // Use spatial planning to find optimal build location
@@ -305,7 +347,7 @@ impl Simulation {
         // and note that until this line the owner field was written by
         // nothing at all, so `owns_house` in the goal world-state has always
         // been false for everybody in every world.
-        let mut building = Building::new_under_construction(building_type, build_pos);
+        let mut building = Building::new_under_construction(building_type, build_pos).with_what_was_brought();
         building.now_belongs_to(if building_type.is_residential() {
             crate::world::Belongs::To(self.population.agents[agent_index].id)
         } else {

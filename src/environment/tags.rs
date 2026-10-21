@@ -936,6 +936,17 @@ pub const WHAT_A_TENT_TAKES: &[Wanted] = &[
 /// be short of.
 pub const WHAT_A_BURROW_TAKES: &[Wanted] = &[];
 
+/// What the brush shelters take: poles, and a cord to tie a frame (#349).
+pub const WHAT_A_WINDBREAK_TAKES: &[Wanted] = &[Wanted { is: Tag::Pole, how_much: 3 }];
+pub const WHAT_A_LEAN_TO_TAKES: &[Wanted] = &[
+    Wanted { is: Tag::Pole, how_much: 4 },
+    Wanted { is: Tag::Cordage, how_much: 1 },
+];
+pub const WHAT_A_BRUSH_HUT_TAKES: &[Wanted] = &[
+    Wanted { is: Tag::Pole, how_much: 6 },
+    Wanted { is: Tag::Cordage, how_much: 1 },
+];
+
 /// What it takes to put up a roof of this kind, where that is stated in
 /// classes rather than in named resources.
 ///
@@ -949,6 +960,9 @@ pub fn what_this_roof_takes(
     match building {
         crate::world::BuildingType::SkinTent => Some(WHAT_A_TENT_TAKES),
         crate::world::BuildingType::Burrow => Some(WHAT_A_BURROW_TAKES),
+        crate::world::BuildingType::Windbreak => Some(WHAT_A_WINDBREAK_TAKES),
+        crate::world::BuildingType::LeanTo => Some(WHAT_A_LEAN_TO_TAKES),
+        crate::world::BuildingType::BrushHut => Some(WHAT_A_BRUSH_HUT_TAKES),
         _ => None,
     }
 }

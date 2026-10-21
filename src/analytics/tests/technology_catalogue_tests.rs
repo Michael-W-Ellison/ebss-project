@@ -71,7 +71,8 @@ fn variant_name(debug: String) -> String {
 fn every_building() -> BTreeSet<String> {
     use BuildingType::*;
     [
-        SkinTent, Burrow, Longhouse, UpgradedLonghouse, SmallHouse, MediumHouse, LargeHouse,
+        Windbreak, LeanTo, BrushHut, SkinTent, Burrow, Longhouse, UpgradedLonghouse, SmallHouse,
+        MediumHouse, LargeHouse,
         Manor, TownCenter, TownStorage, GuardPost, Workshop, Forge, Smithy, Bakery, WeaverHut,
         PotteryKiln, Tannery, Mill, Butchery, Brewery, Dairy, Glassworks, Dyeworks, Ropewalk,
         Brickyard, PaperMill, TailorShop, CobblerShop, BarberShop, Scriptorium, Storehouse, Farm,
@@ -110,6 +111,7 @@ fn every_action() -> BTreeSet<String> {
         Action::HangUp { what: s() },
         Action::StoneBoil,
         Action::PitOven,
+        Action::LayBedding,
         Action::Boil,
         Action::Salt { what: s() },
         Action::Excavate,

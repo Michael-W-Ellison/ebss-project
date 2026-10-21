@@ -6197,17 +6197,27 @@ impl Agent {
     /// agent inside a building cools exactly as fast as one standing in the
     /// open, so sheltering never resolves the exposure that sent it indoors.
     pub fn update_temperature_with_shelter(&mut self, climate: &super::Climate, has_shelter: bool) {
-        let cold_insulation = self.body.total_cold_insulation();
+        self.update_temperature_under(climate, has_shelter.then_some(crate::world::Cover::FULL), false);
+    }
+
+    /// The same, under whatever cover there is (#349), and on bedding or off
+    /// it: lying on boughs is lying off the cold ground, which is worth what
+    /// another layer is worth.
+    pub fn update_temperature_under(
+        &mut self,
+        climate: &super::Climate,
+        cover: Option<crate::world::Cover>,
+        on_bedding: bool,
+    ) {
+        let cold_insulation = self.body.total_cold_insulation()
+            + if on_bedding { Self::WHAT_BEDDING_IS_WORTH } else { 0.0 };
         let heat_resistance = self.body.total_heat_resistance();
-
-        let effective_temp = if has_shelter {
-            climate.sheltered_effective_temperature()
-        } else {
-            climate.effective_temperature()
-        };
-
+        let effective_temp = climate.effective_temperature_under(cover);
         self.body_temperature.update(effective_temp, cold_insulation, heat_resistance);
     }
+
+    /// What lying on bedding is worth against the cold, as insulation.
+    pub const WHAT_BEDDING_IS_WORTH: f32 = 0.15;
 
     /// Update exposure status based on environmental conditions
     ///
@@ -7624,6 +7634,7 @@ impl Agent {
             Action::HangUp { what } => format!("hangup:{what}"),
             Action::StoneBoil => "stoneboil".to_string(),
             Action::PitOven => "pitoven".to_string(),
+            Action::LayBedding => "laybedding".to_string(),
             Action::Excavate => "excavate".to_string(),
             Action::Cover { what } => format!("cover:{what}"),
             Action::PickUp { what } => format!("pickup:{what}"),
@@ -7767,7 +7778,7 @@ impl Agent {
             | Action::StoneBoil
             | Action::PitOven => Undertaking::Cooking,
             Action::Cache => Undertaking::Farming,
-            Action::PutUpRack => Undertaking::Building,
+            Action::PutUpRack | Action::LayBedding => Undertaking::Building,
             Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
             Action::Gather { .. } => Undertaking::Foraging,
             Action::Build { .. } => Undertaking::Building,

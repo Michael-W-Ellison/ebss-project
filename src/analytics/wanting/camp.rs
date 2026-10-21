@@ -151,7 +151,7 @@ impl Simulation {
             .world
             .buildings
             .iter()
-            .filter(|roof| roof.is_completed())
+            .filter(|roof| roof.is_a_roof())
             .map(|roof| (roof.position.x, roof.position.y))
             .filter(|roof| {
                 (roof.0 - at.0).abs().max((roof.1 - at.1).abs()) <= Self::FORAGE_RADIUS as i32

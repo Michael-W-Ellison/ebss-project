@@ -678,4 +678,34 @@ impl Simulation {
             .with_energy_cost(2.0)
             .with_message(format!("Hung {how_many} {what} up on the rack"))
     }
+
+    /// `Action::LayBedding`: boughs and brush laid where this one stands, to
+    /// sleep on (#349).
+    ///
+    /// Stage 0 of shelter, "ground bedding". A bed to sleep on - the sleep it
+    /// gives is a bed's - and off the cold ground, which is worth a layer of
+    /// clothing to whoever is lying on it. Two wood of brush, and it is
+    /// trodden flat in a month.
+    pub(in crate::analytics) fn laying_bedding(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::Position;
+
+        let at = self.population.agents[agent_index].state.position;
+        let here = Position::new(at.0, at.1);
+        if self.world.bedding_at(&here) {
+            return ActionResult::failure("There is bedding laid here already".to_string());
+        }
+        let agent = &mut self.population.agents[agent_index];
+        if agent.how_many_i_have("wood") < Self::WHAT_BEDDING_TAKES {
+            return ActionResult::failure("Not brush enough for bedding".to_string());
+        }
+        agent.inventory.remove_item("wood", Self::WHAT_BEDDING_TAKES);
+        self.world.bedding.push(crate::world::Bedding { at: here, laid: turn_now });
+
+        ActionResult::success()
+            .with_energy_cost(2.0)
+            .with_message("Laid bedding".to_string())
+    }
+
+    /// What bedding takes: two wood of boughs and brush.
+    pub(in crate::analytics) const WHAT_BEDDING_TAKES: u32 = 2;
 }

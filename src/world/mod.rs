@@ -80,7 +80,7 @@ pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
 pub use soil::{Field, Soil, SoilGrade, SoilType};
 pub use belonging::{Access, Belongs};
 pub use resources::{Bearing, Resource, ResourceType, ResourceNode};
-pub use buildings::{Building, BuildingType, BuildingState};
+pub use buildings::{Building, BuildingType, BuildingState, Cover};
 pub use inventory::{Inventory, Item, ItemType};
 pub use actions::{Action, ActionResult};
 pub use grid::{Grid, Position};
@@ -183,6 +183,11 @@ pub struct World {
     /// down.
     #[serde(default)]
     pub racks: Vec<Position>,
+
+    /// Boughs, brush or grass laid where somebody sleeps (#349). Off the cold
+    /// ground and a bed to sleep on; it is trodden flat and gone in a month.
+    #[serde(default)]
+    pub bedding: Vec<Bedding>,
 
     /// Pits dug in the ground, and what is keeping in them.
     ///
@@ -307,6 +312,18 @@ pub struct Dropped {
     /// a thing lying in it.
     #[serde(default)]
     pub dried_in_the_sun: u32,
+}
+
+/// Bedding laid at a place, and when.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bedding {
+    pub at: Position,
+    pub laid: u32,
+}
+
+impl Bedding {
+    /// How long bedding lasts before it is trodden flat, in ticks: a month.
+    pub const HOW_LONG_IT_LASTS: u32 = 30 * crate::environment::seasons::TICKS_PER_DAY;
 }
 
 /// A fish trap or weir set at a reach, and how many fish are in it.
@@ -1456,6 +1473,7 @@ impl World {
             dropped: Vec::new(),
             snares: Vec::new(),
             racks: Vec::new(),
+            bedding: Vec::new(),
             fish_traps: Vec::new(),
             pits: Vec::new(),
             where_it_was_worked_out: std::collections::BTreeSet::new(),
@@ -2405,10 +2423,37 @@ impl World {
     /// weather does to a body asks this, and so does where people bed down
     /// for the night (#299).
     pub fn is_out_of_the_weather_at(&self, pos: &Position) -> bool {
-        self.buildings.iter().any(|b| &b.position == pos && b.is_completed())
-            || self.grid.get_tile(pos).is_some_and(|tile| {
-                matches!(tile.terrain.terrain_type, crate::world::TerrainType::Forest)
-            })
+        self.cover_at(pos).is_some_and(|cover| cover.is_a_roof())
+    }
+
+    /// The best cover at a place: the warmest finished building on it, or the
+    /// trees, which count as a full roof as they always have (#349). A
+    /// windbreak is cover that is not a roof.
+    pub fn cover_at(&self, pos: &Position) -> Option<buildings::Cover> {
+        let built = self
+            .buildings
+            .iter()
+            .filter(|b| &b.position == pos && b.is_completed())
+            .map(|b| b.building_type.cover())
+            .max_by(|a, b| {
+                (a.keeps_off_rain, a.warmth)
+                    .partial_cmp(&(b.keeps_off_rain, b.warmth))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        let trees = self
+            .grid
+            .get_tile(pos)
+            .is_some_and(|tile| matches!(tile.terrain.terrain_type, crate::world::TerrainType::Forest));
+        match (built, trees) {
+            (Some(built), true) if built.warmth >= buildings::Cover::FULL.warmth => Some(built),
+            (_, true) => Some(buildings::Cover::FULL),
+            (built, false) => built,
+        }
+    }
+
+    /// Whether there is bedding laid at a place.
+    pub fn bedding_at(&self, pos: &Position) -> bool {
+        self.bedding.iter().any(|laid| &laid.at == pos)
     }
 
     pub fn remove_depleted_resources(&mut self) {
@@ -2940,6 +2985,13 @@ impl World {
         for building in &mut self.buildings {
             building.take_a_turn();
         }
+        // Brush that has fallen down is gone, and bedding trodden flat with
+        // it (#349). Nothing else in the list has ever fallen down.
+        self.buildings
+            .retain(|building| !(building.building_type.falls_apart() && building.condition <= 0.0));
+        let now = self.turn;
+        self.bedding
+            .retain(|laid| now.saturating_sub(laid.laid) < Bedding::HOW_LONG_IT_LASTS);
 
         // Update heat sources (fuel consumption, heating)
         self.heat_sources.turn_all();

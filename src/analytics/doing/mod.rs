@@ -109,6 +109,7 @@ impl Simulation {
             Action::HangUp { what } => self.hanging_up(what, agent_index, turn_now),
             Action::StoneBoil => self.stone_boiling(agent_index),
             Action::PitOven => self.pit_roasting(agent_index),
+            Action::LayBedding => self.laying_bedding(agent_index, turn_now),
             Action::Excavate => self.excavating(agent_index, turn_now),
             Action::Cover { what } => self.covering(what, agent_index, turn_now),
             Action::PickUp { what } => self.picking_up(what, agent_index, turn_now),

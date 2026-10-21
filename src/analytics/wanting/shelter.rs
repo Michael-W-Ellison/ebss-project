@@ -256,6 +256,74 @@ impl Simulation {
             .map(|recipe| recipe.id.to_string())
     }
 
+    /// The best brush cover this one could put up where they stand, from
+    /// what is in the pack, as the `Build` that does it (#349).
+    ///
+    /// A roof before a screen: a brush hut on a dry day, which takes three
+    /// turns; a lean-to, which takes one, when it is coming down or there is
+    /// no hut in the pack; and a windbreak when there is wind and no roof to
+    /// be had. Brush already going up here is carried on with. Nothing where
+    /// there is a roof already, or anything built at all.
+    pub(in crate::analytics) fn cover_i_could_put_up(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::world::BuildingType;
+
+        let here = crate::world::Position::new(agent_position.0, agent_position.1);
+        if let Some(site) = self
+            .world
+            .buildings
+            .iter()
+            .find(|b| b.position == here && !b.is_completed() && b.building_type.falls_apart())
+        {
+            return Some(Action::Build {
+                structure_type: Self::what_brush_is_called(site.building_type).to_string(),
+                position: agent_position,
+            });
+        }
+        if self.world.is_out_of_the_weather_at(&here) || self.world.get_building_at(&here).is_some() {
+            return None;
+        }
+
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let affords = |building: BuildingType| {
+            crate::environment::tags::what_this_roof_takes(building)
+                .is_some_and(|wants| crate::environment::tags::what_would_be_used(wants, &holding).is_ok())
+        };
+        let weather = &self.world.climate.weather;
+        let wet = weather.weather_type.precipitation_intensity() > 0.0;
+        let windy = weather.effective_wind_speed() > Self::A_WIND_WORTH_SCREENING;
+
+        let choice = if !wet && affords(BuildingType::BrushHut) {
+            BuildingType::BrushHut
+        } else if affords(BuildingType::LeanTo) {
+            BuildingType::LeanTo
+        } else if windy && affords(BuildingType::Windbreak) {
+            BuildingType::Windbreak
+        } else {
+            return None;
+        };
+        Some(Action::Build {
+            structure_type: Self::what_brush_is_called(choice).to_string(),
+            position: agent_position,
+        })
+    }
+
+    /// What `Build` knows each kind of brush by.
+    pub(in crate::analytics) fn what_brush_is_called(building: crate::world::BuildingType) -> &'static str {
+        match building {
+            crate::world::BuildingType::Windbreak => "windbreak",
+            crate::world::BuildingType::LeanTo => "leanto",
+            _ => "brushhut",
+        }
+    }
+
+    /// Wind enough to be worth a screen against: the wind the situation
+    /// already calls foul weather.
+    pub(in crate::analytics) const A_WIND_WORTH_SCREENING: f32 = 8.0;
+
     /// Putting a roof up, or going to fetch what it needs.
     ///
     /// Building was chosen without ever looking at what the agent was
@@ -314,9 +382,24 @@ impl Simulation {
             // which is why `shelters built` was nought in every arm ever
             // measured. A hole in the ground with turf over it needs none of
             // them.
-            Some((what, _)) if what.contains("hide") || what.contains("leather") => self
-                .hunting_action(agent, agent_position)
-                .or_else(|| self.digging_in(agent, agent_position)),
+            //
+            // And a hut of brush first, if the pack holds the poles and cord
+            // for one: the roof a people puts up when the hunt has not given
+            // them skins (#349).
+            Some((what, _)) if what.contains("hide") || what.contains("leather") => {
+                let holding = |what: &str| agent.how_many_i_have(what);
+                let a_hut = crate::environment::tags::what_this_roof_takes(BuildingType::BrushHut)
+                    .is_some_and(|wants| crate::environment::tags::what_would_be_used(wants, &holding).is_ok());
+                let here = crate::world::Position::new(agent_position.0, agent_position.1);
+                if a_hut && self.world.get_building_at(&here).is_none() {
+                    return Some(Action::Build {
+                        structure_type: "brushhut".to_string(),
+                        position: agent_position,
+                    });
+                }
+                self.hunting_action(agent, agent_position)
+                    .or_else(|| self.digging_in(agent, agent_position))
+            }
 
             // **Not a walk to the timber he remembers.** That was built and
             // measured and it costs: over two blocks of 32 worlds it took
@@ -835,7 +918,7 @@ impl Simulation {
         let in_building = self
             .world
             .get_building_at(position)
-            .map(|building| building.is_completed())
+            .map(|building| building.is_a_roof())
             .unwrap_or(false);
 
         let in_woodland = self
@@ -869,7 +952,7 @@ impl Simulation {
         let roof = self
             .world
             .get_building_at(position)
-            .filter(|building| building.is_completed());
+            .filter(|building| building.is_a_roof());
 
         match which {
             WhoseRoof::Natural => self
@@ -933,7 +1016,7 @@ impl Simulation {
                 .world
                 .buildings
                 .iter()
-                .filter(|building| building.is_completed())
+                .filter(|building| building.is_a_roof())
                 .any(|building| Self::is_this_building_mine_to_use(agent, building, which))
         {
             return None;
@@ -1035,7 +1118,7 @@ impl Simulation {
 
         self.world
             .get_building_at(&pos)
-            .map(|building| building.is_completed())
+            .map(|building| building.is_a_roof())
             .unwrap_or(false)
     }
 

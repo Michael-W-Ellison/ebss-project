@@ -100,6 +100,7 @@ pub mod retention_tests;
 pub mod working_together_tests;
 pub mod keeping_tests;
 pub mod food_keeping_tests;
+pub mod shelter_on_the_move_tests;
 pub mod larder_tests;
 pub mod sacrifice_tests;
 pub mod theft_tests;

@@ -7363,6 +7363,9 @@ name = "Simple windbreak"
 path = "shelter_systems_beyond_construction"
 stage = 0
 role = "technique"
+model = ["build:Windbreak"]
+same_as = ["construction.0.windbreaks"]
+note = "The same screen as construction's windbreaks."
 
 [[tech]]
 id = "shelter_systems_beyond_construction.0.one_fire"
@@ -7385,6 +7388,8 @@ name = "Ground bedding"
 path = "shelter_systems_beyond_construction"
 stage = 0
 role = "technique"
+model = ["do:LayBedding"]
+note = "Boughs and brush laid where one sleeps: a bed off the cold ground, trodden flat in a month."
 
 [[tech]]
 id = "shelter_systems_beyond_construction.0.basic_roof_cover"
@@ -10173,6 +10178,8 @@ name = "Lean-tos"
 path = "construction"
 stage = 0
 role = "technique"
+model = ["build:LeanTo"]
+note = "A sloped roof of poles and brush tied at the top: dry and out of the wind, colder than a hut, gone in a month."
 
 [[tech]]
 id = "construction.0.windbreaks"
@@ -10180,6 +10187,8 @@ name = "Windbreaks"
 path = "construction"
 stage = 0
 role = "technique"
+model = ["build:Windbreak"]
+note = "Three poles and brush on the windward side: it takes the wind off a sleeper but not the rain, and falls down in a fortnight."
 
 [[tech]]
 id = "construction.0.brush_huts"
@@ -10187,6 +10196,8 @@ name = "Brush huts"
 path = "construction"
 stage = 0
 role = "technique"
+model = ["build:BrushHut"]
+note = "A closed dome of poles and brush: warmer than a lean-to, colder than a tent, falls in after about three months."
 
 [[tech]]
 id = "construction.0.snow_shelters_in_cold_regions"

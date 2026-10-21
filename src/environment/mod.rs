@@ -304,6 +304,8 @@ pub enum Action {
     StoneBoil,
     /// Bury a big batch with stones out of the fire and let it cook
     PitOven,
+    /// Lay boughs and brush where this one will sleep
+    LayBedding,
     /// Dig a pit in the ground here, to keep things in
     Excavate,
     /// Put something into the pit here and put the earth back over it
@@ -435,6 +437,7 @@ impl Action {
             | Action::PutUpRack
             | Action::HangUp { .. } => Some(DriveType::Preparedness),
             Action::StoneBoil | Action::PitOven => Some(DriveType::Sustenance),
+            Action::LayBedding => Some(DriveType::Rest),
             Action::Excavate => Some(DriveType::Preparedness),
             Action::Cover { .. } => Some(DriveType::Preparedness),
             Action::PickUp { .. } => Some(DriveType::Utility),
