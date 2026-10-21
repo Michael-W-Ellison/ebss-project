@@ -526,10 +526,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // theft, and a person is a danger only while they are in sight.
     // Up 1.9% to 1,031,179 for #348: food keeping - smoking, brine, caches,
     // racks, stone boiling and pit ovens, and no drying in the rain.
-    // Down 0.5% to 1,025,557 for #349: windbreaks, lean-tos, brush huts and
-    // bedding, graded cover, a tent that can be finished, and fish traps
-    // that take fish.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_025_557;
+    // Down 4.9% to 980,526 for #349: windbreaks, lean-tos, brush huts put up
+    // in one go, bedding over a sleeping place, graded cover, a tent that can
+    // be finished, and fish traps that take fish.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 980_526;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
