@@ -331,3 +331,25 @@ fn a_tent_is_finished_on_what_went_into_it() {
     }
     assert!(simulation.world.get_building_at(&site).is_some_and(|tent| tent.is_completed()));
 }
+
+/// Somebody with a hut of their own half-built within sight goes back to it
+/// rather than starting another with the next armful of poles.
+#[test]
+fn a_half_built_hut_is_gone_back_to() {
+    let mut simulation = one_person_in_the_open();
+    poles_and_cord(&mut simulation, 12, 2);
+    let started = simulation.execute_action(
+        &Action::Build { structure_type: "brushhut".to_string(), position: (25, 25, 0) },
+        0,
+    );
+    assert!(started.success, "{:?}", started.message);
+
+    simulation.population.agents[0].state.position = (28, 25, 0);
+    let next = simulation.cover_i_could_put_up(&simulation.population.agents[0], (28, 25, 0));
+    assert!(matches!(next, Some(Action::Move { target: (25, 25, _) })), "got {next:?}");
+
+    // Out of sight of it, another is started
+    simulation.population.agents[0].state.position = (40, 25, 0);
+    let far = simulation.cover_i_could_put_up(&simulation.population.agents[0], (40, 25, 0));
+    assert!(matches!(far, Some(Action::Build { .. })), "got {far:?}");
+}

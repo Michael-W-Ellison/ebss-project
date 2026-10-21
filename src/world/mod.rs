@@ -3070,7 +3070,16 @@ impl World {
                     continue;
                 }
                 let at = self.fish_traps[index].at;
-                let Some(&number) = self.node_numbers_on(at).first() else {
+                // The fish in the reach, not whatever else lies on the cell:
+                // the first node on it was taken, and a trap on a cell with
+                // stone on it took the stone, to the last of it, without
+                // telling the world (#349)
+                let Some(number) = self
+                    .node_numbers_on(at)
+                    .iter()
+                    .copied()
+                    .find(|&number| self.resources[number].resource_type == ResourceType::Fish)
+                else {
                     continue;
                 };
                 let standing = self.resources[number].amount;
