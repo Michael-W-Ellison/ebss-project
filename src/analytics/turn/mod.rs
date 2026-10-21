@@ -168,6 +168,7 @@ impl Simulation {
         // And whoever had food to dry on a day of rain is a day nearer
         // thinking of a rack
         self.who_was_rained_off_drying();
+        self.who_went_thirsty_far_from_water();
         self.what_the_fire_hardened();
         self.who_came_back_to_look();
 

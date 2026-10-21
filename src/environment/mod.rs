@@ -373,6 +373,11 @@ pub enum Action {
     /// [`crate::environment::remedies`] - it takes something off how badly
     /// they are laid up, and that is all a herbal has ever done.
     Treat { who: Option<uuid::Uuid> },
+    /// Press on a wound that is bleeding: one's own (`None`) or somebody's
+    /// within reach (#351).
+    PressOnWound { who: Option<uuid::Uuid> },
+    /// Bind up an open wound with a strip of something (#351).
+    Bandage { who: Option<uuid::Uuid> },
     /// Wait/idle
     Wait,
 }
@@ -457,11 +462,9 @@ impl Action {
             // Taking something for it answers the want to be well enough to
             // work, which is what `Rest` is; giving it to somebody else is
             // looking after your own, which is `Protection`.
-            Action::Treat { who } => Some(if who.is_some() {
-                DriveType::Protection
-            } else {
-                DriveType::Rest
-            }),
+            Action::Treat { who } | Action::PressOnWound { who } | Action::Bandage { who } => {
+                Some(if who.is_some() { DriveType::Protection } else { DriveType::Rest })
+            }
             Action::MakeClothing { .. } => Some(DriveType::Shelter), // Clothing is shelter you carry
             Action::WearClothing { .. } => Some(DriveType::Shelter),
             Action::Move { .. } => None,

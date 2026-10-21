@@ -27,6 +27,7 @@
 //! ISSUES_FOUND.md #94, and it is what makes a refactor of this size a
 //! reviewable change rather than an act of faith.
 
+pub mod caring;
 pub mod eating;
 pub mod fighting;
 pub mod getting;
@@ -125,6 +126,8 @@ impl Simulation {
             Action::TendField => self.tending_a_field(agent_index, turn_now),
             Action::SpreadMuck => self.spreading_muck(agent_index, turn_now),
             Action::Treat { who } => self.treating(agent_index, *who, turn_now),
+            Action::PressOnWound { who } => self.pressing_on_a_wound(agent_index, *who),
+            Action::Bandage { who } => self.bandaging(agent_index, *who, turn_now),
             Action::Fish => self.fishing(agent_index, &mut rng, turn_now),
             Action::ForageShallows => self.picking_over_the_shallows(agent_index, &mut rng, turn_now),
             Action::SetFishTrap => self.setting_a_fish_trap(agent_index, turn_now),

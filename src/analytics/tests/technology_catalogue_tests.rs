@@ -112,6 +112,8 @@ fn every_action() -> BTreeSet<String> {
         Action::StoneBoil,
         Action::PitOven,
         Action::LayBedding,
+        Action::PressOnWound { who: None },
+        Action::Bandage { who: None },
         Action::Boil,
         Action::Salt { what: s() },
         Action::Excavate,

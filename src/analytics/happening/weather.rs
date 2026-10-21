@@ -104,6 +104,35 @@ impl Simulation {
         }
     }
 
+    /// Who went thirsty today with no water in reach, and so came to think of
+    /// taking some along: the water skin (#351). Once a day.
+    pub(in crate::analytics) fn who_went_thirsty_far_from_water(&mut self) {
+        use crate::agents::Agent;
+
+        if self.current_turn % crate::environment::seasons::TICKS_PER_DAY != 0 {
+            return;
+        }
+        let parched: Vec<usize> = (0..self.population.agents.len())
+            .filter(|&index| {
+                let agent = &self.population.agents[index];
+                agent.state.is_alive
+                    && agent.state.life_stage.can_reproduce()
+                    && agent
+                        .drives
+                        .get(crate::core::DriveType::Thirst)
+                        .is_some_and(|thirst| thirst.is_active())
+                    && !self.drinkable_water_within_reach(agent, agent.state.position)
+            })
+            .collect();
+        for index in parched {
+            let agent = &mut self.population.agents[index];
+            agent.skills.made_one(Agent::THIRSTY_FAR_FROM_WATER);
+            if agent.skills.times_made(Agent::THIRSTY_FAR_FROM_WATER) >= Agent::THIRSTY_DAYS_BEFORE_A_WATER_SKIN {
+                agent.found_out_how_to("waterskin");
+            }
+        }
+    }
+
     /// Process environmental damage for all agents
     pub fn process_environmental_damage(&mut self) {
         use crate::agents::body::{BodyPartType, InjuryType, CripplingType};
@@ -242,8 +271,10 @@ impl Simulation {
                 }
             }
 
-            // 4. NATURAL HEALING - Process body turn (handles conditions, bleeding, etc.)
-            agent.body.take_a_turn();
+            // 4. The body's own turn - its conditions, its healing, the wear
+            // on what it wears - is taken in `Agent::turn_with_percepts`.
+            // Taken here as well, every injury healed and every coat wore out
+            // twice a half hour (#351).
         }
     }
 

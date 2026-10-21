@@ -38,6 +38,7 @@ pub mod ground;
 pub mod quarry;
 pub mod shelter;
 pub mod store;
+pub mod wounds;
 
 use super::Simulation;
 use crate::agents::practices::Circumstance;

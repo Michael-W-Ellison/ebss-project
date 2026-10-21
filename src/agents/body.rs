@@ -629,8 +629,17 @@ impl Body {
 
     /// Process all body parts (turn effects like bleeding)
     pub fn take_a_turn(&mut self) {
+        self.take_a_turn_resting(false);
+    }
+
+    /// A turn for the body, and a body lying still mends as much again: rest
+    /// is the oldest medicine there is (#351).
+    pub fn take_a_turn_resting(&mut self, resting: bool) {
         for part in self.parts.values_mut() {
             part.take_a_turn();
+            if resting {
+                part.turn_natural_healing();
+            }
         }
         self.turn_equipment_wear();
     }

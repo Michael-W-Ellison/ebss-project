@@ -453,6 +453,10 @@ pub const EVERYTHING_TAGGED: &[Tagged] = &[
         is: &[Tag::FoodContainer, Tag::WaterContainer, Tag::Timber],
     },
     Tagged {
+        called: "waterskin",
+        is: &[Tag::WaterContainer],
+    },
+    Tagged {
         called: "basket",
         is: &[Tag::FoodContainer, Tag::CarryingContainer],
     },
@@ -752,6 +756,7 @@ pub const EVERYTHING_THAT_SERVES: &[Serves] = &[
     Serves { called: "claypot", capability: Capability::WaterContainer, how_well: 0.9 },
     Serves { called: "leatherbag", capability: Capability::WaterContainer, how_well: 0.6 },
     Serves { called: "bowl", capability: Capability::WaterContainer, how_well: 0.4 },
+    Serves { called: "waterskin", capability: Capability::WaterContainer, how_well: 0.8 },
 
     // ---- roofing ---------------------------------------------------------
     //

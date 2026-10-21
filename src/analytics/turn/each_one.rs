@@ -853,11 +853,18 @@ impl Simulation {
         // agent can finish - see `Errand`.
         let action = self.stick_to_the_errand(agent_index, action, running_away);
 
+        // A wound bleeding, one's own or somebody's near, before anything
+        // but running for it - the night included (#351).
+        let action = self.what_a_wound_asks(agent_index, action, running_away);
+
         // And at night, sleep (#299).
         let action = self.what_the_night_asks(agent_index, action, running_away);
 
         // Drop travel plans toward places the agent cannot reach
         let action = self.retarget_unreachable_move(agent_index, action);
+
+        // And a walk past the water starts with the vessel filled (#351)
+        let action = self.water_for_the_walk(agent_index, action, running_away);
 
         // A job that wants a hand free, and both of them full. A
         // person does not stand there defeated by it: they put

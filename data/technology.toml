@@ -8958,6 +8958,8 @@ name = "Water skins"
 path = "water_system"
 stage = 1
 role = "technique"
+model = ["make:waterskin"]
+note = "A whole hide cut and tied off, holding 8 to a bowl's 4. Found out by going thirsty far from water three days."
 
 [[tech]]
 id = "water_system.1.gourds"
@@ -9275,6 +9277,8 @@ name = "Pressure on wounds"
 path = "medicine_and_public_health"
 stage = 0
 role = "technique"
+model = ["do:PressOnWound"]
+note = "A hand on a bleeding wound: one's own slows it to a quarter, somebody else's two hands stop it. Born knowledge."
 
 [[tech]]
 id = "medicine_and_public_health.0.cooling_warming"
@@ -9311,6 +9315,8 @@ name = "Bandaging"
 path = "medicine_and_public_health"
 stage = 1
 role = "technique"
+model = ["do:Bandage"]
+note = "Found out by pressing on wounds: a strip of bark, sinew or hide tied over one stops the bleeding and, for a week, closes it twice as fast and lets it turn half as often."
 
 [[tech]]
 id = "medicine_and_public_health.1.cleaning_visible_dirt_from_wounds"

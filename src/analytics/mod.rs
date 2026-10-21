@@ -515,7 +515,9 @@ impl Simulation {
             // Watching somebody dose a sick man is watching a problem being
             // worked at, which is the nearest thing the observation tiers
             // have to doctoring.
-            Action::Treat { .. } => Some(ActionType::ProblemSolving),
+            Action::Treat { .. } | Action::PressOnWound { .. } | Action::Bandage { .. } => {
+                Some(ActionType::ProblemSolving)
+            }
             Action::Fish => Some(ActionType::Mining), // Taking something off the world
             Action::ForageShallows | Action::SetFishTrap | Action::CheckFishTraps => Some(ActionType::Mining),
             Action::SetSnare | Action::CheckSnares => Some(ActionType::Mining),
