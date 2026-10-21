@@ -28,12 +28,9 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #349): `cargo test --lib` in one piece.
-2,873 tests: 2,868 passed, none failed, 5 ignored, in 1,671 s.
-- An earlier run on the first cut of #349 failed eleven: nine settlement
-  tests tripped the world's check that nothing runs out unannounced, because
-  a fish trap took stone from its cell (fixed), and the two dice counts moved.
-- The dice counts are 8,397 (seed 4242, 120 turns) and 980,526 (seed 0, a
+**Last full run** (ISSUES_FOUND #350): `cargo test --lib` in one piece.
+2,876 tests: 2,871 passed, none failed, 5 ignored, in 1,399 s.
+- The dice counts are 8,397 (seed 4242, 120 turns) and 1,016,134 (seed 0, a
   year).
 - The fifth ignored test is `repeatable_tests::one_process_reports_seed_zero`,
   which only runs as a child of the two-process test (#342).
