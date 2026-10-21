@@ -259,12 +259,11 @@ impl Simulation {
     /// The best brush cover this one could put up where they stand, from
     /// what is in the pack, as the `Build` that does it (#349).
     ///
-    /// A roof before a screen: a brush hut on a dry day, which takes three
-    /// turns; a lean-to, which takes one, when it is coming down or there is
-    /// no hut in the pack; and a windbreak when there is wind and no roof to
-    /// be had. Brush already going up here is carried on with, and their own
-    /// half-built within sight walked back to. Nothing where there is a roof
-    /// already, or anything built at all.
+    /// A roof before a screen: a brush hut on a dry day, which holds its
+    /// builder three turns; a lean-to, which takes one, when it is coming
+    /// down or there is no hut in the pack; and a windbreak when there is wind
+    /// and no roof to be had. Brush already going up here is carried on with. Nothing where
+    /// there is a roof already, or anything built at all.
     pub(in crate::analytics) fn cover_i_could_put_up(
         &self,
         agent: &crate::agents::Agent,
@@ -287,23 +286,6 @@ impl Simulation {
         if self.world.is_out_of_the_weather_at(&here) || self.world.get_building_at(&here).is_some() {
             return None;
         }
-        // And their own, half-built within sight, is gone back to rather
-        // than another started: measured, four huts in five were started and
-        // left, six poles and a cord apiece
-        if let Some(mine) = self
-            .world
-            .buildings
-            .iter()
-            .filter(|b| !b.is_completed() && b.building_type.falls_apart())
-            .filter(|b| b.belongs == crate::world::Belongs::To(agent.id))
-            .filter(|b| {
-                (b.position.x - here.x).abs().max((b.position.y - here.y).abs()) <= Self::WITHIN_SIGHT
-            })
-            .find(|b| self.world.can_walk_between((here.x, here.y), (b.position.x, b.position.y)))
-        {
-            return Some(Action::Move { target: (mine.position.x, mine.position.y, agent_position.2) });
-        }
-
         let holding = |what: &str| agent.how_many_i_have(what);
         let affords = |building: BuildingType| {
             crate::environment::tags::what_this_roof_takes(building)

@@ -2451,9 +2451,15 @@ impl World {
         }
     }
 
-    /// Whether there is bedding laid at a place.
+    /// Whether there is bedding laid at a place: boughs spread over a
+    /// sleeping place, which is a pace either way of where they were laid.
+    /// Counted at the one cell, everybody who lay down a pace off laid their
+    /// own: 27,780 beds in forty worlds over two years, two wood apiece
+    /// (#349).
     pub fn bedding_at(&self, pos: &Position) -> bool {
-        self.bedding.iter().any(|laid| &laid.at == pos)
+        self.bedding
+            .iter()
+            .any(|laid| (laid.at.x - pos.x).abs() <= 1 && (laid.at.y - pos.y).abs() <= 1)
     }
 
     pub fn remove_depleted_resources(&mut self) {

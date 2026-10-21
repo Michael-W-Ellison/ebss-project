@@ -145,8 +145,9 @@ fn brush_falls_down_and_is_gone() {
     assert!((lasts(BuildingType::BrushHut) - 90.0).abs() < 0.5);
 }
 
-/// A brush hut goes up where its builder stands, takes the poles and cord on
-/// the first turn, and is finished on what went into it then.
+/// A brush hut goes up where its builder stands, from the poles and cord in
+/// the pack, with no store dug under it; and another goes nowhere a roof
+/// stands already.
 #[test]
 fn a_brush_hut_goes_up_where_its_builder_stands() {
     let mut simulation = one_person_in_the_open();
@@ -154,23 +155,14 @@ fn a_brush_hut_goes_up_where_its_builder_stands() {
     let build = Action::Build { structure_type: "brushhut".to_string(), position: (25, 25, 0) };
     let here = Position::new(25, 25);
 
-    let started = simulation.execute_action(&build, 0);
-    assert!(started.success, "{:?}", started.message);
+    let built = simulation.execute_action(&build, 0);
+    assert!(built.success, "{:?}", built.message);
     assert_eq!(simulation.world.get_building_at(&here).map(|b| b.building_type), Some(BuildingType::BrushHut));
     assert_eq!(simulation.population.agents[0].how_many_i_have("wood"), 0, "the poles went into it");
     assert_eq!(simulation.population.agents[0].how_many_i_have("lashing"), 0, "and the cord");
-
-    let mut turns = 0;
-    while !simulation.world.get_building_at(&here).unwrap().is_completed() {
-        let carried_on = simulation.execute_action(&build, 0);
-        assert!(carried_on.success, "carried on with nothing more in hand: {:?}", carried_on.message);
-        turns += 1;
-        assert!(turns <= 3, "a hut is three turns of work");
-    }
     assert!(simulation.world.is_out_of_the_weather_at(&here));
     assert!(simulation.world.pit_at(here).is_none(), "no store is dug under brush");
 
-    // And another goes nowhere a roof stands already
     poles_and_cord(&mut simulation, 4, 1);
     let lean_to = Action::Build { structure_type: "leanto".to_string(), position: (25, 25, 0) };
     assert!(!simulation.execute_action(&lean_to, 0).success);
@@ -218,6 +210,8 @@ fn bedding_is_a_bed_and_warmth_for_a_month() {
     let laid = simulation.execute_action(&Action::LayBedding, 0);
     assert!(laid.success, "{:?}", laid.message);
     assert!(simulation.world.bedding_at(&here));
+    assert!(simulation.world.bedding_at(&Position::new(26, 24)), "a pace off is the same bed");
+    assert!(!simulation.world.bedding_at(&Position::new(27, 25)), "two paces off is not");
     assert_eq!(simulation.population.agents[0].how_many_i_have("wood"), 0);
 
     // Sleep on it is better than sleep on the ground
@@ -332,24 +326,26 @@ fn a_tent_is_finished_on_what_went_into_it() {
     assert!(simulation.world.get_building_at(&site).is_some_and(|tent| tent.is_completed()));
 }
 
-/// Somebody with a hut of their own half-built within sight goes back to it
-/// rather than starting another with the next armful of poles.
+/// Brush goes up in one go, holding its builder for the turns it takes
+/// their hands, so none is ever left half-built: three turns for a hut from
+/// an untried hand, one for a lean-to.
 #[test]
-fn a_half_built_hut_is_gone_back_to() {
+fn brush_goes_up_in_one_go() {
     let mut simulation = one_person_in_the_open();
-    poles_and_cord(&mut simulation, 12, 2);
-    let started = simulation.execute_action(
+    poles_and_cord(&mut simulation, 10, 2);
+    let hut = simulation.execute_action(
         &Action::Build { structure_type: "brushhut".to_string(), position: (25, 25, 0) },
         0,
     );
-    assert!(started.success, "{:?}", started.message);
+    assert!(hut.success, "{:?}", hut.message);
+    assert_eq!(hut.took_periods, 3);
+    assert!(simulation.world.get_building_at(&Position::new(25, 25)).is_some_and(|b| b.is_completed()));
 
-    simulation.population.agents[0].state.position = (28, 25, 0);
-    let next = simulation.cover_i_could_put_up(&simulation.population.agents[0], (28, 25, 0));
-    assert!(matches!(next, Some(Action::Move { target: (25, 25, _) })), "got {next:?}");
-
-    // Out of sight of it, another is started
-    simulation.population.agents[0].state.position = (40, 25, 0);
-    let far = simulation.cover_i_could_put_up(&simulation.population.agents[0], (40, 25, 0));
-    assert!(matches!(far, Some(Action::Build { .. })), "got {far:?}");
+    simulation.population.agents[0].state.position = (30, 25, 0);
+    let lean_to = simulation.execute_action(
+        &Action::Build { structure_type: "leanto".to_string(), position: (30, 25, 0) },
+        0,
+    );
+    assert!(lean_to.success, "{:?}", lean_to.message);
+    assert_eq!(lean_to.took_periods, 1);
 }
