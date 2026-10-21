@@ -2993,8 +2993,11 @@ impl World {
         }
         // Brush that has fallen down is gone, and bedding trodden flat with
         // it (#349). Nothing else in the list has ever fallen down.
-        self.buildings
-            .retain(|building| !(building.building_type.falls_apart() && building.condition <= 0.0));
+        self.buildings.retain(|building| {
+            let gone = building.building_type.falls_apart()
+                || (building.building_type.fills_in() && !building.is_completed());
+            !(gone && building.condition <= 0.0)
+        });
         let now = self.turn;
         self.bedding
             .retain(|laid| now.saturating_sub(laid.laid) < Bedding::HOW_LONG_IT_LASTS);

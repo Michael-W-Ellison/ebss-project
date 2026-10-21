@@ -140,6 +140,18 @@ impl BuildingType {
         matches!(self, BuildingType::Windbreak | BuildingType::LeanTo | BuildingType::BrushHut)
     }
 
+    /// Whether this, left half done, fills in and is gone: a hole nobody goes
+    /// on digging. A finished burrow stands; an open one left a month is
+    /// earth again (#349). Without it every hole anybody ever started stood
+    /// for the life of the world - 365 a world in two years.
+    pub fn fills_in(&self) -> bool {
+        matches!(self, BuildingType::Burrow)
+    }
+
+    /// How fast an open hole fills in, a turn: in a month of the world's
+    /// turns (48 a day).
+    pub const AN_OPEN_HOLE_FILLS_IN: f32 = 1.0 / (30.0 * 48.0);
+
     /// Get construction requirements
     pub fn requirements(&self) -> Vec<Resource> {
         match self {
@@ -1144,12 +1156,18 @@ impl Building {
     /// Process building turn: decay and production
     pub fn take_a_turn(&mut self) {
         // Only completed buildings decay and produce - except brush, which
-        // falls down half-built as readily as built, so an abandoned start
-        // does not hold its ground for ever (#349)
+        // falls down half-built as readily as built, and an open hole, which
+        // fills in, so an abandoned start does not hold its ground for ever
+        // (#349)
         if !self.is_completed() {
-            if self.building_type.falls_apart() {
-                self.condition = (self.condition - self.building_type.decay_rate()).max(0.0);
-            }
+            let coming_down = if self.building_type.falls_apart() {
+                self.building_type.decay_rate()
+            } else if self.building_type.fills_in() {
+                BuildingType::AN_OPEN_HOLE_FILLS_IN
+            } else {
+                0.0
+            };
+            self.condition = (self.condition - coming_down).max(0.0);
             return;
         }
 
