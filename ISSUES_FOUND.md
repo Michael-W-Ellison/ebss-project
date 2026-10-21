@@ -26782,3 +26782,99 @@ were the user's:
   - `nobody_with_brush_sleeps_in_the_open`;
   - `a_tent_is_finished_on_what_went_into_it`.
 - Dice counts: 8,397 (seed 4242, 120 turns) and 980,526 (seed 0, a year).
+
+### 350. After #349: camps held by brush huts, burrows dug anywhere, no wind
+
+#349 left three things unexplained: fewer camp moves, no windbreaks, and
+burrows started and never finished. The user asked for all three to be
+looked into before going on.
+
+A diagnostic probe was run on #348 and #349 side by side, on scattered seeds
+1-16 and then 17-32. It logged every proposed camp move and what the turn did
+instead, every `Build` with the drive that chose it, the roofs and open sites
+left at the end, and the choice of cover whenever there was wind.
+
+#### Camp moves: every brush hut became the camp
+
+- The drop was real. It held on sixteen fresh seeds (304 to 230, t -2.32),
+  and over thirty-two it was 573 to 426 (t -3.11).
+- Moves were carried out as often as they were proposed (3.5% in both); it
+  was fewer proposals.
+- Neither the fish trap fix (it changed catches on smooth maps, not
+  scattered) nor the timing of sowing explained it.
+- `where_this_one_sleeps` snaps home to the nearest finished roof within a
+  forage of the camp, and `settle_the_hearth` makes that the hearth. That was
+  written when a finished roof was a burrow with the camp's store under it.
+  With brush huts going up every night, every hut became where the camp lived.
+- Two counterfactuals on the same sixteen seeds settled it:
+
+| sixteen scattered seeds | camp moves | births | alive |
+|---|---|---|---|
+| #348 | 269 | 32 | 223 |
+| #349 | 196 | 30 | 219 |
+| #349, brush not a camp's roof | 275 | 37 | 228 |
+| #349, no brush at all | 245 | 28 | 220 |
+
+- **Brush no longer anchors a camp**. A tent or a finished burrow still does.
+
+#### Burrows: dug wherever anybody tried one
+
+- The Construction drive dug almost none of them: eight `Build` actions in
+  sixteen worlds. Nearly every burrow was started by Curiosity, Reproduction,
+  Luxury or Sustenance picking "burrow" from what could be done here
+  (`an_action_for`). That built a burrow wherever the person stood, with
+  none of `digging_in`'s rules: carry on with the hole already open, nothing
+  within two paces of a roof, ground that takes a hole.
+- And an open hole stood for ever: 5,839 at the end of sixteen worlds, about
+  365 a world after two years, every one of them blocking its cell and
+  scanned by everything that looks at the buildings.
+- #349 roughly doubled the starts (Curiosity 1,683 to 3,119, Reproduction 506
+  to 2,402). Why is not known. Hut and burrow are learned under different
+  names, so the obvious guess - that finished huts taught people to build -
+  is not confirmed.
+- **A burrow tried for its own sake is offered only where `digging_in`
+  would dig**, and **an open hole fills in after a month**
+  (`BuildingType::fills_in`, `AN_OPEN_HOLE_FILLS_IN`) and is gone. A finished
+  burrow is not touched.
+
+#### No windbreaks: there is no wind
+
+- `Weather::base_wind_speed` is set to 2.0 when the weather is made and
+  nothing ever changes it. The weather multiplies it by at most 3 (a
+  blizzard), so the wind never passes 6.
+- Every rule that reads the wind wants more than that: a windbreak more than
+  8, the situation's "foul weather" more than 8, windburn more than 10. Wind
+  chill is the only effect wind has, at most 3° below 10°.
+- `BiomeType::typical_wind_speed` (2 to 8) exists and nothing reads it.
+- **Not fixed here**, by the user's choice. A real wind model changes exposure
+  everywhere and is a piece of work of its own. Until then windbreaks are
+  linked and never chosen.
+
+**Measured**, forty settlements, two years:
+
+| | #348 | #349 | #350 | #350 vs #348, t |
+|---|---|---|---|---|
+| births | 145 | 142 | 161 | +1.50 |
+| deaths | 1 | 4 | 4 (all hunger) | +1.78 |
+| alive at day 720 | 624 | 618 | 637 | +1.20 |
+| camp moves | 300 | 225 | 307 | +0.17 |
+| burrows started | - | 14,900 | 455 | |
+| burrows finished | - | 735 | 165 | |
+| brush huts | 0 | 4,593 | 4,939 | |
+| sowing found (median day) | 201 | 183 | 208 | |
+| gardens found (median day) | 423 | 428 | 341 | |
+
+- Camp moves are back, and births and survivors are up on #348, not
+  significantly.
+- **Four hunger deaths**, all on scattered maps, on four seeds, three of
+  them in the last two months. Not significant (t +1.86 on scattered), and
+  not from fewer stores: on scattered maps pits dug went from 2,116 to 2,371
+  and food buried stayed level, though finished burrows fell from 735 to 165.
+  Watch it.
+
+**Tests.**
+- New: `camp_tests::brush_does_not_anchor_a_camp`,
+  `burrow_tests::an_open_hole_fills_in`,
+  `burrow_tests::a_burrow_tried_for_its_own_sake_keeps_the_same_rules`.
+- Dice counts: 8,397 (seed 4242, 120 turns, unchanged) and 1,016,134 (seed
+  0, a year).
