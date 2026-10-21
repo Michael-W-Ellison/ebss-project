@@ -26674,3 +26674,111 @@ How often the new ways were used:
   - `stones_in_a_vessel_of_water_cook_without_burning`;
   - `boiling_wants_a_vessel`;
   - `a_pit_oven_cooks_most_of_a_pack_at_once`.
+
+### 349. Shelter on the move: windbreaks, lean-tos, brush huts, bedding
+
+The third of the unlinked survival machinery the user asked for. Two choices
+were the user's:
+- **graded cover**: a windbreak takes off the wind and is not a roof; a
+  lean-to and a brush hut are roofs that hold less warmth than a tent (tent >
+  hut > lean-to);
+- **brush falls apart**: a windbreak in about a fortnight, a lean-to in a
+  month, a hut in a season, and then it is gone. Nothing else falls down.
+
+**Cover** (`BuildingType::cover`, `World::cover_at`).
+- Shelter was one bit: a finished building or a forest tile. It is now what a
+  roof keeps off (rain, wind) and how far it closes the gap to a sheltered
+  space's 18° (`Climate::effective_temperature_under`): a tent and the trees
+  0.6 as before, a hut 0.45, a lean-to 0.3, a windbreak nothing.
+- Behind a windbreak there is no wind chill and no windburn, and it is not a
+  roof: nobody is "out of the weather" behind one, and the places that asked
+  `is_completed` for a roof ask `is_a_roof` now.
+
+**Brush** (`build:Windbreak`, `build:LeanTo`, `build:BrushHut`, Stage 0, born).
+- Three poles; four poles and a cord; six poles and a cord. Put up where the
+  builder stands, with no store dug under it.
+- `cover_i_could_put_up`: a hut on a dry day, a lean-to in the wet or with no
+  hut in the pack, a windbreak when there is wind and no roof to be had.
+- Chosen by the Shelter drive (`BuildTemporaryShelter`, which was declared and
+  out of reach), and by the night: somebody going to sleep in the open with
+  no roof or trees in reach puts brush up first (`brush_before_bed`), whether
+  the night sent them to bed or their own Rest drive did.
+- **Put up a turn at a time, four huts in five were started and left**: 6,425
+  started and 867 finished over forty worlds, six poles and a cord apiece,
+  because whatever won the next turn walked off. Brush now goes up in one
+  action that holds its builder for the turns it takes their hands - three
+  for a hut, one for a lean-to, untried (`taking_periods`).
+
+**Bedding** (`do:LayBedding`, Stage 0 "ground bedding", born).
+- Two wood of boughs where one sleeps: the sleep it gives is a bed's
+  (`has_bed`), and lying on it is worth 0.15 of insulation. Trodden flat in a
+  month.
+- Counted at its one cell, everybody who lay down a pace off laid their own -
+  27,780 beds. It covers a pace either way now.
+
+**No tent was ever finished, anywhere** (#175 again).
+- `add_construction_progress` refuses work until `resources_delivered` covers
+  `requirements()`, and nothing delivers to a site in this model: the
+  builder's materials are taken on the first turn. #175 made a turn of work
+  count and so finished burrows, which want nothing; a tent wants wood and
+  hides and stayed short of them for ever.
+- A site now counts what its builder brought as delivered
+  (`with_what_was_brought`), and carrying on with a site already going up
+  wants nothing more in hand, in the executor or in the verb matrix.
+- It made no difference measured: **nobody started a tent** in forty worlds,
+  for want of hides.
+
+**A fish trap took stone** (found by the suite).
+- A trap took from the first node on its cell; on a cell with stone it took
+  the stone to the last of it without telling the world, and the world's
+  debug check failed nine settlement tests once people moved about
+  differently. It takes from the fish now.
+
+**Measured**, forty settlements, two years, against #348:
+
+| | #348 | #349 | paired t |
+|---|---|---|---|
+| births | 145 | 142 | -0.25 |
+| deaths | 1 (hunger) | 4 (2 hunger, a blow, illness) | +1.36 |
+| alive at day 720 | 624 | 618 | -0.48 |
+| camp moves | 300 | 225 | -1.87 |
+| sowing found (median day) | 40 (201) | 40 (183) | |
+| gardens found (median day) | 39 (423) | 37 (428) | |
+
+| | times | worlds (of 40) |
+|---|---|---|
+| bedding laid | 22,727 | 40 |
+| brush huts put up | 4,593 | 40 |
+| lean-tos put up | 287 | 31 |
+| windbreaks | 0 | 0 |
+| tents | 0 | 0 |
+| burrows finished (started) | 735 (14,900) | 40 |
+
+- Nothing measured is significantly worse, and none of the deaths was the
+  weather, in either.
+- The turn-at-a-time version measured births 145 to 131 and survivors 624 to
+  609 (t about -1); the one-go version is level.
+- **Camp moves are down**, and on the scattered maps nearly significantly so
+  (269 to 196, t -2.04). Not explained here; a roof of one's own at the old
+  camp may be holding people to it.
+- **Nobody puts up a windbreak**: whoever has three poles has the cord for a
+  lean-to, which is chosen first.
+- **Burrows**: 14,900 started and 735 finished. That waste is older than this
+  and costs no materials; burrows are dug a turn at a time and left like the
+  huts were.
+
+**Tests.**
+- New, in `shelter_on_the_move_tests`:
+  - `the_catalogue_knows_brush_and_bedding`;
+  - `cover_is_graded`;
+  - `a_windbreak_is_not_a_roof`;
+  - `a_windbreak_takes_the_wind_off_a_body`;
+  - `brush_falls_down_and_is_gone` (half-built too; a tent does not);
+  - `a_brush_hut_goes_up_where_its_builder_stands`;
+  - `brush_goes_up_in_one_go`;
+  - `the_brush_put_up_suits_the_weather_and_the_pack`;
+  - `bedding_is_a_bed_and_warmth_for_a_month`;
+  - `putting_brush_up_is_a_way_to_shelter`;
+  - `nobody_with_brush_sleeps_in_the_open`;
+  - `a_tent_is_finished_on_what_went_into_it`.
+- Dice counts: 8,397 (seed 4242, 120 turns) and 980,526 (seed 0, a year).
