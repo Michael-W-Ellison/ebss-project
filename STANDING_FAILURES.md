@@ -28,9 +28,13 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #350): `cargo test --lib` in one piece.
-2,876 tests: 2,871 passed, none failed, 5 ignored, in 1,399 s.
-- The dice counts are 8,397 (seed 4242, 120 turns) and 1,016,134 (seed 0, a
+**Last full run** (ISSUES_FOUND #351): `cargo test --lib` in one piece.
+2,884 tests: 2,879 passed, none failed, 5 ignored, in 1,491 s.
+- Two runs before it each failed one structural test, both on how the water
+  skin was made: `table_order_tests` (cutting a hide makes nothing) and
+  `working_tests` (a working's verb performs itself). It is sewn shut with
+  `weave` now, as the leather bag is.
+- The dice counts are 8,397 (seed 4242, 120 turns) and 1,035,210 (seed 0, a
   year).
 - The fifth ignored test is `repeatable_tests::one_process_reports_seed_zero`,
   which only runs as a child of the two-process test (#342).
