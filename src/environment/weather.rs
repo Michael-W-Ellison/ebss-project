@@ -277,6 +277,10 @@ pub struct WeatherGenerator {
     pub biome: Option<BiomeType>,
     /// Previous weather (for transitions)
     previous_weather: Option<WeatherType>,
+    /// The ordinary wind over open ground in this country, before the spell
+    /// and the season have their say (#352). Set by the climate from the
+    /// region's open country; the trees take it off whoever is under them.
+    pub open_country_wind: f32,
 }
 
 impl WeatherGenerator {
@@ -288,6 +292,7 @@ impl WeatherGenerator {
             humidity: 0.5,
             biome: None,
             previous_weather: None,
+            open_country_wind: Self::AN_ORDINARY_WIND,
         }
     }
 
@@ -300,6 +305,7 @@ impl WeatherGenerator {
             humidity: 0.5,
             biome: Some(biome),
             previous_weather: None,
+            open_country_wind: Self::AN_ORDINARY_WIND,
         }
     }
 
@@ -323,6 +329,7 @@ impl WeatherGenerator {
             let duration = spell_of_weather(&mut rng, 3, 15);
             let mut weather = Weather::new(biome_weather);
             weather.duration_remaining = duration;
+            weather.base_wind_speed = self.wind_for_a_spell(&mut rng);
             self.previous_weather = Some(biome_weather);
             return weather;
         }
@@ -332,6 +339,8 @@ impl WeatherGenerator {
             let duration = spell_of_weather(&mut rng, 2, 8);
             let mut weather = Weather::new(WeatherType::Fog);
             weather.duration_remaining = duration;
+            // Fog is still air
+            weather.base_wind_speed = self.wind_for_a_spell(&mut rng) * 0.3;
             self.previous_weather = Some(WeatherType::Fog);
             return weather;
         }
@@ -363,9 +372,35 @@ impl WeatherGenerator {
 
         let mut weather = Weather::new(weather_type);
         weather.duration_remaining = duration;
+        weather.base_wind_speed = self.wind_for_a_spell(&mut rng);
         self.previous_weather = Some(weather_type);
         weather
     }
+
+    /// The wind for a spell of weather, before the weather itself makes it
+    /// worse (`WeatherType::wind_modifier`) (#352).
+    ///
+    /// The wind was 2.0 everywhere, always, and at most 6 in a blizzard -
+    /// under every rule that reads it: foul weather and a windbreak want more
+    /// than 8, windburn more than 10. So the country's open-ground wind,
+    /// times a spell drawn between still air and two and a half times
+    /// ordinary (calm spells far commoner than gales), times the season:
+    /// winter and autumn blow, summer is still.
+    fn wind_for_a_spell(&self, rng: &mut impl rand::Rng) -> f32 {
+        let draw: f32 = rng.gen();
+        let spell = 0.2 + 2.3 * draw * draw;
+        let season = match self.season {
+            Season::Winter => 1.3,
+            Season::Fall => 1.15,
+            Season::Spring => 1.05,
+            Season::Summer => 0.8,
+        };
+        self.open_country_wind * spell * season
+    }
+
+    /// The ordinary wind over open ground, metres a second, where nothing says
+    /// otherwise: a grassland's.
+    pub const AN_ORDINARY_WIND: f32 = 4.0;
 
     /// Generate biome-specific weather
     fn generate_biome_specific_weather(&self, rng: &mut impl rand::Rng) -> Option<WeatherType> {
