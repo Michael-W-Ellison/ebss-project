@@ -236,7 +236,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // no child, and partners go halfway to each other.
     // Down to 8,397 for #349: brush shelter and bedding, graded cover, a tent
     // that can be finished, and fish traps that take fish.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 8_397;
+    // Down to 7,429 for #352: every spell of weather draws its wind, salt is
+    // fetched, a tent asks for what it takes, and a vessel is made for a walk.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_429;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -535,7 +537,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Up 1.9% to 1,035,210 for #351: wounds bleed and are pressed on and
     // bound, a body at rest mends faster and takes one turn a half hour, not
     // two, and a water skin is cut and filled before a walk.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_035_210;
+    // Down 1.4% to 1,020,308 for #352: wind that blows, salt fetched from
+    // where it lies, skins wanted for a tent, a vessel made for a walk.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_020_308;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
