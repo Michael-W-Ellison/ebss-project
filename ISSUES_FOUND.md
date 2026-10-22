@@ -26878,3 +26878,96 @@ left at the end, and the choice of cover whenever there was wind.
   `burrow_tests::a_burrow_tried_for_its_own_sake_keeps_the_same_rules`.
 - Dice counts: 8,397 (seed 4242, 120 turns, unchanged) and 1,016,134 (seed
   0, a year).
+
+### 351. Water and care: bleeding and pressure, dressings, rest, the water skin
+
+The last of the unlinked survival machinery the user asked for. Two choices
+were the user's:
+- **blows bleed**: a wound bleeds until somebody presses on it, and left
+  alone a bad one can kill;
+- **a hide water skin, filled on leaving**: and anybody with an empty vessel
+  fills it before walking away from water.
+
+A survey of what was there first:
+- `ConditionType::Bleeding` existed in the body model and **nothing ever
+  caused it**; nothing could press on a wound because nothing bled.
+- **The body took its turn twice a half hour**, in `Agent::turn_with_percepts`
+  and again in `process_environmental_damage`, so every injury healed and
+  every garment wore at double the intended rate.
+- Rest sped up health regeneration but not the healing of injuries.
+- The only vessel was a carved bowl (holds 4), almost nobody made one, and a
+  vessel was filled only as a side effect of drinking at a source.
+
+**Bleeding and pressure** (`do:PressOnWound`, Stage 0, born).
+- A blow that opens a wound bleeds as hard as it is open: four health a half
+  hour for the worst (`WHAT_AN_OPEN_WOUND_BLEEDS`), clotting by itself to 85%
+  each half hour. Left alone the worst costs about 27 health on top of the
+  blow. Booked as "a wound".
+- One's own hand slows it to a quarter; somebody else's stops it.
+- `what_a_wound_asks` puts a bleeding wound before anything but running for
+  it, the night included: one's own, somebody's within a hand's reach, and
+  one's own kin across the camp, who are walked to.
+
+**Bandaging** (`do:Bandage`, Stage 1, found out).
+- Found out after pressing on four wounds. A strip of anything that binds
+  (cordage) stops the bleeding, and for a week the wound closes twice as fast
+  and turns half as often.
+
+**Rest** (`do:Sleep`, already linked).
+- Asleep, a body heals its injuries and closes its wounds twice as fast.
+- The body takes one turn a half hour, not two.
+
+**The water skin** (`make:waterskin`, Stage 1, found out).
+- A hide cut and tied off (`CUT_A_WATER_SKIN`), holding 8. Found out after
+  three days thirsty with no water in reach (`who_went_thirsty_far_from_water`).
+- `water_for_the_walk`: somebody setting off further than a forage from
+  beside water, with room in a vessel, drinks and fills it first.
+
+**Measured**, forty settlements, two years, and then forty fresh ones
+(smooth 25-48, scattered 17-32) for both versions:
+
+| | #350 | #351 | t |
+|---|---|---|---|
+| births, first forty | 161 | 141 | -1.61 |
+| births, fresh forty | 143 | 142 | -0.10 |
+| births, all eighty | 304 | 283 | -1.32 |
+| alive at day 720, all eighty | 1,256 | 1,230 | -1.62 |
+| deaths, all eighty | 8 | 13 (11 hunger) | +1.00 |
+
+- **The first forty looked like a fall** (smooth survivors 412 to 397, t
+  -2.28). The obvious suspect, injuries healing at half the rate the model
+  was tuned on, was tested and is not it: with the healing rates doubled the
+  first forty read 147 births and 621 alive, no nearer #350.
+- **On fresh seeds the two are level.** #350's 161 looks like a high: against
+  #348 (145) this reads 141, t -0.34. Over eighty, births and survivors lean
+  down and not significantly. Watch it.
+
+How often the new things were done, all eighty:
+
+| | times | worlds (of 80) |
+|---|---|---|
+| a wound pressed on, own | 147 | 43 (any pressing) |
+| a wound pressed on, somebody's | 22 | |
+| a wound bound | 11 | |
+| bandaging found out | 9 | |
+| water skins cut | 3 | |
+| water skin found out | 8 | |
+| a vessel filled before a walk | 393 | 51 |
+
+- **None of it is common**, because blows that open wounds are rare and
+  nobody carries a vessel: the bowl is still almost never made, and a skin
+  wants a hide.
+- Nobody died of "a wound" in either version.
+
+**Tests.**
+- New, in `water_and_care_tests`:
+  - `the_catalogue_knows_how_care_and_water_come`;
+  - `a_blow_bleeds_and_clots`;
+  - `pressure_slows_a_wound_and_teaches_a_dressing`;
+  - `a_dressing_stops_the_bleeding_and_closes_the_wound`;
+  - `rest_mends_twice_as_fast`;
+  - `a_bleeding_wound_comes_first`;
+  - `going_thirsty_far_from_water_is_how_a_water_skin_is_found_out`;
+  - `a_vessel_is_filled_before_a_long_walk`.
+- Dice counts: 8,397 (seed 4242, 120 turns, unchanged) and 1,035,210 (seed
+  0, a year).
