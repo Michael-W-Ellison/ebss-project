@@ -238,7 +238,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // that can be finished, and fish traps that take fish.
     // Down to 7,429 for #352: every spell of weather draws its wind, salt is
     // fetched, a tent asks for what it takes, and a vessel is made for a walk.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_429;
+    // Up to 8,095 for #353: hides rot unless scraped, rawhide is tanned over
+    // a fire, skins make cloaks, wraps and foot-wraps, and a spare hide is
+    // slept on.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 8_095;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -539,7 +542,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // two, and a water skin is cut and filled before a walk.
     // Down 1.4% to 1,020,308 for #352: wind that blows, salt fetched from
     // where it lies, skins wanted for a tent, a vessel made for a walk.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_020_308;
+    // Up 5.3% to 1,074,317 for #353: hides that rot unless worked, rawhide
+    // and tanned leather, the garments a skin makes, and hide bedding.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_074_317;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -28,14 +28,21 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #351): `cargo test --lib` in one piece.
-2,884 tests: 2,879 passed, none failed, 5 ignored, in 1,491 s.
-- Two runs before it each failed one structural test, both on how the water
-  skin was made: `table_order_tests` (cutting a hide makes nothing) and
-  `working_tests` (a working's verb performs itself). It is sewn shut with
-  `weave` now, as the leather bag is.
-- The dice counts are 8,397 (seed 4242, 120 turns) and 1,035,210 (seed 0, a
-  year).
+**Last full run** (ISSUES_FOUND #353): `cargo test --lib` in one piece.
+2,889 tests: 2,886 passed, 3 failed, 6 ignored, in 2,837 s (the machine
+was measuring settlements at the same time). All three were the deliberate
+#353 change, since put right:
+- The two dice counts, now 8,095 (seed 4242, 120 turns) and 1,074,317
+  (seed 0, a year).
+- `carrying_tests::a_leather_bag_holds_more_than_a_basket` asked for leather
+  from scraping a hide. Scraping makes rawhide now, and leather is rawhide
+  tanned over a fire; the test asks for both steps.
+- The #352 run before it failed five, all on that change and all fixed there:
+  salt fetched ahead of drying and burying (`keeping_tests`, `larder_tests`,
+  `clay_tests`) and a tent that wants cord (`burrow_tests`,
+  `stone_age_tests`).
+- The sixth ignored test is `measurement_watch::zz_discovery_watch`, which
+  is the settlement measurement and not a test (#352).
 - The fifth ignored test is `repeatable_tests::one_process_reports_seed_zero`,
   which only runs as a child of the two-process test (#342).
 

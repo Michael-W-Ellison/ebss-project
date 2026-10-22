@@ -26993,9 +26993,13 @@ over 8, windburn over 10).
 
 **Salt.** Four salt flats and two seams in a world, and nothing ever sent
 anybody to them.
-- Somebody with food to keep and no salt fetches it from salt within a
-  forage (`putting_food_by`), before the autumn, cloud, sea, pot and fire that
+- Somebody with spare food and no salt fetches it from salt within a forage
+  (`putting_food_by`), before the autumn, cloud, sea, pot and fire that
   boiling the sea wants.
+- **Only once nothing else will keep the food**: the first cut fetched salt
+  before drying, burying and digging a pit, and `keeping_tests` and
+  `larder_tests` caught it. The fetch now comes after the burying and digging,
+  and before the autumn gate on a store with room in it.
 
 **Tent skins.** Only a garment ever sent anybody hunting, and the tent was
 asked for by name - eight wood, four hides - while the builder asked by class
@@ -27021,40 +27025,44 @@ them was reset, and with it went the settlement measurement every entry since
 compare scripts are in `tools/measure`. The #351 baseline was rebuilt and run
 again from its commit.
 
-**Measured**, forty settlements, two years, against #351:
+**Measured**, forty settlements, two years, against #351. The first
+measurement was taken with salt fetched before drying; these are the numbers
+after the fix, from the commit as it stands:
 
 | | #351 | #352 | t |
 |---|---|---|---|
-| births | 141 | 156 | +0.97 |
+| births | 141 | 158 | +1.16 |
 | deaths | 4 | 4 | 0 |
-| alive at day 720 | 617 | 632 | +0.96 |
-| camp moves | 326 | 264 | -1.28 |
+| of hunger | 3 | 2 | -1.00 |
+| alive at day 720 | 617 | 634 | +1.14 |
+| camp moves | 326 | 264 | -1.38 |
 
 | | #351 | #352 |
 |---|---|---|
-| windbreaks put up | 0 | 150 (22 worlds) |
-| half hours in windburn | 0 | 300,916 |
-| salt fetched | - | 262 (7 worlds) |
-| food salted | 3 (2 worlds) | 167 (6 worlds) |
-| brined | 34 | 3 |
+| windbreaks put up | 0 | 152 (22 worlds) |
+| half hours in windburn | 0 | 298,670 |
+| salt fetched | - | 265 (6 worlds) |
+| food salted | 3 (2 worlds) | 102 (5 worlds) |
+| brined | 34 | 2 |
 | the sea boiled | 28 | 3 |
-| bowls carved | 912 | 2,676 |
-| vessels filled for a walk | 201 | 7,825 |
+| bowls carved | 912 | 2,664 |
+| vessels filled for a walk | 201 | 7,740 |
 | tents | 0 | 0 |
 
-- Nothing measured is worse. Births and survivors are up, not significantly.
+- Nothing measured is worse. Births and survivors are up, not significantly;
+  the salt fix moved them by two.
 - **Wind**: windbreaks are put up now, and windburn is common - about five
   days a person a year, two thirds of it on the smooth maps - without killing
   anybody; it is exposure damage, recovered from.
-- **Salt** reaches the worlds that have it within a forage, seven in forty.
-  Elsewhere it is still the sea or nothing; fetching salt from further off is
-  a journey, and nothing yet plans one.
+- **Salt** reaches the worlds that have it within a forage, six in forty, and
+  is used there. Elsewhere it is still the sea or nothing; fetching salt from
+  further off is a journey, and nothing yet plans one.
 - **Vessels** are made three times as often and carried: a vessel filled for
-  a walk forty times as often.
+  a walk nearly forty times as often.
 - **Tents: still none.** Nobody gathers four skins and two cords in one pack:
   the skins go into clothing first, and a brush hut answers the want for a
   roof for poles and a cord. That is the leatherworking path's to answer.
-- Camp moves are down on the scattered maps (280 to 211, t -1.70). Seen
+- Camp moves are down on the scattered maps (280 to 219, t -1.63). Seen
   before at this size (#349, #350); watch it.
 
 **Tests.**
