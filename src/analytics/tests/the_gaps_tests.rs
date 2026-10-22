@@ -96,11 +96,21 @@ fn a_tent_is_asked_for_by_what_it_takes() {
     assert!(matches!(asked, Some(Action::Craft { ref item_type }) if item_type == "lashing"), "got {asked:?}");
 }
 
-/// Somebody with food to keep and no salt goes to the salt flat a forage
-/// off, rather than waiting on an autumn, a cloud, the sea and a pot.
+/// Somebody with food to keep and no salt, on a wet day on ground that will
+/// not take a hole, goes to the salt flat a forage off, rather than waiting on an
+/// autumn, a cloud, the sea and a pot. On a dry day the sun does it first.
 #[test]
 fn salt_is_fetched_from_where_it_lies() {
     let mut simulation = one_person();
+    simulation.world.climate.weather.weather_type = crate::environment::WeatherType::Rain;
+    // Forest floor all round, which will not take a hole
+    for x in 0..200 {
+        for y in 0..200 {
+            if let Some(tile) = simulation.world.grid.get_tile_mut(&Position::new(x, y)) {
+                tile.terrain.terrain_type = TerrainType::Forest;
+            }
+        }
+    }
     let mut roots = InventoryItem::new_with_weight("roots".to_string(), 30, 0.1);
     roots.food_data = FoodDatabase::new().create_food_data(&ItemType::Roots, 0);
     simulation.population.agents[0].inventory.add_item(roots);

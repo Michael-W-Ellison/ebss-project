@@ -544,19 +544,6 @@ impl Simulation {
             }
         }
 
-        // Or go and get some where it lies: a salt flat, a seam in the hills,
-        // within a forage (#352). There were four flats and two seams in a
-        // world and nothing ever sent anybody to them, so salt was made by
-        // boiling the sea or not at all - one boiling in forty worlds.
-        if agent.how_many_i_have("salt") < Self::WHAT_IT_TAKES_TO_SALT_A_LOT && spare.is_some() {
-            let salt_lies_here = self.nearest_resource_within(agent, agent_position, Self::FORAGE_RADIUS, |node| {
-                node.resource_type == crate::world::ResourceType::Salt
-            });
-            if salt_lies_here.is_some() {
-                return Some(Action::Gather { resource_type: "salt".to_string() });
-            }
-        }
-
         // And go and make some, if there is a sea to make it out of and a
         // fire to make it over. Only in autumn and only with food worth
         // keeping: boiling the sea in June is a way of spending a day.
@@ -710,6 +697,21 @@ impl Simulation {
                 return Some(Action::Move {
                     target: (pit.x, pit.y, agent_position.2),
                 });
+            }
+        }
+
+        // And when nothing above has answered - it will not dry, there is no
+        // hole and none to dig - fetch salt where it lies: a salt flat, a seam
+        // in the hills, within a forage (#352). Above drying and burying it
+        // took the place of both wherever a flat lay near. There were four flats and two seams in a
+        // world and nothing ever sent anybody to them, so salt was made by
+        // boiling the sea or not at all - one boiling in forty worlds.
+        if agent.how_many_i_have("salt") < Self::WHAT_IT_TAKES_TO_SALT_A_LOT && spare.is_some() {
+            let salt_lies_here = self.nearest_resource_within(agent, agent_position, Self::FORAGE_RADIUS, |node| {
+                node.resource_type == crate::world::ResourceType::Salt
+            });
+            if salt_lies_here.is_some() {
+                return Some(Action::Gather { resource_type: "salt".to_string() });
             }
         }
 

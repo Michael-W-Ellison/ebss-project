@@ -147,6 +147,10 @@ fn a_man_with_the_hides_and_poles_puts_a_tent_up() {
                 1.0,
             ));
         }
+        // And the two cords the builder has always asked for (#352)
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight("lashing".to_string(), 2, 0.1));
     }
 
     let here = simulation.population.agents[0].state.position;
