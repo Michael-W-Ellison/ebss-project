@@ -102,7 +102,8 @@ impl Simulation {
     pub(in crate::analytics) const HOW_FAR_YOU_WILL_GO_TO_A_WOUND: i32 = 12;
 
     /// Water taken along: somebody setting off on a walk past the water,
-    /// with room in a vessel, fills it first (#351).
+    /// with room in a vessel, fills it first (#351); and with no vessel,
+    /// makes one first if they can (#352).
     ///
     /// A vessel was only ever filled as a side effect of drinking, and
     /// `top_up_before_you_need_it` is the last thing tried before waiting. The
@@ -121,6 +122,23 @@ impl Simulation {
         if going <= Self::FORAGE_RADIUS as i32 {
             return action;
         }
+        if !self.drinkable_water_within_reach(agent, here) {
+            return action;
+        }
+
+        // Nothing to carry it in, and the makings of something and a blade
+        // to make it with: make it now, beside the water, and fill it next
+        // turn (#352). A vessel was made only when the Utility drive won a
+        // turn, which it rarely does - 1.2% of agent-days had one.
+        if agent.what_i_can_hold_water_in() == 0 {
+            if agent.what_i_have_to_work_with(crate::agents::SkillType::Crafting).is_some() {
+                if let Some((verb, to)) = agent.what_vessel_i_would_rather_have() {
+                    return Action::Work { verb: verb.to_string(), to: to.to_string() };
+                }
+            }
+            return action;
+        }
+
         let room: f32 = agent
             .inventory
             .get_all_items()
@@ -128,7 +146,7 @@ impl Simulation {
             .filter(|item| item.is_container())
             .map(|item| item.max_capacity.unwrap_or(0.0) - item.fill_level.unwrap_or(0.0))
             .sum();
-        if room < 1.0 || !self.drinkable_water_within_reach(agent, here) {
+        if room < 1.0 {
             return action;
         }
         Action::Gather { resource_type: "water".to_string() }

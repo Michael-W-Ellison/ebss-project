@@ -343,25 +343,16 @@ impl Simulation {
 
         // A tent is what a stone-age people can raise. Anything grander needs
         // stone they have no way to quarry.
-        let wanted = BuildingType::SkinTent.requirements();
+        // What the tent takes, asked the way the builder asks it: by class,
+        // so that leather (a deer's skin comes off as leather) and cord count
+        // as well as hides. Asked by name - eight wood and four hides - this
+        // never saw a deer hunter's leather as a covering, and never noticed
+        // the two cords the builder then refused for (#352).
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let short_of = crate::environment::tags::what_this_roof_takes(BuildingType::SkinTent)
+            .and_then(|wants| crate::environment::tags::what_would_be_used(wants, &holding).err());
 
-        let short_of = wanted
-            .iter()
-            .filter_map(|needed| {
-                let name = format!("{:?}", needed.resource_type).to_lowercase();
-                let have = agent
-                    .inventory
-                    .get_item(&name)
-                    .map(|item| item.quantity)
-                    .unwrap_or(0);
-                if have >= needed.amount {
-                    None
-                } else {
-                    Some((name, needed.amount - have))
-                }
-            })
-            .max_by_key(|(_, missing)| *missing);
-
+        use crate::environment::tags::Tag;
         match short_of {
             None => Some(Action::Build {
                 structure_type: "tent".to_string(),
@@ -385,8 +376,11 @@ impl Simulation {
             // And a hut of brush first, if the pack holds the poles and cord
             // for one: the roof a people puts up when the hunt has not given
             // them skins (#349).
-            Some((what, _)) if what.contains("hide") || what.contains("leather") => {
-                let holding = |what: &str| agent.how_many_i_have(what);
+            //
+            // And skins for a tent are a reason to hunt by themselves: only a
+            // garment ever sent anybody after an animal, so a people dressed
+            // for the winter never took a skin for a roof (#352).
+            Some((Tag::FlexibleCovering, _)) => {
                 let a_hut = crate::environment::tags::what_this_roof_takes(BuildingType::BrushHut)
                     .is_some_and(|wants| crate::environment::tags::what_would_be_used(wants, &holding).is_ok());
                 let here = crate::world::Position::new(agent_position.0, agent_position.1);
@@ -396,9 +390,14 @@ impl Simulation {
                         position: agent_position,
                     });
                 }
-                self.hunting_action(agent, agent_position)
+                self.going_after_skins(agent, agent_position)
                     .or_else(|| self.digging_in(agent, agent_position))
             }
+
+            // Cord is made from a branch's bark where a branch is to hand
+            Some((Tag::Cordage, _)) if agent.how_many_i_have("wood") >= 1 => Some(Action::Craft {
+                item_type: "lashing".to_string(),
+            }),
 
             // **Not a walk to the timber he remembers.** That was built and
             // measured and it costs: over two blocks of 32 worlds it took
@@ -411,7 +410,10 @@ impl Simulation {
             // the store goes under. In this model the thing worth doing is
             // nearly always the thing under his feet, and a walk displaces it.
             // See ISSUES_FOUND #194.
-            Some((what, _)) => Some(Action::Gather { resource_type: what }),
+            Some((Tag::Pole, _)) | Some((Tag::Cordage, _)) => Some(Action::Gather {
+                resource_type: "wood".to_string(),
+            }),
+            Some(_) => self.digging_in(agent, agent_position),
         }
     }
 

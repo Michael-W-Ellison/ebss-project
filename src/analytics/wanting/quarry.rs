@@ -377,11 +377,21 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
-        use crate::agents::practices::Undertaking;
-
         if !Self::wants_to_hunt(agent) {
             return None;
         }
+        self.going_after_skins(agent, agent_position)
+    }
+
+    /// Going after an animal for its skin, for whatever reason the skin is
+    /// wanted: a garment (`hunting_action`) or a tent's covering
+    /// (`raising_a_roof`, #352).
+    pub(in crate::analytics) fn going_after_skins(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
 
         // Somebody who has gone after animals a dozen times and come back
         // empty every time stops going after animals. Nothing tells them to:
