@@ -943,14 +943,15 @@ pub const CARVE_A_BOWL: Working = Working {
     over_a_fire: false,
 };
 
-/// A whole hide cut and tied off at the legs and neck: a water skin (#351).
+/// A whole hide lashed shut at the legs and neck: a water skin (#351). The
+/// cord is wanted in hand (`LASH`) and kept.
 ///
 /// Stage 1 of the water path, and found out rather than born: by somebody who
 /// has gone thirsty far from water often enough to want to take some along
 /// (`Simulation::who_went_thirsty_far_from_water`). It holds twice what a bowl
 /// does and does not spill on the walk.
-pub const CUT_A_WATER_SKIN: Working = Working {
-    verb: "cut",
+pub const LASH_A_WATER_SKIN: Working = Working {
+    verb: "lash",
     to: "hides",
     how_much: 1,
     makes: "waterskin",
@@ -1043,7 +1044,7 @@ pub const EVERY_WORKING: &[Working] = &[
     WEAVE_A_BASKET,
     SEW_A_BAG,
     CARVE_A_BOWL,
-    CUT_A_WATER_SKIN,
+    LASH_A_WATER_SKIN,
     SOAK_FLAX,
     FERMENT_FRUIT,
     BOIL_FLOUR,
