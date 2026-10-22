@@ -390,7 +390,11 @@ impl Simulation {
                         position: agent_position,
                     });
                 }
-                self.going_after_skins(agent, agent_position)
+                // Only with an animal to take them from: going after skins
+                // starts with a spear, and nobody makes a spear for a roof
+                // with nothing in sight to throw it at.
+                self.the_best_prey_for_its_skin(agent, agent_position)
+                    .and_then(|_| self.going_after_skins(agent, agent_position))
                     .or_else(|| self.digging_in(agent, agent_position))
             }
 

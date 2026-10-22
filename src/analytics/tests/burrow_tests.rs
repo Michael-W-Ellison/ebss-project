@@ -99,7 +99,8 @@ fn a_burrow_is_a_roof() {
 // Choosing to dig one
 // --------------------------------------------------------------------------
 
-/// Somebody with the makings of a tent builds a tent.
+/// Somebody with the makings of a tent builds a tent: poles, skins, and the
+/// two cords the builder has always asked for (#352).
 #[test]
 fn somebody_who_can_build_a_tent_builds_one() {
     let mut simulation = one_person();
@@ -114,6 +115,9 @@ fn somebody_who_can_build_a_tent_builds_one() {
         agent
             .inventory
             .add_item(InventoryItem::new_with_weight("hides".to_string(), 20, 1.0));
+        agent
+            .inventory
+            .add_item(InventoryItem::new_with_weight("lashing".to_string(), 2, 0.1));
     }
 
     let chosen = simulation.raising_a_roof(&simulation.population.agents[0], here);
