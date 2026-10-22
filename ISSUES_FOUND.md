@@ -26975,3 +26975,92 @@ How often the new things were done, all eighty:
   - `a_vessel_is_filled_before_a_long_walk`.
 - Dice counts: 8,397 (seed 4242, 120 turns, unchanged) and 1,035,210 (seed
   0, a year).
+
+### 352. The gaps after the survival machinery: wind, salt, tent skins, vessels
+
+#349 to #351 left four things the model could not do. The user asked for them
+resolved before going on to leatherworking.
+
+**Wind.** `Weather::base_wind_speed` was 2.0 everywhere for ever, at most 6
+in a blizzard, under every rule that reads it (foul weather and windbreaks
+over 8, windburn over 10).
+- Each spell of weather now draws its wind (`WeatherGenerator::wind_for_a_spell`):
+  the country's open-ground wind (`BiomeType::typical_wind_speed` of the
+  region's open ground, 4.0 in the ordinary country), times a spell between
+  0.2 and 2.5 with still spells far commoner than gales, times the season
+  (winter 1.3, autumn 1.15, spring 1.05, summer 0.8). Fog is still air. The
+  trees take it off whoever is under them, as cover always has.
+
+**Salt.** Four salt flats and two seams in a world, and nothing ever sent
+anybody to them.
+- Somebody with food to keep and no salt fetches it from salt within a
+  forage (`putting_food_by`), before the autumn, cloud, sea, pot and fire that
+  boiling the sea wants.
+
+**Tent skins.** Only a garment ever sent anybody hunting, and the tent was
+asked for by name - eight wood, four hides - while the builder asked by class
+and wanted two cords besides.
+- `raising_a_roof` asks what `WHAT_A_TENT_TAKES` asks: leather counts as a
+  covering (a deer's skin comes off as leather), cord is made from a branch's
+  bark when that is what is short, and a want of skins for a roof is a reason
+  to hunt in itself (`going_after_skins`, split from `hunting_action`).
+- **Only with an animal in reach**: going after skins begins with a spear,
+  and the first cut had a roof-raiser with nothing to hunt making one instead
+  of digging in (`burrow_tests` caught it).
+
+**Vessels.** A bowl was made only when the Utility drive won, and it rarely
+does.
+- Somebody with no vessel setting off on a long walk from beside water, with
+  a blade and the makings, makes one first (`water_for_the_walk`), and fills it
+  the turn after.
+
+**The measurement tools are in the repository now.** The container that held
+them was reset, and with it went the settlement measurement every entry since
+#345 reports, the probe patches and every baseline. `zz_discovery_watch` is in
+`src/analytics/tests/measurement_watch.rs`, and the probe, build, run and
+compare scripts are in `tools/measure`. The #351 baseline was rebuilt and run
+again from its commit.
+
+**Measured**, forty settlements, two years, against #351:
+
+| | #351 | #352 | t |
+|---|---|---|---|
+| births | 141 | 156 | +0.97 |
+| deaths | 4 | 4 | 0 |
+| alive at day 720 | 617 | 632 | +0.96 |
+| camp moves | 326 | 264 | -1.28 |
+
+| | #351 | #352 |
+|---|---|---|
+| windbreaks put up | 0 | 150 (22 worlds) |
+| half hours in windburn | 0 | 300,916 |
+| salt fetched | - | 262 (7 worlds) |
+| food salted | 3 (2 worlds) | 167 (6 worlds) |
+| brined | 34 | 3 |
+| the sea boiled | 28 | 3 |
+| bowls carved | 912 | 2,676 |
+| vessels filled for a walk | 201 | 7,825 |
+| tents | 0 | 0 |
+
+- Nothing measured is worse. Births and survivors are up, not significantly.
+- **Wind**: windbreaks are put up now, and windburn is common - about five
+  days a person a year, two thirds of it on the smooth maps - without killing
+  anybody; it is exposure damage, recovered from.
+- **Salt** reaches the worlds that have it within a forage, seven in forty.
+  Elsewhere it is still the sea or nothing; fetching salt from further off is
+  a journey, and nothing yet plans one.
+- **Vessels** are made three times as often and carried: a vessel filled for
+  a walk forty times as often.
+- **Tents: still none.** Nobody gathers four skins and two cords in one pack:
+  the skins go into clothing first, and a brush hut answers the want for a
+  roof for poles and a cord. That is the leatherworking path's to answer.
+- Camp moves are down on the scattered maps (280 to 211, t -1.70). Seen
+  before at this size (#349, #350); watch it.
+
+**Tests.**
+- New, in `the_gaps_tests`: `the_wind_blows_by_the_season`,
+  `a_tent_is_asked_for_by_what_it_takes`, `salt_is_fetched_from_where_it_lies`,
+  `a_vessel_is_made_before_a_long_walk`.
+- `burrow_tests::somebody_who_can_build_a_tent_builds_one` gives the two cords
+  the builder always asked for.
+- Dice counts: 7,429 (seed 4242, 120 turns) and 1,020,308 (seed 0, a year).
