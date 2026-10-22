@@ -571,6 +571,10 @@ pub const EVERYTHING_TAGGED: &[Tagged] = &[
         is: &[Tag::FlexibleCovering, Tag::Hide],
     },
     Tagged {
+        called: "rawhide",
+        is: &[Tag::FlexibleCovering, Tag::Hide],
+    },
+    Tagged {
         called: "stone",
         is: &[Tag::RigidBuildingMaterial, Tag::Knappable],
     },
@@ -766,6 +770,7 @@ pub const EVERYTHING_THAT_SERVES: &[Serves] = &[
     Serves { called: "bricks", capability: Capability::ShelterMaterial, how_well: 1.0 },
     Serves { called: "hides", capability: Capability::ShelterMaterial, how_well: 0.9 },
     Serves { called: "leather", capability: Capability::ShelterMaterial, how_well: 0.9 },
+    Serves { called: "rawhide", capability: Capability::ShelterMaterial, how_well: 0.85 },
     // A split stave is a better pole than the log it came out of: straighter,
     // and it does not want hewing to sit flat. See `making::SPLIT_WOOD`.
     Serves { called: "staves", capability: Capability::ShelterMaterial, how_well: 0.85 },

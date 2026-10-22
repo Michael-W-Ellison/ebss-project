@@ -27,8 +27,10 @@ pub fn butchered_item_id(material_id: &str) -> &str {
     match material_id {
         "fish_meat" => "fish",
 
-        // Every skin is a skin
-        "fur" | "thick_hide" | "hide" | "snake_skin" | "pelt" => "hides",
+        // Every skin is a skin, a deer's included: what the beast tables call
+        // its leather comes off it raw, and leather is what a hide is worked
+        // into (#353)
+        "fur" | "thick_hide" | "hide" | "snake_skin" | "pelt" | "leather" => "hides",
 
         // Named cuts and the odd rendered fat
         "mutton" | "beef" | "pork" | "blubber" => "meat",

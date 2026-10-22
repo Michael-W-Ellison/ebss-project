@@ -175,6 +175,14 @@ impl InventoryItem {
         let mine = self.quantity;
         let theirs = other.quantity;
 
+        // A raw hide's freshness is kept in its durability, and a hide that
+        // has not had any counted yet is fresh off the animal (#353).
+        let mut other = other;
+        if Self::rots_unless_worked(&self.item_id) {
+            self.current_durability.get_or_insert(1.0);
+            other.current_durability.get_or_insert(1.0);
+        }
+
         // **And what a unit of the stack weighs, blended the same way.** It
         // kept the first stack's figure, so ten two-unit stones and ten
         // half-unit pebbles weighed forty together, and a made thing (weighed
@@ -298,7 +306,29 @@ impl InventoryItem {
         if let Some(ref mut food) = self.food_data {
             food.goes_off(now, how_fast);
         }
+
+        // A raw hide rots in about a week unless it is scraped and dried, or
+        // used (#353). Its freshness is kept in its durability.
+        if Self::rots_unless_worked(&self.item_id) {
+            let fresh = self.current_durability.get_or_insert(1.0);
+            *fresh = (*fresh - Self::WHAT_A_HALF_HOUR_TAKES_OFF_A_RAW_HIDE).max(0.0);
+        }
     }
+
+    /// Whether this is a raw skin that rots unless it is worked (#353).
+    pub fn rots_unless_worked(item_id: &str) -> bool {
+        item_id == "hides"
+    }
+
+    /// Whether this is a raw skin gone rotten.
+    pub fn has_rotted(&self) -> bool {
+        Self::rots_unless_worked(&self.item_id) && self.current_durability.is_some_and(|fresh| fresh <= 0.0)
+    }
+
+    /// How much of a raw hide's freshness a half hour takes: it keeps about a
+    /// week, as fresh meat does.
+    pub const WHAT_A_HALF_HOUR_TAKES_OFF_A_RAW_HIDE: f32 =
+        1.0 / (7.0 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32);
 
     /// Check if this is a container
     pub fn is_container(&self) -> bool {
@@ -1803,6 +1833,9 @@ pub struct Agent {
     /// because the test is `busy_until > now` rather than `>=`.
     #[serde(default)]
     pub busy_until: u32,
+    /// How many raw hides have rotted in this one's pack (#353).
+    #[serde(default)]
+    pub hides_that_rotted: u32,
     /// How used this one has got to each kind of beast, by name, from
     /// nought (a stranger) to nearly one (part of the furniture).
     ///
@@ -2071,6 +2104,7 @@ impl Agent {
         let mut agent = Self {
             id: crate::core::dice::name(),
             busy_until: 0,
+            hides_that_rotted: 0,
             familiar_with: std::collections::BTreeMap::new(),
             last_evening_watching_ore: None,
             stepped_from: None,
@@ -3745,6 +3779,14 @@ impl Agent {
     /// skin (#351).
     pub const THIRSTY_FAR_FROM_WATER: &'static str = "thirstyfarfromwater";
     pub const THIRSTY_DAYS_BEFORE_A_WATER_SKIN: u32 = 3;
+
+    /// How many hides somebody scrapes into rawhide before working one soft
+    /// over a smoky fire: tanning (#353).
+    pub const HIDES_SCRAPED_BEFORE_TANNING: u32 = 6;
+
+    /// Wet enough that rawhide worn on the body stiffens and rots: the
+    /// wetness that frostbite already reads as soaked (#353).
+    pub const SOAKED_THROUGH: f32 = 0.3;
 
     /// What it calls a batch off a fire, and how many suppers before
     /// somebody buries the next one with the stones out of it.
@@ -5630,7 +5672,8 @@ impl Agent {
     pub fn turn_with_percepts(&mut self, current_turn: u32) {
         // Update subsystems
         self.senses.take_a_turn();
-        self.body.take_a_turn_resting(self.fatigue.is_sleeping);
+        let soaked = self.exposure_status.wetness > Self::SOAKED_THROUGH;
+        self.body.take_a_turn_resting_in(self.fatigue.is_sleeping, soaked);
         // Use trait-aware emotion decay (traits affect how quickly emotions fade)
         self.emotions.turn_with_traits(&self.traits);
         // Apply passive trait effects (e.g., Melancholic slowly gains sadness)
@@ -6228,6 +6271,20 @@ impl Agent {
             .map(|(id, _)| id.clone())
             .collect();
 
+        // And raw hides that have rotted, which are matter and not food:
+        // nobody minds them as they mind a meal (#353)
+        let rotted: Vec<String> = self.inventory.get_all_items().iter()
+            .filter(|(_, item)| item.has_rotted())
+            .map(|(id, _)| id.clone())
+            .collect();
+        for item_id in rotted {
+            if let Some(item) = self.inventory.items.remove(&item_id) {
+                self.state.waste_carried += item.quantity as f32
+                    * crate::world::Soil::waste_from_spoilage(&item_id);
+                self.hides_that_rotted += item.quantity;
+            }
+        }
+
         for item_id in spoiled_items {
             // What has gone off is still matter. Deleting it outright made a
             // pack the one place in the world where things could rot to
@@ -6254,20 +6311,20 @@ impl Agent {
     /// agent inside a building cools exactly as fast as one standing in the
     /// open, so sheltering never resolves the exposure that sent it indoors.
     pub fn update_temperature_with_shelter(&mut self, climate: &super::Climate, has_shelter: bool) {
-        self.update_temperature_under(climate, has_shelter.then_some(crate::world::Cover::FULL), false);
+        self.update_temperature_under(climate, has_shelter.then_some(crate::world::Cover::FULL), 0.0);
     }
 
     /// The same, under whatever cover there is (#349), and on bedding or off
     /// it: lying on boughs is lying off the cold ground, which is worth what
-    /// another layer is worth.
+    /// another layer is worth, and a hide twice that (#353). `bedding` is
+    /// what the bedding lain on is worth, nought for none.
     pub fn update_temperature_under(
         &mut self,
         climate: &super::Climate,
         cover: Option<crate::world::Cover>,
-        on_bedding: bool,
+        bedding: f32,
     ) {
-        let cold_insulation = self.body.total_cold_insulation()
-            + if on_bedding { Self::WHAT_BEDDING_IS_WORTH } else { 0.0 };
+        let cold_insulation = self.body.total_cold_insulation() + bedding;
         let heat_resistance = self.body.total_heat_resistance();
         let effective_temp = climate.effective_temperature_under(cover);
         self.body_temperature.update(effective_temp, cold_insulation, heat_resistance);

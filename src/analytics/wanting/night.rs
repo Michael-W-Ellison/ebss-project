@@ -68,7 +68,9 @@ impl Simulation {
                 return Some(build);
             }
         }
-        (!self.world.bedding_at(&at) && agent.how_many_i_have("wood") >= Self::WHAT_BEDDING_TAKES)
+        (!self.world.bedding_at(&at)
+            && (agent.how_many_i_have("wood") >= Self::WHAT_BEDDING_TAKES
+                || Self::a_hide_to_spare_for_bedding(agent).is_some()))
             .then_some(Action::LayBedding)
     }
 
@@ -131,7 +133,14 @@ impl Simulation {
     pub(in crate::analytics) fn the_evening_at_home(&self, agent_index: usize) -> Option<Action> {
         let agent = &self.population.agents[agent_index];
         let here = agent.state.position;
-        if agent.state.years_old() < Self::OLD_ENOUGH_TO_COOK || !Self::has_food_worth_cooking(agent) {
+        if agent.state.years_old() < Self::OLD_ENOUGH_TO_COOK {
+            return None;
+        }
+        // The skins first, which will not wait a week (#353)
+        if let Some(work) = self.a_hide_to_work(agent, here) {
+            return Some(work);
+        }
+        if !Self::has_food_worth_cooking(agent) {
             return None;
         }
         if self.nearest_fire_from(here, Self::FIRE_REACH, true).is_some() {
@@ -150,6 +159,39 @@ impl Simulation {
             resource.resource_type == crate::world::ResourceType::Wood
         })
         .map(|_| Action::Gather { resource_type: "wood".to_string() })
+    }
+
+    /// A skin to see to by the evening fire (#353).
+    ///
+    /// A raw hide rots in a week. One that a wanted fur garment is waiting
+    /// on goes into the garment; any other is scraped and dried into
+    /// rawhide, which keeps, by whoever has an edge to do it with. And
+    /// rawhide is worked soft over the fire - tanned - by whoever has found
+    /// out how, beside a fire that is burning.
+    pub(in crate::analytics) fn a_hide_to_work(
+        &self,
+        agent: &crate::agents::Agent,
+        here: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::SkillType;
+
+        if agent.how_many_i_have("hides") > 0 {
+            if let Some(garment) = Self::garment_to_make(agent).filter(|garment| {
+                crate::agents::equipment::garment_recipe(garment).is_some_and(|recipe| recipe.material_item == "hides")
+            }) {
+                return Some(Action::MakeClothing { garment });
+            }
+            if agent.what_i_have_to_work_with(SkillType::Leatherworking).is_some() {
+                return Some(Action::Work { verb: "scrape".to_string(), to: "hides".to_string() });
+            }
+        }
+        if agent.how_many_i_have("rawhide") > 0
+            && agent.what_i_found_out().contains("leather")
+            && self.nearest_fire_from(here, Self::FIRE_REACH, true).is_some()
+        {
+            return Some(Action::Work { verb: "fire".to_string(), to: "rawhide".to_string() });
+        }
+        None
     }
 
     /// Sleep at night, and be back with the others by then.

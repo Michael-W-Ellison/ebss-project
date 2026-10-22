@@ -610,8 +610,18 @@ impl Body {
 
     /// Turn wear on all equipped items
     pub fn turn_equipment_wear(&mut self) {
+        self.turn_equipment_wear_in(false);
+    }
+
+    /// Wear on what is worn, and rawhide soaked through wears three times as
+    /// fast: it stiffens and rots wet, where tanned leather keeps (#353).
+    pub fn turn_equipment_wear_in(&mut self, soaked: bool) {
         for item in self.equipment.values_mut() {
             item.turn_wear();
+            if soaked && item.material == crate::agents::equipment::ClothingMaterial::Rawhide {
+                item.turn_wear();
+                item.turn_wear();
+            }
         }
 
         // Remove broken items
@@ -635,13 +645,19 @@ impl Body {
     /// A turn for the body, and a body lying still mends as much again: rest
     /// is the oldest medicine there is (#351).
     pub fn take_a_turn_resting(&mut self, resting: bool) {
+        self.take_a_turn_resting_in(resting, false);
+    }
+
+    /// The same, and whether the body is soaked through, which is what
+    /// rawhide worn on it minds (#353).
+    pub fn take_a_turn_resting_in(&mut self, resting: bool, soaked: bool) {
         for part in self.parts.values_mut() {
             part.take_a_turn();
             if resting {
                 part.turn_natural_healing();
             }
         }
-        self.turn_equipment_wear();
+        self.turn_equipment_wear_in(soaked);
     }
 
     /// Get body summary for display

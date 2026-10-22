@@ -179,6 +179,15 @@ impl Simulation {
             // shavings are for by making some.
             agent.found_out_how_to(working.makes);
 
+            // Hides scraped often enough, some of it beside the fire, and
+            // somebody notices the rawhide that hung in the smoke stayed soft
+            // through the wet: tanning (#353)
+            if working.makes == "rawhide"
+                && agent.skills.times_made("rawhide") >= crate::agents::Agent::HIDES_SCRAPED_BEFORE_TANNING
+            {
+                agent.found_out_how_to("leather");
+            }
+
             // And a pot fire with a bright stone beside it may show more than
             // a pot (`what_firing_this_might_show`).
             if let Some((beside, how_many, shows, odds)) = making::what_firing_this_might_show(working.makes) {

@@ -2351,6 +2351,8 @@ name = "Fur wraps"
 path = "footwear"
 stage = 0
 role = "technique"
+model = ["wear:fur_wraps"]
+note = "A raw hide with its fur on, bound round the foot."
 
 [[tech]]
 id = "footwear.0.grass_padding"
@@ -2372,6 +2374,9 @@ name = "One-piece hide moccasins"
 path = "footwear"
 stage = 1
 role = "technique"
+model = ["wear:moccasins"]
+needs = ["leatherworking.1.smoking"]
+note = "Two pieces of tanned leather sewn into one-piece moccasins."
 
 [[tech]]
 id = "footwear.1.plant_fiber_sandals"
@@ -3344,7 +3349,8 @@ name = "Scraped hide dried in shape"
 path = "leatherworking"
 stage = 0
 role = "technique"
-model = ["make:leather"]
+model = ["make:rawhide"]
+note = "A hide scraped and dried in shape is rawhide: stiff, and it keeps, where the raw hide rots in a week. Leather is what it is tanned into (#353)."
 
 [[tech]]
 id = "leatherworking.0.fur_on_hide_retained_for_warmth"
@@ -3367,6 +3373,8 @@ name = "Cloaks"
 path = "leatherworking"
 stage = 0
 role = "product"
+model = ["wear:hide_cloak"]
+note = "A cloak of three rawhides, cheaper and colder than a fur coat."
 
 [[tech]]
 id = "leatherworking.0.wraps"
@@ -3374,6 +3382,8 @@ name = "Wraps"
 path = "leatherworking"
 stage = 0
 role = "product"
+model = ["wear:hide_wraps"]
+note = "Rawhide wrapped round the legs."
 
 [[tech]]
 id = "leatherworking.0.shelter_panels"
@@ -3381,6 +3391,9 @@ name = "Shelter panels"
 path = "leatherworking"
 stage = 0
 role = "product"
+model = ["build:SkinTent"]
+same_as = ["construction.0.skin_tents"]
+note = "Hides, rawhide or leather as a tent's covering: the same tent as construction's."
 
 [[tech]]
 id = "leatherworking.1.scraping_flesh_and_fat_more_thoroughly"
@@ -3409,6 +3422,8 @@ name = "Smoking"
 path = "leatherworking"
 stage = 1
 role = "technique"
+model = ["make:leather"]
+note = "Rawhide worked soft over a smoky fire: tanned leather, which stays soft, keeps in the wet and wears longest. Found out after scraping six hides."
 
 [[tech]]
 id = "leatherworking.1.greasing_with_animal_fats_or_oils"
@@ -3445,6 +3460,9 @@ name = "Bedding"
 path = "leatherworking"
 stage = 1
 role = "product"
+model = ["do:LayBedding"]
+same_as = ["shelter_systems_beyond_construction.0.ground_bedding"]
+note = "A worked hide laid down to sleep on: twice as warm as boughs and a season before it wears through."
 
 [[tech]]
 id = "leatherworking.1.water_resistant_covers_to_a_limited"

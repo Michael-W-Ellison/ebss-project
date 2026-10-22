@@ -695,16 +695,38 @@ impl Simulation {
             return ActionResult::failure("There is bedding laid here already".to_string());
         }
         let agent = &mut self.population.agents[agent_index];
+
+        // A hide to spare goes down first: warmer, and it lasts a season (#353)
+        if let Some(hide) = Self::a_hide_to_spare_for_bedding(agent) {
+            agent.inventory.remove_item(hide, 1);
+            self.world.bedding.push(crate::world::Bedding { at: here, laid: turn_now, of_hide: true });
+            return ActionResult::success()
+                .with_energy_cost(1.0)
+                .with_message("Laid a hide down to sleep on".to_string());
+        }
         if agent.how_many_i_have("wood") < Self::WHAT_BEDDING_TAKES {
             return ActionResult::failure("Not brush enough for bedding".to_string());
         }
         agent.inventory.remove_item("wood", Self::WHAT_BEDDING_TAKES);
-        self.world.bedding.push(crate::world::Bedding { at: here, laid: turn_now });
+        self.world.bedding.push(crate::world::Bedding { at: here, laid: turn_now, of_hide: false });
 
         ActionResult::success()
             .with_energy_cost(2.0)
             .with_message("Laid bedding".to_string())
     }
+
+    /// A worked hide this one can spare to sleep on: rawhide or leather, and
+    /// only with more than one in the pack, so the one a garment or a tent
+    /// is waiting on is kept (#353).
+    pub(in crate::analytics) fn a_hide_to_spare_for_bedding(agent: &crate::agents::Agent) -> Option<&'static str> {
+        ["rawhide", "leather"]
+            .into_iter()
+            .find(|hide| agent.how_many_i_have(hide) >= Self::HIDES_BEFORE_ONE_IS_SLEPT_ON)
+    }
+
+    /// How many worked hides somebody holds before laying one down to sleep
+    /// on.
+    pub(in crate::analytics) const HIDES_BEFORE_ONE_IS_SLEPT_ON: u32 = 3;
 
     /// What bedding takes: two wood of boughs and brush.
     pub(in crate::analytics) const WHAT_BEDDING_TAKES: u32 = 2;

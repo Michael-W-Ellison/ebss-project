@@ -627,18 +627,18 @@ pub const SMASH_A_CORE: Working = Working {
     over_a_fire: false,
 };
 
-/// A hide scraped down into workable leather.
+/// A hide scraped and dried in shape: rawhide (#353).
 ///
-/// Scraping, not cutting. Taking a flint to a hide removes the hair and turns
-/// the skin into leather; cutting a hide gets you two smaller hides. This is
-/// what leatherworking *is*, and it is the one step in the chain where the
-/// skill belongs - what comes afterwards is sewing, which is making like any
-/// other making.
+/// Scraping, not cutting. Taking a flint to a hide takes the flesh and the
+/// hair off it, and dried it is rawhide: stiff, and it keeps, where the raw
+/// hide rots in a week. Cutting a hide gets you two smaller hides. This is
+/// what leatherworking *is*, and it is the step in the chain where the skill
+/// belongs; tanning it soft (`TAN_RAWHIDE`) is the next.
 pub const SCRAPE_A_HIDE: Working = Working {
     verb: "scrape",
     to: "hides",
     how_much: 1,
-    makes: "leather",
+    makes: "rawhide",
     how_many: 2,
     hands: SkillType::Leatherworking,
     effort: 6.0,
@@ -943,6 +943,27 @@ pub const CARVE_A_BOWL: Working = Working {
     over_a_fire: false,
 };
 
+/// Rawhide held in a smoky fire and worked soft: tanned leather (#353).
+///
+/// Stage 1 of leatherworking, "smoking", and found out by scraping hides
+/// (`Agent::HIDES_SCRAPED_BEFORE_TANNING`). `fire`, the verb for what is held
+/// in a fire. Smoked, it stays soft, keeps in the wet and wears longer; what
+/// is made of rawhide stiffens and rots when it is soaked.
+pub const TAN_RAWHIDE: Working = Working {
+    verb: "fire",
+    to: "rawhide",
+    how_much: 1,
+    makes: "leather",
+    how_many: 1,
+    hands: SkillType::Leatherworking,
+    effort: 6.0,
+    obvious: false,
+    holds: None,
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: true,
+};
+
 /// A whole hide sewn shut at the legs and neck: a water skin (#351).
 ///
 /// `weave`, as `SEW_A_BAG` is and for the same reason: the matrix's `sew` is
@@ -1049,6 +1070,7 @@ pub const EVERY_WORKING: &[Working] = &[
     SEW_A_BAG,
     CARVE_A_BOWL,
     SEW_A_WATER_SKIN,
+    TAN_RAWHIDE,
     SOAK_FLAX,
     FERMENT_FRUIT,
     BOIL_FLOUR,

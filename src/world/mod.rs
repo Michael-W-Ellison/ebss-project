@@ -319,11 +319,30 @@ pub struct Dropped {
 pub struct Bedding {
     pub at: Position,
     pub laid: u32,
+    /// A hide laid down rather than boughs (#353): twice as warm to lie on,
+    /// and three months before it is worn through.
+    #[serde(default)]
+    pub of_hide: bool,
 }
 
 impl Bedding {
-    /// How long bedding lasts before it is trodden flat, in ticks: a month.
+    /// How long bedding of boughs lasts before it is trodden flat, in ticks:
+    /// a month.
     pub const HOW_LONG_IT_LASTS: u32 = 30 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// And a hide laid down: a season.
+    pub const HOW_LONG_A_HIDE_LASTS: u32 = 90 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// How long this one lasts.
+    pub fn how_long_it_lasts(&self) -> u32 {
+        if self.of_hide { Self::HOW_LONG_A_HIDE_LASTS } else { Self::HOW_LONG_IT_LASTS }
+    }
+
+    /// What lying on it is worth against the cold, as insulation.
+    pub fn what_it_is_worth(&self) -> f32 {
+        let boughs = crate::agents::Agent::WHAT_BEDDING_IS_WORTH;
+        if self.of_hide { 2.0 * boughs } else { boughs }
+    }
 }
 
 /// A fish trap or weir set at a reach, and how many fish are in it.
@@ -2456,6 +2475,15 @@ impl World {
     /// Counted at the one cell, everybody who lay down a pace off laid their
     /// own: 27,780 beds in forty worlds over two years, two wood apiece
     /// (#349).
+    pub fn bedding_worth_at(&self, pos: &Position) -> f32 {
+        self.bedding
+            .iter()
+            .filter(|laid| (laid.at.x - pos.x).abs() <= 1 && (laid.at.y - pos.y).abs() <= 1)
+            .map(|laid| laid.what_it_is_worth())
+            .fold(0.0, f32::max)
+    }
+
+    /// Whether there is bedding laid at a place: see `bedding_worth_at`.
     pub fn bedding_at(&self, pos: &Position) -> bool {
         self.bedding
             .iter()
@@ -3000,7 +3028,7 @@ impl World {
         });
         let now = self.turn;
         self.bedding
-            .retain(|laid| now.saturating_sub(laid.laid) < Bedding::HOW_LONG_IT_LASTS);
+            .retain(|laid| now.saturating_sub(laid.laid) < laid.how_long_it_lasts());
 
         // Update heat sources (fuel consumption, heating)
         self.heat_sources.turn_all();

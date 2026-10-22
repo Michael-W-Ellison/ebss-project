@@ -104,6 +104,7 @@ pub mod shelter_on_the_move_tests;
 pub mod water_and_care_tests;
 pub mod the_gaps_tests;
 pub mod measurement_watch;
+pub mod leatherworking_tests;
 pub mod larder_tests;
 pub mod sacrifice_tests;
 pub mod theft_tests;

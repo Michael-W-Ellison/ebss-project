@@ -376,8 +376,8 @@ impl Simulation {
                 _ if has_shelter => Some(crate::world::Cover::FULL),
                 _ => None,
             };
-            let on_bedding = agent.fatigue.is_sleeping && self.world.bedding_at(&agent_pos);
-            agent.update_temperature_under(&climate, cover, on_bedding);
+            let bedding = if agent.fatigue.is_sleeping { self.world.bedding_worth_at(&agent_pos) } else { 0.0 };
+            agent.update_temperature_under(&climate, cover, bedding);
 
             // Behind a windbreak the wind does not get at anybody
             let out_of_the_wind = cover.is_some_and(|cover| cover.keeps_off_wind);

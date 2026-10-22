@@ -418,13 +418,13 @@ fn the_survival_paths_start_where_the_document_starts_them() {
     let born = obvious_products();
     for product in [
         "lashing", "flint", "knappedtip", "handaxe", "diggingstick", "sharpenedstick",
-        "leather", "meatstrips", "fishstrips", "bowl",
+        "rawhide", "meatstrips", "fishstrips", "bowl",
     ] {
         assert!(born.contains(product), "{product} is Stage 0");
     }
     for product in [
         "basket", "leatherbag", "fishingrod", "sling", "stoneknife", "spear", "shovel",
-        "travois", "bow", "fishingnet", "claypot", "tinder", "flour",
+        "travois", "bow", "fishingnet", "claypot", "tinder", "flour", "leather",
     ] {
         assert!(!born.contains(product), "{product} is found out");
     }

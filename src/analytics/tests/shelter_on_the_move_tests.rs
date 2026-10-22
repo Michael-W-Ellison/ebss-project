@@ -109,7 +109,7 @@ fn a_windbreak_takes_the_wind_off_a_body() {
     let after = |cover: Option<Cover>| {
         let mut body = simulation.population.agents[0].clone();
         for _ in 0..20 {
-            body.update_temperature_under(&climate, cover, false);
+            body.update_temperature_under(&climate, cover, 0.0);
         }
         body.body_temperature.current
     };
@@ -231,7 +231,7 @@ fn bedding_is_a_bed_and_warmth_for_a_month() {
     let after = |on_bedding: bool| {
         let mut body = simulation.population.agents[0].clone();
         for _ in 0..20 {
-            body.update_temperature_under(&climate, None, on_bedding);
+            body.update_temperature_under(&climate, None, if on_bedding { crate::agents::Agent::WHAT_BEDDING_IS_WORTH } else { 0.0 });
         }
         body.body_temperature.current
     };
