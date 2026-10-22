@@ -943,6 +943,32 @@ pub const CARVE_A_BOWL: Working = Working {
     over_a_fire: false,
 };
 
+/// A whole hide sewn shut at the legs and neck: a water skin (#351).
+///
+/// `weave`, as `SEW_A_BAG` is and for the same reason: the matrix's `sew` is
+/// performed by `MakeClothing`, and `lash` by `Craft`, so neither would come
+/// back round to this working. Cutting a hide makes nothing
+/// (`table_order_tests`).
+///
+/// Stage 1 of the water path, and found out rather than born: by somebody who
+/// has gone thirsty far from water often enough to want to take some along
+/// (`Simulation::who_went_thirsty_far_from_water`). It holds twice what a bowl
+/// does and does not spill on the walk.
+pub const SEW_A_WATER_SKIN: Working = Working {
+    verb: "weave",
+    to: "hides",
+    how_much: 1,
+    makes: "waterskin",
+    how_many: 1,
+    hands: SkillType::Crafting,
+    effort: 10.0,
+    obvious: false,
+    holds: Some(8.0),
+    feeds: None,
+    wants_water: 0.0,
+    over_a_fire: false,
+};
+
 /// Flax left in water until the stem lets go of the fibre.
 ///
 /// Retting: the first real step of making linen, and the one that turns a
@@ -1022,6 +1048,7 @@ pub const EVERY_WORKING: &[Working] = &[
     WEAVE_A_BASKET,
     SEW_A_BAG,
     CARVE_A_BOWL,
+    SEW_A_WATER_SKIN,
     SOAK_FLAX,
     FERMENT_FRUIT,
     BOIL_FLOUR,

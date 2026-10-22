@@ -355,7 +355,7 @@ impl Simulation {
                     .world
                     .buildings
                     .iter()
-                    .any(|building| building.position == here && building.is_completed()),
+                    .any(|building| building.position == here && building.is_a_roof()),
                 recently_hurt: agent.emotions.recent_attacker(current_turn).is_some(),
                 crop_near: crop_at(position),
                 somewhere_to_build: crate::world::Terrain::new(ground).can_be_tilled(),

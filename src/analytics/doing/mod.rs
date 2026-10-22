@@ -27,6 +27,7 @@
 //! ISSUES_FOUND.md #94, and it is what makes a refactor of this size a
 //! reviewable change rather than an act of faith.
 
+pub mod caring;
 pub mod eating;
 pub mod fighting;
 pub mod getting;
@@ -102,6 +103,14 @@ impl Simulation {
             Action::Boil => self.boiling(agent_index),
             Action::Salt { what } => self.salting(what, agent_index),
             Action::Dry { what } => self.drying(what, agent_index, turn_now),
+            Action::Smoke { what } => self.smoking(what, agent_index, turn_now),
+            Action::Brine { what } => self.brining(what, agent_index, turn_now),
+            Action::Cache => self.caching(agent_index, turn_now),
+            Action::PutUpRack => self.putting_up_a_rack(agent_index, turn_now),
+            Action::HangUp { what } => self.hanging_up(what, agent_index, turn_now),
+            Action::StoneBoil => self.stone_boiling(agent_index),
+            Action::PitOven => self.pit_roasting(agent_index),
+            Action::LayBedding => self.laying_bedding(agent_index, turn_now),
             Action::Excavate => self.excavating(agent_index, turn_now),
             Action::Cover { what } => self.covering(what, agent_index, turn_now),
             Action::PickUp { what } => self.picking_up(what, agent_index, turn_now),
@@ -117,6 +126,8 @@ impl Simulation {
             Action::TendField => self.tending_a_field(agent_index, turn_now),
             Action::SpreadMuck => self.spreading_muck(agent_index, turn_now),
             Action::Treat { who } => self.treating(agent_index, *who, turn_now),
+            Action::PressOnWound { who } => self.pressing_on_a_wound(agent_index, *who),
+            Action::Bandage { who } => self.bandaging(agent_index, *who, turn_now),
             Action::Fish => self.fishing(agent_index, &mut rng, turn_now),
             Action::ForageShallows => self.picking_over_the_shallows(agent_index, &mut rng, turn_now),
             Action::SetFishTrap => self.setting_a_fish_trap(agent_index, turn_now),

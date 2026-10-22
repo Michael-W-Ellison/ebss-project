@@ -80,7 +80,7 @@ pub use terrain::{Terrain, TerrainType, Tile, TileVisibility};
 pub use soil::{Field, Soil, SoilGrade, SoilType};
 pub use belonging::{Access, Belongs};
 pub use resources::{Bearing, Resource, ResourceType, ResourceNode};
-pub use buildings::{Building, BuildingType, BuildingState};
+pub use buildings::{Building, BuildingType, BuildingState, Cover};
 pub use inventory::{Inventory, Item, ItemType};
 pub use actions::{Action, ActionResult};
 pub use grid::{Grid, Position};
@@ -174,6 +174,20 @@ pub struct World {
     /// few and goes round them eats off the water without standing in it.
     #[serde(default)]
     pub fish_traps: Vec<FishTrap>,
+
+    /// Racks of poles and cord, where food is hung to dry.
+    ///
+    /// Stage 2 of storage: "raised racks, hanging storage". Food hung on one
+    /// is off the ground and sheds the rain, dries through quicker with the
+    /// air all round it, and stays where it was hung until somebody takes it
+    /// down.
+    #[serde(default)]
+    pub racks: Vec<Position>,
+
+    /// Boughs, brush or grass laid where somebody sleeps (#349). Off the cold
+    /// ground and a bed to sleep on; it is trodden flat and gone in a month.
+    #[serde(default)]
+    pub bedding: Vec<Bedding>,
 
     /// Pits dug in the ground, and what is keeping in them.
     ///
@@ -298,6 +312,18 @@ pub struct Dropped {
     /// a thing lying in it.
     #[serde(default)]
     pub dried_in_the_sun: u32,
+}
+
+/// Bedding laid at a place, and when.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bedding {
+    pub at: Position,
+    pub laid: u32,
+}
+
+impl Bedding {
+    /// How long bedding lasts before it is trodden flat, in ticks: a month.
+    pub const HOW_LONG_IT_LASTS: u32 = 30 * crate::environment::seasons::TICKS_PER_DAY;
 }
 
 /// A fish trap or weir set at a reach, and how many fish are in it.
@@ -1033,8 +1059,26 @@ impl World {
         let now = self.turn;
         let mut buried_and_lost = 0u64;
 
+        let shaded: std::collections::BTreeSet<Position> = self
+            .pits
+            .iter()
+            .map(|pit| pit.where_it_is)
+            .filter(|at| {
+                self.grid
+                    .get_tile(at)
+                    .is_some_and(|tile| tile.terrain.terrain_type == TerrainType::Forest)
+            })
+            .collect();
+
         for pit in self.pits.iter_mut() {
-            let in_here = pit.how_fast_things_go_off_in_here();
+            // A store in the cool of the trees keeps better than one out in
+            // the open sun: "caches in cool shade".
+            let shade = if shaded.contains(&pit.where_it_is) {
+                Self::WHAT_THE_SHADE_OF_TREES_KEEPS
+            } else {
+                1.0
+            };
+            let in_here = pit.how_fast_things_go_off_in_here() * shade;
 
             for item in pit.holds.iter_mut() {
                 item.goes_off(now, in_here);
@@ -1058,6 +1102,26 @@ impl World {
         self.food_that_rotted_in_the_ground =
             self.food_that_rotted_in_the_ground.saturating_add(buried_and_lost);
     }
+
+    /// What a store in the shade of trees ages at, against one in the open.
+    pub const WHAT_THE_SHADE_OF_TREES_KEEPS: f32 = 0.75;
+
+    /// Whether a rack stands at a place, or one step off it.
+    pub fn a_rack_within_reach(&self, at: Position) -> Option<Position> {
+        self.racks
+            .iter()
+            .copied()
+            .find(|rack| (rack.x - at.x).abs().max((rack.y - at.y).abs()) <= Self::WITHIN_REACH_OF_A_RACK)
+    }
+
+    /// How far off a rack can be hung from.
+    pub const WITHIN_REACH_OF_A_RACK: i32 = 1;
+
+    /// How much faster a thing dries hung up than laid on the ground, with
+    /// the air all round it; and how much of the rain it takes, hung up and
+    /// shedding it.
+    pub const WHAT_A_RACK_DOES_FOR_DRYING: u32 = 2;
+    pub const WHAT_OF_THE_RAIN_A_RACK_TAKES: f32 = 0.5;
 
     /// Whether a thing laid out will dry through before it turns.
     ///
@@ -1212,12 +1276,15 @@ impl World {
             .map(|building| building.position)
             .collect();
 
+        let racks: std::collections::BTreeSet<Position> = self.racks.iter().copied().collect();
+
         for left in self.dropped.iter_mut() {
             if left.item.food_data.is_none() {
                 continue;
             }
 
             let sheltered = under_a_roof.contains(&left.where_it_is);
+            let hung_up = racks.contains(&left.where_it_is) && !sheltered;
             let thin_enough_to_dry = Self::will_this_dry(&left.item.item_id);
             let drying = sunny && thin_enough_to_dry && !sheltered;
 
@@ -1228,7 +1295,8 @@ impl World {
             let mut out_in_it = crate::environment::tags::WHAT_A_BARE_PACK_KEEPS;
 
             if drying {
-                left.dried_in_the_sun += Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT;
+                let air = if hung_up { Self::WHAT_A_RACK_DOES_FOR_DRYING } else { 1 };
+                left.dried_in_the_sun += Self::HOW_OFTEN_THE_WEATHER_GETS_AT_IT * air;
             } else {
                 // Rain gets at everything, and how much depends on how hard
                 // it is coming down. Sun gets at anything too thick to dry
@@ -1241,6 +1309,8 @@ impl World {
                     0.0
                 } else if sunny && !thin_enough_to_dry {
                     1.0
+                } else if hung_up {
+                    how_hard_it_rains * Self::WHAT_OF_THE_RAIN_A_RACK_TAKES
                 } else {
                     how_hard_it_rains
                 };
@@ -1300,6 +1370,11 @@ impl World {
             }
 
             let lain = now.saturating_sub(left.since);
+
+            // What is hung on a rack stays there until somebody takes it down
+            if racks.contains(&left.where_it_is) {
+                return true;
+            }
 
             let gone = if left.item.food_data.is_some() {
                 lain >= Self::HOW_LONG_A_THING_LIES_THERE / 4
@@ -1397,6 +1472,8 @@ impl World {
             pieces: std::sync::OnceLock::new(),
             dropped: Vec::new(),
             snares: Vec::new(),
+            racks: Vec::new(),
+            bedding: Vec::new(),
             fish_traps: Vec::new(),
             pits: Vec::new(),
             where_it_was_worked_out: std::collections::BTreeSet::new(),
@@ -2346,10 +2423,43 @@ impl World {
     /// weather does to a body asks this, and so does where people bed down
     /// for the night (#299).
     pub fn is_out_of_the_weather_at(&self, pos: &Position) -> bool {
-        self.buildings.iter().any(|b| &b.position == pos && b.is_completed())
-            || self.grid.get_tile(pos).is_some_and(|tile| {
-                matches!(tile.terrain.terrain_type, crate::world::TerrainType::Forest)
-            })
+        self.cover_at(pos).is_some_and(|cover| cover.is_a_roof())
+    }
+
+    /// The best cover at a place: the warmest finished building on it, or the
+    /// trees, which count as a full roof as they always have (#349). A
+    /// windbreak is cover that is not a roof.
+    pub fn cover_at(&self, pos: &Position) -> Option<buildings::Cover> {
+        let built = self
+            .buildings
+            .iter()
+            .filter(|b| &b.position == pos && b.is_completed())
+            .map(|b| b.building_type.cover())
+            .max_by(|a, b| {
+                (a.keeps_off_rain, a.warmth)
+                    .partial_cmp(&(b.keeps_off_rain, b.warmth))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        let trees = self
+            .grid
+            .get_tile(pos)
+            .is_some_and(|tile| matches!(tile.terrain.terrain_type, crate::world::TerrainType::Forest));
+        match (built, trees) {
+            (Some(built), true) if built.warmth >= buildings::Cover::FULL.warmth => Some(built),
+            (_, true) => Some(buildings::Cover::FULL),
+            (built, false) => built,
+        }
+    }
+
+    /// Whether there is bedding laid at a place: boughs spread over a
+    /// sleeping place, which is a pace either way of where they were laid.
+    /// Counted at the one cell, everybody who lay down a pace off laid their
+    /// own: 27,780 beds in forty worlds over two years, two wood apiece
+    /// (#349).
+    pub fn bedding_at(&self, pos: &Position) -> bool {
+        self.bedding
+            .iter()
+            .any(|laid| (laid.at.x - pos.x).abs() <= 1 && (laid.at.y - pos.y).abs() <= 1)
     }
 
     pub fn remove_depleted_resources(&mut self) {
@@ -2881,6 +2991,16 @@ impl World {
         for building in &mut self.buildings {
             building.take_a_turn();
         }
+        // Brush that has fallen down is gone, and bedding trodden flat with
+        // it (#349). Nothing else in the list has ever fallen down.
+        self.buildings.retain(|building| {
+            let gone = building.building_type.falls_apart()
+                || (building.building_type.fills_in() && !building.is_completed());
+            !(gone && building.condition <= 0.0)
+        });
+        let now = self.turn;
+        self.bedding
+            .retain(|laid| now.saturating_sub(laid.laid) < Bedding::HOW_LONG_IT_LASTS);
 
         // Update heat sources (fuel consumption, heating)
         self.heat_sources.turn_all();
@@ -2959,7 +3079,16 @@ impl World {
                     continue;
                 }
                 let at = self.fish_traps[index].at;
-                let Some(&number) = self.node_numbers_on(at).first() else {
+                // The fish in the reach, not whatever else lies on the cell:
+                // the first node on it was taken, and a trap on a cell with
+                // stone on it took the stone, to the last of it, without
+                // telling the world (#349)
+                let Some(number) = self
+                    .node_numbers_on(at)
+                    .iter()
+                    .copied()
+                    .find(|&number| self.resources[number].resource_type == ResourceType::Fish)
+                else {
                     continue;
                 };
                 let standing = self.resources[number].amount;

@@ -267,3 +267,62 @@ fn a_tent_with_nothing_to_build_it_from_is_refused() {
 
     assert!(!result.success, "eight wood does not come from nowhere");
 }
+
+/// A hole nobody goes on digging fills in after a month and is gone; a
+/// finished burrow stands (#349).
+#[test]
+fn an_open_hole_fills_in() {
+    use crate::world::Building;
+
+    let mut world = World::new(WorldConfig::default());
+    world.buildings.clear();
+    let (open, done) = (Position::new(20, 20), Position::new(24, 20));
+    world.add_building(Building::new_under_construction(BuildingType::Burrow, open));
+    world.add_building(Building::new(BuildingType::Burrow, done));
+    for building in world.buildings.iter_mut() {
+        building.condition = 0.0001;
+    }
+    world.take_a_turn();
+    assert!(world.get_building_at(&open).is_none(), "an open hole fills in");
+    assert!(world.get_building_at(&done).is_some(), "a finished burrow stands");
+
+    let a_month = 1.0 / BuildingType::AN_OPEN_HOLE_FILLS_IN / 48.0;
+    assert!((a_month - 30.0).abs() < 0.5);
+}
+
+/// A burrow tried for its own sake - curiosity, or anything else picking from
+/// what could be done here - is dug only where the Construction drive would
+/// dig one: not within two paces of a roof, and on the hole already open
+/// rather than beside it (#349).
+#[test]
+fn a_burrow_tried_for_its_own_sake_keeps_the_same_rules() {
+    use crate::world::Building;
+
+    let mut simulation = one_person();
+    let verb = crate::environment::verbs::EVERY_VERB
+        .iter()
+        .find(|verb| verb.done_by == Some("burrow"))
+        .expect("a burrow is a verb");
+    let tried = |simulation: &Simulation| simulation.an_action_for(verb, "burrow", &simulation.population.agents[0]);
+
+    assert!(
+        matches!(tried(&simulation), Some(Action::Build { ref structure_type, position: (25, 25, 0) }) if structure_type == "burrow"),
+        "open ground, something to dig with: {:?}",
+        tried(&simulation)
+    );
+
+    // Not beside a roof that stands
+    simulation.world.add_building(Building::new(BuildingType::BrushHut, Position::new(26, 25)));
+    assert_eq!(tried(&simulation), None, "a roof a pace off");
+
+    // And a hole already open here is carried on with
+    simulation.world.buildings.clear();
+    simulation
+        .world
+        .add_building(Building::new_under_construction(BuildingType::Burrow, Position::new(25, 25)));
+    assert!(matches!(tried(&simulation), Some(Action::Build { .. })), "{:?}", tried(&simulation));
+
+    // But one a pace off is not dug beside
+    simulation.population.agents[0].state.position = (26, 25, 0);
+    assert_eq!(tried(&simulation), None, "beside an open hole");
+}

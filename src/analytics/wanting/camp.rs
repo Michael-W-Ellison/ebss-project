@@ -147,11 +147,16 @@ impl Simulation {
             }
         }
 
+        // A roof that will stand, not brush: a hut is cover for the nights a
+        // band is there, not a reason for the band to be there. Counted, every
+        // hut put up within a forage of the camp became where it slept and
+        // then where it lived, and camp moves fell from 269 to 196 on sixteen
+        // scattered worlds, 573 to 426 on thirty-two (#349).
         let roof = self
             .world
             .buildings
             .iter()
-            .filter(|roof| roof.is_completed())
+            .filter(|roof| roof.is_a_roof() && !roof.building_type.falls_apart())
             .map(|roof| (roof.position.x, roof.position.y))
             .filter(|roof| {
                 (roof.0 - at.0).abs().max((roof.1 - at.1).abs()) <= Self::FORAGE_RADIUS as i32

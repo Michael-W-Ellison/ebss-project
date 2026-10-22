@@ -69,6 +69,70 @@ impl Simulation {
         }
     }
 
+    /// A day of rain, for everybody carrying food that wanted drying.
+    ///
+    /// Rained off often enough, and somebody thinks to get it up off the
+    /// ground, where the wet runs off it and the air gets all round: a rack
+    /// (Stage 2 of storage, #348). Counted once a day, and only for somebody
+    /// out under the sky with something to dry.
+    pub(in crate::analytics) fn who_was_rained_off_drying(&mut self) {
+        if self.current_turn % crate::environment::seasons::TICKS_PER_DAY != 0 {
+            return;
+        }
+        if self.world.climate.weather.weather_type.precipitation_intensity() <= 0.0 {
+            return;
+        }
+        let under_a_roof: std::collections::BTreeSet<(i32, i32)> = self
+            .world
+            .buildings
+            .iter()
+            .map(|building| (building.position.x, building.position.y))
+            .collect();
+        for agent in self.population.agents.iter_mut() {
+            if !agent.state.is_alive
+                || under_a_roof.contains(&(agent.state.position.0, agent.state.position.1))
+                || agent.what_i_could_dry().is_none()
+            {
+                continue;
+            }
+            agent.skills.made_one(crate::agents::Agent::RAINED_OFF_DRYING);
+            if agent.skills.times_made(crate::agents::Agent::RAINED_OFF_DRYING)
+                >= crate::agents::Agent::RAINED_OFF_BEFORE_A_RACK
+            {
+                agent.found_out_how_to("do:PutUpRack");
+            }
+        }
+    }
+
+    /// Who went thirsty today with no water in reach, and so came to think of
+    /// taking some along: the water skin (#351). Once a day.
+    pub(in crate::analytics) fn who_went_thirsty_far_from_water(&mut self) {
+        use crate::agents::Agent;
+
+        if self.current_turn % crate::environment::seasons::TICKS_PER_DAY != 0 {
+            return;
+        }
+        let parched: Vec<usize> = (0..self.population.agents.len())
+            .filter(|&index| {
+                let agent = &self.population.agents[index];
+                agent.state.is_alive
+                    && agent.state.life_stage.can_reproduce()
+                    && agent
+                        .drives
+                        .get(crate::core::DriveType::Thirst)
+                        .is_some_and(|thirst| thirst.is_active())
+                    && !self.drinkable_water_within_reach(agent, agent.state.position)
+            })
+            .collect();
+        for index in parched {
+            let agent = &mut self.population.agents[index];
+            agent.skills.made_one(Agent::THIRSTY_FAR_FROM_WATER);
+            if agent.skills.times_made(Agent::THIRSTY_FAR_FROM_WATER) >= Agent::THIRSTY_DAYS_BEFORE_A_WATER_SKIN {
+                agent.found_out_how_to("waterskin");
+            }
+        }
+    }
+
     /// Process environmental damage for all agents
     pub fn process_environmental_damage(&mut self) {
         use crate::agents::body::{BodyPartType, InjuryType, CripplingType};
@@ -207,8 +271,10 @@ impl Simulation {
                 }
             }
 
-            // 4. NATURAL HEALING - Process body turn (handles conditions, bleeding, etc.)
-            agent.body.take_a_turn();
+            // 4. The body's own turn - its conditions, its healing, the wear
+            // on what it wears - is taken in `Agent::turn_with_percepts`.
+            // Taken here as well, every injury healed and every coat wore out
+            // twice a half hour (#351).
         }
     }
 
@@ -274,8 +340,10 @@ impl Simulation {
 
             let environmental_temp = climate.temperature;
 
-            // Check if agent has shelter: a finished roof, or the trees
-            let mut has_shelter = self.world.is_out_of_the_weather_at(&agent_pos);
+            // Check if agent has shelter: a finished roof, or the trees - and
+            // what cover there is short of a roof (#349)
+            let cover_here = self.world.cover_at(&agent_pos);
+            let mut has_shelter = cover_here.is_some_and(|cover| cover.is_a_roof());
 
             // The young are kept warm by whoever is looking after them.
             //
@@ -301,8 +369,23 @@ impl Simulation {
             }
 
             // Update agent's body temperature based on climate, taking cover
-            // into account so that reaching shelter actually warms the agent
-            agent.update_temperature_with_shelter(&climate, has_shelter);
+            // into account so that reaching shelter actually warms the agent:
+            // as much as the cover holds, and a child by its carer as a roof.
+            let cover = match cover_here {
+                Some(cover) if cover.is_a_roof() || !has_shelter => Some(cover),
+                _ if has_shelter => Some(crate::world::Cover::FULL),
+                _ => None,
+            };
+            let on_bedding = agent.fatigue.is_sleeping && self.world.bedding_at(&agent_pos);
+            agent.update_temperature_under(&climate, cover, on_bedding);
+
+            // Behind a windbreak the wind does not get at anybody
+            let out_of_the_wind = cover.is_some_and(|cover| cover.keeps_off_wind);
+            let weather_here = if out_of_the_wind && !has_shelter {
+                crate::environment::Weather { base_wind_speed: 0.0, ..weather.clone() }
+            } else {
+                weather.clone()
+            };
 
             // Check if agent has water access:
             // 1. Water containers in inventory (waterskin, water_flask, water_bucket)
@@ -325,7 +408,7 @@ impl Simulation {
 
             // Update exposure and apply damage
             let damage = agent.update_exposure(
-                &weather,
+                &weather_here,
                 environmental_temp,
                 has_shelter,
                 has_water_access,

@@ -251,46 +251,70 @@ fn dried_meat_outlasts_raw_meat() {
     );
 }
 
-/// Hung in the smoke of a fire it is smoked rather than dried, which is what
-/// a people that can make fire does in weather that will not dry anything.
+/// Dried beside a burning hearth it is dried, as anywhere else; smoking is
+/// Stage 1 of preservation and has to be found out (#348). Drying by the
+/// fire often enough is how.
 #[test]
-fn food_hung_over_a_fire_is_smoked() {
+fn drying_by_the_hearth_is_how_smoking_is_found_out() {
     let mut simulation = one_person();
+    simulation.world.climate.weather.weather_type = crate::environment::WeatherType::Clear;
+    let fire = simulation
+        .world
+        .build_heat_source(crate::environment::HeatSourceType::Campfire, (25, 25, 0), None)
+        .expect("a hearth goes here");
+    let _ = simulation.world.add_fuel_to_heat_source(&fire, "wood".to_string(), 20.0);
+    simulation.world.light_heat_source(&fire).expect("and it lights");
+
+    let times = crate::agents::Agent::DRIED_BY_THE_HEARTH_BEFORE_SMOKING;
+    for i in 0..times {
+        assert!(
+            !simulation.population.agents[0].knows_how_to_do("Smoke"),
+            "not before drying by the fire {times} times, at {i}"
+        );
+        let _ = simulation.population.agents[0]
+            .inventory
+            .add_item(a_meal(ItemType::Meat, "meatportions", 4, 0));
+        let dried = simulation.execute_action(&Action::Dry { what: "meatportions".to_string() }, 0);
+        assert!(dried.success, "{:?}", dried.message);
+        assert!(
+            simulation.population.agents[0].how_many_i_have("dried_meatportions") > 0,
+            "dried, not smoked"
+        );
+    }
+    assert!(
+        simulation.population.agents[0].knows_how_to_do("Smoke"),
+        "and after it, what hung nearest the smoke kept"
+    );
+}
+
+/// Nothing dries in the rain; smoke does it in any weather.
+#[test]
+fn smoke_does_in_the_rain_what_the_sun_cannot() {
+    let mut simulation = one_person();
+    simulation.world.climate.weather.weather_type = crate::environment::WeatherType::Rain;
     let _ = simulation.population.agents[0]
         .inventory
         .add_item(a_meal(ItemType::Meat, "meatportions", 4, 0));
 
+    let dried = simulation.execute_action(&Action::Dry { what: "meatportions".to_string() }, 0);
+    assert!(!dried.success, "laid out in the rain it does not dry");
+
     let fire = simulation
         .world
-        .build_heat_source(
-            crate::environment::HeatSourceType::Campfire,
-            (25, 25, 0),
-            None,
-        )
+        .build_heat_source(crate::environment::HeatSourceType::Campfire, (25, 25, 0), None)
         .expect("a hearth goes here");
-    let _ = simulation
-        .world
-        .add_fuel_to_heat_source(&fire, "wood".to_string(), 20.0);
-    simulation
-        .world
-        .light_heat_source(&fire)
-        .expect("and it lights");
+    let _ = simulation.world.add_fuel_to_heat_source(&fire, "wood".to_string(), 20.0);
+    simulation.world.light_heat_source(&fire).expect("and it lights");
+    simulation.population.agents[0].found_out_how_to("do:Smoke");
 
-    simulation.execute_action(
-        &Action::Dry {
-            what: "meatportions".to_string(),
-        },
-        0,
-    );
-
+    let smoked = simulation.execute_action(&Action::Smoke { what: "meatportions".to_string() }, 0);
+    assert!(smoked.success, "{:?}", smoked.message);
     let how = simulation.population.agents[0]
         .inventory
-        // Carried under its own name now, as cooked food is (#320)
         .get_item("smoked_meatportions")
         .and_then(|item| item.food_data.as_ref())
         .map(|food| food.preparation)
-        .expect("still in the pack");
-
+        .expect("in the pack under its own name");
     assert_eq!(how, PreparationState::Smoked);
 }
 

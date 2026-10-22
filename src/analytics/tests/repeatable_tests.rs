@@ -234,7 +234,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // sowing and gardens found out in stages, and a cache no anchor.
     // Up to 8,703 for #347: the shallows and fish traps, a wasting body wants
     // no child, and partners go halfway to each other.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 8_703;
+    // Down to 8,397 for #349: brush shelter and bedding, graded cover, a tent
+    // that can be finished, and fish traps that take fish.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 8_397;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -520,7 +522,20 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // the document's three stages.
     // Up 6.3% to 1,039,760 for #347: the shallows and fish traps, a wasting
     // body wants no child, and partners go halfway to each other.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_039_760;
+    // Down 2.7% to 1,011,830 for #347's trap robbing: somebody else's trap is
+    // theft, and a person is a danger only while they are in sight.
+    // Up 1.9% to 1,031,179 for #348: food keeping - smoking, brine, caches,
+    // racks, stone boiling and pit ovens, and no drying in the rain.
+    // Down 4.9% to 980,526 for #349: windbreaks, lean-tos, brush huts put up
+    // in one go, bedding over a sleeping place, graded cover, a tent that can
+    // be finished, and fish traps that take fish.
+    // Up 3.6% to 1,016,134 for #350: brush does not anchor a camp, a burrow
+    // tried for its own sake keeps digging_in's rules, and an open hole
+    // fills in.
+    // Up 1.9% to 1,035,210 for #351: wounds bleed and are pressed on and
+    // bound, a body at rest mends faster and takes one turn a half hour, not
+    // two, and a water skin is cut and filled before a walk.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_035_210;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

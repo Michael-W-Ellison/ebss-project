@@ -2023,8 +2023,8 @@ name = "Caches in cool shade"
 path = "storage"
 stage = 0
 role = "technique"
-model = ["do:Excavate", "do:Cover"]
-note = "A pit is a cache a band comes back to (#346)."
+model = ["do:Excavate", "do:Cover", "do:Cache"]
+note = "A pit is a cache a band comes back to (#346). Where a pit will not go - the forest floor, rock - a cairn of stones over a hollow is one (do:Cache); and a store in the shade of trees keeps cooler."
 
 [[tech]]
 id = "storage.0.natural_caves"
@@ -2032,6 +2032,8 @@ name = "Natural caves"
 path = "storage"
 stage = 0
 role = "technique"
+model = ["do:Cache"]
+same_as = ["storage.0.caches_in_cool_shade"]
 
 [[tech]]
 id = "storage.1.gourds"
@@ -2090,6 +2092,8 @@ name = "Raised racks"
 path = "storage"
 stage = 2
 role = "technique"
+model = ["do:PutUpRack"]
+note = "Found out by being rained off drying often enough: get it up off the ground, where the wet runs off it and the air gets all round. Poles and cord."
 
 [[tech]]
 id = "storage.2.hanging_storage"
@@ -2097,6 +2101,8 @@ name = "Hanging storage"
 path = "storage"
 stage = 2
 role = "technique"
+model = ["do:HangUp"]
+needs = ["storage.2.raised_racks"]
 
 [[tech]]
 id = "storage.2.covered_pits"
@@ -2715,6 +2721,9 @@ name = "Brining"
 path = "food_preservation"
 stage = 1
 role = "technique"
+model = ["do:Brine"]
+needs = ["food_preservation.1.dry_salting"]
+note = "Salt and water in a vessel. Takes a whole fish, which dry salt does not."
 
 [[tech]]
 id = "food_preservation.1.smoking_over_low_fires"
@@ -2722,6 +2731,8 @@ name = "Smoking over low fires"
 path = "food_preservation"
 stage = 1
 role = "technique"
+model = ["do:Smoke"]
+note = "Found out by drying food within reach of a burning hearth: what hung in the smoke kept, and kept through the wet, when drying in the open will not go on in the rain."
 
 [[tech]]
 id = "food_preservation.1.combined_salt_smoke_preservation"
@@ -3046,6 +3057,9 @@ name = "Stone boiling with hide or basket-lined containers"
 path = "cooking_and_food_processing"
 stage = 1
 role = "technique"
+model = ["do:StoneBoil"]
+needs = ["storage.1.baskets"]
+note = "Water in a basket, bag or bowl, brought to the boil with stones out of the fire. It is what boils without a pot that will stand the fire, and nothing burns."
 
 [[tech]]
 id = "cooking_and_food_processing.1.pit_ovens"
@@ -3053,6 +3067,8 @@ name = "Pit ovens"
 path = "cooking_and_food_processing"
 stage = 1
 role = "technique"
+model = ["do:PitOven"]
+note = "Found out after enough suppers over a fire: a big batch buried with the stones, cooked through, and nothing burnt."
 
 [[tech]]
 id = "cooking_and_food_processing.1.simple_pounding_and_crushing"
@@ -7347,6 +7363,9 @@ name = "Simple windbreak"
 path = "shelter_systems_beyond_construction"
 stage = 0
 role = "technique"
+model = ["build:Windbreak"]
+same_as = ["construction.0.windbreaks"]
+note = "The same screen as construction's windbreaks."
 
 [[tech]]
 id = "shelter_systems_beyond_construction.0.one_fire"
@@ -7369,6 +7388,8 @@ name = "Ground bedding"
 path = "shelter_systems_beyond_construction"
 stage = 0
 role = "technique"
+model = ["do:LayBedding"]
+note = "Boughs and brush laid where one sleeps: a bed off the cold ground, trodden flat in a month."
 
 [[tech]]
 id = "shelter_systems_beyond_construction.0.basic_roof_cover"
@@ -8937,6 +8958,8 @@ name = "Water skins"
 path = "water_system"
 stage = 1
 role = "technique"
+model = ["make:waterskin"]
+note = "A whole hide cut and tied off, holding 8 to a bowl's 4. Found out by going thirsty far from water three days."
 
 [[tech]]
 id = "water_system.1.gourds"
@@ -9254,6 +9277,8 @@ name = "Pressure on wounds"
 path = "medicine_and_public_health"
 stage = 0
 role = "technique"
+model = ["do:PressOnWound"]
+note = "A hand on a bleeding wound: one's own slows it to a quarter, somebody else's two hands stop it. Born knowledge."
 
 [[tech]]
 id = "medicine_and_public_health.0.cooling_warming"
@@ -9290,6 +9315,8 @@ name = "Bandaging"
 path = "medicine_and_public_health"
 stage = 1
 role = "technique"
+model = ["do:Bandage"]
+note = "Found out by pressing on wounds: a strip of bark, sinew or hide tied over one stops the bleeding and, for a week, closes it twice as fast and lets it turn half as often."
 
 [[tech]]
 id = "medicine_and_public_health.1.cleaning_visible_dirt_from_wounds"
@@ -10157,6 +10184,8 @@ name = "Lean-tos"
 path = "construction"
 stage = 0
 role = "technique"
+model = ["build:LeanTo"]
+note = "A sloped roof of poles and brush tied at the top: dry and out of the wind, colder than a hut, gone in a month."
 
 [[tech]]
 id = "construction.0.windbreaks"
@@ -10164,6 +10193,8 @@ name = "Windbreaks"
 path = "construction"
 stage = 0
 role = "technique"
+model = ["build:Windbreak"]
+note = "Three poles and brush on the windward side: it takes the wind off a sleeper but not the rain, and falls down in a fortnight."
 
 [[tech]]
 id = "construction.0.brush_huts"
@@ -10171,6 +10202,8 @@ name = "Brush huts"
 path = "construction"
 stage = 0
 role = "technique"
+model = ["build:BrushHut"]
+note = "A closed dome of poles and brush: warmer than a lean-to, colder than a tent, falls in after about three months."
 
 [[tech]]
 id = "construction.0.snow_shelters_in_cold_regions"

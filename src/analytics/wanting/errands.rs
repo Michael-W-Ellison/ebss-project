@@ -1216,6 +1216,15 @@ impl Simulation {
             return None;
         }
 
+        // A roof already going up is carried on with on what went into it
+        // when it was started, and wants nothing more in hand (#349)
+        if let Action::Build { position, .. } = action {
+            let here = crate::world::Position::new(position.0, position.1);
+            if self.world.buildings.iter().any(|b| b.position == here && !b.is_completed()) {
+                return None;
+            }
+        }
+
         wanted
             .into_iter()
             .find(|wants| !Self::do_these_hands_do(agent, wants))

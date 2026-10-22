@@ -451,7 +451,9 @@ impl Strategy {
                 Reach::NotYet("a building has a condition and nothing mends \
                     one, so there is no repair to choose")
             }
-            Strategy::BuildTemporaryShelter | Strategy::BuildDurableShelter => {
+            // Brush on the spot, from what is in the pack (#349)
+            Strategy::BuildTemporaryShelter => Reach::Now,
+            Strategy::BuildDurableShelter => {
                 Reach::NotYet("building is answered by Construction rather than \
                     by Shelter, and the two do not yet meet")
             }
@@ -890,6 +892,11 @@ impl crate::analytics::Simulation {
             Strategy::FetchFromKnownSource => {
                 worth.effort += 2.0;
             }
+            // A turn or three of cutting and tying, and the poles spent
+            Strategy::BuildTemporaryShelter => {
+                worth.effort += 4.0;
+                worth.turns += 1.0;
+            }
             // Taking something out of a hole and putting the lid back.
             Strategy::EatStoredFood => {
                 worth.turns += 1.0;
@@ -1024,6 +1031,19 @@ impl crate::analytics::Simulation {
 
                 self.nearest_roof_of_this_kind(agent, agent_position, which)
                     .map(|_| Action::SeekShelter)
+            }
+
+            // Brush put up where this one stands, from what is in the pack:
+            // a hut, a lean-to or a windbreak (#349). The first way of
+            // getting under a roof that does not need a roof to be there.
+            Strategy::BuildTemporaryShelter => {
+                let worth_it = agent.needs_shelter()
+                    || agent.body_temperature.is_too_cold()
+                    || agent.surroundings.foul_weather;
+                if !worth_it || agent.surroundings.under_shelter {
+                    return None;
+                }
+                self.cover_i_could_put_up(agent, agent_position)
             }
 
             // Declared and out of reach. `the_way_to_answer` filters these out

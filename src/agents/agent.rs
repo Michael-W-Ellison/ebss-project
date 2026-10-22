@@ -1162,6 +1162,18 @@ pub struct AgentState {
     /// what actually killed people who survived the animal.
     #[serde(default)]
     pub an_open_wound: f32,
+
+    /// How much health an open wound is losing a half hour (#351).
+    ///
+    /// Opened with the wound by a blow and slowing as the blood clots
+    /// (`Agent::A_WOUND_CLOTS`); pressure on it, or a dressing, stops it.
+    #[serde(default)]
+    pub bleeding: f32,
+
+    /// The tick a dressing over the wound is good until (#351). Dressed, a
+    /// wound closes twice as fast and turns half as often.
+    #[serde(default)]
+    pub wound_dressed_until: u32,
 }
 
 impl AgentState {
@@ -1204,6 +1216,8 @@ impl AgentState {
             what_has_taken_health: Vec::new(),
             salt_in_me: 0.0,
             an_open_wound: 0.0,
+            bleeding: 0.0,
+            wound_dressed_until: 0,
         }
     }
 
@@ -1347,6 +1361,8 @@ impl AgentState {
         // through `lose_health` and leave nothing to fester.
         let opened = (amount / Self::WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND).clamp(0.0, 1.0);
         self.an_open_wound = self.an_open_wound.max(opened);
+        // And it bleeds, as hard as it is open (#351)
+        self.bleeding = self.bleeding.max(opened * Self::WHAT_AN_OPEN_WOUND_BLEEDS);
 
         self.lose_health(amount, Self::A_BLOW);
     }
@@ -1420,6 +1436,12 @@ impl AgentState {
     /// A blow of this size leaves one that is as open as they come. A scratch
     /// leaves a scratch.
     pub const WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND: f32 = 25.0;
+
+    /// What the worst of wounds bleeds, in health a half hour, before anybody
+    /// presses on it (#351). It clots by itself (`Agent::A_WOUND_CLOTS`), so
+    /// left alone it costs about twenty-seven health all told: on top of the
+    /// blow that opened it, enough to finish somebody the blow left low.
+    pub const WHAT_AN_OPEN_WOUND_BLEEDS: f32 = 4.0;
 
     /// How much of an open wound closes in a turn.
     ///
@@ -3026,27 +3048,56 @@ impl Agent {
     const HOW_OFTEN_A_SOAKING_TELLS: f64 =
         0.24 / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f64;
 
-    /// A wound closes, or it turns.
-    fn turn_the_wound(&mut self, now: u32) {
+    /// A wound bleeds, and closes, or it turns.
+    ///
+    /// Bleeding costs health every half hour and slows as the blood clots.
+    /// A dressing over the wound (`wound_dressed_until`) closes it twice as
+    /// fast and lets it turn half as often, and so does lying still: asleep,
+    /// a wound closes twice as fast as on the move (#351).
+    pub(crate) fn turn_the_wound(&mut self, now: u32) {
         use rand::Rng;
+
+        if self.state.bleeding > 0.0 {
+            let losing = self.state.bleeding;
+            self.state.lose_health(losing, AgentState::A_WOUND);
+            self.state.bleeding *= Self::A_WOUND_CLOTS;
+            if self.state.bleeding < Self::A_TRICKLE {
+                self.state.bleeding = 0.0;
+            }
+        }
 
         if self.state.an_open_wound <= 0.0 {
             return;
         }
+        let dressed = now < self.state.wound_dressed_until;
 
         // Only an open wound can turn, and only somebody not already ill can
         // come down with it - nothing in this model stacks.
         if self.state.ailing.is_none() {
-            let odds = Self::HOW_OFTEN_A_WOUND_TURNS * self.state.an_open_wound as f64;
+            let odds = Self::HOW_OFTEN_A_WOUND_TURNS
+                * self.state.an_open_wound as f64
+                * if dressed { 0.5 } else { 1.0 };
             if crate::core::dice::roll().gen_bool(odds.clamp(0.0, 1.0)) {
                 let how_bad = 0.4 + 0.5 * self.state.an_open_wound;
                 self.taken_ill_with(Self::OFF_A_WOUND_THAT_TURNED, how_bad, now);
             }
         }
 
-        self.state.an_open_wound =
-            (self.state.an_open_wound - AgentState::HOW_FAST_A_WOUND_CLOSES).max(0.0);
+        let closing = AgentState::HOW_FAST_A_WOUND_CLOSES
+            * if dressed { 2.0 } else { 1.0 }
+            * if self.fatigue.is_sleeping { 2.0 } else { 1.0 };
+        self.state.an_open_wound = (self.state.an_open_wound - closing).max(0.0);
     }
+
+    /// How much of its bleeding a wound keeps from one half hour to the next,
+    /// clotting by itself (#351).
+    pub const A_WOUND_CLOTS: f32 = 0.85;
+
+    /// Bleeding below which it has stopped.
+    pub const A_TRICKLE: f32 = 0.1;
+
+    /// Bleeding worth stopping what one is doing to press on (#351).
+    pub const BLEEDING_WORTH_PRESSING: f32 = 0.5;
 
     /// Cold and wet, for long enough, comes to something.
     ///
@@ -3670,7 +3721,35 @@ impl Agent {
     ///   `what_was_dropped_takes_root`).
     /// - Breaking ground for a garden (Stage 2) is found out by gathering,
     ///   often enough, from stands you sowed yourself.
-    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 2] = ["ScatterSeed", "TillSoil"];
+    /// - Smoking over a low fire (Stage 1 of preservation) by drying food
+    ///   within reach of a burning hearth, often enough.
+    /// - A rack (Stage 2 of storage) by being rained off drying, often
+    ///   enough.
+    /// - A pit oven (Stage 1 of cooking) by enough suppers over a fire.
+    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 5] =
+        ["ScatterSeed", "TillSoil", "Smoke", "PutUpRack", "PitOven"];
+
+    /// What the practice record calls food dried within reach of a burning
+    /// hearth, and how much of it before somebody notices that what hung in
+    /// the smoke kept, and kept through the wet.
+    pub const DRIED_BY_THE_HEARTH: &'static str = "driedbythehearth";
+    pub const DRIED_BY_THE_HEARTH_BEFORE_SMOKING: u32 = 6;
+
+    /// What it calls being rained off drying, and how often before somebody
+    /// thinks to get food up off the ground and out of the wet.
+    pub const RAINED_OFF_DRYING: &'static str = "rainedoffdrying";
+    pub const RAINED_OFF_BEFORE_A_RACK: u32 = 6;
+
+    /// What the practice record calls a day gone thirsty with no water in
+    /// reach, and how many of them before somebody takes water along in a
+    /// skin (#351).
+    pub const THIRSTY_FAR_FROM_WATER: &'static str = "thirstyfarfromwater";
+    pub const THIRSTY_DAYS_BEFORE_A_WATER_SKIN: u32 = 3;
+
+    /// What it calls a batch off a fire, and how many suppers before
+    /// somebody buries the next one with the stones out of it.
+    pub const A_BATCH_OFF_THE_FIRE: &'static str = "abatchoffthefire";
+    pub const BATCHES_BEFORE_A_PIT_OVEN: u32 = 30;
 
     /// What the practice record calls a handful of seed thrown on the ground.
     pub const SEED_SCATTERED: &'static str = "scatterseed";
@@ -5551,7 +5630,7 @@ impl Agent {
     pub fn turn_with_percepts(&mut self, current_turn: u32) {
         // Update subsystems
         self.senses.take_a_turn();
-        self.body.take_a_turn();
+        self.body.take_a_turn_resting(self.fatigue.is_sleeping);
         // Use trait-aware emotion decay (traits affect how quickly emotions fade)
         self.emotions.turn_with_traits(&self.traits);
         // Apply passive trait effects (e.g., Melancholic slowly gains sadness)
@@ -6175,17 +6254,27 @@ impl Agent {
     /// agent inside a building cools exactly as fast as one standing in the
     /// open, so sheltering never resolves the exposure that sent it indoors.
     pub fn update_temperature_with_shelter(&mut self, climate: &super::Climate, has_shelter: bool) {
-        let cold_insulation = self.body.total_cold_insulation();
+        self.update_temperature_under(climate, has_shelter.then_some(crate::world::Cover::FULL), false);
+    }
+
+    /// The same, under whatever cover there is (#349), and on bedding or off
+    /// it: lying on boughs is lying off the cold ground, which is worth what
+    /// another layer is worth.
+    pub fn update_temperature_under(
+        &mut self,
+        climate: &super::Climate,
+        cover: Option<crate::world::Cover>,
+        on_bedding: bool,
+    ) {
+        let cold_insulation = self.body.total_cold_insulation()
+            + if on_bedding { Self::WHAT_BEDDING_IS_WORTH } else { 0.0 };
         let heat_resistance = self.body.total_heat_resistance();
-
-        let effective_temp = if has_shelter {
-            climate.sheltered_effective_temperature()
-        } else {
-            climate.effective_temperature()
-        };
-
+        let effective_temp = climate.effective_temperature_under(cover);
         self.body_temperature.update(effective_temp, cold_insulation, heat_resistance);
     }
+
+    /// What lying on bedding is worth against the cold, as insulation.
+    pub const WHAT_BEDDING_IS_WORTH: f32 = 0.15;
 
     /// Update exposure status based on environmental conditions
     ///
@@ -7595,6 +7684,14 @@ impl Agent {
             Action::Dry { what } => format!("dry:{what}"),
             Action::Boil => "boil".to_string(),
             Action::Salt { what } => format!("salt:{what}"),
+            Action::Smoke { what } => format!("smoke:{what}"),
+            Action::Brine { what } => format!("brine:{what}"),
+            Action::Cache => "cache".to_string(),
+            Action::PutUpRack => "putuprack".to_string(),
+            Action::HangUp { what } => format!("hangup:{what}"),
+            Action::StoneBoil => "stoneboil".to_string(),
+            Action::PitOven => "pitoven".to_string(),
+            Action::LayBedding => "laybedding".to_string(),
             Action::Excavate => "excavate".to_string(),
             Action::Cover { what } => format!("cover:{what}"),
             Action::PickUp { what } => format!("pickup:{what}"),
@@ -7617,6 +7714,8 @@ impl Agent {
             Action::PlantCutting => "plantcutting".to_string(),
             Action::SpreadMuck => "spreadmuck".to_string(),
             Action::Treat { .. } => "treat".to_string(),
+            Action::PressOnWound { .. } => "pressonwound".to_string(),
+            Action::Bandage { .. } => "bandage".to_string(),
             Action::Socialize { .. } => "socialize".to_string(),
             Action::AskAbout { what, .. } => format!("ask:{what}"),
             Action::ShareInformation { .. } => "shareinformation".to_string(),
@@ -7700,7 +7799,7 @@ impl Agent {
             // and watched them all get better anyway must not learn that he
             // is a hunter, and folding it into `Foraging` would teach him
             // about picking herbs rather than about giving them.
-            Action::Treat { .. } => Undertaking::Healing,
+            Action::Treat { .. } | Action::PressOnWound { .. } | Action::Bandage { .. } => Undertaking::Healing,
             Action::Fish | Action::ForageShallows | Action::CheckFishTraps => Undertaking::Fishing,
             // Like a snare: setting one is not evidence about whether it pays
             Action::SetFishTrap => return,
@@ -7731,7 +7830,14 @@ impl Agent {
             Action::Excavate | Action::Cover { .. } => Undertaking::Farming,
             // Making food outlast the week it was got in is cookery, which is
             // where the rest of what a fire is for already lives
-            Action::Dry { .. } => Undertaking::Cooking,
+            Action::Dry { .. }
+            | Action::Smoke { .. }
+            | Action::Brine { .. }
+            | Action::HangUp { .. }
+            | Action::StoneBoil
+            | Action::PitOven => Undertaking::Cooking,
+            Action::Cache => Undertaking::Farming,
+            Action::PutUpRack | Action::LayBedding => Undertaking::Building,
             Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
             Action::Gather { .. } => Undertaking::Foraging,
             Action::Build { .. } => Undertaking::Building,
@@ -11528,6 +11634,33 @@ impl Agent {
         current_turn: u32,
         how_strong_they_are: f32,
     ) {
+        self.robbed(thief, what, how_many, current_turn, how_strong_they_are, true);
+    }
+
+    /// And finding out afterwards that somebody took something of this
+    /// agent's - a trap emptied by somebody long gone. The same cost to the
+    /// bond and the same mark against them, but held as a grudge
+    /// (`EmotionState::hold_a_grudge`): there is nobody there to face or run
+    /// from.
+    pub fn found_out_they_took_something_of_mine(
+        &mut self,
+        thief: uuid::Uuid,
+        what: &str,
+        how_many: u32,
+        current_turn: u32,
+    ) {
+        self.robbed(thief, what, how_many, current_turn, 0.0, false);
+    }
+
+    fn robbed(
+        &mut self,
+        thief: uuid::Uuid,
+        what: &str,
+        how_many: u32,
+        current_turn: u32,
+        how_strong_they_are: f32,
+        they_are_here: bool,
+    ) {
         use super::EmotionSource;
 
         // What it costs depends on how much was taken and how much this agent
@@ -11545,16 +11678,20 @@ impl Agent {
         // like. It is the same appraisal the wolves get, pointed at a person:
         // see `ThreatAssessment` and `DriveType::Aggression`. What was taken
         // decides how much, and who took it decides which.
-        let judged = super::ThreatAssessment::assess(
-            self.own_strength(),
-            how_strong_they_are,
-            EmotionSource::Agent(thief),
-        );
+        if they_are_here {
+            let judged = super::ThreatAssessment::assess(
+                self.own_strength(),
+                how_strong_they_are,
+                EmotionSource::Agent(thief),
+            );
 
-        if judged.can_overcome {
-            self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+            if judged.can_overcome {
+                self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+            } else {
+                self.emotions.add_fear(EmotionSource::Agent(thief), cost);
+            }
         } else {
-            self.emotions.add_fear(EmotionSource::Agent(thief), cost);
+            self.emotions.hold_a_grudge(EmotionSource::Agent(thief), cost);
         }
 
         let bond = self

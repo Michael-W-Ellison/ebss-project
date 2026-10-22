@@ -20,12 +20,17 @@ impl Simulation {
     pub(in crate::analytics) fn sleeping(&mut self, duration: &u32, agent_index: usize) -> ActionResult {
         let current_turn = self.current_turn;
         let has_shelter = self.agent_has_shelter(agent_index);
+        let on_bedding = {
+            let at = self.population.agents[agent_index].state.position;
+            self.world.bedding_at(&crate::world::Position::new(at.0, at.1))
+        };
         let agent = &mut self.population.agents[agent_index];
 
-        // Sleep quality depends on the agent's circumstances
+        // Sleep quality depends on the agent's circumstances: a bed is a roof
+        // over you, or bedding under you (#349)
         let quality_factors = crate::agents::fatigue::SleepQualityFactors {
             has_shelter,
-            has_bed: has_shelter,
+            has_bed: has_shelter || on_bedding,
             safety: 1.0 - agent.emotions.fear.min(1.0),
             health: (agent.state.health / 100.0).clamp(0.0, 1.0),
             hunger: agent
@@ -525,7 +530,7 @@ impl Simulation {
 
         // Check if already in shelter
         let in_building = self.world.buildings.iter().any(|b| {
-            b.position == agent_pos && b.is_completed()
+            b.position == agent_pos && b.is_a_roof()
         });
 
         let in_forest = self.world.grid.get_tile(&agent_pos)

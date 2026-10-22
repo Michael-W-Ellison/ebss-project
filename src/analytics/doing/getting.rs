@@ -1671,20 +1671,8 @@ impl Simulation {
         // should have been there are as good as a witness.
         for &i in &within {
             if let Some((thief, how_many)) = self.world.fish_traps[i].robbed.take() {
-                let how_strong_they_are = self
-                    .population
-                    .agents
-                    .iter()
-                    .find(|them| them.id == thief)
-                    .map(|them| them.own_strength())
-                    .unwrap_or(1.0);
-                self.population.agents[agent_index].they_took_something_of_mine(
-                    thief,
-                    "fish",
-                    how_many,
-                    turn_now,
-                    how_strong_they_are,
-                );
+                self.population.agents[agent_index]
+                    .found_out_they_took_something_of_mine(thief, "fish", how_many, turn_now);
             }
         }
 

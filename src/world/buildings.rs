@@ -31,6 +31,28 @@ pub enum BuildingType {
     /// It costs a morning's digging and nothing else, and it is worse than a
     /// tent in every way except that it can actually be built.
     Burrow,
+
+    /// A screen of brush and stakes on the side the wind comes from.
+    ///
+    /// Stage 0 of construction. It takes off the wind - no wind chill, no
+    /// windburn - and nothing else: it is not a roof, and the rain comes
+    /// straight down past it. A turn's work and three poles, and it falls
+    /// down in a fortnight (#349).
+    Windbreak,
+
+    /// Poles leant against a ridge pole and thatched with brush on one side.
+    ///
+    /// Stage 0. A roof against the rain and the wind, holding a little of the
+    /// warmth a tent holds. Four poles and a cord, a turn's work, and it
+    /// stands about a month.
+    LeanTo,
+
+    /// A dome of bent poles, thatched with brush all round.
+    ///
+    /// Stage 0. A roof that holds three quarters of what a tent holds, for
+    /// six poles and a cord and three turns, and no hides: what a people
+    /// puts up when the hunt has not given them skins. It stands a season.
+    BrushHut,
     Longhouse,         // Basic: Shared housing (10 capacity)
     UpgradedLonghouse, // Improved longhouse (15 capacity)
     SmallHouse,        // Personal 1-2 person home
@@ -78,7 +100,58 @@ pub enum BuildingType {
     MedicalBuilding,   // Healing and medicine
 }
 
+/// What a roof keeps off, and how much of the warmth of a fire-warmed space
+/// it holds.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Cover {
+    pub keeps_off_rain: bool,
+    pub keeps_off_wind: bool,
+    /// How far it closes the gap between the air outside and a sheltered
+    /// space's warmth, nought to one (`Climate::effective_temperature_under`)
+    pub warmth: f32,
+}
+
+impl Cover {
+    /// A roof as a roof was before cover was graded: rain, wind and the
+    /// warmth of a tent. The trees count as this, as they always have.
+    pub const FULL: Cover = Cover { keeps_off_rain: true, keeps_off_wind: true, warmth: 0.6 };
+
+    /// Whether this is a roof: out of the rain.
+    pub fn is_a_roof(&self) -> bool {
+        self.keeps_off_rain
+    }
+}
+
 impl BuildingType {
+    /// What a finished one of these keeps off (#349). Cheaper shelter is
+    /// worse shelter, which is why a tent is still worth hides.
+    pub fn cover(&self) -> Cover {
+        match self {
+            BuildingType::Windbreak => Cover { keeps_off_rain: false, keeps_off_wind: true, warmth: 0.0 },
+            BuildingType::LeanTo => Cover { keeps_off_rain: true, keeps_off_wind: true, warmth: 0.3 },
+            BuildingType::BrushHut => Cover { keeps_off_rain: true, keeps_off_wind: true, warmth: 0.45 },
+            _ => Cover::FULL,
+        }
+    }
+
+    /// Whether this falls down and is gone once its condition runs out: brush
+    /// does, and nothing else in the list ever has.
+    pub fn falls_apart(&self) -> bool {
+        matches!(self, BuildingType::Windbreak | BuildingType::LeanTo | BuildingType::BrushHut)
+    }
+
+    /// Whether this, left half done, fills in and is gone: a hole nobody goes
+    /// on digging. A finished burrow stands; an open one left a month is
+    /// earth again (#349). Without it every hole anybody ever started stood
+    /// for the life of the world - 365 a world in two years.
+    pub fn fills_in(&self) -> bool {
+        matches!(self, BuildingType::Burrow)
+    }
+
+    /// How fast an open hole fills in, a turn: in a month of the world's
+    /// turns (48 a day).
+    pub const AN_OPEN_HOLE_FILLS_IN: f32 = 1.0 / (30.0 * 48.0);
+
     /// Get construction requirements
     pub fn requirements(&self) -> Vec<Resource> {
         match self {
@@ -90,6 +163,11 @@ impl BuildingType {
             // Earth, and a morning. There is nothing to fetch and nothing to
             // be short of, which is the entire point of it.
             BuildingType::Burrow => vec![],
+            // Brush and poles, which is wood; the cord is asked for by class
+            // (`tags::what_this_roof_takes`).
+            BuildingType::Windbreak => vec![Resource::new(ResourceType::Wood, 3)],
+            BuildingType::LeanTo => vec![Resource::new(ResourceType::Wood, 4)],
+            BuildingType::BrushHut => vec![Resource::new(ResourceType::Wood, 6)],
             BuildingType::Longhouse => vec![
                 Resource::new(ResourceType::Wood, 100),
                 Resource::new(ResourceType::Stone, 50),
@@ -264,6 +342,12 @@ impl BuildingType {
             BuildingType::SkinTent => 40,
             // Longer than a tent: a tent is put up, and a burrow is dug.
             BuildingType::Burrow => 90,
+            // A turn of work apiece for a windbreak and a lean-to; three for
+            // a hut. `Simulation::A_TURN_OF_BUILDING` is 24, and an untried
+            // hand (skill -5) puts in half of it.
+            BuildingType::Windbreak => 12,
+            BuildingType::LeanTo => 12,
+            BuildingType::BrushHut => 36,
             BuildingType::Longhouse => 500,
             BuildingType::UpgradedLonghouse => 700,
             BuildingType::SmallHouse => 300,
@@ -316,6 +400,8 @@ impl BuildingType {
     pub fn capacity(&self) -> usize {
         match self {
             BuildingType::SkinTent => 2,
+            BuildingType::LeanTo => 2,
+            BuildingType::BrushHut => 3,
             BuildingType::Longhouse => 10,
             BuildingType::UpgradedLonghouse => 15,
             BuildingType::SmallHouse => 2,
@@ -345,6 +431,9 @@ impl BuildingType {
             // Housing
             BuildingType::SkinTent => 't',
             BuildingType::Burrow => 'o',
+            BuildingType::Windbreak => ')',
+            BuildingType::LeanTo => '/',
+            BuildingType::BrushHut => 'n',
             BuildingType::Longhouse => 'L',
             BuildingType::UpgradedLonghouse => 'Ł',
             BuildingType::SmallHouse => 'h',
@@ -398,6 +487,7 @@ impl BuildingType {
         match self {
             // Housing - Magenta
             BuildingType::SkinTent | BuildingType::Burrow |
+            BuildingType::Windbreak | BuildingType::LeanTo | BuildingType::BrushHut |
             BuildingType::Longhouse | BuildingType::UpgradedLonghouse |
             BuildingType::SmallHouse | BuildingType::MediumHouse |
             BuildingType::LargeHouse | BuildingType::Manor => "\x1b[35m",
@@ -521,6 +611,9 @@ impl BuildingType {
             // Housing
             BuildingType::SkinTent => "Hides stretched over poles. Sleeps two, keeps the weather off, and can be put up by people who have only what they can carry.",
             BuildingType::Burrow => "A hole in the ground with turf over it. Cold, dark, damp and cramped, and it can be dug by people who have nothing at all.",
+            BuildingType::Windbreak => "A screen of brush on the side the wind comes from. It takes the wind off and nothing else, and it is down in a fortnight.",
+            BuildingType::LeanTo => "Poles leant against a ridge and thatched with brush. Out of the rain and the wind, a little warmer, and standing about a month.",
+            BuildingType::BrushHut => "A dome of bent poles thatched all round. Nearly as good as a tent, for no hides, and standing a season.",
             BuildingType::Longhouse => "Basic shared housing for up to 10 agents. Provides shelter and increases well-being.",
             BuildingType::UpgradedLonghouse => "Improved shared housing for up to 15 agents. Better comfort and amenities.",
             BuildingType::SmallHouse => "Personal dwelling for 1-2 agents. Provides privacy and personal space.",
@@ -574,6 +667,7 @@ impl BuildingType {
         match self {
             // Basic buildings have no prerequisites
             BuildingType::SkinTent | BuildingType::Burrow |
+            BuildingType::Windbreak | BuildingType::LeanTo | BuildingType::BrushHut |
             BuildingType::Longhouse | BuildingType::SmallHouse | BuildingType::Workshop |
             BuildingType::Storehouse | BuildingType::Farm | BuildingType::Shrine => vec![],
 
@@ -679,6 +773,12 @@ impl BuildingType {
     /// Get the decay rate per turn (condition lost per turn without maintenance)
     pub fn decay_rate(&self) -> f32 {
         match self {
+            // Brush falls down: a windbreak in a fortnight, a lean-to in a
+            // month, a hut in a season, counted in the world's turns (48 a
+            // day) - and when it is down it is gone (`falls_apart`).
+            BuildingType::Windbreak => 1.0 / (14.0 * 48.0),
+            BuildingType::LeanTo => 1.0 / (30.0 * 48.0),
+            BuildingType::BrushHut => 1.0 / (90.0 * 48.0),
             // Wooden structures decay faster
             BuildingType::Longhouse | BuildingType::UpgradedLonghouse => 0.0002,
             BuildingType::SmallHouse | BuildingType::MediumHouse => 0.00015,
@@ -832,6 +932,21 @@ impl Building {
             production_timer: 0, // Timer starts when building is completed
             pending_production: Vec::new(),
         }
+    }
+
+    /// What its builder carried to it, counted as delivered.
+    ///
+    /// `Action::Build` takes the materials off the builder on the turn the
+    /// site is started, and nothing in the model delivers to a site after
+    /// that, so a site with requirements stayed short of them for ever and
+    /// `add_construction_progress` refused every turn of work on it: no tent
+    /// was ever finished, only burrows, which want nothing (#175, #349).
+    pub fn with_what_was_brought(mut self) -> Self {
+        let requirements = self.building_type.requirements();
+        if let BuildingState::UnderConstruction { resources_delivered, .. } = &mut self.state {
+            *resources_delivered = requirements;
+        }
+        self
     }
 
     /// Somebody has put a turn of work into this.
@@ -1025,6 +1140,12 @@ impl Building {
         self.occupants.retain(|id| id != &agent_id);
     }
 
+    /// Whether this is finished and a roof: out of the rain. A windbreak is
+    /// finished and not a roof.
+    pub fn is_a_roof(&self) -> bool {
+        self.is_completed() && self.building_type.cover().is_a_roof()
+    }
+
     /// Check if this building can be upgraded
     pub fn can_upgrade(&self) -> bool {
         self.is_completed() && self.building_type.can_upgrade_to().is_some()
@@ -1034,8 +1155,19 @@ impl Building {
 
     /// Process building turn: decay and production
     pub fn take_a_turn(&mut self) {
-        // Only completed buildings decay and produce
+        // Only completed buildings decay and produce - except brush, which
+        // falls down half-built as readily as built, and an open hole, which
+        // fills in, so an abandoned start does not hold its ground for ever
+        // (#349)
         if !self.is_completed() {
+            let coming_down = if self.building_type.falls_apart() {
+                self.building_type.decay_rate()
+            } else if self.building_type.fills_in() {
+                BuildingType::AN_OPEN_HOLE_FILLS_IN
+            } else {
+                0.0
+            };
+            self.condition = (self.condition - coming_down).max(0.0);
             return;
         }
 
