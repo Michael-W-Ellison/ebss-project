@@ -5,7 +5,7 @@
 Adds eprintln! lines the run script greps for: DEATH (each death and its
 cause), MOVECAMP (each camp move), and one line per successful action of
 interest (KEEPX food keeping, SHELX shelter, CAREX care and water, GAPX
-salt, bowls, boiling, FISHX fishing), plus GAPX windburn per turn of it.
+salt, bowls, boiling, FISHX fishing, LEATHX hides and garments), plus GAPX windburn per turn of it.
 Each patch is skipped with a note where the tree does not have its anchor,
 so the same script serves older builds.
 """
@@ -56,7 +56,7 @@ edit(
     "                    | \"Cook\" | \"Excavate\" | \"Cover\" => format!(\"KEEPX {}\", head.to_lowercase()),\n"
     "                    \"Boil\" => \"GAPX boil\".to_string(),\n"
     "                    \"Fish\" | \"ForageShallows\" | \"SetFishTrap\" | \"CheckFishTraps\" => format!(\"FISHX {}\", head.to_lowercase()),\n"
-    "                    \"LayBedding\" => \"SHELX bed\".to_string(),\n"
+    "                    \"LayBedding\" => if action_result.message.as_deref().is_some_and(|m| m.contains(\"hide\")) { \"SHELX bed hide\".to_string() } else { \"SHELX bed\".to_string() },\n"
     "                    \"Build\" => {\n"
     "                        let m = action_result.message.clone().unwrap_or_default();\n"
     "                        let how = if m.starts_with(\"Finished\") { \"finished\" } else if m.starts_with(\"Started\") { \"started\" } else { \"worked\" };\n"
@@ -67,6 +67,9 @@ edit(
     "                    \"Gather\" if named.contains(\"\\\"salt\\\"\") => \"GAPX salt\".to_string(),\n"
     "                    \"Work\" if named.contains(\"\\\"carve\\\"\") && named.contains(\"\\\"wood\\\"\") => \"GAPX bowl\".to_string(),\n"
     "                    \"Work\" if named.contains(\"\\\"hides\\\"\") && named.contains(\"\\\"weave\\\"\") => \"CAREX waterskin\".to_string(),\n"
+    "                    \"Work\" if named.contains(\"\\\"scrape\\\"\") => \"LEATHX scrape\".to_string(),\n"
+    "                    \"Work\" if named.contains(\"\\\"rawhide\\\"\") && named.contains(\"\\\"fire\\\"\") => \"LEATHX tan\".to_string(),\n"
+    "                    \"MakeClothing\" => format!(\"LEATHX wear {}\", named.split('\"').nth(1).unwrap_or(\"?\")),\n"
     "                    \"Hunt\" => \"GAPX hunt\".to_string(),\n"
     "                    _ => String::new(),\n"
     "                };\n"
@@ -85,4 +88,11 @@ edit(
     "src/analytics/wanting/wounds.rs",
     "        Action::Gather { resource_type: \"water\".to_string() }\n    }",
     "        eprintln!(\"CAREX fillforwalk\");\n        Action::Gather { resource_type: \"water\".to_string() }\n    }",
+)
+
+edit(
+    "src/agents/agent.rs",
+    "                self.hides_that_rotted += item.quantity;\n",
+    "                self.hides_that_rotted += item.quantity;\n"
+    "                eprintln!(\"LEATHX rotted {}\", item.quantity);\n",
 )
