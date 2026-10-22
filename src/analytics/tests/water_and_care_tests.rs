@@ -202,7 +202,7 @@ fn a_bleeding_wound_comes_first() {
 }
 
 /// Three days thirsty with no water in reach and somebody thinks of taking
-/// it along in a skin; then they lash one shut from a hide, and it holds 8.
+/// it along in a skin; then they sew one shut from a hide, and it holds 8.
 #[test]
 fn going_thirsty_far_from_water_is_how_a_water_skin_is_found_out() {
     let mut simulation = people(1);
@@ -218,13 +218,9 @@ fn going_thirsty_far_from_water_is_how_a_water_skin_is_found_out() {
     simulation.population.agents[0]
         .inventory
         .add_item(InventoryItem::new_with_weight("hides".to_string(), 1, 1.0));
-    // And a cord to lash it shut with
-    simulation.population.agents[0]
-        .inventory
-        .add_item(InventoryItem::new_with_weight("lashing".to_string(), 1, 0.1));
-    assert_eq!(simulation.population.agents[0].what_vessel_i_would_rather_have(), Some(("lash", "hides")));
-    let lashed = simulation.execute_action(&Action::Work { verb: "lash".to_string(), to: "hides".to_string() }, 0);
-    assert!(lashed.success, "{:?}", lashed.message);
+    assert_eq!(simulation.population.agents[0].what_vessel_i_would_rather_have(), Some(("weave", "hides")));
+    let sewn = simulation.execute_action(&Action::Work { verb: "weave".to_string(), to: "hides".to_string() }, 0);
+    assert!(sewn.success, "{:?}", sewn.message);
     let skin = simulation.population.agents[0].inventory.get_item("waterskin").expect("a water skin");
     assert_eq!(skin.max_capacity, Some(8.0));
 }

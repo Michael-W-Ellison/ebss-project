@@ -26918,7 +26918,7 @@ A survey of what was there first:
 - The body takes one turn a half hour, not two.
 
 **The water skin** (`make:waterskin`, Stage 1, found out).
-- A hide lashed shut with a cord in hand (`LASH_A_WATER_SKIN`), holding 8. Found out after
+- A hide sewn shut (`SEW_A_WATER_SKIN`, `weave` on `hides`), holding 8. Found out after
   three days thirsty with no water in reach (`who_went_thirsty_far_from_water`).
 - `water_for_the_walk`: somebody setting off further than a forage from
   beside water, with room in a vessel, drinks and fills it first.
@@ -26956,8 +26956,8 @@ How often the new things were done, all eighty:
 
 - The water skin was measured as a hide cut and tied off (`cut` on
   `hides`). `table_order_tests::leather_is_scraped_off_a_hide_rather_than_cut_out_of_one`
-  holds that cutting a hide makes nothing, so it is lashed shut instead, with
-  a cord in hand; three skins were made in eighty worlds either way.
+  holds that cutting a hide makes nothing, so it is sewn shut instead, with
+  `weave` as the leather bag is; three skins were made in eighty worlds.
 - **None of it is common**, because blows that open wounds are rare and
   nobody carries a vessel: the bowl is still almost never made, and a skin
   wants a hide.
