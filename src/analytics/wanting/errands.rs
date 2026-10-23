@@ -1216,6 +1216,13 @@ impl Simulation {
             return None;
         }
 
+        // The sea boiled is the sea's water, dipped where it laps: nobody
+        // carries it there first. The pot is asked for by the boiling itself
+        // (`something_to_boil_it_in`) (#355).
+        if matches!(action, Action::Boil) && self.salt_water_within_reach(agent.state.position).is_some() {
+            return None;
+        }
+
         // A roof already going up is carried on with on what went into it
         // when it was started, and wants nothing more in hand (#349)
         if let Action::Build { position, .. } = action {

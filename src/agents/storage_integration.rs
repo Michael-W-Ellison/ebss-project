@@ -42,7 +42,7 @@ pub fn butchered_item_id(material_id: &str) -> &str {
 
 /// What a prepared thing is carried as: `cooked_`, `burnt_`, `dried_`,
 /// `smoked_` or `brined_` in front of what it was.
-pub const PREPARED_AS: [&str; 5] = ["cooked_", "burnt_", "dried_", "smoked_", "brined_"];
+pub const PREPARED_AS: [&str; 6] = ["cooked_", "stewed_", "burnt_", "dried_", "smoked_", "brined_"];
 
 /// An item id with whatever has been done to it taken off the front.
 ///

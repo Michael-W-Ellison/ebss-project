@@ -1836,6 +1836,9 @@ pub struct Agent {
     /// How many raw hides have rotted in this one's pack (#353).
     #[serde(default)]
     pub hides_that_rotted: u32,
+    /// Fired pots that have cracked or broken on this one (#355).
+    #[serde(default)]
+    pub pots_broken: u32,
     /// How used this one has got to each kind of beast, by name, from
     /// nought (a stranger) to nearly one (part of the furniture).
     ///
@@ -2105,6 +2108,7 @@ impl Agent {
             id: crate::core::dice::name(),
             busy_until: 0,
             hides_that_rotted: 0,
+            pots_broken: 0,
             familiar_with: std::collections::BTreeMap::new(),
             last_evening_watching_ore: None,
             stepped_from: None,
@@ -3695,6 +3699,14 @@ impl Agent {
     }
 
     /// Whether this agent knows any way at all of making a named thing.
+    /// Whether this agent knows a working that makes this - working one
+    /// thing into another, as a pot is shaped and fired (#355).
+    pub fn knows_a_working_that_makes(&self, what: &str) -> bool {
+        crate::environment::making::EVERY_WORKING
+            .iter()
+            .any(|working| working.makes == what && (working.born_known() || self.found_out.contains(working.makes)))
+    }
+
     pub fn knows_how_to_make(&self, what: &str) -> bool {
         crate::environment::making::every_way_to_make(what).any(|step| self.knows_how_to(step))
     }
@@ -3962,6 +3974,24 @@ impl Agent {
 
     /// And how many questions anybody keeps open at once.
     const AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS: usize = 4;
+
+    /// One fired pot cracked and gone (#355), with whatever share of the
+    /// water carried was in it. True if there was one.
+    pub fn a_pot_breaks(&mut self) -> bool {
+        let Some(pots) = self.inventory.get_item("stoneware").map(|item| item.quantity) else {
+            return false;
+        };
+        if pots <= 1 {
+            self.inventory.remove_item("stoneware", 1);
+        } else if let Some(item) = self.inventory.get_all_items_mut().get_mut("stoneware") {
+            item.quantity -= 1;
+            if let (Some(fill), Some(_)) = (item.fill_level, item.max_capacity) {
+                item.fill_level = Some(fill * (pots - 1) as f32 / pots as f32);
+            }
+        }
+        self.pots_broken += 1;
+        true
+    }
 
     /// What this one carries that will burn: wood, and dried dung for
     /// whoever has found out what it is good for (#354).
@@ -5681,6 +5711,14 @@ impl Agent {
         self.senses.take_a_turn();
         let soaked = self.exposure_status.wetness > Self::SOAKED_THROUGH;
         self.body.take_a_turn_resting_in(self.fatigue.is_sleeping, soaked);
+        // A pot shaped and not fired goes back to mud in the wet (#355)
+        if soaked {
+            let shaped = self.how_many_i_have("claypot");
+            if shaped > 0 {
+                self.inventory.remove_item("claypot", shaped);
+                self.inventory.add_item(InventoryItem::new_with_weight("clay".to_string(), shaped, 1.0));
+            }
+        }
         // Use trait-aware emotion decay (traits affect how quickly emotions fade)
         self.emotions.turn_with_traits(&self.traits);
         // Apply passive trait effects (e.g., Melancholic slowly gains sadness)

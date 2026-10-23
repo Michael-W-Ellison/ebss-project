@@ -145,6 +145,10 @@ impl Simulation {
         if let Some(work) = self.a_hide_to_work(agent, here) {
             return Some(work);
         }
+        // A pot, by whoever knows how and has fewer than they want (#355)
+        if let Some(work) = self.a_pot_to_make(agent, here) {
+            return Some(work);
+        }
         if !Self::has_food_worth_cooking(agent) {
             return None;
         }
@@ -197,6 +201,41 @@ impl Simulation {
             return Some(Action::Work { verb: "fire".to_string(), to: "rawhide".to_string() });
         }
         None
+    }
+
+    /// How many fired pots somebody who can make them keeps: one to cook in
+    /// and one to carry water or keep food in (#355).
+    pub(in crate::analytics) const POTS_ONE_KEEPS: u32 = 2;
+
+    /// A pot to make by the evening fire (#355), by whoever has found out
+    /// how and has fewer than they keep: a shaped pot fired at a burning
+    /// fire, clay shaped into a pot, or clay fetched from where it lies
+    /// within a forage. A pot is wanted to stew in, to keep food in and to
+    /// carry water, and it breaks, so there is always another to make.
+    pub(in crate::analytics) fn a_pot_to_make(
+        &self,
+        agent: &crate::agents::Agent,
+        here: (i32, i32, i32),
+    ) -> Option<Action> {
+        if agent.how_many_i_have("stoneware") >= Self::POTS_ONE_KEEPS || !agent.knows_a_working_that_makes("claypot") {
+            return None;
+        }
+        if agent.how_many_i_have("claypot") > 0
+            && agent.knows_a_working_that_makes("stoneware")
+            && self.nearest_fire_from(here, Self::FIRE_REACH, true).is_some()
+        {
+            return Some(Action::Work { verb: "fire".to_string(), to: "claypot".to_string() });
+        }
+        if agent.how_many_i_have("claypot") > 0 {
+            return None;
+        }
+        if agent.how_many_i_have("clay") >= crate::environment::making::MOLD_CLAY.how_much {
+            return Some(Action::Work { verb: "mold".to_string(), to: "clay".to_string() });
+        }
+        self.nearest_resource_within(agent, here, Self::FORAGE_RADIUS, |resource| {
+            resource.resource_type == crate::world::ResourceType::Clay && resource.amount > 0
+        })
+        .map(|_| Action::Gather { resource_type: "clay".to_string() })
     }
 
     /// Sleep at night, and be back with the others by then.
@@ -388,6 +427,8 @@ impl Simulation {
                     (Action::Move { .. }, false) => "night: headed home",
                     (Action::Cook { .. }, _) => "night: cooked supper",
                     (Action::LightFire, _) => "night: lit the evening fire",
+                    (Action::Work { to, .. }, _) if to == "clay" || to == "claypot" => "night: made a pot",
+                    (Action::Gather { resource_type }, _) if resource_type == "clay" => "night: fetched clay",
                     (
                         Action::Tame { .. }
                         | Action::CollectAnimalProduct { .. }

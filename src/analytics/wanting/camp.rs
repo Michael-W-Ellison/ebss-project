@@ -277,6 +277,10 @@ impl Simulation {
     /// fewer mouths now to feed. That is how a camp that has outgrown its
     /// ground becomes two, and a farmer stays by a field while the foragers go
     /// on. Children not yet grown go with a parent who goes. See #314.
+    /// How often a fired pot carried on a camp move breaks on the way: one
+    /// in five (#355).
+    pub(in crate::analytics) const A_POT_BREAKS_ON_A_MOVE: f64 = 0.2;
+
     pub(in crate::analytics) fn the_camp_moves(&mut self, decided: CampMove) {
         let Some(decider) = self.population.agents.iter().position(|a| a.id == decided.who) else {
             return;
@@ -309,6 +313,19 @@ impl Simulation {
             if goes {
                 agent.hearth = Some(decided.to);
                 agent.hearth_moved_at = now;
+
+                // And a fired pot carried to the new camp may not get there
+                // (#355): heavy, and it breaks. Which is why pots belong to
+                // a people who stay.
+                let pots = agent.how_many_i_have("stoneware");
+                if pots > 0 {
+                    use rand::Rng;
+                    let mut rng = crate::core::dice::roll();
+                    let broken = (0..pots).filter(|_| rng.gen_bool(Self::A_POT_BREAKS_ON_A_MOVE)).count();
+                    for _ in 0..broken {
+                        agent.a_pot_breaks();
+                    }
+                }
             }
         }
 

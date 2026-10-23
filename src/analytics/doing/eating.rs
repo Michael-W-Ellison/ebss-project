@@ -481,7 +481,26 @@ impl Simulation {
             None => return ActionResult::failure("No lit fire within reach".to_string()),
         };
 
-        let cooked = self.cooking_a_batch(agent_index, food_type, fire_id, Self::COOK_BATCH, true, Some(rng));
+        // In a fired pot of water, if there is one and water to fill it: a
+        // stew, a bigger batch, nothing burnt (#355). And the pot may crack.
+        let agent = &self.population.agents[agent_index];
+        let carried = agent.how_much_water_i_carry() >= Self::WHAT_A_BOILING_TAKES;
+        let in_a_pot = agent.how_many_i_have("stoneware") > 0
+            && (carried || self.drinkable_water_within_reach(agent, agent_pos));
+        let cooked = if in_a_pot {
+            let stewed = self.stewing_a_batch(agent_index, food_type, fire_id);
+            if stewed.success {
+                if carried {
+                    self.population.agents[agent_index].draw_from_what_i_carry(Self::WHAT_A_BOILING_TAKES);
+                }
+                if rng.gen_bool(Self::A_POT_CRACKS_OVER_THE_FIRE) {
+                    self.population.agents[agent_index].a_pot_breaks();
+                }
+            }
+            stewed
+        } else {
+            self.cooking_a_batch(agent_index, food_type, fire_id, Self::COOK_BATCH, true, Some(rng))
+        };
 
         // Enough suppers over a fire, and somebody buries the next one with
         // the stones out of it (#348).
@@ -511,10 +530,41 @@ impl Simulation {
         over_the_flames: bool,
         rng: Option<&mut rand::rngs::StdRng>,
     ) -> ActionResult {
+        self.a_batch_put_to_the_heat(agent_index, food_type, fire_id, most, over_the_flames, rng, false)
+    }
+
+    /// A batch simmered in a fired pot of water over the fire `fire_id`
+    /// (#355): what comes out is stewed, and nothing burns.
+    fn stewing_a_batch(&mut self, agent_index: usize, food_type: &str, fire_id: uuid::Uuid) -> ActionResult {
+        self.a_batch_put_to_the_heat(agent_index, food_type, fire_id, Self::WHAT_A_POT_STEWS, false, None, true)
+    }
+
+    /// How much goes in a pot at once.
+    pub(in crate::analytics) const WHAT_A_POT_STEWS: u32 = 10;
+
+    /// How often a fired pot cracks over the fire: one use in forty.
+    pub(in crate::analytics) const A_POT_CRACKS_OVER_THE_FIRE: f64 = 1.0 / 40.0;
+
+    #[allow(clippy::too_many_arguments)]
+    fn a_batch_put_to_the_heat(
+        &mut self,
+        agent_index: usize,
+        food_type: &str,
+        fire_id: uuid::Uuid,
+        most: u32,
+        over_the_flames: bool,
+        rng: Option<&mut rand::rngs::StdRng>,
+        in_a_pot: bool,
+    ) -> ActionResult {
         // Which of the things it is carrying goes on the fire
         let chosen = {
             let agent = &self.population.agents[agent_index];
-            match Self::cookable_item(agent, food_type) {
+            let chosen = if in_a_pot {
+                Self::stewable_item(agent, food_type)
+            } else {
+                Self::cookable_item(agent, food_type)
+            };
+            match chosen {
                 Some(item_id) => item_id,
                 None => {
                     return ActionResult::failure(
@@ -526,7 +576,7 @@ impl Simulation {
 
         let item_type = crate::agents::storage_integration::id_to_item_type(&chosen);
         let outcome = item_type
-            .map(|item_type| item_type.cooking_outcome())
+            .map(|item_type| if in_a_pot { item_type.stewing_outcome() } else { item_type.cooking_outcome() })
             .unwrap_or(CookingOutcome::NotFood);
 
         if outcome == CookingOutcome::NotFood {
@@ -600,6 +650,9 @@ impl Simulation {
         }
 
         match batch.food_data.as_mut() {
+            Some(food) if in_a_pot => {
+                food.stew(outcome);
+            }
             Some(food) => {
                 food.cook(outcome);
             }
@@ -614,6 +667,9 @@ impl Simulation {
         // one preparation state, so cooked fish cannot share an entry
         // with the raw fish still in the pack.
         batch.item_id = Self::prepared_item_id(&chosen, outcome == CookingOutcome::Improves);
+        if in_a_pot && outcome == CookingOutcome::Improves {
+            batch.item_id = batch.item_id.replacen("cooked_", "stewed_", 1);
+        }
 
         if !agent.inventory.add_item(batch) {
             return ActionResult::failure(format!(
@@ -687,9 +743,16 @@ impl Simulation {
             return ActionResult::failure("Nothing to boil it in".to_string());
         };
 
-        let _ = with_stones;
         let turn_now = self.current_turn;
         let agent = &mut self.population.agents[agent_index];
+
+        // A fired pot over the fire may crack (#355)
+        if !with_stones && {
+            use rand::Rng;
+            crate::core::dice::roll().gen_bool(Self::A_POT_CRACKS_OVER_THE_FIRE)
+        } {
+            agent.a_pot_breaks();
+        }
 
         // What a pot of sea water comes to when the water has gone,
         // which is not much - that is the whole of why salt is dear.

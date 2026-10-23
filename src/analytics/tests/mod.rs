@@ -106,6 +106,7 @@ pub mod the_gaps_tests;
 pub mod measurement_watch;
 pub mod leatherworking_tests;
 pub mod keeping_beasts_tests;
+pub mod pottery_tests;
 pub mod larder_tests;
 pub mod sacrifice_tests;
 pub mod theft_tests;

@@ -977,6 +977,16 @@ impl Simulation {
     /// lose it. Asked for anything, an agent picks something a fire actually
     /// improves, because nobody sets out to burn their dinner.
     pub(in crate::analytics) fn cookable_item(agent: &crate::agents::Agent, food_type: &str) -> Option<String> {
+        Self::food_for_the_heat(agent, food_type, false)
+    }
+
+    /// What this one carries that a pot of water would improve (#355).
+    pub(in crate::analytics) fn stewable_item(agent: &crate::agents::Agent, food_type: &str) -> Option<String> {
+        Self::food_for_the_heat(agent, food_type, true)
+    }
+
+    /// What goes on the fire, or into a pot over it.
+    fn food_for_the_heat(agent: &crate::agents::Agent, food_type: &str, in_a_pot: bool) -> Option<String> {
         use crate::world::nutrition::CookingOutcome;
 
         let named = !food_type.is_empty() && food_type != "generic";
@@ -1004,7 +1014,11 @@ impl Simulation {
             })
             .filter(|item| {
                 crate::agents::storage_integration::id_to_item_type(&item.item_id)
-                    .map(|item_type| item_type.cooking_outcome() == CookingOutcome::Improves)
+                    .map(|item_type| {
+                        let outcome =
+                            if in_a_pot { item_type.stewing_outcome() } else { item_type.cooking_outcome() };
+                        outcome == CookingOutcome::Improves
+                    })
                     .unwrap_or(false)
             })
             // A whole beast does not go over a fire. What happens if you try
@@ -1020,6 +1034,7 @@ impl Simulation {
     /// Whether the agent is carrying something a fire would improve
     pub(in crate::analytics) fn has_food_worth_cooking(agent: &crate::agents::Agent) -> bool {
         Self::cookable_item(agent, "generic").is_some()
+            || (agent.how_many_i_have("stoneware") > 0 && Self::stewable_item(agent, "generic").is_some())
     }
 
     /// How far an agent will walk to reach a fire that is already burning

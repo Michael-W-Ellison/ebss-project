@@ -547,7 +547,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 0.3% to 1,071,252 for #354: a young one left by a kill follows
     // the hunter, kept beasts are fed, folded, milked and culled, and dung
     // burns.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_071_252;
+    // Down 4.3% to 1,025,389 for #355: pots made by the evening fire, stews,
+    // pots that crack and break on a move, and the sea boiled in an empty
+    // pot.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_025_389;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

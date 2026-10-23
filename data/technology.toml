@@ -2728,7 +2728,7 @@ stage = 1
 role = "technique"
 model = ["do:Brine"]
 needs = ["food_preservation.1.dry_salting"]
-note = "Salt and water in a vessel. Takes a whole fish, which dry salt does not."
+note = "Salt and water in a vessel, with water carried. Like dry salt it takes the thing cut up, not whole: the brine has to reach the middle of it."
 
 [[tech]]
 id = "food_preservation.1.smoking_over_low_fires"
@@ -3854,7 +3854,8 @@ name = "Collecting clay from streambanks"
 path = "mining_and_extraction"
 stage = 0
 role = "technique"
-model = ["do:Excavate"]
+model = ["do:Gather"]
+note = "Clay is gathered where it lies on a bank, as anything else is. It was linked to do:Excavate, which digs a store and gives up stone, not clay (#355)."
 
 [[tech]]
 id = "mining_and_extraction.0.gathering_ochre_chalk_salt_crusts_peat"
