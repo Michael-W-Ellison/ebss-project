@@ -4023,15 +4023,18 @@ impl Agent {
     /// How long without meat before the body wants it (#358).
     pub const A_WEEK_WITHOUT_MEAT: u32 = 7 * crate::environment::seasons::TICKS_PER_DAY;
 
-    /// Whether this one craves meat (#358): a week since the last of it -
-    /// counted from birth for somebody who never had any - or a body short
-    /// of salt, which flesh and blood carry.
+    /// Whether this one craves meat (#358): a week since the last of it,
+    /// counted from birth for somebody who never had any.
+    ///
+    /// **Not salt as well.** The first cut had a body short of salt crave
+    /// meat too, and on an inland world with no salt known a whole band
+    /// craved both for good, went after game they mostly could not bring
+    /// down instead of eating, and ten of twelve were dead inside the year.
     pub fn craves_meat(&self, now: u32) -> bool {
         if self.state.life_stage == LifeStage::Infant {
             return false;
         }
-        let since = now.saturating_sub(self.last_ate_meat.unwrap_or(0));
-        since >= Self::A_WEEK_WITHOUT_MEAT || self.craves_salt()
+        now.saturating_sub(self.last_ate_meat.unwrap_or(0)) >= Self::A_WEEK_WITHOUT_MEAT
     }
 
     /// How many places game was seen this one keeps in mind.
@@ -4077,7 +4080,12 @@ impl Agent {
 
     /// What a body short of salt altogether loses of its health in a day:
     /// weakness, cramp, and a slow going downhill.
-    pub const WHAT_GOING_WITHOUT_SALT_COSTS_A_DAY: f32 = 2.0;
+    ///
+    /// It was two a day, which with nothing in plants and no salt known left
+    /// a fifth of all the days on an inland world spent at nought and the
+    /// band bleeding health all year: the measurement that found it is in
+    /// ISSUES_FOUND #358.
+    pub const WHAT_GOING_WITHOUT_SALT_COSTS_A_DAY: f32 = 0.5;
 
     /// Whether this one craves salt.
     pub fn craves_salt(&self) -> bool {
@@ -4086,9 +4094,10 @@ impl Agent {
 
     /// What a mouthful of this puts back of the body's salt (#356): flesh,
     /// blood and milk carry it, the sea's fish more; what has been salted or
-    /// brined carries a good deal; whatever grew carries next to none. A
-    /// people living on meat never go short, and a people living on what
-    /// they grow do.
+    /// brined carries a good deal; wild leaves, roots and nuts a little, and
+    /// grain least. A people living on meat never go short, a people
+    /// gathering go short only slowly, and a people living on what they grow
+    /// do.
     pub fn salt_in_a_mouthful_of(item_id: &str) -> f32 {
         use crate::world::ItemType;
         if item_id.starts_with("brined_") {
@@ -4097,6 +4106,9 @@ impl Agent {
         match crate::agents::storage_integration::id_to_item_type(item_id) {
             Some(ItemType::Fish) => 0.04,
             Some(ItemType::Meat) | Some(ItemType::Milk) | Some(ItemType::Cheese) => 0.03,
+            Some(ItemType::Greens) | Some(ItemType::Roots) | Some(ItemType::Legumes) | Some(ItemType::Nuts)
+            | Some(ItemType::Food) => 0.01,
+            Some(ItemType::Grain) | Some(ItemType::Flour) | Some(ItemType::Bread) => 0.004,
             _ => 0.0,
         }
     }

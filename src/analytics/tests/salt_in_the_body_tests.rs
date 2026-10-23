@@ -84,7 +84,8 @@ fn the_salt_runs_out_of_a_body() {
     assert_eq!(agent.salt_in_the_body, 1.0, "at the breast");
 }
 
-/// Flesh, fish and milk put salt back, salted food more, and what grew none;
+/// Flesh, fish and milk put salt back, salted food more, wild plants a little
+/// and grain least;
 /// and a pinch of what is carried is licked when the body craves it.
 #[test]
 fn salt_is_put_back_by_what_is_eaten_and_licked() {
@@ -92,8 +93,9 @@ fn salt_is_put_back_by_what_is_eaten_and_licked() {
     assert!(Agent::salt_in_a_mouthful_of("fish") > Agent::salt_in_a_mouthful_of("meat"));
     assert!(Agent::salt_in_a_mouthful_of("cooked_meat") > 0.0);
     assert!(Agent::salt_in_a_mouthful_of("milk") > 0.0);
-    assert_eq!(Agent::salt_in_a_mouthful_of("greens"), 0.0);
-    assert_eq!(Agent::salt_in_a_mouthful_of("grain"), 0.0);
+    let leaves = Agent::salt_in_a_mouthful_of("greens");
+    let grain = Agent::salt_in_a_mouthful_of("grain");
+    assert!(Agent::salt_in_a_mouthful_of("meat") > leaves && leaves > grain && grain > 0.0);
     assert!(Agent::salt_in_a_mouthful_of("brined_fish") > Agent::salt_in_a_mouthful_of("fish"));
 
     let mut simulation = one_person();

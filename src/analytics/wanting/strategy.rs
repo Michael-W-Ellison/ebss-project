@@ -789,8 +789,26 @@ impl crate::analytics::Simulation {
         //     is very nearly a ranking on confidence, and gathering is the
         //     surer thing nearly always - so a people who could hunt lived on
         //     berries and fish and never once went after the deer in sight.
-        if need == DriveType::Hunger && agent.craves_meat(self.current_turn) {
-            if let Some(at) = open.iter().position(|(way, _, _)| *way == Strategy::HuntLocalAnimals) {
+        //
+        //     Only for game in sight, struck or closed on - a walk to where
+        //     game was seen stays one way among the rest - and not when the
+        //     hunger is past waiting for a stalk.
+        if need == DriveType::Hunger
+            && agent.craves_meat(self.current_turn)
+            && agent.how_hard_it_presses(need) < Self::WHEN_ONLY_NOW_WILL_DO
+        {
+            let sight = Self::how_far_a_hunter_looks(agent) as i32;
+            let here = agent.state.position;
+            if let Some(at) = open.iter().position(|(way, doing, _)| {
+                *way == Strategy::HuntLocalAnimals
+                    && match doing {
+                        Action::Hunt { .. } => true,
+                        Action::Move { target } => {
+                            (target.0 - here.0).abs().max((target.1 - here.1).abs()) <= sight
+                        }
+                        _ => false,
+                    }
+            }) {
                 return take(&mut open, at);
             }
         }
