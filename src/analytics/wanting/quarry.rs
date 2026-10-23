@@ -257,7 +257,7 @@ impl Simulation {
         self.world
             .get_animals_in_radius(
                 (agent_position.0, agent_position.1),
-                Self::HUNT_SEARCH_RADIUS,
+                Self::how_far_a_hunter_looks(agent),
             )
             .into_iter()
             .filter(|animal| {
@@ -289,7 +289,7 @@ impl Simulation {
         self.world
             .get_animals_in_radius(
                 (agent_position.0, agent_position.1),
-                Self::HUNT_SEARCH_RADIUS,
+                Self::how_far_a_hunter_looks(agent),
             )
             .into_iter()
             .filter(|animal| self.worth_hunting(agent, animal))
@@ -377,10 +377,72 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
-        if !Self::wants_to_hunt(agent) {
+        if Self::wants_to_hunt(agent) {
+            if let Some(going) = self.going_after_skins(agent, agent_position) {
+                return Some(going);
+            }
+        }
+        if agent.craves_meat(self.current_turn) {
+            return self.going_after_meat(agent, agent_position);
+        }
+        None
+    }
+
+    /// How far a hunter looks for game: as far as they can see (#358).
+    ///
+    /// It was twelve cells, a hundred and twenty metres, set when a beast
+    /// moved two cells a turn. At twenty-five times that pace (`world::pace`)
+    /// a deer grazes through a hundred and twenty metres in a quarter hour,
+    /// and a hunter saw almost nothing worth a throw: measured on two worlds,
+    /// four in five hunts wanted found no prey.
+    pub(in crate::analytics) fn how_far_a_hunter_looks(agent: &crate::agents::Agent) -> f32 {
+        Self::HUNT_SEARCH_RADIUS.max(agent.sight_range() as f32)
+    }
+
+    /// How far a hunter walks to where game was lately seen.
+    pub(in crate::analytics) const HOW_FAR_A_HUNTER_GOES: u32 = 150;
+
+    /// Going after an animal for its meat (#358), by somebody who craves
+    /// it: one worth eating in sight, struck or closed on; else a walk to
+    /// where game was lately seen.
+    pub(in crate::analytics) fn going_after_meat(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
+        if !agent.lessons.worth_trying(Undertaking::Hunting) {
             return None;
         }
-        self.going_after_skins(agent, agent_position)
+        if let Some(getting_one) = self.what_a_hunt_wants_first(agent) {
+            return Some(getting_one);
+        }
+        let sight = Self::how_far_a_hunter_looks(agent) as i32;
+        if let Some((animal_id, animal_position, _)) = self.the_best_prey_to_eat(agent, agent_position, sight) {
+            let reach = (animal_position.0 - agent_position.0)
+                .abs()
+                .max((animal_position.1 - agent_position.1).abs());
+            if reach <= Self::HUNT_REACH {
+                return Some(Action::Hunt {
+                    animal_id,
+                    weapon: agent.equipment.get_weapon().map(|weapon| weapon.name.clone()),
+                });
+            }
+            return Some(Action::Move { target: (animal_position.0, animal_position.1, agent_position.2) });
+        }
+        let now = self.current_turn;
+        let here = (agent_position.0, agent_position.1);
+        agent
+            .game_seen
+            .iter()
+            .filter(|(_, when)| now.saturating_sub(*when) < crate::agents::Agent::GAME_STAYS_ABOUT)
+            .filter(|(there, _)| {
+                let far = (there.0 - here.0).abs().max((there.1 - here.1).abs());
+                far > sight && far as u32 <= Self::HOW_FAR_A_HUNTER_GOES
+            })
+            .filter(|(there, _)| self.world.can_walk_between(here, *there))
+            .max_by_key(|(there, when)| (*when, there.0, there.1))
+            .map(|(there, _)| Action::Move { target: (there.0, there.1, agent_position.2) })
     }
 
     /// Going after an animal for its skin, for whatever reason the skin is
@@ -1106,5 +1168,56 @@ impl Simulation {
         }
 
         Some(Action::SetSnare)
+    }
+}
+
+impl Simulation {
+    /// How often each person looks round for game, in half hours.
+    pub(in crate::analytics) const HOW_OFTEN_THE_GAME_IS_NOTED: u32 = 4;
+
+    /// Each grown person notes the game in sight worth hunting, and forgets
+    /// a place they remembered game at and find empty (#358).
+    pub(in crate::analytics) fn the_hunters_note_the_game(&mut self) {
+        use crate::environment::seasons::TICKS_BETWEEN_PLANS;
+        if self.current_turn % (Self::HOW_OFTEN_THE_GAME_IS_NOTED * TICKS_BETWEEN_PLANS) != 0 {
+            return;
+        }
+        let now = self.current_turn;
+        let noted: Vec<(usize, Option<(i32, i32)>)> = self
+            .population
+            .agents
+            .iter()
+            .enumerate()
+            .filter(|(_, agent)| agent.state.is_alive && agent.state.life_stage.can_reproduce())
+            .map(|(index, agent)| {
+                let here = (agent.state.position.0, agent.state.position.1);
+                let seen = self
+                    .world
+                    .get_animals_in_radius(here, Self::how_far_a_hunter_looks(agent))
+                    .into_iter()
+                    .filter(|animal| self.worth_hunting(agent, animal))
+                    .filter(|animal| {
+                        self.world
+                            .animals
+                            .get_species(&animal.species_id)
+                            .is_some_and(|species| species.food_value > 0.0)
+                    })
+                    .map(|animal| animal.position)
+                    .min_by_key(|at| ((at.0 - here.0).abs().max((at.1 - here.1).abs()), at.0, at.1));
+                (index, seen)
+            })
+            .collect();
+        for (index, seen) in noted {
+            let agent = &mut self.population.agents[index];
+            match seen {
+                Some(at) => agent.saw_game_at(at, now),
+                None => {
+                    let here = (agent.state.position.0, agent.state.position.1);
+                    agent
+                        .game_seen
+                        .retain(|(there, _)| (there.0 - here.0).abs().max((there.1 - here.1).abs()) > 10);
+                }
+            }
+        }
     }
 }

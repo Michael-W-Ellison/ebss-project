@@ -556,7 +556,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // and fouled camps moved off, vermin, theft and scavengers at stores, a
     // storehouse that is a place, and no building making anything from
     // nothing.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_012_933;
+    // Down 2.2% to 990,339 for #358: hunters look as far as they can see,
+    // remember where game was, and go after it when a week without meat
+    // has them craving it.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 990_339;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

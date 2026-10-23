@@ -523,7 +523,7 @@ impl Simulation {
             if let Some((animal_id, animal_position, _)) = self.the_best_prey_to_eat(
                 agent,
                 agent_position,
-                Self::HUNT_SEARCH_RADIUS as i32,
+                Self::how_far_a_hunter_looks(agent) as i32,
             ) {
                 let reach = (animal_position.0 - agent_position.0)
                     .abs()

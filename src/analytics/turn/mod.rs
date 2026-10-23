@@ -279,6 +279,9 @@ impl Simulation {
         // (#354).
         self.the_kept_stay_by_their_keepers();
 
+        // And the hunters note where the game is (#358)
+        self.the_hunters_note_the_game();
+
         // Apply religious building effects to agent happiness
         self.apply_religious_effects();
 

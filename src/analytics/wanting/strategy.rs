@@ -785,6 +785,16 @@ impl crate::analytics::Simulation {
             return take(&mut open, at);
         }
 
+        // 1b. A hunt, for somebody hungry who craves meat (#358). The ranking
+        //     is very nearly a ranking on confidence, and gathering is the
+        //     surer thing nearly always - so a people who could hunt lived on
+        //     berries and fish and never once went after the deer in sight.
+        if need == DriveType::Hunger && agent.craves_meat(self.current_turn) {
+            if let Some(at) = open.iter().position(|(way, _, _)| *way == Strategy::HuntLocalAnimals) {
+                return take(&mut open, at);
+            }
+        }
+
         // 2. The plan, where one is running for this need.
         if agent.is_the_plan_for(need) && agent.should_execute_plan() {
             if let Some(step) = agent.what_the_plan_wants_next() {

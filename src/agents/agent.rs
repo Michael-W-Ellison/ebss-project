@@ -1849,6 +1849,15 @@ pub struct Agent {
     /// (#356). Somebody on one sleeps where night finds them.
     #[serde(default)]
     pub journey: Option<Journey>,
+    /// When this one last ate meat, if ever (#358). A week without it and
+    /// the body wants it - fat and flesh, which no plant gives.
+    #[serde(default)]
+    pub last_ate_meat: Option<u32>,
+    /// Where this one has lately seen game worth hunting, and when (#358):
+    /// a herd keeps to its ground, so a place game was seen is a place to
+    /// go hunting.
+    #[serde(default)]
+    pub game_seen: Vec<((i32, i32), u32)>,
     /// How used this one has got to each kind of beast, by name, from
     /// nought (a stranger) to nearly one (part of the furniture).
     ///
@@ -2121,6 +2130,8 @@ impl Agent {
             pots_broken: 0,
             salt_in_the_body: Agent::a_body_full_of_salt(),
             journey: None,
+            last_ate_meat: None,
+            game_seen: Vec::new(),
             familiar_with: std::collections::BTreeMap::new(),
             last_evening_watching_ore: None,
             stepped_from: None,
@@ -4008,6 +4019,45 @@ impl Agent {
 
     /// And how many questions anybody keeps open at once.
     const AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS: usize = 4;
+
+    /// How long without meat before the body wants it (#358).
+    pub const A_WEEK_WITHOUT_MEAT: u32 = 7 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// Whether this one craves meat (#358): a week since the last of it -
+    /// counted from birth for somebody who never had any - or a body short
+    /// of salt, which flesh and blood carry.
+    pub fn craves_meat(&self, now: u32) -> bool {
+        if self.state.life_stage == LifeStage::Infant {
+            return false;
+        }
+        let since = now.saturating_sub(self.last_ate_meat.unwrap_or(0));
+        since >= Self::A_WEEK_WITHOUT_MEAT || self.craves_salt()
+    }
+
+    /// How many places game was seen this one keeps in mind.
+    pub const GAME_KEPT_IN_MIND: usize = 6;
+
+    /// How long a sighting of game is worth walking to: three days.
+    pub const GAME_STAYS_ABOUT: u32 = 3 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// Game seen at a place, now (#358): one sighting a stretch of ground,
+    /// the freshest kept.
+    pub fn saw_game_at(&mut self, at: (i32, i32), now: u32) {
+        const THE_SAME_GROUND: i32 = 20;
+        if let Some(seen) = self
+            .game_seen
+            .iter_mut()
+            .find(|(there, _)| (there.0 - at.0).abs().max((there.1 - at.1).abs()) <= THE_SAME_GROUND)
+        {
+            *seen = (at, now);
+            return;
+        }
+        self.game_seen.push((at, now));
+        if self.game_seen.len() > Self::GAME_KEPT_IN_MIND {
+            self.game_seen.sort_by_key(|(_, when)| std::cmp::Reverse(*when));
+            self.game_seen.truncate(Self::GAME_KEPT_IN_MIND);
+        }
+    }
 
     /// A body with all the salt it wants in it.
     pub fn a_body_full_of_salt() -> f32 {
@@ -9215,6 +9265,9 @@ impl Agent {
             .is_some_and(|food| food.preparation == crate::world::nutrition::PreparationState::Salted);
         let salt = if salted { 0.1 } else { Self::salt_in_a_mouthful_of(item_id) };
         self.salt_in_the_body = (self.salt_in_the_body + salt).min(1.0);
+        if crate::agents::storage_integration::id_to_item_type(item_id) == Some(crate::world::ItemType::Meat) {
+            self.last_ate_meat = Some(current_turn);
+        }
 
         let food_data = match food_data {
             Some(data) => data,
