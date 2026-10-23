@@ -544,7 +544,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // where it lies, skins wanted for a tent, a vessel made for a walk.
     // Up 5.3% to 1,074,317 for #353: hides that rot unless worked, rawhide
     // and tanned leather, the garments a skin makes, and hide bedding.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_074_317;
+    // Down 0.3% to 1,071,252 for #354: a young one left by a kill follows
+    // the hunter, kept beasts are fed, folded, milked and culled, and dung
+    // burns.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_071_252;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

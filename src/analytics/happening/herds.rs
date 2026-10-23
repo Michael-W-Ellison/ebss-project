@@ -53,7 +53,9 @@ impl Simulation {
         let near = Self::A_KEPT_BEAST_GRAZES_WITHIN;
 
         let mut seen: Vec<(uuid::Uuid, &'static str)> = Vec::new();
-        let mut rng = crate::core::dice::roll();
+        // Drawn only when a tame beast is out for the night, so that a world
+        // with nothing kept rolls exactly as it did
+        let mut rng: Option<rand::rngs::StdRng> = None;
         let world = &mut self.world;
         let what_it_gives: BTreeMap<String, Vec<String>> = world
             .animals
@@ -115,7 +117,9 @@ impl Simulation {
                     animal.position = (fold.at.x, fold.at.y);
                     animal.in_the_fold = true;
                     fold.dung += crate::world::Fold::WHAT_A_BEAST_LEAVES_IN_A_HALF_HOUR;
-                } else if animal.is_domesticated && rng.gen_bool(a_night_out) {
+                } else if animal.is_domesticated
+                    && rng.get_or_insert_with(crate::core::dice::roll).gen_bool(a_night_out)
+                {
                     Self::turned_loose(animal);
                 }
                 continue;
