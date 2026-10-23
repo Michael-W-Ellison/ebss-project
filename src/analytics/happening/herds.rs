@@ -9,8 +9,13 @@ impl Simulation {
     /// further, and comes to hand from here.
     pub(in crate::analytics) const A_KEPT_BEAST_GRAZES_WITHIN: i32 = 3;
 
+    /// How long a young one being raised waits for its keeper before it
+    /// begins to go back to the wild: two days.
+    pub(in crate::analytics) const A_YOUNG_ONE_WAITS: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
+
     /// How much tameness a young one being raised loses in a day nobody
-    /// feeds it. Taken at a fifth, it is gone in four days unfed.
+    /// feeds it, once its two days' grace is up. Taken at a fifth, it is
+    /// gone four days after that.
     pub(in crate::analytics) const WHAT_A_DAY_UNFED_TAKES_OFF: f32 = 0.05;
 
     /// How often a tame beast left out of a fold strays in the night: about
@@ -45,6 +50,7 @@ impl Simulation {
             .map(|agent| (agent.id, ((agent.state.position.0, agent.state.position.1), agent.fatigue.is_sleeping)))
             .collect();
         let edge = (self.world.grid.width as i32 - 1, self.world.grid.height as i32 - 1);
+        let now = self.current_turn;
         let a_turn_unfed = Self::WHAT_A_DAY_UNFED_TAKES_OFF
             / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
         let a_night_out = Self::A_NIGHT_OUT_STRAYS
@@ -94,7 +100,12 @@ impl Simulation {
                 continue;
             };
 
-            if !animal.is_domesticated {
+            // Two days' grace since it was last seen to before a young one
+            // begins to drift back to the wild: it has taken to its keeper,
+            // and keepers who were out hunting saw to it one evening in
+            // three. Without it, all sixteen taken in forty worlds ran off.
+            let seen_to = animal.fed_at.unwrap_or(0).max(animal.taken_at);
+            if !animal.is_domesticated && now.saturating_sub(seen_to) > Self::A_YOUNG_ONE_WAITS {
                 animal.tame_level -= a_turn_unfed;
                 if animal.tame_level <= 0.0 {
                     Self::turned_loose(animal);

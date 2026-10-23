@@ -2760,6 +2760,9 @@ pub struct Animal {
     /// Shut in a fold for the night, out of a wolf's reach (#354).
     #[serde(default)]
     pub in_the_fold: bool,
+    /// When a keeper took it in (#358), which its grace counts from.
+    #[serde(default)]
+    pub taken_at: u32,
 }
 
 impl Animal {
@@ -2811,6 +2814,7 @@ impl Animal {
             nursing_for: 0,
             fed_at: None,
             in_the_fold: false,
+            taken_at: 0,
         }
     }
 

@@ -121,6 +121,7 @@ impl Simulation {
                 }
                 let animal = self.world.animals.get_mut(animal_id).expect("looked at above");
                 animal.owner_id = Some(me);
+                animal.taken_at = turn_now;
                 animal.tame_level = animal.tame_level.max(Self::HOW_TAME_A_YOUNG_ONE_TAKEN_IS);
                 ActionResult::success()
                     .with_energy_cost(6.0)
@@ -225,6 +226,7 @@ impl Simulation {
         let here = self.population.agents[agent_index].state.position;
         let animal = self.world.animals.get_mut(&id).expect("found above");
         animal.owner_id = Some(me);
+        animal.taken_at = self.current_turn;
         animal.tame_level = animal.tame_level.max(Self::HOW_TAME_A_YOUNG_ONE_TAKEN_IS);
         animal.position = (here.0, here.1);
         true

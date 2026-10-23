@@ -332,3 +332,28 @@ fn a_young_one_tended_without_fodder_stays() {
         assert!(tended.success, "{:?}", tended.message);
     }
 }
+
+/// A young one taken in waits two days for its keeper before it begins to
+/// drift back to the wild.
+#[test]
+fn a_young_one_waits_two_days_for_its_keeper() {
+    let mut simulation = a_keeper();
+    let keeper = simulation.population.agents[0].id;
+    let species = simulation.world.animals.get_species("sheep").unwrap().clone();
+    let lamb = a_beast(&mut simulation, "sheep", (35, 30), false);
+    assert!(simulation.a_young_one_left_behind(0, &species, (35, 30)));
+    let start = simulation.world.animals.get(&lamb).unwrap().tame_level;
+    let half_hours = crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
+    for _ in 0..(2 * half_hours) {
+        simulation.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
+        simulation.the_kept_stay_by_their_keepers();
+    }
+    let lamb_now = simulation.world.animals.get(&lamb).unwrap();
+    assert_eq!(lamb_now.owner_id, Some(keeper));
+    assert_eq!(lamb_now.tame_level, start, "two days and it has not begun to drift");
+    for _ in 0..(5 * half_hours) {
+        simulation.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
+        simulation.the_kept_stay_by_their_keepers();
+    }
+    assert_eq!(simulation.world.animals.get(&lamb).unwrap().owner_id, None, "a week untended and it is gone");
+}

@@ -567,7 +567,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // a quarter as often.
     // Up 0.5% to 945,540 for #358's husbandry correction: a young one taken
     // from a kill is tended without fodder when there is none to give it.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 945_540;
+    // Up 2.1% to 965,120 for #358's second husbandry correction: a young
+    // one taken in waits two days for its keeper before it drifts.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 965_120;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
