@@ -22,9 +22,10 @@ impl Simulation {
     /// gone four days after that.
     pub(in crate::analytics) const WHAT_A_DAY_UNFED_TAKES_OFF: f32 = 0.05;
 
-    /// How often a tame beast left out of a fold strays in the night: about
-    /// one night in thirty.
-    pub(in crate::analytics) const A_NIGHT_OUT_STRAYS: f64 = 1.0 / 30.0;
+    /// How often a tame beast left out of a fold, and apart from its
+    /// sleeping keeper, strays in the night: about one night in a hundred
+    /// and twenty.
+    pub(in crate::analytics) const A_NIGHT_OUT_STRAYS: f64 = 1.0 / 120.0;
 
     /// How much dung lies in a fold before its keeper sees what it is good
     /// for (`do:MuckOut`).
@@ -102,7 +103,7 @@ impl Simulation {
                 continue;
             };
             let Some(&(at, asleep)) = keepers.get(&keeper) else {
-                Self::turned_loose(animal);
+                Self::turned_loose(animal, "its keeper is dead");
                 continue;
             };
 
@@ -128,7 +129,7 @@ impl Simulation {
                 } else if now.saturating_sub(seen_to) > Self::A_YOUNG_ONE_WAITS {
                     animal.tame_level -= a_turn_unfed;
                     if animal.tame_level <= 0.0 {
-                        Self::turned_loose(animal);
+                        Self::turned_loose(animal, "drifted from its keeper");
                         continue;
                     }
                 }
@@ -150,9 +151,14 @@ impl Simulation {
                     animal.in_the_fold = true;
                     fold.dung += crate::world::Fold::WHAT_A_BEAST_LEAVES_IN_A_HALF_HOUR;
                 } else if animal.is_domesticated
+                    && (animal.position.0 - at.0).abs().max((animal.position.1 - at.1).abs()) > near
                     && rng.get_or_insert_with(crate::core::dice::roll).gen_bool(a_night_out)
                 {
-                    Self::turned_loose(animal);
+                    // Only one left apart from its sleeping keeper strays: one
+                    // lying by the fire with its people does not (#360). At
+                    // one night in thirty for every beast out of a fold,
+                    // forty-four tame beasts of fifty-odd were lost.
+                    Self::turned_loose(animal, "strayed in the night");
                 }
                 continue;
             }
@@ -191,7 +197,7 @@ impl Simulation {
     }
 
     /// A kept beast nobody keeps any more goes back to the wild.
-    fn turned_loose(animal: &mut crate::environment::fauna::Animal) {
+    fn turned_loose(animal: &mut crate::environment::fauna::Animal, _why: &str) {
         animal.owner_id = None;
         animal.is_domesticated = false;
         animal.tame_level = 0.0;

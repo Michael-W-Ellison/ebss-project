@@ -63,6 +63,12 @@ impl Simulation {
         if kept.len() >= Self::A_HERD_WORTH_BUILDING {
             return None;
         }
+        // Two of a kind and a keeper sticks to that kind, so that what is
+        // kept is a pair that breeds and not a beast of each (#360)
+        let a_kind_to_keep_to = kept
+            .iter()
+            .copied()
+            .find(|kind| kept.iter().filter(|other| *other == kind).count() >= 2);
         let sight = Self::how_far_a_hunter_looks(agent);
         let (id, at, _) = self
             .world
@@ -76,6 +82,7 @@ impl Simulation {
                     .is_some_and(|species| species.can_domesticate)
             })
             .filter(|animal| self.world.can_walk_between((here.0, here.1), animal.position))
+            .filter(|animal| a_kind_to_keep_to.is_none_or(|kind| animal.species_id == kind))
             .map(|animal| {
                 let far = (animal.position.0 - here.0).abs().max((animal.position.1 - here.1).abs());
                 let a_kind_not_kept = !kept.contains(&animal.species_id.as_str());

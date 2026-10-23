@@ -110,9 +110,22 @@ edit(
 
 edit(
     "src/analytics/happening/herds.rs",
-    "    fn turned_loose(animal: &mut crate::environment::fauna::Animal) {\n",
-    "    fn turned_loose(animal: &mut crate::environment::fauna::Animal) {\n"
-    "        eprintln!(\"HERDX lost {}\", if animal.is_domesticated { \"tame\" } else { \"raising\" });\n",
+    "    fn turned_loose(animal: &mut crate::environment::fauna::Animal, _why: &str) {\n",
+    "    fn turned_loose(animal: &mut crate::environment::fauna::Animal, _why: &str) {\n"
+    "        eprintln!(\"HERDX lost {} {}\", if animal.is_domesticated { \"tame\" } else { \"raising\" }, _why.replace(' ', \"_\"));\n",
+)
+
+edit(
+    "src/environment/fauna.rs",
+    "                        offspring.owner_id = kept_by;\n",
+    "                        offspring.owner_id = kept_by;\n"
+    "                        eprintln!(\"HERDX born {}\", species_id);\n",
+)
+
+edit(
+    "src/analytics/happening/herds.rs",
+    "            if !animal.is_alive() {\n                continue;\n            }\n            animal.in_the_fold = false;\n",
+    "            if !animal.is_alive() {\n                if animal.owner_id.take().is_some() { eprintln!(\"HERDX died {}\", animal.species_id); }\n                continue;\n            }\n            animal.in_the_fold = false;\n",
 )
 
 edit(
