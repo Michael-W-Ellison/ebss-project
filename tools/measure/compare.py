@@ -6,7 +6,7 @@ Pairs the settlements both runs finished, prints the totals and a paired t
 for births, deaths, hunger deaths, survivors and camp moves - smooth maps,
 scattered maps and all - and then the counter lines (KEEPX, SHELX, CAREX,
 GAPX, FISHX, LEATHX,
-HERDX, POTX) and death causes of the second run.
+HERDX, POTX, SALTX) and death causes of the second run.
 """
 import collections
 import glob
@@ -33,7 +33,7 @@ def read(d):
                 r["causes"][cause] += 1
                 if cause == "hunger":
                     r["hungerdeaths"] += 1
-            elif line[:5] in ("KEEPX", "SHELX", "CAREX", "GAPX ", "FISHX", "LEATH", "HERDX", "POTX "):
+            elif line[:5] in ("KEEPX", "SHELX", "CAREX", "GAPX ", "FISHX", "LEATH", "HERDX", "POTX ", "SALTX"):
                 r["counted"][line.strip()] += 1
         out[os.path.basename(f)[:-4]] = r
     return out

@@ -5,7 +5,7 @@
 Adds eprintln! lines the run script greps for: DEATH (each death and its
 cause), MOVECAMP (each camp move), and one line per successful action of
 interest (KEEPX food keeping, SHELX shelter, CAREX care and water, GAPX
-salt, bowls, boiling, FISHX fishing, LEATHX hides and garments, HERDX kept beasts, POTX pots), plus GAPX windburn per turn of it.
+salt, bowls, boiling, FISHX fishing, LEATHX hides and garments, HERDX kept beasts, POTX pots, SALTX salt), plus GAPX windburn per turn of it.
 Each patch is skipped with a note where the tree does not have its anchor,
 so the same script serves older builds.
 """
@@ -126,3 +126,31 @@ edit(
     "            let stewed = self.stewing_a_batch(agent_index, food_type, fire_id);\n            if stewed.success {\n"
     "                eprintln!(\"POTX stew\");\n",
 )
+
+edit(
+    "src/agents/agent.rs",
+    "            self.salt_in_the_body = (self.salt_in_the_body + Self::WHAT_A_PINCH_PUTS_BACK).min(1.0);\n",
+    "            self.salt_in_the_body = (self.salt_in_the_body + Self::WHAT_A_PINCH_PUTS_BACK).min(1.0);\n"
+    "            eprintln!(\"SALTX lick\");\n",
+)
+
+edit(
+    "src/agents/agent.rs",
+    "        if self.salt_in_the_body <= 0.0 {\n            self.take_damage(",
+    "        if self.salt_in_the_body <= 0.0 {\n            eprintln!(\"SALTX without\");\n            self.take_damage(",
+)
+
+edit(
+    "src/agents/agent.rs",
+    "        let salt = if salted { 0.1 } else { Self::salt_in_a_mouthful_of(item_id) };\n",
+    "        let salt = if salted { 0.1 } else { Self::salt_in_a_mouthful_of(item_id) };\n"
+    "        if self.craves_salt() { eprintln!(\"SALTX craving_meal\"); }\n",
+)
+
+for what in ("salt: gathered near", "salt: set out on a journey", "journey: given up", "journey: home again", "journey: turned for home"):
+    counted = what.replace(": ", "_").replace(" ", "_")
+    edit(
+        "src/analytics/wanting/journey.rs",
+        '.entry("' + what + '".to_string())',
+        '.entry({ eprintln!("SALTX ' + counted + '"); "' + what + '".to_string() })',
+    )
