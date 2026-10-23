@@ -38,6 +38,58 @@ impl Simulation {
             .filter(move |animal| animal.is_alive() && animal.owner_id == Some(agent.id))
     }
 
+    /// How many beasts a keeper goes on catching young ones until they keep.
+    pub(in crate::analytics) const A_HERD_WORTH_BUILDING: usize = 8;
+
+    /// A young one to catch, by somebody who has raised one and keeps fewer
+    /// than a herd (#360): one of a kind that can be kept, in sight and not
+    /// anybody's, the kinds already kept first so that they breed. Caught
+    /// when it is to hand, closed on when it is not.
+    ///
+    /// **One beast is not a herd.** A young one left by a kill came now and
+    /// then, a dozen in forty worlds over two years; a people does not wait
+    /// for the next. Somebody who has raised one goes out after more, and
+    /// two of a kind kept together breed, and what a kept mother bears is
+    /// kept.
+    pub(in crate::analytics) fn a_young_one_to_catch(
+        &self,
+        agent: &crate::agents::Agent,
+        here: (i32, i32, i32),
+    ) -> Option<Action> {
+        if !agent.knows_how_to_do("Tame") {
+            return None;
+        }
+        let kept: Vec<&str> = self.my_beasts(agent).map(|animal| animal.species_id.as_str()).collect();
+        if kept.len() >= Self::A_HERD_WORTH_BUILDING {
+            return None;
+        }
+        let sight = Self::how_far_a_hunter_looks(agent);
+        let (id, at, _) = self
+            .world
+            .get_animals_in_radius((here.0, here.1), sight)
+            .into_iter()
+            .filter(|animal| animal.is_alive() && !animal.is_mature() && !animal.is_kept())
+            .filter(|animal| {
+                self.world
+                    .animals
+                    .get_species(&animal.species_id)
+                    .is_some_and(|species| species.can_domesticate)
+            })
+            .filter(|animal| self.world.can_walk_between((here.0, here.1), animal.position))
+            .map(|animal| {
+                let far = (animal.position.0 - here.0).abs().max((animal.position.1 - here.1).abs());
+                let a_kind_not_kept = !kept.contains(&animal.species_id.as_str());
+                (animal.id, animal.position, (a_kind_not_kept, far))
+            })
+            .min_by_key(|(id, _, rank)| (*rank, *id))?;
+        let far = (at.0 - here.0).abs().max((at.1 - here.1).abs());
+        if far <= Self::A_KEPT_BEAST_COMES_TO_HAND {
+            Some(Action::Tame { animal_id: id, food_type: None })
+        } else {
+            Some(Action::Move { target: (at.0, at.1, here.2) })
+        }
+    }
+
     /// What there is to do for the beasts in the evening, by their keeper
     /// (#354): a young one being raised fed, a hungry tame one fed, milk or
     /// wool taken that is ready, a fold put up where they will sleep, and
@@ -53,7 +105,7 @@ impl Simulation {
                 <= Self::A_KEPT_BEAST_COMES_TO_HAND
         };
         let mine: Vec<&Animal> = self.my_beasts(agent).filter(to_hand).collect();
-        if mine.is_empty() && self.world.folds.is_empty() {
+        if mine.is_empty() && self.world.folds.is_empty() && !agent.knows_how_to_do("Tame") {
             return None;
         }
 
@@ -118,7 +170,9 @@ impl Simulation {
                 return Some(Action::MuckOut);
             }
         }
-        None
+
+        // And another young one to the herd, if one is in sight
+        self.a_young_one_to_catch(agent, here)
     }
 
     /// One of this one's own beasts to kill for its meat (#354), if the herd

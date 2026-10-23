@@ -376,3 +376,39 @@ fn a_young_one_takes_to_its_keeper() {
     }
     assert_eq!(simulation.world.animals.get(&kid).unwrap().owner_id, None, "a week apart and it is gone");
 }
+
+/// Somebody who has raised one goes after more: a young one of a kind that
+/// can be kept, in sight, closed on and caught, the kinds already kept first;
+/// and no more once there is a herd.
+#[test]
+fn a_keeper_catches_young_ones_for_a_herd() {
+    let mut simulation = a_keeper();
+    let here = (30, 30, 0);
+    let ask = |simulation: &Simulation| simulation.a_young_one_to_catch(&simulation.population.agents[0], here);
+    let kid = a_beast(&mut simulation, "goat", (45, 30), false);
+    assert_eq!(ask(&simulation), None, "nobody here has raised one");
+
+    simulation.population.agents[0].found_out_how_to("do:Tame");
+    assert!(matches!(ask(&simulation), Some(Action::Move { target }) if (target.0, target.1) == (45, 30)));
+
+    // A kind already kept comes first
+    a_kept_beast(&mut simulation, "sheep", true);
+    let lamb = a_beast(&mut simulation, "sheep", (50, 30), false);
+    assert!(matches!(ask(&simulation), Some(Action::Move { target }) if (target.0, target.1) == (50, 30)));
+
+    // To hand, it is caught
+    simulation.world.animals.get_mut(&lamb).unwrap().position = (31, 31);
+    let catch = ask(&simulation);
+    assert!(matches!(catch, Some(Action::Tame { animal_id, .. }) if animal_id == lamb), "got {catch:?}");
+    assert!(simulation.execute_action(&catch.unwrap(), 0).success);
+    assert_eq!(simulation.world.animals.get(&lamb).unwrap().owner_id, Some(simulation.population.agents[0].id));
+
+    // A grown one is not caught, and a herd wants no more
+    simulation.world.animals.get_mut(&kid).unwrap().age = 1_000_000;
+    assert_eq!(ask(&simulation), None);
+    a_beast(&mut simulation, "goat", (40, 30), false);
+    for _ in 0..6 {
+        a_kept_beast(&mut simulation, "goat", true);
+    }
+    assert_eq!(ask(&simulation), None, "eight is a herd");
+}
