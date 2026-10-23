@@ -873,8 +873,10 @@ impl Simulation {
     pub(in crate::analytics) const WHAT_SEEPS_INTO_WATER: i32 = 3;
 
     /// How often a drink drawn beside the foulest ground there is makes
-    /// somebody ill: one in twenty-five.
-    pub(in crate::analytics) const HOW_OFTEN_FOUL_WATER_TELLS: f64 = 0.04;
+    /// somebody ill: one in a hundred. It was one in twenty-five, and with a
+    /// drink several times a day that laid people up 5,630 times in forty
+    /// worlds over two years - most of a fortnight a year each (#357).
+    pub(in crate::analytics) const HOW_OFTEN_FOUL_WATER_TELLS: f64 = 0.01;
 
     /// `Action::Hunt`.
     pub(in crate::analytics) fn hunting(&mut self, animal_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {

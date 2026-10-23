@@ -392,10 +392,23 @@ impl Simulation {
             // Out of somebody else's store is theft (#357), found out the
             // next time its owner opens it; one's own opening finds out
             // whoever was in it before.
+            //
+            // **Not a campmate's.** A band shares what it puts by, and
+            // taking out of the pit somebody you camp with dug is what a pit
+            // at a camp is for. Booked as theft, every band robbed itself
+            // twelve thousand times over forty worlds and nursed the grudges
+            // (#357). Theft is out of a pit dug by somebody living elsewhere.
             let me = self.population.agents[agent_index].id;
             let whose = self.world.pit_at(here).map(|pit| self.population.agents[agent_index].may_i_use(&pit.belongs));
+            let a_campmates = |owner: uuid::Uuid| {
+                let mine = Self::where_this_one_lives(&self.population.agents[agent_index]);
+                self.population.agents.iter().find(|agent| agent.id == owner).is_some_and(|them| {
+                    let theirs = Self::where_this_one_lives(them);
+                    (theirs.0 - mine.0).abs().max((theirs.1 - mine.1).abs()) <= Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS
+                })
+            };
             match whose {
-                Some(crate::world::belonging::Access::NotMine(_)) => {
+                Some(crate::world::belonging::Access::NotMine(owner)) if !a_campmates(owner) => {
                     let already = self.world.stores_robbed.get(&here).map_or(0, |(_, n)| *n);
                     self.world.stores_robbed.insert(here, (me, already + taking));
                 }

@@ -562,7 +562,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Up to 991,004 for #358's correction: plants carry a little salt, going
     // without it costs a quarter what it did, and meat is not craved for the
     // salt.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 991_004;
+    // Down 5.0% to 941,071 for #357's correction: vermin take a third of
+    // what they did, a campmate's store is not theft, and foul water sickens
+    // a quarter as often.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 941_071;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

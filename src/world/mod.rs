@@ -511,14 +511,21 @@ impl Pit {
         }
     }
 
-    /// A fiftieth a day out of an open hole.
-    pub const VERMIN_IN_AN_OPEN_HOLE: f32 = 0.02;
-    /// Under earth, three in a thousand: a quarter of a winter's store.
-    pub const VERMIN_UNDER_EARTH: f32 = 0.003;
+    /// A hundred and fiftieth a day out of an open hole.
+    ///
+    /// **A third of what these first were.** At three in a thousand a day
+    /// under earth, vermin took twenty-one times what rotted across forty
+    /// worlds over two years (#357's measurement): 567,199 units against
+    /// 26,890. A tenth of a percent a day is about a tenth of a season's
+    /// store, which is what a pit loses to them where nothing is done about
+    /// it.
+    pub const VERMIN_IN_AN_OPEN_HOLE: f32 = 0.0067;
+    /// Under earth, one in a thousand.
+    pub const VERMIN_UNDER_EARTH: f32 = 0.001;
     /// With a basket or a bowl in the way, half that.
-    pub const VERMIN_PAST_A_LINING: f32 = 0.0015;
+    pub const VERMIN_PAST_A_LINING: f32 = 0.0005;
     /// In a fired pot, next to nothing.
-    pub const VERMIN_PAST_A_POT: f32 = 0.0002;
+    pub const VERMIN_PAST_A_POT: f32 = 0.00007;
     /// How near a midden brings more of them.
     pub const A_MIDDEN_DRAWS_VERMIN_FROM: u32 = 12;
 

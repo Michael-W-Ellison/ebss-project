@@ -124,7 +124,7 @@ fn water_by_fouled_ground_sickens() {
     assert!(simulation.world.how_foul_about((101, 100), 3) > 0.9);
 
     let mut ill = 0;
-    for _ in 0..200 {
+    for _ in 0..1000 {
         let agent = &mut simulation.population.agents[0];
         agent.state.ailing = None;
         simulation.execute_action(&Action::Gather { resource_type: "water".to_string() }, 0);
@@ -132,7 +132,7 @@ fn water_by_fouled_ground_sickens() {
             ill += 1;
         }
     }
-    assert!((3..30).contains(&ill), "one drink in twenty-five or so: {ill} of 200");
+    assert!((3..30).contains(&ill), "one drink in a hundred or so: {ill} of 1000");
 }
 
 /// Somebody laid up by filth moves the camp off fouled ground to clean
@@ -224,8 +224,8 @@ fn a_spare_pot_lines_a_store() {
     assert_eq!(pit.what_vermin_get_at(), Pit::VERMIN_PAST_A_POT);
 }
 
-/// Taking from somebody else's store is theft, found out when its owner
-/// next opens it.
+/// Taking from the store of somebody living at another camp is theft,
+/// found out when its owner next opens it; a campmate's is not.
 #[test]
 fn taking_from_anothers_store_is_found_out() {
     let mut simulation = one_person();
@@ -240,6 +240,10 @@ fn taking_from_anothers_store_is_found_out() {
         belongs: Belongs::To(owner),
     });
     let take = Action::PickUp { what: "grain".to_string() };
+    assert!(simulation.execute_action(&take, 1).success);
+    assert!(simulation.world.stores_robbed.is_empty(), "a campmate's store is shared");
+
+    simulation.population.agents[1].hearth = Some((200, 200));
     assert!(simulation.execute_action(&take, 1).success);
     assert_eq!(simulation.world.stores_robbed.get(&Position::new(100, 100)).map(|(who, _)| *who), Some(thief));
 
