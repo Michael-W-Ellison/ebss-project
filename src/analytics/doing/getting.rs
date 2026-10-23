@@ -596,6 +596,20 @@ impl Simulation {
                             .with_message("Drank salt water".to_string());
                     }
 
+                    // Water drawn beside fouled ground carries the fouling
+                    // in it (#357): a camp living on its own spring sickens
+                    // off it.
+                    let drawn_at = self.world.resources[resource_index].position;
+                    let foul = self.world.how_foul_about((drawn_at.x, drawn_at.y), Self::WHAT_SEEPS_INTO_WATER);
+                    let agent = &mut self.population.agents[agent_index];
+                    if foul > 0.0 && !agent.is_ailing() && {
+                        use rand::Rng;
+                        rng.gen_bool((Self::HOW_OFTEN_FOUL_WATER_TELLS * foul as f64).clamp(0.0, 1.0))
+                    } {
+                        agent.taken_ill_with(crate::agents::Agent::OFF_FOUL_WATER, 0.3 + 0.4 * foul, self.current_turn);
+                        agent.what_filth_teaches();
+                    }
+
                     // Fill containers if agent has any
                     let filled = agent.inventory.fill_containers(harvested as f32);
 
@@ -854,6 +868,13 @@ impl Simulation {
             ActionResult::failure(format!("No {} sources nearby", resource_type))
         }
     }
+
+    /// How far from where water is drawn fouled ground seeps into it (#357).
+    pub(in crate::analytics) const WHAT_SEEPS_INTO_WATER: i32 = 3;
+
+    /// How often a drink drawn beside the foulest ground there is makes
+    /// somebody ill: one in twenty-five.
+    pub(in crate::analytics) const HOW_OFTEN_FOUL_WATER_TELLS: f64 = 0.04;
 
     /// `Action::Hunt`.
     pub(in crate::analytics) fn hunting(&mut self, animal_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {

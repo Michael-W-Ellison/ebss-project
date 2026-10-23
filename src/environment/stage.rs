@@ -665,7 +665,10 @@ impl Path {
                 ],
                 standing: Standing::Stands(
                     "waste that can be smelled, avoided and learned from, and ground that \
-                     takes what is dropped on it back into the soil",
+                     takes what is dropped on it back into the soil; a camp used too long \
+                     fouls its ground and the water beside it, vermin get into stores and \
+                     scavengers come to what is left lying, and the midden that answers it \
+                     is Stage 1 and found out",
                 ),
             },
 

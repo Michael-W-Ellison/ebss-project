@@ -232,6 +232,11 @@ pub enum Action {
     Slaughter {
         animal_id: uuid::Uuid,
     },
+    /// Set aside a place for the camp's refuse, away from where it sleeps
+    /// and draws water (#357).
+    StartMidden,
+    /// Dig a latrine pit beside the midden (#357).
+    DigLatrine,
     /// Harvest a plant (crop or wild)
     HarvestPlant {
         plant_id: uuid::Uuid,
@@ -430,6 +435,7 @@ impl Action {
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
             Action::PutUpFold | Action::MuckOut => Some(DriveType::Utility),
+            Action::StartMidden | Action::DigLatrine => Some(DriveType::Protection),
             Action::Slaughter { .. } => Some(DriveType::Hunger),
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather

@@ -491,6 +491,7 @@ impl Simulation {
             Action::Tame { .. } => Some(ActionType::Social), // Taming requires social skills
             Action::CollectAnimalProduct { .. } => Some(ActionType::Crafting), // Animal husbandry
             Action::PutUpFold | Action::MuckOut => Some(ActionType::Farming),
+            Action::StartMidden | Action::DigLatrine => Some(ActionType::Building),
             Action::Slaughter { .. } => Some(ActionType::Combat), // As a hunt is
             Action::HarvestPlant { .. } => Some(ActionType::Crafting), // Plant farming
             Action::Cook { .. } => Some(ActionType::Cooking),

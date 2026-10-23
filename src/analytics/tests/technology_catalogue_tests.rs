@@ -98,6 +98,8 @@ fn every_action() -> BTreeSet<String> {
         Action::PutUpFold,
         Action::MuckOut,
         Action::Slaughter { animal_id: nobody },
+        Action::StartMidden,
+        Action::DigLatrine,
         Action::SeekShelter,
         Action::LightFire,
         Action::Cook { food_type: s() },

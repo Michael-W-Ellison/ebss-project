@@ -5032,6 +5032,9 @@ name = "Designated defecation area away from camp"
 path = "waste_management_and_sanitization"
 stage = 1
 role = "technique"
+model = ["do:StartMidden"]
+same_as = ["waste_management_and_sanitization.1.waste_heaps_placed_downhill_downwind"]
+note = "The same place set aside: the model's midden takes leavings and refuse alike."
 
 [[tech]]
 id = "waste_management_and_sanitization.1.separate_sleeping_cooking_and_butchery_zones"
@@ -5046,6 +5049,8 @@ name = "Waste heaps placed downhill/downwind"
 path = "waste_management_and_sanitization"
 stage = 1
 role = "technique"
+model = ["do:StartMidden"]
+note = "Found out by somebody laid up twice by foul ground or foul water: the camp's refuse and leavings go to one place a midden's distance from the hearth, away from water, rather than where they fall (#357)."
 
 [[tech]]
 id = "waste_management_and_sanitization.1.burial_of_some_refuse"
@@ -5067,6 +5072,8 @@ name = "Latrine pits"
 path = "waste_management_and_sanitization"
 stage = 2
 role = "technique"
+model = ["do:DigLatrine"]
+note = "Found out by somebody who keeps a midden and has settled to farming, when laid up by filth again: a pit by the midden takes the camp's leavings under the ground and fouls nothing on top until it is full (#357)."
 
 [[tech]]
 id = "waste_management_and_sanitization.2.refuse_pits"
@@ -5088,6 +5095,9 @@ name = "Midden heaps"
 path = "waste_management_and_sanitization"
 stage = 2
 role = "technique"
+model = ["do:StartMidden"]
+same_as = ["waste_management_and_sanitization.1.waste_heaps_placed_downhill_downwind"]
+note = "The midden itself. It fouls its own ground, smells, draws vermin to stores near it and scavengers to the camp, and grows what was thrown on it (#357)."
 
 [[tech]]
 id = "waste_management_and_sanitization.2.burial_or_covering_of_carcasses_offal"

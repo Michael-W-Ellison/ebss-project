@@ -3414,6 +3414,28 @@ impl Agent {
     /// And off living on fouled ground.
     pub const OFF_FOUL_GROUND: &'static str = "foul ground";
 
+    /// Water drawn beside fouled ground (#357).
+    pub const OFF_FOUL_WATER: &'static str = "foul water";
+
+    /// How many times laid up by filth before somebody sees where it comes
+    /// from and keeps the refuse in one place away from the camp (#357).
+    pub const ILL_FROM_FILTH_BEFORE_A_MIDDEN: u32 = 2;
+
+    /// What being laid up by filth teaches (#357): enough of it, and a
+    /// midden; with a midden and a people settled, a latrine.
+    pub fn what_filth_teaches(&mut self) {
+        let laid_up = self.times_laid_up.get(Self::OFF_FOUL_GROUND).copied().unwrap_or(0)
+            + self.times_laid_up.get(Self::OFF_FOUL_WATER).copied().unwrap_or(0);
+        if laid_up >= Self::ILL_FROM_FILTH_BEFORE_A_MIDDEN {
+            self.found_out_how_to("do:StartMidden");
+        }
+        if self.found_out.contains("do:StartMidden")
+            && self.practices.is_established(crate::agents::practices::Practice::Farming)
+        {
+            self.found_out_how_to("do:DigLatrine");
+        }
+    }
+
     /// A chill: cold and wet, for long enough, with no roof.
     ///
     /// The winter had nothing to do with illness in this model until the

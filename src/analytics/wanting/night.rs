@@ -141,6 +141,18 @@ impl Simulation {
         if let Some(chore) = self.the_beasts_to_see_to(agent, here) {
             return Some(chore);
         }
+        // The refuse given a place, and a latrine dug by it (#357)
+        let home = Self::where_this_one_lives(agent);
+        let home = (home.0, home.1);
+        if agent.knows_how_to_do("StartMidden") && self.world.midden_serving(home).is_none() {
+            return Some(Action::StartMidden);
+        }
+        if agent.knows_how_to_do("DigLatrine")
+            && self.world.midden_serving(home).is_some()
+            && self.world.latrine_serving(home).is_none()
+        {
+            return Some(Action::DigLatrine);
+        }
         // The skins, which will not wait a week (#353)
         if let Some(work) = self.a_hide_to_work(agent, here) {
             return Some(work);
@@ -434,6 +446,7 @@ impl Simulation {
                     (Action::Cook { .. }, _) => "night: cooked supper",
                     (Action::LightFire, _) => "night: lit the evening fire",
                     (Action::Work { to, .. }, _) if to == "clay" || to == "claypot" => "night: made a pot",
+                    (Action::StartMidden | Action::DigLatrine, _) => "night: saw to the refuse",
                     (Action::Gather { resource_type }, _) if resource_type == "clay" => "night: fetched clay",
                     (
                         Action::Tame { .. }

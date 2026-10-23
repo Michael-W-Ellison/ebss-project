@@ -1182,30 +1182,31 @@ impl Simulation {
                 .map(|d| d.value > 0.6)
                 .unwrap_or(false)
         } {
-            // Calculate storehouse contents
+            // Only somebody standing at a storehouse looks in at one, and
+            // what is counted is what is in that one (#357)
+            let Some(store) = self.the_store_i_am_standing_at(agent_index) else {
+                return;
+            };
             let (storehouse_food, storehouse_resources) = {
                 use crate::world::ItemType;
-                
-
-                let food_types = vec![
-                    ItemType::Food, ItemType::Bread, ItemType::Cheese,
-                    ItemType::Meat, ItemType::Fish, ItemType::Honey, ItemType::Ale,
-                ];
-                let resource_types = vec![
+                let resource_types = [
                     ItemType::Wood, ItemType::Stone, ItemType::Iron,
                     ItemType::Clay, ItemType::Sand, ItemType::Coal,
                 ];
-
-                let food_total: u32 = food_types.iter()
-                    .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                let held = self.world.pit_at(store).map(|pit| pit.holds.clone()).unwrap_or_default();
+                let food_total: u32 = held
+                    .iter()
+                    .filter(|item| crate::world::nutrition::is_this_food(&item.item_id))
                     .map(|item| item.quantity)
                     .sum();
-
-                let resource_total: u32 = resource_types.iter()
-                    .filter_map(|&item| self.world.storehouse_inventory.items.get(&item))
+                let resource_total: u32 = held
+                    .iter()
+                    .filter(|item| {
+                        crate::agents::storage_integration::id_to_item_type(&item.item_id)
+                            .is_some_and(|kind| resource_types.contains(&kind))
+                    })
                     .map(|item| item.quantity)
                     .sum();
-
                 (food_total, resource_total)
             };
 

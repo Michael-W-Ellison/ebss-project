@@ -519,6 +519,18 @@ impl Simulation {
             return None;
         }
 
+        // **A camp that has fouled its ground is moved off it** (#357), by
+        // somebody who has been laid up by the filth: a forager's answer to
+        // dirt is to leave it. A people that stays has to keep it in one
+        // place instead.
+        if !self.moved_lately(agent) && self.this_camp_is_fouled(agent) {
+            let lives = Self::where_this_one_lives(agent);
+            if let Some(there) = self.somewhere_clean_to_camp(agent, (lives.0, lives.1, agent_position.2)) {
+                self.propose_moving_camp(agent, (there.x, there.y), None, "fouled ground");
+                return Some(Action::Move { target: (there.x, there.y, agent_position.2) });
+            }
+        }
+
         // **A herd that has eaten the place down is moved on** (#354).
         // Herds keep their people moving, not settled: only a field holds a
         // people in one place. Whoever lives with the keeper comes too.
@@ -568,6 +580,45 @@ impl Simulation {
         Some(Action::Move {
             target: (there.x, there.y, agent_position.2),
         })
+    }
+
+    /// How many foul tiles about where somebody lives make the camp fouled.
+    pub(in crate::analytics) const A_FOULED_CAMP: u32 = 8;
+
+    /// How far about a camp its fouling is counted.
+    pub(in crate::analytics) const HOW_FAR_A_CAMP_FOULS: i32 = 6;
+
+    /// Whether the camp this one lives at has fouled its ground, as somebody
+    /// who has been laid up by filth sees it (#357).
+    pub(in crate::analytics) fn this_camp_is_fouled(&self, agent: &crate::agents::Agent) -> bool {
+        use crate::agents::Agent;
+        let laid_up = agent.times_laid_up.get(Agent::OFF_FOUL_GROUND).copied().unwrap_or(0)
+            + agent.times_laid_up.get(Agent::OFF_FOUL_WATER).copied().unwrap_or(0);
+        if laid_up == 0 {
+            return false;
+        }
+        let lives = Self::where_this_one_lives(agent);
+        self.world.foul_tiles_within((lives.0, lives.1), Self::HOW_FAR_A_CAMP_FOULS) >= Self::A_FOULED_CAMP
+    }
+
+    /// Somewhere to camp off fouled ground: the place with the most food
+    /// standing that this one knows of, a move away and clean about.
+    pub(in crate::analytics) fn somewhere_clean_to_camp(
+        &self,
+        agent: &crate::agents::Agent,
+        from: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        let here = crate::world::Position::new(from.0, from.1);
+        self.nodes_known_to(agent, here, Self::HOW_FAR_A_PEOPLE_WILL_MOVE)
+            .filter(|resource| resource.amount > 0)
+            .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
+            .filter(|resource| here.distance_to(&resource.position) >= Self::FAR_ENOUGH_TO_BE_WORTH_THE_WALK as u32)
+            .filter(|resource| {
+                self.world.foul_tiles_within((resource.position.x, resource.position.y), Self::HOW_FAR_A_CAMP_FOULS)
+                    < Self::A_FOULED_CAMP / 2
+            })
+            .max_by_key(|resource| (resource.amount, resource.position.x, resource.position.y))
+            .map(|resource| resource.position)
     }
 
     /// Ground clearly better than this, for a people that cannot make food

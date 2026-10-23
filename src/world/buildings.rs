@@ -715,7 +715,20 @@ impl BuildingType {
     }
 
     /// Get the production interval in turns (0 means no production)
+    ///
+    /// **Nothing produces on its own** (#357). Every one of these turned out
+    /// food, iron or stone from nothing - a farm ten food a hundred turns
+    /// with no field, a pen five with no beasts, a tannery "leather" that was
+    /// food - for anybody standing within five tiles. Food comes from fields,
+    /// herds and what people make with their own hands, and a building will
+    /// produce again when it is given inputs to work on. The table stays as
+    /// the rate each one would work at.
     pub fn production_interval(&self) -> u32 {
+        0
+    }
+
+    /// The rate each workshop would work at, once it is given inputs.
+    pub fn the_rate_it_would_work_at(&self) -> u32 {
         match self {
             // Production buildings produce resources
             BuildingType::Farm => 100,

@@ -552,7 +552,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // pot.
     // Up 2.5% to 1,051,389 for #356: salt in the body, sweated out and put
     // back, licked when craved, and journeys made for it.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_051_389;
+    // Down 3.7% to 1,012,933 for #357: middens and latrines, fouled water
+    // and fouled camps moved off, vermin, theft and scavengers at stores, a
+    // storehouse that is a place, and no building making anything from
+    // nothing.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_012_933;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -38,6 +38,7 @@ pub mod looking;
 pub mod making;
 pub mod meeting;
 pub mod moving;
+pub mod sanitation;
 
 use super::Simulation;
 use crate::environment::{Action, ActionResult};
@@ -82,6 +83,8 @@ impl Simulation {
             Action::Tame { animal_id, food_type } => self.taming(animal_id, food_type, agent_index, turn_now),
             Action::CollectAnimalProduct { animal_id } => self.collecting_from_a_beast(animal_id, agent_index, turn_now),
             Action::PutUpFold => self.putting_up_a_fold(agent_index, turn_now),
+            Action::StartMidden => self.starting_a_midden(agent_index, turn_now),
+            Action::DigLatrine => self.digging_a_latrine(agent_index, turn_now),
             Action::MuckOut => self.mucking_out(agent_index),
             Action::Slaughter { animal_id } => self.slaughtering(animal_id, agent_index, &mut rng, turn_now),
             Action::HarvestPlant { plant_id } => self.harvesting_a_plant(plant_id, agent_index, &mut rng, turn_now),

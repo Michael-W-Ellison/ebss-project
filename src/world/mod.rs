@@ -194,6 +194,16 @@ pub struct World {
     #[serde(default)]
     pub folds: Vec<Fold>,
 
+    /// A camp's middens: one place set aside for its refuse, away from where
+    /// it sleeps and draws water (#357).
+    #[serde(default)]
+    pub middens: Vec<Midden>,
+
+    /// Latrine pits, which take a camp's leavings under the ground until
+    /// they are full (#357).
+    #[serde(default)]
+    pub latrines: Vec<Latrine>,
+
     /// Pits dug in the ground, and what is keeping in them.
     ///
     /// A settlement had nowhere to put anything. The storehouse is a single
@@ -243,6 +253,25 @@ pub struct World {
     pub food_that_rotted_where_it_lay: u64,
     #[serde(default)]
     pub food_that_rotted_in_the_ground: u64,
+
+    /// What vermin have taken out of stores (#357).
+    #[serde(default)]
+    pub food_the_vermin_took: u64,
+
+    /// What scavengers have taken out of open stores (#357).
+    #[serde(default)]
+    pub food_the_scavengers_took: u64,
+
+    /// What the vermin are partway through carrying off each store, by where
+    /// it is (#357).
+    #[serde(default)]
+    pub vermin_owed: BTreeMap<Position, f32>,
+
+    /// Who last took from a store that it does not belong to, and how much,
+    /// by where it is - found out by its owner the next time they open it
+    /// (#357).
+    #[serde(default)]
+    pub stores_robbed: BTreeMap<Position, (uuid::Uuid, u32)>,
 
     /// How many growing days have gone by: the day's regrowth pass counts
     /// them, and a sleeping node remembers the first one it missed.
@@ -375,6 +404,40 @@ impl Fold {
     pub const WHAT_A_BEAST_LEAVES_IN_A_HALF_HOUR: f32 = 1.0 / 64.0;
 }
 
+/// A camp's midden: where its refuse is taken rather than left where it
+/// falls (#357). It fouls its own ground, smells, draws scavengers and
+/// vermin, and grows what was thrown on it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Midden {
+    pub at: Position,
+    pub started: u32,
+}
+
+impl Midden {
+    /// How far from where a camp sleeps its midden is put.
+    pub const HOW_FAR_FROM_THE_HEARTH: i32 = 8;
+
+    /// How near a midden somebody has to be living for their refuse to go
+    /// on it.
+    pub const HOW_FAR_IT_SERVES: i32 = 20;
+}
+
+/// A latrine pit (#357): leavings go into the ground and foul nothing on
+/// top, until it is full and filled in.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Latrine {
+    pub at: Position,
+    pub dug: u32,
+    /// How much it holds now
+    pub holds: f32,
+}
+
+impl Latrine {
+    /// How much a latrine pit takes before it is full, in what a body
+    /// passes: a season of a family's.
+    pub const WHAT_IT_TAKES: f32 = 60.0;
+}
+
 /// A fish trap or weir set at a reach, and how many fish are in it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FishTrap {
@@ -435,6 +498,30 @@ pub struct Pit {
 }
 
 impl Pit {
+    /// What vermin take of a store in a day, by how it is shut (#357).
+    pub fn what_vermin_get_at(&self) -> f32 {
+        if !self.covered {
+            Self::VERMIN_IN_AN_OPEN_HOLE
+        } else if self.holds.iter().any(|item| item.item_id == "stoneware") {
+            Self::VERMIN_PAST_A_POT
+        } else if self.is_lined() {
+            Self::VERMIN_PAST_A_LINING
+        } else {
+            Self::VERMIN_UNDER_EARTH
+        }
+    }
+
+    /// A fiftieth a day out of an open hole.
+    pub const VERMIN_IN_AN_OPEN_HOLE: f32 = 0.02;
+    /// Under earth, three in a thousand: a quarter of a winter's store.
+    pub const VERMIN_UNDER_EARTH: f32 = 0.003;
+    /// With a basket or a bowl in the way, half that.
+    pub const VERMIN_PAST_A_LINING: f32 = 0.0015;
+    /// In a fired pot, next to nothing.
+    pub const VERMIN_PAST_A_POT: f32 = 0.0002;
+    /// How near a midden brings more of them.
+    pub const A_MIDDEN_DRAWS_VERMIN_FROM: u32 = 12;
+
     /// How much a pit holds, in the units a pack is weighed in.
     ///
     /// Generous against a pack, which is the point of digging one - a person
@@ -1152,6 +1239,133 @@ impl World {
             self.food_that_rotted_in_the_ground.saturating_add(buried_and_lost);
     }
 
+    /// What vermin take of what is put by in a day (#357): mice, rats and
+    /// beetles, at a share of what is in a store by how it is shut.
+    ///
+    /// An open hole is a larder for anything; earth over it keeps most out;
+    /// a basket or bowl in it keeps out more; a fired pot, which nothing
+    /// gnaws through, keeps out nearly all. And a midden beside a store
+    /// doubles what comes to it.
+    pub fn what_the_vermin_take(&mut self) {
+        let middens: Vec<Position> = self.middens.iter().map(|midden| midden.at).collect();
+        let mut taken = 0u64;
+        for pit in self.pits.iter_mut() {
+            let share = pit.what_vermin_get_at() * if middens
+                .iter()
+                .any(|at| at.distance_to(&pit.where_it_is) <= Pit::A_MIDDEN_DRAWS_VERMIN_FROM)
+            {
+                2.0
+            } else {
+                1.0
+            };
+            let owed = self.vermin_owed.entry(pit.where_it_is).or_insert(0.0);
+            for item in pit.holds.iter_mut().filter(|item| item.food_data.is_some()) {
+                // Whole units, and the odd one carried off a little at a time
+                let due = item.quantity as f32 * share + *owed;
+                let gone = (due.floor() as u32).min(item.quantity);
+                *owed = due - gone as f32;
+                item.quantity -= gone;
+                taken += gone as u64;
+            }
+            pit.holds.retain(|item| item.quantity > 0);
+        }
+        self.food_the_vermin_took = self.food_the_vermin_took.saturating_add(taken);
+    }
+
+    /// How far off a hungry scavenger smells a midden, a carcass or an open
+    /// store: half a kilometre.
+    pub const A_SCAVENGER_SMELLS_IT_FROM: i32 = 50;
+
+    /// What a scavenger takes at a time, in units of food.
+    pub const WHAT_A_SCAVENGER_TAKES: u32 = 3;
+
+    /// Hungry flesh-eaters and omnivores come to what a camp leaves lying
+    /// (#357): a midden, a carcass with meat on it, a store left open. They
+    /// walk to it, and take from it when they are there - so waste and a
+    /// careless store bring wolves and bears to a camp.
+    pub fn what_draws_the_scavengers(&mut self) {
+        use crate::environment::fauna::DietType;
+
+        // What there is to come to
+        let mut draws: Vec<Position> = self
+            .middens
+            .iter()
+            .filter(|midden| self.grid.get_tile(&midden.at).is_some_and(|tile| tile.soil.is_foul()))
+            .map(|midden| midden.at)
+            .collect();
+        draws.extend(
+            self.pits
+                .iter()
+                .filter(|pit| !pit.covered && pit.how_much_is_in_it() > 0)
+                .map(|pit| pit.where_it_is),
+        );
+        draws.extend(
+            self.resources
+                .iter()
+                .filter(|node| node.resource_type == ResourceType::Meat && node.amount > 0)
+                .map(|node| node.position),
+        );
+        if draws.is_empty() {
+            return;
+        }
+
+        // Who comes, and how far each gets in a turn
+        let smells = Self::A_SCAVENGER_SMELLS_IT_FROM;
+        let coming: Vec<(usize, Position, i32)> = self
+            .animals
+            .get_all()
+            .iter()
+            .enumerate()
+            .filter(|(_, animal)| animal.is_alive() && animal.is_wild() && !animal.is_kept())
+            .filter(|(_, animal)| animal.hunger >= animal.max_hunger * 0.5)
+            .filter_map(|(index, animal)| {
+                let species = self.animals.get_species(&animal.species_id)?;
+                if species.diet == DietType::Herbivore {
+                    return None;
+                }
+                let at = Position::new(animal.position.0, animal.position.1);
+                let nearest = draws
+                    .iter()
+                    .filter(|draw| (draw.x - at.x).abs().max((draw.y - at.y).abs()) <= smells)
+                    .min_by_key(|draw| ((draw.x - at.x).abs().max((draw.y - at.y).abs()), draw.x, draw.y))?;
+                Some((index, *nearest, animal.how_far_it_gets_in_a_turn(species)))
+            })
+            .collect();
+
+        for (index, draw, pace) in coming {
+            let animal = &mut self.animals.get_all_mut()[index];
+            let (dx, dy) = (draw.x - animal.position.0, draw.y - animal.position.1);
+            if dx.abs().max(dy.abs()) > 1 {
+                animal.position.0 += dx.clamp(-pace, pace);
+                animal.position.1 += dy.clamp(-pace, pace);
+                continue;
+            }
+
+            // There: it eats
+            let mut took = 0;
+            if let Some(number) = self
+                .resources
+                .iter()
+                .position(|node| node.position == draw && node.resource_type == ResourceType::Meat && node.amount > 0)
+            {
+                let node = &mut self.resources[number];
+                took = Self::WHAT_A_SCAVENGER_TAKES.min(node.amount);
+                node.amount -= took;
+                let _ = self.did_that_empty_it(number);
+            } else if let Some(pit) = self.pits.iter_mut().find(|pit| pit.where_it_is == draw && !pit.covered) {
+                if let Some(food) = pit.holds.iter().find(|item| Pit::is_it_food(item)).map(|item| item.item_id.clone()) {
+                    took = pit.take_out(&food, Self::WHAT_A_SCAVENGER_TAKES);
+                }
+                self.food_the_scavengers_took = self.food_the_scavengers_took.saturating_add(took as u64);
+            } else {
+                // Picking over a midden
+                took = 1;
+            }
+            let animal = &mut self.animals.get_all_mut()[index];
+            animal.feed(animal.max_hunger * 0.15 * took as f32);
+        }
+    }
+
     /// What a store in the shade of trees ages at, against one in the open.
     pub const WHAT_THE_SHADE_OF_TREES_KEEPS: f32 = 0.75;
 
@@ -1524,12 +1738,18 @@ impl World {
             racks: Vec::new(),
             bedding: Vec::new(),
             folds: Vec::new(),
+            middens: Vec::new(),
+            latrines: Vec::new(),
             fish_traps: Vec::new(),
             pits: Vec::new(),
             where_it_was_worked_out: std::collections::BTreeSet::new(),
             what_dried_in_the_sun: Vec::new(),
             food_that_rotted_where_it_lay: 0,
             food_that_rotted_in_the_ground: 0,
+            food_the_vermin_took: 0,
+            food_the_scavengers_took: 0,
+            vermin_owed: BTreeMap::new(),
+            stores_robbed: BTreeMap::new(),
             days_gone_by: 0,
             growing_days: std::collections::VecDeque::new(),
             first_day_logged: 0,
@@ -2514,6 +2734,57 @@ impl World {
             .fold(0.0, f32::max)
     }
 
+    /// The midden that serves somebody living at `home`, if there is one
+    /// (#357).
+    pub fn midden_serving(&self, home: (i32, i32)) -> Option<usize> {
+        let reach = Midden::HOW_FAR_IT_SERVES;
+        self.middens
+            .iter()
+            .position(|midden| (midden.at.x - home.0).abs() <= reach && (midden.at.y - home.1).abs() <= reach)
+    }
+
+    /// The latrine with room that serves somebody living at `home` (#357).
+    pub fn latrine_serving(&self, home: (i32, i32)) -> Option<usize> {
+        let reach = Midden::HOW_FAR_IT_SERVES;
+        self.latrines.iter().position(|latrine| {
+            latrine.holds < Latrine::WHAT_IT_TAKES
+                && (latrine.at.x - home.0).abs() <= reach
+                && (latrine.at.y - home.1).abs() <= reach
+        })
+    }
+
+    /// How fouled the ground is about a place: how many tiles within `reach`
+    /// are foul (#357).
+    pub fn foul_tiles_within(&self, at: (i32, i32), reach: i32) -> u32 {
+        let mut foul = 0;
+        for dx in -reach..=reach {
+            for dy in -reach..=reach {
+                if self
+                    .grid
+                    .get_tile(&Position::new(at.0 + dx, at.1 + dy))
+                    .is_some_and(|tile| tile.soil.is_foul())
+                {
+                    foul += 1;
+                }
+            }
+        }
+        foul
+    }
+
+    /// The worst fouling within `reach` of a place, as a share of as foul
+    /// as ground gets (#357): what seeps into water drawn there.
+    pub fn how_foul_about(&self, at: (i32, i32), reach: i32) -> f32 {
+        let mut worst = 0.0f32;
+        for dx in -reach..=reach {
+            for dy in -reach..=reach {
+                if let Some(tile) = self.grid.get_tile(&Position::new(at.0 + dx, at.1 + dy)) {
+                    worst = worst.max(tile.soil.fouling);
+                }
+            }
+        }
+        (worst / Soil::AS_FOUL_AS_IT_GETS).clamp(0.0, 1.0)
+    }
+
     /// The fold within reach of a place, if one is standing (#354).
     pub fn fold_near(&self, pos: &Position) -> Option<usize> {
         let reach = Fold::HOW_FAR_IT_REACHES;
@@ -3078,6 +3349,9 @@ impl World {
         if self.turn % crate::environment::seasons::ONCE_A_DAY == 0 {
             self.what_is_lying_about_weathers();
             self.carcasses_go_off();
+            // And the mice and the beetles have their share of what is put
+            // by (#357)
+            self.what_the_vermin_take();
         }
 
         // What is under the earth keeps
@@ -3122,6 +3396,9 @@ impl World {
             grazing_passes,
             weather,
         );
+
+        // And what a camp leaves lying draws what eats such things (#357)
+        self.what_draws_the_scavengers();
 
         // And what has gone into the snares, and what has come out of them
         // again. Taken and put back because the snares are the world's and
