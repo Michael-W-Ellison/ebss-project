@@ -57,23 +57,24 @@ impl Simulation {
             return None;
         }
 
-        // Fed, the young before the hungry
-        if Self::fodder_in(agent).is_some() {
-            let unfed = |animal: &&&Animal| {
-                animal.fed_at.is_none_or(|fed| now.saturating_sub(fed) >= Self::FED_TODAY)
-            };
-            let wants_feeding = mine
-                .iter()
-                .filter(unfed)
-                .find(|animal| !animal.is_domesticated)
-                .or_else(|| {
-                    mine.iter().filter(unfed).find(|animal| {
-                        animal.hunger >= animal.max_hunger * Self::HUNGRY_ENOUGH_TO_FEED
-                    })
-                });
-            if let Some(animal) = wants_feeding {
-                return Some(Action::Tame { animal_id: animal.id, food_type: None });
-            }
+        // Fed or tended, the young before the hungry: a young one being
+        // raised is seen to whether or not there is fodder in the pack, a
+        // grown one fed only from what there is
+        let unfed = |animal: &&&Animal| {
+            animal.fed_at.is_none_or(|fed| now.saturating_sub(fed) >= Self::FED_TODAY)
+        };
+        let has_fodder = Self::fodder_in(agent).is_some();
+        let wants_feeding = mine
+            .iter()
+            .filter(unfed)
+            .find(|animal| !animal.is_domesticated)
+            .or_else(|| {
+                mine.iter().filter(unfed).filter(|_| has_fodder).find(|animal| {
+                    animal.hunger >= animal.max_hunger * Self::HUNGRY_ENOUGH_TO_FEED
+                })
+            });
+        if let Some(animal) = wants_feeding {
+            return Some(Action::Tame { animal_id: animal.id, food_type: None });
         }
 
         // Milked or plucked, of what this one knows to take

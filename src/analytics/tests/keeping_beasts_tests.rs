@@ -301,3 +301,34 @@ fn a_hungry_herd_moves_the_camp() {
     let moved = simulation.moving_on(&agent, (100, 100, 0));
     assert!(matches!(moved, Some(Action::Move { .. })), "got {moved:?}");
 }
+
+/// With nothing in the pack to feed it, a young one is led to graze and
+/// handled each day, and is tame within a month all the same.
+#[test]
+fn a_young_one_tended_without_fodder_stays() {
+    let mut simulation = a_keeper();
+    let keeper = simulation.population.agents[0].id;
+    let kid = a_beast(&mut simulation, "goat", (31, 30), false);
+    {
+        let animal = simulation.world.animals.get_mut(&kid).unwrap();
+        animal.owner_id = Some(keeper);
+        animal.tame_level = Simulation::HOW_TAME_A_YOUNG_ONE_TAKEN_IS;
+    }
+    let here = (30, 30, 0);
+    let a_day = crate::environment::seasons::TICKS_PER_DAY;
+    let half_hours = crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
+    let mut days = 0;
+    while !simulation.world.animals.get(&kid).unwrap().is_domesticated {
+        days += 1;
+        assert!(days <= 30, "a month of tending");
+        simulation.current_turn += a_day;
+        for _ in 0..half_hours {
+            simulation.the_kept_stay_by_their_keepers();
+        }
+        let agent = simulation.population.agents[0].clone();
+        let chore = simulation.the_beasts_to_see_to(&agent, here);
+        assert!(matches!(chore, Some(Action::Tame { .. })), "day {days}: {chore:?}");
+        let tended = simulation.execute_action(&chore.unwrap(), 0);
+        assert!(tended.success, "{:?}", tended.message);
+    }
+}

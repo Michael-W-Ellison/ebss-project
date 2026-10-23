@@ -565,7 +565,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 5.0% to 941,071 for #357's correction: vermin take a third of
     // what they did, a campmate's store is not theft, and foul water sickens
     // a quarter as often.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 941_071;
+    // Up 0.5% to 945,540 for #358's husbandry correction: a young one taken
+    // from a kill is tended without fodder when there is none to give it.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 945_540;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

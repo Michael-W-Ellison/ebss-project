@@ -24,6 +24,10 @@ impl Simulation {
     /// off again if nobody feeds it (`the_kept_stay_by_their_keepers`).
     pub(in crate::analytics) const HOW_TAME_A_YOUNG_ONE_TAKEN_IS: f32 = 0.2;
 
+    /// What a day's tending does to a young one's tameness with nothing to
+    /// feed it from the hand: led to graze and handled.
+    pub(in crate::analytics) const WHAT_TENDING_TAMES: f32 = 0.12;
+
     /// What a handful of fodder takes off a beast's hunger, as a share of
     /// what it can hold.
     pub(in crate::analytics) const WHAT_A_HANDFUL_FEEDS: f32 = 0.3;
@@ -127,12 +131,35 @@ impl Simulation {
                     return ActionResult::failure(format!("The {} has been fed today", species.name));
                 }
                 let agent = &self.population.agents[agent_index];
-                let Some(fodder) = food_type
+                let fodder = food_type
                     .clone()
                     .filter(|food| agent.how_many_i_have(food) > 0)
-                    .or_else(|| Self::fodder_in(agent))
-                else {
-                    return ActionResult::failure("Nothing to feed it".to_string());
+                    .or_else(|| Self::fodder_in(agent));
+                // Nothing in the pack to give it, and a young one is led to
+                // graze and handled instead: slower, but it is the handling
+                // that tames. Measured, sixteen young taken from kills in
+                // forty worlds were never once fed - the plants a keeper
+                // carried were eaten by supper - and all sixteen ran off.
+                let Some(fodder) = fodder else {
+                    if animal.is_domesticated {
+                        return ActionResult::failure("Nothing to feed it".to_string());
+                    }
+                    let animal = self.world.animals.get_mut(animal_id).expect("looked at above");
+                    animal.feed(animal.max_hunger * Self::WHAT_A_HANDFUL_FEEDS / 2.0);
+                    animal.fed_at = Some(turn_now);
+                    animal.tame(Self::WHAT_TENDING_TAMES);
+                    let now_tame = animal.is_domesticated;
+                    let agent = &mut self.population.agents[agent_index];
+                    agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, turn_now);
+                    if now_tame {
+                        agent.found_out_how_to("do:Tame");
+                        return ActionResult::success()
+                            .with_energy_cost(3.0)
+                            .with_message(format!("The {} is tame and stays", species.name));
+                    }
+                    return ActionResult::success()
+                        .with_energy_cost(3.0)
+                        .with_message(format!("Led the {} to graze", species.name));
                 };
                 let hand = agent
                     .skills
