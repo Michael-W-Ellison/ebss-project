@@ -9,6 +9,10 @@ impl Simulation {
     /// further, and comes to hand from here.
     pub(in crate::analytics) const A_KEPT_BEAST_GRAZES_WITHIN: i32 = 3;
 
+    /// What a day at its keeper's side does to a young one's tameness:
+    /// tame in about a month untended.
+    pub(in crate::analytics) const WHAT_A_DAY_BESIDE_ITS_KEEPER_TAMES: f32 = 0.03;
+
     /// How long a young one being raised waits for its keeper before it
     /// begins to go back to the wild: two days.
     pub(in crate::analytics) const A_YOUNG_ONE_WAITS: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
@@ -51,6 +55,8 @@ impl Simulation {
             .collect();
         let edge = (self.world.grid.width as i32 - 1, self.world.grid.height as i32 - 1);
         let now = self.current_turn;
+        let a_turn_beside_its_keeper = Self::WHAT_A_DAY_BESIDE_ITS_KEEPER_TAMES
+            / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
         let a_turn_unfed = Self::WHAT_A_DAY_UNFED_TAKES_OFF
             / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
         let a_night_out = Self::A_NIGHT_OUT_STRAYS
@@ -100,16 +106,29 @@ impl Simulation {
                 continue;
             };
 
-            // Two days' grace since it was last seen to before a young one
-            // begins to drift back to the wild: it has taken to its keeper,
-            // and keepers who were out hunting saw to it one evening in
-            // three. Without it, all sixteen taken in forty worlds ran off.
-            let seen_to = animal.fed_at.unwrap_or(0).max(animal.taken_at);
-            if !animal.is_domesticated && now.saturating_sub(seen_to) > Self::A_YOUNG_ONE_WAITS {
-                animal.tame_level -= a_turn_unfed;
-                if animal.tame_level <= 0.0 {
-                    Self::turned_loose(animal);
-                    continue;
+            // A young one being raised takes to whoever it stays beside, a
+            // little each day, whether or not they have anything to give it;
+            // tending it speeds that (`taming`). Apart from its keeper it
+            // waits two days and then begins to drift back to the wild.
+            //
+            // **Feeding alone was not enough.** Its keepers were mostly
+            // hunters, at home of an evening one time in three: tended or
+            // not, fifteen of sixteen young taken in forty worlds ran off.
+            if !animal.is_domesticated {
+                let by_its_keeper =
+                    (animal.position.0 - at.0).abs().max((animal.position.1 - at.1).abs()) <= near;
+                let seen_to = animal.fed_at.unwrap_or(0).max(animal.taken_at);
+                if by_its_keeper {
+                    animal.tame(a_turn_beside_its_keeper);
+                    if animal.is_domesticated {
+                        seen.push((keeper, "do:Tame"));
+                    }
+                } else if now.saturating_sub(seen_to) > Self::A_YOUNG_ONE_WAITS {
+                    animal.tame_level -= a_turn_unfed;
+                    if animal.tame_level <= 0.0 {
+                        Self::turned_loose(animal);
+                        continue;
+                    }
                 }
             } else {
                 let gives = what_it_gives.get(&animal.species_id);
@@ -162,7 +181,7 @@ impl Simulation {
 
         for (keeper, what) in seen {
             if let Some(agent) = self.population.agents.iter_mut().find(|agent| agent.id == keeper) {
-                if agent.found_out_how_to(what) && what != "do:MuckOut" {
+                if agent.found_out_how_to(what) && matches!(what, "milk" | "wool") {
                     agent.found_out_how_to("do:CollectAnimalProduct");
                 }
             }

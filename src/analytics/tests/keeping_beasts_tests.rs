@@ -131,18 +131,18 @@ fn a_young_one_fed_every_day_stays() {
     }
     assert!(simulation.population.agents[0].what_i_found_out().contains("do:Tame"));
 
-    // And one nobody feeds runs off
-    let other = a_beast(&mut simulation, "goat", (31, 31), false);
-    {
-        let animal = simulation.world.animals.get_mut(&other).unwrap();
-        animal.owner_id = Some(keeper);
-        animal.tame_level = Simulation::HOW_TAME_A_YOUNG_ONE_TAKEN_IS;
-    }
-    let half_hours = 5 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
-    for _ in 0..half_hours {
+    // And it stays, folded at night with its keeper asleep (a young one
+    // apart from its keeper is `a_young_one_takes_to_its_keeper`)
+    simulation.population.agents[0].fatigue.is_sleeping = true;
+    simulation.world.folds.push(crate::world::Fold {
+        at: Position::new(30, 30),
+        put_up: simulation.current_turn,
+        dung: 0.0,
+    });
+    for _ in 0..(7 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY) {
+        simulation.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
         simulation.the_kept_stay_by_their_keepers();
     }
-    assert_eq!(simulation.world.animals.get(&other).unwrap().owner_id, None);
     assert_eq!(simulation.world.animals.get(&lamb).unwrap().owner_id, Some(keeper), "the tame one stays");
 }
 
@@ -333,27 +333,46 @@ fn a_young_one_tended_without_fodder_stays() {
     }
 }
 
-/// A young one taken in waits two days for its keeper before it begins to
-/// drift back to the wild.
+/// A young one taken in grows tamer at its keeper's side, untended, and is
+/// tame within about a month; apart from its keeper it waits two days and
+/// then drifts back to the wild.
 #[test]
-fn a_young_one_waits_two_days_for_its_keeper() {
+fn a_young_one_takes_to_its_keeper() {
     let mut simulation = a_keeper();
     let keeper = simulation.population.agents[0].id;
     let species = simulation.world.animals.get_species("sheep").unwrap().clone();
     let lamb = a_beast(&mut simulation, "sheep", (35, 30), false);
     assert!(simulation.a_young_one_left_behind(0, &species, (35, 30)));
-    let start = simulation.world.animals.get(&lamb).unwrap().tame_level;
     let half_hours = crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
+    let mut days = 0;
+    while !simulation.world.animals.get(&lamb).unwrap().is_domesticated {
+        days += 1;
+        assert!(days <= 30, "a month beside its keeper");
+        for _ in 0..half_hours {
+            simulation.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
+            simulation.the_kept_stay_by_their_keepers();
+        }
+    }
+    assert!(days >= 20, "and not at once: {days} days");
+    assert!(simulation.population.agents[0].what_i_found_out().contains("do:Tame"));
+
+    // Apart: two days waiting, then drifting
+    let kid = a_beast(&mut simulation, "goat", (90, 90), false);
+    {
+        let animal = simulation.world.animals.get_mut(&kid).unwrap();
+        animal.owner_id = Some(keeper);
+        animal.taken_at = simulation.current_turn;
+        animal.tame_level = Simulation::HOW_TAME_A_YOUNG_ONE_TAKEN_IS;
+    }
+    simulation.population.agents[0].fatigue.is_sleeping = true;
     for _ in 0..(2 * half_hours) {
         simulation.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
         simulation.the_kept_stay_by_their_keepers();
     }
-    let lamb_now = simulation.world.animals.get(&lamb).unwrap();
-    assert_eq!(lamb_now.owner_id, Some(keeper));
-    assert_eq!(lamb_now.tame_level, start, "two days and it has not begun to drift");
+    assert_eq!(simulation.world.animals.get(&kid).unwrap().tame_level, Simulation::HOW_TAME_A_YOUNG_ONE_TAKEN_IS);
     for _ in 0..(5 * half_hours) {
         simulation.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
         simulation.the_kept_stay_by_their_keepers();
     }
-    assert_eq!(simulation.world.animals.get(&lamb).unwrap().owner_id, None, "a week untended and it is gone");
+    assert_eq!(simulation.world.animals.get(&kid).unwrap().owner_id, None, "a week apart and it is gone");
 }
