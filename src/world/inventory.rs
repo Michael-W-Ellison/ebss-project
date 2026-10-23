@@ -298,6 +298,19 @@ impl ItemType {
     /// destroys a handful of berries, scorches honey and burns bread that was
     /// baked once already. Deciding this per item is the point: an agent that
     /// cooks indiscriminately should lose its dinner.
+    /// What simmering in a pot of water does to this (#355): it softens
+    /// what a fire alone cannot open - roots, pulses, mast, leaves, meal -
+    /// as well as all a fire improves.
+    pub fn stewing_outcome(&self) -> super::nutrition::CookingOutcome {
+        use super::nutrition::CookingOutcome;
+        match self {
+            ItemType::Roots | ItemType::Legumes | ItemType::Nuts | ItemType::Greens | ItemType::Flour => {
+                CookingOutcome::Improves
+            }
+            _ => self.cooking_outcome(),
+        }
+    }
+
     pub fn cooking_outcome(&self) -> super::nutrition::CookingOutcome {
         use super::nutrition::CookingOutcome;
 

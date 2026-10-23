@@ -596,6 +596,20 @@ impl Simulation {
                             .with_message("Drank salt water".to_string());
                     }
 
+                    // Water drawn beside fouled ground carries the fouling
+                    // in it (#357): a camp living on its own spring sickens
+                    // off it.
+                    let drawn_at = self.world.resources[resource_index].position;
+                    let foul = self.world.how_foul_about((drawn_at.x, drawn_at.y), Self::WHAT_SEEPS_INTO_WATER);
+                    let agent = &mut self.population.agents[agent_index];
+                    if foul > 0.0 && !agent.is_ailing() && {
+                        use rand::Rng;
+                        rng.gen_bool((Self::HOW_OFTEN_FOUL_WATER_TELLS * foul as f64).clamp(0.0, 1.0))
+                    } {
+                        agent.taken_ill_with(crate::agents::Agent::OFF_FOUL_WATER, 0.3 + 0.4 * foul, self.current_turn);
+                        agent.what_filth_teaches();
+                    }
+
                     // Fill containers if agent has any
                     let filled = agent.inventory.fill_containers(harvested as f32);
 
@@ -855,6 +869,15 @@ impl Simulation {
         }
     }
 
+    /// How far from where water is drawn fouled ground seeps into it (#357).
+    pub(in crate::analytics) const WHAT_SEEPS_INTO_WATER: i32 = 3;
+
+    /// How often a drink drawn beside the foulest ground there is makes
+    /// somebody ill: one in a hundred. It was one in twenty-five, and with a
+    /// drink several times a day that laid people up 5,630 times in forty
+    /// worlds over two years - most of a fortnight a year each (#357).
+    pub(in crate::analytics) const HOW_OFTEN_FOUL_WATER_TELLS: f64 = 0.01;
+
     /// `Action::Hunt`.
     pub(in crate::analytics) fn hunting(&mut self, animal_id: &uuid::Uuid, weapon: &Option<String>, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
         // Get species data first (clone to avoid borrow issues)
@@ -863,8 +886,8 @@ impl Simulation {
                 if !animal.is_alive() {
                     return ActionResult::failure("Animal is already dead".to_string());
                 }
-                if animal.is_domesticated {
-                    return ActionResult::failure("Cannot hunt domesticated animals".to_string());
+                if animal.is_domesticated || animal.is_kept() {
+                    return ActionResult::failure("Cannot hunt somebody's kept beast".to_string());
                 }
 
                 // You have to be near enough to throw something at it.
@@ -960,71 +983,21 @@ impl Simulation {
                 let wore_out = spear > 1.0;
 
                 // If killed, get drops
-                let mut items_gained = Vec::new();
                 if !animal.is_alive() {
-                    // What comes off it is as good as the flake that took it
-                    // off - see the same stamp on the fighting branch.
-                    let as_good_a_knife = self.population.agents[agent_index]
-                        .how_well_made_is_what_i_work_this_trade_with(
-                            crate::agents::skills::SkillType::Leatherworking,
-                        );
-
-                    for drop in &species.drops {
-                        if rng.gen_bool(drop.drop_chance as f64) {
-                            let quantity = rng.gen_range(drop.min_quantity..=drop.max_quantity);
-                            items_gained.push(match as_good_a_knife {
-                                Some(quality) => crate::environment::ItemStack::of_quality(
-                                    drop.material_id.clone(),
-                                    quantity,
-                                    quality,
-                                ),
-                                None => crate::environment::ItemStack::new(
-                                    drop.material_id.clone(),
-                                    quantity,
-                                ),
-                            });
-                        }
-                    }
-
-                    let where_it_fell = {
-                        let at = self.population.agents[agent_index].state.position;
-                        crate::world::Position::new(at.0, at.1)
-                    };
-
-                    // The meat is cut as far as a turn takes it and the rest
-                    // left on the bone - see `the_beast_comes_down`.
-                    self.the_beast_comes_down(agent_index, &mut items_gained, where_it_fell, rng);
-
-                    // How much of the rest comes off, which is the waste
-                    // question and so reads the yield channel: a fine flake
-                    // leaves less of a hide than a crude one, and a worn
-                    // flake leaves no more than a fresh one.
-                    let knife = self.population.agents[agent_index]
-                        .how_much_my_tools_bring_back(
-                            crate::agents::skills::SkillType::Leatherworking,
-                        );
-                    let butchered = self.butcher(&items_gained, knife);
-                    self.into_the_pack_or_on_the_ground(
-                        agent_index,
-                        butchered,
-                        where_it_fell,
-                    );
+                    let fell_at = animal.position;
+                    let items_gained = self.the_carcass_is_cut_up(agent_index, &species, rng);
                     let agent = &mut self.population.agents[agent_index];
-                    let _ = &agent;
 
-                    // Both tools are one job further through their
-                    // lives: the spear that was thrown and the flake
-                    // that took the carcass apart.
+                    // The spear is one throw further through its life
                     if wore_out {
                         agent.wear_what_i_worked_with(
                             crate::agents::skills::SkillType::Hunting,
                         );
                     }
-                    if knife > 1.0 {
-                        agent.wear_what_i_worked_with(
-                            crate::agents::skills::SkillType::Leatherworking,
-                        );
-                    }
+
+                    // And a young one of the herd left standing by it follows
+                    // the hunter home (#354)
+                    let taken = self.a_young_one_left_behind(agent_index, &species, fell_at);
 
                     // Increase hunting skill
                     let agent = &mut self.population.agents[agent_index];
@@ -1036,7 +1009,11 @@ impl Simulation {
                         .with_drive_change(DriveType::Hunger, -0.4)
                         .with_energy_cost(Self::WHAT_A_THROW_COSTS)
                         .with_experience(5.0)
-                        .with_message(format!("Successfully hunted {} and obtained materials", species.name));
+                        .with_message(if taken {
+                            format!("Successfully hunted {}, and a young one followed", species.name)
+                        } else {
+                            format!("Successfully hunted {} and obtained materials", species.name)
+                        });
 
                     // Add all items gained
                     for item in items_gained {
@@ -1125,111 +1102,6 @@ impl Simulation {
 
                 ActionResult::failure(format!("{} escaped", species.name))
                     .with_energy_cost(Self::WHAT_A_THROW_COSTS)
-            }
-        } else {
-            ActionResult::failure("Animal not found".to_string())
-        }
-    }
-
-    /// `Action::CollectAnimalProduct`.
-    pub(in crate::analytics) fn collecting_from_a_beast(&mut self, animal_id: &uuid::Uuid, agent_index: usize, turn_now: u32) -> ActionResult {
-        // Get species data first (clone to avoid borrow issues)
-        let species = {
-            if let Some(animal) = self.world.animals.get(animal_id) {
-                if !animal.is_alive() {
-                    return ActionResult::failure("Animal is dead".to_string());
-                }
-                if !animal.is_domesticated {
-                    return ActionResult::failure("Can only collect from domesticated animals".to_string());
-                }
-                if !animal.is_mature() {
-                    return ActionResult::failure("Animal is not yet mature enough to produce".to_string());
-                }
-
-                let species_id = animal.species_id.clone();
-                match self.world.animals.get_species(&species_id) {
-                    Some(s) => s.clone(),
-                    None => return ActionResult::failure("Unknown animal species".to_string()),
-                }
-            } else {
-                return ActionResult::failure("Animal not found".to_string());
-            }
-        };
-
-        if species.living_products.is_empty() {
-            return ActionResult::failure(format!("{} does not produce any products", species.name));
-        }
-
-        // Now get mutable reference to animal
-        if let Some(animal) = self.world.animals.get_mut(animal_id) {
-            // Check which products are ready
-            let mut collected_products = Vec::new();
-            for product in &species.living_products {
-                if let Some(timer) = animal.product_timers.get(&product.material_id) {
-                    if *timer == 0 {
-                        // Product is ready
-                        collected_products.push(crate::environment::ItemStack::new(
-                            product.material_id.clone(),
-                            product.quantity,
-                        ));
-
-                        // Reset timer
-                        animal.product_timers.insert(product.material_id.clone(), product.production_time);
-                    }
-                }
-            }
-
-            if !collected_products.is_empty() {
-                // Milk and eggs are food, and were arriving with no nutrition
-                // on them at all - so they counted towards what somebody had
-                // put by, could not be eaten, and never spoiled. The same
-                // defect as the trade path; see #232. Anything the food
-                // database knows gets its clock started here, exactly as a
-                // gathered armful does.
-                let now = self.current_turn;
-                let clocks: Vec<_> = collected_products
-                    .iter()
-                    .map(|stack| {
-                        crate::agents::storage_integration::id_to_item_type(
-                            &stack.material_id,
-                        )
-                        .and_then(|kind| self.food_database.create_food_data(&kind, now))
-                    })
-                    .collect();
-
-                let agent = &mut self.population.agents[agent_index];
-                for (item_stack, clock) in collected_products.iter().zip(clocks) {
-                    use crate::agents::InventoryItem;
-                    let mut item = InventoryItem::new_with_weight(
-                        item_stack.material_id.clone(),
-                        item_stack.quantity,
-                        1.0, // Animal products are generally light
-                    );
-                    item.food_data = clock;
-                    agent.inventory.add_item(item);
-                }
-
-                // Practice animal husbandry (Farming skill)
-                let agent = &mut self.population.agents[agent_index];
-                agent.skills.practise(crate::agents::skills::SkillType::Farming, 2, turn_now);
-
-                let products_str = collected_products.iter()
-                    .map(|p| format!("{} {}", p.quantity, p.material_id))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                let mut result = ActionResult::success()
-                    .with_drive_change(DriveType::Industry, -0.2)
-                    .with_energy_cost(5.0)
-                    .with_message(format!("Collected {} from {}", products_str, species.name));
-
-                // Add all collected products
-                for product in collected_products {
-                    result = result.with_item_gained(product);
-                }
-                result
-            } else {
-                ActionResult::failure("No products ready for collection yet".to_string())
             }
         } else {
             ActionResult::failure("Animal not found".to_string())
@@ -1671,20 +1543,8 @@ impl Simulation {
         // should have been there are as good as a witness.
         for &i in &within {
             if let Some((thief, how_many)) = self.world.fish_traps[i].robbed.take() {
-                let how_strong_they_are = self
-                    .population
-                    .agents
-                    .iter()
-                    .find(|them| them.id == thief)
-                    .map(|them| them.own_strength())
-                    .unwrap_or(1.0);
-                self.population.agents[agent_index].they_took_something_of_mine(
-                    thief,
-                    "fish",
-                    how_many,
-                    turn_now,
-                    how_strong_they_are,
-                );
+                self.population.agents[agent_index]
+                    .found_out_they_took_something_of_mine(thief, "fish", how_many, turn_now);
             }
         }
 

@@ -530,8 +530,16 @@ impl Simulation {
         // the answer in a wet autumn, when the drying branch below simply
         // never comes good. It sits above drying because salt in the pack is
         // salt already paid for: leaving it there while food turns is waste.
+        //
+        // Put down in brine, by somebody who knows to and has the water for
+        // it: the same salt, keeping better than rubbed in (#348).
         if agent.how_many_i_have("salt") >= Self::WHAT_IT_TAKES_TO_SALT_A_LOT {
             if let Some((what, _)) = agent.what_i_could_salt() {
+                if agent.knows_how_to_do("Brine")
+                    && agent.how_much_water_i_carry() >= Self::WHAT_A_BRINE_TAKES
+                {
+                    return Some(Action::Brine { what });
+                }
                 return Some(Action::Salt { what });
             }
         }
@@ -553,6 +561,7 @@ impl Simulation {
                 crate::environment::seasons::Season::Fall
             )
             && self.salt_water_within_reach(agent_position).is_some()
+            && Self::something_to_boil_it_in(agent).is_some()
             && self
                 .nearest_fire_from(agent_position, Self::WITHIN_REACH_OF_THE_HEARTH, true)
                 .is_some()
@@ -574,8 +583,45 @@ impl Simulation {
         // the branch went quiet altogether and the winter store fell by a
         // quarter, because a settlement's entire preservation output had been
         // built on drying fish that ought to have rotted.
+        //
+        // **Not in the rain** (#348). A wet autumn used to be no different
+        // from a dry one, because laying food out worked in any weather.
+        // Smoke is what does it in the wet, for whoever has found that out;
+        // a rack keeps the worst of the wet off and dries it twice as fast.
+        if let Some(taking_down) = self.what_has_dried_on_a_rack(agent_position) {
+            return Some(taking_down);
+        }
         if let Some((what, _)) = agent.what_i_could_dry() {
-            return Some(Action::Dry { what });
+            if agent.knows_how_to_do("HangUp") && self.world.a_rack_within_reach(here).is_some() {
+                return Some(Action::HangUp { what });
+            }
+            if !self.too_wet_to_dry_here(agent_position) {
+                return Some(Action::Dry { what });
+            }
+            if agent.knows_how_to_do("Smoke")
+                && self
+                    .nearest_fire_from(agent_position, Self::WITHIN_REACH_OF_THE_HEARTH, true)
+                    .is_some()
+            {
+                return Some(Action::Smoke { what });
+            }
+        }
+
+        // And a rack at home, for whoever has thought of one and has the
+        // poles and cord, if there is none within a walk of the store.
+        if agent.knows_how_to_do("PutUpRack")
+            && agent.how_many_i_have("wood") >= Self::WOOD_TO_A_RACK
+            && agent.how_many_i_have("lashing") >= Self::LASHING_TO_A_RACK
+            && !self
+                .world
+                .racks
+                .iter()
+                .any(|rack| (rack.x - here.x).abs().max((rack.y - here.y).abs()) <= Self::WORTH_WALKING_TO_THE_STORE as i32)
+        {
+            let home = Self::where_this_one_lives(agent);
+            if (home.0 - here.x).abs().max((home.1 - here.y).abs()) <= Self::CLOSE_ENOUGH_TO_HOME_FOR_A_RACK {
+                return Some(Action::PutUpRack);
+            }
         }
 
         // The branch that used to sit here laid food on the ground so that
@@ -637,6 +683,9 @@ impl Simulation {
                 if self.is_ground_a_pit_will_go_in(here) {
                     return Some(Action::Excavate);
                 }
+                if self.a_cairn_would_go_here(agent, here) {
+                    return Some(Action::Cache);
+                }
                 if let Some(ground) = self.ground_a_pit_will_go_in_near(here) {
                     return Some(Action::Move {
                         target: (ground.x, ground.y, agent_position.2),
@@ -648,6 +697,21 @@ impl Simulation {
                 return Some(Action::Move {
                     target: (pit.x, pit.y, agent_position.2),
                 });
+            }
+        }
+
+        // And when nothing above has answered - it will not dry, there is no
+        // hole and none to dig - fetch salt where it lies: a salt flat, a seam
+        // in the hills, within a forage (#352). Above drying and burying it
+        // took the place of both wherever a flat lay near. There were four flats and two seams in a
+        // world and nothing ever sent anybody to them, so salt was made by
+        // boiling the sea or not at all - one boiling in forty worlds.
+        if agent.how_many_i_have("salt") < Self::WHAT_IT_TAKES_TO_SALT_A_LOT && spare.is_some() {
+            let salt_lies_here = self.nearest_resource_within(agent, agent_position, Self::FORAGE_RADIUS, |node| {
+                node.resource_type == crate::world::ResourceType::Salt
+            });
+            if salt_lies_here.is_some() {
+                return Some(Action::Gather { resource_type: "salt".to_string() });
             }
         }
 
@@ -690,6 +754,9 @@ impl Simulation {
         // Autumn with nowhere to put anything is reason enough to dig.
         if self.is_ground_a_pit_will_go_in(here) {
             return Some(Action::Excavate);
+        }
+        if self.a_cairn_would_go_here(agent, here) {
+            return Some(Action::Cache);
         }
         if let Some(ground) = self.ground_a_pit_will_go_in_near(here) {
             return Some(Action::Move {
@@ -1110,6 +1177,42 @@ impl Simulation {
     /// a pit in a lake or in bare rock. Asked in the decision as well as in
     /// the executor, because an agent standing on the wrong ground would
     /// otherwise ask for a pit every turn for the rest of its life.
+    /// Whether this one would pile a cache here: ground a pit will not go
+    /// into, no store here already, and the stones to do it with.
+    pub(in crate::analytics) fn a_cairn_would_go_here(
+        &self,
+        agent: &crate::agents::Agent,
+        here: crate::world::Position,
+    ) -> bool {
+        self.world.pit_at(here).is_none()
+            && !self.is_ground_a_pit_will_go_in(here)
+            && agent.knows_how_to_do("Cache")
+            && agent.how_many_i_have("stone") >= Self::STONES_TO_A_CAIRN
+            && self.world.grid.get_tile(&here).is_some_and(|tile| tile.terrain.is_walkable())
+    }
+
+    /// What has dried on a rack within reach, to take down: picked up if the
+    /// rack is underfoot, walked to if it is a step off.
+    pub(in crate::analytics) fn what_has_dried_on_a_rack(&self, agent_position: (i32, i32, i32)) -> Option<Action> {
+        let here = crate::world::Position::new(agent_position.0, agent_position.1);
+        let rack = self.world.a_rack_within_reach(here)?;
+        let dried = self.world.what_is_lying_at(&rack).into_iter().find(|left| {
+            left.item.food_data.as_ref().is_some_and(|food| {
+                food.preparation != crate::world::nutrition::PreparationState::Raw
+                    && !food.is_spoiled()
+            })
+        })?;
+        if rack == here {
+            Some(Action::PickUp { what: dried.item.item_id.clone() })
+        } else {
+            Some(Action::Move { target: (rack.x, rack.y, agent_position.2) })
+        }
+    }
+
+    /// How near home a rack is put up: the camp, not the far side of a
+    /// day's foraging.
+    pub(in crate::analytics) const CLOSE_ENOUGH_TO_HOME_FOR_A_RACK: i32 = 3;
+
     pub(in crate::analytics) fn is_ground_a_pit_will_go_in(&self, here: crate::world::Position) -> bool {
         if self.world.pit_at(here).is_some() {
             return false;

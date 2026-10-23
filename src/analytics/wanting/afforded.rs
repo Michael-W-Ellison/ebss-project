@@ -454,9 +454,18 @@ impl Simulation {
             // The matrix keeps digging yourself in apart from framing a tent,
             // and `what_was_tried` keeps the same distinction: a burrow is a
             // `Build` that is named for what it is.
-            "burrow" => Action::Build {
-                structure_type: "burrow".to_string(),
-                position: at,
+            //
+            // And only where `digging_in` would dig: carrying on with a hole
+            // here, or a fresh one with nothing built within two paces, on
+            // ground that takes a hole. Tried anywhere, a burrow was started
+            // wherever curiosity or the wish for a child stood somebody, and
+            // left: 6,111 started on sixteen worlds over two years and 5,839
+            // still open at the end (#349).
+            "burrow" => match self.digging_in(agent, at)? {
+                Action::Build { structure_type, position } if position == at && structure_type == "burrow" => {
+                    Action::Build { structure_type, position }
+                }
+                _ => return None,
             },
 
             // ---- the verbs that want nothing but a body and a place -------

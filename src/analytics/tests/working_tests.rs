@@ -236,8 +236,8 @@ fn a_hide_with_a_knife_becomes_leather() {
 
     assert!(result.success, "with a knife it comes apart: {:?}", result.message);
     assert!(
-        simulation.population.agents[0].how_many_i_have("leather") > 0,
-        "and there is leather to make things out of"
+        simulation.population.agents[0].how_many_i_have("rawhide") > 0,
+        "and there is rawhide to make things out of (#353)"
     );
 }
 

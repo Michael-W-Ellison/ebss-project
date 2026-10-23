@@ -16,176 +16,130 @@ use log::debug;
 
 impl Simulation {
     /// `Action::Store`.
-    pub(in crate::analytics) fn storing(&mut self, item_type: &String, amount: &u32, agent_index: usize) -> ActionResult {
-        use crate::agents::storage_integration::{
-            id_to_item_type, take_from_agent_inventory,
-            count_in_agent_inventory
-        };
-
-        let agent = &mut self.population.agents[agent_index];
-
-        // Try to convert string item_type to ItemType
-        if let Some(item) = id_to_item_type(item_type) {
-            let available = count_in_agent_inventory(&agent.inventory, item);
-
-            if available == 0 {
-                return ActionResult::failure(format!(
-                    "No {} in inventory to store", item_type
-                ));
-            }
-
-            // Determine how much to deposit based on storage preferences
-            let deposit_amount = (*amount).min(available);
-
-            // Remove from agent inventory
-            let (success, removed) = take_from_agent_inventory(
-                &mut agent.inventory,
-                item,
-                deposit_amount,
-            );
-
-            if success && removed > 0 {
-                // Add to world storehouse
-                if let Some(existing) = self.world.storehouse_inventory.items.get_mut(&item) {
-                    existing.quantity += removed;
-                } else {
-                    self.world.storehouse_inventory.items.insert(
-                        item,
-                        crate::world::inventory::Item {
-                            item_type: item,
-                            quantity: removed,
-                            durability: 100,
-                            max_durability: 100,
-                        },
-                    );
-                }
-
-                // Read here rather than in the block below: the timeline event
-                // that wants them is behind `feature = "gui"`, and `agent` is
-                // borrowed from `self` for only as long as this arm.
-                #[cfg(feature = "gui")]
-                let agent_id = agent.id;
-                #[cfg(feature = "gui")]
-                let agent_pos = (agent.state.position.0, agent.state.position.1);
-
-                debug!(
-                    "Agent {} deposited {} {} to storehouse (storehouse now has {})",
-                    agent.id,
-                    removed,
-                    item_type,
-                    self.world.storehouse_inventory.items.get(&item)
-                        .map(|i| i.quantity)
-                        .unwrap_or(0)
-                );
-
-                // Emit storehouse deposit event for timeline (only for significant deposits)
-                #[cfg(feature = "gui")]
-                if removed >= 3 {
-                    use crate::gui::events::{SimulationEvent, SimulationEventType};
-                    let event = SimulationEvent::new(
-                        self.current_turn,
-                        SimulationEventType::StorehouseDeposit {
-                            agent_id,
-                            resource: item_type.clone(),
-                            amount: removed,
-                        },
-                        Some(agent_pos),
-                    );
-                    self.population.pending_events.push(event);
-                }
-
-                ActionResult::success()
-                    .with_drive_change(DriveType::Preparedness, -0.15)
-                    .with_energy_cost(5.0)
-                    .with_message(format!(
-                        "Deposited {} {} to storehouse", removed, item_type
-                    ))
-            } else {
-                ActionResult::failure(format!(
-                    "Failed to remove {} from inventory", item_type
-                ))
-            }
-        } else {
-            ActionResult::failure(format!(
-                "Unknown item type: {}", item_type
-            ))
+    /// The store at a storehouse this one is standing at (#357), opened
+    /// if it has not been yet: a covered store under the building's roof,
+    /// the settlement's, where food keeps as it keeps under earth and the
+    /// vermin get at it as they get at any store. There is no storehouse
+    /// anywhere else - the store that every agent could reach from wherever
+    /// they stood, where nothing ever went off, is gone.
+    pub(in crate::analytics) fn the_store_i_am_standing_at(&mut self, agent_index: usize) -> Option<crate::world::Position> {
+        use crate::world::Position;
+        let at = self.population.agents[agent_index].state.position;
+        let storehouse = self
+            .world
+            .buildings
+            .iter()
+            .filter(|building| building.building_type == crate::world::BuildingType::Storehouse && building.is_completed())
+            .map(|building| building.position)
+            .find(|there| (there.x - at.0).abs().max((there.y - at.1).abs()) <= Self::AT_THE_STOREHOUSE)?;
+        if self.world.pit_at(storehouse).is_none() {
+            self.world.pits.push(crate::world::Pit {
+                where_it_is: storehouse,
+                holds: Vec::new(),
+                covered: true,
+                dug: self.current_turn,
+                belongs: crate::world::belonging::Belongs::ToUsAll,
+            });
         }
+        Some(storehouse)
     }
 
-    /// `Action::Retrieve`.
-    pub(in crate::analytics) fn retrieving(&mut self, item_type: &String, amount: &u32, agent_index: usize) -> ActionResult {
-        use crate::agents::storage_integration::{
-            id_to_item_type, add_to_agent_inventory
+    /// How near a storehouse somebody stands to put things in it.
+    pub(in crate::analytics) const AT_THE_STOREHOUSE: i32 = 2;
+
+    /// `Action::Store`: what is carried put into the storehouse this one is
+    /// standing at (#357), food with its clock still on it.
+    pub(in crate::analytics) fn storing(&mut self, item_type: &String, amount: &u32, agent_index: usize) -> ActionResult {
+        use crate::agents::storage_integration::id_to_item_type;
+        let Some(kind) = id_to_item_type(item_type) else {
+            return ActionResult::failure(format!("Unknown item type: {}", item_type));
         };
-
+        let Some(store) = self.the_store_i_am_standing_at(agent_index) else {
+            return ActionResult::failure("No storehouse here".to_string());
+        };
         let agent = &mut self.population.agents[agent_index];
-
-        // Try to convert string item_type to ItemType
-        if let Some(item) = id_to_item_type(item_type) {
-            // Check storehouse inventory
-            let storehouse_available = self.world.storehouse_inventory.items
-                .get(&item)
-                .map(|i| i.quantity)
-                .unwrap_or(0);
-
-            if storehouse_available == 0 {
-                return ActionResult::failure(format!(
-                    "Storehouse has no {} available", item_type
-                ));
+        let ids: Vec<String> = agent
+            .inventory
+            .get_all_items()
+            .values()
+            .filter(|item| item.quantity > 0 && id_to_item_type(&item.item_id) == Some(kind))
+            .map(|item| item.item_id.clone())
+            .collect();
+        let mut wanted = *amount;
+        let mut going = Vec::new();
+        for id in ids {
+            if wanted == 0 {
+                break;
             }
-
-            // Determine how much to retrieve
-            let retrieve_amount = (*amount).min(storehouse_available);
-
-            // Try to add to agent inventory
-            let (_success, added) = add_to_agent_inventory(
-                &mut agent.inventory,
-                item,
-                retrieve_amount,
-            );
-
-            if added > 0 {
-                // Remove from world storehouse
-                if let Some(existing) = self.world.storehouse_inventory.items.get_mut(&item) {
-                    existing.quantity -= added;
-                    if existing.quantity == 0 {
-                        self.world.storehouse_inventory.items.remove(&item);
-                    }
-                }
-
-                debug!(
-                    "Agent {} retrieved {} {} from storehouse (storehouse now has {})",
-                    agent.id,
-                    added,
-                    item_type,
-                    self.world.storehouse_inventory.items.get(&item)
-                        .map(|i| i.quantity)
-                        .unwrap_or(0)
-                );
-
-                let message = if added < retrieve_amount {
-                    format!(
-                        "Retrieved {} {} from storehouse (inventory full, couldn't take all {})",
-                        added, item_type, retrieve_amount
-                    )
-                } else {
-                    format!("Retrieved {} {} from storehouse", added, item_type)
-                };
-
-                ActionResult::success()
-                    .with_drive_change(DriveType::Preparedness, -0.1)
-                    .with_energy_cost(5.0)
-                    .with_message(message)
-            } else {
-                ActionResult::failure(format!(
-                    "Inventory full, cannot retrieve {}", item_type
-                ))
+            let here = agent.how_many_i_have(&id).min(wanted);
+            if let Some(item) = agent.inventory.remove_item(&id, here) {
+                wanted -= item.quantity;
+                going.push(item);
             }
-        } else {
-            ActionResult::failure(format!(
-                "Unknown item type: {}", item_type
-            ))
         }
+        let put = *amount - wanted;
+        if put == 0 {
+            return ActionResult::failure(format!("No {} in inventory to store", item_type));
+        }
+        if let Some(pit) = self.world.pit_at_mut(store) {
+            for item in going {
+                pit.put_in(item);
+            }
+        }
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.15)
+            .with_energy_cost(5.0)
+            .with_message(format!("Put {} {} in the storehouse", put, item_type))
+    }
+
+    /// `Action::Retrieve`: what is wanted taken out of the storehouse this
+    /// one is standing at (#357), as much as goes in the pack.
+    pub(in crate::analytics) fn retrieving(&mut self, item_type: &String, amount: &u32, agent_index: usize) -> ActionResult {
+        use crate::agents::storage_integration::id_to_item_type;
+        let Some(kind) = id_to_item_type(item_type) else {
+            return ActionResult::failure(format!("Unknown item type: {}", item_type));
+        };
+        let Some(store) = self.the_store_i_am_standing_at(agent_index) else {
+            return ActionResult::failure("No storehouse here".to_string());
+        };
+        let held: Vec<crate::agents::InventoryItem> = self
+            .world
+            .pit_at(store)
+            .map(|pit| {
+                pit.holds
+                    .iter()
+                    .filter(|item| item.quantity > 0 && id_to_item_type(&item.item_id) == Some(kind))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        if held.is_empty() {
+            return ActionResult::failure(format!("Storehouse has no {} available", item_type));
+        }
+        let mut wanted = *amount;
+        let mut taken = 0;
+        for mut item in held {
+            if wanted == 0 {
+                break;
+            }
+            item.quantity = item.quantity.min(wanted);
+            let fits = self.take_what_fits(agent_index, &item);
+            if fits == 0 {
+                break;
+            }
+            if let Some(pit) = self.world.pit_at_mut(store) {
+                pit.take_out(&item.item_id, fits);
+            }
+            wanted -= fits;
+            taken += fits;
+        }
+        if taken == 0 {
+            return ActionResult::failure("No room in the pack for it".to_string());
+        }
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.1)
+            .with_energy_cost(5.0)
+            .with_message(format!("Retrieved {} {} from the storehouse", taken, item_type))
     }
 
     /// `Action::Cover`.
@@ -281,11 +235,20 @@ impl Simulation {
         // A vessel goes in first, if there is one to spare. What
         // gets at buried food is the ground itself, and a bowl or a
         // basket in the way of it doubles what the hole is worth.
+        //
+        // **Whichever keeps best**, asked of what keeps rather than of two
+        // names: a fired pot, which keeps food best and which nothing gnaws
+        // through, was never put in (#357).
         let lining = {
             let agent = &self.population.agents[agent_index];
-            ["bowl", "basket"]
-                .into_iter()
-                .find(|vessel| agent.how_many_i_have(vessel) > 1)
+            crate::environment::tags::EVERYTHING_THAT_KEEPS
+                .iter()
+                .filter(|keeps| {
+                    crate::environment::tags::is_this_a(keeps.called, crate::environment::tags::Tag::FoodContainer)
+                })
+                .filter(|keeps| agent.how_many_i_have(keeps.called) > 1)
+                .min_by(|a, b| a.how_fast_food_in_it_goes_off.total_cmp(&b.how_fast_food_in_it_goes_off))
+                .map(|keeps| keeps.called)
         };
 
         if let Some(vessel) = lining {
@@ -295,11 +258,15 @@ impl Simulation {
                     .remove_item(vessel, 1);
 
                 if let Some(pit) = self.world.pit_at_mut(here) {
-                    pit.put_in(crate::agents::InventoryItem::new_with_weight(
-                        vessel.to_string(),
-                        1,
-                        1.0,
-                    ));
+                    pit.put_in(if vessel == "stoneware" {
+                        crate::agents::InventoryItem::new_container(
+                            vessel.to_string(),
+                            1,
+                            crate::environment::making::WHAT_A_FIRED_POT_HOLDS,
+                        )
+                    } else {
+                        crate::agents::InventoryItem::new_with_weight(vessel.to_string(), 1, 1.0)
+                    });
                 }
             }
         }
@@ -422,6 +389,37 @@ impl Simulation {
                 );
             }
 
+            // Out of somebody else's store is theft (#357), found out the
+            // next time its owner opens it; one's own opening finds out
+            // whoever was in it before.
+            //
+            // **Not a campmate's.** A band shares what it puts by, and
+            // taking out of the pit somebody you camp with dug is what a pit
+            // at a camp is for. Booked as theft, every band robbed itself
+            // twelve thousand times over forty worlds and nursed the grudges
+            // (#357). Theft is out of a pit dug by somebody living elsewhere.
+            let me = self.population.agents[agent_index].id;
+            let whose = self.world.pit_at(here).map(|pit| self.population.agents[agent_index].may_i_use(&pit.belongs));
+            let a_campmates = |owner: uuid::Uuid| {
+                let mine = Self::where_this_one_lives(&self.population.agents[agent_index]);
+                self.population.agents.iter().find(|agent| agent.id == owner).is_some_and(|them| {
+                    let theirs = Self::where_this_one_lives(them);
+                    (theirs.0 - mine.0).abs().max((theirs.1 - mine.1).abs()) <= Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS
+                })
+            };
+            match whose {
+                Some(crate::world::belonging::Access::NotMine(owner)) if !a_campmates(owner) => {
+                    let already = self.world.stores_robbed.get(&here).map_or(0, |(_, n)| *n);
+                    self.world.stores_robbed.insert(here, (me, already + taking));
+                }
+                Some(crate::world::belonging::Access::Freely) => {
+                    if let Some((thief, how_many)) = self.world.stores_robbed.remove(&here) {
+                        self.population.agents[agent_index]
+                            .found_out_they_took_something_of_mine(thief, "food", how_many, turn_now);
+                    }
+                }
+                _ => {}
+            }
             if let Some(pit) = self.world.pit_at_mut(here) {
                 pit.take_out(what, taking);
             }
@@ -546,4 +544,188 @@ impl Simulation {
             .with_energy_cost(1.0)
             .with_message(format!("Put down {how_many} {what}"))
     }
+
+    /// `Action::Cache`: a hollow on ground a pit will not go into, with
+    /// stones piled over it - a store, covered from the first.
+    ///
+    /// Stage 0 of storage, "caches in cool shade". A camp under the trees
+    /// sleeps on ground that will not take a hole (#315), and up to now the
+    /// only answer was to walk off it to dig. What goes in afterwards goes in
+    /// the way it would go in a pit (`Action::Cover`).
+    pub(in crate::analytics) fn caching(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::{Pit, Position};
+
+        let here = {
+            let at = self.population.agents[agent_index].state.position;
+            Position::new(at.0, at.1)
+        };
+        if self.world.pit_at(here).is_some() {
+            return ActionResult::failure("There is a store here already".to_string());
+        }
+        if !self.world.grid.get_tile(&here).is_some_and(|tile| tile.terrain.is_walkable()) {
+            return ActionResult::failure("Nowhere here to pile stones".to_string());
+        }
+        let agent = &mut self.population.agents[agent_index];
+        if agent.how_many_i_have("stone") < Self::STONES_TO_A_CAIRN {
+            return ActionResult::failure("Not stones enough for a cairn".to_string());
+        }
+        agent.inventory.remove_item("stone", Self::STONES_TO_A_CAIRN);
+        agent.memory.remember_location(
+            crate::core::memory::SpatialMemoryType::Storage,
+            (here.x, here.y, 0),
+        );
+        agent
+            .skills
+            .practise(crate::agents::SkillType::Mining, 10, turn_now);
+        let whose = agent.id;
+        self.world.pits.push(Pit {
+            where_it_is: here,
+            holds: Vec::new(),
+            covered: true,
+            dug: turn_now,
+            belongs: crate::world::Belongs::To(whose),
+        });
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.1)
+            .with_energy_cost(6.0)
+            .with_message("Piled stones over a cache".to_string())
+    }
+
+    /// How many stones a cairn over a cache takes.
+    pub(in crate::analytics) const STONES_TO_A_CAIRN: u32 = 4;
+
+    /// `Action::PutUpRack`: poles and cord, put up where this one stands.
+    pub(in crate::analytics) fn putting_up_a_rack(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::Position;
+
+        let at = self.population.agents[agent_index].state.position;
+        let here = Position::new(at.0, at.1);
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_how_to_do("PutUpRack") {
+            return ActionResult::failure("Nobody here has thought to put food up off the ground".to_string());
+        }
+        if self.world.a_rack_within_reach(here).is_some() {
+            return ActionResult::failure("There is a rack here already".to_string());
+        }
+        if agent.how_many_i_have("wood") < Self::WOOD_TO_A_RACK
+            || agent.how_many_i_have("lashing") < Self::LASHING_TO_A_RACK
+        {
+            return ActionResult::failure("Not the poles and cord for a rack".to_string());
+        }
+        let agent = &mut self.population.agents[agent_index];
+        agent.inventory.remove_item("wood", Self::WOOD_TO_A_RACK);
+        agent.inventory.remove_item("lashing", Self::LASHING_TO_A_RACK);
+        agent
+            .skills
+            .practise(crate::agents::SkillType::Crafting, 10, turn_now);
+        self.world.racks.push(here);
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.1)
+            .with_energy_cost(8.0)
+            .with_message("Put up a rack".to_string())
+    }
+
+    /// What a rack takes: three poles and two lengths of cord.
+    pub(in crate::analytics) const WOOD_TO_A_RACK: u32 = 3;
+    pub(in crate::analytics) const LASHING_TO_A_RACK: u32 = 2;
+
+    /// `Action::HangUp`: a stack of raw food hung on a rack within reach.
+    ///
+    /// It dries there in the sun as it would on the ground, twice as fast,
+    /// and half the rain gets at it; and it stays until somebody takes it
+    /// down (`Action::PickUp`, standing at the rack).
+    pub(in crate::analytics) fn hanging_up(&mut self, what: &String, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::nutrition::{Piece, PreparationState};
+        use crate::world::Position;
+
+        let at = self.population.agents[agent_index].state.position;
+        let Some(rack) = self.world.a_rack_within_reach(Position::new(at.0, at.1)) else {
+            return ActionResult::failure("No rack within reach".to_string());
+        };
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_how_to_do("HangUp") {
+            return ActionResult::failure("Nobody here knows to hang it up".to_string());
+        }
+        if Piece::of(what) == Piece::Whole || !crate::world::World::will_this_dry(what) {
+            return ActionResult::failure(format!("{what} would not dry hung up like that"));
+        }
+        let worth_it = agent.inventory.get_item(what).is_some_and(|item| {
+            item.food_data.as_ref().is_some_and(|food| {
+                food.preparation == PreparationState::Raw && food.freshness >= Self::TOO_FAR_GONE_TO_KEEP
+            })
+        });
+        if !worth_it {
+            return ActionResult::failure(format!("No {what} worth hanging up"));
+        }
+        let agent = &mut self.population.agents[agent_index];
+        let how_many = agent.inventory.get_item(what).map_or(0, |item| item.quantity);
+        let Some(item) = agent.inventory.remove_item(what, how_many) else {
+            return ActionResult::failure(format!("No {what} to hang up"));
+        };
+        self.world.dropped.push(crate::world::Dropped {
+            item,
+            where_it_is: rack,
+            since: turn_now,
+            dried_in_the_sun: 0,
+        });
+
+        ActionResult::success()
+            .with_drive_change(DriveType::Preparedness, -0.3)
+            .with_energy_cost(2.0)
+            .with_message(format!("Hung {how_many} {what} up on the rack"))
+    }
+
+    /// `Action::LayBedding`: boughs and brush laid where this one stands, to
+    /// sleep on (#349).
+    ///
+    /// Stage 0 of shelter, "ground bedding". A bed to sleep on - the sleep it
+    /// gives is a bed's - and off the cold ground, which is worth a layer of
+    /// clothing to whoever is lying on it. Two wood of brush, and it is
+    /// trodden flat in a month.
+    pub(in crate::analytics) fn laying_bedding(&mut self, agent_index: usize, turn_now: u32) -> ActionResult {
+        use crate::world::Position;
+
+        let at = self.population.agents[agent_index].state.position;
+        let here = Position::new(at.0, at.1);
+        if self.world.bedding_at(&here) {
+            return ActionResult::failure("There is bedding laid here already".to_string());
+        }
+        let agent = &mut self.population.agents[agent_index];
+
+        // A hide to spare goes down first: warmer, and it lasts a season (#353)
+        if let Some(hide) = Self::a_hide_to_spare_for_bedding(agent) {
+            agent.inventory.remove_item(hide, 1);
+            self.world.bedding.push(crate::world::Bedding { at: here, laid: turn_now, of_hide: true });
+            return ActionResult::success()
+                .with_energy_cost(1.0)
+                .with_message("Laid a hide down to sleep on".to_string());
+        }
+        if agent.how_many_i_have("wood") < Self::WHAT_BEDDING_TAKES {
+            return ActionResult::failure("Not brush enough for bedding".to_string());
+        }
+        agent.inventory.remove_item("wood", Self::WHAT_BEDDING_TAKES);
+        self.world.bedding.push(crate::world::Bedding { at: here, laid: turn_now, of_hide: false });
+
+        ActionResult::success()
+            .with_energy_cost(2.0)
+            .with_message("Laid bedding".to_string())
+    }
+
+    /// A worked hide this one can spare to sleep on: rawhide or leather, and
+    /// only with more than one in the pack, so the one a garment or a tent
+    /// is waiting on is kept (#353).
+    pub(in crate::analytics) fn a_hide_to_spare_for_bedding(agent: &crate::agents::Agent) -> Option<&'static str> {
+        ["rawhide", "leather"]
+            .into_iter()
+            .find(|hide| agent.how_many_i_have(hide) >= Self::HIDES_BEFORE_ONE_IS_SLEPT_ON)
+    }
+
+    /// How many worked hides somebody holds before laying one down to sleep
+    /// on.
+    pub(in crate::analytics) const HIDES_BEFORE_ONE_IS_SLEPT_ON: u32 = 3;
+
+    /// What bedding takes: two wood of boughs and brush.
+    pub(in crate::analytics) const WHAT_BEDDING_TAKES: u32 = 2;
 }

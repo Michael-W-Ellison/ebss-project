@@ -170,20 +170,28 @@ impl Climate {
     /// make the weather pleasant - it takes the edge off, which is the
     /// difference between sheltering being worth the walk and being pointless.
     pub fn sheltered_effective_temperature(&self) -> Temperature {
+        self.effective_temperature_under(Some(crate::world::Cover::FULL))
+    }
+
+    /// What it feels like under this cover, or in the open with none.
+    ///
+    /// Out of the wind there is no wind chill; and a roof closes the gap to
+    /// what a sheltered space tends toward by as much warmth as it holds - a
+    /// tent most, a brush hut less, a lean-to less again, a windbreak none
+    /// (#349).
+    pub fn effective_temperature_under(&self, cover: Option<crate::world::Cover>) -> Temperature {
         /// What a sheltered space tends toward: cool, but survivable
         const INDOOR_COMFORT: Temperature = 18.0;
-        /// How far shelter closes the gap to that
-        const SHELTER_MODERATION: f32 = 0.6;
 
-        // Out of the wind, so no wind chill
-        let out_of_the_wind = Climate {
-            wind_speed: 0.0,
-            ..self.clone()
+        let Some(cover) = cover else {
+            return self.effective_temperature();
         };
-
-        let outside = out_of_the_wind.effective_temperature();
-
-        outside + (INDOOR_COMFORT - outside) * SHELTER_MODERATION
+        let outside = if cover.keeps_off_wind {
+            Climate { wind_speed: 0.0, ..self.clone() }.effective_temperature()
+        } else {
+            self.effective_temperature()
+        };
+        outside + (INDOOR_COMFORT - outside) * cover.warmth
     }
 
     pub fn effective_temperature(&self) -> Temperature {

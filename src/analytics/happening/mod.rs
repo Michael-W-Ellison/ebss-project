@@ -27,6 +27,7 @@
 
 pub mod beasts;
 pub mod buildings;
+pub mod herds;
 pub mod kin;
 pub mod noticing;
 pub mod senses;

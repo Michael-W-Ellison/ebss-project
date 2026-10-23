@@ -453,6 +453,10 @@ pub const EVERYTHING_TAGGED: &[Tagged] = &[
         is: &[Tag::FoodContainer, Tag::WaterContainer, Tag::Timber],
     },
     Tagged {
+        called: "waterskin",
+        is: &[Tag::WaterContainer],
+    },
+    Tagged {
         called: "basket",
         is: &[Tag::FoodContainer, Tag::CarryingContainer],
     },
@@ -564,6 +568,10 @@ pub const EVERYTHING_TAGGED: &[Tagged] = &[
     },
     Tagged {
         called: "leather",
+        is: &[Tag::FlexibleCovering, Tag::Hide],
+    },
+    Tagged {
+        called: "rawhide",
         is: &[Tag::FlexibleCovering, Tag::Hide],
     },
     Tagged {
@@ -752,6 +760,7 @@ pub const EVERYTHING_THAT_SERVES: &[Serves] = &[
     Serves { called: "claypot", capability: Capability::WaterContainer, how_well: 0.9 },
     Serves { called: "leatherbag", capability: Capability::WaterContainer, how_well: 0.6 },
     Serves { called: "bowl", capability: Capability::WaterContainer, how_well: 0.4 },
+    Serves { called: "waterskin", capability: Capability::WaterContainer, how_well: 0.8 },
 
     // ---- roofing ---------------------------------------------------------
     //
@@ -761,6 +770,7 @@ pub const EVERYTHING_THAT_SERVES: &[Serves] = &[
     Serves { called: "bricks", capability: Capability::ShelterMaterial, how_well: 1.0 },
     Serves { called: "hides", capability: Capability::ShelterMaterial, how_well: 0.9 },
     Serves { called: "leather", capability: Capability::ShelterMaterial, how_well: 0.9 },
+    Serves { called: "rawhide", capability: Capability::ShelterMaterial, how_well: 0.85 },
     // A split stave is a better pole than the log it came out of: straighter,
     // and it does not want hewing to sit flat. See `making::SPLIT_WOOD`.
     Serves { called: "staves", capability: Capability::ShelterMaterial, how_well: 0.85 },
@@ -936,6 +946,17 @@ pub const WHAT_A_TENT_TAKES: &[Wanted] = &[
 /// be short of.
 pub const WHAT_A_BURROW_TAKES: &[Wanted] = &[];
 
+/// What the brush shelters take: poles, and a cord to tie a frame (#349).
+pub const WHAT_A_WINDBREAK_TAKES: &[Wanted] = &[Wanted { is: Tag::Pole, how_much: 3 }];
+pub const WHAT_A_LEAN_TO_TAKES: &[Wanted] = &[
+    Wanted { is: Tag::Pole, how_much: 4 },
+    Wanted { is: Tag::Cordage, how_much: 1 },
+];
+pub const WHAT_A_BRUSH_HUT_TAKES: &[Wanted] = &[
+    Wanted { is: Tag::Pole, how_much: 6 },
+    Wanted { is: Tag::Cordage, how_much: 1 },
+];
+
 /// What it takes to put up a roof of this kind, where that is stated in
 /// classes rather than in named resources.
 ///
@@ -949,6 +970,9 @@ pub fn what_this_roof_takes(
     match building {
         crate::world::BuildingType::SkinTent => Some(WHAT_A_TENT_TAKES),
         crate::world::BuildingType::Burrow => Some(WHAT_A_BURROW_TAKES),
+        crate::world::BuildingType::Windbreak => Some(WHAT_A_WINDBREAK_TAKES),
+        crate::world::BuildingType::LeanTo => Some(WHAT_A_LEAN_TO_TAKES),
+        crate::world::BuildingType::BrushHut => Some(WHAT_A_BRUSH_HUT_TAKES),
         _ => None,
     }
 }

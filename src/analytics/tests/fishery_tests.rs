@@ -696,3 +696,23 @@ fn a_partner_or_a_fed_friend_leaves_a_trap_alone() {
         "somebody barely hungry does not rob a friend"
     );
 }
+
+/// Somebody who saw a trap robbed is angry at the thief; that puts them on
+/// the minute clock while the thief is in sight, and not once the thief has
+/// gone (#347).
+#[test]
+fn a_thief_out_of_sight_is_no_danger() {
+    use crate::agents::EmotionSource;
+
+    let mut simulation = a_full_trap_and_somebody_at_it(1.0);
+    let thief = simulation.population.agents[0].id;
+    simulation.population.agents[1]
+        .emotions
+        .add_anger(EmotionSource::Agent(thief), 0.55);
+
+    simulation.population.agents[1].state.position = (4, 2, 0);
+    assert!(simulation.something_is_after_me(1), "the thief is right there");
+
+    simulation.population.agents[1].state.position = (40, 40, 0);
+    assert!(!simulation.something_is_after_me(1), "and gone, the grudge is only a grudge");
+}

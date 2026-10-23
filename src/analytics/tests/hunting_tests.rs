@@ -41,8 +41,10 @@ fn a_kill_is_butchered_into_things_agents_understand() {
         assert_eq!(butchered_item_id(skin), "hides", "{skin} should be a hide");
     }
 
+    // A deer's skin comes off raw, whatever the beast table calls it (#353)
+    assert_eq!(butchered_item_id("leather"), "hides");
+
     // Things that already have a name keep it
-    assert_eq!(butchered_item_id("leather"), "leather");
     assert_eq!(butchered_item_id("wool"), "wool");
 
     // Trophies pass through: no use yet, and inventing one would be worse
@@ -149,8 +151,8 @@ fn a_kill_fills_the_pack_with_meat_and_skins() {
         "a deer should be worth some meat, carrying {carried:?}"
     );
     assert!(
-        agent.inventory.has_item("leather", 1),
-        "a deer should be worth some leather, carrying {carried:?}"
+        agent.inventory.has_item("hides", 1),
+        "a deer should be worth a skin, carrying {carried:?}"
     );
 
     // And the meat is meat: it carries nutrition and can go on a fire

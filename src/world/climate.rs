@@ -206,6 +206,11 @@ impl ClimateManager {
         // Update weather generator with current season and humidity
         self.weather_gen.season = self.calendar.current_season();
         self.weather_gen.set_humidity(self.base_climate.humidity);
+        // The wind blows across the country's open ground (#352)
+        self.weather_gen.open_country_wind = self
+            .region
+            .on_this_ground(crate::world::TerrainType::Plains)
+            .typical_wind_speed();
         if let Some(biome) = self.dominant_biome {
             self.weather_gen.set_biome(biome);
         }

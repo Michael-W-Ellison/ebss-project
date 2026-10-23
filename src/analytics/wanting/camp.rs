@@ -147,11 +147,16 @@ impl Simulation {
             }
         }
 
+        // A roof that will stand, not brush: a hut is cover for the nights a
+        // band is there, not a reason for the band to be there. Counted, every
+        // hut put up within a forage of the camp became where it slept and
+        // then where it lived, and camp moves fell from 269 to 196 on sixteen
+        // scattered worlds, 573 to 426 on thirty-two (#349).
         let roof = self
             .world
             .buildings
             .iter()
-            .filter(|roof| roof.is_completed())
+            .filter(|roof| roof.is_a_roof() && !roof.building_type.falls_apart())
             .map(|roof| (roof.position.x, roof.position.y))
             .filter(|roof| {
                 (roof.0 - at.0).abs().max((roof.1 - at.1).abs()) <= Self::FORAGE_RADIUS as i32
@@ -272,6 +277,10 @@ impl Simulation {
     /// fewer mouths now to feed. That is how a camp that has outgrown its
     /// ground becomes two, and a farmer stays by a field while the foragers go
     /// on. Children not yet grown go with a parent who goes. See #314.
+    /// How often a fired pot carried on a camp move breaks on the way: one
+    /// in five (#355).
+    pub(in crate::analytics) const A_POT_BREAKS_ON_A_MOVE: f64 = 0.2;
+
     pub(in crate::analytics) fn the_camp_moves(&mut self, decided: CampMove) {
         let Some(decider) = self.population.agents.iter().position(|a| a.id == decided.who) else {
             return;
@@ -304,6 +313,19 @@ impl Simulation {
             if goes {
                 agent.hearth = Some(decided.to);
                 agent.hearth_moved_at = now;
+
+                // And a fired pot carried to the new camp may not get there
+                // (#355): heavy, and it breaks. Which is why pots belong to
+                // a people who stay.
+                let pots = agent.how_many_i_have("stoneware");
+                if pots > 0 {
+                    use rand::Rng;
+                    let mut rng = crate::core::dice::roll();
+                    let broken = (0..pots).filter(|_| rng.gen_bool(Self::A_POT_BREAKS_ON_A_MOVE)).count();
+                    for _ in 0..broken {
+                        agent.a_pot_breaks();
+                    }
+                }
             }
         }
 
@@ -497,6 +519,29 @@ impl Simulation {
             return None;
         }
 
+        // **A camp that has fouled its ground is moved off it** (#357), by
+        // somebody who has been laid up by the filth: a forager's answer to
+        // dirt is to leave it. A people that stays has to keep it in one
+        // place instead.
+        if !self.moved_lately(agent) && self.this_camp_is_fouled(agent) {
+            let lives = Self::where_this_one_lives(agent);
+            if let Some(there) = self.somewhere_clean_to_camp(agent, (lives.0, lives.1, agent_position.2)) {
+                self.propose_moving_camp(agent, (there.x, there.y), None, "fouled ground");
+                return Some(Action::Move { target: (there.x, there.y, agent_position.2) });
+            }
+        }
+
+        // **A herd that has eaten the place down is moved on** (#354).
+        // Herds keep their people moving, not settled: only a field holds a
+        // people in one place. Whoever lives with the keeper comes too.
+        if !self.moved_lately(agent) && self.my_herd_is_going_hungry(agent) {
+            let lives = Self::where_this_one_lives(agent);
+            if let Some(there) = self.fresh_grazing_from((lives.0, lives.1, agent_position.2)) {
+                self.propose_moving_camp(agent, (there.0, there.1), None, "fresh grazing");
+                return Some(Action::Move { target: there });
+            }
+        }
+
         // **A move of camp, or a day's trip.** Whether the camp itself goes
         // is a question about where this one lives: not straight after a
         // move. Not away from food in store, either, was the rule - a people
@@ -535,6 +580,45 @@ impl Simulation {
         Some(Action::Move {
             target: (there.x, there.y, agent_position.2),
         })
+    }
+
+    /// How many foul tiles about where somebody lives make the camp fouled.
+    pub(in crate::analytics) const A_FOULED_CAMP: u32 = 8;
+
+    /// How far about a camp its fouling is counted.
+    pub(in crate::analytics) const HOW_FAR_A_CAMP_FOULS: i32 = 6;
+
+    /// Whether the camp this one lives at has fouled its ground, as somebody
+    /// who has been laid up by filth sees it (#357).
+    pub(in crate::analytics) fn this_camp_is_fouled(&self, agent: &crate::agents::Agent) -> bool {
+        use crate::agents::Agent;
+        let laid_up = agent.times_laid_up.get(Agent::OFF_FOUL_GROUND).copied().unwrap_or(0)
+            + agent.times_laid_up.get(Agent::OFF_FOUL_WATER).copied().unwrap_or(0);
+        if laid_up == 0 {
+            return false;
+        }
+        let lives = Self::where_this_one_lives(agent);
+        self.world.foul_tiles_within((lives.0, lives.1), Self::HOW_FAR_A_CAMP_FOULS) >= Self::A_FOULED_CAMP
+    }
+
+    /// Somewhere to camp off fouled ground: the place with the most food
+    /// standing that this one knows of, a move away and clean about.
+    pub(in crate::analytics) fn somewhere_clean_to_camp(
+        &self,
+        agent: &crate::agents::Agent,
+        from: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        let here = crate::world::Position::new(from.0, from.1);
+        self.nodes_known_to(agent, here, Self::HOW_FAR_A_PEOPLE_WILL_MOVE)
+            .filter(|resource| resource.amount > 0)
+            .filter(|resource| Self::edible_item_for(resource.resource_type).is_some())
+            .filter(|resource| here.distance_to(&resource.position) >= Self::FAR_ENOUGH_TO_BE_WORTH_THE_WALK as u32)
+            .filter(|resource| {
+                self.world.foul_tiles_within((resource.position.x, resource.position.y), Self::HOW_FAR_A_CAMP_FOULS)
+                    < Self::A_FOULED_CAMP / 2
+            })
+            .max_by_key(|resource| (resource.amount, resource.position.x, resource.position.y))
+            .map(|resource| resource.position)
     }
 
     /// Ground clearly better than this, for a people that cannot make food

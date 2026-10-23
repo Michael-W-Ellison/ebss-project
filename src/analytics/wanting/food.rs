@@ -310,7 +310,7 @@ impl Simulation {
                 Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
             };
 
-            if agent.inventory.has_item("wood", wood_a_fire_wants) {
+            if agent.fuel_i_carry() >= wood_a_fire_wants {
                 return Some(Action::LightFire);
             }
         }
@@ -329,6 +329,12 @@ impl Simulation {
             .is_some()
         {
             return Some(Action::Eat { food_type: "generic".to_string() });
+        }
+
+        // A beast of the herd that can be spared, before a walk for food
+        // (#354)
+        if let Some(kill) = self.a_beast_to_spare(agent, agent_position, false) {
+            return Some(kill);
         }
 
         // An animal standing right here, when the nearest food anybody knows
@@ -504,6 +510,10 @@ impl Simulation {
         // because gathering thin air on the spot accomplishes nothing and
         // blocks everything they could usefully be doing.
         if desperate {
+            // A beast of the herd, down to a pair (#354)
+            if let Some(kill) = self.a_beast_to_spare(agent, agent_position, true) {
+                return Some(kill);
+            }
             // An animal is food. Hunting does not pay against berries and
             // fish, which is why an agent does not do it for the meat as a
             // rule - but an agent with nothing else left is a different case.
@@ -513,7 +523,7 @@ impl Simulation {
             if let Some((animal_id, animal_position, _)) = self.the_best_prey_to_eat(
                 agent,
                 agent_position,
-                Self::HUNT_SEARCH_RADIUS as i32,
+                Self::how_far_a_hunter_looks(agent) as i32,
             ) {
                 let reach = (animal_position.0 - agent_position.0)
                     .abs()
@@ -967,6 +977,16 @@ impl Simulation {
     /// lose it. Asked for anything, an agent picks something a fire actually
     /// improves, because nobody sets out to burn their dinner.
     pub(in crate::analytics) fn cookable_item(agent: &crate::agents::Agent, food_type: &str) -> Option<String> {
+        Self::food_for_the_heat(agent, food_type, false)
+    }
+
+    /// What this one carries that a pot of water would improve (#355).
+    pub(in crate::analytics) fn stewable_item(agent: &crate::agents::Agent, food_type: &str) -> Option<String> {
+        Self::food_for_the_heat(agent, food_type, true)
+    }
+
+    /// What goes on the fire, or into a pot over it.
+    fn food_for_the_heat(agent: &crate::agents::Agent, food_type: &str, in_a_pot: bool) -> Option<String> {
         use crate::world::nutrition::CookingOutcome;
 
         let named = !food_type.is_empty() && food_type != "generic";
@@ -994,7 +1014,11 @@ impl Simulation {
             })
             .filter(|item| {
                 crate::agents::storage_integration::id_to_item_type(&item.item_id)
-                    .map(|item_type| item_type.cooking_outcome() == CookingOutcome::Improves)
+                    .map(|item_type| {
+                        let outcome =
+                            if in_a_pot { item_type.stewing_outcome() } else { item_type.cooking_outcome() };
+                        outcome == CookingOutcome::Improves
+                    })
                     .unwrap_or(false)
             })
             // A whole beast does not go over a fire. What happens if you try
@@ -1010,6 +1034,7 @@ impl Simulation {
     /// Whether the agent is carrying something a fire would improve
     pub(in crate::analytics) fn has_food_worth_cooking(agent: &crate::agents::Agent) -> bool {
         Self::cookable_item(agent, "generic").is_some()
+            || (agent.how_many_i_have("stoneware") > 0 && Self::stewable_item(agent, "generic").is_some())
     }
 
     /// How far an agent will walk to reach a fire that is already burning
@@ -1055,6 +1080,9 @@ impl Simulation {
                 .nearest_fire_from(agent_position, Self::FIRE_REACH, true)
                 .is_some()
         {
+            if let Some(better) = self.a_better_way_to_cook(agent, agent_position) {
+                return Some(better);
+            }
             return Some(Action::Cook {
                 food_type: "generic".to_string(),
             });
@@ -1077,7 +1105,7 @@ impl Simulation {
             Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
         };
 
-        if agent.inventory.has_item("wood", wood_needed) {
+        if agent.fuel_i_carry() >= wood_needed {
             return Some(Action::LightFire);
         }
 
@@ -1095,6 +1123,43 @@ impl Simulation {
 
         None
     }
+
+    /// A better way than over the flames, at a fire, for a batch big enough
+    /// to be worth it (#348): a pit oven for most of a pack, if this one
+    /// knows how and has the wood and the ground for it; stones in a vessel
+    /// of water for more than a fire takes at once. Neither burns.
+    pub(in crate::analytics) fn a_better_way_to_cook(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let cookable = Self::cookable_item(agent, "generic")?;
+        if crate::world::nutrition::Piece::of(&cookable) == crate::world::nutrition::Piece::Whole {
+            return None;
+        }
+        let how_many = agent.how_many_i_have(&cookable);
+        let here = crate::world::Position::new(agent_position.0, agent_position.1);
+
+        if how_many >= Self::WORTH_A_PIT_OVEN
+            && agent.knows_how_to_do("PitOven")
+            && agent.how_many_i_have("wood") >= Self::WOOD_FOR_A_PIT_OVEN
+            && self.is_ground_a_pit_will_go_in(here)
+        {
+            return Some(Action::PitOven);
+        }
+
+        if how_many > Self::COOK_BATCH
+            && Self::something_to_boil_it_in(agent) == Some(true)
+            && (agent.how_much_water_i_carry() >= Self::WHAT_A_BOILING_TAKES
+                || self.drinkable_water_within_reach(agent, agent_position))
+        {
+            return Some(Action::StoneBoil);
+        }
+        None
+    }
+
+    /// How much there has to be to cook before a pit oven is worth digging.
+    pub(in crate::analytics) const WORTH_A_PIT_OVEN: u32 = 10;
 
     /// Position of the closest edible resource within `radius` walking steps
     pub(in crate::analytics) fn nearest_edible_within(

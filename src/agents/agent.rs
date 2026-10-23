@@ -175,6 +175,14 @@ impl InventoryItem {
         let mine = self.quantity;
         let theirs = other.quantity;
 
+        // A raw hide's freshness is kept in its durability, and a hide that
+        // has not had any counted yet is fresh off the animal (#353).
+        let mut other = other;
+        if Self::rots_unless_worked(&self.item_id) {
+            self.current_durability.get_or_insert(1.0);
+            other.current_durability.get_or_insert(1.0);
+        }
+
         // **And what a unit of the stack weighs, blended the same way.** It
         // kept the first stack's figure, so ten two-unit stones and ten
         // half-unit pebbles weighed forty together, and a made thing (weighed
@@ -298,7 +306,29 @@ impl InventoryItem {
         if let Some(ref mut food) = self.food_data {
             food.goes_off(now, how_fast);
         }
+
+        // A raw hide rots in about a week unless it is scraped and dried, or
+        // used (#353). Its freshness is kept in its durability.
+        if Self::rots_unless_worked(&self.item_id) {
+            let fresh = self.current_durability.get_or_insert(1.0);
+            *fresh = (*fresh - Self::WHAT_A_HALF_HOUR_TAKES_OFF_A_RAW_HIDE).max(0.0);
+        }
     }
+
+    /// Whether this is a raw skin that rots unless it is worked (#353).
+    pub fn rots_unless_worked(item_id: &str) -> bool {
+        item_id == "hides"
+    }
+
+    /// Whether this is a raw skin gone rotten.
+    pub fn has_rotted(&self) -> bool {
+        Self::rots_unless_worked(&self.item_id) && self.current_durability.is_some_and(|fresh| fresh <= 0.0)
+    }
+
+    /// How much of a raw hide's freshness a half hour takes: it keeps about a
+    /// week, as fresh meat does.
+    pub const WHAT_A_HALF_HOUR_TAKES_OFF_A_RAW_HIDE: f32 =
+        1.0 / (7.0 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32);
 
     /// Check if this is a container
     pub fn is_container(&self) -> bool {
@@ -1162,6 +1192,18 @@ pub struct AgentState {
     /// what actually killed people who survived the animal.
     #[serde(default)]
     pub an_open_wound: f32,
+
+    /// How much health an open wound is losing a half hour (#351).
+    ///
+    /// Opened with the wound by a blow and slowing as the blood clots
+    /// (`Agent::A_WOUND_CLOTS`); pressure on it, or a dressing, stops it.
+    #[serde(default)]
+    pub bleeding: f32,
+
+    /// The tick a dressing over the wound is good until (#351). Dressed, a
+    /// wound closes twice as fast and turns half as often.
+    #[serde(default)]
+    pub wound_dressed_until: u32,
 }
 
 impl AgentState {
@@ -1204,6 +1246,8 @@ impl AgentState {
             what_has_taken_health: Vec::new(),
             salt_in_me: 0.0,
             an_open_wound: 0.0,
+            bleeding: 0.0,
+            wound_dressed_until: 0,
         }
     }
 
@@ -1347,6 +1391,8 @@ impl AgentState {
         // through `lose_health` and leave nothing to fester.
         let opened = (amount / Self::WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND).clamp(0.0, 1.0);
         self.an_open_wound = self.an_open_wound.max(opened);
+        // And it bleeds, as hard as it is open (#351)
+        self.bleeding = self.bleeding.max(opened * Self::WHAT_AN_OPEN_WOUND_BLEEDS);
 
         self.lose_health(amount, Self::A_BLOW);
     }
@@ -1420,6 +1466,12 @@ impl AgentState {
     /// A blow of this size leaves one that is as open as they come. A scratch
     /// leaves a scratch.
     pub const WHAT_A_BLOW_HAS_TO_BE_TO_LEAVE_A_WOUND: f32 = 25.0;
+
+    /// What the worst of wounds bleeds, in health a half hour, before anybody
+    /// presses on it (#351). It clots by itself (`Agent::A_WOUND_CLOTS`), so
+    /// left alone it costs about twenty-seven health all told: on top of the
+    /// blow that opened it, enough to finish somebody the blow left low.
+    pub const WHAT_AN_OPEN_WOUND_BLEEDS: f32 = 4.0;
 
     /// How much of an open wound closes in a turn.
     ///
@@ -1781,6 +1833,31 @@ pub struct Agent {
     /// because the test is `busy_until > now` rather than `>=`.
     #[serde(default)]
     pub busy_until: u32,
+    /// How many raw hides have rotted in this one's pack (#353).
+    #[serde(default)]
+    pub hides_that_rotted: u32,
+    /// Fired pots that have cracked or broken on this one (#355).
+    #[serde(default)]
+    pub pots_broken: u32,
+    /// How much salt the body has in it, from nought to one (#356). Sweated
+    /// and passed away a little every half hour; put back by meat, fish,
+    /// milk, salted food and salt itself. Run low, the body craves it; run
+    /// out, it weakens.
+    #[serde(default = "Agent::a_body_full_of_salt")]
+    pub salt_in_the_body: f32,
+    /// A journey under way to somewhere beyond a day's forage, and back
+    /// (#356). Somebody on one sleeps where night finds them.
+    #[serde(default)]
+    pub journey: Option<Journey>,
+    /// When this one last ate meat, if ever (#358). A week without it and
+    /// the body wants it - fat and flesh, which no plant gives.
+    #[serde(default)]
+    pub last_ate_meat: Option<u32>,
+    /// Where this one has lately seen game worth hunting, and when (#358):
+    /// a herd keeps to its ground, so a place game was seen is a place to
+    /// go hunting.
+    #[serde(default)]
+    pub game_seen: Vec<((i32, i32), u32)>,
     /// How used this one has got to each kind of beast, by name, from
     /// nought (a stranger) to nearly one (part of the furniture).
     ///
@@ -2049,6 +2126,12 @@ impl Agent {
         let mut agent = Self {
             id: crate::core::dice::name(),
             busy_until: 0,
+            hides_that_rotted: 0,
+            pots_broken: 0,
+            salt_in_the_body: Agent::a_body_full_of_salt(),
+            journey: None,
+            last_ate_meat: None,
+            game_seen: Vec::new(),
             familiar_with: std::collections::BTreeMap::new(),
             last_evening_watching_ore: None,
             stepped_from: None,
@@ -3026,27 +3109,56 @@ impl Agent {
     const HOW_OFTEN_A_SOAKING_TELLS: f64 =
         0.24 / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f64;
 
-    /// A wound closes, or it turns.
-    fn turn_the_wound(&mut self, now: u32) {
+    /// A wound bleeds, and closes, or it turns.
+    ///
+    /// Bleeding costs health every half hour and slows as the blood clots.
+    /// A dressing over the wound (`wound_dressed_until`) closes it twice as
+    /// fast and lets it turn half as often, and so does lying still: asleep,
+    /// a wound closes twice as fast as on the move (#351).
+    pub(crate) fn turn_the_wound(&mut self, now: u32) {
         use rand::Rng;
+
+        if self.state.bleeding > 0.0 {
+            let losing = self.state.bleeding;
+            self.state.lose_health(losing, AgentState::A_WOUND);
+            self.state.bleeding *= Self::A_WOUND_CLOTS;
+            if self.state.bleeding < Self::A_TRICKLE {
+                self.state.bleeding = 0.0;
+            }
+        }
 
         if self.state.an_open_wound <= 0.0 {
             return;
         }
+        let dressed = now < self.state.wound_dressed_until;
 
         // Only an open wound can turn, and only somebody not already ill can
         // come down with it - nothing in this model stacks.
         if self.state.ailing.is_none() {
-            let odds = Self::HOW_OFTEN_A_WOUND_TURNS * self.state.an_open_wound as f64;
+            let odds = Self::HOW_OFTEN_A_WOUND_TURNS
+                * self.state.an_open_wound as f64
+                * if dressed { 0.5 } else { 1.0 };
             if crate::core::dice::roll().gen_bool(odds.clamp(0.0, 1.0)) {
                 let how_bad = 0.4 + 0.5 * self.state.an_open_wound;
                 self.taken_ill_with(Self::OFF_A_WOUND_THAT_TURNED, how_bad, now);
             }
         }
 
-        self.state.an_open_wound =
-            (self.state.an_open_wound - AgentState::HOW_FAST_A_WOUND_CLOSES).max(0.0);
+        let closing = AgentState::HOW_FAST_A_WOUND_CLOSES
+            * if dressed { 2.0 } else { 1.0 }
+            * if self.fatigue.is_sleeping { 2.0 } else { 1.0 };
+        self.state.an_open_wound = (self.state.an_open_wound - closing).max(0.0);
     }
+
+    /// How much of its bleeding a wound keeps from one half hour to the next,
+    /// clotting by itself (#351).
+    pub const A_WOUND_CLOTS: f32 = 0.85;
+
+    /// Bleeding below which it has stopped.
+    pub const A_TRICKLE: f32 = 0.1;
+
+    /// Bleeding worth stopping what one is doing to press on (#351).
+    pub const BLEEDING_WORTH_PRESSING: f32 = 0.5;
 
     /// Cold and wet, for long enough, comes to something.
     ///
@@ -3312,6 +3424,28 @@ impl Agent {
 
     /// And off living on fouled ground.
     pub const OFF_FOUL_GROUND: &'static str = "foul ground";
+
+    /// Water drawn beside fouled ground (#357).
+    pub const OFF_FOUL_WATER: &'static str = "foul water";
+
+    /// How many times laid up by filth before somebody sees where it comes
+    /// from and keeps the refuse in one place away from the camp (#357).
+    pub const ILL_FROM_FILTH_BEFORE_A_MIDDEN: u32 = 2;
+
+    /// What being laid up by filth teaches (#357): enough of it, and a
+    /// midden; with a midden and a people settled, a latrine.
+    pub fn what_filth_teaches(&mut self) {
+        let laid_up = self.times_laid_up.get(Self::OFF_FOUL_GROUND).copied().unwrap_or(0)
+            + self.times_laid_up.get(Self::OFF_FOUL_WATER).copied().unwrap_or(0);
+        if laid_up >= Self::ILL_FROM_FILTH_BEFORE_A_MIDDEN {
+            self.found_out_how_to("do:StartMidden");
+        }
+        if self.found_out.contains("do:StartMidden")
+            && self.practices.is_established(crate::agents::practices::Practice::Farming)
+        {
+            self.found_out_how_to("do:DigLatrine");
+        }
+    }
 
     /// A chill: cold and wet, for long enough, with no roof.
     ///
@@ -3610,6 +3744,14 @@ impl Agent {
     }
 
     /// Whether this agent knows any way at all of making a named thing.
+    /// Whether this agent knows a working that makes this - working one
+    /// thing into another, as a pot is shaped and fired (#355).
+    pub fn knows_a_working_that_makes(&self, what: &str) -> bool {
+        crate::environment::making::EVERY_WORKING
+            .iter()
+            .any(|working| working.makes == what && (working.born_known() || self.found_out.contains(working.makes)))
+    }
+
     pub fn knows_how_to_make(&self, what: &str) -> bool {
         crate::environment::making::every_way_to_make(what).any(|step| self.knows_how_to(step))
     }
@@ -3670,7 +3812,43 @@ impl Agent {
     ///   `what_was_dropped_takes_root`).
     /// - Breaking ground for a garden (Stage 2) is found out by gathering,
     ///   often enough, from stands you sowed yourself.
-    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 2] = ["ScatterSeed", "TillSoil"];
+    /// - Smoking over a low fire (Stage 1 of preservation) by drying food
+    ///   within reach of a burning hearth, often enough.
+    /// - A rack (Stage 2 of storage) by being rained off drying, often
+    ///   enough.
+    /// - A pit oven (Stage 1 of cooking) by enough suppers over a fire.
+    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 5] =
+        ["ScatterSeed", "TillSoil", "Smoke", "PutUpRack", "PitOven"];
+
+    /// What the practice record calls food dried within reach of a burning
+    /// hearth, and how much of it before somebody notices that what hung in
+    /// the smoke kept, and kept through the wet.
+    pub const DRIED_BY_THE_HEARTH: &'static str = "driedbythehearth";
+    pub const DRIED_BY_THE_HEARTH_BEFORE_SMOKING: u32 = 6;
+
+    /// What it calls being rained off drying, and how often before somebody
+    /// thinks to get food up off the ground and out of the wet.
+    pub const RAINED_OFF_DRYING: &'static str = "rainedoffdrying";
+    pub const RAINED_OFF_BEFORE_A_RACK: u32 = 6;
+
+    /// What the practice record calls a day gone thirsty with no water in
+    /// reach, and how many of them before somebody takes water along in a
+    /// skin (#351).
+    pub const THIRSTY_FAR_FROM_WATER: &'static str = "thirstyfarfromwater";
+    pub const THIRSTY_DAYS_BEFORE_A_WATER_SKIN: u32 = 3;
+
+    /// How many hides somebody scrapes into rawhide before working one soft
+    /// over a smoky fire: tanning (#353).
+    pub const HIDES_SCRAPED_BEFORE_TANNING: u32 = 6;
+
+    /// Wet enough that rawhide worn on the body stiffens and rots: the
+    /// wetness that frostbite already reads as soaked (#353).
+    pub const SOAKED_THROUGH: f32 = 0.3;
+
+    /// What it calls a batch off a fire, and how many suppers before
+    /// somebody buries the next one with the stones out of it.
+    pub const A_BATCH_OFF_THE_FIRE: &'static str = "abatchoffthefire";
+    pub const BATCHES_BEFORE_A_PIT_OVEN: u32 = 30;
 
     /// What the practice record calls a handful of seed thrown on the ground.
     pub const SEED_SCATTERED: &'static str = "scatterseed";
@@ -3841,6 +4019,144 @@ impl Agent {
 
     /// And how many questions anybody keeps open at once.
     const AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS: usize = 4;
+
+    /// How long without meat before the body wants it (#358).
+    pub const A_WEEK_WITHOUT_MEAT: u32 = 7 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// Whether this one craves meat (#358): a week since the last of it,
+    /// counted from birth for somebody who never had any.
+    ///
+    /// **Not salt as well.** The first cut had a body short of salt crave
+    /// meat too, and on an inland world with no salt known a whole band
+    /// craved both for good, went after game they mostly could not bring
+    /// down instead of eating, and ten of twelve were dead inside the year.
+    pub fn craves_meat(&self, now: u32) -> bool {
+        if self.state.life_stage == LifeStage::Infant {
+            return false;
+        }
+        now.saturating_sub(self.last_ate_meat.unwrap_or(0)) >= Self::A_WEEK_WITHOUT_MEAT
+    }
+
+    /// How many places game was seen this one keeps in mind.
+    pub const GAME_KEPT_IN_MIND: usize = 6;
+
+    /// How long a sighting of game is worth walking to: three days.
+    pub const GAME_STAYS_ABOUT: u32 = 3 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// Game seen at a place, now (#358): one sighting a stretch of ground,
+    /// the freshest kept.
+    pub fn saw_game_at(&mut self, at: (i32, i32), now: u32) {
+        const THE_SAME_GROUND: i32 = 20;
+        if let Some(seen) = self
+            .game_seen
+            .iter_mut()
+            .find(|(there, _)| (there.0 - at.0).abs().max((there.1 - at.1).abs()) <= THE_SAME_GROUND)
+        {
+            *seen = (at, now);
+            return;
+        }
+        self.game_seen.push((at, now));
+        if self.game_seen.len() > Self::GAME_KEPT_IN_MIND {
+            self.game_seen.sort_by_key(|(_, when)| std::cmp::Reverse(*when));
+            self.game_seen.truncate(Self::GAME_KEPT_IN_MIND);
+        }
+    }
+
+    /// A body with all the salt it wants in it.
+    pub fn a_body_full_of_salt() -> f32 {
+        1.0
+    }
+
+    /// What a day takes out of the body's salt, in sweat and water: from
+    /// full to nothing in forty days with none going in (#356).
+    pub const WHAT_A_DAY_TAKES_OF_THE_SALT: f32 = 1.0 / 40.0;
+
+    /// Below this the body craves salt, and a pinch of what is carried is
+    /// licked.
+    pub const SHORT_OF_SALT: f32 = 0.35;
+
+    /// What a pinch of salt licked puts back.
+    pub const WHAT_A_PINCH_PUTS_BACK: f32 = 0.4;
+
+    /// What a body short of salt altogether loses of its health in a day:
+    /// weakness, cramp, and a slow going downhill.
+    ///
+    /// It was two a day, which with nothing in plants and no salt known left
+    /// a fifth of all the days on an inland world spent at nought and the
+    /// band bleeding health all year: the measurement that found it is in
+    /// ISSUES_FOUND #358.
+    pub const WHAT_GOING_WITHOUT_SALT_COSTS_A_DAY: f32 = 0.5;
+
+    /// Whether this one craves salt.
+    pub fn craves_salt(&self) -> bool {
+        self.salt_in_the_body < Self::SHORT_OF_SALT
+    }
+
+    /// What a mouthful of this puts back of the body's salt (#356): flesh,
+    /// blood and milk carry it, the sea's fish more; what has been salted or
+    /// brined carries a good deal; wild leaves, roots and nuts a little, and
+    /// grain least. A people living on meat never go short, a people
+    /// gathering go short only slowly, and a people living on what they grow
+    /// do.
+    pub fn salt_in_a_mouthful_of(item_id: &str) -> f32 {
+        use crate::world::ItemType;
+        if item_id.starts_with("brined_") {
+            return 0.1;
+        }
+        match crate::agents::storage_integration::id_to_item_type(item_id) {
+            Some(ItemType::Fish) => 0.04,
+            Some(ItemType::Meat) | Some(ItemType::Milk) | Some(ItemType::Cheese) => 0.03,
+            Some(ItemType::Greens) | Some(ItemType::Roots) | Some(ItemType::Legumes) | Some(ItemType::Nuts)
+            | Some(ItemType::Food) => 0.01,
+            Some(ItemType::Grain) | Some(ItemType::Flour) | Some(ItemType::Bread) => 0.004,
+            _ => 0.0,
+        }
+    }
+
+    /// The body's salt over a half hour: what is sweated out, a pinch of
+    /// what is carried licked when it craves, and health lost when there is
+    /// none (#356).
+    pub fn turn_the_salt_in_the_body(&mut self) {
+        // At the breast a child has its mother's
+        if self.state.life_stage == LifeStage::Infant {
+            self.salt_in_the_body = 1.0;
+            return;
+        }
+        let a_half_hour = crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
+        self.salt_in_the_body = (self.salt_in_the_body - Self::WHAT_A_DAY_TAKES_OF_THE_SALT / a_half_hour).max(0.0);
+        if self.craves_salt() && self.how_many_i_have("salt") > 0 {
+            self.inventory.remove_item("salt", 1);
+            self.salt_in_the_body = (self.salt_in_the_body + Self::WHAT_A_PINCH_PUTS_BACK).min(1.0);
+        }
+        if self.salt_in_the_body <= 0.0 {
+            self.take_damage(Self::WHAT_GOING_WITHOUT_SALT_COSTS_A_DAY / a_half_hour);
+        }
+    }
+
+    /// One fired pot cracked and gone (#355), with whatever share of the
+    /// water carried was in it. True if there was one.
+    pub fn a_pot_breaks(&mut self) -> bool {
+        let Some(pots) = self.inventory.get_item("stoneware").map(|item| item.quantity) else {
+            return false;
+        };
+        if pots <= 1 {
+            self.inventory.remove_item("stoneware", 1);
+        } else if let Some(item) = self.inventory.get_all_items_mut().get_mut("stoneware") {
+            item.quantity -= 1;
+            if let (Some(fill), Some(_)) = (item.fill_level, item.max_capacity) {
+                item.fill_level = Some(fill * (pots - 1) as f32 / pots as f32);
+            }
+        }
+        self.pots_broken += 1;
+        true
+    }
+
+    /// What this one carries that will burn: wood, and dried dung for
+    /// whoever has found out what it is good for (#354).
+    pub fn fuel_i_carry(&self) -> u32 {
+        let dung = if self.knows_how_to_do("MuckOut") { self.how_many_i_have("dung") } else { 0 };
+        self.how_many_i_have("wood") + dung
+    }
 
     pub fn found_out_how_to(&mut self, what: &str) -> bool {
         self.found_out.insert(what.to_string())
@@ -5551,7 +5867,18 @@ impl Agent {
     pub fn turn_with_percepts(&mut self, current_turn: u32) {
         // Update subsystems
         self.senses.take_a_turn();
-        self.body.take_a_turn();
+        let soaked = self.exposure_status.wetness > Self::SOAKED_THROUGH;
+        self.body.take_a_turn_resting_in(self.fatigue.is_sleeping, soaked);
+        // The salt in the body, sweated out and put back (#356)
+        self.turn_the_salt_in_the_body();
+        // A pot shaped and not fired goes back to mud in the wet (#355)
+        if soaked {
+            let shaped = self.how_many_i_have("claypot");
+            if shaped > 0 {
+                self.inventory.remove_item("claypot", shaped);
+                self.inventory.add_item(InventoryItem::new_with_weight("clay".to_string(), shaped, 1.0));
+            }
+        }
         // Use trait-aware emotion decay (traits affect how quickly emotions fade)
         self.emotions.turn_with_traits(&self.traits);
         // Apply passive trait effects (e.g., Melancholic slowly gains sadness)
@@ -6149,6 +6476,20 @@ impl Agent {
             .map(|(id, _)| id.clone())
             .collect();
 
+        // And raw hides that have rotted, which are matter and not food:
+        // nobody minds them as they mind a meal (#353)
+        let rotted: Vec<String> = self.inventory.get_all_items().iter()
+            .filter(|(_, item)| item.has_rotted())
+            .map(|(id, _)| id.clone())
+            .collect();
+        for item_id in rotted {
+            if let Some(item) = self.inventory.items.remove(&item_id) {
+                self.state.waste_carried += item.quantity as f32
+                    * crate::world::Soil::waste_from_spoilage(&item_id);
+                self.hides_that_rotted += item.quantity;
+            }
+        }
+
         for item_id in spoiled_items {
             // What has gone off is still matter. Deleting it outright made a
             // pack the one place in the world where things could rot to
@@ -6175,17 +6516,27 @@ impl Agent {
     /// agent inside a building cools exactly as fast as one standing in the
     /// open, so sheltering never resolves the exposure that sent it indoors.
     pub fn update_temperature_with_shelter(&mut self, climate: &super::Climate, has_shelter: bool) {
-        let cold_insulation = self.body.total_cold_insulation();
+        self.update_temperature_under(climate, has_shelter.then_some(crate::world::Cover::FULL), 0.0);
+    }
+
+    /// The same, under whatever cover there is (#349), and on bedding or off
+    /// it: lying on boughs is lying off the cold ground, which is worth what
+    /// another layer is worth, and a hide twice that (#353). `bedding` is
+    /// what the bedding lain on is worth, nought for none.
+    pub fn update_temperature_under(
+        &mut self,
+        climate: &super::Climate,
+        cover: Option<crate::world::Cover>,
+        bedding: f32,
+    ) {
+        let cold_insulation = self.body.total_cold_insulation() + bedding;
         let heat_resistance = self.body.total_heat_resistance();
-
-        let effective_temp = if has_shelter {
-            climate.sheltered_effective_temperature()
-        } else {
-            climate.effective_temperature()
-        };
-
+        let effective_temp = climate.effective_temperature_under(cover);
         self.body_temperature.update(effective_temp, cold_insulation, heat_resistance);
     }
+
+    /// What lying on bedding is worth against the cold, as insulation.
+    pub const WHAT_BEDDING_IS_WORTH: f32 = 0.15;
 
     /// Update exposure status based on environmental conditions
     ///
@@ -7595,6 +7946,14 @@ impl Agent {
             Action::Dry { what } => format!("dry:{what}"),
             Action::Boil => "boil".to_string(),
             Action::Salt { what } => format!("salt:{what}"),
+            Action::Smoke { what } => format!("smoke:{what}"),
+            Action::Brine { what } => format!("brine:{what}"),
+            Action::Cache => "cache".to_string(),
+            Action::PutUpRack => "putuprack".to_string(),
+            Action::HangUp { what } => format!("hangup:{what}"),
+            Action::StoneBoil => "stoneboil".to_string(),
+            Action::PitOven => "pitoven".to_string(),
+            Action::LayBedding => "laybedding".to_string(),
             Action::Excavate => "excavate".to_string(),
             Action::Cover { what } => format!("cover:{what}"),
             Action::PickUp { what } => format!("pickup:{what}"),
@@ -7617,6 +7976,8 @@ impl Agent {
             Action::PlantCutting => "plantcutting".to_string(),
             Action::SpreadMuck => "spreadmuck".to_string(),
             Action::Treat { .. } => "treat".to_string(),
+            Action::PressOnWound { .. } => "pressonwound".to_string(),
+            Action::Bandage { .. } => "bandage".to_string(),
             Action::Socialize { .. } => "socialize".to_string(),
             Action::AskAbout { what, .. } => format!("ask:{what}"),
             Action::ShareInformation { .. } => "shareinformation".to_string(),
@@ -7700,7 +8061,7 @@ impl Agent {
             // and watched them all get better anyway must not learn that he
             // is a hunter, and folding it into `Foraging` would teach him
             // about picking herbs rather than about giving them.
-            Action::Treat { .. } => Undertaking::Healing,
+            Action::Treat { .. } | Action::PressOnWound { .. } | Action::Bandage { .. } => Undertaking::Healing,
             Action::Fish | Action::ForageShallows | Action::CheckFishTraps => Undertaking::Fishing,
             // Like a snare: setting one is not evidence about whether it pays
             Action::SetFishTrap => return,
@@ -7731,7 +8092,14 @@ impl Agent {
             Action::Excavate | Action::Cover { .. } => Undertaking::Farming,
             // Making food outlast the week it was got in is cookery, which is
             // where the rest of what a fire is for already lives
-            Action::Dry { .. } => Undertaking::Cooking,
+            Action::Dry { .. }
+            | Action::Smoke { .. }
+            | Action::Brine { .. }
+            | Action::HangUp { .. }
+            | Action::StoneBoil
+            | Action::PitOven => Undertaking::Cooking,
+            Action::Cache => Undertaking::Farming,
+            Action::PutUpRack | Action::LayBedding => Undertaking::Building,
             Action::MakeClothing { .. } | Action::WearClothing { .. } => Undertaking::Clothing,
             Action::Gather { .. } => Undertaking::Foraging,
             Action::Build { .. } => Undertaking::Building,
@@ -8403,7 +8771,9 @@ impl Agent {
 
             // Animal interactions reward AnimalLover, penalize Allergic
             crate::environment::Action::Tame { .. } |
-            crate::environment::Action::CollectAnimalProduct { .. } => {
+            crate::environment::Action::CollectAnimalProduct { .. } |
+            crate::environment::Action::PutUpFold |
+            crate::environment::Action::MuckOut => {
                 if self.traits.has(Trait::AnimalLover) {
                     happiness_bonus += 0.06;
                     reward_reason = "animal_joy".to_string();
@@ -8537,6 +8907,7 @@ impl Agent {
 
             // Animal interactions involve problem solving
             Action::Tame { .. } | Action::CollectAnimalProduct { .. } => Some(ActionType::ProblemSolving),
+            Action::PutUpFold | Action::MuckOut | Action::Slaughter { .. } => Some(ActionType::ProblemSolving),
 
             // Other actions that don't fit categories
             _ => None,
@@ -8898,6 +9269,16 @@ impl Agent {
         // two kilos of raw beast in a turn.
         if !crate::world::nutrition::Piece::of(item_id).can_it_be_eaten() {
             return EatResult::NoFood;
+        }
+
+        // What salt it carries into the body, salted or not (#356)
+        let salted = food_data
+            .as_ref()
+            .is_some_and(|food| food.preparation == crate::world::nutrition::PreparationState::Salted);
+        let salt = if salted { 0.1 } else { Self::salt_in_a_mouthful_of(item_id) };
+        self.salt_in_the_body = (self.salt_in_the_body + salt).min(1.0);
+        if crate::agents::storage_integration::id_to_item_type(item_id) == Some(crate::world::ItemType::Meat) {
+            self.last_ate_meat = Some(current_turn);
         }
 
         let food_data = match food_data {
@@ -11264,6 +11645,20 @@ impl Agent {
                     })
                     .map(|(where_it_is, _)| *where_it_is),
             );
+
+            // And where the salt is (#356). It is not wanted every day and
+            // there is little of it in the world, so weighed with the rest
+            // it went first - and a body that craves it a month later has
+            // nowhere to go.
+            let mut salt: Vec<crate::world::Position> = self
+                .exploration_knowledge
+                .known_resources
+                .iter()
+                .filter(|(_, what)| **what == crate::world::ResourceType::Salt)
+                .map(|(where_it_is, _)| *where_it_is)
+                .collect();
+            salt.sort_by_key(|where_it_is| here.distance_to(where_it_is));
+            keep.extend(salt.into_iter().take(Self::NEAREST_MAKINGS_KEPT_IN_MIND));
             keep
         };
 
@@ -11528,6 +11923,33 @@ impl Agent {
         current_turn: u32,
         how_strong_they_are: f32,
     ) {
+        self.robbed(thief, what, how_many, current_turn, how_strong_they_are, true);
+    }
+
+    /// And finding out afterwards that somebody took something of this
+    /// agent's - a trap emptied by somebody long gone. The same cost to the
+    /// bond and the same mark against them, but held as a grudge
+    /// (`EmotionState::hold_a_grudge`): there is nobody there to face or run
+    /// from.
+    pub fn found_out_they_took_something_of_mine(
+        &mut self,
+        thief: uuid::Uuid,
+        what: &str,
+        how_many: u32,
+        current_turn: u32,
+    ) {
+        self.robbed(thief, what, how_many, current_turn, 0.0, false);
+    }
+
+    fn robbed(
+        &mut self,
+        thief: uuid::Uuid,
+        what: &str,
+        how_many: u32,
+        current_turn: u32,
+        how_strong_they_are: f32,
+        they_are_here: bool,
+    ) {
         use super::EmotionSource;
 
         // What it costs depends on how much was taken and how much this agent
@@ -11545,16 +11967,20 @@ impl Agent {
         // like. It is the same appraisal the wolves get, pointed at a person:
         // see `ThreatAssessment` and `DriveType::Aggression`. What was taken
         // decides how much, and who took it decides which.
-        let judged = super::ThreatAssessment::assess(
-            self.own_strength(),
-            how_strong_they_are,
-            EmotionSource::Agent(thief),
-        );
+        if they_are_here {
+            let judged = super::ThreatAssessment::assess(
+                self.own_strength(),
+                how_strong_they_are,
+                EmotionSource::Agent(thief),
+            );
 
-        if judged.can_overcome {
-            self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+            if judged.can_overcome {
+                self.emotions.add_anger(EmotionSource::Agent(thief), cost);
+            } else {
+                self.emotions.add_fear(EmotionSource::Agent(thief), cost);
+            }
         } else {
-            self.emotions.add_fear(EmotionSource::Agent(thief), cost);
+            self.emotions.hold_a_grudge(EmotionSource::Agent(thief), cost);
         }
 
         let bond = self
@@ -12062,6 +12488,21 @@ impl Agent {
 /// a turn: arriving, a threat, a different drive taking the lead, or the walk
 /// going on so much longer than it should that the place is plainly not
 /// reachable.
+/// A journey to somewhere further off than a day's forage, for something,
+/// and home again (#356): a load of salt from a flat a morning's walk away.
+/// Held across turns and nights; an errand is a walk within the day.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Journey {
+    /// Where it is going now: there, and then home
+    pub to: (i32, i32),
+    /// What it is for, as the thing to bring back
+    pub for_what: String,
+    /// When it set out
+    pub set_out: u32,
+    /// On the way back
+    pub homeward: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Errand {
     /// Where it is going

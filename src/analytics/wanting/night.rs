@@ -53,6 +53,27 @@ impl Simulation {
         (asleep, heading_home, turns_left)
     }
 
+    /// What somebody about to sleep where they stand does first, from what
+    /// is in the pack (#349): with no roof over them, they put brush up;
+    /// under one, or with no brush for it, they lay boughs to lie on if
+    /// there are none here already.
+    pub(in crate::analytics) fn brush_before_bed(
+        &self,
+        agent: &crate::agents::Agent,
+        here: (i32, i32, i32),
+    ) -> Option<Action> {
+        let at = crate::world::Position::new(here.0, here.1);
+        if !self.world.is_out_of_the_weather_at(&at) {
+            if let Some(build) = self.cover_i_could_put_up(agent, here) {
+                return Some(build);
+            }
+        }
+        (!self.world.bedding_at(&at)
+            && (agent.how_many_i_have("wood") >= Self::WHAT_BEDDING_TAKES
+                || Self::a_hide_to_spare_for_bedding(agent).is_some()))
+            .then_some(Action::LayBedding)
+    }
+
     /// The nearest clean ground out of the weather within
     /// `NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS`, for somebody about to sleep
     /// where they are not: under a finished roof, or among trees.
@@ -112,7 +133,35 @@ impl Simulation {
     pub(in crate::analytics) fn the_evening_at_home(&self, agent_index: usize) -> Option<Action> {
         let agent = &self.population.agents[agent_index];
         let here = agent.state.position;
-        if agent.state.years_old() < Self::OLD_ENOUGH_TO_COOK || !Self::has_food_worth_cooking(agent) {
+        if agent.state.years_old() < Self::OLD_ENOUGH_TO_COOK {
+            return None;
+        }
+        // The beasts first, which are fed and folded before anybody eats
+        // (#354)
+        if let Some(chore) = self.the_beasts_to_see_to(agent, here) {
+            return Some(chore);
+        }
+        // The refuse given a place, and a latrine dug by it (#357)
+        let home = Self::where_this_one_lives(agent);
+        let home = (home.0, home.1);
+        if agent.knows_how_to_do("StartMidden") && self.world.midden_serving(home).is_none() {
+            return Some(Action::StartMidden);
+        }
+        if agent.knows_how_to_do("DigLatrine")
+            && self.world.midden_serving(home).is_some()
+            && self.world.latrine_serving(home).is_none()
+        {
+            return Some(Action::DigLatrine);
+        }
+        // The skins, which will not wait a week (#353)
+        if let Some(work) = self.a_hide_to_work(agent, here) {
+            return Some(work);
+        }
+        // A pot, by whoever knows how and has fewer than they want (#355)
+        if let Some(work) = self.a_pot_to_make(agent, here) {
+            return Some(work);
+        }
+        if !Self::has_food_worth_cooking(agent) {
             return None;
         }
         if self.nearest_fire_from(here, Self::FIRE_REACH, true).is_some() {
@@ -124,13 +173,81 @@ impl Simulation {
         {
             return Some(Action::Move { target: fire });
         }
-        if agent.inventory.has_item("wood", self.wood_a_fire_here_takes(agent_index)) {
+        if agent.fuel_i_carry() >= self.wood_a_fire_here_takes(agent_index) {
             return Some(Action::LightFire);
         }
         self.nearest_resource_within(agent, here, Self::FORAGE_RADIUS, |resource| {
             resource.resource_type == crate::world::ResourceType::Wood
         })
         .map(|_| Action::Gather { resource_type: "wood".to_string() })
+    }
+
+    /// A skin to see to by the evening fire (#353).
+    ///
+    /// A raw hide rots in a week. One that a wanted fur garment is waiting
+    /// on goes into the garment; any other is scraped and dried into
+    /// rawhide, which keeps, by whoever has an edge to do it with. And
+    /// rawhide is worked soft over the fire - tanned - by whoever has found
+    /// out how, beside a fire that is burning.
+    pub(in crate::analytics) fn a_hide_to_work(
+        &self,
+        agent: &crate::agents::Agent,
+        here: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::SkillType;
+
+        if agent.how_many_i_have("hides") > 0 {
+            if let Some(garment) = Self::garment_to_make(agent).filter(|garment| {
+                crate::agents::equipment::garment_recipe(garment).is_some_and(|recipe| recipe.material_item == "hides")
+            }) {
+                return Some(Action::MakeClothing { garment });
+            }
+            if agent.what_i_have_to_work_with(SkillType::Leatherworking).is_some() {
+                return Some(Action::Work { verb: "scrape".to_string(), to: "hides".to_string() });
+            }
+        }
+        if agent.how_many_i_have("rawhide") > 0
+            && agent.what_i_found_out().contains("leather")
+            && self.nearest_fire_from(here, Self::FIRE_REACH, true).is_some()
+        {
+            return Some(Action::Work { verb: "fire".to_string(), to: "rawhide".to_string() });
+        }
+        None
+    }
+
+    /// How many fired pots somebody who can make them keeps: one to cook in
+    /// and one to carry water or keep food in (#355).
+    pub(in crate::analytics) const POTS_ONE_KEEPS: u32 = 2;
+
+    /// A pot to make by the evening fire (#355), by whoever has found out
+    /// how and has fewer than they keep: a shaped pot fired at a burning
+    /// fire, clay shaped into a pot, or clay fetched from where it lies
+    /// within a forage. A pot is wanted to stew in, to keep food in and to
+    /// carry water, and it breaks, so there is always another to make.
+    pub(in crate::analytics) fn a_pot_to_make(
+        &self,
+        agent: &crate::agents::Agent,
+        here: (i32, i32, i32),
+    ) -> Option<Action> {
+        if agent.how_many_i_have("stoneware") >= Self::POTS_ONE_KEEPS || !agent.knows_a_working_that_makes("claypot") {
+            return None;
+        }
+        if agent.how_many_i_have("claypot") > 0
+            && agent.knows_a_working_that_makes("stoneware")
+            && self.nearest_fire_from(here, Self::FIRE_REACH, true).is_some()
+        {
+            return Some(Action::Work { verb: "fire".to_string(), to: "claypot".to_string() });
+        }
+        if agent.how_many_i_have("claypot") > 0 {
+            return None;
+        }
+        if agent.how_many_i_have("clay") >= crate::environment::making::MOLD_CLAY.how_much {
+            return Some(Action::Work { verb: "mold".to_string(), to: "clay".to_string() });
+        }
+        self.nearest_resource_within(agent, here, Self::FORAGE_RADIUS, |resource| {
+            resource.resource_type == crate::world::ResourceType::Clay && resource.amount > 0
+        })
+        .map(|_| Action::Gather { resource_type: "clay".to_string() })
     }
 
     /// Sleep at night, and be back with the others by then.
@@ -159,7 +276,7 @@ impl Simulation {
         let agent = &self.population.agents[agent_index];
         let let_be = if agent.state.life_stage == crate::agents::LifeStage::Infant {
             Some("night: let be, an infant")
-        } else if agent.emotions.threatened_by_something_there() {
+        } else if agent.emotions.threatened_by_any_of(|source| self.is_it_about(agent_index, source)) {
             // Nothing wakes a sleeper but danger, and danger is not answered
             // by going back to sleep. Somebody backing away from a boar was
             // sent to bed instead, and struck where they lay, four times in a
@@ -178,6 +295,14 @@ impl Simulation {
             // one in the pack.
             Some("night: let be, a remedy")
         } else if matches!(action, Action::Sleep { .. }) {
+            // Going to bed where they stand, they put brush over it or lay
+            // boughs under it first, if the pack holds them (#349)
+            if asleep && !agent.fatigue.is_sleeping {
+                if let Some(brush) = self.brush_before_bed(agent, agent.state.position) {
+                    *self.what_a_threat_came_to.entry("night: brush before bed".to_string()).or_insert(0) += 1;
+                    return brush;
+                }
+            }
             Some("night: asleep already")
         } else {
             None
@@ -253,10 +378,20 @@ impl Simulation {
         // 0-3 the weather killed fifteen where it had killed five (#299).
         let out_of_the_weather = if asleep { self.somewhere_out_of_the_weather(here) } else { None };
 
+        // **And nobody with brush in the pack sleeps in the open** (#349),
+        // when there is no roof or trees in reach to walk to.
+        let brush = if asleep && off_the_midden.is_none() && out_of_the_weather.is_none() {
+            self.brush_before_bed(agent, here)
+        } else {
+            None
+        };
+
         let instead = if let Some(cover) = out_of_the_weather {
             Action::Move { target: cover }
         } else if let Some(clean) = off_the_midden {
             Action::Move { target: clean }
+        } else if let Some(brush) = brush {
+            brush
         } else if asleep {
             // Until first light, a stretch at a time: a night is a sleep,
             // not scraps of one, but nothing wakes a sleeper but danger, and
@@ -264,7 +399,13 @@ impl Simulation {
             // until morning.
             Action::Sleep { duration: turns_left.min(Self::A_STRETCH_OF_SLEEP) }
         } else {
-            match self.where_this_one_sleeps(agent_index) {
+            // Somebody on a journey sleeps where night finds them (#356)
+            let sleeps = if self.population.agents[agent_index].journey.is_some() {
+                Some((here.0, here.1))
+            } else {
+                self.where_this_one_sleeps(agent_index)
+            };
+            match sleeps {
                 Some(home)
                     if (home.0 - here.0).abs().max((home.1 - here.1).abs())
                         > Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS =>
@@ -304,6 +445,16 @@ impl Simulation {
                     (Action::Move { .. }, false) => "night: headed home",
                     (Action::Cook { .. }, _) => "night: cooked supper",
                     (Action::LightFire, _) => "night: lit the evening fire",
+                    (Action::Work { to, .. }, _) if to == "clay" || to == "claypot" => "night: made a pot",
+                    (Action::StartMidden | Action::DigLatrine, _) => "night: saw to the refuse",
+                    (Action::Gather { resource_type }, _) if resource_type == "clay" => "night: fetched clay",
+                    (
+                        Action::Tame { .. }
+                        | Action::CollectAnimalProduct { .. }
+                        | Action::PutUpFold
+                        | Action::MuckOut,
+                        _,
+                    ) => "night: saw to the beasts",
                     _ => "night: fetched wood for the fire",
                 }
                 .to_string(),

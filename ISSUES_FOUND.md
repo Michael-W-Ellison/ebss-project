@@ -26510,29 +26510,852 @@ theirs is theft** (`Action::RobFishTrap`).
   it lands through `they_took_something_of_mine`, like any theft: the bond,
   anger or fear, and trust.
 
-**Measured**, forty settlements, against #346 and against traps alone:
+**What it set off: the minute clock read a grudge wherever the thief was.**
+- The first full suite with robbing failed
+  `a_settlement_stops_doing_what_does_not_work`: 43% of all actions failed.
+- The same settlement took 360,864 actions in 6,000 turns, against 118,497
+  before robbing.
+- Nearly all of the extra were one thing: 157,000 failed gathers ("No food
+  sources nearby"), every one of them by somebody on the minute clock.
+- Everybody who saw a trap robbed was angry enough at the thief to act on it.
+  `in_danger` and `threatened_by_something_there` read that anger wherever
+  the thief was. A beast's hold fades once it is out of sight; a grudge
+  against a neighbour is held for days. So the watchers spent the next half
+  day deciding minute by minute, falling back on a gather that came to
+  nothing.
+- **And the births that the first measure of robbing showed (130 -> 177,
+  t = 3.84) were this**: people taking three times the actions find more food.
+  Measured again with it fixed, the gain is gone (below).
 
-| | #346 | traps | traps and robbing | paired t, against #346 |
-|---|---|---|---|---|
-| births | 130 | 139 | 177 | +3.84 |
-| scattered births | 25 | 37 | 51 | +2.36 |
-| alive at day 720 | 607 | 612 | 652 | +3.47 |
-| hunger deaths | 3 | 5 | 4 | +0.44 |
-| camp moves | 531 | 350 | 351 | -2.25 |
-| sowing found (median day) | 39 (224) | 40 (197) | 40 (216) | |
-| gardens found (median day) | 31 (416) | 37 (385) | 39 (366) | |
+Fixed:
+- `EmotionState::in_danger_from` and `threatened_by_any_of` count only what
+  the caller says is about.
+- `Simulation::is_it_about` counts a person only within sight
+  (`WITHIN_SIGHT`). That is used for the minute clock and for not sleeping
+  through danger.
+- Beasts and the fear of going without are as they were.
+- A robbery found out afterwards is a grudge (`hold_a_grudge`): the same cost
+  to the bond and trust, weighing on the bond while it is held, but held short
+  of acting on. Seen happening, it is answered as any theft is.
+- The same settlement now takes 144,880 actions, 11.5% failing; it was 10.9%
+  before robbing.
 
-- 8,754 robberies in forty worlds took 21,209 fish, about a seventh of what
-  came out of traps.
-- **Births rise with robbing**, and significantly (+38 against traps alone,
-  t = 2.60). The fish a trap holds go to whoever is hungry and standing at
-  it, not only to whoever set it. A theft that feeds somebody without a trap
-  of their own is, in what it does for a band's children, a share.
-- Scattered settlements now have about the births they had before farming was
-  staged (#345: 56; here 51), still with no garden for most of the first
-  year.
+**Measured**, forty settlements, two years, everything in #347 against #346:
+
+| | #346 | #347 | paired t |
+|---|---|---|---|
+| births | 130 | 127 | -0.21 |
+| scattered births | 25 | 24 | -0.08 |
+| deaths (all hunger) | 3 | 3 | 0 |
+| alive at day 720 | 607 | 604 | -0.20 |
+| camp moves | 531 | 361 | -1.66 |
+| sowing found (median day) | 39 (224) | 39 (223) | |
+| gardens found (median day) | 31 (416) | 37 (343) | |
+
+- Traps were found in every world, median day 9. In two years they gave
+  132,000 fish to their owners and 29,000 to 12,304 robberies; 54,000 more
+  were speared and 16,000 picked out of the shallows.
+- **None of it moves births or deaths.** The fish stands in for food got
+  another way; a band's children are gated by its stores.
+- It is the user's own ask that a gathering band not thrive before
+  agriculture, so that is where this leaves it.
+- What changes is the pace of farming: gardens come in 37 worlds, not 31, and
+  about ten weeks sooner, and bands on scattered ground move camp less.
 
 **Tests.**
 - `a_robbed_trap_is_found_out_on_the_round`;
 - `a_partner_or_a_fed_friend_leaves_a_trap_alone`;
+- `a_thief_out_of_sight_is_no_danger`;
+- `a_grudge_is_held_short_of_acting` and
+  `danger_from_a_person_counts_only_while_they_are_about` (in `emotions`);
 - `a_settlement_ends_up_with_enemies_in_it` passes again.
+
+### 348. Food keeping: smoking, brine, caches, racks, stone boiling, pit ovens
+
+The second of the unlinked survival machinery the user asked for. Two
+choices were the user's:
+- **drying needs dry weather**, so that smoking has a reason to exist;
+- **boiling needs a vessel**: a fired pot, or stone boiling. `Boil` had never
+  asked for one, though its own note said it should.
+
+**Smoking** (`Action::Smoke`, Stage 1 of preservation, found out).
+- Drying beside a lit fire used to give smoked food, unasked, to everybody.
+  Now it gives dried food. Six times by the hearth (`DRIED_BY_THE_HEARTH`) and
+  somebody notices that what hung nearest the smoke kept, and kept through the
+  wet: `do:Smoke`.
+- `Dry` is refused while it rains or snows, unless under a roof
+  (`too_wet_to_dry_here`). Smoke works in any weather.
+- Smoked food keeps half as well as dried (the tags as they were).
+
+**Brine** (`Action::Brine`, Stage 1).
+- Salt and water in a vessel: Pickled, which keeps better than dry salt.
+- Comes to whoever knows dry salting. Boiling the sea now records `do:Salt`,
+  which nothing did, so the catalogue could never see that anybody knew it.
+
+**Caches** (`Action::Cache`, Stage 0, born).
+- Four stones piled over a hollow on ground a pit will not go into - the
+  forest floor a camp sleeps on (#315) - is a store, covered from the first.
+- Any store in the shade of trees ages at three quarters the rate:
+  "caches in cool shade".
+
+**Racks** (`Action::PutUpRack`, `Action::HangUp`, Stage 2, found out).
+- Three poles and two cords (`World::racks`).
+- Found out by days of rain with food that wanted drying
+  (`who_was_rained_off_drying`, six days). Being rained off drying can only
+  be counted world-side: the decision never asks to dry in the wet.
+- Food hung on one dries twice as fast, takes half the rain, and stays until
+  it is taken down; what has dried is taken down (`what_has_dried_on_a_rack`)
+  and goes to the store like anything else.
+
+**Stone boiling** (`Action::StoneBoil`, Stage 1).
+- Comes to whoever can make a basket.
+- A basket, bag, bowl or clay pot of water and the hearth's own stones: eight
+  at once, against five over the flames, and nothing burns.
+- Chosen over the flames for more than a fire takes at once.
+- **The first cut asked for the stones and the water to be carried, and in
+  ten worlds nobody stone-boiled once**: hardly anybody carries stones, and
+  nobody carries water. The stones are the fire's, and the water can be filled
+  from water within reach.
+
+**Pit ovens** (`Action::PitOven`, Stage 1, found out).
+- Found out after thirty batches off a fire.
+- Twenty at once, nothing burnt, for two wood and ground that will take a
+  hole - which gives up its own stones, as digging a store does. The first
+  cut asked for four stones carried, and nobody had them.
+
+**Boil wants a vessel**: a fired pot (`stoneware`) over the fire, or stone
+boiling (`something_to_boil_it_in`).
+
+Cooking over the flames, stone boiling and pit ovens are one batch step
+(`cooking_a_batch`), told apart by how much goes in and whether a lapse burns
+it. Drying, smoking and brining are one keeping step (`keeping_it`).
+
+**Measured**, forty settlements, two years, against #347:
+
+| | #347 | #348 | paired t |
+|---|---|---|---|
+| births | 127 | 145 | +1.61 |
+| deaths (all hunger) | 3 | 1 | -1.00 |
+| alive at day 720 | 604 | 624 | +1.75 |
+| camp moves | 361 | 300 | -0.94 |
+| sowing found (median day) | 39 (223) | 40 (206) | |
+| gardens found (median day) | 37 (343) | 39 (423) | |
+
+How often the new ways were used:
+
+| | times | worlds (of 40) |
+|---|---|---|
+| stone boiling | 4,152 | 40 |
+| hung on a rack | 1,672 | 38 |
+| caches | 683 | 40 |
+| smoked | 481 | 38 |
+| racks put up | 267 | 40 |
+| pit ovens | 39 | 23 |
+
+- The old ways still carry nearly everything: 137,027 dryings, 138,241
+  burials, 122,651 batches cooked over the flames.
+- **Salt is all but absent**: one boiling of the sea, one salting and one
+  brining in forty worlds. The sea has to be within four cells of a lit fire,
+  in autumn, under cloud. That gap is older than this; brine waits on salt.
+- Nothing measured is significantly worse. Births and survivors are up, but
+  not significantly.
+- Gardens are found in two more worlds but later in the median. That is not
+  explained here and may be noise.
+
+**Tests.**
+- `food_hung_over_a_fire_is_smoked` held the old behaviour and is replaced by
+  `drying_by_the_hearth_is_how_smoking_is_found_out` and
+  `smoke_does_in_the_rain_what_the_sun_cannot`.
+- New, in `food_keeping_tests`:
+  - `the_catalogue_knows_how_food_keeping_comes`;
+  - `brine_keeps_better_than_dry_salt`;
+  - `a_cache_goes_where_a_pit_will_not` (with the cool shade);
+  - `food_on_a_rack_dries_and_is_taken_down`;
+  - `stones_in_a_vessel_of_water_cook_without_burning`;
+  - `boiling_wants_a_vessel`;
+  - `a_pit_oven_cooks_most_of_a_pack_at_once`.
+
+### 349. Shelter on the move: windbreaks, lean-tos, brush huts, bedding
+
+The third of the unlinked survival machinery the user asked for. Two choices
+were the user's:
+- **graded cover**: a windbreak takes off the wind and is not a roof; a
+  lean-to and a brush hut are roofs that hold less warmth than a tent (tent >
+  hut > lean-to);
+- **brush falls apart**: a windbreak in about a fortnight, a lean-to in a
+  month, a hut in a season, and then it is gone. Nothing else falls down.
+
+**Cover** (`BuildingType::cover`, `World::cover_at`).
+- Shelter was one bit: a finished building or a forest tile. It is now what a
+  roof keeps off (rain, wind) and how far it closes the gap to a sheltered
+  space's 18° (`Climate::effective_temperature_under`): a tent and the trees
+  0.6 as before, a hut 0.45, a lean-to 0.3, a windbreak nothing.
+- Behind a windbreak there is no wind chill and no windburn, and it is not a
+  roof: nobody is "out of the weather" behind one, and the places that asked
+  `is_completed` for a roof ask `is_a_roof` now.
+
+**Brush** (`build:Windbreak`, `build:LeanTo`, `build:BrushHut`, Stage 0, born).
+- Three poles; four poles and a cord; six poles and a cord. Put up where the
+  builder stands, with no store dug under it.
+- `cover_i_could_put_up`: a hut on a dry day, a lean-to in the wet or with no
+  hut in the pack, a windbreak when there is wind and no roof to be had.
+- Chosen by the Shelter drive (`BuildTemporaryShelter`, which was declared and
+  out of reach), and by the night: somebody going to sleep in the open with
+  no roof or trees in reach puts brush up first (`brush_before_bed`), whether
+  the night sent them to bed or their own Rest drive did.
+- **Put up a turn at a time, four huts in five were started and left**: 6,425
+  started and 867 finished over forty worlds, six poles and a cord apiece,
+  because whatever won the next turn walked off. Brush now goes up in one
+  action that holds its builder for the turns it takes their hands - three
+  for a hut, one for a lean-to, untried (`taking_periods`).
+
+**Bedding** (`do:LayBedding`, Stage 0 "ground bedding", born).
+- Two wood of boughs where one sleeps: the sleep it gives is a bed's
+  (`has_bed`), and lying on it is worth 0.15 of insulation. Trodden flat in a
+  month.
+- Counted at its one cell, everybody who lay down a pace off laid their own -
+  27,780 beds. It covers a pace either way now.
+
+**No tent was ever finished, anywhere** (#175 again).
+- `add_construction_progress` refuses work until `resources_delivered` covers
+  `requirements()`, and nothing delivers to a site in this model: the
+  builder's materials are taken on the first turn. #175 made a turn of work
+  count and so finished burrows, which want nothing; a tent wants wood and
+  hides and stayed short of them for ever.
+- A site now counts what its builder brought as delivered
+  (`with_what_was_brought`), and carrying on with a site already going up
+  wants nothing more in hand, in the executor or in the verb matrix.
+- It made no difference measured: **nobody started a tent** in forty worlds,
+  for want of hides.
+
+**A fish trap took stone** (found by the suite).
+- A trap took from the first node on its cell; on a cell with stone it took
+  the stone to the last of it without telling the world, and the world's
+  debug check failed nine settlement tests once people moved about
+  differently. It takes from the fish now.
+
+**Measured**, forty settlements, two years, against #348:
+
+| | #348 | #349 | paired t |
+|---|---|---|---|
+| births | 145 | 142 | -0.25 |
+| deaths | 1 (hunger) | 4 (2 hunger, a blow, illness) | +1.36 |
+| alive at day 720 | 624 | 618 | -0.48 |
+| camp moves | 300 | 225 | -1.87 |
+| sowing found (median day) | 40 (201) | 40 (183) | |
+| gardens found (median day) | 39 (423) | 37 (428) | |
+
+| | times | worlds (of 40) |
+|---|---|---|
+| bedding laid | 22,727 | 40 |
+| brush huts put up | 4,593 | 40 |
+| lean-tos put up | 287 | 31 |
+| windbreaks | 0 | 0 |
+| tents | 0 | 0 |
+| burrows finished (started) | 735 (14,900) | 40 |
+
+- Nothing measured is significantly worse, and none of the deaths was the
+  weather, in either.
+- The turn-at-a-time version measured births 145 to 131 and survivors 624 to
+  609 (t about -1); the one-go version is level.
+- **Camp moves are down**, and on the scattered maps nearly significantly so
+  (269 to 196, t -2.04). Not explained here; a roof of one's own at the old
+  camp may be holding people to it.
+- **Nobody puts up a windbreak**: whoever has three poles has the cord for a
+  lean-to, which is chosen first.
+- **Burrows**: 14,900 started and 735 finished. That waste is older than this
+  and costs no materials; burrows are dug a turn at a time and left like the
+  huts were.
+
+**Tests.**
+- New, in `shelter_on_the_move_tests`:
+  - `the_catalogue_knows_brush_and_bedding`;
+  - `cover_is_graded`;
+  - `a_windbreak_is_not_a_roof`;
+  - `a_windbreak_takes_the_wind_off_a_body`;
+  - `brush_falls_down_and_is_gone` (half-built too; a tent does not);
+  - `a_brush_hut_goes_up_where_its_builder_stands`;
+  - `brush_goes_up_in_one_go`;
+  - `the_brush_put_up_suits_the_weather_and_the_pack`;
+  - `bedding_is_a_bed_and_warmth_for_a_month`;
+  - `putting_brush_up_is_a_way_to_shelter`;
+  - `nobody_with_brush_sleeps_in_the_open`;
+  - `a_tent_is_finished_on_what_went_into_it`.
+- Dice counts: 8,397 (seed 4242, 120 turns) and 980,526 (seed 0, a year).
+
+### 350. After #349: camps held by brush huts, burrows dug anywhere, no wind
+
+#349 left three things unexplained: fewer camp moves, no windbreaks, and
+burrows started and never finished. The user asked for all three to be
+looked into before going on.
+
+A diagnostic probe was run on #348 and #349 side by side, on scattered seeds
+1-16 and then 17-32. It logged every proposed camp move and what the turn did
+instead, every `Build` with the drive that chose it, the roofs and open sites
+left at the end, and the choice of cover whenever there was wind.
+
+#### Camp moves: every brush hut became the camp
+
+- The drop was real. It held on sixteen fresh seeds (304 to 230, t -2.32),
+  and over thirty-two it was 573 to 426 (t -3.11).
+- Moves were carried out as often as they were proposed (3.5% in both); it
+  was fewer proposals.
+- Neither the fish trap fix (it changed catches on smooth maps, not
+  scattered) nor the timing of sowing explained it.
+- `where_this_one_sleeps` snaps home to the nearest finished roof within a
+  forage of the camp, and `settle_the_hearth` makes that the hearth. That was
+  written when a finished roof was a burrow with the camp's store under it.
+  With brush huts going up every night, every hut became where the camp lived.
+- Two counterfactuals on the same sixteen seeds settled it:
+
+| sixteen scattered seeds | camp moves | births | alive |
+|---|---|---|---|
+| #348 | 269 | 32 | 223 |
+| #349 | 196 | 30 | 219 |
+| #349, brush not a camp's roof | 275 | 37 | 228 |
+| #349, no brush at all | 245 | 28 | 220 |
+
+- **Brush no longer anchors a camp**. A tent or a finished burrow still does.
+
+#### Burrows: dug wherever anybody tried one
+
+- The Construction drive dug almost none of them: eight `Build` actions in
+  sixteen worlds. Nearly every burrow was started by Curiosity, Reproduction,
+  Luxury or Sustenance picking "burrow" from what could be done here
+  (`an_action_for`). That built a burrow wherever the person stood, with
+  none of `digging_in`'s rules: carry on with the hole already open, nothing
+  within two paces of a roof, ground that takes a hole.
+- And an open hole stood for ever: 5,839 at the end of sixteen worlds, about
+  365 a world after two years, every one of them blocking its cell and
+  scanned by everything that looks at the buildings.
+- #349 roughly doubled the starts (Curiosity 1,683 to 3,119, Reproduction 506
+  to 2,402). Why is not known. Hut and burrow are learned under different
+  names, so the obvious guess - that finished huts taught people to build -
+  is not confirmed.
+- **A burrow tried for its own sake is offered only where `digging_in`
+  would dig**, and **an open hole fills in after a month**
+  (`BuildingType::fills_in`, `AN_OPEN_HOLE_FILLS_IN`) and is gone. A finished
+  burrow is not touched.
+
+#### No windbreaks: there is no wind
+
+- `Weather::base_wind_speed` is set to 2.0 when the weather is made and
+  nothing ever changes it. The weather multiplies it by at most 3 (a
+  blizzard), so the wind never passes 6.
+- Every rule that reads the wind wants more than that: a windbreak more than
+  8, the situation's "foul weather" more than 8, windburn more than 10. Wind
+  chill is the only effect wind has, at most 3° below 10°.
+- `BiomeType::typical_wind_speed` (2 to 8) exists and nothing reads it.
+- **Not fixed here**, by the user's choice. A real wind model changes exposure
+  everywhere and is a piece of work of its own. Until then windbreaks are
+  linked and never chosen.
+
+**Measured**, forty settlements, two years:
+
+| | #348 | #349 | #350 | #350 vs #348, t |
+|---|---|---|---|---|
+| births | 145 | 142 | 161 | +1.50 |
+| deaths | 1 | 4 | 4 (all hunger) | +1.78 |
+| alive at day 720 | 624 | 618 | 637 | +1.20 |
+| camp moves | 300 | 225 | 307 | +0.17 |
+| burrows started | - | 14,900 | 455 | |
+| burrows finished | - | 735 | 165 | |
+| brush huts | 0 | 4,593 | 4,939 | |
+| sowing found (median day) | 201 | 183 | 208 | |
+| gardens found (median day) | 423 | 428 | 341 | |
+
+- Camp moves are back, and births and survivors are up on #348, not
+  significantly.
+- **Four hunger deaths**, all on scattered maps, on four seeds, three of
+  them in the last two months. Not significant (t +1.86 on scattered), and
+  not from fewer stores: on scattered maps pits dug went from 2,116 to 2,371
+  and food buried stayed level, though finished burrows fell from 735 to 165.
+  Watch it.
+
+**Tests.**
+- New: `camp_tests::brush_does_not_anchor_a_camp`,
+  `burrow_tests::an_open_hole_fills_in`,
+  `burrow_tests::a_burrow_tried_for_its_own_sake_keeps_the_same_rules`.
+- Dice counts: 8,397 (seed 4242, 120 turns, unchanged) and 1,016,134 (seed
+  0, a year).
+
+### 351. Water and care: bleeding and pressure, dressings, rest, the water skin
+
+The last of the unlinked survival machinery the user asked for. Two choices
+were the user's:
+- **blows bleed**: a wound bleeds until somebody presses on it, and left
+  alone a bad one can kill;
+- **a hide water skin, filled on leaving**: and anybody with an empty vessel
+  fills it before walking away from water.
+
+A survey of what was there first:
+- `ConditionType::Bleeding` existed in the body model and **nothing ever
+  caused it**; nothing could press on a wound because nothing bled.
+- **The body took its turn twice a half hour**, in `Agent::turn_with_percepts`
+  and again in `process_environmental_damage`, so every injury healed and
+  every garment wore at double the intended rate.
+- Rest sped up health regeneration but not the healing of injuries.
+- The only vessel was a carved bowl (holds 4), almost nobody made one, and a
+  vessel was filled only as a side effect of drinking at a source.
+
+**Bleeding and pressure** (`do:PressOnWound`, Stage 0, born).
+- A blow that opens a wound bleeds as hard as it is open: four health a half
+  hour for the worst (`WHAT_AN_OPEN_WOUND_BLEEDS`), clotting by itself to 85%
+  each half hour. Left alone the worst costs about 27 health on top of the
+  blow. Booked as "a wound".
+- One's own hand slows it to a quarter; somebody else's stops it.
+- `what_a_wound_asks` puts a bleeding wound before anything but running for
+  it, the night included: one's own, somebody's within a hand's reach, and
+  one's own kin across the camp, who are walked to.
+
+**Bandaging** (`do:Bandage`, Stage 1, found out).
+- Found out after pressing on four wounds. A strip of anything that binds
+  (cordage) stops the bleeding, and for a week the wound closes twice as fast
+  and turns half as often.
+
+**Rest** (`do:Sleep`, already linked).
+- Asleep, a body heals its injuries and closes its wounds twice as fast.
+- The body takes one turn a half hour, not two.
+
+**The water skin** (`make:waterskin`, Stage 1, found out).
+- A hide sewn shut (`SEW_A_WATER_SKIN`, `weave` on `hides`), holding 8. Found out after
+  three days thirsty with no water in reach (`who_went_thirsty_far_from_water`).
+- `water_for_the_walk`: somebody setting off further than a forage from
+  beside water, with room in a vessel, drinks and fills it first.
+
+**Measured**, forty settlements, two years, and then forty fresh ones
+(smooth 25-48, scattered 17-32) for both versions:
+
+| | #350 | #351 | t |
+|---|---|---|---|
+| births, first forty | 161 | 141 | -1.61 |
+| births, fresh forty | 143 | 142 | -0.10 |
+| births, all eighty | 304 | 283 | -1.32 |
+| alive at day 720, all eighty | 1,256 | 1,230 | -1.62 |
+| deaths, all eighty | 8 | 13 (11 hunger) | +1.00 |
+
+- **The first forty looked like a fall** (smooth survivors 412 to 397, t
+  -2.28). The obvious suspect, injuries healing at half the rate the model
+  was tuned on, was tested and is not it: with the healing rates doubled the
+  first forty read 147 births and 621 alive, no nearer #350.
+- **On fresh seeds the two are level.** #350's 161 looks like a high: against
+  #348 (145) this reads 141, t -0.34. Over eighty, births and survivors lean
+  down and not significantly. Watch it.
+
+How often the new things were done, all eighty:
+
+| | times | worlds (of 80) |
+|---|---|---|
+| a wound pressed on, own | 147 | 43 (any pressing) |
+| a wound pressed on, somebody's | 22 | |
+| a wound bound | 11 | |
+| bandaging found out | 9 | |
+| water skins cut | 3 | |
+| water skin found out | 8 | |
+| a vessel filled before a walk | 393 | 51 |
+
+- The water skin was measured as a hide cut and tied off (`cut` on
+  `hides`). `table_order_tests::leather_is_scraped_off_a_hide_rather_than_cut_out_of_one`
+  holds that cutting a hide makes nothing, so it is sewn shut instead, with
+  `weave` as the leather bag is; three skins were made in eighty worlds.
+- **None of it is common**, because blows that open wounds are rare and
+  nobody carries a vessel: the bowl is still almost never made, and a skin
+  wants a hide.
+- Nobody died of "a wound" in either version.
+
+**Tests.**
+- New, in `water_and_care_tests`:
+  - `the_catalogue_knows_how_care_and_water_come`;
+  - `a_blow_bleeds_and_clots`;
+  - `pressure_slows_a_wound_and_teaches_a_dressing`;
+  - `a_dressing_stops_the_bleeding_and_closes_the_wound`;
+  - `rest_mends_twice_as_fast`;
+  - `a_bleeding_wound_comes_first`;
+  - `going_thirsty_far_from_water_is_how_a_water_skin_is_found_out`;
+  - `a_vessel_is_filled_before_a_long_walk`.
+- Dice counts: 8,397 (seed 4242, 120 turns, unchanged) and 1,035,210 (seed
+  0, a year).
+
+### 352. The gaps after the survival machinery: wind, salt, tent skins, vessels
+
+#349 to #351 left four things the model could not do. The user asked for them
+resolved before going on to leatherworking.
+
+**Wind.** `Weather::base_wind_speed` was 2.0 everywhere for ever, at most 6
+in a blizzard, under every rule that reads it (foul weather and windbreaks
+over 8, windburn over 10).
+- Each spell of weather now draws its wind (`WeatherGenerator::wind_for_a_spell`):
+  the country's open-ground wind (`BiomeType::typical_wind_speed` of the
+  region's open ground, 4.0 in the ordinary country), times a spell between
+  0.2 and 2.5 with still spells far commoner than gales, times the season
+  (winter 1.3, autumn 1.15, spring 1.05, summer 0.8). Fog is still air. The
+  trees take it off whoever is under them, as cover always has.
+
+**Salt.** Four salt flats and two seams in a world, and nothing ever sent
+anybody to them.
+- Somebody with spare food and no salt fetches it from salt within a forage
+  (`putting_food_by`), before the autumn, cloud, sea, pot and fire that
+  boiling the sea wants.
+- **Only once nothing else will keep the food**: the first cut fetched salt
+  before drying, burying and digging a pit, and `keeping_tests` and
+  `larder_tests` caught it. The fetch now comes after the burying and digging,
+  and before the autumn gate on a store with room in it.
+
+**Tent skins.** Only a garment ever sent anybody hunting, and the tent was
+asked for by name - eight wood, four hides - while the builder asked by class
+and wanted two cords besides.
+- `raising_a_roof` asks what `WHAT_A_TENT_TAKES` asks: leather counts as a
+  covering (a deer's skin comes off as leather), cord is made from a branch's
+  bark when that is what is short, and a want of skins for a roof is a reason
+  to hunt in itself (`going_after_skins`, split from `hunting_action`).
+- **Only with an animal in reach**: going after skins begins with a spear,
+  and the first cut had a roof-raiser with nothing to hunt making one instead
+  of digging in (`burrow_tests` caught it).
+
+**Vessels.** A bowl was made only when the Utility drive won, and it rarely
+does.
+- Somebody with no vessel setting off on a long walk from beside water, with
+  a blade and the makings, makes one first (`water_for_the_walk`), and fills it
+  the turn after.
+
+**The measurement tools are in the repository now.** The container that held
+them was reset, and with it went the settlement measurement every entry since
+#345 reports, the probe patches and every baseline. `zz_discovery_watch` is in
+`src/analytics/tests/measurement_watch.rs`, and the probe, build, run and
+compare scripts are in `tools/measure`. The #351 baseline was rebuilt and run
+again from its commit.
+
+**Measured**, forty settlements, two years, against #351. The first
+measurement was taken with salt fetched before drying; these are the numbers
+after the fix, from the commit as it stands:
+
+| | #351 | #352 | t |
+|---|---|---|---|
+| births | 141 | 158 | +1.16 |
+| deaths | 4 | 4 | 0 |
+| of hunger | 3 | 2 | -1.00 |
+| alive at day 720 | 617 | 634 | +1.14 |
+| camp moves | 326 | 264 | -1.38 |
+
+| | #351 | #352 |
+|---|---|---|
+| windbreaks put up | 0 | 152 (22 worlds) |
+| half hours in windburn | 0 | 298,670 |
+| salt fetched | - | 265 (6 worlds) |
+| food salted | 3 (2 worlds) | 102 (5 worlds) |
+| brined | 34 | 2 |
+| the sea boiled | 28 | 3 |
+| bowls carved | 912 | 2,664 |
+| vessels filled for a walk | 201 | 7,740 |
+| tents | 0 | 0 |
+
+- Nothing measured is worse. Births and survivors are up, not significantly;
+  the salt fix moved them by two.
+- **Wind**: windbreaks are put up now, and windburn is common - about five
+  days a person a year, two thirds of it on the smooth maps - without killing
+  anybody; it is exposure damage, recovered from.
+- **Salt** reaches the worlds that have it within a forage, six in forty, and
+  is used there. Elsewhere it is still the sea or nothing; fetching salt from
+  further off is a journey, and nothing yet plans one.
+- **Vessels** are made three times as often and carried: a vessel filled for
+  a walk nearly forty times as often.
+- **Tents: still none.** Nobody gathers four skins and two cords in one pack:
+  the skins go into clothing first, and a brush hut answers the want for a
+  roof for poles and a cord. That is the leatherworking path's to answer.
+- Camp moves are down on the scattered maps (280 to 219, t -1.63). Seen
+  before at this size (#349, #350); watch it.
+
+**Tests.**
+- New, in `the_gaps_tests`: `the_wind_blows_by_the_season`,
+  `a_tent_is_asked_for_by_what_it_takes`, `salt_is_fetched_from_where_it_lies`,
+  `a_vessel_is_made_before_a_long_walk`.
+- `burrow_tests::somebody_who_can_build_a_tent_builds_one` gives the two cords
+  the builder always asked for.
+- Dice counts: 7,429 (seed 4242, 120 turns) and 1,020,308 (seed 0, a year).
+
+### 353. Leatherworking: hides that rot, rawhide, tanned leather, and what a skin makes
+
+The first item in the order the user set after #352: "start working on the
+suggested order items starting with leatherworking". The user chose: hides
+rot unless worked; rawhide first, then tanned; shelter panels, moccasins,
+cloaks and wraps.
+
+**What changed.**
+- A raw hide rots in about a week in the pack (`Agent::rots_unless_worked`,
+  `has_rotted`); fresh hides put with old ones are as fresh as the mix.
+- Scraping a hide makes rawhide, which keeps (`SCRAPE_A_HIDE`). After six
+  hides scraped, smoking rawhide over a fire is found out and makes leather
+  (`TAN_RAWHIDE`, verb `fire`).
+- Rawhide makes a cloak (three) and leg wraps (two), which wear three times
+  as fast soaked; a raw hide makes fur foot-wraps; leather makes moccasins,
+  which wait on tanning. Leather wears longest of the skins (140).
+- A worked hide to spare (three or more held) goes down as bedding: twice as
+  warm as boughs, and it lasts a season.
+- By the evening fire a raw hide goes into a garment that wants it, or is
+  scraped; rawhide is tanned at a burning fire by whoever knows how.
+- Deer and the rest now give `hides` when butchered, not `leather`.
+
+**Measured**, forty settlements, two years, against #352:
+
+| | #352 | #353 | t |
+|---|---|---|---|
+| births | 158 | 153 | -1.00 |
+| deaths | 4 | 4 | 0 |
+| alive at day 720 | 634 | 629 | -1.00 |
+| camp moves | 264 | 277 | +1.00 |
+
+The smooth maps came out identical; the scattered maps differ by one
+settlement.
+
+- **Nothing to work.** 23 kills in forty worlds over two years, in nine
+  worlds. No hide rotted, none was tanned, no rawhide garment or hide bed was
+  made, and no tent was built. The 2,401 `scrape` lines are almost all a stick
+  scraped for tinder (`SCRAPE_A_STICK`), which the counter did not tell apart.
+- **The chain hangs on the hunt, and nobody hunts.** A hunt is chosen for
+  skins only when a garment wants them and an animal is in reach, and for
+  food only when it beats the best patch in the same coin. Gathering and
+  fishing win nearly always. Leatherworking, the tent and husbandry's young
+  taken from a kill (#354) all wait on this.
+- The first #353 run kept no leatherworking lines at all: the run script's
+  grep did not pass them (fixed in the tool commits after it).
+
+**Tests.** `leatherworking_tests` (seven): the catalogue, a hide rots and
+rawhide keeps, scraping teaches tanning and tanning wants a fire, rawhide
+rots worn wet, a spare hide is slept on, the evening's skins. Changed for the
+deliberate model change: `table_order_tests`, `hunting_tests`,
+`working_tests`, `technology_catalogue_tests`, `carrying_tests` (scraping
+makes rawhide, leather is tanned).
+
+**Dice counts**: 8,095 (seed 4242, 120 turns) and 1,074,317 (seed 0, a year).
+
+### 354. Animal husbandry: a young one from a kill, beasts that follow and are folded, milk, wool, dung, culling
+
+The second item in the user's order. The user chose: young taken from a kill
+(not dogs first); kept beasts follow their keeper and are folded in brush at
+night; herds keep people mobile, so only fields anchor a settlement; milk,
+wool and dung first.
+
+**What was there.** A half-built domestication system nothing reached:
+`Action::Tame` and `Action::CollectAnimalProduct` with executors no decision
+chose, `Animal::owner_id`, `tame_level`, `is_domesticated`, product timers,
+and an `AnimalPen` building that made food from nothing.
+- **Products could never be collected**: `turn_products` reset a ready timer
+  to a hundred the next pass, so a product stood ready for one half hour.
+- Taming worked from any distance, and turned a tamed sheep or goat into a
+  pack donkey by display name.
+- A tame beast wandered as a wild one, its young were born wild, and wolves
+  ate it.
+
+**What changed.**
+- A hunter who kills a sheep, goat, cow, boar, elk, reindeer or camel is
+  followed home by a young one of its kind standing within 25 cells
+  (`a_young_one_left_behind`). Fed by hand once a day it is tame in about a
+  week, and its keeper has found out keeping (`do:Tame`); unfed, it goes back
+  to the wild in four days.
+- Kept beasts graze within three cells of their keeper and are walked along
+  wherever the keeper goes (`the_kept_stay_by_their_keepers`). At night they
+  are shut in a brush fold by the keeper's bed, out of the predator pass,
+  leaving dung; a tame one left out strays one night in thirty. A beast whose
+  keeper dies goes wild.
+- What is born to a kept mother is kept, and she is in milk for five months.
+  Milk is drawn once a day, wool plucked twice a year; each is found out by a
+  keeper who sees it. Products wait to be taken.
+- Dung is noticed in the fold (`do:MuckOut`) and carried out. It burns ahead
+  of wood (`fuel_i_carry`), or mucks a field at twice what refuse is worth.
+- A herd spares one for the pot above four kept back for breeding, or down
+  to a pair for somebody starving (`a_beast_to_spare`).
+- A herd that has eaten its grazing down moves its people on to fresh
+  grazing. Only a field holds a people in one place.
+- The pass rolls only when a tame beast is out overnight, so a world with
+  nothing kept rolls exactly as it did.
+
+**Measured**, forty settlements, two years, against #353: **identical in every
+world.** No young one was taken from a kill, so nothing was ever kept, and the
+husbandry never ran. The cause is the same as #353's: 23 hunts in forty
+worlds, and whether any killed a beast with young nearby is down to chance.
+Husbandry is machinery that waits on hunting.
+
+**Tests.** `keeping_beasts_tests` (nine): the catalogue, a young one follows
+the hunter, a young one fed every day stays, a kept beast follows and is
+folded, milk waits for her keeper, the young of a kept mother are kept, the
+herd spares one, dung burns, a hungry herd moves the camp.
+
+**Dice counts**: 8,095 (seed 4242, unchanged) and 1,071,252 (seed 0, a year).
+
+### 355. Pottery: pots wanted to stew in, keep and carry; pots that break
+
+The third item in the user's order, with salt (#356). The user chose: pots
+wanted for cooking, keeping and carrying; fragile pots.
+
+**What was there.** Pots were fired nought to four times a settlement in
+three years, nearly all by the ember accident; nothing set out to make one.
+An empty pot could not boil the sea (the `boil` verb wants water carried),
+clay collecting was linked to `do:Excavate`, which digs a store and gives up
+stone, and the brining note said brine takes a whole fish, which the code
+refuses.
+
+**What changed.**
+- Whoever has found out pottery and has fewer than two fired pots makes one
+  by the evening fire: fires a shaped pot, shapes clay, or fetches clay
+  within a forage (`a_pot_to_make`).
+- A fired pot of water stews ten at a time, burns nothing, and gets
+  everything out of what goes in (`PreparationState::Stewed`, 1.0 against
+  cooking's 0.95). Roots, pulses, nuts, greens and meal are worth stewing,
+  which a fire alone does not improve (`stewing_outcome`).
+- A fired pot cracks one use in forty over the fire, and one in five carried
+  on a camp move breaks. A pot shaped and not fired slumps back to clay on
+  somebody soaked through.
+- The sea is boiled in an empty pot: the water is dipped where the sea laps.
+
+**Measured** with #356, forty settlements, two years, against #354: 93,608
+lots of clay fetched, 39,672 pots shaped, 17,717 fired, 46,721 stews, 1,235
+pots broken, in all forty worlds.
+
+**Tests.** `pottery_tests` (six).
+
+### 356. Salt in the body, and journeys for it
+
+The user chose: a slow salt need, and planned trips for salt beyond a day's
+forage.
+
+**What changed.**
+- The body holds salt (`salt_in_the_body`), sweated out from full to nothing
+  in forty days and put back by what is eaten: fish 0.04 a mouthful, meat and
+  milk 0.03, salted or brined food 0.1. Below 0.35 it is craved and a pinch
+  carried is licked; at nothing, health is lost. An infant at the breast never
+  goes short.
+- Somebody craving salt with none goes for salt they know of: gathered within
+  a forage, or a journey (`Journey`) - food packed, a vessel filled, nights
+  slept where they fall, a load of eight, and home. Given up after four days.
+- Where salt is stays in mind among a head full of other places.
+
+**Measured** with #355, against #354:
+
+| | #354 | #356 | t |
+|---|---|---|---|
+| births | 153 | 153 | 0 |
+| deaths | 4 | 26 | +2.85 |
+| alive at day 720 | 629 | 607 | -1.20 |
+
+- **Salt killed.** 21 of the 26 deaths were booked as "a blow", which is how
+  `take_damage` books, and salt deficiency took health through it. As first
+  written, plants carried no salt at all and going without cost two health a
+  day. A band living on what it gathered, with no salt known, spent about a
+  quarter of all its days at nought. Corrected in #358.
+- 285 salt journeys set out in 19 worlds; 168 came home and 117 were given
+  up. 854 gatherings were near home, in 8 worlds.
+
+**Tests.** `salt_in_the_body_tests` (five).
+
+### 357. Waste, sanitation and storage
+
+The last item in the user's order. The user chose: a midden, then a latrine;
+camps that foul their ground and water; a storehouse that is a place; vermin,
+theft and scavengers at stores.
+
+**What was there.** Waste landed wherever somebody stood. Nobody decided
+where it went, and nothing tied it to water, vermin, stores or camp moves. The
+storehouse was one global bag with no position: every agent reached it from
+anywhere, and nothing in it went off. Farms, pens and workshops turned out
+food, iron and stone from nothing. Pits were lined only with a bowl or basket,
+by name.
+
+**What changed.**
+- Twice laid up by foul ground or foul water and somebody finds out the
+  midden: the camp's refuse goes to one place eight cells off, away from
+  water. With farming as well, a latrine by it takes the leavings under the
+  ground.
+- Water drawn beside fouled ground sickens.
+- Somebody laid up by filth moves the camp off fouled ground.
+- Vermin take a share of each store daily, by how it is shut, and more by a
+  midden.
+- Taking from somebody else's pit is theft, found out when they next open it.
+- Hungry flesh-eaters come to middens, carcasses and open stores.
+- A pit is lined with whatever keeps best, fired pots included.
+- `Store` and `Retrieve` work standing at a finished storehouse, which keeps
+  a covered common store where food spoils as it does under earth.
+- No building produces anything from nothing.
+
+**Measured**, against #356:
+
+| | #356 | #357 | t |
+|---|---|---|---|
+| births | 153 | 136 | -1.19 |
+| deaths | 26 | 79 | +3.34 |
+| alive at day 720 | 607 | 537 | -2.89 |
+
+- **Every added death was salt**, still at #356's calibration: on the worst
+  world (smooth 4, ten dead) a labelled run found 111,073 half-hours of salt
+  deficiency, 106 blows between people and two from beasts. #357 made the
+  shortage worse without dealing any blow itself.
+- **Three rates were too high**, corrected in #358:
+  - Vermin took 567,199 units against 26,890 rotted.
+  - 12,215 thefts, nearly all a band taking from its own campmates' pits.
+  - 5,630 illnesses from foul water.
+- 476 middens and 286 latrines; 737 fouled-camp moves proposed in 16 worlds.
+
+**Tests.** `sanitation_and_stores_tests` (ten).
+
+### 358. Hunting for meat, and the corrections #356 and #357 wanted
+
+#353 and #354 found leatherworking and husbandry dormant: 23 hunts in forty
+worlds over two years. Asked, the user chose meat and skins both: hunting as
+a food strategy, with skins coming as a by-product.
+
+**Diagnosed** on two worlds: 93% of the time nobody wanted skins, because
+plant garments answered the cold. Of hunts that were wanted, four in five
+found no prey within the 12-cell search, set when beasts moved two cells a
+turn; at today's pace (`world::pace`) a deer crosses that in a quarter hour.
+
+**What changed.**
+- A hunter looks for game as far as they can see (`how_far_a_hunter_looks`).
+- Every two hours each grown person notes the nearest game in sight worth
+  hunting, keeps the six freshest places in mind, and forgets one they find
+  empty (`the_hunters_note_the_game`).
+- A week without meat and the body craves it (`craves_meat`). Hungry and
+  craving it, a person hunts: game in sight is struck or closed on; with none
+  in sight, they walk to where game was seen within 1.5 km in three days.
+  Game in sight is taken first among the hunger strategies unless hunger
+  will not wait.
+
+**Corrections.**
+- **Salt** (#356): wild plants carry 0.01 a mouthful and grain 0.004, and
+  going without costs 0.5 health a day, not 2.
+  - The first cut of #358 also had a body short of salt crave meat. On one
+    inland world with no salt known, ten of twelve died inside the year,
+    chasing game they could not bring down while the salt took their health.
+- **Stores** (#357): vermin a third of what they took; taking from a
+  campmate's pit is not theft; a drink beside the foulest ground sickens one
+  time in a hundred, not twenty-five.
+
+**Measured**, forty settlements, two years, against #354 (before pottery,
+salt, sanitation and hunting):
+
+| | #354 | #358 | t |
+|---|---|---|---|
+| births | 153 | 164 | +0.73 |
+| deaths | 4 | 3 | -0.37 |
+| alive at day 720 | 629 | 641 | +0.77 |
+| camp moves | 277 | 416 | +3.06 |
+
+- **The salt deaths are gone**: three deaths, two of hunger and one of
+  illness. People still spend about a tenth of their days with no salt in the
+  body (2,084,406 half-hours), at small cost.
+- **Hunting**: 270 kills in 36 worlds, from 23 in 9.
+  - Leatherworking has started: rawhide tanned 7 times in 2 worlds, fur
+    wraps worn.
+  - Sixteen young were taken from kills in ten worlds, and all sixteen ran
+    off unfed. Feeding wanted plant food in the pack, and by supper it had
+    been eaten. Corrected after this measurement: a young one with nothing to
+    feed it is led to graze and handled, and is tame within a month.
+- **Camp moves are up by half**, from bands leaving ground they have fouled
+  (5,697 proposals in 28 worlds): the foragers' answer to dirt.
+- Vermin took 209,741 units against 39,834 rotted; 870 thefts in 29 worlds;
+  2,307 illnesses from foul water; 523 middens, 427 latrines.
+- Pottery as at #356: 17,597 pots fired, 44,877 stews.
+
+**Tests.** `hunting_for_meat_tests` (four); `salt_in_the_body_tests` and
+`sanitation_and_stores_tests` changed for the corrections, and
+`keeping_beasts_tests` gains `a_young_one_tended_without_fodder_stays`.
+
+**Dice counts**: 8,095 (seed 4242, 120 turns) and 945,540 (seed 0, a year).

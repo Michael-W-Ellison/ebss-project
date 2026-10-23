@@ -27,8 +27,10 @@ pub fn butchered_item_id(material_id: &str) -> &str {
     match material_id {
         "fish_meat" => "fish",
 
-        // Every skin is a skin
-        "fur" | "thick_hide" | "hide" | "snake_skin" | "pelt" => "hides",
+        // Every skin is a skin, a deer's included: what the beast tables call
+        // its leather comes off it raw, and leather is what a hide is worked
+        // into (#353)
+        "fur" | "thick_hide" | "hide" | "snake_skin" | "pelt" | "leather" => "hides",
 
         // Named cuts and the odd rendered fat
         "mutton" | "beef" | "pork" | "blubber" => "meat",
@@ -38,9 +40,9 @@ pub fn butchered_item_id(material_id: &str) -> &str {
     }
 }
 
-/// What a prepared thing is carried as: `cooked_`, `burnt_`, `dried_` or
-/// `smoked_` in front of what it was.
-pub const PREPARED_AS: [&str; 4] = ["cooked_", "burnt_", "dried_", "smoked_"];
+/// What a prepared thing is carried as: `cooked_`, `burnt_`, `dried_`,
+/// `smoked_` or `brined_` in front of what it was.
+pub const PREPARED_AS: [&str; 6] = ["cooked_", "stewed_", "burnt_", "dried_", "smoked_", "brined_"];
 
 /// An item id with whatever has been done to it taken off the front.
 ///

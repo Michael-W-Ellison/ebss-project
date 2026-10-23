@@ -186,7 +186,7 @@ fn a_bowl_is_reachable_by_somebody() {
 fn leather_is_scraped_off_a_hide_rather_than_cut_out_of_one() {
     let scraping = making::how_to_work("scrape", "hides").expect("a hide scrapes");
 
-    assert_eq!(scraping.makes, "leather");
+    assert_eq!(scraping.makes, "rawhide", "scraped and dried, a hide is rawhide (#353)");
     assert_eq!(
         scraping.hands,
         SkillType::Leatherworking,
@@ -243,7 +243,8 @@ fn what_gates_the_bag_is_the_leather() {
     );
     assert!(!result.success, "no leather to sew");
 
-    // Scrape one, and it is.
+    // Scrape one, and it is rawhide; the bag waits on its being tanned
+    // into leather, which is found out later (#353).
     let scraped = simulation.execute_action(
         &Action::Work {
             verb: "scrape".to_string(),
@@ -252,7 +253,15 @@ fn what_gates_the_bag_is_the_leather() {
         0,
     );
     assert!(scraped.success, "{:?}", scraped.message);
-    assert!(simulation.population.agents[0].how_many_i_have("leather") > 0);
+    assert!(simulation.population.agents[0].how_many_i_have("rawhide") > 0);
+    let result = simulation.execute_action(
+        &Action::Work {
+            verb: "weave".to_string(),
+            to: "leather".to_string(),
+        },
+        0,
+    );
+    assert!(!result.success, "rawhide is not leather");
 }
 
 /// Scraping still wants something to scrape with.

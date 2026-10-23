@@ -528,10 +528,12 @@ impl Simulation {
                 .values()
                 .filter(|item| item.quantity > 0)
                 .filter(|item| {
-                    item.food_data
-                        .as_ref()
-                        .map(|food| food.is_rotting() || food.is_ruined())
-                        .unwrap_or(false)
+                    item.item_id == "dung"
+                        || item
+                            .food_data
+                            .as_ref()
+                            .map(|food| food.is_rotting() || food.is_ruined())
+                            .unwrap_or(false)
                 })
                 .map(|item| (item.item_id.clone(), item.quantity))
                 .collect()
@@ -555,7 +557,10 @@ impl Simulation {
                 // worth many times as much to a field on that account
                 // alone.
                 worth += *quantity as f32
-                    * if crate::world::Soil::came_out_of_the_water(item_id) {
+                    * if item_id == "dung" {
+                        // What a beast has already made of the grass (#354)
+                        2.0 * Self::MUCK_PER_UNIT
+                    } else if crate::world::Soil::came_out_of_the_water(item_id) {
                         Self::MUCK_PER_FISH
                     } else {
                         Self::MUCK_PER_UNIT

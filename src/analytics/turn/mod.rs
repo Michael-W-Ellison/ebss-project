@@ -165,6 +165,10 @@ impl Simulation {
         // And whoever was standing near enough to watch a thing dry out in
         // the sun now knows something they did not
         self.who_saw_that_dry();
+        // And whoever had food to dry on a day of rain is a day nearer
+        // thinking of a rack
+        self.who_was_rained_off_drying();
+        self.who_went_thirsty_far_from_water();
         self.what_the_fire_hardened();
         self.who_came_back_to_look();
 
@@ -270,6 +274,13 @@ impl Simulation {
 
             self.world.animals.shy_away_from(&people);
         }
+
+        // And the kept ones stay by their keepers, and are folded at night
+        // (#354).
+        self.the_kept_stay_by_their_keepers();
+
+        // And the hunters note where the game is (#358)
+        self.the_hunters_note_the_game();
 
         // Apply religious building effects to agent happiness
         self.apply_religious_effects();

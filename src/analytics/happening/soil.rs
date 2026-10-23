@@ -273,18 +273,38 @@ impl Simulation {
     pub(in crate::analytics) fn return_what_the_living_and_the_dead_leave(&mut self) {
         use crate::world::Position;
 
-        // What the living have to pass
-        let leavings: Vec<((i32, i32, i32), f32)> = self
+        // What the living have to pass, and where they live, and whether
+        // they keep a midden (#357)
+        let leavings: Vec<((i32, i32, i32), f32, Option<(i32, i32)>)> = self
             .population
             .agents
             .iter_mut()
             .filter(|agent| agent.state.is_alive)
-            .map(|agent| (agent.state.position, agent.state.void_waste()))
-            .filter(|(_, waste)| *waste > 0.0)
+            .map(|agent| {
+                let keeps_a_midden = agent.knows_how_to_do("StartMidden");
+                let home = Self::where_this_one_lives(agent);
+                let near_home = (home.0 - agent.state.position.0).abs().max((home.1 - agent.state.position.1).abs())
+                    <= crate::world::Midden::HOW_FAR_IT_SERVES;
+                (agent.state.position, agent.state.void_waste(), (keeps_a_midden && near_home).then_some((home.0, home.1)))
+            })
+            .filter(|(_, waste, _)| *waste > 0.0)
             .collect();
 
-        for (position, waste) in leavings {
+        for (position, waste, home) in leavings {
+            // Into the latrine if the camp has one with room, onto the
+            // midden if it keeps one, and otherwise where it falls (#357).
             // Not just litter: a midden also has a smell and seeds in it.
+            if let Some(home) = home {
+                if let Some(which) = self.world.latrine_serving(home) {
+                    self.world.latrines[which].holds += waste;
+                    continue;
+                }
+                if let Some(which) = self.world.midden_serving(home) {
+                    let there = self.world.middens[which].at;
+                    self.world.grid.somebody_voided_on(&there, waste);
+                    continue;
+                }
+            }
             let here = Position::new(position.0, position.1);
             self.world.grid.somebody_voided_on(&here, waste);
         }
@@ -392,6 +412,7 @@ impl Simulation {
                     0.25 + 0.35 * how_bad,
                     now,
                 );
+                agent.what_filth_teaches();
             }
         }
     }

@@ -1593,7 +1593,7 @@ fn sheep() -> AnimalSpecies {
         living_products: vec![
             AnimalProduct {
                 material_id: "wool".to_string(),
-                production_time: 600,
+                production_time: days(180),
                 quantity: 4,
             },
         ],
@@ -1636,7 +1636,7 @@ fn goat() -> AnimalSpecies {
         living_products: vec![
             AnimalProduct {
                 material_id: "milk".to_string(),
-                production_time: 200,
+                production_time: days(1),
                 quantity: 1,
             },
         ],
@@ -1726,7 +1726,7 @@ fn cow() -> AnimalSpecies {
         living_products: vec![
             AnimalProduct {
                 material_id: "milk".to_string(),
-                production_time: 150,
+                production_time: days(1),
                 quantity: 2,
             },
         ],
@@ -1892,7 +1892,7 @@ fn camel() -> AnimalSpecies {
         living_products: vec![
             AnimalProduct {
                 material_id: "milk".to_string(),
-                production_time: 300,
+                production_time: days(1),
                 quantity: 1,
             },
         ],
@@ -2748,6 +2748,21 @@ pub struct Animal {
     /// hunter does. See `AnimalManager::HOW_LONG_A_KILL_LASTS`.
     #[serde(default)]
     pub a_kill_to_go_back_to: f32,
+
+    /// How much longer this one is in milk, in turns, from her last birth
+    /// (#354). Milk comes from a mother nursing young and from nobody else.
+    #[serde(default)]
+    pub nursing_for: u32,
+    /// When its keeper last fed it from the hand, which is how a young one
+    /// taken from a kill comes to stay (#354).
+    #[serde(default)]
+    pub fed_at: Option<u32>,
+    /// Shut in a fold for the night, out of a wolf's reach (#354).
+    #[serde(default)]
+    pub in_the_fold: bool,
+    /// When a keeper took it in (#358), which its grace counts from.
+    #[serde(default)]
+    pub taken_at: u32,
 }
 
 impl Animal {
@@ -2796,6 +2811,10 @@ impl Animal {
             what_is_on_me_from: None,
             what_is_on_me_id: None,
             a_kill_to_go_back_to: 0.0,
+            nursing_for: 0,
+            fed_at: None,
+            in_the_fold: false,
+            taken_at: 0,
         }
     }
 
@@ -2863,27 +2882,52 @@ impl Animal {
         }
     }
 
-    /// Turn product production timers and return ready products
-    pub fn turn_products(&mut self) -> Vec<(String, u32)> {
-        let mut produced = Vec::new();
-
+    /// Count down what a living animal gives, and say what is ready.
+    ///
+    /// **A ready product waits to be taken.** The timer used to reach nought
+    /// and be put back to a hundred on the very next pass, so whatever was
+    /// ready stood ready for one half hour, and nobody could ever collect
+    /// from a beast (#354). It is put back to the species' own interval when
+    /// it is taken (`collecting_from_a_beast`). Milk counts down only while
+    /// she is nursing.
+    pub fn turn_products(&mut self) -> Vec<String> {
         if !self.is_alive() || !self.is_mature() {
-            return produced;
+            return Vec::new();
+        }
+        if self.nursing_for > 0 {
+            self.nursing_for -= 1;
         }
 
+        let nursing = self.nursing_for > 0;
+        let mut ready = Vec::new();
         for (material_id, timer) in self.product_timers.iter_mut() {
+            if material_id == "milk" && !nursing {
+                continue;
+            }
             if *timer > 0 {
                 *timer -= 1;
             } else {
-                // Find the product info to get quantity
-                // We'll return the material_id and quantity
-                produced.push((material_id.clone(), 1)); // Default quantity
-                *timer = 100; // Reset timer (will be updated with actual value)
+                ready.push(material_id.clone());
             }
         }
-
-        produced
+        ready
     }
+
+    /// Whether this product could be taken from it now.
+    pub fn has_ready(&self, material_id: &str) -> bool {
+        self.is_alive()
+            && self.is_mature()
+            && (material_id != "milk" || self.nursing_for > 0)
+            && self.product_timers.get(material_id) == Some(&0)
+    }
+
+    /// Whether somebody keeps it, tamed or still being raised.
+    pub fn is_kept(&self) -> bool {
+        self.owner_id.is_some()
+    }
+
+    /// How long a mother is in milk after a birth.
+    pub const HOW_LONG_SHE_NURSES: u32 = days(150);
 
     /// Age the animal by one turn
     pub fn turn_age(&mut self) {
@@ -3645,7 +3689,7 @@ impl AnimalManager {
             self.animals
                 .iter()
                 .enumerate()
-                .filter(|(_, animal)| animal.is_alive() && animal.is_wild())
+                .filter(|(_, animal)| animal.is_alive() && animal.is_wild() && !animal.is_kept())
                 .filter(|(_, animal)| {
                     registry.get(&animal.species_id).is_some_and(|species| {
                         matches!(
@@ -3707,7 +3751,7 @@ impl AnimalManager {
     const NEAR_ENOUGH_TO_SPOOK_IT: i32 = 4;
 
     /// Process births for pregnant animals
-    fn process_births(&mut self) {
+    pub(crate) fn process_births(&mut self) {
         use rand::Rng;
         let mut rng = crate::core::dice::roll();
 
@@ -3716,29 +3760,31 @@ impl AnimalManager {
             None => return,
         };
 
-        // Collect birth data
-        let births: Vec<(String, (i32, i32), Option<Uuid>, u32, u32)> = self.animals
+        // Collect birth data, with whoever keeps the mother: what is born to
+        // a kept beast is kept by the same hand (#354).
+        let births: Vec<(String, (i32, i32), Option<Uuid>, u32, Option<Uuid>)> = self.animals
             .iter_mut()
             .filter(|a| a.is_alive() && a.ready_to_give_birth())
             .filter_map(|a| {
                 let species = registry.get(&a.species_id)?;
                 let litter_size = Self::how_many_come_through(species, &mut rng);
 
-                // Complete birth
+                // Complete birth, and she is in milk
                 a.give_birth();
+                a.nursing_for = Animal::HOW_LONG_SHE_NURSES;
 
                 Some((
                     a.species_id.clone(),
                     a.position,
                     a.group_id,
                     litter_size,
-                    species.breeding_cooldown,
+                    a.owner_id.filter(|_| a.is_domesticated),
                 ))
             })
             .collect();
 
         // Spawn offspring
-        for (species_id, position, group_id, litter_size, _cooldown) in births {
+        for (species_id, position, group_id, litter_size, kept_by) in births {
             if let Some(species) = registry.get(&species_id) {
                 for _ in 0..litter_size {
                     if self.how_many_are_alive() >= self.max_population {
@@ -3751,12 +3797,18 @@ impl AnimalManager {
                     let offset_y = rng.gen_range(-2..=2);
                     let offspring_pos = (position.0 + offset_x, position.1 + offset_y);
 
-                    let offspring = Animal::new_offspring(
+                    let mut offspring = Animal::new_offspring(
                         species_id.clone(),
                         offspring_pos,
                         species,
                         group_id,
                     );
+                    if kept_by.is_some() {
+                        offspring.position = position;
+                        offspring.owner_id = kept_by;
+                        offspring.is_domesticated = true;
+                        offspring.tame_level = 1.0;
+                    }
                     self.animals.push(offspring);
                 }
             }
@@ -3994,7 +4046,8 @@ impl AnimalManager {
         let mut breaking_away: Vec<(usize, (i32, i32))> = Vec::new();
 
         for (idx, animal) in self.animals.iter().enumerate() {
-            if !animal.is_alive() {
+            // A kept beast keeps by its keeper, not its kind (#354)
+            if !animal.is_alive() || animal.is_kept() {
                 continue;
             }
 
@@ -4384,7 +4437,8 @@ impl AnimalManager {
         // two sheep without once seeing either. See ISSUES_FOUND #280.
         let mut who_is_about: BTreeMap<(i32, i32), Vec<usize>> = BTreeMap::new();
         for (idx, animal) in self.animals.iter().enumerate() {
-            if !animal.is_alive() {
+            // Shut in a fold is out of reach and out of sight (#354)
+            if !animal.is_alive() || animal.in_the_fold {
                 continue;
             }
             who_is_about

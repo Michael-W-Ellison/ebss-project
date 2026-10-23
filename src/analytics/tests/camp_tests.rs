@@ -240,3 +240,20 @@ fn a_farmer_does_not_leave_food_in_store_for_ploughland() {
     let position = simulation.population.agents[0].state.position;
     assert!(simulation.moving_to_farmland(&simulation.population.agents[0], position).is_none());
 }
+
+/// A camp sleeps under a roof that will stand when there is one in reach,
+/// but brush is cover for the night, not where a camp lives: a hut within a
+/// forage did not stay a hut, it became the camp, and camps stopped moving
+/// (#349).
+#[test]
+fn brush_does_not_anchor_a_camp() {
+    use crate::world::{Building, BuildingType, Position};
+
+    let mut simulation = a_camp(3);
+    let near = Position::new(HERE.0 + 3, HERE.1);
+    simulation.world.add_building(Building::new(BuildingType::BrushHut, near));
+    assert_eq!(simulation.where_this_one_sleeps(0), Some(HERE), "a hut does not move the camp");
+
+    simulation.world.add_building(Building::new(BuildingType::Burrow, near));
+    assert_eq!(simulation.where_this_one_sleeps(0), Some((near.x, near.y)), "a finished burrow does");
+}

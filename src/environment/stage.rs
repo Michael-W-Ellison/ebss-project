@@ -665,7 +665,10 @@ impl Path {
                 ],
                 standing: Standing::Stands(
                     "waste that can be smelled, avoided and learned from, and ground that \
-                     takes what is dropped on it back into the soil",
+                     takes what is dropped on it back into the soil; a camp used too long \
+                     fouls its ground and the water beside it, vermin get into stores and \
+                     scavengers come to what is left lying, and the midden that answers it \
+                     is Stage 1 and found out",
                 ),
             },
 
@@ -717,7 +720,9 @@ impl Path {
                 held_back_by: &["nothing is owned", "nothing is bred", "nothing is fed"],
                 standing: Standing::Part(
                     "hunting pressure does shape prey - animals grow shy where they are \
-                     hunted - and nothing follows a camp, scavenges waste, or is tolerated",
+                     hunted - and nothing follows a camp, scavenges waste, or is tolerated; \
+                     a young one left standing by a kill follows the hunter, and raising it \
+                     by hand is Stage 1 and found out",
                 ),
             },
 

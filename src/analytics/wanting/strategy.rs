@@ -451,7 +451,9 @@ impl Strategy {
                 Reach::NotYet("a building has a condition and nothing mends \
                     one, so there is no repair to choose")
             }
-            Strategy::BuildTemporaryShelter | Strategy::BuildDurableShelter => {
+            // Brush on the spot, from what is in the pack (#349)
+            Strategy::BuildTemporaryShelter => Reach::Now,
+            Strategy::BuildDurableShelter => {
                 Reach::NotYet("building is answered by Construction rather than \
                     by Shelter, and the two do not yet meet")
             }
@@ -783,6 +785,34 @@ impl crate::analytics::Simulation {
             return take(&mut open, at);
         }
 
+        // 1b. A hunt, for somebody hungry who craves meat (#358). The ranking
+        //     is very nearly a ranking on confidence, and gathering is the
+        //     surer thing nearly always - so a people who could hunt lived on
+        //     berries and fish and never once went after the deer in sight.
+        //
+        //     Only for game in sight, struck or closed on - a walk to where
+        //     game was seen stays one way among the rest - and not when the
+        //     hunger is past waiting for a stalk.
+        if need == DriveType::Hunger
+            && agent.craves_meat(self.current_turn)
+            && agent.how_hard_it_presses(need) < Self::WHEN_ONLY_NOW_WILL_DO
+        {
+            let sight = Self::how_far_a_hunter_looks(agent) as i32;
+            let here = agent.state.position;
+            if let Some(at) = open.iter().position(|(way, doing, _)| {
+                *way == Strategy::HuntLocalAnimals
+                    && match doing {
+                        Action::Hunt { .. } => true,
+                        Action::Move { target } => {
+                            (target.0 - here.0).abs().max((target.1 - here.1).abs()) <= sight
+                        }
+                        _ => false,
+                    }
+            }) {
+                return take(&mut open, at);
+            }
+        }
+
         // 2. The plan, where one is running for this need.
         if agent.is_the_plan_for(need) && agent.should_execute_plan() {
             if let Some(step) = agent.what_the_plan_wants_next() {
@@ -889,6 +919,11 @@ impl crate::analytics::Simulation {
             }
             Strategy::FetchFromKnownSource => {
                 worth.effort += 2.0;
+            }
+            // A turn or three of cutting and tying, and the poles spent
+            Strategy::BuildTemporaryShelter => {
+                worth.effort += 4.0;
+                worth.turns += 1.0;
             }
             // Taking something out of a hole and putting the lid back.
             Strategy::EatStoredFood => {
@@ -1024,6 +1059,19 @@ impl crate::analytics::Simulation {
 
                 self.nearest_roof_of_this_kind(agent, agent_position, which)
                     .map(|_| Action::SeekShelter)
+            }
+
+            // Brush put up where this one stands, from what is in the pack:
+            // a hut, a lean-to or a windbreak (#349). The first way of
+            // getting under a roof that does not need a roof to be there.
+            Strategy::BuildTemporaryShelter => {
+                let worth_it = agent.needs_shelter()
+                    || agent.body_temperature.is_too_cold()
+                    || agent.surroundings.foul_weather;
+                if !worth_it || agent.surroundings.under_shelter {
+                    return None;
+                }
+                self.cover_i_could_put_up(agent, agent_position)
             }
 
             // Declared and out of reach. `the_way_to_answer` filters these out

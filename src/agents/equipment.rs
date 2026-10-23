@@ -56,19 +56,23 @@ pub enum ClothingMaterial {
     Cotton,
     Hide,
     Bark,
+    /// Scraped and dried, not tanned: stiff, and it rots when soaked (#353)
+    Rawhide,
 }
 
 impl ClothingMaterial {
     /// Base durability for this material
     pub fn base_durability(&self) -> f32 {
         match self {
-            ClothingMaterial::Leather => 100.0,
+            // Tanned: soft, keeps in the wet, wears longest of the skins (#353)
+            ClothingMaterial::Leather => 140.0,
             ClothingMaterial::Fur => 80.0,
             ClothingMaterial::Wool => 60.0,
             ClothingMaterial::Linen => 50.0,
             ClothingMaterial::Cotton => 55.0,
             ClothingMaterial::Hide => 120.0,
             ClothingMaterial::Bark => 40.0,
+            ClothingMaterial::Rawhide => 70.0,
         }
     }
 
@@ -82,6 +86,7 @@ impl ClothingMaterial {
             ClothingMaterial::Cotton => 0.9,   // Light cold protection
             ClothingMaterial::Linen => 0.8,    // Minimal cold protection
             ClothingMaterial::Bark => 0.7,     // Poor cold protection
+            ClothingMaterial::Rawhide => 1.0,  // A skin, without the fur
         }
     }
 
@@ -91,6 +96,7 @@ impl ClothingMaterial {
             ClothingMaterial::Linen => 1.4,    // Excellent in heat
             ClothingMaterial::Cotton => 1.3,   // Very good in heat
             ClothingMaterial::Bark => 1.1,     // Decent in heat
+            ClothingMaterial::Rawhide => 0.7,
             ClothingMaterial::Leather => 0.9,  // Poor in heat
             ClothingMaterial::Wool => 0.7,     // Bad in heat
             ClothingMaterial::Hide => 0.6,     // Very bad in heat
@@ -108,6 +114,7 @@ impl ClothingMaterial {
             ClothingMaterial::Cotton => 0.7,
             ClothingMaterial::Linen => 0.6,
             ClothingMaterial::Bark => 1.0,
+            ClothingMaterial::Rawhide => 1.4,
         }
     }
 
@@ -121,6 +128,7 @@ impl ClothingMaterial {
             ClothingMaterial::Cotton => 0.9,
             ClothingMaterial::Linen => 0.8,
             ClothingMaterial::Bark => 0.4,
+            ClothingMaterial::Rawhide => 0.6,
         }
     }
 }
@@ -1241,6 +1249,52 @@ pub const GARMENT_RECIPES: &[GarmentRecipe] = &[
         material: ClothingMaterial::Bark,
         base_cold_insulation: 0.2,
         base_heat_resistance: 0.4,
+        base_armor: 0.1,
+    },
+    // What a skin makes short of a coat (#353): a cloak and wraps of
+    // rawhide, wraps of raw fur for the feet, and moccasins of tanned leather.
+    GarmentRecipe {
+        id: "hide_cloak",
+        name: "Hide Cloak",
+        slot: EquipmentSlot::Back,
+        material_item: "rawhide",
+        material_amount: 3,
+        material: ClothingMaterial::Rawhide,
+        base_cold_insulation: 0.45,
+        base_heat_resistance: 0.2,
+        base_armor: 0.1,
+    },
+    GarmentRecipe {
+        id: "hide_wraps",
+        name: "Hide Wraps",
+        slot: EquipmentSlot::Legs,
+        material_item: "rawhide",
+        material_amount: 2,
+        material: ClothingMaterial::Rawhide,
+        base_cold_insulation: 0.25,
+        base_heat_resistance: 0.2,
+        base_armor: 0.1,
+    },
+    GarmentRecipe {
+        id: "fur_wraps",
+        name: "Fur Wraps",
+        slot: EquipmentSlot::Feet,
+        material_item: "hides",
+        material_amount: 1,
+        material: ClothingMaterial::Fur,
+        base_cold_insulation: 0.3,
+        base_heat_resistance: 0.1,
+        base_armor: 0.05,
+    },
+    GarmentRecipe {
+        id: "moccasins",
+        name: "Moccasins",
+        slot: EquipmentSlot::Feet,
+        material_item: "leather",
+        material_amount: 2,
+        material: ClothingMaterial::Leather,
+        base_cold_insulation: 0.3,
+        base_heat_resistance: 0.3,
         base_armor: 0.1,
     },
 ];

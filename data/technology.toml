@@ -2023,8 +2023,8 @@ name = "Caches in cool shade"
 path = "storage"
 stage = 0
 role = "technique"
-model = ["do:Excavate", "do:Cover"]
-note = "A pit is a cache a band comes back to (#346)."
+model = ["do:Excavate", "do:Cover", "do:Cache"]
+note = "A pit is a cache a band comes back to (#346). Where a pit will not go - the forest floor, rock - a cairn of stones over a hollow is one (do:Cache); and a store in the shade of trees keeps cooler."
 
 [[tech]]
 id = "storage.0.natural_caves"
@@ -2032,6 +2032,8 @@ name = "Natural caves"
 path = "storage"
 stage = 0
 role = "technique"
+model = ["do:Cache"]
+same_as = ["storage.0.caches_in_cool_shade"]
 
 [[tech]]
 id = "storage.1.gourds"
@@ -2090,6 +2092,8 @@ name = "Raised racks"
 path = "storage"
 stage = 2
 role = "technique"
+model = ["do:PutUpRack"]
+note = "Found out by being rained off drying often enough: get it up off the ground, where the wet runs off it and the air gets all round. Poles and cord."
 
 [[tech]]
 id = "storage.2.hanging_storage"
@@ -2097,6 +2101,8 @@ name = "Hanging storage"
 path = "storage"
 stage = 2
 role = "technique"
+model = ["do:HangUp"]
+needs = ["storage.2.raised_racks"]
 
 [[tech]]
 id = "storage.2.covered_pits"
@@ -2345,6 +2351,8 @@ name = "Fur wraps"
 path = "footwear"
 stage = 0
 role = "technique"
+model = ["wear:fur_wraps"]
+note = "A raw hide with its fur on, bound round the foot."
 
 [[tech]]
 id = "footwear.0.grass_padding"
@@ -2366,6 +2374,9 @@ name = "One-piece hide moccasins"
 path = "footwear"
 stage = 1
 role = "technique"
+model = ["wear:moccasins"]
+needs = ["leatherworking.1.smoking"]
+note = "Two pieces of tanned leather sewn into one-piece moccasins."
 
 [[tech]]
 id = "footwear.1.plant_fiber_sandals"
@@ -2715,6 +2726,9 @@ name = "Brining"
 path = "food_preservation"
 stage = 1
 role = "technique"
+model = ["do:Brine"]
+needs = ["food_preservation.1.dry_salting"]
+note = "Salt and water in a vessel, with water carried. Like dry salt it takes the thing cut up, not whole: the brine has to reach the middle of it."
 
 [[tech]]
 id = "food_preservation.1.smoking_over_low_fires"
@@ -2722,6 +2736,8 @@ name = "Smoking over low fires"
 path = "food_preservation"
 stage = 1
 role = "technique"
+model = ["do:Smoke"]
+note = "Found out by drying food within reach of a burning hearth: what hung in the smoke kept, and kept through the wet, when drying in the open will not go on in the rain."
 
 [[tech]]
 id = "food_preservation.1.combined_salt_smoke_preservation"
@@ -3046,6 +3062,9 @@ name = "Stone boiling with hide or basket-lined containers"
 path = "cooking_and_food_processing"
 stage = 1
 role = "technique"
+model = ["do:StoneBoil"]
+needs = ["storage.1.baskets"]
+note = "Water in a basket, bag or bowl, brought to the boil with stones out of the fire. It is what boils without a pot that will stand the fire, and nothing burns."
 
 [[tech]]
 id = "cooking_and_food_processing.1.pit_ovens"
@@ -3053,6 +3072,8 @@ name = "Pit ovens"
 path = "cooking_and_food_processing"
 stage = 1
 role = "technique"
+model = ["do:PitOven"]
+note = "Found out after enough suppers over a fire: a big batch buried with the stones, cooked through, and nothing burnt."
 
 [[tech]]
 id = "cooking_and_food_processing.1.simple_pounding_and_crushing"
@@ -3328,7 +3349,8 @@ name = "Scraped hide dried in shape"
 path = "leatherworking"
 stage = 0
 role = "technique"
-model = ["make:leather"]
+model = ["make:rawhide"]
+note = "A hide scraped and dried in shape is rawhide: stiff, and it keeps, where the raw hide rots in a week. Leather is what it is tanned into (#353)."
 
 [[tech]]
 id = "leatherworking.0.fur_on_hide_retained_for_warmth"
@@ -3351,6 +3373,8 @@ name = "Cloaks"
 path = "leatherworking"
 stage = 0
 role = "product"
+model = ["wear:hide_cloak"]
+note = "A cloak of three rawhides, cheaper and colder than a fur coat."
 
 [[tech]]
 id = "leatherworking.0.wraps"
@@ -3358,6 +3382,8 @@ name = "Wraps"
 path = "leatherworking"
 stage = 0
 role = "product"
+model = ["wear:hide_wraps"]
+note = "Rawhide wrapped round the legs."
 
 [[tech]]
 id = "leatherworking.0.shelter_panels"
@@ -3365,6 +3391,9 @@ name = "Shelter panels"
 path = "leatherworking"
 stage = 0
 role = "product"
+model = ["build:SkinTent"]
+same_as = ["construction.0.skin_tents"]
+note = "Hides, rawhide or leather as a tent's covering: the same tent as construction's."
 
 [[tech]]
 id = "leatherworking.1.scraping_flesh_and_fat_more_thoroughly"
@@ -3393,6 +3422,8 @@ name = "Smoking"
 path = "leatherworking"
 stage = 1
 role = "technique"
+model = ["make:leather"]
+note = "Rawhide worked soft over a smoky fire: tanned leather, which stays soft, keeps in the wet and wears longest. Found out after scraping six hides."
 
 [[tech]]
 id = "leatherworking.1.greasing_with_animal_fats_or_oils"
@@ -3429,6 +3460,9 @@ name = "Bedding"
 path = "leatherworking"
 stage = 1
 role = "product"
+model = ["do:LayBedding"]
+same_as = ["shelter_systems_beyond_construction.0.ground_bedding"]
+note = "A worked hide laid down to sleep on: twice as warm as boughs and a season before it wears through."
 
 [[tech]]
 id = "leatherworking.1.water_resistant_covers_to_a_limited"
@@ -3820,7 +3854,8 @@ name = "Collecting clay from streambanks"
 path = "mining_and_extraction"
 stage = 0
 role = "technique"
-model = ["do:Excavate"]
+model = ["do:Gather"]
+note = "Clay is gathered where it lies on a bank, as anything else is. It was linked to do:Excavate, which digs a store and gives up stone, not clay (#355)."
 
 [[tech]]
 id = "mining_and_extraction.0.gathering_ochre_chalk_salt_crusts_peat"
@@ -4997,6 +5032,9 @@ name = "Designated defecation area away from camp"
 path = "waste_management_and_sanitization"
 stage = 1
 role = "technique"
+model = ["do:StartMidden"]
+same_as = ["waste_management_and_sanitization.1.waste_heaps_placed_downhill_downwind"]
+note = "The same place set aside: the model's midden takes leavings and refuse alike."
 
 [[tech]]
 id = "waste_management_and_sanitization.1.separate_sleeping_cooking_and_butchery_zones"
@@ -5011,6 +5049,8 @@ name = "Waste heaps placed downhill/downwind"
 path = "waste_management_and_sanitization"
 stage = 1
 role = "technique"
+model = ["do:StartMidden"]
+note = "Found out by somebody laid up twice by foul ground or foul water: the camp's refuse and leavings go to one place a midden's distance from the hearth, away from water, rather than where they fall (#357)."
 
 [[tech]]
 id = "waste_management_and_sanitization.1.burial_of_some_refuse"
@@ -5032,6 +5072,8 @@ name = "Latrine pits"
 path = "waste_management_and_sanitization"
 stage = 2
 role = "technique"
+model = ["do:DigLatrine"]
+note = "Found out by somebody who keeps a midden and has settled to farming, when laid up by filth again: a pit by the midden takes the camp's leavings under the ground and fouls nothing on top until it is full (#357)."
 
 [[tech]]
 id = "waste_management_and_sanitization.2.refuse_pits"
@@ -5053,6 +5095,9 @@ name = "Midden heaps"
 path = "waste_management_and_sanitization"
 stage = 2
 role = "technique"
+model = ["do:StartMidden"]
+same_as = ["waste_management_and_sanitization.1.waste_heaps_placed_downhill_downwind"]
+note = "The midden itself. It fouls its own ground, smells, draws vermin to stores near it and scavengers to the camp, and grows what was thrown on it (#357)."
 
 [[tech]]
 id = "waste_management_and_sanitization.2.burial_or_covering_of_carcasses_offal"
@@ -7347,6 +7392,9 @@ name = "Simple windbreak"
 path = "shelter_systems_beyond_construction"
 stage = 0
 role = "technique"
+model = ["build:Windbreak"]
+same_as = ["construction.0.windbreaks"]
+note = "The same screen as construction's windbreaks."
 
 [[tech]]
 id = "shelter_systems_beyond_construction.0.one_fire"
@@ -7369,6 +7417,8 @@ name = "Ground bedding"
 path = "shelter_systems_beyond_construction"
 stage = 0
 role = "technique"
+model = ["do:LayBedding"]
+note = "Boughs and brush laid where one sleeps: a bed off the cold ground, trodden flat in a month."
 
 [[tech]]
 id = "shelter_systems_beyond_construction.0.basic_roof_cover"
@@ -8937,6 +8987,8 @@ name = "Water skins"
 path = "water_system"
 stage = 1
 role = "technique"
+model = ["make:waterskin"]
+note = "A whole hide cut and tied off, holding 8 to a bowl's 4. Found out by going thirsty far from water three days."
 
 [[tech]]
 id = "water_system.1.gourds"
@@ -9254,6 +9306,8 @@ name = "Pressure on wounds"
 path = "medicine_and_public_health"
 stage = 0
 role = "technique"
+model = ["do:PressOnWound"]
+note = "A hand on a bleeding wound: one's own slows it to a quarter, somebody else's two hands stop it. Born knowledge."
 
 [[tech]]
 id = "medicine_and_public_health.0.cooling_warming"
@@ -9290,6 +9344,8 @@ name = "Bandaging"
 path = "medicine_and_public_health"
 stage = 1
 role = "technique"
+model = ["do:Bandage"]
+note = "Found out by pressing on wounds: a strip of bark, sinew or hide tied over one stops the bleeding and, for a week, closes it twice as fast and lets it turn half as often."
 
 [[tech]]
 id = "medicine_and_public_health.1.cleaning_visible_dirt_from_wounds"
@@ -10157,6 +10213,8 @@ name = "Lean-tos"
 path = "construction"
 stage = 0
 role = "technique"
+model = ["build:LeanTo"]
+note = "A sloped roof of poles and brush tied at the top: dry and out of the wind, colder than a hut, gone in a month."
 
 [[tech]]
 id = "construction.0.windbreaks"
@@ -10164,6 +10222,8 @@ name = "Windbreaks"
 path = "construction"
 stage = 0
 role = "technique"
+model = ["build:Windbreak"]
+note = "Three poles and brush on the windward side: it takes the wind off a sleeper but not the rain, and falls down in a fortnight."
 
 [[tech]]
 id = "construction.0.brush_huts"
@@ -10171,6 +10231,8 @@ name = "Brush huts"
 path = "construction"
 stage = 0
 role = "technique"
+model = ["build:BrushHut"]
+note = "A closed dome of poles and brush: warmer than a lean-to, colder than a tent, falls in after about three months."
 
 [[tech]]
 id = "construction.0.snow_shelters_in_cold_regions"
@@ -10718,6 +10780,7 @@ path = "animal_husbandry"
 stage = 1
 role = "technique"
 model = ["do:Tame"]
+note = "A young one left standing by a kill follows the hunter home and is raised by hand: fed every day for a week it is tame, and its keeper has found this out (#354)."
 
 [[tech]]
 id = "animal_husbandry.1.keeping_animals_temporarily"
@@ -10725,6 +10788,9 @@ name = "Keeping animals temporarily"
 path = "animal_husbandry"
 stage = 1
 role = "technique"
+model = ["do:Tame"]
+same_as = ["animal_husbandry.1.capturing_young_animals"]
+note = "The young one kept and fed until it stays: the same raising by hand as capturing one."
 
 [[tech]]
 id = "animal_husbandry.1.simple_enclosures"
@@ -10732,6 +10798,9 @@ name = "Simple enclosures"
 path = "animal_husbandry"
 stage = 1
 role = "technique"
+model = ["do:PutUpFold"]
+needs = ["animal_husbandry.1.capturing_young_animals"]
+note = "A ring of brush on poles where the keeper sleeps: the kept beasts are shut in at night out of a wolf's reach, and do not stray (#354)."
 
 [[tech]]
 id = "animal_husbandry.1.use_of_animals_for_alarm_status"
@@ -10760,7 +10829,10 @@ name = "Routine feeding and protection"
 path = "animal_husbandry"
 stage = 2
 role = "technique"
-model = ["do:CollectAnimalProduct"]
+model = ["do:PutUpFold"]
+same_as = ["animal_husbandry.1.simple_enclosures"]
+needs = ["animal_husbandry.1.capturing_young_animals"]
+note = "Fed by hand when the grazing has not filled them, and folded at night: the fold is the protection, and feeding is the raising (do:Tame)."
 
 [[tech]]
 id = "animal_husbandry.2.culling_management"
@@ -10768,6 +10840,9 @@ name = "Culling management"
 path = "animal_husbandry"
 stage = 2
 role = "technique"
+model = ["do:Slaughter"]
+needs = ["animal_husbandry.1.capturing_young_animals"]
+note = "One of the herd killed for its meat and skin when it can be spared: the herd kept back for breeding is not touched unless somebody is starving (#354)."
 
 [[tech]]
 id = "animal_husbandry.2.meat"
@@ -10789,6 +10864,8 @@ name = "Dung"
 path = "animal_husbandry"
 stage = 2
 role = "product"
+model = ["do:MuckOut"]
+note = "Found out by a keeper who sees dung lying in the fold: carried out, it burns where wood is short and mucks a field (#354)."
 
 [[tech]]
 id = "animal_husbandry.2.guard_or_hunting_assistance_in_some"
@@ -10838,6 +10915,8 @@ name = "Milk use"
 path = "animal_husbandry"
 stage = 4
 role = "technique"
+model = ["do:CollectAnimalProduct"]
+note = "Found out by a keeper whose beast is in milk after a birth: goats, cows and camels, milked once a day while she nurses (#354)."
 
 [[tech]]
 id = "animal_husbandry.4.wool_hair_fiber_harvest"
@@ -10845,6 +10924,9 @@ name = "Wool/hair/fiber harvest"
 path = "animal_husbandry"
 stage = 4
 role = "technique"
+model = ["do:CollectAnimalProduct"]
+same_as = ["animal_husbandry.4.milk_use"]
+note = "Wool plucked from a kept sheep as it sheds, twice a year: taking from a living beast, as milking is. Found out by a keeper who sees it shed (#354)."
 
 [[tech]]
 id = "animal_husbandry.4.eggs"

@@ -257,11 +257,16 @@ fn a_leather_bag_holds_more_than_a_basket() {
     );
 
     // And what actually gates it is the material: a hide is not leather until
-    // somebody has taken the hair off it.
+    // somebody has scraped it to rawhide and smoked that soft over a fire
+    // (#353).
     let scraping = crate::environment::making::how_to_work("scrape", "hides")
-        .expect("a hide scrapes into leather");
-    assert_eq!(scraping.makes, "leather");
+        .expect("a hide scrapes into rawhide");
+    assert_eq!(scraping.makes, "rawhide");
     assert_eq!(scraping.hands, crate::agents::SkillType::Leatherworking);
+    let tanning = crate::environment::making::how_to_work("fire", "rawhide")
+        .expect("rawhide tans into leather");
+    assert_eq!(tanning.makes, "leather");
+    assert_eq!(tanning.hands, crate::agents::SkillType::Leatherworking);
 }
 
 /// And both of them actually raise what a person can carry.

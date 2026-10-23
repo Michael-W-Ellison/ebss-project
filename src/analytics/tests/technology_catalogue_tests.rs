@@ -71,7 +71,8 @@ fn variant_name(debug: String) -> String {
 fn every_building() -> BTreeSet<String> {
     use BuildingType::*;
     [
-        SkinTent, Burrow, Longhouse, UpgradedLonghouse, SmallHouse, MediumHouse, LargeHouse,
+        Windbreak, LeanTo, BrushHut, SkinTent, Burrow, Longhouse, UpgradedLonghouse, SmallHouse,
+        MediumHouse, LargeHouse,
         Manor, TownCenter, TownStorage, GuardPost, Workshop, Forge, Smithy, Bakery, WeaverHut,
         PotteryKiln, Tannery, Mill, Butchery, Brewery, Dairy, Glassworks, Dyeworks, Ropewalk,
         Brickyard, PaperMill, TailorShop, CobblerShop, BarberShop, Scriptorium, Storehouse, Farm,
@@ -94,6 +95,11 @@ fn every_action() -> BTreeSet<String> {
         Action::Hunt { animal_id: nobody, weapon: None },
         Action::Tame { animal_id: nobody, food_type: None },
         Action::CollectAnimalProduct { animal_id: nobody },
+        Action::PutUpFold,
+        Action::MuckOut,
+        Action::Slaughter { animal_id: nobody },
+        Action::StartMidden,
+        Action::DigLatrine,
         Action::SeekShelter,
         Action::LightFire,
         Action::Cook { food_type: s() },
@@ -103,6 +109,16 @@ fn every_action() -> BTreeSet<String> {
         Action::TillSoil,
         Action::TendField,
         Action::Dry { what: s() },
+        Action::Smoke { what: s() },
+        Action::Brine { what: s() },
+        Action::Cache,
+        Action::PutUpRack,
+        Action::HangUp { what: s() },
+        Action::StoneBoil,
+        Action::PitOven,
+        Action::LayBedding,
+        Action::PressOnWound { who: None },
+        Action::Bandage { who: None },
         Action::Boil,
         Action::Salt { what: s() },
         Action::Excavate,
@@ -407,13 +423,13 @@ fn the_survival_paths_start_where_the_document_starts_them() {
     let born = obvious_products();
     for product in [
         "lashing", "flint", "knappedtip", "handaxe", "diggingstick", "sharpenedstick",
-        "leather", "meatstrips", "fishstrips", "bowl",
+        "rawhide", "meatstrips", "fishstrips", "bowl",
     ] {
         assert!(born.contains(product), "{product} is Stage 0");
     }
     for product in [
         "basket", "leatherbag", "fishingrod", "sling", "stoneknife", "spear", "shovel",
-        "travois", "bow", "fishingnet", "claypot", "tinder", "flour",
+        "travois", "bow", "fishingnet", "claypot", "tinder", "flour", "leather",
     ] {
         assert!(!born.contains(product), "{product} is found out");
     }

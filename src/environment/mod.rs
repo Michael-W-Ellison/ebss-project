@@ -223,6 +223,20 @@ pub enum Action {
     CollectAnimalProduct {
         animal_id: uuid::Uuid,
     },
+    /// Put up a fold of brush and poles where one stands, for the kept beasts
+    /// to be shut in at night (#354).
+    PutUpFold,
+    /// Carry the dung out of a fold, to burn or to spread (#354).
+    MuckOut,
+    /// Kill one of your own kept beasts for its meat and skin (#354).
+    Slaughter {
+        animal_id: uuid::Uuid,
+    },
+    /// Set aside a place for the camp's refuse, away from where it sleeps
+    /// and draws water (#357).
+    StartMidden,
+    /// Dig a latrine pit beside the midden (#357).
+    DigLatrine,
     /// Harvest a plant (crop or wild)
     HarvestPlant {
         plant_id: uuid::Uuid,
@@ -285,6 +299,27 @@ pub enum Action {
     /// Rub salt into food, which keeps it about seven times as long as
     /// leaving it alone and does not need a week of sun
     Salt { what: String },
+    /// Hang food in the smoke of a low fire. It keeps half as well as food
+    /// dried in the sun and it works in any weather. Found out, by drying
+    /// beside the hearth.
+    Smoke { what: String },
+    /// Put food down in salt water in a vessel. Takes a whole fish, which dry
+    /// salt does not.
+    Brine { what: String },
+    /// Pile stones over a hollow on ground a pit will not go into: a cache.
+    Cache,
+    /// Put up a rack of poles and cord to hang food on
+    PutUpRack,
+    /// Hang food on a rack within reach, to dry off the ground and out of
+    /// the wet
+    HangUp { what: String },
+    /// Cook in a vessel of water with stones out of the fire: no pot that
+    /// would stand the fire, and nothing burns
+    StoneBoil,
+    /// Bury a big batch with stones out of the fire and let it cook
+    PitOven,
+    /// Lay boughs and brush where this one will sleep
+    LayBedding,
     /// Dig a pit in the ground here, to keep things in
     Excavate,
     /// Put something into the pit here and put the earth back over it
@@ -352,6 +387,11 @@ pub enum Action {
     /// [`crate::environment::remedies`] - it takes something off how badly
     /// they are laid up, and that is all a herbal has ever done.
     Treat { who: Option<uuid::Uuid> },
+    /// Press on a wound that is bleeding: one's own (`None`) or somebody's
+    /// within reach (#351).
+    PressOnWound { who: Option<uuid::Uuid> },
+    /// Bind up an open wound with a strip of something (#351).
+    Bandage { who: Option<uuid::Uuid> },
     /// Wait/idle
     Wait,
 }
@@ -394,6 +434,9 @@ impl Action {
             Action::CheckSnares => Some(DriveType::Hunger),
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
+            Action::PutUpFold | Action::MuckOut => Some(DriveType::Utility),
+            Action::StartMidden | Action::DigLatrine => Some(DriveType::Protection),
+            Action::Slaughter { .. } => Some(DriveType::Hunger),
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather
             Action::LightFire => Some(DriveType::Sustenance), // A fire is for the food that goes on it
@@ -410,6 +453,13 @@ impl Action {
             Action::Dry { .. } => Some(DriveType::Preparedness),
             Action::Boil => Some(DriveType::Preparedness),
             Action::Salt { .. } => Some(DriveType::Preparedness),
+            Action::Smoke { .. }
+            | Action::Brine { .. }
+            | Action::Cache
+            | Action::PutUpRack
+            | Action::HangUp { .. } => Some(DriveType::Preparedness),
+            Action::StoneBoil | Action::PitOven => Some(DriveType::Sustenance),
+            Action::LayBedding => Some(DriveType::Rest),
             Action::Excavate => Some(DriveType::Preparedness),
             Action::Cover { .. } => Some(DriveType::Preparedness),
             Action::PickUp { .. } => Some(DriveType::Utility),
@@ -429,11 +479,9 @@ impl Action {
             // Taking something for it answers the want to be well enough to
             // work, which is what `Rest` is; giving it to somebody else is
             // looking after your own, which is `Protection`.
-            Action::Treat { who } => Some(if who.is_some() {
-                DriveType::Protection
-            } else {
-                DriveType::Rest
-            }),
+            Action::Treat { who } | Action::PressOnWound { who } | Action::Bandage { who } => {
+                Some(if who.is_some() { DriveType::Protection } else { DriveType::Rest })
+            }
             Action::MakeClothing { .. } => Some(DriveType::Shelter), // Clothing is shelter you carry
             Action::WearClothing { .. } => Some(DriveType::Shelter),
             Action::Move { .. } => None,

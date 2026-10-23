@@ -234,7 +234,14 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // sowing and gardens found out in stages, and a cache no anchor.
     // Up to 8,703 for #347: the shallows and fish traps, a wasting body wants
     // no child, and partners go halfway to each other.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 8_703;
+    // Down to 8,397 for #349: brush shelter and bedding, graded cover, a tent
+    // that can be finished, and fish traps that take fish.
+    // Down to 7,429 for #352: every spell of weather draws its wind, salt is
+    // fetched, a tent asks for what it takes, and a vessel is made for a walk.
+    // Up to 8,095 for #353: hides rot unless scraped, rawhide is tanned over
+    // a fire, skins make cloaks, wraps and foot-wraps, and a spare hide is
+    // slept on.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 8_095;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -520,7 +527,49 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // the document's three stages.
     // Up 6.3% to 1,039,760 for #347: the shallows and fish traps, a wasting
     // body wants no child, and partners go halfway to each other.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_039_760;
+    // Down 2.7% to 1,011,830 for #347's trap robbing: somebody else's trap is
+    // theft, and a person is a danger only while they are in sight.
+    // Up 1.9% to 1,031,179 for #348: food keeping - smoking, brine, caches,
+    // racks, stone boiling and pit ovens, and no drying in the rain.
+    // Down 4.9% to 980,526 for #349: windbreaks, lean-tos, brush huts put up
+    // in one go, bedding over a sleeping place, graded cover, a tent that can
+    // be finished, and fish traps that take fish.
+    // Up 3.6% to 1,016,134 for #350: brush does not anchor a camp, a burrow
+    // tried for its own sake keeps digging_in's rules, and an open hole
+    // fills in.
+    // Up 1.9% to 1,035,210 for #351: wounds bleed and are pressed on and
+    // bound, a body at rest mends faster and takes one turn a half hour, not
+    // two, and a water skin is cut and filled before a walk.
+    // Down 1.4% to 1,020,308 for #352: wind that blows, salt fetched from
+    // where it lies, skins wanted for a tent, a vessel made for a walk.
+    // Up 5.3% to 1,074,317 for #353: hides that rot unless worked, rawhide
+    // and tanned leather, the garments a skin makes, and hide bedding.
+    // Down 0.3% to 1,071,252 for #354: a young one left by a kill follows
+    // the hunter, kept beasts are fed, folded, milked and culled, and dung
+    // burns.
+    // Down 4.3% to 1,025,389 for #355: pots made by the evening fire, stews,
+    // pots that crack and break on a move, and the sea boiled in an empty
+    // pot.
+    // Up 2.5% to 1,051,389 for #356: salt in the body, sweated out and put
+    // back, licked when craved, and journeys made for it.
+    // Down 3.7% to 1,012,933 for #357: middens and latrines, fouled water
+    // and fouled camps moved off, vermin, theft and scavengers at stores, a
+    // storehouse that is a place, and no building making anything from
+    // nothing.
+    // Down 2.2% to 990,339 for #358: hunters look as far as they can see,
+    // remember where game was, and go after it when a week without meat
+    // has them craving it.
+    // Up to 991,004 for #358's correction: plants carry a little salt, going
+    // without it costs a quarter what it did, and meat is not craved for the
+    // salt.
+    // Down 5.0% to 941,071 for #357's correction: vermin take a third of
+    // what they did, a campmate's store is not theft, and foul water sickens
+    // a quarter as often.
+    // Up 0.5% to 945,540 for #358's husbandry correction: a young one taken
+    // from a kill is tended without fodder when there is none to give it.
+    // Up 2.1% to 965,120 for #358's second husbandry correction: a young
+    // one taken in waits two days for its keeper before it drifts.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 965_120;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

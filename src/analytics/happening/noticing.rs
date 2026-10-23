@@ -44,6 +44,7 @@ impl Simulation {
     pub(in crate::analytics) fn prepared_item_id(item_id: &str, cooked_well: bool) -> String {
         let base = item_id
             .strip_prefix("cooked_")
+            .or_else(|| item_id.strip_prefix("stewed_"))
             .or_else(|| item_id.strip_prefix("burnt_"))
             .unwrap_or(item_id);
 

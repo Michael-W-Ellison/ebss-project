@@ -254,6 +254,10 @@ pub enum PreparationState {
     Raw,
     /// Heat-processed - high utilization, slightly slower spoilage
     Cooked,
+    /// Simmered in a fired pot with water (#355): everything in it is got
+    /// at - the tough root, the hard grain, the marrow in the bone - and
+    /// nothing burns, and it carries its water still.
+    Stewed,
     /// Dehydrated - good retention, very slow spoilage
     Dried,
     /// Smoke-preserved - good retention, very slow spoilage
@@ -277,6 +281,7 @@ impl PreparationState {
         match self {
             Self::Raw => 0.35,       // 30-40% utilization
             Self::Cooked => 0.95,    // 90-100% - cooking unlocks nutrients
+            Self::Stewed => 1.0,     // Nothing left on the bone or in the husk
             Self::Dried => 0.85,     // Good retention, some loss
             Self::Smoked => 0.80,    // Slight nutrient loss from heat
             Self::Salted => 0.75,    // Some nutrient loss
@@ -306,6 +311,8 @@ impl PreparationState {
             Self::Smoked => 0.5,
             Self::Cooked => 0.8,
             Self::Ground => 0.9,
+            // The water it was simmered in is still in it
+            Self::Stewed => 1.0,
             // Salt and brine put back roughly what they draw out
             Self::Salted | Self::Pickled | Self::Fermented => 1.0,
             Self::Raw | Self::Ruined => 1.0,
@@ -333,7 +340,7 @@ impl PreparationState {
             // Nothing has been done to it, and that *is* a statement: it has
             // its water still in it, which is what goes off
             Self::Raw => &[Tag::Wet],
-            Self::Cooked => &[Tag::Cooked],
+            Self::Cooked | Self::Stewed => &[Tag::Cooked],
             Self::Dried => &[Tag::Dry],
             Self::Smoked => &[Tag::Smoked],
             Self::Salted => &[Tag::Salted],
@@ -360,6 +367,7 @@ impl PreparationState {
         match self {
             Self::Raw => "Raw",
             Self::Cooked => "Cooked",
+            Self::Stewed => "Stewed",
             Self::Dried => "Dried",
             Self::Smoked => "Smoked",
             Self::Salted => "Salted",
@@ -500,7 +508,7 @@ impl FoodData {
 
         match self.preparation {
             // Food over a fire is unmistakable
-            PreparationState::Cooked | PreparationState::Smoked => 1.0,
+            PreparationState::Cooked | PreparationState::Stewed | PreparationState::Smoked => 1.0,
             // Prepared, but not hot
             PreparationState::Dried
             | PreparationState::Fermented
@@ -525,6 +533,16 @@ impl FoodData {
     /// spoiled by the heat, and so is anything that was already cooked or
     /// preserved: a second turn over the flames burns it. Returns what
     /// happened, so a caller can tell a meal from a mistake.
+    /// Simmered in a pot (#355): what cooking would improve comes out
+    /// stewed, and a pot of water burns nothing.
+    pub fn stew(&mut self, outcome: CookingOutcome) -> CookingOutcome {
+        if outcome == CookingOutcome::Improves && self.preparation == PreparationState::Raw {
+            self.preparation = PreparationState::Stewed;
+            return CookingOutcome::Improves;
+        }
+        self.cook(outcome)
+    }
+
     pub fn cook(&mut self, outcome: CookingOutcome) -> CookingOutcome {
         let worth_cooking =
             outcome == CookingOutcome::Improves && self.preparation == PreparationState::Raw;
