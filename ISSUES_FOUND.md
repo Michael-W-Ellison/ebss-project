@@ -27127,3 +27127,57 @@ deliberate model change: `table_order_tests`, `hunting_tests`,
 makes rawhide, leather is tanned).
 
 **Dice counts**: 8,095 (seed 4242, 120 turns) and 1,074,317 (seed 0, a year).
+
+### 354. Animal husbandry: a young one from a kill, beasts that follow and are folded, milk, wool, dung, culling
+
+The second item in the user's order. The user chose: young taken from a kill
+(not dogs first); kept beasts follow their keeper and are folded in brush at
+night; herds keep people mobile, so only fields anchor a settlement; milk,
+wool and dung first.
+
+**What was there.** A half-built domestication system nothing reached:
+`Action::Tame` and `Action::CollectAnimalProduct` with executors no decision
+chose, `Animal::owner_id`, `tame_level`, `is_domesticated`, product timers,
+and an `AnimalPen` building that made food from nothing.
+- **Products could never be collected**: `turn_products` reset a ready timer
+  to a hundred the next pass, so a product stood ready for one half hour.
+- Taming worked from any distance, and turned a tamed sheep or goat into a
+  pack donkey by display name.
+- A tame beast wandered as a wild one, its young were born wild, and wolves
+  ate it.
+
+**What changed.**
+- A hunter who kills a sheep, goat, cow, boar, elk, reindeer or camel is
+  followed home by a young one of its kind standing within 25 cells
+  (`a_young_one_left_behind`). Fed by hand once a day it is tame in about a
+  week, and its keeper has found out keeping (`do:Tame`); unfed, it goes back
+  to the wild in four days.
+- Kept beasts graze within three cells of their keeper and are walked along
+  wherever the keeper goes (`the_kept_stay_by_their_keepers`). At night they
+  are shut in a brush fold by the keeper's bed, out of the predator pass,
+  leaving dung; a tame one left out strays one night in thirty. A beast whose
+  keeper dies goes wild.
+- What is born to a kept mother is kept, and she is in milk for five months.
+  Milk is drawn once a day, wool plucked twice a year; each is found out by a
+  keeper who sees it. Products wait to be taken.
+- Dung is noticed in the fold (`do:MuckOut`) and carried out. It burns ahead
+  of wood (`fuel_i_carry`), or mucks a field at twice what refuse is worth.
+- A herd spares one for the pot above four kept back for breeding, or down
+  to a pair for somebody starving (`a_beast_to_spare`).
+- A herd that has eaten its grazing down moves its people on to fresh
+  grazing. Only a field holds a people in one place.
+- The pass rolls only when a tame beast is out overnight, so a world with
+  nothing kept rolls exactly as it did.
+
+**Measured**, forty settlements, two years, against #353: **identical in every
+world.** No young one was taken from a kill, so nothing was ever kept, and the
+husbandry never ran. The cause is the same as #353's: 23 hunts in forty
+worlds, and whether any killed a beast with young nearby is down to chance.
+Husbandry is machinery that waits on hunting.
+
+**Tests.** `keeping_beasts_tests` (nine): the catalogue, a young one follows
+the hunter, a young one fed every day stays, a kept beast follows and is
+folded, milk waits for her keeper, the young of a kept mother are kept, the
+herd spares one, dung burns, a hungry herd moves the camp.
+
+**Dice counts**: 8,095 (seed 4242, unchanged) and 1,071,252 (seed 0, a year).
