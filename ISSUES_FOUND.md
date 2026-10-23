@@ -27072,3 +27072,58 @@ after the fix, from the commit as it stands:
 - `burrow_tests::somebody_who_can_build_a_tent_builds_one` gives the two cords
   the builder always asked for.
 - Dice counts: 7,429 (seed 4242, 120 turns) and 1,020,308 (seed 0, a year).
+
+### 353. Leatherworking: hides that rot, rawhide, tanned leather, and what a skin makes
+
+The first item in the order the user set after #352: "start working on the
+suggested order items starting with leatherworking". The user chose: hides
+rot unless worked; rawhide first, then tanned; shelter panels, moccasins,
+cloaks and wraps.
+
+**What changed.**
+- A raw hide rots in about a week in the pack (`Agent::rots_unless_worked`,
+  `has_rotted`); fresh hides put with old ones are as fresh as the mix.
+- Scraping a hide makes rawhide, which keeps (`SCRAPE_A_HIDE`). After six
+  hides scraped, smoking rawhide over a fire is found out and makes leather
+  (`TAN_RAWHIDE`, verb `fire`).
+- Rawhide makes a cloak (three) and leg wraps (two), which wear three times
+  as fast soaked; a raw hide makes fur foot-wraps; leather makes moccasins,
+  which wait on tanning. Leather wears longest of the skins (140).
+- A worked hide to spare (three or more held) goes down as bedding: twice as
+  warm as boughs, and it lasts a season.
+- By the evening fire a raw hide goes into a garment that wants it, or is
+  scraped; rawhide is tanned at a burning fire by whoever knows how.
+- Deer and the rest now give `hides` when butchered, not `leather`.
+
+**Measured**, forty settlements, two years, against #352:
+
+| | #352 | #353 | t |
+|---|---|---|---|
+| births | 158 | 153 | -1.00 |
+| deaths | 4 | 4 | 0 |
+| alive at day 720 | 634 | 629 | -1.00 |
+| camp moves | 264 | 277 | +1.00 |
+
+The smooth maps came out identical; the scattered maps differ by one
+settlement.
+
+- **Nothing to work.** 23 kills in forty worlds over two years, in nine
+  worlds. No hide rotted, none was tanned, no rawhide garment or hide bed was
+  made, and no tent was built. The 2,401 `scrape` lines are almost all a stick
+  scraped for tinder (`SCRAPE_A_STICK`), which the counter did not tell apart.
+- **The chain hangs on the hunt, and nobody hunts.** A hunt is chosen for
+  skins only when a garment wants them and an animal is in reach, and for
+  food only when it beats the best patch in the same coin. Gathering and
+  fishing win nearly always. Leatherworking, the tent and husbandry's young
+  taken from a kill (#354) all wait on this.
+- The first #353 run kept no leatherworking lines at all: the run script's
+  grep did not pass them (fixed in the tool commits after it).
+
+**Tests.** `leatherworking_tests` (seven): the catalogue, a hide rots and
+rawhide keeps, scraping teaches tanning and tanning wants a fire, rawhide
+rots worn wet, a spare hide is slept on, the evening's skins. Changed for the
+deliberate model change: `table_order_tests`, `hunting_tests`,
+`working_tests`, `technology_catalogue_tests`, `carrying_tests` (scraping
+makes rawhide, leather is tanned).
+
+**Dice counts**: 8,095 (seed 4242, 120 turns) and 1,074,317 (seed 0, a year).
