@@ -7051,6 +7051,15 @@ impl AnimalManager {
             }
         }
 
+        // A kept beast does not wander off: it grazes where its keeper is,
+        // which is the keeper's pass to decide (`the_kept_stay_by_their_keepers`,
+        // #358). Wandering it here, fifty cells a turn, put a young one being
+        // raised out of its keeper's sight between one look and the next, and
+        // eleven of eleven ran off for it.
+        if animal.is_kept() {
+            return;
+        }
+
         // If state timer is active, continue current behavior
         if animal.state_timer > 0 {
             return;

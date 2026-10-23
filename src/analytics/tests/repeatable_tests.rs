@@ -571,7 +571,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // one taken in waits two days for its keeper before it drifts.
     // Up 1.0% to 974,352 for #358's third husbandry correction: a young
     // one takes to whoever it stays beside.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 974_352;
+    // Down 2.2% to 952,602 for #358's fourth husbandry correction: a kept
+    // beast does not wander off its keeper.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 952_602;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
