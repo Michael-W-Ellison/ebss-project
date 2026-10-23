@@ -6987,6 +6987,16 @@ impl AnimalManager {
 
         let animal = &mut self.animals[animal_idx];
 
+        // A kept beast does not bolt: it bunches by its people, and where it
+        // stands is the keeper's pass to decide (#360). Bolting, a kept goat
+        // went a hundred metres from a wolf it had seen two hours before,
+        // and was found apart from its keeper and drifted back to the wild:
+        // eleven of the thirteen young lost in ten worlds were lost so.
+        if animal.is_kept() {
+            animal.state = AnimalState::Following;
+            return;
+        }
+
         // Something that eats this one, close enough to matter, comes before
         // anything else - including the state timer, because a deer that has
         // just settled down to graze does not go on grazing because it is
@@ -7049,15 +7059,6 @@ impl AnimalManager {
                 animal.what_is_on_me_from = None;
                 return;
             }
-        }
-
-        // A kept beast does not wander off: it grazes where its keeper is,
-        // which is the keeper's pass to decide (`the_kept_stay_by_their_keepers`,
-        // #358). Wandering it here, fifty cells a turn, put a young one being
-        // raised out of its keeper's sight between one look and the next, and
-        // eleven of eleven ran off for it.
-        if animal.is_kept() {
-            return;
         }
 
         // If state timer is active, continue current behavior

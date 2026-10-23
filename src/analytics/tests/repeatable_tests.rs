@@ -575,7 +575,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // beast does not wander off its keeper.
     // Up 0.3% to 955,483 for #360: somebody who has raised one catches
     // young ones for a herd.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 955_483;
+    // Up 0.5% to 960,743 for #360: a kept beast does not bolt from what
+    // frightens it.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 960_743;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -115,8 +115,10 @@ impl Simulation {
             // hunters, at home of an evening one time in three: tended or
             // not, fifteen of sixteen young taken in forty worlds ran off.
             if !animal.is_domesticated {
-                let by_its_keeper =
-                    (animal.position.0 - at.0).abs().max((animal.position.1 - at.1).abs()) <= near;
+                // Beside its keeper, or a walk off with its keeper awake to
+                // bring it in this turn
+                let apart = (animal.position.0 - at.0).abs().max((animal.position.1 - at.1).abs());
+                let by_its_keeper = apart <= near || (!asleep && apart <= a_walk + near);
                 let seen_to = animal.fed_at.unwrap_or(0).max(animal.taken_at);
                 if by_its_keeper {
                     animal.tame(a_turn_beside_its_keeper);
