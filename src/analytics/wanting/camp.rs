@@ -502,6 +502,17 @@ impl Simulation {
             return None;
         }
 
+        // **A herd that has eaten the place down is moved on** (#354).
+        // Herds keep their people moving, not settled: only a field holds a
+        // people in one place. Whoever lives with the keeper comes too.
+        if !self.moved_lately(agent) && self.my_herd_is_going_hungry(agent) {
+            let lives = Self::where_this_one_lives(agent);
+            if let Some(there) = self.fresh_grazing_from((lives.0, lives.1, agent_position.2)) {
+                self.propose_moving_camp(agent, (there.0, there.1), None, "fresh grazing");
+                return Some(Action::Move { target: there });
+            }
+        }
+
         // **A move of camp, or a day's trip.** Whether the camp itself goes
         // is a question about where this one lives: not straight after a
         // move. Not away from food in store, either, was the rule - a people

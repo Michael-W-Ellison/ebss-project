@@ -136,7 +136,12 @@ impl Simulation {
         if agent.state.years_old() < Self::OLD_ENOUGH_TO_COOK {
             return None;
         }
-        // The skins first, which will not wait a week (#353)
+        // The beasts first, which are fed and folded before anybody eats
+        // (#354)
+        if let Some(chore) = self.the_beasts_to_see_to(agent, here) {
+            return Some(chore);
+        }
+        // The skins, which will not wait a week (#353)
         if let Some(work) = self.a_hide_to_work(agent, here) {
             return Some(work);
         }
@@ -152,7 +157,7 @@ impl Simulation {
         {
             return Some(Action::Move { target: fire });
         }
-        if agent.inventory.has_item("wood", self.wood_a_fire_here_takes(agent_index)) {
+        if agent.fuel_i_carry() >= self.wood_a_fire_here_takes(agent_index) {
             return Some(Action::LightFire);
         }
         self.nearest_resource_within(agent, here, Self::FORAGE_RADIUS, |resource| {
@@ -383,6 +388,13 @@ impl Simulation {
                     (Action::Move { .. }, false) => "night: headed home",
                     (Action::Cook { .. }, _) => "night: cooked supper",
                     (Action::LightFire, _) => "night: lit the evening fire",
+                    (
+                        Action::Tame { .. }
+                        | Action::CollectAnimalProduct { .. }
+                        | Action::PutUpFold
+                        | Action::MuckOut,
+                        _,
+                    ) => "night: saw to the beasts",
                     _ => "night: fetched wood for the fire",
                 }
                 .to_string(),

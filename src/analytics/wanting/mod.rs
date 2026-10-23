@@ -35,6 +35,7 @@ pub mod camp;
 pub mod errands;
 pub mod food;
 pub mod ground;
+pub mod herd;
 pub mod quarry;
 pub mod shelter;
 pub mod store;

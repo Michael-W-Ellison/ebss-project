@@ -10769,6 +10769,7 @@ path = "animal_husbandry"
 stage = 1
 role = "technique"
 model = ["do:Tame"]
+note = "A young one left standing by a kill follows the hunter home and is raised by hand: fed every day for a week it is tame, and its keeper has found this out (#354)."
 
 [[tech]]
 id = "animal_husbandry.1.keeping_animals_temporarily"
@@ -10776,6 +10777,9 @@ name = "Keeping animals temporarily"
 path = "animal_husbandry"
 stage = 1
 role = "technique"
+model = ["do:Tame"]
+same_as = ["animal_husbandry.1.capturing_young_animals"]
+note = "The young one kept and fed until it stays: the same raising by hand as capturing one."
 
 [[tech]]
 id = "animal_husbandry.1.simple_enclosures"
@@ -10783,6 +10787,9 @@ name = "Simple enclosures"
 path = "animal_husbandry"
 stage = 1
 role = "technique"
+model = ["do:PutUpFold"]
+needs = ["animal_husbandry.1.capturing_young_animals"]
+note = "A ring of brush on poles where the keeper sleeps: the kept beasts are shut in at night out of a wolf's reach, and do not stray (#354)."
 
 [[tech]]
 id = "animal_husbandry.1.use_of_animals_for_alarm_status"
@@ -10811,7 +10818,10 @@ name = "Routine feeding and protection"
 path = "animal_husbandry"
 stage = 2
 role = "technique"
-model = ["do:CollectAnimalProduct"]
+model = ["do:PutUpFold"]
+same_as = ["animal_husbandry.1.simple_enclosures"]
+needs = ["animal_husbandry.1.capturing_young_animals"]
+note = "Fed by hand when the grazing has not filled them, and folded at night: the fold is the protection, and feeding is the raising (do:Tame)."
 
 [[tech]]
 id = "animal_husbandry.2.culling_management"
@@ -10819,6 +10829,9 @@ name = "Culling management"
 path = "animal_husbandry"
 stage = 2
 role = "technique"
+model = ["do:Slaughter"]
+needs = ["animal_husbandry.1.capturing_young_animals"]
+note = "One of the herd killed for its meat and skin when it can be spared: the herd kept back for breeding is not touched unless somebody is starving (#354)."
 
 [[tech]]
 id = "animal_husbandry.2.meat"
@@ -10840,6 +10853,8 @@ name = "Dung"
 path = "animal_husbandry"
 stage = 2
 role = "product"
+model = ["do:MuckOut"]
+note = "Found out by a keeper who sees dung lying in the fold: carried out, it burns where wood is short and mucks a field (#354)."
 
 [[tech]]
 id = "animal_husbandry.2.guard_or_hunting_assistance_in_some"
@@ -10889,6 +10904,8 @@ name = "Milk use"
 path = "animal_husbandry"
 stage = 4
 role = "technique"
+model = ["do:CollectAnimalProduct"]
+note = "Found out by a keeper whose beast is in milk after a birth: goats, cows and camels, milked once a day while she nurses (#354)."
 
 [[tech]]
 id = "animal_husbandry.4.wool_hair_fiber_harvest"
@@ -10896,6 +10913,9 @@ name = "Wool/hair/fiber harvest"
 path = "animal_husbandry"
 stage = 4
 role = "technique"
+model = ["do:CollectAnimalProduct"]
+same_as = ["animal_husbandry.4.milk_use"]
+note = "Wool plucked from a kept sheep as it sheds, twice a year: taking from a living beast, as milking is. Found out by a keeper who sees it shed (#354)."
 
 [[tech]]
 id = "animal_husbandry.4.eggs"

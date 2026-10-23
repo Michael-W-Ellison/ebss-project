@@ -3963,6 +3963,13 @@ impl Agent {
     /// And how many questions anybody keeps open at once.
     const AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS: usize = 4;
 
+    /// What this one carries that will burn: wood, and dried dung for
+    /// whoever has found out what it is good for (#354).
+    pub fn fuel_i_carry(&self) -> u32 {
+        let dung = if self.knows_how_to_do("MuckOut") { self.how_many_i_have("dung") } else { 0 };
+        self.how_many_i_have("wood") + dung
+    }
+
     pub fn found_out_how_to(&mut self, what: &str) -> bool {
         self.found_out.insert(what.to_string())
     }
@@ -8566,7 +8573,9 @@ impl Agent {
 
             // Animal interactions reward AnimalLover, penalize Allergic
             crate::environment::Action::Tame { .. } |
-            crate::environment::Action::CollectAnimalProduct { .. } => {
+            crate::environment::Action::CollectAnimalProduct { .. } |
+            crate::environment::Action::PutUpFold |
+            crate::environment::Action::MuckOut => {
                 if self.traits.has(Trait::AnimalLover) {
                     happiness_bonus += 0.06;
                     reward_reason = "animal_joy".to_string();
@@ -8700,6 +8709,7 @@ impl Agent {
 
             // Animal interactions involve problem solving
             Action::Tame { .. } | Action::CollectAnimalProduct { .. } => Some(ActionType::ProblemSolving),
+            Action::PutUpFold | Action::MuckOut | Action::Slaughter { .. } => Some(ActionType::ProblemSolving),
 
             // Other actions that don't fit categories
             _ => None,

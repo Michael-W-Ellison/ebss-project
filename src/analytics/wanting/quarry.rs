@@ -21,7 +21,7 @@ impl Simulation {
     ) -> bool {
         use crate::environment::AnimalBehavior;
 
-        if !animal.is_alive() || animal.is_domesticated {
+        if !animal.is_alive() || animal.is_domesticated || animal.is_kept() {
             return false;
         }
 

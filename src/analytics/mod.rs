@@ -490,6 +490,8 @@ impl Simulation {
             Action::Hunt { .. } => Some(ActionType::Combat), // Hunting is combat-like
             Action::Tame { .. } => Some(ActionType::Social), // Taming requires social skills
             Action::CollectAnimalProduct { .. } => Some(ActionType::Crafting), // Animal husbandry
+            Action::PutUpFold | Action::MuckOut => Some(ActionType::Farming),
+            Action::Slaughter { .. } => Some(ActionType::Combat), // As a hunt is
             Action::HarvestPlant { .. } => Some(ActionType::Crafting), // Plant farming
             Action::Cook { .. } => Some(ActionType::Cooking),
             Action::StoneBoil | Action::PitOven => Some(ActionType::Cooking),

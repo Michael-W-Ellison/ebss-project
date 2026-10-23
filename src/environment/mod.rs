@@ -223,6 +223,15 @@ pub enum Action {
     CollectAnimalProduct {
         animal_id: uuid::Uuid,
     },
+    /// Put up a fold of brush and poles where one stands, for the kept beasts
+    /// to be shut in at night (#354).
+    PutUpFold,
+    /// Carry the dung out of a fold, to burn or to spread (#354).
+    MuckOut,
+    /// Kill one of your own kept beasts for its meat and skin (#354).
+    Slaughter {
+        animal_id: uuid::Uuid,
+    },
     /// Harvest a plant (crop or wild)
     HarvestPlant {
         plant_id: uuid::Uuid,
@@ -420,6 +429,8 @@ impl Action {
             Action::CheckSnares => Some(DriveType::Hunger),
             Action::Tame { .. } => Some(DriveType::Utility), // Taming provides future utility
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
+            Action::PutUpFold | Action::MuckOut => Some(DriveType::Utility),
+            Action::Slaughter { .. } => Some(DriveType::Hunger),
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather
             Action::LightFire => Some(DriveType::Sustenance), // A fire is for the food that goes on it

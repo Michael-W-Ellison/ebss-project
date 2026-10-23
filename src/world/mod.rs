@@ -189,6 +189,11 @@ pub struct World {
     #[serde(default)]
     pub bedding: Vec<Bedding>,
 
+    /// Brush folds put up at a camp for the kept beasts to be shut in at
+    /// night (#354), out of a wolf's reach, with the dung they leave.
+    #[serde(default)]
+    pub folds: Vec<Fold>,
+
     /// Pits dug in the ground, and what is keeping in them.
     ///
     /// A settlement had nowhere to put anything. The storehouse is a single
@@ -343,6 +348,31 @@ impl Bedding {
         let boughs = crate::agents::Agent::WHAT_BEDDING_IS_WORTH;
         if self.of_hide { 2.0 * boughs } else { boughs }
     }
+}
+
+/// A fold of brush and poles where kept beasts are shut in for the night
+/// (#354), and the dung that has gathered in it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Fold {
+    pub at: Position,
+    pub put_up: u32,
+    /// Dung trodden in, in what a person carries off in an armful.
+    #[serde(default)]
+    pub dung: f32,
+}
+
+impl Fold {
+    /// How long a fold of brush stands before it has to be put up again, in
+    /// ticks: a month, as brush does.
+    pub const HOW_LONG_IT_STANDS: u32 = 30 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// How far from the fold's middle a beast in it stands, and how near a
+    /// keeper must sleep for the fold to be theirs for the night.
+    pub const HOW_FAR_IT_REACHES: i32 = 2;
+
+    /// What one beast leaves in a fold in a half hour of night, in armfuls:
+    /// one in about four nights.
+    pub const WHAT_A_BEAST_LEAVES_IN_A_HALF_HOUR: f32 = 1.0 / 64.0;
 }
 
 /// A fish trap or weir set at a reach, and how many fish are in it.
@@ -1493,6 +1523,7 @@ impl World {
             snares: Vec::new(),
             racks: Vec::new(),
             bedding: Vec::new(),
+            folds: Vec::new(),
             fish_traps: Vec::new(),
             pits: Vec::new(),
             where_it_was_worked_out: std::collections::BTreeSet::new(),
@@ -2483,6 +2514,14 @@ impl World {
             .fold(0.0, f32::max)
     }
 
+    /// The fold within reach of a place, if one is standing (#354).
+    pub fn fold_near(&self, pos: &Position) -> Option<usize> {
+        let reach = Fold::HOW_FAR_IT_REACHES;
+        self.folds
+            .iter()
+            .position(|fold| (fold.at.x - pos.x).abs() <= reach && (fold.at.y - pos.y).abs() <= reach)
+    }
+
     /// Whether there is bedding laid at a place: see `bedding_worth_at`.
     pub fn bedding_at(&self, pos: &Position) -> bool {
         self.bedding
@@ -3029,6 +3068,8 @@ impl World {
         let now = self.turn;
         self.bedding
             .retain(|laid| now.saturating_sub(laid.laid) < laid.how_long_it_lasts());
+        self.folds
+            .retain(|fold| now.saturating_sub(fold.put_up) < Fold::HOW_LONG_IT_STANDS);
 
         // Update heat sources (fuel consumption, heating)
         self.heat_sources.turn_all();

@@ -275,6 +275,10 @@ impl Simulation {
             self.world.animals.shy_away_from(&people);
         }
 
+        // And the kept ones stay by their keepers, and are folded at night
+        // (#354).
+        self.the_kept_stay_by_their_keepers();
+
         // Apply religious building effects to agent happiness
         self.apply_religious_effects();
 

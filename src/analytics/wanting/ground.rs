@@ -251,7 +251,11 @@ impl Simulation {
                     .as_ref()
                     .map(|food| food.is_rotting() || food.is_ruined())
                     .unwrap_or(false)
-            });
+            })
+            // And dung from a fold, when there is wood enough not to need it
+            // on the fire (#354)
+            || (agent.how_many_i_have("dung") > 0
+                && agent.how_many_i_have("wood") >= Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD);
 
         if !carrying_refuse {
             return None;

@@ -989,7 +989,7 @@ impl Simulation {
 
         {
             let agent = &self.population.agents[agent_index];
-            if !agent.inventory.has_item("wood", wood_needed) {
+            if agent.fuel_i_carry() < wood_needed {
                 return ActionResult::failure(format!(
                     "Not enough wood for a fire: needs {}",
                     wood_needed
@@ -1015,9 +1015,22 @@ impl Simulation {
             },
         };
 
-        self.population.agents[agent_index]
-            .inventory
-            .remove_item("wood", wood_needed);
+        // Dried dung first where it is carried, which is good for nothing
+        // else, and wood for the rest (#354)
+        {
+            let agent = &mut self.population.agents[agent_index];
+            let dung = if agent.knows_how_to_do("MuckOut") {
+                agent.how_many_i_have("dung").min(wood_needed)
+            } else {
+                0
+            };
+            if dung > 0 {
+                agent.inventory.remove_item("dung", dung);
+            }
+            if wood_needed > dung {
+                agent.inventory.remove_item("wood", wood_needed - dung);
+            }
+        }
 
         let _ = self.world.add_fuel_to_heat_source(
             &fire_id,

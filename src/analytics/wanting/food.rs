@@ -310,7 +310,7 @@ impl Simulation {
                 Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
             };
 
-            if agent.inventory.has_item("wood", wood_a_fire_wants) {
+            if agent.fuel_i_carry() >= wood_a_fire_wants {
                 return Some(Action::LightFire);
             }
         }
@@ -329,6 +329,12 @@ impl Simulation {
             .is_some()
         {
             return Some(Action::Eat { food_type: "generic".to_string() });
+        }
+
+        // A beast of the herd that can be spared, before a walk for food
+        // (#354)
+        if let Some(kill) = self.a_beast_to_spare(agent, agent_position, false) {
+            return Some(kill);
         }
 
         // An animal standing right here, when the nearest food anybody knows
@@ -504,6 +510,10 @@ impl Simulation {
         // because gathering thin air on the spot accomplishes nothing and
         // blocks everything they could usefully be doing.
         if desperate {
+            // A beast of the herd, down to a pair (#354)
+            if let Some(kill) = self.a_beast_to_spare(agent, agent_position, true) {
+                return Some(kill);
+            }
             // An animal is food. Hunting does not pay against berries and
             // fish, which is why an agent does not do it for the meat as a
             // rule - but an agent with nothing else left is a different case.
@@ -1080,7 +1090,7 @@ impl Simulation {
             Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD
         };
 
-        if agent.inventory.has_item("wood", wood_needed) {
+        if agent.fuel_i_carry() >= wood_needed {
             return Some(Action::LightFire);
         }
 

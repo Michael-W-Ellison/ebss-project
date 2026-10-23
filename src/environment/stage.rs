@@ -717,7 +717,9 @@ impl Path {
                 held_back_by: &["nothing is owned", "nothing is bred", "nothing is fed"],
                 standing: Standing::Part(
                     "hunting pressure does shape prey - animals grow shy where they are \
-                     hunted - and nothing follows a camp, scavenges waste, or is tolerated",
+                     hunted - and nothing follows a camp, scavenges waste, or is tolerated; \
+                     a young one left standing by a kill follows the hunter, and raising it \
+                     by hand is Stage 1 and found out",
                 ),
             },
 
