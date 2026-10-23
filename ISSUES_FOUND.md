@@ -27181,3 +27181,181 @@ folded, milk waits for her keeper, the young of a kept mother are kept, the
 herd spares one, dung burns, a hungry herd moves the camp.
 
 **Dice counts**: 8,095 (seed 4242, unchanged) and 1,071,252 (seed 0, a year).
+
+### 355. Pottery: pots wanted to stew in, keep and carry; pots that break
+
+The third item in the user's order, with salt (#356). The user chose: pots
+wanted for cooking, keeping and carrying; fragile pots.
+
+**What was there.** Pots were fired nought to four times a settlement in
+three years, nearly all by the ember accident; nothing set out to make one.
+An empty pot could not boil the sea (the `boil` verb wants water carried),
+clay collecting was linked to `do:Excavate`, which digs a store and gives up
+stone, and the brining note said brine takes a whole fish, which the code
+refuses.
+
+**What changed.**
+- Whoever has found out pottery and has fewer than two fired pots makes one
+  by the evening fire: fires a shaped pot, shapes clay, or fetches clay
+  within a forage (`a_pot_to_make`).
+- A fired pot of water stews ten at a time, burns nothing, and gets
+  everything out of what goes in (`PreparationState::Stewed`, 1.0 against
+  cooking's 0.95). Roots, pulses, nuts, greens and meal are worth stewing,
+  which a fire alone does not improve (`stewing_outcome`).
+- A fired pot cracks one use in forty over the fire, and one in five carried
+  on a camp move breaks. A pot shaped and not fired slumps back to clay on
+  somebody soaked through.
+- The sea is boiled in an empty pot: the water is dipped where the sea laps.
+
+**Measured** with #356, forty settlements, two years, against #354: 93,608
+lots of clay fetched, 39,672 pots shaped, 17,717 fired, 46,721 stews, 1,235
+pots broken, in all forty worlds.
+
+**Tests.** `pottery_tests` (six).
+
+### 356. Salt in the body, and journeys for it
+
+The user chose: a slow salt need, and planned trips for salt beyond a day's
+forage.
+
+**What changed.**
+- The body holds salt (`salt_in_the_body`), sweated out from full to nothing
+  in forty days and put back by what is eaten: fish 0.04 a mouthful, meat and
+  milk 0.03, salted or brined food 0.1. Below 0.35 it is craved and a pinch
+  carried is licked; at nothing, health is lost. An infant at the breast never
+  goes short.
+- Somebody craving salt with none goes for salt they know of: gathered within
+  a forage, or a journey (`Journey`) - food packed, a vessel filled, nights
+  slept where they fall, a load of eight, and home. Given up after four days.
+- Where salt is stays in mind among a head full of other places.
+
+**Measured** with #355, against #354:
+
+| | #354 | #356 | t |
+|---|---|---|---|
+| births | 153 | 153 | 0 |
+| deaths | 4 | 26 | +2.85 |
+| alive at day 720 | 629 | 607 | -1.20 |
+
+- **Salt killed.** 21 of the 26 deaths were booked as "a blow", which is how
+  `take_damage` books, and salt deficiency took health through it. As first
+  written, plants carried no salt at all and going without cost two health a
+  day. A band living on what it gathered, with no salt known, spent about a
+  quarter of all its days at nought. Corrected in #358.
+- 285 salt journeys set out in 19 worlds; 168 came home and 117 were given
+  up. 854 gatherings were near home, in 8 worlds.
+
+**Tests.** `salt_in_the_body_tests` (five).
+
+### 357. Waste, sanitation and storage
+
+The last item in the user's order. The user chose: a midden, then a latrine;
+camps that foul their ground and water; a storehouse that is a place; vermin,
+theft and scavengers at stores.
+
+**What was there.** Waste landed wherever somebody stood. Nobody decided
+where it went, and nothing tied it to water, vermin, stores or camp moves. The
+storehouse was one global bag with no position: every agent reached it from
+anywhere, and nothing in it went off. Farms, pens and workshops turned out
+food, iron and stone from nothing. Pits were lined only with a bowl or basket,
+by name.
+
+**What changed.**
+- Twice laid up by foul ground or foul water and somebody finds out the
+  midden: the camp's refuse goes to one place eight cells off, away from
+  water. With farming as well, a latrine by it takes the leavings under the
+  ground.
+- Water drawn beside fouled ground sickens.
+- Somebody laid up by filth moves the camp off fouled ground.
+- Vermin take a share of each store daily, by how it is shut, and more by a
+  midden.
+- Taking from somebody else's pit is theft, found out when they next open it.
+- Hungry flesh-eaters come to middens, carcasses and open stores.
+- A pit is lined with whatever keeps best, fired pots included.
+- `Store` and `Retrieve` work standing at a finished storehouse, which keeps
+  a covered common store where food spoils as it does under earth.
+- No building produces anything from nothing.
+
+**Measured**, against #356:
+
+| | #356 | #357 | t |
+|---|---|---|---|
+| births | 153 | 136 | -1.19 |
+| deaths | 26 | 79 | +3.34 |
+| alive at day 720 | 607 | 537 | -2.89 |
+
+- **Every added death was salt**, still at #356's calibration: on the worst
+  world (smooth 4, ten dead) a labelled run found 111,073 half-hours of salt
+  deficiency, 106 blows between people and two from beasts. #357 made the
+  shortage worse without dealing any blow itself.
+- **Three rates were too high**, corrected in #358:
+  - Vermin took 567,199 units against 26,890 rotted.
+  - 12,215 thefts, nearly all a band taking from its own campmates' pits.
+  - 5,630 illnesses from foul water.
+- 476 middens and 286 latrines; 737 fouled-camp moves proposed in 16 worlds.
+
+**Tests.** `sanitation_and_stores_tests` (ten).
+
+### 358. Hunting for meat, and the corrections #356 and #357 wanted
+
+#353 and #354 found leatherworking and husbandry dormant: 23 hunts in forty
+worlds over two years. Asked, the user chose meat and skins both: hunting as
+a food strategy, with skins coming as a by-product.
+
+**Diagnosed** on two worlds: 93% of the time nobody wanted skins, because
+plant garments answered the cold. Of hunts that were wanted, four in five
+found no prey within the 12-cell search, set when beasts moved two cells a
+turn; at today's pace (`world::pace`) a deer crosses that in a quarter hour.
+
+**What changed.**
+- A hunter looks for game as far as they can see (`how_far_a_hunter_looks`).
+- Every two hours each grown person notes the nearest game in sight worth
+  hunting, keeps the six freshest places in mind, and forgets one they find
+  empty (`the_hunters_note_the_game`).
+- A week without meat and the body craves it (`craves_meat`). Hungry and
+  craving it, a person hunts: game in sight is struck or closed on; with none
+  in sight, they walk to where game was seen within 1.5 km in three days.
+  Game in sight is taken first among the hunger strategies unless hunger
+  will not wait.
+
+**Corrections.**
+- **Salt** (#356): wild plants carry 0.01 a mouthful and grain 0.004, and
+  going without costs 0.5 health a day, not 2.
+  - The first cut of #358 also had a body short of salt crave meat. On one
+    inland world with no salt known, ten of twelve died inside the year,
+    chasing game they could not bring down while the salt took their health.
+- **Stores** (#357): vermin a third of what they took; taking from a
+  campmate's pit is not theft; a drink beside the foulest ground sickens one
+  time in a hundred, not twenty-five.
+
+**Measured**, forty settlements, two years, against #354 (before pottery,
+salt, sanitation and hunting):
+
+| | #354 | #358 | t |
+|---|---|---|---|
+| births | 153 | 164 | +0.73 |
+| deaths | 4 | 3 | -0.37 |
+| alive at day 720 | 629 | 641 | +0.77 |
+| camp moves | 277 | 416 | +3.06 |
+
+- **The salt deaths are gone**: three deaths, two of hunger and one of
+  illness. People still spend about a tenth of their days with no salt in the
+  body (2,084,406 half-hours), at small cost.
+- **Hunting**: 270 kills in 36 worlds, from 23 in 9.
+  - Leatherworking has started: rawhide tanned 7 times in 2 worlds, fur
+    wraps worn.
+  - Sixteen young were taken from kills in ten worlds, and all sixteen ran
+    off unfed. Feeding wanted plant food in the pack, and by supper it had
+    been eaten. Corrected after this measurement: a young one with nothing to
+    feed it is led to graze and handled, and is tame within a month.
+- **Camp moves are up by half**, from bands leaving ground they have fouled
+  (5,697 proposals in 28 worlds): the foragers' answer to dirt.
+- Vermin took 209,741 units against 39,834 rotted; 870 thefts in 29 worlds;
+  2,307 illnesses from foul water; 523 middens, 427 latrines.
+- Pottery as at #356: 17,597 pots fired, 44,877 stews.
+
+**Tests.** `hunting_for_meat_tests` (four); `salt_in_the_body_tests` and
+`sanitation_and_stores_tests` changed for the corrections, and
+`keeping_beasts_tests` gains `a_young_one_tended_without_fodder_stays`.
+
+**Dice counts**: 8,095 (seed 4242, 120 turns) and 945,540 (seed 0, a year).
