@@ -27359,3 +27359,49 @@ salt, sanitation and hunting):
 `keeping_beasts_tests` gains `a_young_one_tended_without_fodder_stays`.
 
 **Dice counts**: 8,095 (seed 4242, 120 turns) and 945,540 (seed 0, a year).
+
+### 359. Raising a young one from a kill: four corrections, and where it still fails
+
+#358's measurement found sixteen young taken from kills in ten worlds and
+none raised. Each correction below was measured over forty settlements for
+two years before the next.
+
+| | taken | ran off | tamed | births | deaths |
+|---|---|---|---|---|---|
+| #358 as measured | 16 | 16 | 0 | 164 | 3 |
+| tended without fodder | 16 | 16 | 0 | 163 | 3 |
+| two days' grace | 16 | 15 | 0 | 164 | 3 |
+| takes to its keeper | 11 | 11 | 0 | 162 | 3 |
+| kept beasts do not wander | 13 | 10 | 2 | 167 | 3 |
+
+1. **Never fed.** Feeding wanted plant food in the pack, and by supper it was
+   eaten. A young one with nothing to give it is now led to graze and handled
+   (`WHAT_TENDING_TAMES`).
+2. **Gone in four days.** Its keepers were mostly hunters, at home of an
+   evening one time in three. It now waits two days after it was taken or last
+   seen to before it begins to drift (`A_YOUNG_ONE_WAITS`).
+3. **Tending was too rare to tame it.** A young one now takes to whoever it
+   stays beside, 0.03 a day, tame in a month untended
+   (`WHAT_A_DAY_BESIDE_ITS_KEEPER_TAMES`); it drifts only when apart.
+4. **It was never beside them.** The animal pass wandered kept beasts as wild
+   ones, up to fifty cells a turn, so the keeper's pass rarely found a young
+   one by its keeper. A kept beast is now left where its keeper's pass puts
+   it, though fright still moves it.
+
+**Where it stands.** Two young were tamed, in two worlds, and a fold was put
+up; both tame beasts were lost again before the end. Ten of thirteen young
+still ran off. That the chain can now complete at all is the change; a herd is
+not yet raised anywhere. Not yet diagnosed:
+- what still separates a young one from its keeper - flight from a predator,
+  or a keeper sleeping away from it;
+- whether the two tame beasts strayed from outside a fold or were killed.
+
+Births, deaths and survivors did not move beyond noise across the four
+corrections.
+
+**Tests.** `keeping_beasts_tests` gains
+`a_young_one_tended_without_fodder_stays` and
+`a_young_one_takes_to_its_keeper`; `a_young_one_fed_every_day_stays` folds
+its tame lamb for the week its keeper sleeps.
+
+**Dice counts**: 8,095 (seed 4242, 120 turns) and 952,602 (seed 0, a year).
