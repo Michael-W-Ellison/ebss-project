@@ -387,7 +387,13 @@ impl Simulation {
             // until morning.
             Action::Sleep { duration: turns_left.min(Self::A_STRETCH_OF_SLEEP) }
         } else {
-            match self.where_this_one_sleeps(agent_index) {
+            // Somebody on a journey sleeps where night finds them (#356)
+            let sleeps = if self.population.agents[agent_index].journey.is_some() {
+                Some((here.0, here.1))
+            } else {
+                self.where_this_one_sleeps(agent_index)
+            };
+            match sleeps {
                 Some(home)
                     if (home.0 - here.0).abs().max((home.1 - here.1).abs())
                         > Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS =>

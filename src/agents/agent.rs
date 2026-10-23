@@ -1839,6 +1839,16 @@ pub struct Agent {
     /// Fired pots that have cracked or broken on this one (#355).
     #[serde(default)]
     pub pots_broken: u32,
+    /// How much salt the body has in it, from nought to one (#356). Sweated
+    /// and passed away a little every half hour; put back by meat, fish,
+    /// milk, salted food and salt itself. Run low, the body craves it; run
+    /// out, it weakens.
+    #[serde(default = "Agent::a_body_full_of_salt")]
+    pub salt_in_the_body: f32,
+    /// A journey under way to somewhere beyond a day's forage, and back
+    /// (#356). Somebody on one sleeps where night finds them.
+    #[serde(default)]
+    pub journey: Option<Journey>,
     /// How used this one has got to each kind of beast, by name, from
     /// nought (a stranger) to nearly one (part of the furniture).
     ///
@@ -2109,6 +2119,8 @@ impl Agent {
             busy_until: 0,
             hides_that_rotted: 0,
             pots_broken: 0,
+            salt_in_the_body: Agent::a_body_full_of_salt(),
+            journey: None,
             familiar_with: std::collections::BTreeMap::new(),
             last_evening_watching_ore: None,
             stepped_from: None,
@@ -3975,6 +3987,68 @@ impl Agent {
     /// And how many questions anybody keeps open at once.
     const AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS: usize = 4;
 
+    /// A body with all the salt it wants in it.
+    pub fn a_body_full_of_salt() -> f32 {
+        1.0
+    }
+
+    /// What a day takes out of the body's salt, in sweat and water: from
+    /// full to nothing in forty days with none going in (#356).
+    pub const WHAT_A_DAY_TAKES_OF_THE_SALT: f32 = 1.0 / 40.0;
+
+    /// Below this the body craves salt, and a pinch of what is carried is
+    /// licked.
+    pub const SHORT_OF_SALT: f32 = 0.35;
+
+    /// What a pinch of salt licked puts back.
+    pub const WHAT_A_PINCH_PUTS_BACK: f32 = 0.4;
+
+    /// What a body short of salt altogether loses of its health in a day:
+    /// weakness, cramp, and a slow going downhill.
+    pub const WHAT_GOING_WITHOUT_SALT_COSTS_A_DAY: f32 = 2.0;
+
+    /// Whether this one craves salt.
+    pub fn craves_salt(&self) -> bool {
+        self.salt_in_the_body < Self::SHORT_OF_SALT
+    }
+
+    /// What a mouthful of this puts back of the body's salt (#356): flesh,
+    /// blood and milk carry it, the sea's fish more; what has been salted or
+    /// brined carries a good deal; whatever grew carries next to none. A
+    /// people living on meat never go short, and a people living on what
+    /// they grow do.
+    pub fn salt_in_a_mouthful_of(item_id: &str) -> f32 {
+        use crate::world::ItemType;
+        if item_id.starts_with("brined_") {
+            return 0.1;
+        }
+        match crate::agents::storage_integration::id_to_item_type(item_id) {
+            Some(ItemType::Fish) => 0.04,
+            Some(ItemType::Meat) | Some(ItemType::Milk) | Some(ItemType::Cheese) => 0.03,
+            _ => 0.0,
+        }
+    }
+
+    /// The body's salt over a half hour: what is sweated out, a pinch of
+    /// what is carried licked when it craves, and health lost when there is
+    /// none (#356).
+    pub fn turn_the_salt_in_the_body(&mut self) {
+        // At the breast a child has its mother's
+        if self.state.life_stage == LifeStage::Infant {
+            self.salt_in_the_body = 1.0;
+            return;
+        }
+        let a_half_hour = crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
+        self.salt_in_the_body = (self.salt_in_the_body - Self::WHAT_A_DAY_TAKES_OF_THE_SALT / a_half_hour).max(0.0);
+        if self.craves_salt() && self.how_many_i_have("salt") > 0 {
+            self.inventory.remove_item("salt", 1);
+            self.salt_in_the_body = (self.salt_in_the_body + Self::WHAT_A_PINCH_PUTS_BACK).min(1.0);
+        }
+        if self.salt_in_the_body <= 0.0 {
+            self.take_damage(Self::WHAT_GOING_WITHOUT_SALT_COSTS_A_DAY / a_half_hour);
+        }
+    }
+
     /// One fired pot cracked and gone (#355), with whatever share of the
     /// water carried was in it. True if there was one.
     pub fn a_pot_breaks(&mut self) -> bool {
@@ -5711,6 +5785,8 @@ impl Agent {
         self.senses.take_a_turn();
         let soaked = self.exposure_status.wetness > Self::SOAKED_THROUGH;
         self.body.take_a_turn_resting_in(self.fatigue.is_sleeping, soaked);
+        // The salt in the body, sweated out and put back (#356)
+        self.turn_the_salt_in_the_body();
         // A pot shaped and not fired goes back to mud in the wet (#355)
         if soaked {
             let shaped = self.how_many_i_have("claypot");
@@ -9111,6 +9187,13 @@ impl Agent {
             return EatResult::NoFood;
         }
 
+        // What salt it carries into the body, salted or not (#356)
+        let salted = food_data
+            .as_ref()
+            .is_some_and(|food| food.preparation == crate::world::nutrition::PreparationState::Salted);
+        let salt = if salted { 0.1 } else { Self::salt_in_a_mouthful_of(item_id) };
+        self.salt_in_the_body = (self.salt_in_the_body + salt).min(1.0);
+
         let food_data = match food_data {
             Some(data) => data,
             None => {
@@ -11475,6 +11558,20 @@ impl Agent {
                     })
                     .map(|(where_it_is, _)| *where_it_is),
             );
+
+            // And where the salt is (#356). It is not wanted every day and
+            // there is little of it in the world, so weighed with the rest
+            // it went first - and a body that craves it a month later has
+            // nowhere to go.
+            let mut salt: Vec<crate::world::Position> = self
+                .exploration_knowledge
+                .known_resources
+                .iter()
+                .filter(|(_, what)| **what == crate::world::ResourceType::Salt)
+                .map(|(where_it_is, _)| *where_it_is)
+                .collect();
+            salt.sort_by_key(|where_it_is| here.distance_to(where_it_is));
+            keep.extend(salt.into_iter().take(Self::NEAREST_MAKINGS_KEPT_IN_MIND));
             keep
         };
 
@@ -12304,6 +12401,21 @@ impl Agent {
 /// a turn: arriving, a threat, a different drive taking the lead, or the walk
 /// going on so much longer than it should that the place is plainly not
 /// reachable.
+/// A journey to somewhere further off than a day's forage, for something,
+/// and home again (#356): a load of salt from a flat a morning's walk away.
+/// Held across turns and nights; an errand is a walk within the day.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Journey {
+    /// Where it is going now: there, and then home
+    pub to: (i32, i32),
+    /// What it is for, as the thing to bring back
+    pub for_what: String,
+    /// When it set out
+    pub set_out: u32,
+    /// On the way back
+    pub homeward: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Errand {
     /// Where it is going

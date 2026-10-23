@@ -857,6 +857,10 @@ impl Simulation {
         // but running for it - the night included (#351).
         let action = self.what_a_wound_asks(agent_index, action, running_away);
 
+        // A body craving salt goes for it, or keeps to the journey it set
+        // out on for it (#356). The night still has its say after.
+        let action = self.what_the_salt_asks(agent_index, action, running_away);
+
         // And at night, sleep (#299).
         let action = self.what_the_night_asks(agent_index, action, running_away);
 
