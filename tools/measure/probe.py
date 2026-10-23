@@ -5,7 +5,7 @@
 Adds eprintln! lines the run script greps for: DEATH (each death and its
 cause), MOVECAMP (each camp move), and one line per successful action of
 interest (KEEPX food keeping, SHELX shelter, CAREX care and water, GAPX
-salt, bowls, boiling, FISHX fishing, LEATHX hides and garments, HERDX kept beasts, POTX pots, SALTX salt), plus GAPX windburn per turn of it.
+salt, bowls, boiling, FISHX fishing, LEATHX hides and garments, HERDX kept beasts, POTX pots, SALTX salt, SANX waste and stores), plus GAPX windburn per turn of it.
 Each patch is skipped with a note where the tree does not have its anchor,
 so the same script serves older builds.
 """
@@ -75,6 +75,8 @@ edit(
     "                    \"Work\" if named.contains(\"\\\"fire\\\"\") && named.contains(\"\\\"claypot\\\"\") => \"POTX fired\".to_string(),\n"
     "                    \"Gather\" if named.contains(\"\\\"clay\\\"\") => \"POTX clay\".to_string(),\n"
     "                    \"Hunt\" => \"GAPX hunt\".to_string(),\n"
+    "                    \"StartMidden\" => \"SANX midden\".to_string(),\n"
+    "                    \"DigLatrine\" => \"SANX latrine\".to_string(),\n"
     "                    \"Tame\" => { let m = action_result.message.clone().unwrap_or_default(); format!(\"HERDX {}\", if m.starts_with(\"Caught\") { \"caught\" } else if m.contains(\"is tame\") { \"tamed\" } else { \"fed\" }) }\n"
     "                    \"CollectAnimalProduct\" => format!(\"HERDX took {}\", if action_result.message.as_deref().is_some_and(|m| m.contains(\"wool\")) { \"wool\" } else { \"milk\" }),\n"
     "                    \"PutUpFold\" => \"HERDX fold\".to_string(),\n"
@@ -154,3 +156,38 @@ for what in ("salt: gathered near", "salt: set out on a journey", "journey: give
         '.entry("' + what + '".to_string())',
         '.entry({ eprintln!("SALTX ' + counted + '"); "' + what + '".to_string() })',
     )
+
+edit(
+    "src/analytics/doing/getting.rs",
+    "                        agent.taken_ill_with(crate::agents::Agent::OFF_FOUL_WATER, 0.3 + 0.4 * foul, self.current_turn);\n",
+    "                        agent.taken_ill_with(crate::agents::Agent::OFF_FOUL_WATER, 0.3 + 0.4 * foul, self.current_turn);\n"
+    "                        eprintln!(\"SANX ill_foulwater\");\n",
+)
+
+edit(
+    "src/analytics/happening/soil.rs",
+    "                agent.what_filth_teaches();\n",
+    "                agent.what_filth_teaches();\n"
+    "                eprintln!(\"SANX ill_foulground\");\n",
+)
+
+edit(
+    "src/analytics/wanting/camp.rs",
+    "                self.propose_moving_camp(agent, (there.x, there.y), None, \"fouled ground\");\n",
+    "                self.propose_moving_camp(agent, (there.x, there.y), None, \"fouled ground\");\n"
+    "                eprintln!(\"SANX move_fouled\");\n",
+)
+
+edit(
+    "src/analytics/wanting/camp.rs",
+    "                self.propose_moving_camp(agent, (there.0, there.1), None, \"fresh grazing\");\n",
+    "                self.propose_moving_camp(agent, (there.0, there.1), None, \"fresh grazing\");\n"
+    "                eprintln!(\"HERDX move_grazing\");\n",
+)
+
+edit(
+    "src/analytics/doing/keeping.rs",
+    "                    self.world.stores_robbed.insert(here, (me, already + taking));\n",
+    "                    self.world.stores_robbed.insert(here, (me, already + taking));\n"
+    "                    eprintln!(\"SANX store_theft\");\n",
+)

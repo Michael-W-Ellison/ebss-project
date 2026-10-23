@@ -66,6 +66,15 @@ fn zz_discovery_watch() {
         let holders = alive.iter().filter(|a| a.what_i_found_out().contains(what)).count();
         println!("DISC {} day={} holders={} of {}", what, day, holders, alive.len());
     }
+    // What became of what was put by, in units, as lines the compare script
+    // counts one per unit (#357)
+    for (what, how_many) in [
+        ("rotted", sim.world.food_that_rotted_in_the_ground),
+        ("vermin", sim.world.food_the_vermin_took),
+        ("scavengers", sim.world.food_the_scavengers_took),
+    ] {
+        println!("STORE {what} {how_many}");
+    }
     println!(
         "BD D{:04} births {} deaths {} alive {}",
         days,
