@@ -5,7 +5,7 @@
 Adds eprintln! lines the run script greps for: DEATH (each death and its
 cause), MOVECAMP (each camp move), and one line per successful action of
 interest (KEEPX food keeping, SHELX shelter, CAREX care and water, GAPX
-salt, bowls, boiling, FISHX fishing, LEATHX hides and garments, HERDX kept beasts), plus GAPX windburn per turn of it.
+salt, bowls, boiling, FISHX fishing, LEATHX hides and garments, HERDX kept beasts, POTX pots), plus GAPX windburn per turn of it.
 Each patch is skipped with a note where the tree does not have its anchor,
 so the same script serves older builds.
 """
@@ -71,6 +71,9 @@ edit(
     "                    \"Work\" if named.contains(\"\\\"rawhide\\\"\") && named.contains(\"\\\"fire\\\"\") => \"LEATHX tan\".to_string(),\n"
     "                    \"MakeClothing\" => format!(\"LEATHX wear {}\", named.split('\"').nth(1).unwrap_or(\"?\")),\n"
     "                    \"Hunt\" if action_result.message.as_deref().is_some_and(|m| m.contains(\"young one\")) => \"GAPX hunt\\nHERDX orphan\".to_string(),\n"
+    "                    \"Work\" if named.contains(\"\\\"mold\\\"\") && named.contains(\"\\\"clay\\\"\") => \"POTX shaped\".to_string(),\n"
+    "                    \"Work\" if named.contains(\"\\\"fire\\\"\") && named.contains(\"\\\"claypot\\\"\") => \"POTX fired\".to_string(),\n"
+    "                    \"Gather\" if named.contains(\"\\\"clay\\\"\") => \"POTX clay\".to_string(),\n"
     "                    \"Hunt\" => \"GAPX hunt\".to_string(),\n"
     "                    \"Tame\" => { let m = action_result.message.clone().unwrap_or_default(); format!(\"HERDX {}\", if m.starts_with(\"Caught\") { \"caught\" } else if m.contains(\"is tame\") { \"tamed\" } else { \"fed\" }) }\n"
     "                    \"CollectAnimalProduct\" => format!(\"HERDX took {}\", if action_result.message.as_deref().is_some_and(|m| m.contains(\"wool\")) { \"wool\" } else { \"milk\" }),\n"
@@ -108,4 +111,18 @@ edit(
     "    fn turned_loose(animal: &mut crate::environment::fauna::Animal) {\n",
     "    fn turned_loose(animal: &mut crate::environment::fauna::Animal) {\n"
     "        eprintln!(\"HERDX lost {}\", if animal.is_domesticated { \"tame\" } else { \"raising\" });\n",
+)
+
+edit(
+    "src/agents/agent.rs",
+    "        self.pots_broken += 1;\n",
+    "        self.pots_broken += 1;\n"
+    "        eprintln!(\"POTX broken\");\n",
+)
+
+edit(
+    "src/analytics/doing/eating.rs",
+    "            let stewed = self.stewing_a_batch(agent_index, food_type, fire_id);\n            if stewed.success {\n",
+    "            let stewed = self.stewing_a_batch(agent_index, food_type, fire_id);\n            if stewed.success {\n"
+    "                eprintln!(\"POTX stew\");\n",
 )
