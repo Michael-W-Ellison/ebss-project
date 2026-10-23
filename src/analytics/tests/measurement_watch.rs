@@ -58,6 +58,10 @@ fn zz_discovery_watch() {
     }
 
     let alive: Vec<_> = sim.population.agents.iter().filter(|a| a.state.is_alive).collect();
+    for animal in sim.world.animals.get_all().iter().filter(|a| a.is_alive() && a.is_kept()) {
+        let how = if animal.is_domesticated { "tame" } else { "raising" };
+        println!("HERDX kept {how} {}", animal.species_id);
+    }
     for (what, day) in first.iter() {
         let holders = alive.iter().filter(|a| a.what_i_found_out().contains(what)).count();
         println!("DISC {} day={} holders={} of {}", what, day, holders, alive.len());
