@@ -327,6 +327,10 @@ something real and the number it is measuring has genuinely changed.
 
 ### 4. No error recovery around a tick
 
+**Fixed in #364.** A person's turn that panics is caught outside the tests,
+logged, counted (`Simulation::turns_lost_to_a_fault`) and skipped; everybody
+else goes on.
+
 One panicking agent ends the whole run and loses everything since the last
 autosave. There is no isolation of per-agent failure and no attempt to
 continue after an error. This mattered concretely: a probability bug in
@@ -338,6 +342,10 @@ crash took the entire simulation with it.
 ## Design gaps that show up as odd behaviour
 
 ### 5. A settlement that overshoots slides instead of settling back
+
+**The spent-field half is fixed in #364:** `fields_within` no longer counts an
+exhausted field towards `FIELDS_WANTED`. The soil has since become a ladder
+that rests back (#246), which answers the rest of this entry's mechanism.
 
 Traced over six worlds to thirty thousand ticks. A settlement grows, strips the
 ground it farms, and then slides — it does not find a smaller level and hold
@@ -773,6 +781,9 @@ tools, and nothing yet makes one ahead of needing it.
 
 ### 10. Farming is learned now, and the plant nobody can reach
 
+**Grain reaches a pack now: #364.** Somebody about to break ground with no
+grain on them fetches some from wild grain they know of within a walk.
+
 Breaking ground used to be something every founder was born knowing, and a
 field was sown and then forgotten: nothing came on in it, nothing took it, and
 what it grew was the same whether anybody went near it again. Three things
@@ -1128,12 +1139,19 @@ on the best ground it knows of.
 
 ### 14. Agents still cannot hear anything
 
+**Fixed in #364.** Somebody struck cries out, everybody in earshot hears it,
+and a cry heard is frightening as the dark is (`Surroundings::heard_a_cry`).
+
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
 ### 15. Zoning and territory are never established
+
+**Fixed in #364.** The first building of a kind lays out ground for more of
+its kind, and a house claims the plot round it for whoever put it up; building
+goes through the territory-aware search.
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -1142,6 +1160,9 @@ always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
 ### 16. Agents carry food they will never eat
+
+**Fixed in #362:** food burnt past eating is thrown away with the spoiled, as
+waste.
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -2196,6 +2217,9 @@ rather than lives at this timescale. Tents are unchanged — the burrow does not
 replace the better shelter, it fills in underneath it.
 
 ### 33. An agent could only ever learn about a situation somebody had named
+
+**The floor everything reached is fixed in #363:** `Lessons` move a share of
+the way rather than a flat step, so a belief settles where the record puts it.
 
 `Lessons` has recorded what works since it was written, keyed on the thing
 attempted: `dry`, `gather:greens`, `fire:claypot`, `hunt`. Every one of those
@@ -3725,6 +3749,9 @@ Filed as #188.
 
 ### 68. A place, a date, and how much was on it — and being right, which nothing recorded
 
+**The pick by distance it left took the furthest place; #364 takes the nearest
+worth the walk.**
+
 Everything one agent could tell another was a position, a resource type and a
 date. A listener already weighed the age of a claim - "a seam I passed last
 week" against "one I passed this morning" - and had no way at all to weigh
@@ -3841,6 +3868,10 @@ is not explained.
 remembered amount would belong, if anything reached it. Recorded, not fixed.
 
 ### 69. Every man knew how to make an axe and one in thirty-five owned one
+
+**`TrySwapping` (#191) since: a swap tried once is not tried again (#364).** A
+swap comes out the same every time, so most refusals were the same dead swap
+made a dozen times.
 
 "They struggle to complete simple tasks." So the first thing built was an
 instrument for where a settlement's day actually goes, and the first thing it
@@ -3971,6 +4002,9 @@ being equipped is upstream of everything the model is for.
   it has already learned nothing from. Filed as #192.
 
 ### 70. The effort economy is decorative: nobody in this model is ever tired
+
+**`is_starving` no longer reads tiredness as hunger (#363).** The economy
+itself is as this entry leaves it.
 
 A specification arrived describing an efficiency architecture - tools that make
 work faster, an agent weighing "eight hours with this axe, or two hours making
@@ -4228,6 +4262,9 @@ a people can *do* - which is what it is really about - but nobody should expect
 it to show up in how many of them there are until #203 is answered.
 
 ### 73. Four spellings of one clock, and rebasing it kills every settlement
+
+**The fourth spelling is fixed in #363:** the nutrition deficit onsets are a
+day and three days of half-hour turns.
 
 `AgentState::is_starving` read `ticks_without_food > 1440`. The comment beside
 it said "after a day". `TICKS_PER_DAY` is twelve. The clock was a hundred and
@@ -5514,6 +5551,9 @@ level up, and it is the honest remaining cost of the half-hour turn.
 
 ### 169. The one store nothing reads, and why capping it cost thirteen times the running time
 
+**It has a reader now:** `verify_resource_claim` asks it whether a claim is
+about ground the listener has seen.
+
 `ExplorationKnowledge::explored_tiles` is a `BTreeSet<Position>` with no
 ceiling and nothing ever taken out of it: every tile anybody has stood within
 sight of, for as long as they live, on a map of a hundred square kilometres.
@@ -5558,6 +5598,10 @@ appear anywhere else somebody caps a set that is written far more often than
 it is read.
 
 ### 93. Fourteen per cent of the public surface had no caller
+
+**What was left of the slot vocabulary was read in four places; #363 has those
+read the tool vocabulary.** A dozen unused stat helpers remain on `Equipment`,
+which nothing fills.
 
 A sweep for `pub fn` definitions whose identifier appears nowhere else in
 `src`, `plugins`, `examples`, `benches` or `tests` - not "no call site", *no
@@ -5848,6 +5892,9 @@ commits back, which at the time looked like housekeeping.
 
 ### 98. The third layer, and the parts of it that had never been next to each other
 
+**`process_information_verification`, left behind here, was removed in #362:**
+the live verification sweep never called it.
+
 What happens whether or not anybody decides anything: the ground coming up, the
 weather on a body, the beasts, birth and nursing, what a person finds out by
 being somewhere at the time. It was the last big cluster in `analytics/mod.rs`
@@ -5906,6 +5953,8 @@ that #93 deleted the rest of. It is left where it is rather than given a home in
 sweep.
 
 ### 99. What one agent makes of another, which is not a layer but a seam
+
+**`process_information_verification` was removed in #362.**
 
 The last big cluster, and the one that would not sit in any of the three:
 being afraid of somebody, angry at somebody, willing to trade with them,
@@ -5971,6 +6020,9 @@ who wanted to check would have had to hold two places four thousand lines apart
 in their head. It took ten seconds once they were forty lines apart.
 
 ### 100. A man with a spear fought a wolf exactly as he would have fought it empty-handed
+
+**The rest is fixed in #363:** `own_strength` no longer carries a slot bonus,
+and `armed` means a weapon in the hand.
 
 `Action::Fight` carried a `weapon` and never read it. That was the finding the
 `execute_action` split turned up (#95), and it was worse than it looked: not one
@@ -6200,6 +6252,8 @@ wrong day.
 
 ### 105. Build warnings
 
+**Fixed in #362:** `cargo check --lib` reports no warnings.
+
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
@@ -6403,6 +6457,10 @@ year, directly above the line that assumed he had. All three now ask whether
 he is there before asking how he is.
 
 ### 109. Seven items for a winter, and a larder anybody could open in July
+
+**The room in the ground is answered since:** digging asks whether what is put
+by and the room left reach a winter for the mouths about
+(`enough_hole_for_the_winter` in `wanting/store.rs`).
 
 Two things, and the second is the one in the title.
 
@@ -6834,6 +6892,9 @@ requires that every grown pair be allowed and every child pair refused.
 ---
 
 ### 113. Why they still starve: a trickle that never fails, and a pack that holds two days
+
+**The forage branch of `Eat` is fixed in #362:** food eaten where it grew is
+counted and carries its salt into the body.
 
 The food year was rebalanced (#107), the world stopped being seeded with
 summer fruit in winter (#108), and the store was given a real target (#109).
@@ -7400,6 +7461,8 @@ person to think twelve looks arbitrary finds out that it is not.
 
 ### 120. The signal to leave fired, and a bare patch a pace away outbid it
 
+**The honey filed in passing is fixed in #362:** wild honey is food.
+
 #229 said a starving settlement never picks itself up and moves. The obvious
 reading is that the signal never reaches its threshold, and that reading is
 wrong. Measured over six worlds and 45,732 agent-ticks, hunger's `denied_ticks`
@@ -7581,6 +7644,9 @@ settlements in sixty-four, and the next entry is about why.
 
 ### 173. Every settlement dies in its first winter, and it is not the pack
 
+**The unreachable materials threshold is fixed in #363:** `ENOUGH_MATERIALS`
+is eight.
+
 "Get the agents to the point where they can survive sustainably" starts from a
 measurement, and the measurement is stark. Thirty-two seeded worlds, twelve
 founders, two years: **every settlement is emptied, and the days they empty on
@@ -7746,6 +7812,8 @@ the two lists happened to agree.
 ---
 
 ### 122. Going for a drink was a change of mind, and it emptied the larder
+
+**The dormant `Errand::pressed_this_hard` was removed in #362.**
 
 #239 was filed on the reading that undertakings are dropped because two needs
 of the same standing trade places, which is the case
@@ -8112,6 +8180,9 @@ pack that holds forty-odd.
 ---
 
 ### 126. Every pack in the world was half as much again over its own limit, so no food would go in one
+
+**The refused `Excavate` is fixed in #362:** a dig is offered only with
+something to dig with, and otherwise the way to a digging tool.
 
 #241 asked what caps the winter store, and named drying as the suspect: it was
 a discovery an agent had to watch, it wants a clear sky, it wants the food cut
@@ -8499,6 +8570,9 @@ against it. No test failed that was not already failing;
 
 ### 130. The naturalistic spawner puts two clusters on one tile
 
+**Fixed in #362:** the spawner is told what ground is taken and keeps its
+clusters off it.
+
 `NaturalisticSpawner::spawn_all` builds its own list and never asks what is
 already standing where it is putting things, so its clusters land on top of
 each other and on top of what the basic spawner placed: eighty by eighty gives
@@ -8834,6 +8908,9 @@ which is a settlement that died out, not a thermal fault.
 
 ### 135. Shrubs go out of a country that nobody is managing
 
+**Still open (checked for #364).** It wants a run of a century and a half to
+measure, and was left.
+
 Left alone for a hundred and fifty years, a hundred and twenty by a hundred
 and twenty takes its bushes from 524 to 71 and keeps going down, while its
 trees hold and its grass holds. Woody middling growth - `PlantSize::Medium`
@@ -8976,6 +9053,8 @@ any change at all to world generation moves every draw after it:
   is a draw.
 
 ### 137. There is no such thing in this world as a small predator
+
+**Still open (checked for #364).** It wants new species rather than a fix.
 
 The chain this model can build runs grass, grazer, fox, wolf, and skips a
 rung. Of thirty-three species in `FaunaRegistry`, eighteen eat plants, nine
@@ -27504,3 +27583,57 @@ observation path sowing already used (`watch_a_practice`).
 **Tests.** `keeping_beasts_tests` gains `watching_a_keeper_teaches_keeping`.
 
 **Dice counts**: 8,095 (seed 4242, 120 turns) and 958,337 (seed 0, a year).
+
+### 362. Loose ends from the open sections: dead code, digs, honey, burnt food
+
+The user asked: "Work on resolving the issues listed in ISSUES_FOUND.md". The
+open sections were triaged first. Most of what they hold was fixed by later
+entries and is now marked where it stands. This entry and the next two record
+what was left.
+
+**Dead code and warnings (#98, #99, #105).** `cargo check --lib` reported 39
+warnings and now reports none. Removed, because nothing called them:
+`process_information_verification`, `trapping_action` and `a_catch_waiting`,
+reproduction's `offspring_position`, and the plugin's `FurnaceState`. The
+dice counts did not move, so behaviour did not either.
+
+**Concrete defects:**
+- **A dig offered with nothing to dig with (#126).** `Excavate` was offered to
+  people the verb matrix would refuse. They are now offered the way to a
+  digging tool instead (`a_dig_or_what_it_wants_first`).
+- **Two clusters on one tile (#130).** The spawner is told what ground is
+  taken and keeps its clusters off it.
+- **A dormant field (#122).** `Errand::pressed_this_hard` was written and
+  never read. It is removed.
+- **Food eaten where it grew (#113).** The forage branch of `Eat` did not
+  count the meal or put its salt into the body. It does both now.
+- **Honey (#120).** Wild honey was not food. It is now.
+- **Burnt food (#16).** Food burnt past eating was carried for ever. It is
+  thrown away with the spoiled, as waste.
+
+**Measured**, forty settlements, two years, the loose ends against #361:
+
+| | #361 | #362 |
+|---|---|---|
+| births | 163 | 165 |
+| deaths | 4 | 6 |
+| alive at day 720 | 639 | 639 |
+| camp moves | 404 | 433 |
+| turns without salt | 2,114,299 | 1,679,647 |
+| shallows foraged | 15,306 | 23,143 |
+| food rotted in store | 39,660 | 54,572 |
+| food lost to vermin | 208,180 | 285,085 |
+| thefts from a store | 1,018 | 549 |
+
+- None of the population columns moved beyond noise (t under 1 for each).
+- **Salt.** A fifth fewer turns went without salt, because food eaten where
+  it grew now brings its salt in.
+- **Stores.** More went into stores and more of it was lost to rot and
+  vermin. Honey is food now, and so is the forage counted as eaten.
+
+**Tests.** New `loose_ends_tests`: `a_dig_is_offered_only_with_something_to_dig_with`,
+`food_eaten_where_it_grew_is_counted`, `wild_honey_is_food`,
+`burnt_food_is_thrown_away`. `land_tests`'
+`stocking_a_map_leaves_no_two_things_on_a_tile` now checks every kind.
+
+**Dice counts**: 6,440 (seed 4242, 120 turns) and 1,021,041 (seed 0, a year).

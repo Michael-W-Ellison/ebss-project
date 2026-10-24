@@ -28,10 +28,18 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #361): `cargo test --lib` in one piece.
-2,933 tests: 2,927 passed, none failed, 6 ignored.
-- The dice counts are 8,095 (seed 4242, 120 turns) and 958,337 (seed 0, a
+**Last full run** (ISSUES_FOUND #364): `cargo test --lib` in one piece.
+2,952 tests: 2,945 passed, 6 ignored, and one red only for the dice count of
+seed 0 over a year, which #364 then recorded.
+- The dice counts are 6,624 (seed 4242, 120 turns) and 974,158 (seed 0, a
   year).
+- #363 turned nineteen tests red that leaned on what it fixed. Most made a man
+  starving by setting his stamina to five, which read as starving only
+  through the tiredness clause #363 removed. They now starve the body
+  (`Physiology::four_days_without_food`). The weapon fixtures failed because
+  every founder's handaxe briefly made them all armed. One fixture's "no
+  materials" was four, which is half of the new eight. `clay_tests` read a
+  dead man out of an empty list.
 - The sixth ignored test is `measurement_watch::zz_discovery_watch`, which
   is the settlement measurement and not a test (#352).
 - The fifth ignored test is `repeatable_tests::one_process_reports_seed_zero`,
