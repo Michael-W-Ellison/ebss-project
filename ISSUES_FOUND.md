@@ -27459,3 +27459,48 @@ The user asked: "Keep working on husbandry until herds actually form." After
 `a_keeper_catches_young_ones_for_a_herd`.
 
 **Dice counts**: 8,095 (seed 4242, 120 turns) and 961,553 (seed 0, a year).
+
+### 361. Campmates learn keeping by watching a keeper
+
+The user asked: "Let campmates learn taming by watching a keeper." After
+#360 husbandry went no further than the one who found a young one by a kill.
+
+**What changed.** Somebody who sees a keeper feed, lead, handle or catch a
+young one five times knows how to raise one (`do:Tame`), and from there
+catches young ones of their own (`a_young_one_to_catch`). Seeing dung carried
+out of a fold teaches what it is good for (`do:MuckOut`). Both go through the
+observation path sowing already used (`watch_a_practice`).
+
+**Measured**, forty settlements, two years, against #360:
+
+| | #360 | #361 |
+|---|---|---|
+| young caught | 33 | 182 |
+| tamed | 24 | 91 |
+| tame at the end | 45 | 157 |
+| born to kept mothers | 9 | 21 |
+| milk drawn | 48 | 231 |
+| wool plucked | 11 | 23 |
+| folds put up | 667 | 1,732 |
+| dung carried out | 288 | 1,271 |
+| camps moved to fresh grazing | 1 | 14 |
+| tame lost | 2 | 22 |
+| births | 165 | 163 |
+| deaths | 4 | 4 |
+| alive at day 720 | 641 | 639 |
+
+- **Herds at the end of two years**:
+  - 55 beasts on scattered 12 (21 sheep, 12 reindeer, 8 boar, 7 goats);
+  - 38 on scattered 4 (15 goats);
+  - 26 on scattered 2 (11 sheep);
+  - 18 on smooth 4;
+  - 9, 6 and 3 on three more, and one beast on each of two others.
+- **Still nine worlds in forty.** Watching spreads keeping through the bands of
+  a world that has a keeper; it does not start husbandry anywhere else, which
+  still waits on a young one by a kill.
+- Of the 22 tame beasts lost, 19 strayed at night apart from a sleeping keeper
+  and 3 lost their keeper to death.
+
+**Tests.** `keeping_beasts_tests` gains `watching_a_keeper_teaches_keeping`.
+
+**Dice counts**: 8,095 (seed 4242, 120 turns) and 958,337 (seed 0, a year).
