@@ -27640,3 +27640,66 @@ dice counts did not move, so behaviour did not either.
 `stocking_a_map_leaves_no_two_things_on_a_tile` now checks every kind.
 
 **Dice counts**: 6,440 (seed 4242, 120 turns) and 1,021,041 (seed 0, a year).
+
+### 363. Clocks, thresholds and dead vocabulary
+
+The second of three entries resolving what the open sections still held.
+
+**What changed:**
+- **The nutrition clock (#73).** Wasting began after 1,440 turns of going
+  short of protein, and scurvy after 4,320. Those were a day and three days
+  counted in minutes, and they were counted in half-hour turns, so they meant
+  a month and three months. They are a day and three days of turns now.
+- **Materials enough (#173).** `ENOUGH_MATERIALS` was thirty, counted in a
+  pack that holds about thirteen, so Industry never came down. It is eight.
+- **Tired is not starving (#70).** `AgentState::is_starving` also fired when
+  stamina fell under twenty, so a man worn out by a day's digging read as
+  starving with a full belly. It is the body's own reckoning now.
+- **Weapons in the tool vocabulary (#100).**
+  - `have_i_a_weapon` asks the pack as well as the old equipment slot.
+  - `armed` is a weapon out in the hand (`a_weapon_in_my_hand`).
+  - Dangerous game is hunted only with a hunting weapon carried.
+  - `own_strength` loses its slot bonus. That bonus never fired, and the
+    weapon is already counted where it works, in the throw and the fight.
+  - A first cut counted the pack for `armed` and for strength. Every founder
+    carries a handaxe, so every founder became armed and half as frightened,
+    and men who would fight one wolf stood against four. Nineteen tests said
+    so before anything was measured.
+- **Beliefs that settle (#33).** `Lessons` moved a flat 0.06 up and 0.10
+  down. That is a walk with a drift, so anything that worked less than five
+  times in eight went to nought. It now moves a share of the way, and settles
+  where the two pulls balance: `p·0.06 / (p·0.06 + (1-p)·0.10)` for a thing
+  that works with chance `p`. That is still gloomier than the record, but a
+  thing that works half the time is now believed more than one that works a
+  tenth of it.
+
+**Measured**, forty settlements, two years, against #362:
+
+| | #362 | #363 |
+|---|---|---|
+| births | 165 | 168 |
+| deaths | 6 | 3 |
+| alive at day 720 | 639 | 645 |
+| camp moves | 433 | 412 |
+| shallows foraged | 23,143 | 46,053 |
+| fish caught | 17,041 | 27,437 |
+| hunts that told | 246 | 397 |
+| young caught to keep | 181 | 304 |
+| tamed | 93 | 163 |
+| worlds keeping beasts | 8 | 11 |
+| latrines dug | 275 | 421 |
+| brush huts finished | 4,218 | 3,544 |
+
+- **Population.** None of the population columns moved beyond noise (t under
+  1 for each, and -1.8 for deaths on smooth worlds, 4 to 1).
+- **What people do.** Fishing, hunting and keeping beasts all rose. They are
+  the work that fails more often than it pays, and under the flat step their
+  beliefs sat on the floor.
+- **Fixtures.** The fixtures that made a man starving by tiring him now
+  starve his body (`Physiology::four_days_without_food`).
+
+**Tests.** `loose_ends_tests` gains `wasting_begins_after_a_day_short`,
+`enough_materials_fits_in_a_pack`, `tired_is_not_starving`,
+`a_spear_in_the_pack_is_a_weapon` and `a_belief_follows_how_often_it_works`.
+
+**Dice counts**: 6,624 (seed 4242, 120 turns) and 979,878 (seed 0, a year).
