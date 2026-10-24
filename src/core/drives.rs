@@ -195,7 +195,14 @@ impl DriveType {
     /// point. Fear about a need has to press in the same direction as the
     /// need, not in front of it.
     const WHAT_DREAD_IS_WORTH: f32 = 0.4;
-    pub const ENOUGH_MATERIALS: f32 = 30.0;
+
+    /// Materials enough to stop Industry pressing: eight.
+    ///
+    /// Counted in what is carried, and a pack holds about thirteen items of
+    /// material by weight, so the thirty this used to be could never be
+    /// reached and Industry never came down (#173). Eight is a load with room
+    /// left in the pack for food and tools.
+    pub const ENOUGH_MATERIALS: f32 = 8.0;
     pub const ENOUGH_TOOLS: f32 = 3.0;
     const ENOUGH_FINERY: f32 = 2.0;
 

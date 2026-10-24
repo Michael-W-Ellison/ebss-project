@@ -141,7 +141,7 @@ impl Simulation {
             let attacker = &self.population.agents[agent_index];
             let attacker_health = attacker.state.health / 100.0;
             let attacker_armor = attacker.equipment.total_armor() / 100.0;
-            let attacker_has_weapon = attacker.equipment.get_weapon().is_some();
+            let attacker_has_weapon = attacker.a_weapon_in_my_hand();
             let attacker_strength = attacker_health * (1.0 + attacker_armor * 0.5)
                 + if attacker_has_weapon { 0.3 } else { 0.0 };
 

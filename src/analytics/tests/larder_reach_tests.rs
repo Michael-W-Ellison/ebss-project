@@ -72,9 +72,8 @@ fn one_bush_and_a_full_pit(bush_at: (i32, i32)) -> crate::analytics::Simulation 
     {
         hunger.value = 1.0;
     }
-    // `is_starving` is the body's own reckoning, and energy is the half of
-    // it a fixture can set without waiting a fortnight.
-    simulation.population.agents[0].state.energy = 5.0;
+    // `is_starving` is the body's own reckoning, so the body is starved.
+    simulation.population.agents[0].state.physiology.four_days_without_food();
 
     simulation
 }

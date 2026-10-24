@@ -257,11 +257,33 @@ impl Lessons {
     /// worth one attempt, not enough to build a life around
     pub const UNTRIED: f32 = 0.5;
 
-    /// How far one good outcome moves the belief
+    /// How far one good outcome moves the belief, as a share of the way
+    /// still to go to certainty
     const LEARNED_FROM_SUCCESS: f32 = 0.06;
 
-    /// And one bad one, which counts for more
+    /// And one bad one, which counts for more, as a share of the way down
     const LEARNED_FROM_FAILURE: f32 = 0.10;
+
+    /// One outcome's worth of learning.
+    ///
+    /// Proportional rather than a flat step. A flat 0.06 up and 0.10 down is
+    /// a walk with a drift, and a walk with a drift ends at a wall: anything
+    /// that worked less than five times in eight went to nought and anything
+    /// that worked more went to one, so every belief in a settlement sat on
+    /// one floor or one ceiling and the floor carried no information (#33).
+    /// Moving a share of the way instead settles where the pulls balance,
+    /// `p·0.06 / (p·0.06 + (1-p)·0.10)` for a thing that works with chance
+    /// `p` - still gloomier than the record, because a failure still counts
+    /// for more, but a thing that works half the time is now believed in more
+    /// than one that works a tenth of it.
+    fn learned(belief: f32, worked: bool) -> f32 {
+        if worked {
+            belief + (1.0 - belief) * Self::LEARNED_FROM_SUCCESS
+        } else {
+            belief - belief * Self::LEARNED_FROM_FAILURE
+        }
+        .clamp(0.0, 1.0)
+    }
 
     /// How many attempts before an agent trusts its own record over the
     /// benefit of the doubt
@@ -303,11 +325,7 @@ impl Lessons {
         }
 
         let belief = self.belief.entry(undertaking).or_insert(Self::UNTRIED);
-        *belief = if worked {
-            (*belief + Self::LEARNED_FROM_SUCCESS).min(1.0)
-        } else {
-            (*belief - Self::LEARNED_FROM_FAILURE).max(0.0)
-        };
+        *belief = Self::learned(*belief, worked);
     }
 
     /// Whether this agent still thinks this is worth its time.
@@ -372,11 +390,7 @@ impl Lessons {
     /// `gather:water` is one lesson and `gather:wood` another.
     fn note(&mut self, what: String, worked: bool) {
         let belief = self.particular.entry(what.clone()).or_insert(Self::UNTRIED);
-        if worked {
-            *belief = (*belief + Self::LEARNED_FROM_SUCCESS).min(1.0);
-        } else {
-            *belief = (*belief - Self::LEARNED_FROM_FAILURE).max(0.0);
-        }
+        *belief = Self::learned(*belief, worked);
         *self.particular_attempts.entry(what.clone()).or_insert(0.0) += 1.0;
         if worked {
             *self.particular_successes.entry(what).or_insert(0.0) += 1.0;

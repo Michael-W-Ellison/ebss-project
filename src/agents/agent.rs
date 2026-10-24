@@ -1671,8 +1671,13 @@ impl AgentState {
     }
 
     /// Check if agent is starving (critical survival state)
+    ///
+    /// The body's own reckoning and nothing else. This used to be true as
+    /// well whenever stamina fell under twenty, so somebody worn out by a day's
+    /// digging read as starving to everything that asks, with a full belly
+    /// (#70).
     pub fn is_starving(&self) -> bool {
-        self.physiology.is_starving() || self.energy < 20.0
+        self.physiology.is_starving()
     }
 
     /// How old this body is, in years.
@@ -2414,7 +2419,7 @@ impl Agent {
             tools_to_hand: tools,
             broken_tools: broken,
             fine_things: finery,
-            armed: self.equipment.get_weapon().is_some(),
+            armed: self.a_weapon_in_my_hand(),
             exposed: !self.exposure_status.active_exposures.is_empty()
                 || self.body_temperature.is_too_cold(),
             chilly: self.body_temperature.current
@@ -4945,6 +4950,34 @@ impl Agent {
             .unwrap_or(0)
     }
 
+    /// Whether this one has a weapon with them: a spear or a club in the
+    /// pack, or anything in the old equipment slot.
+    ///
+    /// Weapons are made and carried in the tool vocabulary and nothing puts
+    /// one in the equipment slot any more, so a question that asked only the
+    /// slot never counted the spear an agent was carrying (#100).
+    pub fn have_i_a_weapon(&self) -> bool {
+        self.equipment.get_weapon().is_some()
+            || self.what_i_have_to_work_with(super::SkillType::Hunting).is_some()
+            || self.what_i_have_to_work_with(super::SkillType::MeleeCombat).is_some()
+    }
+
+    /// Whether a weapon is out in this one's hand, rather than in the pack.
+    ///
+    /// What makes somebody feel armed. A founder carries a handaxe, which is
+    /// a club at a pinch, and counting the pack made every founder armed and
+    /// half as frightened of anything; a man who has taken his spear up is
+    /// the one who is ready for what is coming.
+    pub fn a_weapon_in_my_hand(&self) -> bool {
+        use crate::environment::making;
+        self.equipment.get_weapon().is_some()
+            || self.what_is_in_my_hands().any(|held| {
+                making::what_helps_with(super::SkillType::Hunting)
+                    .chain(making::what_helps_with(super::SkillType::MeleeCombat))
+                    .any(|tool| tool.called == held)
+            })
+    }
+
     /// The tool in this agent's pack that helps most with a kind of work.
     ///
     /// A worn-through tool is no tool: it stays in the pack as a reminder
@@ -6727,7 +6760,11 @@ impl Agent {
         let body_factor = self.body.movement_speed_multiplier();
 
         let armor_bonus = self.equipment.total_armor() / 100.0;
-        let weapon_bonus = if self.equipment.get_weapon().is_some() { 0.3 } else { 0.0 };
+        // No weapon in this. It added 0.3 for anything in the old equipment
+        // slot, which nothing fills, so it never once fired (#100); and the
+        // weapon is counted where it does its work - the point in a throw
+        // (`what_a_throw_takes_off`) and the spear in a fight - so counting
+        // it here as well would count it twice.
 
         let combat_skill = self
             .skills
@@ -6748,7 +6785,7 @@ impl Agent {
         // out of a fight altogether; this is what separates a thirteen-year-old
         // from his father, and his father from his grandfather.
         let base_strength = health_factor * body_factor * self.state.what_i_can_do_for_my_age();
-        let equipment_bonus = armor_bonus * 0.3 + weapon_bonus;
+        let equipment_bonus = armor_bonus * 0.3;
         let built = (base_strength + equipment_bonus + skill_bonus * 0.2) * bravery_modifier;
 
         built * self.what_fighting_has_taught_me()

@@ -70,7 +70,13 @@ impl Simulation {
             species.behavior,
             AnimalBehavior::Aggressive | AnimalBehavior::Territorial
         );
-        if dangerous && agent.equipment.get_weapon().is_none() {
+        // A hunting weapon, carried: the old question asked the equipment
+        // slot, which nothing fills, so nobody ever went after one (#100).
+        let a_hunting_weapon = agent.equipment.get_weapon().is_some()
+            || agent
+                .what_i_have_to_work_with(crate::agents::skills::SkillType::Hunting)
+                .is_some();
+        if dangerous && !a_hunting_weapon {
             return false;
         }
 

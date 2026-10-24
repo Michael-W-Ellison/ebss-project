@@ -244,7 +244,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Down to 6,440 for the loose ends after #361: clusters kept off taken
     // ground, a dig asked for only with something to dig with, honey eaten,
     // and burnt food thrown away.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_440;
+    // Up to 6,624 for the third batch of ISSUES_FOUND: a tired man is not
+    // starving, materials enough to fit in a pack, beliefs that settle where
+    // the record puts them, and a weapon in the hand makes a man armed.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_624;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -586,7 +589,8 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // keeping.
     // Up 6.5% to 1,021,041 for the loose ends after #361: the same, and food
     // eaten where it grew counted, salt and all.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_021_041;
+    // Down 4.0% to 979,878 for the third batch of ISSUES_FOUND: the same.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 979_878;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

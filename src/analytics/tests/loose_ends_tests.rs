@@ -2,7 +2,10 @@
 //! Defects left open in ISSUES_FOUND, each fixed and held here: a dig offered
 //! without a tool to dig with (#126), food eaten where it grew going
 //! uncounted (#113), honey nobody could eat (#120), and burnt food carried
-//! for ever (#16).
+//! for ever (#16); and from the third batch, clocks counted in the wrong
+//! units (#73), a threshold nobody could reach (#173), tiredness read as
+//! hunger (#70), a spear that never counted as a weapon (#100), and beliefs
+//! that all ended on a floor (#33).
 
 use crate::agents::{AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
@@ -104,4 +107,93 @@ fn burnt_food_is_thrown_away() {
     agent.turn_food_spoilage(30);
     assert_eq!(agent.how_many_i_have("burnt_fish"), 0);
     assert!(agent.state.waste_carried > 0.0, "and it is waste, which goes back to the ground");
+}
+
+/// Wasting begins after a day of going short, in the half-hour turns the
+/// body is reckoned in, not after a month of them.
+#[test]
+fn wasting_begins_after_a_day_short() {
+    use crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
+    use crate::world::nutrition::NutritionalState;
+    let mut body = NutritionalState { protein_stores: 10.0, ..NutritionalState::full() };
+    for _ in 0..PLANNING_PERIODS_PER_DAY {
+        body.turn_metabolism(0.5);
+    }
+    assert!(!body.has_protein_deficiency(), "not inside the day");
+    for _ in 0..PLANNING_PERIODS_PER_DAY {
+        body.turn_metabolism(0.5);
+    }
+    assert!(body.has_protein_deficiency(), "but within two");
+}
+
+/// A pack can hold enough materials to quiet Industry.
+#[test]
+fn enough_materials_fits_in_a_pack() {
+    let mut simulation = one_person();
+    let agent = &mut simulation.population.agents[0];
+    // What a grown pair of hands holds, with nothing to carry it in.
+    agent.inventory.max_weight = crate::agents::Agent::WHAT_TWO_HANDS_HOLD;
+    let wanted = crate::core::DriveType::ENOUGH_MATERIALS as u32;
+    assert!(agent.inventory.add_item(InventoryItem::new_with_weight("wood".to_string(), wanted, 1.0)));
+    assert_eq!(agent.what_the_situation_asks().materials_put_by, wanted);
+}
+
+/// Worn out is not starving.
+#[test]
+fn tired_is_not_starving() {
+    let mut simulation = one_person();
+    let agent = &mut simulation.population.agents[0];
+    agent.state.energy = 5.0;
+    assert!(!agent.state.is_starving());
+}
+
+/// A spear carried in the pack is a weapon to have with you; it is out in
+/// the hand, not in the pack, that makes a man feel armed; and it adds
+/// nothing to his own strength, because it is counted where it does its work.
+#[test]
+fn a_spear_in_the_pack_is_a_weapon() {
+    let mut simulation = one_person();
+    let bare = simulation.population.agents[0].own_strength();
+    assert!(!simulation.population.agents[0].have_i_a_weapon());
+    let spear = crate::environment::making::what_helps_with(crate::agents::SkillType::Hunting)
+        .find(|tool| tool.called == "spear")
+        .expect("a spear hunts");
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_durability(spear.called.to_string(), 1, 25.0, crate::agents::Quality::Common));
+    let agent = &simulation.population.agents[0];
+    assert!(agent.have_i_a_weapon());
+    assert!(!agent.what_the_situation_asks().armed, "in the pack");
+    assert_eq!(agent.own_strength(), bare, "counted in the throw and the fight, not twice");
+
+    let agent = &mut simulation.population.agents[0];
+    assert!(agent.take_in_hand("spear"));
+    assert!(agent.what_the_situation_asks().armed, "and in the hand");
+}
+
+/// A belief settles somewhere that says how often the thing works, rather
+/// than at the floor for everything that works less than five times in
+/// eight.
+#[test]
+fn a_belief_follows_how_often_it_works() {
+    use crate::agents::practices::Lessons;
+    let settle = |every: u32| {
+        let mut lessons = Lessons::new();
+        for turn in 0..400u32 {
+            lessons.record_particular("try", turn % every == 0);
+        }
+        lessons.how_likely_to_try_this("try")
+    };
+    let half = settle(2);
+    let tenth = settle(10);
+    let mostly = {
+        let mut lessons = Lessons::new();
+        for turn in 0..400u32 {
+            lessons.record_particular("try", turn % 5 != 0);
+        }
+        lessons.how_likely_to_try_this("try")
+    };
+    assert!(half > tenth, "half the time {half} against a tenth {tenth}");
+    assert!(half > Lessons::NEVER_QUITE_GIVES_UP, "half the time is off the floor: {half}");
+    assert!(mostly > half && mostly < Lessons::NEVER_QUITE_CERTAIN, "four in five {mostly}");
 }

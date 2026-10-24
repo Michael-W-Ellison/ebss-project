@@ -804,6 +804,21 @@ impl Physiology {
             && self.days_into_the_reserve() >= DAYS_OF_RESERVE_BEFORE_IT_IS_STARVATION
     }
 
+    /// A body four days without food: nothing in the stomach or the gut and
+    /// four days of its reserve gone, which `is_starving` reads as starving.
+    ///
+    /// For a test that wants a starving man without living him through four
+    /// days. Fixtures used to set stamina to five instead, which read as
+    /// starving only because `AgentState::is_starving` took tiredness for
+    /// hunger (#70).
+    #[cfg(test)]
+    pub fn four_days_without_food(&mut self) {
+        self.stomach.clear();
+        self.gut.clear();
+        let a_day = UNITS_BURNED_IN_AN_ORDINARY_DAY * self.how_fast_this_body_burns();
+        self.reserve = (self.reserve_capacity - 4.0 * a_day).max(0.0);
+    }
+
     /// How many days of its own reserve this body has already eaten through.
     ///
     /// Reckoned against what *this* body burns, so a child a week into its

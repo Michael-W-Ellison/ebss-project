@@ -979,10 +979,16 @@ impl Default for NutritionalState {
 impl NutritionalState {
     /// Critical threshold below which deficiency effects begin
     pub const DEFICIT_THRESHOLD: f32 = 20.0;
-    /// Turns of protein deficit before wasting begins (1 day)
-    pub const PROTEIN_DEFICIT_ONSET: u32 = 1440;
-    /// Turns of micronutrient deficit before scurvy-like symptoms (3 days)
-    pub const MICRONUTRIENT_DEFICIT_ONSET: u32 = 4320;
+    /// Turns of protein deficit before wasting begins: a day.
+    ///
+    /// Counted in the turns `turn_metabolism` is called in, which are half an
+    /// hour each, forty-eight to the day. This was 1,440, a day of minutes,
+    /// so wasting waited a month to begin (#73).
+    pub const PROTEIN_DEFICIT_ONSET: u32 = crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
+    /// Turns of micronutrient deficit before scurvy-like symptoms: three days,
+    /// counted the same way. It was 4,320, which was three months.
+    pub const MICRONUTRIENT_DEFICIT_ONSET: u32 =
+        3 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
 
     pub fn new() -> Self {
         Self {
@@ -1061,7 +1067,7 @@ impl NutritionalState {
         // Protein deficiency causes wasting (progressive health loss)
         if self.has_protein_deficiency() {
             let days_in_deficit = (self.turns_protein_deficit - Self::PROTEIN_DEFICIT_ONSET) as f32
-                / 1440.0;
+                / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
             // Scales from 0.05 to 0.15 health/turn over 3 days
             penalty += 0.05 * (1.0 + days_in_deficit.min(2.0));
         }
@@ -1069,7 +1075,7 @@ impl NutritionalState {
         // Micronutrient deficiency causes disease symptoms
         if self.has_micronutrient_deficiency() {
             let days_in_deficit = (self.turns_micronutrient_deficit - Self::MICRONUTRIENT_DEFICIT_ONSET) as f32
-                / 1440.0;
+                / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
             // Scales from 0.02 to 0.06 health/turn over 3 days
             penalty += 0.02 * (1.0 + days_in_deficit.min(2.0));
         }
@@ -1316,8 +1322,8 @@ mod tests {
         // Not deficient yet - need time
         assert!(!state.has_protein_deficiency());
 
-        // Simulate 1.5 days of deficit
-        state.turns_protein_deficit = 2000;
+        // A day and a half of deficit, in half-hour turns
+        state.turns_protein_deficit = 72;
         assert!(state.has_protein_deficiency());
         assert!(state.deficiency_health_penalty() > 0.0);
     }

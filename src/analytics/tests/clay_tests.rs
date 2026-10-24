@@ -294,7 +294,9 @@ fn a_lump_left_at_the_fire_comes_out_hard() {
             a_lit_fire_at(&mut simulation, here);
             simulation.take_a_turn();
 
-            if !simulation.population.agents[0].state.is_alive {
+            // A death takes him out of the list in the same turn, so ask
+            // whether he is there at all before asking anything of him.
+            if simulation.population.agents.first().is_none_or(|agent| !agent.state.is_alive) {
                 break;
             }
 
