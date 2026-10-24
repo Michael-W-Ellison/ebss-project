@@ -17,14 +17,20 @@ impl Simulation {
     /// Seed is not a separate thing an agent carries: a handful of the grain
     /// in the pack is next year's field, which is exactly the choice a hungry
     /// people has to make.
-    pub(in crate::analytics) fn what_can_be_sown() -> [(&'static str, crate::world::ResourceType, bool); 7] {
+    pub(in crate::analytics) fn what_can_be_sown() -> [(&'static str, crate::world::ResourceType, bool); 8] {
         use crate::world::ResourceType;
 
         // The flag is whether it is worth breaking ground for when the thing
         // driving you is hunger. Sprouted grain comes first because it is the
         // one thing in the list that is visibly already doing what a field is
         // for - a man holding it does not have to be told.
+        //
+        // Seed set aside comes before all of it: it was kept back for this
+        // and for nothing else (#365). And first in the list is the name a
+        // grain field's lesson is recorded under, so the lesson and the
+        // choice of seed are the same lesson.
         [
+            (crate::agents::Agent::SEED, ResourceType::Grain, true),
             ("sproutedgrain", ResourceType::Grain, true),
             ("grain", ResourceType::Grain, true),
             ("legumes", ResourceType::Legumes, true),
@@ -513,7 +519,10 @@ impl Simulation {
     ) -> Option<crate::world::Position> {
         use crate::world::{Position, ResourceType};
 
-        if agent.how_many_i_have("grain") > 0 || agent.how_many_i_have("sproutedgrain") > 0 {
+        if agent.how_many_i_have("grain") > 0
+            || agent.how_many_i_have("sproutedgrain") > 0
+            || agent.how_many_i_have(crate::agents::Agent::SEED) > 0
+        {
             return None;
         }
 

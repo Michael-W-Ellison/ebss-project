@@ -172,3 +172,50 @@ fn gathering_wild_grain_puts_seed_in_the_pack() {
     assert!(got.success, "{:?}", got.message);
     assert!(simulation.population.agents[0].how_many_i_have("grain") > 0);
 }
+
+/// A farmer keeps a handful of grain back as seed, which is not eaten, and
+/// sows it; somebody starving eats it after all.
+#[test]
+fn a_farmer_keeps_seed_back_and_sows_it() {
+    use crate::agents::Agent;
+
+    let mut simulation = one_person();
+    let agent = &mut simulation.population.agents[0];
+    agent.inventory.add_item(InventoryItem::new("grain".to_string(), 5));
+
+    // Nobody who does not know how to break ground keeps seed.
+    assert!(!agent.keep_seed_back());
+
+    agent.found_out_how_to("do:TillSoil");
+    assert!(agent.knows_how_to_do("TillSoil"));
+    assert!(agent.keep_seed_back());
+    assert_eq!(agent.how_many_i_have(Agent::SEED), Agent::A_HANDFUL_OF_SEED);
+    assert_eq!(agent.how_many_i_have("grain"), 5 - Agent::A_HANDFUL_OF_SEED);
+    assert!(!agent.keep_seed_back(), "a handful is enough");
+
+    // Seed is not a meal.
+    agent.inventory.remove_item("grain", agent.how_many_i_have("grain"));
+    assert_eq!(agent.find_best_food_to_eat(), None, "seed is not food");
+
+    // It goes into the next field.
+    let sown = Simulation::what_this_one_would_sow(agent, 1.0);
+    assert_eq!(sown, ResourceType::Grain);
+    let tilled = simulation.execute_action(&Action::TillSoil, 0);
+    assert!(tilled.success, "{:?}", tilled.message);
+    assert_eq!(
+        simulation.population.agents[0].how_many_i_have(Agent::SEED),
+        Agent::A_HANDFUL_OF_SEED - 1,
+        "one handful went in"
+    );
+    assert!(simulation
+        .world
+        .nodes_on(Position::new(25, 25))
+        .any(|node| node.resource_type == ResourceType::Grain));
+
+    // And somebody starving eats the seed corn.
+    let agent = &mut simulation.population.agents[0];
+    agent.state.physiology.four_days_without_food();
+    assert!(agent.keep_seed_back());
+    assert_eq!(agent.how_many_i_have(Agent::SEED), 0);
+    assert_eq!(agent.how_many_i_have("grain"), Agent::A_HANDFUL_OF_SEED - 1);
+}

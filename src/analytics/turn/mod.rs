@@ -100,6 +100,8 @@ impl Simulation {
             for agent in self.population.agents.iter_mut() {
                 if agent.state.is_alive {
                     agent.forget_what_does_not_matter(now);
+                    // And a farmer keeps seed back from the pot (#365)
+                    agent.keep_seed_back();
                 }
             }
         }

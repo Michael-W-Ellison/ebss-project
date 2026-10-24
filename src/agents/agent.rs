@@ -2623,6 +2623,8 @@ impl Agent {
             "wood" => Self::ENOUGH_WOOD_TO_HAND,
             // The cord for the next knife - see `what_my_kit_is_short_of`
             "lashing" => 2,
+            // Next year's field - see `keep_seed_back`
+            Self::SEED => Self::A_HANDFUL_OF_SEED,
             _ => 0,
         }
     }
@@ -4180,6 +4182,55 @@ impl Agent {
     pub fn fuel_i_carry(&self) -> u32 {
         let dung = if self.knows_how_to_do("MuckOut") { self.how_many_i_have("dung") } else { 0 };
         self.how_many_i_have("wood") + dung
+    }
+
+    /// Grain set aside to sow, which is not food.
+    ///
+    /// Grain in a pack was eaten, dried, cooked or put down before anybody
+    /// broke ground with it. Of 3,231 grain picked up in six settlement-years,
+    /// none went into a field: 1,264 were eaten, 1,007 dried, 554 put down and
+    /// 140 cooked (#365). Seed under its own name is not food to any of
+    /// those, and sowing takes it first.
+    pub const SEED: &'static str = "seedgrain";
+
+    /// How much seed a farmer keeps back: a few fields' worth.
+    pub const A_HANDFUL_OF_SEED: u32 = 3;
+
+    /// Set grain aside as seed, or give it back to the pot.
+    ///
+    /// Somebody who knows how to break ground keeps a handful of grain back
+    /// from the pot for the next field. Somebody starving eats the seed corn,
+    /// as people always have in the end. Returns whether anything moved.
+    pub fn keep_seed_back(&mut self) -> bool {
+        let seed = self.how_many_i_have(Self::SEED);
+
+        if self.state.is_starving() {
+            if seed == 0 {
+                return false;
+            }
+            self.inventory.remove_item(Self::SEED, seed);
+            self.inventory
+                .add_item(InventoryItem::new_with_weight("grain".to_string(), seed, 1.0));
+            return true;
+        }
+
+        if seed >= Self::A_HANDFUL_OF_SEED || !self.knows_how_to_do("TillSoil") {
+            return false;
+        }
+        let grain = self.how_many_i_have("grain");
+        let setting_aside = grain.min(Self::A_HANDFUL_OF_SEED - seed);
+        if setting_aside == 0 {
+            return false;
+        }
+        let weight = self
+            .inventory
+            .get_item("grain")
+            .map(|item| item.weight_per_unit)
+            .unwrap_or(1.0);
+        self.inventory.remove_item("grain", setting_aside);
+        self.inventory
+            .add_item(InventoryItem::new_with_weight(Self::SEED.to_string(), setting_aside, weight));
+        true
     }
 
     /// Note a swap as tried, for good - see `swaps_tried`.
