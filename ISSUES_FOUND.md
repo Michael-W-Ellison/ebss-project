@@ -8684,6 +8684,9 @@ seed like the rest. Filed as #132.
 
 ### 132. A test that fails when anything else draws a random number
 
+**Fixed since:** the test runs a block of seeded worlds and asserts about the
+block.
+
 `survival_loop_tests::population_feeds_itself_over_a_long_run` runs 4,000
 ticks of a twelve-person settlement on an unseeded world and asserts that
 somebody is still alive. Roughly a third of worlds are empty by tick 4,000 on
