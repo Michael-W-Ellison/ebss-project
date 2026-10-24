@@ -28,10 +28,10 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #358): `cargo test --lib` in one piece.
-2,931 tests: 2,925 passed, none failed, 6 ignored, in 2,887 s.
-- The dice counts are 8,095 (seed 4242, 120 turns) and 974,352 (seed 0, a
-  year); 952,602 after #359, which ran only the affected groups.
+**Last full run** (ISSUES_FOUND #360): `cargo test --lib` in one piece.
+2,932 tests: 2,926 passed, none failed, 6 ignored, in 1,243 s.
+- The dice counts are 8,095 (seed 4242, 120 turns) and 961,553 (seed 0, a
+  year).
 - The sixth ignored test is `measurement_watch::zz_discovery_watch`, which
   is the settlement measurement and not a test (#352).
 - The fifth ignored test is `repeatable_tests::one_process_reports_seed_zero`,
