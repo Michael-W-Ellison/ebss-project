@@ -412,3 +412,34 @@ fn a_keeper_catches_young_ones_for_a_herd() {
     }
     assert_eq!(ask(&simulation), None, "eight is a herd");
 }
+
+/// Somebody who watches a keeper at work with a beast often enough knows how
+/// to raise one; seeing it once or twice is not enough.
+#[test]
+fn watching_a_keeper_teaches_keeping() {
+    use crate::agents::observation_processing::{process_observations, BroadcastAction};
+    use crate::agents::ActionType;
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    population.spawn_agent(AgentConfig::default());
+    let keeper = population.agents[0].id;
+    for agent in population.agents.iter_mut() {
+        agent.state.position = (30, 30, 0);
+    }
+    population.agents[1].senses.vision.visible_agents.insert(keeper);
+    let tending = BroadcastAction::new(
+        keeper,
+        (30, 31, 0),
+        ActionType::Social,
+        true,
+        format!("{:?}", Action::Tame { animal_id: uuid::Uuid::nil(), food_type: None }),
+        0,
+    );
+    for seen in 1..=crate::agents::Agent::KEEPERS_WATCHED_BEFORE_KEEPING {
+        assert!(!population.agents[1].knows_how_to_do("Tame"), "after {} sightings", seen - 1);
+        process_observations(&mut population.agents, &tending);
+    }
+    assert!(population.agents[1].knows_how_to_do("Tame"));
+    assert!(!population.agents[0].knows_how_to_do("Tame"), "the keeper does not learn from himself");
+}

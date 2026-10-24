@@ -197,6 +197,22 @@ fn watch_a_practice(watcher: &mut Agent, broadcast: &BroadcastAction) {
         watcher.found_out_how_to("do:TillSoil");
         watcher.practices.learn_from_watching(Practice::Farming);
     }
+
+    // And keeping a beast (#361): seeing a keeper feed, lead and handle a
+    // young one, or catch one, often enough is how raising one is passed on.
+    // Husbandry began only where a hunter found a young one by a kill, and
+    // went no further than the one who found it.
+    if broadcast.details.starts_with("Tame") {
+        watcher.skills.made_one(Agent::A_KEEPER_SEEN_AT_WORK);
+        if watcher.skills.times_made(Agent::A_KEEPER_SEEN_AT_WORK) >= Agent::KEEPERS_WATCHED_BEFORE_KEEPING {
+            watcher.found_out_how_to("do:Tame");
+        }
+    }
+
+    // And seeing dung carried out of a fold is seeing what it is good for
+    if broadcast.details.starts_with("MuckOut") {
+        watcher.found_out_how_to("do:MuckOut");
+    }
 }
 
 /// Skill experience a child gains from watching an adult work.

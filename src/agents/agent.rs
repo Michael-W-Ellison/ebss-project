@@ -4020,6 +4020,13 @@ impl Agent {
     /// And how many questions anybody keeps open at once.
     const AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS: usize = 4;
 
+    /// What watching a keeper at work with a beast is counted under (#361).
+    pub const A_KEEPER_SEEN_AT_WORK: &'static str = "a keeper seen at work";
+
+    /// How many times somebody watches a keeper at work before they know how
+    /// to raise a beast themselves (#361).
+    pub const KEEPERS_WATCHED_BEFORE_KEEPING: u32 = 5;
+
     /// How long without meat before the body wants it (#358).
     pub const A_WEEK_WITHOUT_MEAT: u32 = 7 * crate::environment::seasons::TICKS_PER_DAY;
 
