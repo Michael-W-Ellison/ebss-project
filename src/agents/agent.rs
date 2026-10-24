@@ -2029,6 +2029,8 @@ pub struct Agent {
     /// fed anybody. Nothing in this project had ever counted that, so every
     /// preservation change had to be judged on how much was *in* the store
     /// rather than on how much of what was got was ever any use.
+    ///
+    /// Out of the pack and where it grew alike, in items (#113).
     #[serde(default)]
     pub food_i_ate: u32,
     #[serde(default)]
@@ -6471,11 +6473,13 @@ impl Agent {
             item.goes_off(current_turn, kept_in);
         }
 
-        // Remove completely spoiled food (freshness <= 0)
+        // Remove completely spoiled food (freshness <= 0), and food burnt past
+        // eating, which nobody will ever eat and which was carried for ever
+        // (#16)
         let spoiled_items: Vec<String> = self.inventory.get_all_items().iter()
             .filter(|(_, item)| {
                 item.food_data.as_ref()
-                    .map(|f| f.freshness <= 0.0)
+                    .map(|f| f.freshness <= 0.0 || f.is_ruined())
                     .unwrap_or(false)
             })
             .map(|(id, _)| id.clone())
@@ -12533,9 +12537,6 @@ pub struct Errand {
     pub to_make: Option<String>,
     /// Which drive it set out to answer
     pub for_drive: DriveType,
-    /// How hard that drive was pressing when it set out, so that a drive going
-    /// quiet - because somebody handed this one a meal, say - ends the errand
-    pub pressed_this_hard: f32,
     /// How many turns it has been walking
     pub turns_on_it: u32,
     /// And how many turns it has been standing waiting while its owner dealt

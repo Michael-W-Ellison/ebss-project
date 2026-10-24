@@ -458,7 +458,6 @@ fn an_errand_to_somewhere_there_is_no_way_to_is_given_up() {
         set_out_from: (cx, cy, 0),
         to_make: None,
         for_drive: crate::core::DriveType::Curiosity,
-        pressed_this_hard: 0.5,
         turns_on_it: 0,
         set_aside: 0,
     });

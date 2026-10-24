@@ -157,7 +157,6 @@ fn an_errand_left_too_long_is_let_go() {
         set_out_from: (0, 0, 0),
         to_make: None,
         for_drive: crate::core::DriveType::Preparedness,
-        pressed_this_hard: 1.0,
         turns_on_it: 3,
         set_aside: Errand::HOW_LONG_AN_ERRAND_KEEPS,
     };
@@ -178,7 +177,6 @@ fn even_the_shortest_errand_gets_a_few_turns() {
         set_out_from: (0, 0, 0),
         to_make: None,
         for_drive: crate::core::DriveType::Thirst,
-        pressed_this_hard: 1.0,
         turns_on_it: 0,
         set_aside: 0,
     };
@@ -209,7 +207,6 @@ fn a_walk_nearly_finished_is_harder_to_abandon_than_one_just_begun() {
         set_out_from: (0, 0, 0),
         to_make: None,
         for_drive: crate::core::DriveType::Hunger,
-        pressed_this_hard: 1.0,
         turns_on_it: 1,
         set_aside: 0,
     };
@@ -219,7 +216,6 @@ fn a_walk_nearly_finished_is_harder_to_abandon_than_one_just_begun() {
         set_out_from: (0, 0, 0),
         to_make: None,
         for_drive: crate::core::DriveType::Hunger,
-        pressed_this_hard: 1.0,
         turns_on_it: 19,
         set_aside: 0,
     };

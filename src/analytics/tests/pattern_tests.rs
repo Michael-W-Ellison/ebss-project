@@ -472,7 +472,6 @@ fn hunting_east_and_west_teaches_hunting_rather_than_east() {
         set_out_from: camp,
         to_make: None,
         for_drive: DriveType::Hunger,
-        pressed_this_hard: 1.0,
         turns_on_it: 1,
         set_aside: 0,
     });
@@ -483,7 +482,6 @@ fn hunting_east_and_west_teaches_hunting_rather_than_east() {
         set_out_from: camp,
         to_make: None,
         for_drive: DriveType::Hunger,
-        pressed_this_hard: 1.0,
         turns_on_it: 1,
         set_aside: 0,
     });
@@ -574,7 +572,6 @@ fn a_quick_answer_lays_a_stronger_trail_than_a_slow_one() {
             set_out_from: (0, 0, 0),
             to_make: None,
             for_drive: DriveType::Thirst,
-            pressed_this_hard: 1.0,
             turns_on_it: 1,
             set_aside: 0,
         });
@@ -596,7 +593,6 @@ fn a_quick_answer_lays_a_stronger_trail_than_a_slow_one() {
             set_out_from: (0, 0, 0),
             to_make: None,
             for_drive: DriveType::Thirst,
-            pressed_this_hard: 1.0,
             turns_on_it: 10,
             set_aside: 0,
         });
@@ -780,7 +776,6 @@ fn a_meal_at_the_end_of_a_walk_is_priced_at_the_walk() {
         set_out_from: (11, 20, 0),
         to_make: None,
         for_drive: DriveType::Hunger,
-        pressed_this_hard: 1.0,
         turns_on_it: 9,
         set_aside: 0,
     });

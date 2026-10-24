@@ -2339,12 +2339,11 @@ impl World {
         };
 
         // Use naturalistic spawner
-        let mut spawner = NaturalisticSpawner::new(&self.grid, today);
+        let mut spawner = NaturalisticSpawner::new(&self.grid, today).with_ground_taken(&taken);
         let new_resources = spawner.spawn_all(&nat_config);
 
-        // Add spawned resources. The spawner chooses its own ground and does
-        // not ask about what is already there, so the register hears about
-        // what it put down rather than the other way about.
+        // Add spawned resources. The spawner keeps clear of the ground
+        // already taken (#130), and the register hears about what it put down.
         for resource in &new_resources {
             taken.insert((resource.position.x, resource.position.y));
         }

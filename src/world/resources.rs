@@ -631,7 +631,7 @@ impl ResourceType {
 
     /// Whether a person can eat this.
     ///
-    /// The same six the decision layer forages for. It lived there as
+    /// The same nine the decision layer forages for. It lived there as
     /// `edible_resources`, which is analytics-private, so anything outside
     /// that layer wanting to know what counts as food had to write its own
     /// list - and a second list is a list that drifts. What is edible is a
@@ -647,6 +647,9 @@ impl ResourceType {
                 | ResourceType::Legumes
                 | ResourceType::Fish
                 | ResourceType::Meat
+                // Wild honey (#120): placed in woods and meadows with a
+                // season of its own, and nobody could eat any of it.
+                | ResourceType::Honey
         )
     }
 
@@ -1840,12 +1843,13 @@ mod all_resources_tests {
     /// And the other half of it: a thing that comes up out of the ground is
     /// grown, so what a patch of it carries follows the soil under it.
     ///
-    /// Meat and fish are food and are not grown - they walk and swim - so
-    /// this asks only of the ones the ground puts up.
+    /// Meat and fish are food and are not grown - they walk and swim - and
+    /// nor is honey, which bees make; so this asks only of the ones the
+    /// ground puts up.
     #[test]
     fn every_food_that_comes_out_of_the_ground_is_grown() {
         for what in ResourceType::all() {
-            if !what.is_it_food() || matches!(what, ResourceType::Meat | ResourceType::Fish) {
+            if !what.is_it_food() || matches!(what, ResourceType::Meat | ResourceType::Fish | ResourceType::Honey) {
                 continue;
             }
             assert!(

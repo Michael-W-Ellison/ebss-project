@@ -511,9 +511,17 @@ impl Simulation {
         &self,
         agent: &crate::agents::Agent,
     ) -> Option<Action> {
-        use crate::agents::skills::SkillType;
+        self.what_this_trade_wants_first(agent, crate::agents::skills::SkillType::Hunting)
+    }
 
-        if agent.what_i_have_to_work_with(SkillType::Hunting).is_some() {
+    /// The next step towards the humblest tool of a trade this one has none
+    /// of, or `None` when they have one already - or no step can be taken.
+    pub(in crate::analytics) fn what_this_trade_wants_first(
+        &self,
+        agent: &crate::agents::Agent,
+        trade: crate::agents::skills::SkillType,
+    ) -> Option<Action> {
+        if agent.what_i_have_to_work_with(trade).is_some() {
             return None;
         }
 
@@ -532,7 +540,7 @@ impl Simulation {
         // the next rung reachable later; `would_a_better_tool_pay` is what
         // climbs.
         let mut ladder: Vec<&'static crate::environment::making::Tool> =
-            crate::environment::making::what_helps_with(SkillType::Hunting)
+            crate::environment::making::what_helps_with(trade)
                 .filter(|tool| agent.knows_how_to_make(tool.called))
                 .collect();
         ladder.sort_by(|a, b| {

@@ -681,7 +681,9 @@ impl Simulation {
             // ninety-eight turns spent trying to dig a hole in a lake.
             if !self.is_there_a_hole_going_spare(here) {
                 if self.is_ground_a_pit_will_go_in(here) {
-                    return Some(Action::Excavate);
+                    if let Some(dig) = self.a_dig_or_what_it_wants_first(agent) {
+                        return Some(dig);
+                    }
                 }
                 if self.a_cairn_would_go_here(agent, here) {
                     return Some(Action::Cache);
@@ -753,7 +755,9 @@ impl Simulation {
         //
         // Autumn with nowhere to put anything is reason enough to dig.
         if self.is_ground_a_pit_will_go_in(here) {
-            return Some(Action::Excavate);
+            if let Some(dig) = self.a_dig_or_what_it_wants_first(agent) {
+                return Some(dig);
+            }
         }
         if self.a_cairn_would_go_here(agent, here) {
             return Some(Action::Cache);
@@ -1257,6 +1261,26 @@ impl Simulation {
     }
 
     /// Salt water close enough to dip a pot in.
+    /// A dig, by somebody with something to dig with; the next step towards
+    /// a digging stick, by somebody without; or nothing, by somebody who can
+    /// take no step towards one (#126).
+    ///
+    /// The verb matrix has always wanted a digging tool for `excavate`, and
+    /// the store offered the dig without asking, so the matrix refused it and
+    /// the turn went - 73 to 99 per cent of digs, measured across later
+    /// entries. The executor's note that a hole can be dug with the fingers
+    /// was from before the matrix.
+    pub(in crate::analytics) fn a_dig_or_what_it_wants_first(
+        &self,
+        agent: &crate::agents::Agent,
+    ) -> Option<Action> {
+        use crate::agents::skills::SkillType;
+        if agent.what_i_have_to_work_with(SkillType::Mining).is_some() {
+            return Some(Action::Excavate);
+        }
+        self.what_this_trade_wants_first(agent, SkillType::Mining)
+    }
+
     pub(in crate::analytics) fn salt_water_within_reach(&self, from: (i32, i32, i32)) -> Option<crate::world::Position> {
         use crate::world::Position;
 

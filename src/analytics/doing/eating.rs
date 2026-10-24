@@ -365,6 +365,19 @@ impl Simulation {
                     eaten_here = 1;
                 }
 
+                // Counted as eaten, and what it carries into the body, as a
+                // meal out of the pack is (#113): food eaten where it grew
+                // was never counted, nor its salt, nor flesh off a carcass
+                // as meat.
+                let as_carried = format!("{foraged_item:?}").to_lowercase();
+                agent.food_i_ate = agent.food_i_ate.saturating_add(eaten_here);
+                agent.salt_in_the_body = (agent.salt_in_the_body
+                    + eaten_here as f32 * crate::agents::Agent::salt_in_a_mouthful_of(&as_carried))
+                    .min(1.0);
+                if foraged_item == crate::world::ItemType::Meat {
+                    agent.last_ate_meat = Some(self.current_turn);
+                }
+
                 *self
                     .what_went_down
                     .entry(format!("{foraged_item:?}"))

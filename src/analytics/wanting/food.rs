@@ -1240,7 +1240,7 @@ impl Simulation {
     ///
     /// Foraging accepts everything that smells of food, so an agent does not
     /// starve standing in a grain field because only berries counted as edible.
-    pub(in crate::analytics) fn edible_resources() -> [(crate::world::ResourceType, crate::world::ItemType); 8] {
+    pub(in crate::analytics) fn edible_resources() -> [(crate::world::ResourceType, crate::world::ItemType); 9] {
         use crate::world::{ItemType, ResourceType};
 
         [
@@ -1256,6 +1256,8 @@ impl Simulation {
             (ResourceType::Legumes, ItemType::Legumes),
             (ResourceType::Fish, ItemType::Fish),
             (ResourceType::Meat, ItemType::Meat),
+            // Wild honey, in its season (#120)
+            (ResourceType::Honey, ItemType::Honey),
         ]
     }
 

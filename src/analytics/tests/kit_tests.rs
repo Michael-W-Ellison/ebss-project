@@ -148,7 +148,6 @@ fn a_making_short_of_stone_goes_for_stone() {
         set_out_from: (30, 30, 0),
         to_make: Some("knappedtip".to_string()),
         for_drive: crate::core::DriveType::Utility,
-        pressed_this_hard: 1.0,
         turns_on_it: 1,
         set_aside: 0,
     });

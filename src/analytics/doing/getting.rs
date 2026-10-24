@@ -1270,11 +1270,9 @@ impl Simulation {
 
         debug!("Agent {} dug a pit at {here:?}", agent.id);
 
-        // And what it cost, which depends on what was in the hand.
-        //
-        // A flat twenty-two whether the agent dug with a shovel or with
-        // its fingers - which is most of a turn's work either way, and
-        // a settlement that cannot dig cheaply cannot keep a larder.
+        // And what it cost, which depends on what was in the hand: the verb
+        // matrix will not let a hole be dug without something to dig with,
+        // and a better one digs it for less.
         let shovel = self.population.agents[agent_index]
             .how_fast_my_tools_make_this_go(crate::agents::SkillType::Mining);
         if shovel > 1.0 {
