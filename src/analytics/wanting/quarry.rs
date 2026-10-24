@@ -19,8 +19,6 @@ impl Simulation {
         agent: &crate::agents::Agent,
         animal: &crate::environment::Animal,
     ) -> bool {
-        use crate::environment::AnimalBehavior;
-
         if !animal.is_alive() || animal.is_domesticated || animal.is_kept() {
             return false;
         }
@@ -945,39 +943,6 @@ impl Simulation {
     /// further off is a snare you will come across when you come across it.
     /// It was a hundred and fifty metres while a walk was a cell a turn.
     pub(in crate::analytics) const AS_FAR_AS_A_LINE_IS_WORTH_WALKING: i32 = 15 * crate::world::pace::HOW_MUCH_FURTHER_IS_WORTH_WALKING as i32;
-
-    /// Trapping: set a line, and go round it.
-    ///
-    /// The way in to the lower tiers of the food web now those are a
-    /// population rather than records - see
-    /// [`crate::environment::SmallLife`]. Three things in order, which is the
-    /// order a trapper does them in: take what is in reach, walk to what is
-    /// waiting, and set another where you are standing.
-    pub(in crate::analytics) fn trapping_action(
-        &self,
-        agent: &crate::agents::Agent,
-        agent_position: (i32, i32, i32),
-    ) -> Option<Action> {
-        self.a_catch_waiting(agent, agent_position)
-            .or_else(|| self.lengthening_the_line(agent, agent_position))
-    }
-
-    /// A catch already in a snare: take it, or go to it.
-    ///
-    /// Split out from setting string, and placed *ahead* of ordinary
-    /// foraging, because a catch in a snare is use-it-or-lose-it in a way a
-    /// berry on a bush is not - something else is walking towards it. Behind
-    /// the berries it was worth almost nothing: a settlement of twelve caught
-    /// 213 in a year and carried home 28, because by the time anybody had a
-    /// reason to walk out there the fox had been.
-    pub(in crate::analytics) fn a_catch_waiting(
-        &self,
-        agent: &crate::agents::Agent,
-        agent_position: (i32, i32, i32),
-    ) -> Option<Action> {
-        self.a_catch_at_my_feet(agent, agent_position)
-            .or_else(|| self.walking_to_a_catch(agent, agent_position))
-    }
 
     /// A catch in a snare the agent is standing on. Free: no walk, no
     /// weighing, take it.

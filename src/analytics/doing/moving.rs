@@ -824,7 +824,6 @@ impl Simulation {
             }
         }
 
-        let _agent = &mut self.population.agents[agent_index];
 
         // Construct message about exploration results
         let mut message = format!(

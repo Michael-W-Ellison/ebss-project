@@ -435,23 +435,6 @@ fn inherit_traits(traits1: &crate::agents::TraitSet, traits2: &crate::agents::Tr
     offspring_traits
 }
 
-/// Calculate offspring position (near parents)
-fn offspring_position(pos1: (i32, i32, i32), pos2: (i32, i32, i32)) -> (i32, i32, i32) {
-    let mut rng = crate::core::dice::roll();
-
-    // Average parent positions
-    let avg_x = (pos1.0 + pos2.0) / 2;
-    let avg_y = (pos1.1 + pos2.1) / 2;
-    let avg_z = (pos1.2 + pos2.2) / 2;
-
-    // Add small random offset
-    let offset_x = rng.gen_range(-2..=2);
-    let offset_y = rng.gen_range(-2..=2);
-    let offset_z = rng.gen_range(-1..=1);
-
-    (avg_x + offset_x, avg_y + offset_y, avg_z + offset_z)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

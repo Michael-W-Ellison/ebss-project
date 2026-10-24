@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences, GoalWorldState};
 use crate::core::planning::{ActionPlan, PlanActionType, Planner, PlanStep, ActionOutcome};
 use crate::environment::{Action, ActionResult};
-use std::collections::BTreeMap;
 
 use super::senses::Senses;
 use super::body::Body;
@@ -1208,8 +1207,9 @@ pub struct AgentState {
 
 impl AgentState {
     pub fn new() -> Self {
-        use rand::Rng;
-        let mut rng = crate::core::dice::roll();
+        // A draw nothing reads any more, kept because removing it would move
+        // every roll after it and with them every recorded run.
+        let _rng = crate::core::dice::roll();
         // Max age varies between 9000-11000 turns
         // Seventy years, and that is the end of it. There is no spread: the
         // specification says "Age 70: Death from old age", and everything
@@ -2814,7 +2814,7 @@ impl Agent {
         self.inventory
             .get_all_items()
             .iter()
-            .filter(|(name, item)| {
+            .filter(|(_name, item)| {
                 item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP && item.is_food()
             })
             // What keeps worst is what most wants burying
@@ -4478,8 +4478,6 @@ impl Agent {
     /// this is a step on the way to a meal and answers to Hunger, so it does
     /// not wait on anything. Everybody is born knowing a carcass comes apart.
     pub fn what_flesh_i_should_cut_up(&self) -> Option<(String, String)> {
-        use crate::environment::making;
-        use crate::world::nutrition::Piece;
 
         // Only bother if there is nothing already cut that would do. A man
         // with a joint in his hand does not stop to quarter the rest of the
@@ -12206,7 +12204,7 @@ impl Agent {
         // something, because the victim always knows.
         let seen = 1.0 + watching as f32 * Self::WHAT_ANOTHER_PAIR_OF_EYES_ADDS;
 
-        let mut cost = bonds.clamp(0.0, 1.0) * seen * Self::WHAT_A_BOND_IS_WORTH_KEEPING;
+        let cost = bonds.clamp(0.0, 1.0) * seen * Self::WHAT_A_BOND_IS_WORTH_KEEPING;
 
         // Temperament does not decide this, but it weighs it: an honest man
         // sees far more at stake in being a thief, and a greedy or callous one

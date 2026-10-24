@@ -133,7 +133,7 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         // poison mushrooms are not supper.
         "apples" | "bananas" | "baobab_fruit" | "berries" | "cherries"
         | "coconut" | "mushrooms" | "olives" | "oranges" | "pears"
-        | "pumpkin" | "tomatoes" | "rose_hips" | "nuts" | "fruit" => {
+        | "pumpkin" | "tomatoes" | "rose_hips" | "fruit" => {
             Some(ItemType::Food)
         }
         "barley" | "corn" | "rice" | "wheat" => Some(ItemType::Grain),

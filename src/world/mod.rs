@@ -2597,7 +2597,7 @@ impl World {
         use rand::seq::SliceRandom;
         let mut rng = crate::core::dice::roll();
 
-        let mut claim = |pos: Position, taken: &mut std::collections::BTreeSet<(i32, i32)>| {
+        let claim = |pos: Position, taken: &mut std::collections::BTreeSet<(i32, i32)>| {
             taken.insert((pos.x, pos.y));
             pos
         };

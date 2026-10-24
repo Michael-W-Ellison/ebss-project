@@ -265,7 +265,7 @@ impl Simulation {
 
     /// `Action::Gather`.
     pub(in crate::analytics) fn gathering(&mut self, resource_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
-        use crate::world::{ResourceType, Position};
+        use crate::world::ResourceType;
         use crate::agents::InventoryItem;
 
         let resource_type_enum = Self::what_a_gather_asks_for(resource_type);
@@ -275,14 +275,6 @@ impl Simulation {
         }
         let resource_type_enum = resource_type_enum.unwrap();
 
-        // Get agent position
-        let agent = &self.population.agents[agent_index];
-        let agent_pos = Position::new(
-            agent.state.position.0,
-            agent.state.position.1
-        );
-
-        let gathering_food = resource_type_enum == ResourceType::Food;
         let nearest_resource = self.the_node_this_gather_takes(agent_index, resource_type_enum);
 
         if let Some((resource_index, _)) = nearest_resource {

@@ -1902,19 +1902,6 @@ impl Simulation {
         true
     }
 
-    /// Process information verification and lie detection
-    /// Agents periodically verify information they've received against their knowledge
-    fn process_information_verification(&mut self) {
-        for agent in &mut self.population.agents {
-            if !agent.state.is_alive {
-                continue;
-            }
-
-            // Call the agent's lie detection processing
-            agent.process_information_verification(self.current_turn);
-        }
-    }
-
     /// Log simulation statistics
     fn log_statistics(&self) {
         info!("--- Turn {} Statistics ---", self.current_turn);

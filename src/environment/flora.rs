@@ -2450,7 +2450,7 @@ impl PlantManager {
         let height = grid.height;
         let mut canopy = vec![0.0f32; width * height];
 
-        let mut shade_at = |x: i32, y: i32, by: f32, canopy: &mut Vec<f32>| {
+        let shade_at = |x: i32, y: i32, by: f32, canopy: &mut Vec<f32>| {
             if x < 0 || y < 0 || x as usize >= width || y as usize >= height {
                 return;
             }

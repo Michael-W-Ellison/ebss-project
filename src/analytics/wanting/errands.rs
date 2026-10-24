@@ -387,7 +387,7 @@ impl Simulation {
                 None => far.get(&at).copied(),
             }
         };
-        let mut reach = |near: &mut Vec<u8>,
+        let reach = |near: &mut Vec<u8>,
                          far: &mut BTreeMap<(i32, i32), (i32, i32)>,
                          at: (i32, i32),
                          from: (i32, i32)| {

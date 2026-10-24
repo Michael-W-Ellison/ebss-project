@@ -1080,7 +1080,6 @@ impl Simulation {
         let me = self.population.agents[agent_index].id;
 
         {
-            let agent = &mut self.population.agents[agent_index];
         }
 
         if self.hand_over(agent_index, them, &mine, 1) == 0 {

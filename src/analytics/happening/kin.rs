@@ -185,7 +185,6 @@ impl Simulation {
                 }
 
                 // Add parent-child relationships
-                let offspring_idx = self.population.agents.len() - 1;
 
                 // Mother bonds with child
                 use crate::agents::emotions::{Relationship, RelationshipType};

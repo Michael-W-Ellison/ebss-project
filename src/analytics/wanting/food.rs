@@ -814,7 +814,6 @@ impl Simulation {
                     _ => crate::world::ResourceType::Food,
                 };
 
-                let here = crate::world::Position::new(agent_position.0, agent_position.1);
                 let looking_for_food = wanted == crate::world::ResourceType::Food;
 
                 // And whether the thing remembered can be bearing today.
@@ -1186,6 +1185,10 @@ impl Simulation {
     /// Falls back to the plain answer when everything within reach is bad
     /// ground: hunger outlasts a fright, and a settlement that starves rather
     /// than walk past a wood is not being careful.
+    ///
+    /// Only the tests ask this now: the live hunger path weighs danger in
+    /// `the_best_food_anywhere_and_its_worth` instead.
+    #[cfg(test)]
     pub(in crate::analytics) fn nearest_edible_this_one_would_go_to(
         &self,
         agent: &crate::agents::Agent,

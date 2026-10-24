@@ -4557,7 +4557,7 @@ impl AnimalManager {
             // block: whether to stay is a different question from feeding,
             // and it is asked further down, once it is known whether there
             // was anything else here worth staying for.
-            let mut the_ground_pays = 0.0f32;
+            let the_ground_pays: f32;
             {
                 let ground = grid
                     .get_tile(&crate::world::Position::new(pred_pos.0, pred_pos.1))
@@ -4917,7 +4917,7 @@ impl AnimalManager {
                 // wood; what it wants is water, and the two are not the same
                 // grounds.
                 let by_the_water = hunter.feeds_in_the_water();
-                let mut living_on = |ground: (i32, i32), counting_itself: usize| -> f32 {
+                let living_on = |ground: (i32, i32), counting_itself: usize| -> f32 {
                     let here = self.small_life.here(ground);
                     let under_it = if by_the_water {
                         here.how_thick_the_water_is_against_the_best_there_could_be(
@@ -7685,7 +7685,6 @@ impl AnimalManager {
                     let pack_size = rng.gen_range(1..=species.group_size.1.min(4));
 
                     if self.spawn_group(species.id.clone(), pos, pack_size).is_some() {
-                        spawned += pack_size as usize;
                         *put_down_of.entry(role).or_insert(0) += pack_size as usize;
                         prey_present.insert(species.id.clone());
                     }

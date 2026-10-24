@@ -23,7 +23,6 @@ impl Simulation {
     /// anywhere else - the store that every agent could reach from wherever
     /// they stood, where nothing ever went off, is gone.
     pub(in crate::analytics) fn the_store_i_am_standing_at(&mut self, agent_index: usize) -> Option<crate::world::Position> {
-        use crate::world::Position;
         let at = self.population.agents[agent_index].state.position;
         let storehouse = self
             .world

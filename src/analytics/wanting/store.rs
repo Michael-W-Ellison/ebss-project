@@ -870,7 +870,6 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
-        use crate::world::Position;
 
         // Somebody with a proper meal about them does not open the store.
         //
