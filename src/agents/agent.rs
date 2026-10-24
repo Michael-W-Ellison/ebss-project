@@ -1921,6 +1921,15 @@ pub struct Agent {
     /// knowing - see `environment::making::Making::obvious`.
     #[serde(default)]
     found_out: std::collections::BTreeSet<String>,
+    /// Every swap this one has tried, by `what_that_swap_is_called`.
+    ///
+    /// Kept apart from `lessons` for the same reason as `times_laid_up`. A
+    /// swap comes out the same every time, so one try settles it for good;
+    /// but a lesson fades in about a season and a head holds forty-eight of
+    /// them, so the same dead swaps were made again every season at the cost
+    /// of their makings, about 690 a world-year (#364).
+    #[serde(default)]
+    swaps_tried: std::collections::BTreeSet<String>,
     /// What this one makes of each field it has seen a crop on.
     ///
     /// Nobody is told the grade of a piece of ground. What a farmer has is
@@ -2166,6 +2175,7 @@ impl Agent {
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             times_laid_up: std::collections::BTreeMap::new(),
             found_out: Self::what_anybody_is_born_knowing(),
+            swaps_tried: std::collections::BTreeSet::new(),
             what_i_make_of_the_fields: std::collections::BTreeMap::new(),
             wonderings: Vec::new(),
             food_i_ate: 0,
@@ -4172,6 +4182,11 @@ impl Agent {
         self.how_many_i_have("wood") + dung
     }
 
+    /// Note a swap as tried, for good - see `swaps_tried`.
+    pub fn tried_this_swap(&mut self, called: &str) {
+        self.swaps_tried.insert(called.to_string());
+    }
+
     pub fn found_out_how_to(&mut self, what: &str) -> bool {
         self.found_out.insert(what.to_string())
     }
@@ -4750,7 +4765,10 @@ impl Agent {
                     // was made a dozen times over at the cost of its makings,
                     // and swapping was refused six thousand times a year for
                     // two successes (#69).
-                    if self.lessons.tried_this(&called) > 0 {
+                    //
+                    // Asked of `swaps_tried`, which is never forgotten, and
+                    // not of the lessons, which are (#364).
+                    if self.swaps_tried.contains(&called) {
                         continue;
                     }
 

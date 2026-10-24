@@ -1353,6 +1353,7 @@ impl Simulation {
         self.population.agents[agent_index]
             .lessons
             .record_particular(&called, worked);
+        self.population.agents[agent_index].tried_this_swap(&called);
 
         if worked {
             ActionResult::success()

@@ -2,7 +2,8 @@
 //! Behaviour that came out wrong for want of one question asked: a worn-out
 //! field counted as a field (#5), a hungry man setting off for the furthest
 //! food he knew (#68's neighbour in `migration_action`), a dead swap made a
-//! dozen times (#69), and grain that never reached a pack to be sown (#10).
+//! dozen times (#69) and again every season (#364), and grain that never
+//! reached a pack to be sown (#10), or was eaten when it did.
 
 use crate::agents::{AgentConfig, InventoryItem, Population};
 use crate::analytics::Simulation;
@@ -91,8 +92,40 @@ fn a_swap_tried_is_not_tried_again() {
     let first = agent.what_i_would_swap().expect("something to put where the flax goes");
     let called = crate::environment::making::what_that_swap_is_called(&first.0, &first.1, &first.2);
     agent.lessons.record_particular(&called, false);
+    agent.tried_this_swap(&called);
 
-    assert_ne!(agent.what_i_would_swap(), Some(first), "not the same swap twice");
+    assert_ne!(agent.what_i_would_swap(), Some(first.clone()), "not the same swap twice");
+
+    // And not after the lesson has faded either: years on, it is still known.
+    agent.lessons.fade(10 * crate::environment::seasons::TICKS_PER_YEAR);
+    assert_eq!(agent.lessons.tried_this(&called), 0, "the lesson itself is gone");
+    assert_ne!(agent.what_i_would_swap(), Some(first), "but the swap is still not tried again");
+}
+
+/// The executor is what notes the swap as tried.
+#[test]
+fn trying_a_swap_notes_it_for_good() {
+    let mut simulation = one_person();
+    let agent = &mut simulation.population.agents[0];
+    agent.found_out_how_to(crate::environment::making::THONG_FOR_CORD.instead_of_making);
+    agent.inventory.add_item(InventoryItem::new("stone".to_string(), 3));
+    let (makes, instead_of, put_in) = agent.what_i_would_swap().expect("a swap to try");
+
+    simulation.execute_action(
+        &Action::TrySwapping {
+            instead_of_making: makes.clone(),
+            instead_of: instead_of.clone(),
+            put_in: put_in.clone(),
+        },
+        0,
+    );
+
+    simulation.population.agents[0].inventory.add_item(InventoryItem::new(put_in.clone(), 3));
+    assert_ne!(
+        simulation.population.agents[0].what_i_would_swap(),
+        Some((makes, instead_of, put_in)),
+        "tried once, not tried again"
+    );
 }
 
 /// Somebody about to break ground with no grain on them fetches some from
