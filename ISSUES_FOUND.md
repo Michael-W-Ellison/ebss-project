@@ -781,8 +781,9 @@ tools, and nothing yet makes one ahead of needing it.
 
 ### 10. Farming is learned now, and the plant nobody can reach
 
-**Grain reaches a pack now: #364.** Somebody about to break ground with no
-grain on them fetches some from wild grain they know of within a walk.
+**Still open after #364.** Farmers about to break ground now fetch seed from
+wild grain they know of, but grain went into 28 fields of 7,048 in forty
+worlds. The seed probably gets eaten before the next field is broken.
 
 Breaking ground used to be something every founder was born knowing, and a
 field was sown and then forgotten: nothing came on in it, nothing took it, and
@@ -1149,9 +1150,10 @@ sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
 ### 15. Zoning and territory are never established
 
-**Fixed in #364.** The first building of a kind lays out ground for more of
-its kind, and a house claims the plot round it for whoever put it up; building
-goes through the territory-aware search.
+**Wired in #364, not yet seen working.** The first building of a kind lays
+out ground for more of its kind, and a house claims the plot round it for
+whoever put it up. Nobody in forty two-year settlements put up anything but
+brush, so neither has fired in a measurement.
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -3869,9 +3871,9 @@ remembered amount would belong, if anything reached it. Recorded, not fixed.
 
 ### 69. Every man knew how to make an axe and one in thirty-five owned one
 
-**`TrySwapping` (#191) since: a swap tried once is not tried again (#364).** A
-swap comes out the same every time, so most refusals were the same dead swap
-made a dozen times.
+**`TrySwapping` (#191) since: a swap is not tried again while the first try
+is remembered (#364).** That is about a season, because lessons fade and a
+head holds 48 of them, so failed swaps still run to about 690 a world-year.
 
 "They struggle to complete simple tasks." So the first thing built was an
 instrument for where a settlement's day actually goes, and the first thing it
@@ -27703,3 +27705,82 @@ The second of three entries resolving what the open sections still held.
 `a_spear_in_the_pack_is_a_weapon` and `a_belief_follows_how_often_it_works`.
 
 **Dice counts**: 6,624 (seed 4242, 120 turns) and 979,878 (seed 0, a year).
+
+### 364. Dead subsystems fed, and behaviour gaps closed
+
+The last of three entries resolving what the open sections still held.
+
+**Dead subsystems:**
+- **Hearing (#14).** Hearing was never fed. Somebody struck within the last
+  turn now cries out, and everybody alive in earshot hears it as a fight. The
+  percept pass remembers the place as dangerous, and
+  `Surroundings::heard_a_cry` adds to Safety as the dark does.
+- **Zoning and territory (#15).** Both managers were empty in every live run.
+  `World::add_building` now lays a zone of a building's kind round the first
+  of its kind (not for brush), and claims a plot round a house for whoever put
+  it up. Building goes through `find_optimal_location_with_territory`.
+  Territory ids are the agents' `Uuid`s, where they were a `u32` nothing
+  could supply.
+- **A turn that panics (#4).** Outside the tests, a person's turn that panics
+  is caught, logged, counted in `turns_lost_to_a_fault` and skipped. Under
+  test it still fails loudly.
+- **Two that needed no code.** `explored_tiles` (#169) has a reader now in
+  `verify_resource_claim`. The equipment wear model of #93 went in #93
+  itself.
+
+**Behaviour gaps:**
+- **Spent fields (#5).** `fields_within` no longer counts an exhausted field
+  towards `FIELDS_WANTED`.
+- **Leaving for food.** `migration_action` took the furthest remembered place
+  worth the walk (`max_by_key`). It takes the nearest.
+- **Swaps (#69).** `what_i_would_swap` skips a swap already tried, because a
+  swap comes out the same every time.
+- **Seed (#10).** A farmer about to break ground with no grain on them fetches
+  some from wild grain they know of within `A_WALK_FOR_SEED`.
+
+**Measured**, forty settlements, two years, against #363:
+
+| | #363 | #364 |
+|---|---|---|
+| births | 168 | 174 |
+| deaths | 3 | 4 |
+| alive at day 720 | 645 | 650 |
+| camp moves | 412 | 378 |
+| turns without salt | 1,824,602 | 1,541,209 |
+| latrines dug | 421 | 727 |
+| hunts that told | 397 | 379 |
+| young caught to keep | 304 | 214 |
+
+The probe's new ISSX counters, which #363 did not carry:
+
+| | |
+|---|---|
+| cries heard | 159, in 13 worlds |
+| fields sown with food / pods / grain | 6,609 / 411 / 28 |
+| seed errands (turns) | 908, in 17 worlds |
+| swaps failed / worked | 54,879 / 3 |
+| zones laid, plots claimed | 0, 0 |
+
+- **Population.** None of the population columns moved beyond noise.
+- **Grain is still not sown.** The errand fires in seventeen worlds, but grain
+  went into 28 fields of 7,048 (0.4%), about the share #246 measured (4 in
+  690). What it fetches is probably eaten before the next field is broken.
+  Keeping seed back from the pot is the next lever.
+- **Swaps are still tried over and over.** A try fades from a head in about a
+  season, and a head holds 48 lessons, so "not twice" lasts a season.
+  Per world-year that is about 690 failed swaps, against 830 to 1,400 in
+  the older measurements, which counted differently.
+- **Zoning and territory are wired and have not fired.** Nobody in forty
+  two-year settlements put up anything but brush.
+
+**Tests.**
+- New `dead_subsystems_tests`: `a_cry_carries_to_whoever_is_in_earshot`,
+  `an_old_blow_is_not_cried_over`, `a_cry_heard_is_frightening`,
+  `the_first_house_lays_out_ground_for_more`, `a_house_claims_its_plot`.
+- New `behaviour_gaps_tests`: `a_worn_out_field_is_not_counted`,
+  `a_hungry_man_leaves_for_the_nearest_food_he_knows`,
+  `a_swap_tried_is_not_tried_again`,
+  `a_farmer_fetches_grain_before_breaking_ground`,
+  `gathering_wild_grain_puts_seed_in_the_pack`.
+
+**Dice counts**: 6,624 (seed 4242, 120 turns) and 974,158 (seed 0, a year).
