@@ -75,7 +75,7 @@ impl Simulation {
             .map(|a| a.id)
             .collect();
         for agent_id in due {
-            self.the_next_decision(agent_id, now, agent_positions);
+            self.the_next_decision_kept_apart(agent_id, now, agent_positions);
         }
 
         // "The minute-to-minute decision making was meant to occur when a
@@ -112,6 +112,38 @@ impl Simulation {
     /// being added to it - so somebody walking to the stream who comes into
     /// sight of a wolf stops where they are, and takes what is left of the
     /// half hour a minute at a time.
+    /// One person's turn, kept apart from everybody else's.
+    ///
+    /// A fault in one person's turn used to end the whole run and lose
+    /// everything since the last save; a probability slip in conception did
+    /// that to one run in twenty-five while it stood (#4). Outside the tests a
+    /// turn that panics is caught, written to the log and counted, and that
+    /// person loses their half hour; everybody else goes on. Under test it is
+    /// left to fail loudly, because a test is where a fault should be seen.
+    fn the_next_decision_kept_apart(
+        &mut self,
+        agent_id: uuid::Uuid,
+        now: u32,
+        agent_positions: &[(uuid::Uuid, (i32, i32, i32))],
+    ) {
+        #[cfg(test)]
+        self.the_next_decision(agent_id, now, agent_positions);
+
+        #[cfg(not(test))]
+        {
+            let went = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                self.the_next_decision(agent_id, now, agent_positions)
+            }));
+            if went.is_err() {
+                self.turns_lost_to_a_fault += 1;
+                log::error!("a turn of {agent_id} at {now} failed and was skipped");
+                if let Some(agent) = self.population.agents.iter_mut().find(|a| a.id == agent_id) {
+                    agent.state.next_decision_at = now + crate::environment::seasons::MINUTES_PER_TURN;
+                }
+            }
+        }
+    }
+
     fn the_next_decision(
         &mut self,
         agent_id: uuid::Uuid,

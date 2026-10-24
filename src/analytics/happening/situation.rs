@@ -357,6 +357,10 @@ impl Simulation {
                     .iter()
                     .any(|building| building.position == here && building.is_a_roof()),
                 recently_hurt: agent.emotions.recent_attacker(current_turn).is_some(),
+                heard_a_cry: agent.senses.hearing.heard_sounds.iter().any(|sound| {
+                    sound.age == 0
+                        && sound.sound_type == crate::agents::senses::SoundType::Combat
+                }),
                 crop_near: crop_at(position),
                 somewhere_to_build: crate::world::Terrain::new(ground).can_be_tilled(),
                 neighbours_building: building_sites.iter().any(|spot| near(spot, 12)),

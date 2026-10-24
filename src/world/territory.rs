@@ -8,7 +8,8 @@ use serde::{Serialize, Deserialize};
 use std::collections::BTreeMap;
 
 pub type Position = (i32, i32, i32);
-pub type AgentId = u32;
+/// Whose a claim is: the same id an agent goes by everywhere else.
+pub type AgentId = uuid::Uuid;
 pub type TerritoryId = u32;
 
 /// Maximum radius for a single territory claim
@@ -305,18 +306,22 @@ impl TerritoryManager {
 mod tests {
     use super::*;
 
+    fn who(n: u128) -> AgentId {
+        uuid::Uuid::from_u128(n)
+    }
+
     #[test]
     fn test_territory_creation() {
-        let territory = Territory::new(0, 1, (10, 10, 0), 5);
+        let territory = Territory::new(0, who(1), (10, 10, 0), 5);
         assert_eq!(territory.id(), 0);
-        assert_eq!(territory.owner(), 1);
+        assert_eq!(territory.owner(), who(1));
         assert_eq!(territory.center(), (10, 10, 0));
         assert_eq!(territory.radius(), 5);
     }
 
     #[test]
     fn test_territory_contains() {
-        let territory = Territory::new(0, 1, (10, 10, 0), 5);
+        let territory = Territory::new(0, who(1), (10, 10, 0), 5);
 
         assert!(territory.contains((10, 10, 0)), "Center should be in territory");
         assert!(territory.contains((13, 10, 0)), "Point within radius should be in territory");
@@ -325,9 +330,9 @@ mod tests {
 
     #[test]
     fn test_territory_overlap() {
-        let territory1 = Territory::new(0, 1, (10, 10, 0), 5);
-        let territory2 = Territory::new(1, 2, (20, 10, 0), 5);
-        let territory3 = Territory::new(2, 3, (12, 10, 0), 5);
+        let territory1 = Territory::new(0, who(1), (10, 10, 0), 5);
+        let territory2 = Territory::new(1, who(2), (20, 10, 0), 5);
+        let territory3 = Territory::new(2, who(3), (12, 10, 0), 5);
 
         assert!(!territory1.overlaps(&territory2), "Separate territories should not overlap");
         assert!(territory1.overlaps(&territory3), "Close territories should overlap");
@@ -337,7 +342,7 @@ mod tests {
     fn test_manager_claim_territory() {
         let mut manager = TerritoryManager::new();
 
-        let result = manager.claim_territory(1, (10, 10, 0), 5);
+        let result = manager.claim_territory(who(1), (10, 10, 0), 5);
         assert!(matches!(result, TerritoryClaimResult::Success(_)));
     }
 
@@ -345,8 +350,8 @@ mod tests {
     fn test_manager_prevent_overlap() {
         let mut manager = TerritoryManager::new();
 
-        manager.claim_territory(1, (10, 10, 0), 5);
-        let result = manager.claim_territory(2, (12, 10, 0), 5);
+        manager.claim_territory(who(1), (10, 10, 0), 5);
+        let result = manager.claim_territory(who(2), (12, 10, 0), 5);
 
         assert!(matches!(result, TerritoryClaimResult::Conflict(_)));
     }
@@ -355,7 +360,7 @@ mod tests {
     fn test_manager_size_limit() {
         let mut manager = TerritoryManager::new();
 
-        let result = manager.claim_territory(1, (10, 10, 0), 1000);
+        let result = manager.claim_territory(who(1), (10, 10, 0), 1000);
         assert!(matches!(result, TerritoryClaimResult::TooLarge));
     }
 }

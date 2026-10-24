@@ -319,10 +319,11 @@ impl Simulation {
         let (_criteria, strategy) = determine_placement_approach(building_type);
         let planner = SpatialPlanner::new(&self.world);
 
-        let optimal_pos = planner.find_optimal_location_for_agent(
+        let optimal_pos = planner.find_optimal_location_with_territory(
             building_type,
-            *position,  // agent's current position
-            strategy
+            *position,
+            strategy,
+            self.population.agents[agent_index].id,
         );
 
         // Use optimal position if found, otherwise fall back to agent's position

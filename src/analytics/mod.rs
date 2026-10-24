@@ -202,6 +202,10 @@ pub struct Simulation {
     /// fires looks exactly like a run without it. See
     /// `Simulation::everybody_takes_a_turn`.
     pub minutes_spent_in_danger: u64,
+    /// Turns somebody lost because their turn failed and was caught rather
+    /// than allowed to end the run - see `the_next_decision_kept_apart`.
+    /// Nought in a sound run.
+    pub turns_lost_to_a_fault: u64,
     /// Ground a route search has already found to be shut off from where it
     /// was going. See `wanting::errands::ShutIn` (#293).
     pub(crate) shut_in: std::cell::RefCell<wanting::errands::ShutIn>,
@@ -426,6 +430,7 @@ impl Simulation {
             how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
+            turns_lost_to_a_fault: 0,
             shut_in: Default::default(),
             camp_move_proposed: Default::default(),
             route_scratch: Default::default(),
@@ -2003,6 +2008,7 @@ impl Simulation {
             how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
+            turns_lost_to_a_fault: 0,
             shut_in: Default::default(),
             camp_move_proposed: Default::default(),
             route_scratch: Default::default(),

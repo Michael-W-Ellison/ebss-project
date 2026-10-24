@@ -4742,7 +4742,15 @@ impl Agent {
                     let called =
                         making::what_that_swap_is_called(step.makes, left_out, put_in);
 
-                    if !self.lessons.will_try_this_again(&called) {
+                    // A swap comes out the same every time: the same thing
+                    // in the same place makes the same thing or nothing. So
+                    // once is enough to know, and one tried already is not
+                    // tried again. Left to `will_try_this_again`, which gives
+                    // anything a dozen goes before it listens, each dead swap
+                    // was made a dozen times over at the cost of its makings,
+                    // and swapping was refused six thousand times a year for
+                    // two successes (#69).
+                    if self.lessons.tried_this(&called) > 0 {
                         continue;
                     }
 

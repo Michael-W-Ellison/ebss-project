@@ -111,6 +111,8 @@ pub mod salt_in_the_body_tests;
 pub mod sanitation_and_stores_tests;
 pub mod hunting_for_meat_tests;
 pub mod loose_ends_tests;
+pub mod dead_subsystems_tests;
+pub mod behaviour_gaps_tests;
 pub mod larder_tests;
 pub mod sacrifice_tests;
 pub mod theft_tests;

@@ -233,10 +233,11 @@ impl Simulation {
                building_type, criteria, strategy);
         debug!("World has {} resource node types", self.world.resource_nodes.len());
 
-        let optimal_pos = planner.find_optimal_location_for_agent(
+        let optimal_pos = planner.find_optimal_location_with_territory(
             building_type,
             agent_pos,
-            strategy
+            strategy,
+            self.population.agents[agent_index].id,
         );
 
         debug!("Optimal position found: {:?}", optimal_pos);

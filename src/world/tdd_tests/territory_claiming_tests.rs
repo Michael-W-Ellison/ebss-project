@@ -19,7 +19,7 @@ fn test_territory_manager_creation() {
 fn test_agent_claims_territory() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent_id = 1;
+    let agent_id = uuid::Uuid::from_u128(1);
     let center = (50, 50, 0);
     let radius = 10;
 
@@ -36,7 +36,7 @@ fn test_agent_claims_territory() {
 fn test_territory_ownership_tracking() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent_id = 1;
+    let agent_id = uuid::Uuid::from_u128(1);
     let center = (50, 50, 0);
 
     world.territory_manager.claim_territory(agent_id, center, 10);
@@ -58,8 +58,8 @@ fn test_territory_ownership_tracking() {
 fn test_territory_claim_conflicts() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent1 = 1;
-    let agent2 = 2;
+    let agent1 = uuid::Uuid::from_u128(1);
+    let agent2 = uuid::Uuid::from_u128(2);
     let center = (50, 50, 0);
 
     // Agent 1 claims territory
@@ -78,7 +78,7 @@ fn test_territory_claim_conflicts() {
 fn test_territory_size_limits() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent_id = 1;
+    let agent_id = uuid::Uuid::from_u128(1);
     let center = (50, 50, 0);
 
     // Try to claim extremely large territory
@@ -97,7 +97,7 @@ fn test_territory_size_limits() {
 fn test_agent_maximum_territories() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent_id = 1;
+    let agent_id = uuid::Uuid::from_u128(1);
 
     // Claim multiple territories
     world.territory_manager.claim_territory(agent_id, (10, 10, 0), 5);
@@ -117,7 +117,7 @@ fn test_agent_maximum_territories() {
 fn test_territory_expansion() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent_id = 1;
+    let agent_id = uuid::Uuid::from_u128(1);
     let center = (50, 50, 0);
 
     let result = world.territory_manager.claim_territory(agent_id, center, 10);
@@ -140,7 +140,7 @@ fn test_territory_expansion() {
 fn test_building_placement_prefers_owned_territory() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent_id = 1;
+    let agent_id = uuid::Uuid::from_u128(1);
     let territory_center = (50, 50, 0);
 
     // Agent claims territory
@@ -174,7 +174,7 @@ fn test_building_placement_prefers_owned_territory() {
 fn test_territory_boundaries() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent_id = 1;
+    let agent_id = uuid::Uuid::from_u128(1);
     let center = (50, 50, 0);
     let radius = 10;
 
@@ -195,7 +195,7 @@ fn test_territory_boundaries() {
 fn test_territory_abandonment() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent_id = 1;
+    let agent_id = uuid::Uuid::from_u128(1);
     let center = (50, 50, 0);
 
     let result = world.territory_manager.claim_territory(agent_id, center, 10);
@@ -218,8 +218,8 @@ fn test_territory_abandonment() {
 fn test_territory_transfer() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent1 = 1;
-    let agent2 = 2;
+    let agent1 = uuid::Uuid::from_u128(1);
+    let agent2 = uuid::Uuid::from_u128(2);
     let center = (50, 50, 0);
 
     let result = world.territory_manager.claim_territory(agent1, center, 10);
@@ -242,8 +242,8 @@ fn test_territory_transfer() {
 fn test_multiple_non_overlapping_territories() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent1 = 1;
-    let agent2 = 2;
+    let agent1 = uuid::Uuid::from_u128(1);
+    let agent2 = uuid::Uuid::from_u128(2);
 
     // Two agents claim separate territories
     let result1 = world.territory_manager.claim_territory(agent1, (20, 20, 0), 8);
@@ -263,7 +263,7 @@ fn test_multiple_non_overlapping_territories() {
 fn test_territory_visualization_data() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent_id = 1;
+    let agent_id = uuid::Uuid::from_u128(1);
     world.territory_manager.claim_territory(agent_id, (50, 50, 0), 10);
 
     // Get visualization data (boundary points)
@@ -280,8 +280,8 @@ fn test_territory_visualization_data() {
 fn test_building_conflict_in_others_territory() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent1 = 1;
-    let agent2 = 2;
+    let agent1 = uuid::Uuid::from_u128(1);
+    let agent2 = uuid::Uuid::from_u128(2);
 
     // Agent 1 claims territory
     world.territory_manager.claim_territory(agent1, (50, 50, 0), 10);
@@ -300,7 +300,7 @@ fn test_building_conflict_in_others_territory() {
 fn test_territory_claim_scoring_bonus() {
     let mut world = World::new(WorldConfig::default());
 
-    let agent_id = 1;
+    let agent_id = uuid::Uuid::from_u128(1);
     world.territory_manager.claim_territory(agent_id, (50, 50, 0), 15);
 
     let planner = crate::world::spatial_planning::SpatialPlanner::new(&world);

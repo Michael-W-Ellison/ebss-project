@@ -272,7 +272,8 @@ impl DriveType {
                 // *is* that, weighed rather than counted, and having both was
                 // the same fact twice.
                 let about = yes(ctx.around.recently_hurt, 0.5)
-                    + yes(ctx.around.night, 0.35);
+                    + yes(ctx.around.night, 0.35)
+                    + yes(ctx.around.heard_a_cry, 0.35);
 
                 let cover = yes(ctx.around.under_shelter, 0.5) + yes(ctx.armed, 0.5);
 
@@ -616,6 +617,11 @@ pub struct Surroundings {
     pub they_could_get_clear: bool,
     /// Anybody else within talking distance
     pub company: bool,
+    /// Somebody within earshot cried out under attack this turn.
+    ///
+    /// What hearing is for (#14): a man struck beyond the trees is not seen,
+    /// and everybody in earshot knows something is about all the same.
+    pub heard_a_cry: bool,
 }
 
 /// Everything a drive can consult when working out how much the situation

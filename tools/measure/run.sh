@@ -12,7 +12,7 @@ one() { t=$1; s=$2; if [ "$t" = sm ]; then E="SMOOTH=1"; else E="SCATTERED=1"; f
   grep -q '^BD D0720' "$OUT/${t}_s$s.txt" 2>/dev/null && return
   cd "$REPO"
   env $E SEEDS=$s DAYS=720 "$BIN" --ignored --nocapture zz_discovery_watch 2>&1 \
-    | grep -a "^START\|^DISC\|^BD\|^DEATH\|^MOVECAMP\|^FISHX\|^KEEPX\|^SHELX\|^CAREX\|^GAPX\|^LEATHX\|^HERDX\|^POTX\|^SALTX\|^SANX\|^STORE" > "$OUT/${t}_s$s.txt"; }
+    | grep -a "^START\|^DISC\|^BD\|^DEATH\|^MOVECAMP\|^FISHX\|^KEEPX\|^SHELX\|^CAREX\|^GAPX\|^LEATHX\|^HERDX\|^POTX\|^SALTX\|^SANX\|^STORE\|^ISSX" > "$OUT/${t}_s$s.txt"; }
 export -f one
 (for s in $SM; do echo sm $s; done; for s in $SC; do echo sc $s; done) | xargs -P 3 -L 1 bash -c 'one $0 $1'
 echo ALLDONE > "$OUT/done"

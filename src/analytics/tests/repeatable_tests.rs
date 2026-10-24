@@ -590,7 +590,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Up 6.5% to 1,021,041 for the loose ends after #361: the same, and food
     // eaten where it grew counted, salt and all.
     // Down 4.0% to 979,878 for the third batch of ISSUES_FOUND: the same.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 979_878;
+    // Down 0.6% to 974,158 for the fourth and fifth: cries carry, the first
+    // building of a kind lays out ground and a house claims its plot, a
+    // worn-out field is not counted, a swap is tried once, and seed is
+    // fetched before ground is broken.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 974_158;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

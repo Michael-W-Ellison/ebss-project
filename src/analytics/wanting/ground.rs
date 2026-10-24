@@ -128,7 +128,14 @@ impl Simulation {
     /// something else.
     pub(in crate::analytics) const HOW_READILY_GRAIN_TAKES: f32 = 0.01;
 
-    /// Fields already broken within reach
+    /// Fields already broken within reach that are still worth sowing.
+    ///
+    /// A field worked down to exhaustion is not counted. It yields a quarter
+    /// of ordinary ground, and while it counted as one of the
+    /// `FIELDS_WANTED` a settlement that had worn its ground out saw its full
+    /// tally of fields and broke no new ground, and starved beside them (#5).
+    /// Left alone it rests back towards what it was, and counts again when
+    /// it has climbed a rung.
     pub(in crate::analytics) fn fields_within(&self, position: (i32, i32, i32), radius: u32) -> usize {
         use crate::world::Position;
 
@@ -145,13 +152,18 @@ impl Simulation {
                     continue;
                 }
 
-                if self
+                let cultivated = self
                     .world
                     .grid
                     .get_tile(&candidate)
                     .map(|tile| tile.terrain.is_cultivated())
-                    .unwrap_or(false)
-                {
+                    .unwrap_or(false);
+                let spent = self
+                    .world
+                    .grid
+                    .field_at(&candidate)
+                    .is_some_and(|field| field.grade == crate::world::soil::SoilGrade::Exhausted);
+                if cultivated && !spent {
                     fields += 1;
                 }
             }
@@ -462,6 +474,22 @@ impl Simulation {
             });
         }
 
+        // Seed before ground. A farmer sows what he is carrying, and grain
+        // comes first of anything he might carry - and he never carried it,
+        // because foraging takes the nearest food and grain stands in a few
+        // patches against many of berries: 3 fields of grain in 691 (#10). So
+        // somebody about to break ground with no grain on him, who knows of
+        // some standing within a walk, fetches a handful first.
+        if let Some(seed) = self.wild_grain_to_sow_from(agent, agent_position) {
+            if seed.x == agent_position.0 && seed.y == agent_position.1 {
+                return Some(Action::Gather { resource_type: "grain".to_string() });
+            }
+
+            return Some(Action::Move {
+                target: (seed.x, seed.y, agent_position.2),
+            });
+        }
+
         let ground = self.ground_to_break(agent_position)?;
 
         if ground.x == agent_position.0 && ground.y == agent_position.1 {
@@ -472,6 +500,42 @@ impl Simulation {
             target: (ground.x, ground.y, agent_position.2),
         })
     }
+
+    /// The nearest wild grain this one knows of with something on it, for
+    /// somebody about to sow with none in the pack.
+    ///
+    /// Only within `A_WALK_FOR_SEED`: a handful of seed is worth an errand,
+    /// not an expedition.
+    pub(in crate::analytics) fn wild_grain_to_sow_from(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<crate::world::Position> {
+        use crate::world::{Position, ResourceType};
+
+        if agent.how_many_i_have("grain") > 0 || agent.how_many_i_have("sproutedgrain") > 0 {
+            return None;
+        }
+
+        let here = Position::new(agent_position.0, agent_position.1);
+        agent
+            .exploration_knowledge
+            .known_resources
+            .iter()
+            .filter(|(_, kind)| **kind == ResourceType::Grain)
+            .map(|(at, _)| *at)
+            .filter(|at| here.distance_to(at) <= Self::A_WALK_FOR_SEED)
+            .filter(|at| {
+                self.world
+                    .nodes_on(*at)
+                    .any(|node| node.resource_type == ResourceType::Grain && node.amount > 0)
+            })
+            .min_by_key(|at| here.distance_to(at))
+    }
+
+    /// How far somebody will go for seed before breaking ground: twice the
+    /// walk to a field.
+    pub(in crate::analytics) const A_WALK_FOR_SEED: u32 = 2 * Self::FIELD_WALK_RADIUS;
 
     /// The nearest stand worth turning under: a ground-feeding crop on a field
     /// its farmer thinks poor, or anything at all on a field he thinks worn to

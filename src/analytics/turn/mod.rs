@@ -132,6 +132,10 @@ impl Simulation {
         // Update exposure damage for all agents
         self.update_agent_exposure();
 
+        // Anybody struck, by a beast just now or a man last turn, cries out,
+        // and whoever is in earshot hears it before reading the situation
+        self.let_the_cries_carry();
+
         // Tell each agent what the world around it is doing, so that next
         // turn its drives rise on the conditions the design document gives
         // them rather than on a clock

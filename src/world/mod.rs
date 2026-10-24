@@ -2678,8 +2678,53 @@ impl World {
     }
 
     pub fn add_building(&mut self, building: Building) {
+        let at = (building.position.x, building.position.y, 0);
+        let kind = building.building_type;
+
+        // The settlement's plan grows out of what it has built (#15). The
+        // first building of a kind lays out ground for more of its kind round
+        // it, and the planner, which has always read zones, draws the next
+        // one there and keeps other kinds out of it. Brush that falls down
+        // in a season lays out nothing: it is a night's cover, not a plan.
+        if !kind.falls_apart() {
+            let zoned_for_it = self
+                .zone_manager
+                .get_zones_at_position(at)
+                .iter()
+                .any(|zone| zone.is_appropriate_for_building(kind));
+            let its_kind = [
+                zoning::ZoneType::Residential,
+                zoning::ZoneType::Industrial,
+                zoning::ZoneType::Agricultural,
+                zoning::ZoneType::Commercial,
+            ]
+            .into_iter()
+            .find(|zone| zone.is_appropriate_for_building(kind));
+            if let (false, Some(zone)) = (zoned_for_it, its_kind) {
+                self.zone_manager.add_zone(zone, at, Self::GROUND_LAID_OUT_FOR_A_KIND);
+            }
+        }
+
+        // And a man who puts up a house claims the plot round it, so that
+        // nobody else builds in his yard. A claim on ground somebody else
+        // holds is refused, and the house stands without a plot.
+        if kind.is_residential() {
+            if let crate::world::Belongs::To(whose) = &building.belongs {
+                let _ = self
+                    .territory_manager
+                    .claim_territory(*whose, at, Self::A_HOUSE_PLOT);
+            }
+        }
+
         self.buildings.push(building);
     }
+
+    /// How far round the first building of a kind the ground is laid out for
+    /// more of it: a few houses, or a yard of workshops.
+    pub const GROUND_LAID_OUT_FOR_A_KIND: i32 = 6;
+
+    /// How far round his house a man's plot runs.
+    pub const A_HOUSE_PLOT: i32 = 2;
 
     pub fn get_resource_at(&self, pos: &Position) -> Option<&ResourceNode> {
         self.nodes_on(*pos).next()
