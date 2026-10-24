@@ -27405,3 +27405,57 @@ corrections.
 its tame lamb for the week its keeper sleeps.
 
 **Dice counts**: 8,095 (seed 4242, 120 turns) and 952,602 (seed 0, a year).
+
+### 360. Herds form: keepers catch young ones, kept beasts stay put, pairs breed
+
+The user asked: "Keep working on husbandry until herds actually form." After
+#359, two young were tamed in forty worlds and both were lost again.
+
+**Diagnosed**, ten worlds with young taken from kills, instrumented:
+- 29 kills of keepable kinds (reindeer 13, goat 8, sheep 4, elk 3, camel 1);
+  13 young taken in.
+- **Every young one lost was a bolt's distance from its keeper** (110 to
+  530 cells) when its tameness ran out. A kept beast still took flight from a
+  predator it had seen, and the keeper's pass found it apart.
+- And one beast is not a herd: nothing but the occasional kill ever added to
+  a keeper's beasts.
+
+**What changed.**
+1. **Somebody who has raised one catches young ones** (`a_young_one_to_catch`):
+   a young one of a kind that can be kept, in sight and nobody's, closed on
+   and caught, until they keep eight. Offered under the Sustenance drive and
+   among the evening chores.
+2. **A kept beast does not bolt** from what frightens it. It bunches by its
+   people, and a young one a walk off from a keeper who is awake counts as
+   beside them.
+3. **A tame beast by its sleeping keeper does not stray**; only one left
+   apart does, one night in 120 (was one in 30 for any beast out of a fold).
+4. **Two of a kind keep a keeper to that kind**, so what is kept is a pair
+   that breeds.
+
+**Measured**, forty settlements, two years, each step against the one before:
+
+| | caught | tamed | tame lost | born to kept | tame at the end | worlds keeping |
+|---|---|---|---|---|---|---|
+| #359 | 0 | 2 | 2 | 0 | 0 | 0 |
+| catching, no bolting | 63 | 36 | 44 | - | 12 | 5 |
+| no straying by the fire, one kind | 33 | 24 | 2 | 9 | 45 | 9 |
+
+- **Herds at the end of two years**:
+  - 12 beasts (9 sheep, 3 boar) and 11 (9 sheep) on two scattered worlds;
+  - 7 (6 reindeer) and 6 (4 goats) on two more;
+  - 5 on a smooth world;
+  - one beast on each of four others.
+- **Products**: milk drawn 48 times and wool plucked 11; 667 folds put up and
+  288 loads of dung carried out; one beast slaughtered; one camp moved to
+  fresh grazing. 9 young born to kept mothers (7 sheep, 2 goats): the herds are
+  starting to breed.
+- Births, deaths and survivors did not move (165, 4, 641).
+- **Still limited by the first beast.** Husbandry starts only where a young one
+  is left by a kill, in ten worlds of forty over two years; nothing teaches
+  it to anybody else.
+
+**Tests.** `keeping_beasts_tests` gains
+`a_keeper_catches_young_ones_for_a_herd`.
+
+**Dice counts**: 8,095 (seed 4242, 120 turns) and 961,553 (seed 0, a year).
