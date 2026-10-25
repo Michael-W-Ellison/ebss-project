@@ -12757,6 +12757,19 @@ impl Errand {
     }
 
     /// How far off it was set out from
+    /// How many turns this errand is worth before it is given up: so many
+    /// times the turns the whole walk takes, and a few at least.
+    ///
+    /// The whole walk, from where it set out. Reckoned from where it had got
+    /// to, the budget shrank with every step while the turns spent on it
+    /// grew, so a man was likeliest to give up just short of the place
+    /// (#179).
+    pub fn how_long_it_is_worth(&self) -> u32 {
+        crate::world::pace::whole_turns_to_walk(self.how_far_it_was(self.set_out_from))
+            .max(Self::AT_LEAST_THIS_MANY_TURNS)
+            * Self::HOW_LONG_A_WALK_IS_WORTH
+    }
+
     pub fn how_far_it_was(&self, from: (i32, i32, i32)) -> u32 {
         (self.going_to.0 - from.0).abs().max((self.going_to.1 - from.1).abs()) as u32
     }

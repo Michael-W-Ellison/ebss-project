@@ -770,10 +770,7 @@ impl Simulation {
                     }
                     None => true,
                 };
-            let a_long_walk = crate::world::pace::whole_turns_to_walk(errand.how_far_it_was(here))
-                .max(crate::agents::Errand::AT_LEAST_THIS_MANY_TURNS)
-                * crate::agents::Errand::HOW_LONG_A_WALK_IS_WORTH;
-            let given_up = errand.turns_on_it > a_long_walk;
+            let given_up = errand.turns_on_it > errand.how_long_it_is_worth();
 
             // A making errand is finished when the thing is in the pack, and
             // is carried on with by taking the next step towards it. This is
