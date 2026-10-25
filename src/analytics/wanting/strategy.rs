@@ -426,13 +426,17 @@ impl Strategy {
                     modelled, so there is nowhere to sink one")
             }
             Strategy::RelocateTowardWater => {
-                Reach::NotYet("moving camp never fires - see ISSUES_FOUND #237")
+                Reach::NotYet("camps move for water, but the camp decides it \
+                    (`go_and_live_where_it_is`, when thirst keeps going \
+                    short) and not one person's thirst this turn; a way here \
+                    would be a second spelling of that (#193)")
             }
             Strategy::TradeForWater => {
-                Reach::NotYet("there is nothing to carry water in, so nobody \
-                    ever has a surplus of it to trade - and `TradeForFood`, \
-                    which has every piece of machinery it needs, is measured \
-                    as never once firing anyway")
+                Reach::NotYet("water is carried now, in bowls, skins and pots, \
+                    but nobody carries more than a walk's worth, so nobody \
+                    has any to spare - and `TradeForFood`, which has every \
+                    piece of machinery it needs, is measured as never once \
+                    firing anyway")
             }
             Strategy::StealFood => {
                 Reach::NotYet("theft exists but sits at the tail of a chain \
