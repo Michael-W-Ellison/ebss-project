@@ -407,7 +407,14 @@ impl Simulation {
             );
         }
 
-        let could_run = agent.could_i_run_at_all(Self::WHAT_RUNNING_COSTS)
+        // Anything left in the legs will do. This asked for what a run costs,
+        // fourteen, which nobody ever lacked while every meal refilled
+        // stamina. Once a day's work could tire a man (#70), people at the end
+        // of a long day stood and were struck: blows went from one death in
+        // forty worlds to eight, and about nine tenths of the health they took
+        // came off people under fourteen (#366). Fear finds the legs a tired
+        // man did not know he had; the run still costs what it costs.
+        let could_run = agent.could_i_run_at_all(Self::NOTHING_LEFT)
             && self.is_there_anywhere_to_run(
                 &agent.exploration_knowledge,
                 agent_position,
