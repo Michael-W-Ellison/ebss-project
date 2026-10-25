@@ -4006,8 +4006,9 @@ being equipped is upstream of everything the model is for.
 
 ### 70. The effort economy is decorative: nobody in this model is ever tired
 
-**`is_starving` no longer reads tiredness as hunger (#363).** The economy
-itself is as this entry leaves it.
+**Fixed in #366:** a meal no longer refills stamina. Work takes it, sleep gives
+it back, and a tired man rests while he can still run. `is_starving` stopped
+reading tiredness as hunger in #363.
 
 A specification arrived describing an efficiency architecture - tools that make
 work faster, an agent weighing "eight hours with this axe, or two hours making
@@ -27853,3 +27854,80 @@ also checks that the swap stays known after the lesson has faded.
 
 **Dice counts**: 6,624 (seed 4242, 120 turns) and 1,005,752 (seed 0, a year).
 The seed changes neither: nobody in those two worlds breaks ground in time.
+
+### 366. Stamina is tiredness: a meal does not refill it
+
+The user asked: "Make eating stop refilling stamina (#70)."
+
+**What stamina was.** Three things refilled it:
+- a meal, which put its food energy straight in;
+- a pull a fiftieth of the way towards the food reserve, every turn;
+- milk, for nursing infants.
+
+One thing drained it: 0.05 a turn, whatever anybody did. The work itself was
+priced in the body's food (`Physiology::advance_at`) and never in stamina. So
+cutting the meal alone would have changed nothing. The reserve pull kept
+stamina near full, and the drain needed forty days to empty a pool.
+
+**What it is now:**
+- **Food leaves it alone.** The meal, the legacy flat refill, the reserve
+  pull and the milk are all gone.
+- **Work takes it** (`WHAT_A_UNIT_OF_WORK_TIRES`): a turn's effort and its
+  walking. An ordinary day takes a quarter of a pool, and a day of digging
+  takes all of it.
+- **Sleep gives it back** (`A_TURN_OF_SLEEP_RESTORES`, by sleep quality). It
+  was a tenth of a point a turn, which never had to be more.
+- **The Rest drive answers it.** The drive never sits below how spent the
+  stamina is (`STAMINA_TO_SPARE`), so it reaches its threshold at thirty.
+
+**Four measurements to get there**, forty settlements, two years each,
+against #365 (4 deaths, 646 alive):
+
+| | deaths | of exhaustion | of blows | alive |
+|---|---|---|---|---|
+| first cut | 19 | 8 | 9 | 627 |
+| infants mend, rest at thirty | 11 | 4 | 6 | 647 |
+| a spent body rests | 12 | 0 | 8 | 630 |
+| a tired man can run | 7 | 0 | 3 | 637 |
+
+- **First cut.**
+  - Six of the eight exhaustion deaths were infants. A child under six
+    takes no turn, so it never sleeps through `Action::Sleep`; the milk had
+    been topping it up, and illness drained it with nothing to give it back.
+    It now mends as a sleeper does every turn.
+  - The Rest drive reached its threshold at twenty, below the fourteen a
+    run cost.
+- **Second.** The four exhaustion deaths left were grown people in their
+  first winter. Probed, one spent fifteen days with Rest and Hunger both at
+  their ceiling, cold, never asleep. Hunger outranks rest by day, and the
+  night lets the cold and the hungry be. `what_a_spent_body_does` makes a
+  turn at empty a rest, unless the body is running for it or doing something
+  that costs nothing.
+- **Third.** Blows were left. About nine tenths of the health they took
+  came off people under fourteen stamina. One man faced the thing sixteen
+  times over two days with somewhere to run. Running asks only that the
+  body is not empty now.
+- **Last.** Every population column is within noise of #365: deaths 4 to
+  7 (t 0.77), alive 646 to 637 (t -0.64). Stamina dips through the day and
+  comes back overnight.
+
+**What it costs.** Tired people do less of the work that fails most often.
+Against #365:
+
+| | #365 | #366 |
+|---|---|---|
+| hunts that told | 429 | 238 |
+| young caught to keep | 235 | 154 |
+| fish caught | 30,805 | 23,540 |
+
+**Tests.** New `stamina_tests`:
+- `a_meal_does_not_give_back_stamina`
+- `work_takes_stamina`
+- `a_nights_sleep_gives_back_a_days_work`
+- `a_tired_man_wants_rest`
+- `a_spent_body_rests`
+
+Fixtures that made a man starving by tiring him had already been moved to
+starving his body in #363.
+
+**Dice counts**: 6,624 (seed 4242, 120 turns) and 961,599 (seed 0, a year).
