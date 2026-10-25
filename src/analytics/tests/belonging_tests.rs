@@ -196,6 +196,45 @@ fn a_hole_of_ones_own_is_walked_to_before_a_strangers() {
     );
 }
 
+/// But not across the country: a stranger's full pit at his elbow beats his
+/// own a long way off (#252, #369).
+#[test]
+fn a_strangers_hole_beats_ones_own_a_long_way_off() {
+    use crate::core::memory::SpatialMemoryType;
+
+    let mut simulation = two_people();
+    let mine = simulation.population.agents[0].id;
+    let his = simulation.population.agents[1].id;
+    let here = simulation.population.agents[0].state.position;
+
+    // His is three paces off; mine is further than his by more than a
+    // stranger's hole counts for.
+    let near = Position::new(here.0 + 3, here.1);
+    // On the diagonal, because the map is fifty across: paces are counted
+    // along both sides.
+    let beyond = (3 + Simulation::A_STRANGERS_HOLE_IS_FURTHER_BY as i32) / 2 + 2;
+    let far = Position::new(here.0 + beyond, here.1 + beyond);
+    assert!(simulation.world.grid.get_tile(&far).is_some(), "the fixture's map is too small");
+    for (at, whose) in [(near, his), (far, mine)] {
+        simulation.world.pits.push(Pit {
+            where_it_is: at,
+            holds: Vec::new(),
+            covered: true,
+            dug: 0,
+            belongs: Belongs::To(whose),
+        });
+        simulation.population.agents[0]
+            .memory
+            .remember_location(SpatialMemoryType::Storage, (at.x, at.y, 0));
+    }
+
+    let agent = &simulation.population.agents[0];
+    let (where_it_is, _) = simulation
+        .nearest_pit_i_remember(agent, agent.state.position)
+        .expect("he remembers two holes");
+    assert_eq!(where_it_is, near, "he walked across the country past a full pit");
+}
+
 /// The three ways of getting under somebody's roof are three ways now.
 ///
 /// Each of `UseOwnedShelter`, `UseHouseholdShelter` and `ShareCommunalShelter`

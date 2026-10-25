@@ -1106,11 +1106,17 @@ impl Simulation {
     /// try them.
     ///
     /// The same order `nearest_pit_i_remember` takes the head of, and for the
-    /// same reasons - whose hole it is before how far off it is. It exists
+    /// same reasons - how far off it is, with somebody else's hole counted
+    /// further. It exists
     /// because the nearest remembered pit is not always the one that answers:
     /// a memory is a record of what *was* there, and a hole somebody has
     /// since emptied stops the whole branch when it is the only one asked.
     /// See `something_out_of_the_store` and ISSUES_FOUND #228.
+    /// How much further a pit that is not one's own counts for, in paces:
+    /// three hundred metres. A man goes to his own, his kin's or the
+    /// settlement's first, and to somebody else's when it saves him that.
+    pub(in crate::analytics) const A_STRANGERS_HOLE_IS_FURTHER_BY: u32 = 30;
+
     pub(in crate::analytics) fn pits_i_remember(
         &self,
         agent: &crate::agents::Agent,
@@ -1149,8 +1155,19 @@ impl Simulation {
             })
             .collect::<Vec<_>>();
 
+        // Whose it is counts as a walk, not as a wall. Sorted on whose it
+        // was before how far, a man walked past a stranger's full pit at his
+        // elbow to his own across the country, however far (#252): a pit
+        // that is not his counts as `A_STRANGERS_HOLE_IS_FURTHER_BY` further
+        // off than it is, so his own wins unless the other is a long way
+        // nearer.
         let mut remembered = remembered;
-        remembered.sort_by_key(|(_, paces, somebody_elses)| (*somebody_elses, *paces));
+        remembered.sort_by_key(|(_, paces, somebody_elses)| {
+            (
+                *paces + if *somebody_elses { Self::A_STRANGERS_HOLE_IS_FURTHER_BY } else { 0 },
+                *somebody_elses,
+            )
+        });
         remembered
             .into_iter()
             .map(|(there, paces, _)| (there, paces))
