@@ -27993,8 +27993,8 @@ later entry. These were not. Each line names the entry that left it.
   was is not (#192, #259).
 
 **Behaviour:**
-- Territorial beasts never charge people who come too near; `could_it_take`
-  counts only hunters (#327).
+- ~~Territorial beasts never charge people who come too near; `could_it_take`
+  counts only hunters (#327).~~ They warn, then strike (#368).
 - `SeekShelter` cannot end the cold that chose it, because `recover` never
   touches body temperature (#233, #241).
 - The `EatCarriedFood` way checks for a snare at the feet, not the pack
@@ -28086,3 +28086,65 @@ the put-by gate of #264 opened (#219-#228, #250, #278, #279). #307 opened it
 and nothing re-ran them. Run now in release, both pass, in 2,406 seconds for
 the pair. They stay ignored only for their length, and STANDING_FAILURES says
 so.
+
+### 368. Territorial beasts keep their ground: they warn, then strike
+
+The user asked: "Fix the behaviour gaps first, starting with territorial
+beasts." #327 found that nothing but a hungry hunter ever struck anybody. It
+took away the fear of mammoths to match, and left beasts charging people who
+come too near as a behaviour still to be written.
+
+**What charges** (`would_it_charge`): a beast that can do harm and is either
+territorial, or aggressive without living by hunting. That is the bear, the
+mammoth and the boar. The boar hunts rabbits and squirrels, so a rule on "not
+a hunter" missed it; the rule is on the diet.
+
+**What a charge is**, in `predators_try_their_luck`:
+- Within two cells (`A_BEASTS_GROUND`, twenty metres) the beast comes at a
+  person and stops short. They are frightened and decide again at once. The
+  beast is recorded as what went for them, and the place goes on their map as
+  somewhere it went badly.
+- Somebody it has warned within this half hour and who is still there, it
+  strikes, a quarter of the time (`HOW_OFTEN_IT_CHARGES`). Hunger plays no
+  part, and it takes nothing.
+- The hungry hunter's path is unchanged.
+
+**Fear goes with it.** A `Menace` now carries its reach. People are wary of a
+beast that keeps its ground within five cells (`NEAR_ENOUGH_TO_BE_WARY_OF_IT`)
+and not across a field, so #327's mammoth fights do not come back. Sight
+(`what_would_frighten`), appraisal (`feel_about_what_stands_in_the_way`) and
+the turn's own checks all ask `could_it_harm` and use the reach.
+
+**The steps, on seed 0's year:**
+
+| | struck | alive at the year's end |
+|---|---|---|
+| before | 0 | 12 of 12 |
+| struck on sight | 62, all by mammoths | 4 of 12 |
+| warned first, remembered | about 15, after about 300 warnings | 11 of 12 |
+
+**Measured**, forty settlements over two years, against #367:
+
+| | #367 | #368 | t |
+|---|---|---|---|
+| births | 164 | 157 | -0.68 |
+| deaths | 7 | 15 | 1.07 |
+| of a blow | 3 | 10 | |
+| of hunger | 2 | 5 | 1.00 |
+| alive | 637 | 622 | -1.05 |
+
+Every column is within noise. The direction is the cost of the change: seven
+more people over eighty settlement-years died of blows, about one death per
+eleven settlement-years. A bear, a boar or a mammoth that people walk into
+the ground of does sometimes kill one of them, and that is what was asked
+for. If it proves too dear, the first lever is that a warned person decides
+again but is not made to leave the ground.
+
+**Tests** (`danger_cadence_tests`):
+- `a_beast_charges_whoever_comes_too_near`: bear, boar and mammoth inside the
+  ground are charged, none outside it; a cow never charges.
+- `a_beast_that_keeps_its_ground_is_feared_only_up_close`.
+- `a_beast_that_never_strikes_frightens_nobody` now uses an elk, because
+  the mammoth it used does strike.
+
+**Dice count**: 927,965 (seed 0, a year).
