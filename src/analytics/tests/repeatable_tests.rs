@@ -596,7 +596,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // fetched before ground is broken.
     // Up 3.2% to 1,005,752 for the swaps record: a swap tried is never tried
     // again, where the lesson of it faded in a season.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_005_752;
+    // Down 3.0% to 975,942 for #366: a meal does not give back stamina,
+    // work takes it, sleep gives it back, and a tired man goes to rest.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 975_942;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

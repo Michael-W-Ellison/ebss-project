@@ -1358,10 +1358,19 @@ impl AgentState {
         // year, once its food and its water had both been seen to. The cost
         // is not waived so much as moved - it is the carrier who is spending
         // the turn, and who is short a hand for it.
+        //
+        // And what the turn's work took, which is the half of tiredness the
+        // food never paid for. The work was priced in the body's food and
+        // nowhere else, so stamina ran down at a fiftieth a turn whatever
+        // anybody did and was filled again at every meal (#70). Walking counts
+        // as ordinary work for the minutes walked.
+        let work = effort
+            + walked / turn * Self::WHAT_AN_ORDINARY_TURN_OF_WORK_COSTS;
         let energy_loss = if self.years_old() < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL {
             0.0
         } else {
-            Self::WHAT_A_TURN_OF_LIVING_COSTS * energy_multiplier
+            (Self::WHAT_A_TURN_OF_LIVING_COSTS + work * Self::WHAT_A_UNIT_OF_WORK_TIRES)
+                * energy_multiplier
                 / self.physiology.capability().max(0.25)
         };
         self.energy = (self.energy - energy_loss).max(0.0);
@@ -1433,6 +1442,19 @@ impl AgentState {
     /// measured year came out as exhaustion once the food and the water had
     /// been seen to - the third clock, found the same way as the other two.
     pub const WHAT_A_TURN_OF_LIVING_COSTS: f32 = 0.05;
+
+    /// What an ordinary turn of work is priced at in the action matrix, the
+    /// same figure `physiology::what_the_work_costs` reckons from.
+    pub const WHAT_AN_ORDINARY_TURN_OF_WORK_COSTS: f32 = 5.0;
+
+    /// How much stamina a unit of work takes.
+    ///
+    /// A waking day is about thirty-two turns. At an ordinary turn's five,
+    /// this takes a quarter off a full pool, and a day of digging, priced at
+    /// four times as much, takes all of it. What settlements actually do runs
+    /// well above five a turn: at a quarter of a point they were empty by
+    /// noon. Sleep gives it back - see `Agent::A_TURN_OF_SLEEP_RESTORES`.
+    pub const WHAT_A_UNIT_OF_WORK_TIRES: f32 = 0.15;
     pub const THIRST: &'static str = "thirst";
     pub const A_BLOW: &'static str = "a blow";
     pub const A_FALL: &'static str = "a fall";
@@ -1576,8 +1598,13 @@ impl AgentState {
     }
 
     /// Eat food and restore energy
-    pub fn eat(&mut self, current_turn: u32, energy_restored: f32) {
-        self.energy = (self.energy + energy_restored).min(100.0);
+    /// A meal: the clocks reset and the body has something to pass.
+    ///
+    /// It does not touch stamina. A meal used to put its food energy straight
+    /// into `energy`, so a meal of five refilled the whole pool and nobody in
+    /// this model was ever tired (#70). Food goes into the body - see
+    /// `agents::physiology` - and stamina comes back with rest and sleep.
+    pub fn eat(&mut self, current_turn: u32) {
         self.took_a_meal(current_turn, crate::world::Soil::WASTE_PER_MEAL);
     }
 
@@ -1649,8 +1676,8 @@ impl AgentState {
             // from a full skin says every agent alive is a couple of thousand
             // turns from dying of tiredness, which had Rest winning four turns
             // in five and a settlement doing nothing but sleep and forage.
-            // Energy is topped up by every meal; it is not a clock that only
-            // runs down.
+            // Stamina comes back with sleep; it is not a clock that only runs
+            // down.
             DriveType::Rest => {
                 const NEARLY_SPENT: f32 = 25.0;
 
@@ -6481,6 +6508,14 @@ impl Agent {
                 // Rest drive increases with fatigue level
                 let rest_increase = self.fatigue.level * 0.02;
                 rest_drive.increase(rest_increase);
+
+                // And never below how spent the stamina is, which is the
+                // tiredness a day's work brings and a night's sleep takes
+                // away (#70). Nothing above half a pool; at a fifth of one the
+                // drive is at its threshold, so a tired man stops before he
+                // is empty rather than working on into exhaustion.
+                let spent = (1.0 - self.state.energy / Self::STAMINA_TO_SPARE).clamp(0.0, 1.0);
+                rest_drive.value = rest_drive.value.max(spent);
             }
 
             // Apply fatigue-induced happiness penalty
@@ -6534,17 +6569,9 @@ impl Agent {
             self.state.lose_health(penalty, AgentState::A_POOR_DIET);
         }
 
-        // Couple state energy to nutritional reserves.
-        //
-        // Reserves are the long-term store; `state.energy` is short-term felt
-        // energy that eating and sleeping move directly. Drifting gradually
-        // toward reserves keeps the two systems consistent without erasing the
-        // effect of a meal or a rest on the very next turn, which is what a
-        // straight average between the two used to do.
-        const ENERGY_SYNC_RATE: f32 = 0.02;
-        let reserve_delta = self.nutrition.energy_reserves - self.state.energy;
-        self.state.energy =
-            (self.state.energy + reserve_delta * ENERGY_SYNC_RATE).clamp(0.0, 100.0);
+        // Stamina is not pulled towards the food reserve any more. It drifted
+        // a fiftieth of the way there every turn, which was eating refilling
+        // stamina by a second road (#70).
     }
 
     /// What this one's food is being kept in, and what that is worth.
@@ -9337,10 +9364,6 @@ impl Agent {
                     thirst.increase(-to_thirst);
                 }
             }
-        } else {
-            // Legacy: no food data, use old flat rate
-            let energy_restored = (amount as f32) * 20.0;
-            self.state.energy = (self.state.energy + energy_restored).min(100.0);
         }
 
         // Reset starvation (use current age as approximation of turn)
@@ -9766,6 +9789,17 @@ impl Agent {
         }
     }
 
+    /// What a turn of sleep gives back, at the best sleep there is.
+    ///
+    /// A night is sixteen turns. At an ordinary night's quality that gives
+    /// back what an ordinary day takes out - see
+    /// `AgentState::WHAT_A_UNIT_OF_WORK_TIRES` - and a good night more.
+    pub const A_TURN_OF_SLEEP_RESTORES: f32 = 5.0;
+
+    /// Stamina above which nobody feels tired: half a pool.
+    pub const STAMINA_TO_SPARE: f32 = 50.0;
+
+
     /// Rest and restore energy, satisfy rest drive
     pub fn rest(&mut self, amount: f32) {
         self.state.energy = (self.state.energy + amount).min(100.0);
@@ -9786,8 +9820,11 @@ impl Agent {
         let recovery_modifier = self.sleep_recovery_modifier();
         let fatigue_decrease = self.fatigue.turn_sleeping_with_modifier(sleep_quality, current_turn, recovery_modifier);
 
-        // Also restore energy based on fatigue recovery
-        let energy_restored = fatigue_decrease * 30.0;
+        // And stamina, which is what sleep is for now that a meal does not
+        // give it back (#70). This was the fatigue recovered times thirty, a
+        // tenth of a point a turn, which never had to be more while every
+        // meal refilled the pool.
+        let energy_restored = Self::A_TURN_OF_SLEEP_RESTORES * sleep_quality * recovery_modifier;
         self.state.energy = (self.state.energy + energy_restored).min(100.0);
 
         // Satisfy rest drive

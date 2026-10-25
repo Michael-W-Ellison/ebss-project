@@ -707,7 +707,7 @@ impl Simulation {
 
     /// Process nursing for infants
     pub(in crate::analytics) fn process_nursing(&mut self) {
-        use crate::agents::childcare::{MAX_CAREGIVER_DISTANCE, NURSING_ENERGY_GAIN};
+        use crate::agents::childcare::MAX_CAREGIVER_DISTANCE;
         use crate::agents::LifeStage;
 
         let current_turn = self.current_turn;
@@ -762,9 +762,6 @@ impl Simulation {
                 if caregiver_nearby || secondary_nearby {
                     // Being nursed
                     nursing.nurse();
-
-                    // Gain energy from nursing
-                    agent.state.energy = (agent.state.energy + NURSING_ENERGY_GAIN).min(100.0);
 
                     // And milk, which is the point of the exercise.
                     //
