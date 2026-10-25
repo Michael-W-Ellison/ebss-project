@@ -91,3 +91,29 @@ fn a_tired_man_wants_rest() {
     let rest = fresh.drives.get(DriveType::Rest).map(|drive| drive.value).unwrap_or(0.0);
     assert!(rest < DriveType::Rest.default_threshold(), "a rested man does not: {rest}");
 }
+
+/// A body with nothing left rests, whatever it wanted to do, unless it is
+/// running for its life or doing something that costs it nothing.
+#[test]
+fn a_spent_body_rests() {
+    use crate::analytics::Simulation;
+    use crate::environment::Action;
+    use crate::world::{World, WorldConfig};
+
+    let mut population = crate::agents::Population::new();
+    population.spawn_agent(AgentConfig::default());
+    let mut simulation = Simulation::new(World::new(WorldConfig::default()), population);
+    simulation.population.agents[0].state.energy = 0.0;
+
+    assert_eq!(simulation.what_a_spent_body_does(0, Action::Excavate, false), Action::Wait);
+    assert_eq!(
+        simulation.what_a_spent_body_does(0, Action::Excavate, true),
+        Action::Excavate,
+        "running for it is let through"
+    );
+    let supper = Action::Eat { food_type: "generic".to_string() };
+    assert_eq!(simulation.what_a_spent_body_does(0, supper.clone(), false), supper);
+
+    simulation.population.agents[0].state.energy = 50.0;
+    assert_eq!(simulation.what_a_spent_body_does(0, Action::Excavate, false), Action::Excavate);
+}

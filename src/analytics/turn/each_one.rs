@@ -896,6 +896,9 @@ impl Simulation {
         // And at night, sleep (#299).
         let action = self.what_the_night_asks(agent_index, action, running_away);
 
+        // And a body with nothing left in it rests, night or day (#366).
+        let action = self.what_a_spent_body_does(agent_index, action, running_away);
+
         // Drop travel plans toward places the agent cannot reach
         let action = self.retarget_unreachable_move(agent_index, action);
 
