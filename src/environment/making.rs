@@ -1225,6 +1225,16 @@ pub const EVERY_SWAP: &[Swap] = &[
     BLADE_FOR_FLAKE_IN_A_SPEAR,
 ];
 
+/// Whether any step anybody could know puts this into what it makes.
+///
+/// What a swap may put in: the things a maker knows as parts. A step's own
+/// tool in hand is not a part; what it binds, hafts and twists is.
+pub fn is_this_a_part_of_anything(what: &str) -> bool {
+    EVERY_STEP
+        .iter()
+        .any(|step| step.needs.iter().any(|(part, _)| *part == what))
+}
+
 /// What comes of this particular substitution, if anything does.
 pub fn what_comes_of_swapping(
     instead_of_making: &str,

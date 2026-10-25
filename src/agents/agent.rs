@@ -4829,9 +4829,12 @@ impl Agent {
 
                     let put_in = stack.item_id.as_str();
 
-                    // Not a thing the step already wants, and not the part
-                    // that is missing
-                    if step.needs.iter().any(|(what, _)| *what == put_in) {
+                    // Not a thing the step already wants, not the part
+                    // that is missing, and not the thing it makes: cord
+                    // twisted out of cord was being offered
+                    if step.needs.iter().any(|(what, _)| *what == put_in)
+                        || step.makes == put_in
+                    {
                         continue;
                     }
 
@@ -4845,6 +4848,17 @@ impl Agent {
                     // and the thing he carries everything in were off that
                     // list. See `is_this_part_of_the_kit`.
                     if Self::is_this_part_of_the_kit(put_in) {
+                        continue;
+                    }
+
+                    // And a part of something: "substitute known
+                    // sub-components". A man short of a flake tries the
+                    // other things that go into tools - a thong, a lump of
+                    // flint, a blade - and not his dinner. Every food and
+                    // every vessel was offered once a person, which was
+                    // most of the eighteen thousand swaps a run that came
+                    // to nothing (#206).
+                    if !making::is_this_a_part_of_anything(put_in) {
                         continue;
                     }
 

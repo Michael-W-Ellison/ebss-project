@@ -1314,6 +1314,11 @@ impl Simulation {
         // cost of trying things: a man who puts a lump of iron where
         // the flake goes has spent a stick and a length of cord and
         // has a lump of iron tied to a stick.
+        //
+        // And he unties the lump. What went in is used up only when the
+        // swap worked; a failed one spent the makings and gave the
+        // substitute back, where it was destroyed every time (#206).
+        let worked = outcome.is_some();
         {
             let agent = &mut self.population.agents[agent_index];
             for (what, how_many) in step.needs {
@@ -1322,10 +1327,10 @@ impl Simulation {
                 }
                 agent.inventory.remove_item(what, *how_many);
             }
-            agent.inventory.remove_item(put_in, 1);
+            if worked {
+                agent.inventory.remove_item(put_in, 1);
+            }
         }
-
-        let worked = outcome.is_some();
 
         if let Some(swap) = outcome {
             let made = self.population.agents[agent_index]

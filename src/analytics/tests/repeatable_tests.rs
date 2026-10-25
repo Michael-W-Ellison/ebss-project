@@ -609,7 +609,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // from the pack when the meal would be kept.
     // Down 3.8% to 878,290 for #369: a stranger's pit counts as three
     // hundred metres further, not as last.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 878_290;
+    // Up 13.8% to 999,301 for #369: a failed swap gives back what went in,
+    // and only a part of something is put in where a part goes.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 999_301;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -182,6 +182,39 @@ fn a_substitution_that_fails_costs_the_materials_anyway() {
         0,
         "and there is no spear"
     );
+    assert_eq!(
+        simulation.population.agents[0].how_many_i_have("stone"),
+        4,
+        "but he unties the rock: what went in is spent only when it worked (#206)"
+    );
+}
+
+/// What goes in where a part goes is a part of something - never food, never
+/// a pot (#206).
+#[test]
+fn only_a_part_of_something_is_put_in_where_a_part_goes() {
+    let mut simulation = a_person();
+    empty_the_pack(&mut simulation);
+
+    // Twisting cord wants only flax, so a pack with anything in it is
+    // one part short of cord
+    give(&mut simulation, "fish", 3);
+    give(&mut simulation, "roots", 3);
+    give(&mut simulation, "bowl", 1);
+
+    assert!(
+        simulation.population.agents[0].what_i_would_swap().is_none(),
+        "a fish where the flake goes is not an experiment: {:?}",
+        simulation.population.agents[0].what_i_would_swap()
+    );
+
+    give(&mut simulation, "wood", 2);
+    give(&mut simulation, "lashing", 2);
+    give(&mut simulation, "metalblade", 1);
+    let (_, _, put_in) = simulation.population.agents[0]
+        .what_i_would_swap()
+        .expect("a blade is a part, and it is offered");
+    assert!(making::is_this_a_part_of_anything(&put_in), "{put_in}");
 }
 
 /// Nothing happens without the rest of the makings.
