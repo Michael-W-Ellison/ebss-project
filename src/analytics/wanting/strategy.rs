@@ -780,7 +780,7 @@ impl crate::analytics::Simulation {
         // 1. What is already in his hand.
         if let Some(at) = open
             .iter()
-            .position(|(_, doing, _)| Self::is_it_already_in_his_hand(doing))
+            .position(|(_, doing, _)| Self::is_it_already_in_his_hand(doing, agent))
         {
             return take(&mut open, at);
         }
@@ -868,6 +868,17 @@ impl crate::analytics::Simulation {
         // than the way - the ways differ in what they cost, not in what water
         // does once it is drunk.
         let mut worth = Utility::a_sure_thing(agent.how_hard_it_presses(need).min(1.0));
+
+        // Except a bite off the ground, which is a mouthful of whatever grows
+        // in reach: an armful of leaf is two thirds of a supper, and roots
+        // out of season a handful. Every other way fills a sitting, so this
+        // is the one that is not a mouthful like any other (#301).
+        if way == Strategy::GatherWildFood
+            && matches!(doing, Action::Eat { .. })
+            && !Self::is_it_already_in_his_hand(doing, agent)
+        {
+            worth.relief *= self.what_a_bite_off_the_ground_comes_to(agent, agent.state.position);
+        }
 
         // The walk. This is the term #193 is about: an errand costs the walk as
         // well as the work, and until it was priced a trip across the map

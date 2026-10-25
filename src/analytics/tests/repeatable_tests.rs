@@ -611,7 +611,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // hundred metres further, not as last.
     // Up 13.8% to 999,301 for #369: a failed swap gives back what went in,
     // and only a part of something is put in where a part goes.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 999_301;
+    // Down 7.0% to 929,785 for #369: a bite off the ground is ranked with
+    // the other ways at what it would put in, not taken first as in hand.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 929_785;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

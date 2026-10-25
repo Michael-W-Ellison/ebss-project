@@ -834,8 +834,21 @@ impl Simulation {
     /// no experiment to run on them, and passing over one to go and try
     /// something else is not curiosity, it is starving with your dinner in
     /// your hand.
-    fn is_it_already_in_his_hand(doing: &Action) -> bool {
-        matches!(doing, Action::Eat { .. } | Action::CheckSnares | Action::CheckFishTraps)
+    ///
+    /// A meal is in his hand when it is in his pack. A bite off the ground
+    /// is `Eat` too, and was taken first on that word, before a two-turn
+    /// walk to a pit and whatever the bite was worth: the dying of seed 1's
+    /// ninth spring ate leaf within reach while their larder share read six
+    /// thousand units (#301). It is ranked with the other ways now, at what
+    /// it would put in.
+    fn is_it_already_in_his_hand(doing: &Action, agent: &crate::agents::Agent) -> bool {
+        match doing {
+            Action::Eat { .. } => {
+                agent.find_best_food_to_eat().is_some() || agent.could_pull_apart_by_hand()
+            }
+            Action::CheckSnares | Action::CheckFishTraps => true,
+            _ => false,
+        }
     }
 
     /// How long a need goes unanswered before an agent stops taking its own
