@@ -292,6 +292,10 @@ self-correcting. The cost of all this is issue #3.
 
 ### 3. The nutrient loop does not keep up with a settlement that works
 
+**Fixed since, by replacing the loop:** the soil ladder of #246 replaced the
+nutrient loop, and `the_farmed_ground_holds_up_longer` went with it, along with
+the other tests of the loop. A field now rests back towards what it was.
+
 `the_farmed_ground_holds_up_longer` asks that farmed ground keep at least half
 its fertility over ten thousand ticks of a settlement working it. It passed
 three times in three before the work of issue #2 and passes about three times
@@ -555,6 +559,11 @@ not break new ground while exhausted ones sit inside its radius, and nobody has
 still ever died of hunger.
 
 ### 6. Winter is not cold: the tile temperature is frozen at first touch
+
+**Fixed since, in #129:** the biome is cached by the kind of ground and the
+calendar, and worked out again when the hour or the day moves on, and its
+season is a `Season` rather than a fraction that always cast to spring.
+`the_ground_gets_colder_as_the_year_turns` holds it.
 
 `ClimateManager::get_biome` builds a `Biome` for a position the first time
 anybody asks about it, stamps the current season and hour into it, and caches
