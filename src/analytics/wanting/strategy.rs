@@ -994,7 +994,23 @@ impl crate::analytics::Simulation {
             }
 
             // ---- hunger -----------------------------------------------
-            Strategy::EatCarriedFood => self.a_catch_at_my_feet(agent, agent_position),
+            // What it says, when the meal would be kept. Wired to the pack
+            // outright it cost 7.8% of a settlement's life and most of its
+            // births (#235, #241): eaten at a full reserve a meal is thrown
+            // away, and what is eaten in early summer is not in a pit in
+            // winter. A body that can bank it eats from the pack; one that
+            // cannot leaves the pack as the store it is, and this way stays
+            // the snare check it was.
+            Strategy::EatCarriedFood => {
+                if agent.state.physiology.would_a_sitting_be_banked()
+                    && agent.find_best_food_to_eat().is_some()
+                    && agent.state.physiology.room_for_another_mouthful()
+                {
+                    Some(Action::Eat { food_type: "generic".to_string() })
+                } else {
+                    self.a_catch_at_my_feet(agent, agent_position)
+                }
+            }
             Strategy::EatStoredFood => self.something_out_of_the_store(agent, agent_position),
             // Whether he is desperate is a fact about the man, so it is asked
             // here rather than passed in from four levels up.

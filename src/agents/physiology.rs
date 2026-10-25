@@ -839,6 +839,22 @@ impl Physiology {
     ///
     /// Mending is work and work is paid for out of this - see
     /// `Agent::regenerate_health`.
+    /// Whether a sitting eaten now would be kept rather than thrown away.
+    ///
+    /// What is already in the stomach and the gut is on its way to the
+    /// reserve; a sitting on top of it is banked only if all of it fits
+    /// under what the reserve holds. A reserve at capacity discards what
+    /// arrives (`spilled_at_the_brim`), so a meal eaten then is a meal lost.
+    pub fn would_a_sitting_be_banked(&self) -> bool {
+        let on_its_way: f32 = self
+            .stomach
+            .iter()
+            .map(|meal| meal.remaining * meal.richness)
+            .chain(self.gut.iter().map(|lot| lot.units * lot.richness))
+            .sum();
+        self.reserve + on_its_way + WHAT_A_SITTING_AIMS_AT <= self.reserve_capacity
+    }
+
     pub fn what_this_body_has_spare(&self) -> f32 {
         if self.reserve_capacity <= 0.0 {
             return 0.0;

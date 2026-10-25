@@ -605,7 +605,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // whoever walks into its ground, and strikes whoever stays.
     // Up 6.1% to 984,436 for #369: a huddle under cover warms a cold body,
     // so the turns spent sheltering end the cold that chose them.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 984_436;
+    // Down 7.2% to 913,295 for #369: "eat the food you are carrying" eats
+    // from the pack when the meal would be kept.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 913_295;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

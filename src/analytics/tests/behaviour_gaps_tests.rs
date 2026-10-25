@@ -219,3 +219,34 @@ fn a_farmer_keeps_seed_back_and_sows_it() {
     assert_eq!(agent.how_many_i_have(Agent::SEED), 0);
     assert_eq!(agent.how_many_i_have("grain"), Agent::A_HANDFUL_OF_SEED - 1);
 }
+
+/// "Eat the food you are carrying" eats from the pack when the meal would be
+/// kept, and leaves the pack alone when the reserve is full and the meal
+/// would be thrown away (#235, #369).
+#[test]
+fn eating_what_you_carry_waits_for_room_to_keep_it() {
+    use crate::analytics::wanting::strategy::Strategy;
+
+    let mut simulation = one_person();
+    let agent = &mut simulation.population.agents[0];
+    agent.inventory.add_item(InventoryItem::new("food".to_string(), 4));
+
+    // Full to the brim: a meal now is a meal lost
+    agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
+    assert!(!agent.state.physiology.would_a_sitting_be_banked());
+    let agent = simulation.population.agents[0].clone();
+    assert_ne!(
+        simulation.can_this_way_be_taken(Strategy::EatCarriedFood, &agent, (25, 25, 0)),
+        Some(Action::Eat { food_type: "generic".to_string() })
+    );
+
+    // A week into the reserve: it is kept
+    let agent = &mut simulation.population.agents[0];
+    agent.state.physiology.reserve = agent.state.physiology.reserve_capacity * 0.6;
+    assert!(agent.state.physiology.would_a_sitting_be_banked());
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(
+        simulation.can_this_way_be_taken(Strategy::EatCarriedFood, &agent, (25, 25, 0)),
+        Some(Action::Eat { food_type: "generic".to_string() })
+    );
+}
