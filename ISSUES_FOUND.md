@@ -27940,3 +27940,141 @@ Fixtures that made a man starving by tiring him had already been moved to
 starving his body in #363.
 
 **Dice counts**: 6,624 (seed 4242, 120 turns) and 961,599 (seed 0, a year).
+
+### 367. What the log left open: a sweep of #154 to #366
+
+The user asked for the log's loose ends to be swept. Many entries end by
+naming what they did not do: "filed", "left open", "the next lever", "wants
+its own arm". Every such item in #154-#366 was checked against everything
+written after it and against the code as it stands. Most were settled by a
+later entry. These were not. Each line names the entry that left it.
+
+**Dead code and state nothing reads:**
+- `Population::process_gossip` is called only by tests (#337).
+- `apply_starvation_damage` and `update_starvation` are called only by
+  tests (#208, #209).
+- `what_last_took_health` is written and read only by tests (#209).
+- `Relationship::verify_information`, `incorrect_information` and
+  `SharedKnowledge::cleanup_stale` have no live callers. The
+  `SimulationController` counter is read by nothing (#218).
+- The `DRINKING_THE_SEA` lesson is written and never consulted (#181).
+- `Rhythm::still_finding_it` has no caller, and only trapping keeps a
+  rhythm (#185).
+- The category tier of memory (`what_sort_i_could_say_it_was`) has no
+  caller. Nothing in the decision layer acts on a
+  `SpatialMemoryType::Resource` memory (#196, #197).
+- The place readers (`somewhere_that_answered`) still return nothing
+  (#186, #259).
+- The catalogue's `drive` field is read only by its own tests, so the luxury
+  drive is tagged and drives nothing (#345).
+- The `Event` arm of `process_drive_source_loss_with_cause` has no caller
+  (#210).
+- Placement criteria are worked out twice and the first is only logged
+  (#220).
+- Goal-planner plans are laid down with a hard-coded (50, 50, 0) and never
+  executed (#187).
+- `stage.rs` is read only by tests now that the catalogue gives born
+  knowledge (#199).
+- `TradeForWater` is declared with no dispatch, and the `FILL` verb's doc is
+  stale since #351 (#204).
+- A dozen unused stat helpers remain on `Equipment` (#93).
+
+**Records and bookkeeping:**
+- `DeathCause` cannot name the weather, illness, a wound or a mishap.
+  `Exposure` exists and is never mapped (#209). "A blow" does not tell a
+  beast's from a person's (#212). An empty ledger still falls back to
+  "unknown cause" (#211).
+- About a dozen `add_item` callers ignore the refusal, among them a fishing
+  catch and several gather paths (#180).
+- A save does not carry shared knowledge, the technology registry, the dead
+  and what they left, and more, and a resumed run does not continue the dice
+  stream (#305).
+- How a meal was come by is recorded (`by_what_way`); how water or shelter
+  was is not (#192, #259).
+
+**Behaviour:**
+- Territorial beasts never charge people who come too near; `could_it_take`
+  counts only hunters (#327).
+- `SeekShelter` cannot end the cold that chose it, because `recover` never
+  touches body temperature (#233, #241).
+- The `EatCarriedFood` way checks for a snare at the feet, not the pack
+  (#235).
+- A full reserve spills 17-22% of what is eaten, and burying gets no claim
+  on the turn when the body is full and the pack is not (#235, #237, #240).
+- `pits_i_remember` walks past a nearer stranger's pit to one's own or
+  kin's, however far (#252).
+- Famine: a bite off the ground is taken before the walk to a pit, and every
+  way of answering hunger is ranked as the same relief (#301). The larder
+  branch made 10,589 walks for 2,276 handfuls (#303).
+- The patience of a long walk is reckoned from what is left of it, so it
+  shrinks near the end (#179).
+- Some walks still go nowhere, and "already there" costs nothing (#234).
+- The Construction drive almost never wins a turn (#175). No tent is ever
+  built (#205, #349, #353). No house is ever built, so zoning and plots
+  have never fired (#364).
+- Husbandry starts only where a kill leaves a young one (#360, #361).
+- `wants_to_hunt` answers only a want for hides, and Preparedness never
+  leads to hunting or fishing (#266; the hungry hunt is priced since #330).
+- Nobody carries meat home for a share (#331). Meat by the beast's mass was
+  tried and not kept (#257, #330).
+- A failed swap destroys the substitute, and swaps the world cannot supply
+  are still offered once (#206).
+- `what_i_would_work_on` has no "is the output worth having" filter (#199).
+- Telling where things are was reverted, and lie detection still counts any
+  wrong claim as a lie (#196).
+- Lessons: an undertaking's record never fades, a way is judged by its
+  success rate and not its yield, `worth_trying` still drops a way at 0.2,
+  and `A_FAIR_GO` is twelve (#184, #266-#269). The flat step itself became
+  proportional in #363.
+- Rotation cannot be learned, because lessons are keyed on the crop and not
+  the ground (#165), and a field is read only from a full stand (#246).
+- Mining covers both quarrying and digging a hole (#204). Felling is not
+  gated on a tool (#200). Making never breaks or wastes in the making
+  (#200, #201). A better tool changes the yield, not the time (#345).
+- Knowing how is keyed on the product, not the recipe (#195, #199). There is
+  no flint in the ground, so the map arm cannot fire (#195).
+- Several ways are still `Reach::NotYet`, and `RelocateTowardWater` says
+  "moving camp never fires" though camps move (#193).
+- Sling, travois and leather bag are never found out in two years (#345).
+- Mating is tried about 1.4 times a day per partnered adult (#338). Best
+  suited pairs stand no nearer than others (#339). Traits only a mutation
+  can give never appear in an adult (#337).
+- An ill person sleeps through their own hunger (#166, not settled); the ill
+  walk for herbs rather than stooping for what they pass (#166).
+
+**Ecology and the world:**
+- Every hunter gets the same head count of small life whatever its size
+  (#159). Small-life fish and `fish_run` are two fisheries (#159).
+- The region is not passed to flora and fauna; they use the temperate
+  default (#162).
+- Kestrels and small raptors starve, and the small-life larder was never
+  looked at with them (#282, #285). Herds grow about a fifth a year (#285,
+  #306).
+- Mast years are an independent hash per year, with no streaks (#164).
+- No coarse model for herds far from people (#248).
+- The 51 plant growth and regrowth figures were never authored in real
+  time (#217). `WHAT_A_GROUND_GIVES_A_LINE` and `HOW_FAST_THE_GRAZERS_COME_BACK`
+  still assume a twelve-turn day (#183). The plant's `id` and field widths
+  were never cut (#244).
+- Shrubs decline (#135), there are no small predators (#137), and the wild
+  does not settle in every world (#8, #141).
+
+**Content never built:**
+- Six specified herbs, a split of grain, orchards (#163, #166).
+- Cold-hammered native copper, and catalogue links for writing, governance,
+  measurement, masonry, boats and water systems (#343). Boats, a carried
+  ember, animals following camp and leadership at stage 0 (#199).
+- The memory specification's salience, seasonal places, what was told
+  against what was seen, and a refresh that is not flat (#196). Exploring
+  unfamiliar orders of acts (#186).
+
+**Never traced:**
+- Why an edge in the kit made food be carried rather than stored, and births
+  came apart from the store (#332, #333).
+- Why taking want's extra minutes cost no thirst deaths in #326 when it cost
+  four in #325; why brush shelter doubled burrow starts (#350).
+- A "blow" with no attacker on smooth seed 8 (#325); hunger deaths bunching
+  late in the second winter (#346, #347, #350); seed 2's thin years (#313).
+- Whether the 600-cell camp search can strand a camp from its pits (#275).
+  The 468 wasted giving turns on the barter path (#230). How tight packs
+  are now (#175). The winter-test flake (#191).
