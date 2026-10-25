@@ -77,16 +77,16 @@ fn a_nights_sleep_gives_back_a_days_work() {
 #[test]
 fn a_tired_man_wants_rest() {
     let mut agent = a_grown_man();
-    agent.state.energy = 20.0;
+    agent.state.energy = 30.0;
     agent.process_survival_turn(1);
     let rest = agent.drives.get(DriveType::Rest).map(|drive| drive.value).unwrap_or(0.0);
     assert!(
         rest >= DriveType::Rest.default_threshold() - 0.01,
-        "at a fifth of a pool the Rest drive should be at its threshold: {rest}"
+        "at thirty the Rest drive should be at its threshold: {rest}"
     );
 
     let mut fresh = a_grown_man();
-    fresh.state.energy = 90.0;
+    fresh.state.energy = 95.0;
     fresh.process_survival_turn(1);
     let rest = fresh.drives.get(DriveType::Rest).map(|drive| drive.value).unwrap_or(0.0);
     assert!(rest < DriveType::Rest.default_threshold(), "a rested man does not: {rest}");

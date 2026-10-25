@@ -598,7 +598,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // again, where the lesson of it faded in a season.
     // Down 3.0% to 975,942 for #366: a meal does not give back stamina,
     // work takes it, sleep gives it back, and a tired man goes to rest.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 975_942;
+    // Down 0.9% to 967,028 for #366's correction: rest at thirty, clear of
+    // what it takes to run, and a small child mends its stamina as it sleeps.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 967_028;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

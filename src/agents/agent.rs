@@ -1375,6 +1375,16 @@ impl AgentState {
         };
         self.energy = (self.energy - energy_loss).max(0.0);
 
+        // And a small child, carried and asleep most of the day, gets back
+        // what an illness takes out of it as a sleeper does. It takes no turn
+        // and so never sleeps through `Action::Sleep`; it was topped up by the
+        // milk instead, and when a meal stopped refilling stamina (#70) six
+        // infants in forty worlds died of exhaustion in their first year,
+        // drained by illness with nothing to give it back.
+        if self.years_old() < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL {
+            self.energy = (self.energy + Agent::A_TURN_OF_SLEEP_RESTORES).min(100.0);
+        }
+
         // When energy is depleted, health starts decreasing too
         if self.energy <= 0.0 {
             self.lose_health(0.05, Self::EXHAUSTION);
@@ -6511,9 +6521,9 @@ impl Agent {
 
                 // And never below how spent the stamina is, which is the
                 // tiredness a day's work brings and a night's sleep takes
-                // away (#70). Nothing above half a pool; at a fifth of one the
-                // drive is at its threshold, so a tired man stops before he
-                // is empty rather than working on into exhaustion.
+                // away (#70). Nothing above `STAMINA_TO_SPARE`; at thirty the
+                // drive is at its threshold, so a tired man stops while he
+                // can still run, rather than working on into exhaustion.
                 let spent = (1.0 - self.state.energy / Self::STAMINA_TO_SPARE).clamp(0.0, 1.0);
                 rest_drive.value = rest_drive.value.max(spent);
             }
@@ -9796,8 +9806,14 @@ impl Agent {
     /// `AgentState::WHAT_A_UNIT_OF_WORK_TIRES` - and a good night more.
     pub const A_TURN_OF_SLEEP_RESTORES: f32 = 5.0;
 
-    /// Stamina above which nobody feels tired: half a pool.
-    pub const STAMINA_TO_SPARE: f32 = 50.0;
+    /// Stamina above which nobody feels tired: three quarters of a pool.
+    ///
+    /// The Rest drive is at its threshold of 0.6 at 0.4 of this, which is
+    /// thirty: well clear of the fourteen it takes to run from something
+    /// (`WHAT_RUNNING_COSTS`). At half a pool the drive crossed at twenty, a
+    /// day's end often found people under fourteen, and blows went from one
+    /// death in forty worlds to nine (#366).
+    pub const STAMINA_TO_SPARE: f32 = 75.0;
 
 
     /// Rest and restore energy, satisfy rest drive
