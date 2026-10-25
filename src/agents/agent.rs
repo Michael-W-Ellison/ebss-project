@@ -1101,6 +1101,11 @@ pub struct AgentState {
     /// the body reads it.
     #[serde(default)]
     pub effort_this_turn: f32,
+    /// Huddled under cover this turn, curled up against the cold, which the
+    /// weather pass reads as warmth (`WHAT_HUDDLING_IS_WORTH`). See
+    /// `Simulation::seeking_shelter`.
+    #[serde(default)]
+    pub huddled: bool,
     /// How much of this half hour is still to spend, in minutes.
     ///
     /// A turn is half an hour, and a walk costs the minutes it takes rather
@@ -1233,6 +1238,7 @@ impl AgentState {
             winters_seen: provision::WintersSeen::default(),
             what_the_larder_says: None,
             effort_this_turn: 0.0,
+            huddled: false,
             minutes_left_this_turn: 0.0,
             minutes_walked: 0.0,
             walking_effort: 0.0,

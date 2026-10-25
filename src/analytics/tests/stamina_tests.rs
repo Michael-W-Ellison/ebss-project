@@ -117,3 +117,45 @@ fn a_spent_body_rests() {
     simulation.population.agents[0].state.energy = 50.0;
     assert_eq!(simulation.what_a_spent_body_does(0, Action::Excavate, false), Action::Excavate);
 }
+
+/// Huddling under cover warms a cold body faster than standing there, so
+/// the turn spent on it can end the cold that chose it (#233).
+#[test]
+fn a_huddle_under_cover_warms_a_cold_body() {
+    use crate::analytics::Simulation;
+    use crate::environment::Action;
+    use crate::world::{Position, TerrainType, World, WorldConfig};
+
+    let cold_body = |huddle: bool| {
+        let mut world = World::new(WorldConfig::default());
+        world.animals.get_all_mut().clear();
+        if let Some(tile) = world.grid.get_tile_mut(&Position::new(25, 25)) {
+            tile.terrain.terrain_type = TerrainType::Forest;
+        }
+        let mut population = crate::agents::Population::new();
+        population.spawn_agent(AgentConfig::default());
+        let mut simulation = Simulation::new(world, population);
+        // Midwinter, in a blizzard: cold enough that a body under the trees
+        // loses heat faster than it makes it, which is when a huddle tells.
+        simulation.world.climate.calendar.day_of_year =
+            crate::environment::seasons::Season::Winter.first_day() + 30;
+        simulation.world.climate.weather =
+            crate::environment::Weather::new(crate::environment::WeatherType::Blizzard);
+        let agent = &mut simulation.population.agents[0];
+        agent.state.now_this_many_years_old(30);
+        agent.state.position = (25, 25, 0);
+        agent.body_temperature.current = 34.0;
+        if huddle {
+            let result = simulation.execute_action(&Action::SeekShelter, 0);
+            assert!(result.success, "{:?}", result.message);
+            assert!(simulation.population.agents[0].state.huddled);
+        }
+        simulation.update_agent_exposure();
+        assert!(!simulation.population.agents[0].state.huddled, "the huddle is spent");
+        simulation.population.agents[0].body_temperature.current
+    };
+
+    let stood = cold_body(false);
+    let huddled = cold_body(true);
+    assert!(huddled > stood, "huddled {huddled} against standing {stood}");
+}

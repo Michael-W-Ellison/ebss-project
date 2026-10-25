@@ -538,9 +538,19 @@ impl Simulation {
             .unwrap_or(false);
 
         if in_building || in_forest {
-            // Already in shelter - recover from exposure
+            // Already in shelter - recover from exposure, and huddle.
+            //
+            // The huddle is what makes the turn worth spending. A roof warms
+            // a body at the sheltered rate wherever it stands, and this did
+            // nothing beyond that, so it could never end the cold that
+            // chose it: a cold man stood under his roof turn after turn,
+            // 28% of every turn in the hungry gap, until the weather turned
+            // (#233). Curled up and shivering, and against others doing the
+            // same, a body warms faster than standing - the weather pass
+            // gives it back (`WHAT_HUDDLING_IS_WORTH`).
             let agent = &mut self.population.agents[agent_index];
             agent.exposure_status.recover(0.05);
+            agent.state.huddled = true;
 
             return ActionResult::success()
                 .with_drive_change(DriveType::Safety, -0.3)
