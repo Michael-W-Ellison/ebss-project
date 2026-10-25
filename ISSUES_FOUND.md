@@ -6262,6 +6262,10 @@ handles most.
 
 ### 106. Placeholder package metadata
 
+**Fixed:** `authors` is Michael W. Ellison, on the user's word, and
+`repository` is the project's GitHub repository. The same placeholders went
+out of the plugin's `Cargo.toml`, `README.md` and `SETUP.md`.
+
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
 ### 107. The bearing year was written for a twenty-four-day season
@@ -6592,6 +6596,11 @@ store fills in autumn and nobody is alive by then. Sixteen worlds average
 settlement that no longer exists is still the right larder.
 
 ### 110. A six-year-old who carried what his father carried
+
+**The question it left is settled: a child starves first.** The user
+confirmed it, and the model already does so through #227's Kleiber scaling,
+which gives a body of an eight-year-old about 0.82 of a grown man's days
+without food. `a_hungry_year_takes_the_children_first` holds it.
 
 Three things the lifecycle described and nothing read, and two defects found
 underneath them that were worth more than any of the three.

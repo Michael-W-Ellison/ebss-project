@@ -2056,7 +2056,7 @@ ebss-project/
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ebss-project.git
+git clone https://github.com/Michael-W-Ellison/ebss-project.git
 cd ebss-project
 
 # Build the project
@@ -2578,9 +2578,9 @@ If you use EBSS in your research, please cite:
 ```bibtex
 @software{ebss2024,
   title={Emergent Behavior Society Simulator},
-  author={Your Name},
+  author={Michael W. Ellison},
   year={2024},
-  url={https://github.com/yourusername/ebss-project}
+  url={https://github.com/Michael-W-Ellison/ebss-project}
 }
 ```
 
@@ -2592,9 +2592,8 @@ If you use EBSS in your research, please cite:
 
 ## Contact
 
-- Issues: [GitHub Issues](https://github.com/yourusername/ebss-project/issues)
-- Discussions: [GitHub Discussions](https://github.com/yourusername/ebss-project/discussions)
-- Email: your.email@example.com
+- Issues: [GitHub Issues](https://github.com/Michael-W-Ellison/ebss-project/issues)
+- Discussions: [GitHub Discussions](https://github.com/Michael-W-Ellison/ebss-project/discussions)
 
 ---
 
