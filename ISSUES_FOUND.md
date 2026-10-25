@@ -781,9 +781,9 @@ tools, and nothing yet makes one ahead of needing it.
 
 ### 10. Farming is learned now, and the plant nobody can reach
 
-**Still open after #364.** Farmers about to break ground now fetch seed from
-wild grain they know of, but grain went into 28 fields of 7,048 in forty
-worlds. The seed probably gets eaten before the next field is broken.
+**Grain is sown now (#364, #365).** Farmers fetch seed from wild grain they
+know of and keep a handful back from the pot as seed. Grain went into 449
+fields of 6,363 in forty worlds, where it had gone into 28 of 7,048.
 
 Breaking ground used to be something every founder was born knowing, and a
 field was sown and then forgotten: nothing came on in it, nothing took it, and
@@ -3871,9 +3871,10 @@ remembered amount would belong, if anything reached it. Recorded, not fixed.
 
 ### 69. Every man knew how to make an axe and one in thirty-five owned one
 
-**`TrySwapping` (#191) since: a swap is not tried again while the first try
-is remembered (#364).** That is about a season, because lessons fade and a
-head holds 48 of them, so failed swaps still run to about 690 a world-year.
+**`TrySwapping` (#191) since: a swap tried is never tried again (#364,
+#365).** Each person keeps a record of the swaps they have tried, apart from
+the fading lessons. Failed swaps fell from 54,879 to 18,031 in forty
+two-year settlements.
 
 "They struggle to complete simple tasks." So the first thing built was an
 instrument for where a settlement's day actually goes, and the first thing it
@@ -27784,3 +27785,62 @@ The probe's new ISSX counters, which #363 did not carry:
   `gathering_wild_grain_puts_seed_in_the_pack`.
 
 **Dice counts**: 6,624 (seed 4242, 120 turns) and 974,158 (seed 0, a year).
+
+### 365. Seed kept back from the pot, and swaps tried once for good
+
+The user asked: "Keep seed back for sowing, then the swaps record." Both were
+left open by #364.
+
+**Where the grain went.** A probe tagged every grain taken out of a pack with
+the action taking it. In six scattered settlements over a year, 3,231 grain
+went into packs and none went into a field:
+
+| taken by | grain |
+|---|---|
+| eating | 1,264 |
+| drying | 1,007 |
+| putting down | 554 |
+| between actions | 203 |
+| cooking | 140 |
+| brining, burying, working, giving | 63 |
+
+Guarding each of those would mean a guard in each of them, and the next one
+written would leak. So the seed is taken out of all of them at once.
+
+**What changed:**
+- **Seed.** Somebody who knows how to break ground sets up to three grain
+  aside every turn as `seedgrain` (`Agent::keep_seed_back`). It is not food,
+  so nothing that eats, dries, cooks or stores food sees it. It stays in a
+  full pack (`what_stays_in_the_pack`), and it is the first thing
+  `what_can_be_sown` offers. Somebody starving puts it back with the food.
+- **Swaps.** Each person keeps a record of every swap they have tried
+  (`Agent::swaps_tried`), kept apart from the lessons as `times_laid_up` is.
+  A swap comes out the same every time, so once settles it for good. The
+  lessons fade in a season and hold 48, which is why #364's version wore off.
+
+**Measured**, forty settlements, two years, against #364:
+
+| | #364 | #365 |
+|---|---|---|
+| births | 174 | 170 |
+| deaths | 4 | 4 |
+| alive at day 720 | 650 | 646 |
+| fields sown with grain | 28, in 15 worlds | 449, in 24 worlds |
+| fields sown with food / pods | 6,609 / 411 | 5,661 / 253 |
+| seed errands (turns) | 908 | 322 |
+| swaps failed | 54,879 | 18,031 |
+| swaps that worked | 3 | 3 |
+
+- **Population.** None of the population columns moved beyond noise.
+- **Grain.** Grain is now 7% of what is sown, up from 0.4%. Seed errands fell
+  by two thirds, because a farmer with seed kept back has no need to fetch
+  any.
+- **Swaps.** Failed swaps fell by two thirds, and the three that worked
+  still work.
+
+**Tests.** `behaviour_gaps_tests` gains `a_farmer_keeps_seed_back_and_sows_it`
+and `trying_a_swap_notes_it_for_good`; `a_swap_tried_is_not_tried_again` now
+also checks that the swap stays known after the lesson has faded.
+
+**Dice counts**: 6,624 (seed 4242, 120 turns) and 1,005,752 (seed 0, a year).
+The seed changes neither: nobody in those two worlds breaks ground in time.
