@@ -28078,3 +28078,11 @@ later entry. These were not. Each line names the entry that left it.
 - Whether the 600-cell camp search can strand a camp from its pits (#275).
   The 468 wasted giving turns on the barter path (#230). How tight packs
   are now (#175). The winter-test flake (#191).
+
+**And two the sweep turned up that had quietly come right.** The
+multi-generation tests `a_settlement_still_raises_children_late_on` and
+`the_children_of_a_settlement_live_past_infancy` were filed as failing until
+the put-by gate of #264 opened (#219-#228, #250, #278, #279). #307 opened it
+and nothing re-ran them. Run now in release, both pass, in 2,406 seconds for
+the pair. They stay ignored only for their length, and STANDING_FAILURES says
+so.

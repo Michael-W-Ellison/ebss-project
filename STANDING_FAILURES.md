@@ -55,15 +55,16 @@ dealt afresh. Somebody chilly with the makings on them now dresses on the
 spot. The test counts in days and seeds each world before building it. It
 asks for nine in ten dressed within a day and reads 96 of 96 (3 of 96
 without the change). That leaves:
-- The two multi-generation tests below, which are ignored long runs.
+- The two multi-generation tests below, which are ignored long runs and pass
+  when run (#367).
 
 `relationship_graph_tests::a_settlement_ends_up_with_enemies_in_it` passed
 on this run; it is one of the two thresholds that flap (below).
 
 | test | reports | what is known |
 |---|---|---|
-| `longevity_tests::a_settlement_still_raises_children_late_on` | (ignored; run with `--ignored`) | **A stated requirement: settlements must last generations.** Since #279: eight years on the 100 km2 map with seed 3 and the founders at the middle, and asks for someone born in the last four still alive. Over half an hour even in a release build. It used to ask for this at 9,000 turns, which is half a year and shorter than a pregnancy (#253). Births stay rare while the put-by gate (#264) stays shut, so expect it to fail until that is fixed. |
-| `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | (ignored; run with `--ignored`) | Same requirement. Since #279: four years on the big map, and asks for three children born there alive past their first birthday. Failed on its first run in release (seed 3), inside half an hour. It used to run 6,000 turns, which is four months. |
+| `longevity_tests::a_settlement_still_raises_children_late_on` | (ignored; run with `--ignored`) | **A stated requirement: settlements must last generations.** Since #279: eight years on the 100 km2 map with seed 3 and the founders at the middle, and asks for someone born in the last four still alive. Over half an hour even in a release build. It used to ask for this at 9,000 turns, which is half a year and shorter than a pregnancy (#253). **Passes as of #367**, run in release on the code after #366 (2,406 s for the pair): the put-by gate #264 named was opened in #307. Kept ignored only for its length. |
+| `survival_pressure_tests::the_children_of_a_settlement_live_past_infancy` | (ignored; run with `--ignored`) | Same requirement. Since #279: four years on the big map, and asks for three children born there alive past their first birthday. Failed on its first run in release (seed 3), inside half an hour. It used to run 6,000 turns, which is four months. **Passes as of #367**, in the same release run. Kept ignored only for its length. |
 
 Measured over sixteen years (#259): four settlements of twelve still there,
 one to five founders each, and none of the forty-three children born in them
@@ -103,12 +104,11 @@ end to end - 53 tests, the hunting ones among them.
 
 ## Closed, with the measurement
 
-Two remain open, and they are one question:
 `a_settlement_still_raises_children_late_on` and
-`the_children_of_a_settlement_live_past_infancy` are ISSUES_FOUND #167's
-central open problem - the store that never fills - and should stay red until
-it does. A settlement of twelve dies out on day 327, which is what both of
-them are really reporting.
+`the_children_of_a_settlement_live_past_infancy` were ISSUES_FOUND #167's
+central open problem - the store that never fills, and a settlement of twelve
+dying out on day 327. Both pass as of #367, in a release run of the code after
+#366; they stay ignored only because each takes half an hour or more.
 
 **`salt_tests::the_sea_costs_more_than_it_gives`** - the fixture, not the
 model. `water_left_after_three_days` ran `TICKS_PER_DAY * 3` passes, which is
