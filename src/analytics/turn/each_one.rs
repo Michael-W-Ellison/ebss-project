@@ -234,7 +234,7 @@ impl Simulation {
             .iter()
             .filter(|menace| !(grown && menace.only_takes_the_small))
             .filter(|menace| {
-                (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= Self::CLOSE_ENOUGH_TO_WORRY_ABOUT
+                (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= menace.reach
             })
             .map(|menace| agent.what_a_blow_costs_me(menace.damage))
             .fold(0.0_f32, f32::max);

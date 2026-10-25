@@ -265,6 +265,52 @@ impl Simulation {
             && !(Self::too_small_for_the_grown(species) && years_old >= Self::TOO_BIG_FOR_A_SMALL_HUNTER)
     }
 
+    /// Whether a beast of this kind charges anybody who comes too near.
+    ///
+    /// A territorial beast, or one with a temper that does not live by
+    /// hunting: the bear, the mammoth and the boar. They do not come looking,
+    /// and nothing they do is about being hungry. They keep their ground, and
+    /// somebody who walks into it is struck. A wolf, a lion or an eagle lives
+    /// by hunting, keeps away from people while it is fed, and strikes when
+    /// it is starving (`could_it_take`); a boar roots for its living, takes a
+    /// rabbit when it finds one, and charges a man at close quarters. #327 found that nothing but a hungry
+    /// hunter ever struck anybody, took the fear of mammoths away to match,
+    /// and left this as "a behaviour of the beasts still to be written".
+    /// A cow, an elk or a goat turns on a man who hunts it and on nobody
+    /// else (`fights_back`), so a defensive temper is not enough.
+    pub(in crate::analytics) fn would_it_charge(species: &crate::environment::fauna::AnimalSpecies) -> bool {
+        use crate::environment::fauna::DietType;
+        use crate::environment::AnimalBehavior;
+
+        species.attack_damage > 0.0
+            && match species.behavior {
+                AnimalBehavior::Territorial => true,
+                AnimalBehavior::Aggressive => species.diet != DietType::Carnivore,
+                _ => false,
+            }
+    }
+
+    /// Whether a beast of this kind would ever harm a person of this age of
+    /// its own accord: by hunting them, or by charging them off its ground.
+    /// What people size beasts up by, so that they are wary of exactly what
+    /// would strike them.
+    pub(in crate::analytics) fn could_it_harm(species: &crate::environment::fauna::AnimalSpecies, years_old: u32) -> bool {
+        Self::could_it_take(species, years_old) || Self::would_it_charge(species)
+    }
+
+    /// How near a charging beast lets anybody come: twenty metres.
+    pub(in crate::analytics) const A_BEASTS_GROUND: i32 = 2;
+
+    /// And how near before anybody is wary of it: fifty metres. A hunter
+    /// worries anybody within `CLOSE_ENOUGH_TO_WORRY_ABOUT`, because it comes
+    /// for them; a beast that only keeps its ground worries only somebody
+    /// about to walk into it, which is what keeps people from squaring up to
+    /// a mammoth across a field (#327).
+    pub(in crate::analytics) const NEAR_ENOUGH_TO_BE_WARY_OF_IT: i32 = 5;
+
+    /// How often a beast charges somebody inside its ground, a pass.
+    pub(in crate::analytics) const HOW_OFTEN_IT_CHARGES: f32 = 0.25;
+
     /// It hunts, and its blow does something.
     pub(in crate::analytics) fn a_hunter(species: &crate::environment::fauna::AnimalSpecies) -> bool {
         !species.prey_species.is_empty() && species.attack_damage > 0.0
@@ -333,9 +379,11 @@ impl Simulation {
         // #212 what went on the record here was the animal's uuid in a field
         // that means "the person who hit me".
         let mut strikes: Vec<(uuid::Uuid, String, usize, f32, f32)> = Vec::new();
+        // Those a beast came at and stopped short of, what it was and where
+        let mut warnings: Vec<(usize, String, String, (i32, i32))> = Vec::new();
 
         for animal in self.world.animals.get_all() {
-            if !animal.is_alive() || animal.is_domesticated || !animal.is_hungry() {
+            if !animal.is_alive() || animal.is_domesticated {
                 continue;
             }
 
@@ -343,6 +391,62 @@ impl Simulation {
                 Some(species) => species,
                 None => continue,
             };
+
+            // Somebody inside the ground of a beast that keeps one is
+            // charged, hungry or not, whatever their age, and the beast takes
+            // nothing for it.
+            if Self::would_it_charge(species) {
+                let too_near = agent_positions
+                    .iter()
+                    .filter(|(_, position)| {
+                        (position.0 - animal.position.0)
+                            .abs()
+                            .max((position.1 - animal.position.1).abs())
+                            <= Self::A_BEASTS_GROUND
+                    })
+                    .min_by_key(|(_, position)| {
+                        (position.0 - animal.position.0).abs()
+                            + (position.1 - animal.position.1).abs()
+                    });
+                if let Some((agent_index, _)) = too_near {
+                    // It comes at them first and stops short. Somebody it has
+                    // already warned off this half hour, and who is still
+                    // there, it strikes. Striking at once, a mammoth charged
+                    // sixty-two times in a year on seed 0, at forty a blow,
+                    // and eight of twelve died of what the blows left them
+                    // open to.
+                    let warned = {
+                        let emotions = &self.population.agents[*agent_index].emotions;
+                        emotions.what_last_struck_me
+                            == Some(crate::agents::EmotionSource::Creature(animal.species_id.clone()))
+                            && current_turn.saturating_sub(emotions.last_attack_turn)
+                                <= crate::environment::seasons::MINUTES_PER_TURN
+                    };
+                    if !warned {
+                        warnings.push((
+                            *agent_index,
+                            animal.species_id.clone(),
+                            species.name.clone(),
+                            animal.position,
+                        ));
+                        continue;
+                    }
+                    if rng.gen::<f32>() < Self::HOW_OFTEN_IT_CHARGES {
+                        strikes.push((
+                            animal.id,
+                            animal.species_id.clone(),
+                            *agent_index,
+                            species.attack_damage,
+                            0.0,
+                        ));
+                        continue;
+                    }
+                }
+            }
+
+            if !animal.is_hungry() {
+                continue;
+            }
 
             if species.prey_species.is_empty() || species.attack_damage <= 0.0 {
                 continue;
@@ -388,6 +492,28 @@ impl Simulation {
                     species.food_value * 0.25,
                 ));
             }
+        }
+
+        // Warned off: frightened, deciding again now, and remembering the
+        // ground as somewhere it went badly, which is what keeps them off it
+        // tomorrow - the food that brought them there is weighed against it
+        // (`how_bad_is_it_there`). No blow lands, and nothing is learned
+        // about fighting from it. Without the memory a settlement beside a
+        // mammoth was warned off 332 times in a year on seed 0 and walked
+        // back each time.
+        for (agent_index, what_it_was, called, at) in warnings {
+            let agent = &mut self.population.agents[agent_index];
+            agent.busy_until = 0;
+            agent.state.next_decision_at = agent.state.next_decision_at.min(current_turn);
+            agent
+                .emotions
+                .record_attack(crate::agents::EmotionSource::Creature(what_it_was), current_turn);
+            agent.exploration_knowledge.saw_danger(
+                crate::world::Position::new(at.0, at.1),
+                &called,
+                1.0,
+                current_turn,
+            );
         }
 
         for (animal_id, what_it_was, agent_index, damage, fed) in strikes {

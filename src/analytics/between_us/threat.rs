@@ -770,12 +770,16 @@ impl Simulation {
                     return None;
                 }
 
-                // **Only a hunter menaces anybody.** A mammoth, an elk or a
-                // cow never strikes anybody of its own accord - nothing that
-                // does not hunt does - and a man frightened of a mammoth,
-                // with a loved one two paces from it, stood over them and
-                // fought it, at forty a blow (#327).
-                if !Self::a_hunter(species) {
+                // **Only what strikes menaces anybody.** An elk or a cow
+                // never strikes anybody of its own accord, and a man
+                // frightened of a mammoth, with a loved one two paces from
+                // it, stood over them and fought it, at forty a blow (#327).
+                // A beast that keeps its ground does strike, but only
+                // somebody who walks into it, so it menaces only somebody
+                // about to.
+                let hunts = Self::a_hunter(species);
+                let charges = Self::would_it_charge(species);
+                if !hunts && !charges {
                     return None;
                 }
 
@@ -788,7 +792,12 @@ impl Simulation {
                     name: species.name.clone(),
                     species: animal.species_id.clone(),
                     damage: species.attack_damage,
-                    only_takes_the_small: Self::too_small_for_the_grown(species),
+                    only_takes_the_small: Self::too_small_for_the_grown(species) && !charges,
+                    reach: if hunts {
+                        Self::CLOSE_ENOUGH_TO_WORRY_ABOUT
+                    } else {
+                        Self::NEAR_ENOUGH_TO_BE_WARY_OF_IT
+                    },
                 })
             })
             .collect();
@@ -828,7 +837,7 @@ impl Simulation {
             .iter()
             .filter(|menace| !(grown && menace.only_takes_the_small))
             .filter(|menace| {
-                (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= Self::CLOSE_ENOUGH_TO_WORRY_ABOUT
+                (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= menace.reach
             })
             .map(|menace| &menace.name)
             .collect();
@@ -876,12 +885,11 @@ impl Simulation {
                 let strength =
                     strength * (1.0 - agent.familiar_with.get(what).copied().unwrap_or(0.0));
                 let paces = (hx - x).abs().max((hy - y).abs());
-                if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+                if paces > menace.reach {
                     return None;
                 }
 
-                let nearness = 1.0
-                    - (paces as f32 / (Self::CLOSE_ENOUGH_TO_WORRY_ABOUT as f32 + 1.0));
+                let nearness = 1.0 - (paces as f32 / (menace.reach as f32 + 1.0));
 
                 Some((strength * nearness, what))
             })

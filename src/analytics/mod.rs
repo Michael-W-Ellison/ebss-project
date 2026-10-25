@@ -243,6 +243,9 @@ pub(crate) struct Menace {
     pub(crate) damage: f32,
     /// Too small to take a grown person; see `Simulation::could_it_take`.
     pub(crate) only_takes_the_small: bool,
+    /// How near before it matters: a hunter comes for you, and a beast that
+    /// only keeps its ground does not (`NEAR_ENOUGH_TO_BE_WARY_OF_IT`).
+    pub(crate) reach: i32,
 }
 
 /// Flat tables for the route search, the size of the map, cleared by stamp.

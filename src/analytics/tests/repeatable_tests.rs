@@ -601,7 +601,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 0.9% to 967,028 for #366's correction: rest at thirty, clear of
     // what it takes to run, and a small child mends its stamina as it sleeps.
     // Down 0.6% to 961,599 for #366: a spent body rests where it is.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 961_599;
+    // Down 3.5% to 927,965 for #368: a bear, a boar or a mammoth warns off
+    // whoever walks into its ground, and strikes whoever stays.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 927_965;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

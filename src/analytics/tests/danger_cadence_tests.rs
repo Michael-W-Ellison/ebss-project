@@ -349,19 +349,70 @@ fn afraid_or_angry_at_a_beast(simulation: &Simulation) -> bool {
     emotions.what_frightens_me_most().is_some() || emotions.what_angers_me_most().is_some()
 }
 
-/// A beast that hunts nothing frightens nobody, and nobody fights it.
+/// A beast that never strikes frightens nobody, and nobody fights it.
 ///
-/// Nothing that does not hunt strikes anybody of its own accord, and a
-/// frightened man with a loved one two paces from a mammoth stood over them
-/// and fought it, at forty a blow; nine fought it at once, and one died of it
-/// (#327).
+/// An elk turns on a man who hunts it and on nobody else, and a frightened
+/// man with a loved one two paces from a beast that would never have touched
+/// them stood over them and fought it; nine fought a mammoth at once, and one
+/// died of it (#327). The mammoth was the case then; it keeps its ground now
+/// (#368), and the elk is the beast that never strikes.
 #[test]
 fn a_beast_that_never_strikes_frightens_nobody() {
-    let mut simulation = one_person_beside("mammoth", 30);
+    let mut simulation = one_person_beside("elk", 30);
     simulation.feel_about_what_stands_in_the_way();
 
-    assert!(!afraid_or_angry_at_a_beast(&simulation), "a hurt man beside a mammoth");
+    assert!(!afraid_or_angry_at_a_beast(&simulation), "a hurt man beside an elk");
     assert!(!simulation.something_is_after_me(0));
+}
+
+/// A beast that keeps its ground is something to be wary of up close, and
+/// nothing from across the field (#368).
+#[test]
+fn a_beast_that_keeps_its_ground_is_feared_only_up_close() {
+    let mut beside = one_person_beside("mammoth", 30);
+    beside.feel_about_what_stands_in_the_way();
+    assert!(afraid_or_angry_at_a_beast(&beside), "a hurt man a pace from a mammoth");
+
+    let mut across = one_person_beside("mammoth", 30);
+    across.population.agents[0].state.position =
+        (30 + Simulation::NEAR_ENOUGH_TO_BE_WARY_OF_IT + 3, 31, 0);
+    across.feel_about_what_stands_in_the_way();
+    assert!(!afraid_or_angry_at_a_beast(&across), "nor across the field from one");
+}
+
+/// How often this one is struck in so many passes of the strike, put back
+/// to full health before each.
+fn struck_in(simulation: &mut Simulation, passes: u32) -> u32 {
+    let mut struck = 0;
+    for _ in 0..passes {
+        simulation.population.agents[0].state.health = 100.0;
+        if let Some(beast) = simulation.world.animals.get_all_mut().first_mut() {
+            beast.hunger = 0.0;
+        }
+        simulation.predators_try_their_luck_at(0);
+        if simulation.population.agents[0].state.health < 100.0 {
+            struck += 1;
+        }
+    }
+    struck
+}
+
+/// A bear or a boar charges whoever walks into its ground, fed or not; a
+/// cow does not, and nobody is charged from outside the ground (#368).
+#[test]
+fn a_beast_charges_whoever_comes_too_near() {
+    for kind in ["bear", "boar", "mammoth"] {
+        let mut simulation = one_person_beside(kind, 30);
+        assert!(struck_in(&mut simulation, 40) > 0, "a {kind} a pace off, fed, never charged");
+
+        let mut simulation = one_person_beside(kind, 30);
+        simulation.population.agents[0].state.position =
+            (30 + Simulation::A_BEASTS_GROUND + 2, 31, 0);
+        assert_eq!(struck_in(&mut simulation, 40), 0, "a {kind} charged from outside its ground");
+    }
+
+    let mut simulation = one_person_beside("cow", 30);
+    assert_eq!(struck_in(&mut simulation, 40), 0, "a cow charged");
 }
 
 /// And a hunter too small to take a grown person frightens only the small.
