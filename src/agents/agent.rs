@@ -4551,6 +4551,7 @@ impl Agent {
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
             .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
             .filter(|working| self.how_many_i_have(working.makes) < making::A_FEW_SPARE)
+            .filter(|working| self.is_what_this_makes_worth_having(working))
             .filter(|working| {
                 self.lessons
                     .will_try_this_again(&format!("{}:{}", working.verb, working.to))
@@ -4580,6 +4581,51 @@ impl Agent {
         could
             .get(mine)
             .map(|working| (working.verb.to_string(), working.to.to_string()))
+    }
+
+    /// Whether what this working makes is any use to this agent (#199).
+    ///
+    /// Something he can eat, carry or keep things in, or that serves for
+    /// something - a roof, an edge, a vessel. Failing those, a part: and a
+    /// part is worth making only to somebody who knows a step that takes it.
+    /// A shape in unfired clay is nothing to a people who have never fired
+    /// one, and when shaping was born knowledge before firing was, they spent
+    /// their winters shaping clay. A thing no recipe takes at all is used
+    /// somewhere the making tables do not reach - a fire, a garment, a wall -
+    /// and is left alone.
+    pub fn is_what_this_makes_worth_having(
+        &self,
+        working: &crate::environment::making::Working,
+    ) -> bool {
+        use crate::environment::{making, tags};
+
+        let makes = working.makes;
+        if working.feeds.is_some()
+            || working.holds.is_some()
+            || Self::is_this_part_of_the_kit(makes)
+            || tags::EVERYTHING_THAT_SERVES.iter().any(|serves| serves.called == makes)
+            || tags::EVERYTHING_THAT_KEEPS.iter().any(|keeps| keeps.called == makes)
+        {
+            return true;
+        }
+
+        let steps_take_it: Vec<&making::Making> = making::EVERY_STEP
+            .iter()
+            .filter(|step| step.needs.iter().any(|(part, _)| *part == makes))
+            .collect();
+        let workings_take_it: Vec<&making::Working> = making::EVERY_WORKING
+            .iter()
+            .filter(|next| next.to == makes)
+            .collect();
+
+        if steps_take_it.is_empty() && workings_take_it.is_empty() {
+            return true;
+        }
+
+        steps_take_it.iter().any(|step| self.knows_how_to(step))
+            || workings_take_it
+                .iter()
+                .any(|next| next.born_known() || self.found_out.contains(next.makes))
     }
 
     /// A carcass in the pack that has to come apart before it is supper.
