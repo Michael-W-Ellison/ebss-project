@@ -1159,10 +1159,11 @@ sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
 ### 15. Zoning and territory are never established
 
-**Wired in #364, not yet seen working.** The first building of a kind lays
-out ground for more of its kind, and a house claims the plot round it for
-whoever put it up. Nobody in forty two-year settlements put up anything but
-brush, so neither has fired in a measurement.
+**Wired in #364, seen working since #371.** The first building of a kind
+lays out ground for more of its kind, and a house claims the plot round it
+for whoever put it up. Nobody in forty two-year settlements put up anything
+but brush until #371 gave a settled household a house it could build; 129
+were started in 32 of 40 settlements.
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -5564,8 +5565,11 @@ level up, and it is the honest remaining cost of the half-hour turn.
 
 ### 169. The one store nothing reads, and why capping it cost thirteen times the running time
 
-**It has a reader now:** `verify_resource_claim` asks it whether a claim is
-about ground the listener has seen.
+~~**It has a reader now:** `verify_resource_claim` asks it whether a claim is
+about ground the listener has seen.~~ **Open again (#371):** that reader was
+in the retired lie review, deleted under #369, and nothing in a live run
+writes the store either (`explore_tile` is called only by its own test), so
+it is dead at both ends. `exploration_behavior`'s readers are never called.
 
 `ExplorationKnowledge::explored_tiles` is a `BTreeSet<Position>` with no
 ceiling and nothing ever taken out of it: every tile anybody has stood within
@@ -28011,9 +28015,12 @@ later entry. These were not. Each line names the entry that left it.
   shrinks near the end (#179). ~~Fixed (#369).~~
 - ~~Some walks still go nowhere, and "already there" costs nothing (#234).~~
   None found in sixty days of seed 0 (#369).
-- The Construction drive almost never wins a turn (#175). No tent is ever
+- ~~The Construction drive almost never wins a turn (#175). No tent is ever
   built (#205, #349, #353). No house is ever built, so zoning and plots
-  have never fired (#364).
+  have never fired (#364).~~ Houses go up over many trips, and zone and
+  claim their ground; tents are still rare for want of skins (#371).
+- `explored_tiles` is written and read by nothing in a live run (#169,
+  reopened in #371).
 - Husbandry starts only where a kill leaves a young one (#360, #361).
 - `wants_to_hunt` answers only a want for hides, and ~~Preparedness never
   leads to hunting or fishing~~ (#266; the hungry hunt is priced since
@@ -28369,3 +28376,105 @@ home. It is counted with the pits now.
 **Full suite**: 2,967 passed; the year dice count failed and is recorded.
 
 **Dice counts**: 6,612 (seed 4242, 120 turns) and 912,614 (seed 0, a year).
+
+### 371. Tents and houses go up over many trips
+
+The user asked: "Resolve Construction: tents and houses are never built. But
+I am not sure what is meant by 'zoning'."
+
+**What zoning is here.** `World::zone_manager` holds areas of the map set
+aside for a kind of building - residential, industrial, agricultural,
+commercial. The first building of a kind marks the ground round it (six
+cells) for more of its kind. The placement planner scores a site higher
+inside a zone for its kind and lower inside one for another, so houses
+cluster and workshops cluster. Alongside it, `territory_manager` holds
+plots: a house claims the ground round it for whoever put it up, and the
+planner keeps other people's buildings off it. Both were wired in #364, but
+only for buildings nobody could build: brush lays out nothing, and a house
+wanted stone.
+
+**Why nothing was built:**
+- **A tent** wanted eight poles, four hides and two cords in one pack at
+  once. Hides come one kill at a time, rot, and go into fur garments first.
+  One tent was started in forty settlements over two years, and none was
+  finished.
+- **Every house** in the table wanted stone - thirty for the smallest - and
+  the larger ones iron. No stone-age people ever carried a block.
+- **Nothing let a site be brought its materials over time.**
+  `deliver_resource` existed and nothing called it, and the builder had to
+  hold everything when he started.
+- **Nothing made anybody want a roof of their own.** The Construction
+  drive read room to build, neighbours building and the weather, and sat
+  under its threshold.
+
+**What changed.**
+- **A site owes what its frame did not bring** (`Building::owed`, by class).
+  A tent or a house is started with its frame - eight poles and two cords -
+  and whatever else of it is in hand. Whoever of the household holds
+  something it still wants takes it there and hands it over
+  (`bringing_to_a_site`, `take_what_it_still_wants`). No work is done on it
+  until nothing is owed.
+- **A house is a Stage 1 framed hut**, as the construction path puts it:
+  pole frame, wattle walls, bark roof, earth daub. It takes thirty poles and
+  six cords and no stone, and is warmer than a tent (0.8 of a heated space's
+  warmth against 0.6). It goes up by the household's hearth, claims its plot
+  and lays out the residential zone.
+- **Which roof** (`the_roof_this_one_wants`):
+  - a house for a household tied to this ground - crops standing on fields
+    by its hearth - that has none;
+  - a tent for anybody sixteen or over with no roof of their household's.
+
+  A household is the person and their partner, or, for somebody unpaired,
+  their kin. A tent's frame is started only with a skin in hand. With
+  poles and no skin, the skins are hunted for, and brush or a burrow serves
+  meanwhile, as before.
+- **The Construction drive reads it**
+  (`Surroundings::without_a_roof_of_its_own`): a settled household without a
+  house adds half again to the drive, and a tent less.
+
+**Measured**, forty settlements, two years, against #370:
+
+| | #370 | #371 | t |
+|---|---|---|---|
+| births | 171 | 173 | +0.18 |
+| deaths | 9 | 16 | +1.10 |
+| of a blow | 7 | 12 | |
+| alive at two years | 642 | 637 | -0.39 |
+| houses started / finished | 0 / 0 | 129 / 14 (in 32 / 11 worlds) | |
+| tents started / finished | 1 / 0 | 5 / 1 | |
+| burrows started / finished | 281 / 67 | 1,032 / 615 | |
+| brush huts | 3,092 | 5,732 | |
+
+- **Houses are built.** A house is about a dozen visits of work and
+  hand-over, and most were started late, once the fields came in; 14 were
+  finished inside two years. The zones and plots they lay are the first to
+  appear in a live run.
+- **Tents stay rare.** Skins still go into garments first. Kills went up
+  with #370, but not enough to roof a band.
+- **The Construction drive now wins turns**, and much of what it does is dig
+  in and put up brush: burrows finished went from 67 to 615.
+- **Population** is within noise. Deaths by blows rose again, from seven to
+  twelve (t +1.10, all on the smooth maps). That is not significant, but
+  it is the third change in a row to move them up, and the next thing to
+  look at if it holds.
+
+**Tests** (`roof_tests`):
+- `a_tent_goes_up_on_its_frame_and_waits_for_its_skins`;
+- `a_household_that_farms_here_puts_up_a_house_over_many_trips`: its plot,
+  its zone, at least three trips;
+- `a_house_wants_no_stone`.
+
+Existing tests moved with the change:
+- `a_tent_cannot_be_made_of_poles_and_air` now also holds that a frame with
+  no covering stands and is never finished, and its refusal names the cord a
+  start lacks.
+- `test_building_requirements` and `test_building_construction` state the
+  house without stone.
+
+**Found on the way.** `explored_tiles` (#169) is dead at both ends.
+Deleting the retired lie review under #369 took its only reader, and
+nothing writes it.
+
+**Full suite**: 2,970 passed; the year dice count failed and is recorded.
+
+**Dice counts**: 6,612 (seed 4242, 120 turns) and 868,427 (seed 0, a year).
