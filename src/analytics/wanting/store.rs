@@ -814,7 +814,7 @@ impl Simulation {
     /// hill, was moved by Preparedness to nothing at all (#266, #370).
     ///
     /// A beast in sight first, because a carcass is the most food a turn
-    /// buys; then the water; then a walk to where game was lately seen. Any
+    /// buys, and then the water (`a_hunt_for_the_store` says what game). Any
     /// season the larder is short of the month, and in autumn whatever it is
     /// short of. Only with room in the pack to bring it home, because what
     /// comes home is what the drive is reckoned from: the catch in the pack
@@ -853,16 +853,63 @@ impl Simulation {
             return None;
         }
 
+        if let Some(hunt) = self.a_hunt_for_the_store(agent, agent_position) {
+            return Some(hunt);
+        }
+        self.going_fishing(agent, agent_position)
+    }
+
+    /// The health below which nobody goes hunting for the store: three
+    /// quarters of a whole body.
+    const FIT_TO_HUNT_FOR_THE_STORE: f32 = 75.0;
+
+    /// A hunt for the store, which is a more careful thing than a hungry
+    /// man's.
+    ///
+    /// Hunger takes what is there; putting by can wait for better odds.
+    /// Wired to the hungry man's hunt it doubled the hunts and the deaths by
+    /// blows rose from three to thirteen over forty settlements in two years
+    /// (#370): goats turned on hunters a dozen times in a fortnight, health
+    /// running down five a blow, and a long walk to where game was last seen
+    /// put people among the beasts that strike. So:
+    /// - nothing that comes after you - no boar, bear or mammoth;
+    /// - nothing that fights back unless the body is three quarters whole;
+    /// - only game in sight, not a walk to where it was lately seen.
+    fn a_hunt_for_the_store(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
+        use crate::environment::AnimalBehavior;
+
+        if !agent.lessons.worth_trying(Undertaking::Hunting) {
+            return None;
+        }
         let sight = Self::how_far_a_hunter_looks(agent) as i32;
-        if self.the_best_prey_to_eat(agent, agent_position, sight).is_some() {
-            if let Some(hunt) = self.going_after_meat(agent, agent_position) {
-                return Some(hunt);
-            }
+        let (animal_id, at, _) = self.the_best_prey_to_eat(agent, agent_position, sight)?;
+        let species = self
+            .world
+            .animals
+            .get(&animal_id)
+            .and_then(|animal| self.world.animals.get_species(&animal.species_id))?;
+        if matches!(species.behavior, AnimalBehavior::Aggressive | AnimalBehavior::Territorial) {
+            return None;
         }
-        if let Some(fishing) = self.going_fishing(agent, agent_position) {
-            return Some(fishing);
+        if Self::fights_back(species) && agent.state.health < Self::FIT_TO_HUNT_FOR_THE_STORE {
+            return None;
         }
-        self.going_after_meat(agent, agent_position)
+        if let Some(getting_one) = self.what_a_hunt_wants_first(agent) {
+            return Some(getting_one);
+        }
+        let reach = (at.0 - agent_position.0).abs().max((at.1 - agent_position.1).abs());
+        if reach <= Self::HUNT_REACH {
+            return Some(Action::Hunt {
+                animal_id,
+                weapon: agent.equipment.get_weapon().map(|weapon| weapon.name.clone()),
+            });
+        }
+        Some(Action::Move { target: (at.0, at.1, agent_position.2) })
     }
 
     /// A beast in sight that is worth more than the best patch of food this
@@ -872,17 +919,12 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
-        use crate::agents::practices::Undertaking;
-
-        if !agent.lessons.worth_trying(Undertaking::Hunting) {
-            return None;
-        }
         let sight = Self::how_far_a_hunter_looks(agent) as i32;
         let (_, _, hunt_worth) = self.the_best_prey_to_eat(agent, agent_position, sight)?;
         let beats = self
             .the_best_food_anywhere_and_its_worth(agent, agent_position)
             .is_none_or(|(_, patch_worth)| hunt_worth > patch_worth);
-        beats.then(|| self.going_after_meat(agent, agent_position)).flatten()
+        beats.then(|| self.a_hunt_for_the_store(agent, agent_position)).flatten()
     }
 
     /// A kill this one knows of with meat still on it, worth going for and

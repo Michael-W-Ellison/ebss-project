@@ -618,7 +618,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // only when there is room to carry it home.
     // Up 9.7% to 951,495 for #370: Preparedness goes hunting and fishing
     // for a larder short of the month, and food on a rack counts as put by.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 951_495;
+    // Down 4.1% to 912,614 for #370's correction: a hunt for the store takes
+    // nothing that comes after you, nothing that fights back unless the body
+    // is three quarters whole, and only game in sight.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 912_614;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

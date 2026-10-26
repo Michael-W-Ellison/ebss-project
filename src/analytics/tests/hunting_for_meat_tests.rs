@@ -153,3 +153,45 @@ fn a_short_larder_sends_a_hunter_after_the_deer_in_sight() {
         "the store sends him after the deer: {going:?}"
     );
 }
+
+/// But a hunt for the store is a careful one (#370). Hunger takes what is
+/// there; putting by can wait for better odds. No boar, whatever the
+/// larder says; and a goat, which turns on whoever spears it, is left
+/// alone by somebody already hurt.
+#[test]
+fn the_store_does_not_send_a_hunter_after_what_fights_back() {
+    let short = |simulation: &mut Simulation| {
+        let day = simulation.world.climate.calendar.day_of_year;
+        simulation.population.agents[0].state.what_the_larder_says =
+            Some(crate::agents::provision::WhatIsPutBy::reckon(0.0, 1_440.0, 90.0, day));
+    };
+
+    let mut simulation = a_hunter();
+    short(&mut simulation);
+    let id = simulation.world.spawn_animal("boar".to_string(), (120, 100)).expect("a boar");
+    simulation.world.animals.get_mut(&id).unwrap().age = 100_000;
+    let agent = simulation.population.agents[0].clone();
+    let going = simulation.going_out_for_food_to_put_by(&agent, (100, 100, 0));
+    assert!(
+        !matches!(going, Some(Action::Move { target }) if (target.0, target.1) == (120, 100)),
+        "nobody goes after a boar to fill a pit: {going:?}"
+    );
+
+    let mut simulation = a_hunter();
+    short(&mut simulation);
+    let id = simulation.world.spawn_animal("goat".to_string(), (120, 100)).expect("a goat");
+    simulation.world.animals.get_mut(&id).unwrap().age = 100_000;
+    let agent = simulation.population.agents[0].clone();
+    let going = simulation.going_out_for_food_to_put_by(&agent, (100, 100, 0));
+    assert!(
+        matches!(going, Some(Action::Move { target }) if (target.0, target.1) == (120, 100)),
+        "a whole man goes after the goat: {going:?}"
+    );
+    simulation.population.agents[0].state.health = 60.0;
+    let agent = simulation.population.agents[0].clone();
+    let going = simulation.going_out_for_food_to_put_by(&agent, (100, 100, 0));
+    assert!(
+        !matches!(going, Some(Action::Move { target }) if (target.0, target.1) == (120, 100)),
+        "and a hurt one does not: {going:?}"
+    );
+}
