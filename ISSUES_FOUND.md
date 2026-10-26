@@ -28015,8 +28015,9 @@ later entry. These were not. Each line names the entry that left it.
   built (#205, #349, #353). No house is ever built, so zoning and plots
   have never fired (#364).
 - Husbandry starts only where a kill leaves a young one (#360, #361).
-- `wants_to_hunt` answers only a want for hides, and Preparedness never
-  leads to hunting or fishing (#266; the hungry hunt is priced since #330).
+- `wants_to_hunt` answers only a want for hides, and ~~Preparedness never
+  leads to hunting or fishing~~ (#266; the hungry hunt is priced since
+  #330). Preparedness hunts and fishes for the store since #370.
 - Nobody carries meat home for a share (#331). Meat by the beast's mass was
   tried and not kept (#257, #330).
 - A failed swap destroys the substitute, and swaps the world cannot supply
@@ -28296,3 +28297,75 @@ count, recorded, and the autosave tie, fixed after it.
 
 **Dice counts**: 6,624 (seed 4242, 120 turns, unchanged throughout) and
 867,309 (seed 0, a year).
+
+### 370. Preparedness goes hunting and fishing; a rack counts as put by
+
+The user asked: "Preparedness should lead to hunting and fishing. These are
+methods of getting food. More food should mean a decreased preparedness
+drive."
+
+**What was there.** The Preparedness arm buried, dried, salted, dug, walked
+a trapline and set traps in the water. The only food it ever went out for
+was a gather for the store, in autumn. Hunting answered a want of hides
+(`wants_to_hunt`) or a craving for meat (#358), and fishing answered hunger
+or Sustenance (`fishing_action`). Somebody short of a week's food in spring,
+with a river beside the camp and deer on the hill, was moved by
+Preparedness to nothing at all (#266).
+
+**The drive already fell with food.** `reckon_what_is_put_by` sets it every
+half hour from the pack, a share of the camp's pits, and what is in the
+body. So the catch coming home is what eases it. One store was missing:
+food hung on a rack lay on the ground at the rack and was counted by
+nobody, so a rack of drying fish read as though the catch had never come
+home. It is counted with the pits now.
+
+**What changed.**
+- `going_out_for_food_to_put_by`, last in the Preparedness arm: a hunt for
+  the store, else the water (`going_fishing`, split out of
+  `fishing_action`). Any season the larder is short of the month, and in
+  autumn whatever it is short of. Only with room in the pack to bring it
+  home, and only where the lessons still say the way is worth trying.
+- In autumn's gather for the store, a beast in sight worth more than the
+  best patch is gone after instead. With no patch worth the trip, the store
+  sends the person to the water or after game.
+- **A hunt for the store is a careful one** (`a_hunt_for_the_store`). It
+  takes nothing aggressive or territorial, nothing that fights back unless
+  the body is three quarters whole, and only game in sight. The hungry
+  man's hunt is unchanged.
+
+**Measured**, forty settlements, two years, against #369:
+
+| | #369 | wired to the hungry hunt | careful |
+|---|---|---|---|
+| births | 163 | 167 | 171 |
+| deaths | 5 | 14 | 9 |
+| of a blow | 4 | 13 | 7 |
+| alive at two years | 638 | 633 | 642 |
+| hunts that told | 434 | 1,006 | 889 |
+| fish speared | 32,422 | 36,497 | 32,373 |
+| shallows picked over | 29,402 | 41,179 | 46,827 |
+| food rotted in store | 47,445 | 45,908 | 42,021 |
+
+- **Wired to the hungry man's hunt**, deaths by blows rose from four to
+  thirteen (deaths t +1.71, all on the smooth maps, t +2.20). A probe on
+  one settlement found goats turning on the same hunter a dozen times in a
+  fortnight, five health a blow. Long walks to where game was last seen
+  also put people among the beasts that strike, at fifteen a blow.
+- **Careful**, every population column is within noise of #369: births t
+  +0.66, alive t +0.32, deaths t +1.00. Hunts that told doubled, picking
+  over the shallows rose by three fifths, and less food rotted in store.
+
+**Tests:**
+- `a_short_larder_sends_a_fed_man_to_the_water` (`fishery_tests`): not
+  hungry, nothing put by, fish at his feet. Preparedness sends him to the
+  water, and with forty days put by in spring it does not.
+- `a_short_larder_sends_a_hunter_after_the_deer_in_sight`
+  (`hunting_for_meat_tests`): no craving, so hunger's hunt does not send
+  him, but the store does.
+- `the_store_does_not_send_a_hunter_after_what_fights_back`: no boar; a goat
+  for a whole man and not for a hurt one.
+- `food_on_a_rack_eases_preparedness` (`food_keeping_tests`).
+
+**Full suite**: 2,967 passed; the year dice count failed and is recorded.
+
+**Dice counts**: 6,612 (seed 4242, 120 turns) and 912,614 (seed 0, a year).
