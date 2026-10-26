@@ -28154,3 +28154,145 @@ again but is not made to leave the ground.
   the mammoth it used does strike.
 
 **Dice count**: 927,965 (seed 0, a year).
+
+### 369. The rest of the behaviour gaps: warmth, the pack, the pit, swaps, and a bite of leaf
+
+The user asked: "Fix the behaviour gaps first, starting with territorial
+beasts." #368 was the beasts. This is what followed, in the order it was
+done, from the behaviour list in #367.
+
+**A huddle under cover warms a cold body** (#233, #241). `recover` never
+touched body temperature, so the turns spent sheltering could not end the
+cold that chose them. Treated as insulation it did nothing: under cover,
+cooling roughly matches the body's own warming, so insulation changes
+nothing and recovery ran at 5% a turn. A huddled body is now warmed
+directly, by `WHAT_HUDDLING_IS_WORTH` (0.3) and 0.15 for each other body
+under the same cover, up to 0.45 more, and never past the ideal. Test:
+`a_huddle_under_cover_warms_a_cold_body` (midwinter, a blizzard, a wood).
+
+**"Eat the food you are carrying" eats it, when the meal would be kept**
+(#235). The way checked for a snare at the feet, not the pack. Wired to the
+pack outright it cost 7.8% of a settlement's life (#235, #241), because a
+meal eaten at a full reserve is thrown away. It now eats from the pack only
+when `Physiology::would_a_sitting_be_banked`, and otherwise stays the snare
+check it was. Test: `eating_what_you_carry_waits_for_room_to_keep_it`.
+
+**A stranger's pit counts as a longer walk, not as last** (#252).
+`pits_i_remember` sorted one's own and kin's pits ahead of a stranger's
+however far. A stranger's now sorts as three hundred metres further
+(`A_STRANGERS_HOLE_IS_FURTHER_BY`, 30 cells). Test:
+`a_strangers_hole_beats_ones_own_a_long_way_off`.
+
+**A walk is worth as long at its end as at its start** (#179). The patience
+of an errand was reckoned from what was left of the walk, so it shrank as
+the walker neared the end and gave up in sight of it.
+`Errand::how_long_it_is_worth` reckons it from where the walk set out. Test:
+`a_walk_is_worth_as_long_at_its_end_as_at_its_start`.
+
+**Walks that go nowhere** (#234). Probed over sixty days of seed 0, 30,349
+turns: no "move: already there" at all. #301's fix to the pit underfoot
+took the last of them.
+
+**A failed swap gives the substitute back; only parts are put in** (#206).
+`trying_a_swap` spent what went in whether or not the swap worked. It is now
+used up only when the swap makes something; the makings are spent either
+way. `what_i_would_swap` offered every stack in the pack, food and pots
+among them, and cord in place of flax to make cord. It now offers only what
+some step takes as a part (`making::is_this_a_part_of_anything`), and never
+what the step makes. Test: `only_a_part_of_something_is_put_in_where_a_part_goes`.
+
+**A bite off the ground is ranked at what it would put in** (#301).
+`the_way_to_answer` took any `Eat` first as already in hand, so a bite of
+leaf beat a two-turn walk to a full pit. An `Eat` is in hand now only when
+the food is in the pack, or a joint to pull apart. A bite off the ground is
+ranked with the other ways, its relief scaled by what an armful of the
+richest patch in reach comes to as a share of a sitting
+(`what_a_bite_off_the_ground_comes_to`): leaf in season is two thirds of a
+supper, anything out of season a mouthful. #301's other claim, that a
+stomach of leaf ranks with one of dried meat, no longer holds: the stomach
+is charged in energy, so a full one is a full one. Tests:
+`a_starving_man_walks_to_the_larder_past_a_bite_of_leaf`,
+`a_bush_in_fruit_underfoot_still_beats_the_larder_by_the_ways`.
+
+**The larder walks are not a fault any more** (#303). Instrumented over seed
+0's first year: 1,141 of 1,288 walks the larder branch chose arrived in one
+turn, and 692 of 743 handfuls taken out of a pit went into the pack (the
+other 51 were "No room for it"). #303's 10,589 walks for 2,276 handfuls were
+the leash that #303 itself fixed.
+
+**What a working makes has to be worth having** (#199). Something to eat,
+to carry or keep things in, or that serves for something; failing those, a
+part some step or working this person knows takes. A thing no recipe takes
+is used somewhere the tables do not reach and is left alone. Today it turns
+nothing away - claypots keep food and hold water now - so it is a guard.
+Tests: `every_working_a_people_is_born_to_makes_something_worth_having`,
+`a_part_nobody_here_can_use_is_not_worth_making`.
+
+**Curiosity fetches an untried material only with room to carry it.** Found
+while asking what a full body with spare food does instead of burying it
+(#237, #240). A body at a full reserve with a full pack chose `Gather` for
+food about 7,500 times over seeds 0 and 1's first years, and 5,500 of those
+came from `something_nobody_has_tried_within_reach`: an untried working
+wanted "food" the pack lacked, the berries could not go in the pack and were
+eaten on the bush, and the walk came round every turn curiosity won. It now
+asks `could_i_take_another_handful`. Test:
+`curiosity_does_not_fetch_what_there_is_no_room_to_carry`.
+
+**Smaller things.**
+- **#166.** In three seeded years no ill person was ever wasting; the ill
+  ate (6,318 turns) about as often as they slept (5,964). "An ill person
+  sleeps through their own hunger" is no longer so. Stooping for herbs was
+  not done: the ill fetch herbs and treat themselves (1,266 times), and a
+  detour would add little.
+- **#193.** `RelocateTowardWater` and `TradeForWater` said camps never move
+  and nothing carries water. Camps move for water (`go_and_live_where_it_is`)
+  and bowls, skins and pots carry it; the prose says so.
+- **#196.** The periodic lie review, which counted any wrong claim as a lie
+  and read `ground_truth` to decide, had been out of the turn for a long
+  time and nothing called it. It is deleted. Lies are found out on the spot,
+  by ground the teller could be held to.
+- **Autosave.** Checkpoints were ordered by file time, which ties on a loaded
+  machine; `test_autosave_cleanup_old_checkpoints` loaded turn 120 as the
+  latest of 120 and 150. They are ordered by the turn in the name.
+- **#345.** "A better tool changes the yield, not the time" is left: in
+  whole turns, more per turn and fewer turns per unit are the same rate.
+
+**Measured**, forty settlements (smooth 1–24, scattered 1–16), two years
+each. The container was reclaimed twice mid-queue, so the steps after the
+pack were measured together rather than one at a time:
+
+| | #368 | huddle | the pack | the rest |
+|---|---|---|---|---|
+| births | 157 | 167 | 173 | 163 |
+| deaths | 15 | 11 | 10 | 5 |
+| of hunger | 5 | 1 | 2 | 1 |
+| alive at two years | 622 | 636 | 643 | 638 |
+| camps moved | 336 | 437 | 389 | 365 |
+
+- **Huddle against #368**: hunger deaths 5 to 1 (t -2.08), camps moved 336 to
+  437 (t +2.52); alive and births up, within noise.
+- **The pack against the huddle**: every column within noise (alive t
+  +0.56). The way that cost 7.8% wired outright costs nothing gated on the
+  meal being kept.
+- **The rest against the pack** (stranger's pit, walk patience, swaps, the
+  bite of leaf, the worth filter, curiosity's room): every column within
+  noise (births t -0.90, alive t -0.39). What moved is what people did:
+
+| | the pack | the rest |
+|---|---|---|
+| swaps that failed | 17,244 | 5,135 |
+| swaps that worked | 5 | 2 |
+| buried | 193,185 | 214,562 |
+| dried | 145,953 | 162,086 |
+| fish caught | 27,182 | 32,422 |
+| hunts that told | 343 | 434 |
+| things found out | 1,336 | 1,395 |
+
+Seven in ten failed swaps are gone; the turns went to burying, drying,
+fishing and hunting.
+
+**Full suite**, at the curiosity fix: 2,962 passed, 2 failed - the year dice
+count, recorded, and the autosave tie, fixed after it.
+
+**Dice counts**: 6,624 (seed 4242, 120 turns, unchanged throughout) and
+867,309 (seed 0, a year).
