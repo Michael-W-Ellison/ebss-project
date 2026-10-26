@@ -27995,20 +27995,22 @@ later entry. These were not. Each line names the entry that left it.
 **Behaviour:**
 - ~~Territorial beasts never charge people who come too near; `could_it_take`
   counts only hunters (#327).~~ They warn, then strike (#368).
-- `SeekShelter` cannot end the cold that chose it, because `recover` never
-  touches body temperature (#233, #241).
-- The `EatCarriedFood` way checks for a snare at the feet, not the pack
-  (#235).
+- ~~`SeekShelter` cannot end the cold that chose it, because `recover` never
+  touches body temperature (#233, #241).~~ A huddle under cover warms (#369).
+- ~~The `EatCarriedFood` way checks for a snare at the feet, not the pack
+  (#235).~~ It eats from the pack when the meal would be banked (#369).
 - A full reserve spills 17-22% of what is eaten, and burying gets no claim
   on the turn when the body is full and the pack is not (#235, #237, #240).
-- `pits_i_remember` walks past a nearer stranger's pit to one's own or
-  kin's, however far (#252).
-- Famine: a bite off the ground is taken before the walk to a pit, and every
+- ~~`pits_i_remember` walks past a nearer stranger's pit to one's own or
+  kin's, however far (#252).~~ A stranger's pit counts as 300 m further (#369).
+- ~~Famine: a bite off the ground is taken before the walk to a pit, and every
   way of answering hunger is ranked as the same relief (#301). The larder
-  branch made 10,589 walks for 2,276 handfuls (#303).
+  branch made 10,589 walks for 2,276 handfuls (#303).~~ A bite is ranked at
+  what it puts in; larder walks arrive (#369).
 - The patience of a long walk is reckoned from what is left of it, so it
-  shrinks near the end (#179).
-- Some walks still go nowhere, and "already there" costs nothing (#234).
+  shrinks near the end (#179). ~~Fixed (#369).~~
+- ~~Some walks still go nowhere, and "already there" costs nothing (#234).~~
+  None found in sixty days of seed 0 (#369).
 - The Construction drive almost never wins a turn (#175). No tent is ever
   built (#205, #349, #353). No house is ever built, so zoning and plots
   have never fired (#364).
@@ -28018,10 +28020,12 @@ later entry. These were not. Each line names the entry that left it.
 - Nobody carries meat home for a share (#331). Meat by the beast's mass was
   tried and not kept (#257, #330).
 - A failed swap destroys the substitute, and swaps the world cannot supply
-  are still offered once (#206).
-- `what_i_would_work_on` has no "is the output worth having" filter (#199).
+  are still offered once (#206). ~~Fixed (#369).~~
+- ~~`what_i_would_work_on` has no "is the output worth having" filter (#199).~~
+  It has one, which today turns nothing away (#369).
 - Telling where things are was reverted, and lie detection still counts any
-  wrong claim as a lie (#196).
+  wrong claim as a lie (#196). ~~The lie half: that review was dead and is
+  gone (#369).~~
 - Lessons: an undertaking's record never fades, a way is judged by its
   success rate and not its yield, `worth_trying` still drops a way at 0.2,
   and `A_FAIR_GO` is twelve (#184, #266-#269). The flat step itself became
@@ -28034,13 +28038,15 @@ later entry. These were not. Each line names the entry that left it.
 - Knowing how is keyed on the product, not the recipe (#195, #199). There is
   no flint in the ground, so the map arm cannot fire (#195).
 - Several ways are still `Reach::NotYet`, and `RelocateTowardWater` says
-  "moving camp never fires" though camps move (#193).
+  "moving camp never fires" though camps move (#193). ~~The prose is
+  corrected (#369).~~
 - Sling, travois and leather bag are never found out in two years (#345).
 - Mating is tried about 1.4 times a day per partnered adult (#338). Best
   suited pairs stand no nearer than others (#339). Traits only a mutation
   can give never appear in an adult (#337).
-- An ill person sleeps through their own hunger (#166, not settled); the ill
-  walk for herbs rather than stooping for what they pass (#166).
+- ~~An ill person sleeps through their own hunger (#166, not settled)~~: no
+  ill person was ever wasting in three seeded years (#369). The ill walk for
+  herbs rather than stooping for what they pass (#166).
 
 **Ecology and the world:**
 - Every hunter gets the same head count of small life whatever its size
