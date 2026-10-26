@@ -28,12 +28,13 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #366, at the spent-body change):
-`cargo test --lib` in one piece, 2,959 tests: 2,953 passed, none failed, 6
-ignored. The last change of #366, letting a tired man run, was checked
-against the threat, fight-or-flight, sacrifice, danger, stamina and
-repeatable groups, all green.
-- The dice counts are 6,624 (seed 4242, 120 turns) and 961,599 (seed 0, a
+**Last full run** (ISSUES_FOUND #369, at the curiosity fix):
+`cargo test --lib` in one piece, 2,970 tests: 2,962 passed, 2 failed, 6
+ignored. The two were the year dice count, recorded since, and
+`test_autosave_cleanup_old_checkpoints`, which tied on file times and is
+fixed (checkpoints sort by turn); the autosave and repeatable groups were
+green after.
+- The dice counts are 6,624 (seed 4242, 120 turns) and 867,309 (seed 0, a
   year).
 - #363 turned nineteen tests red that leaned on what it fixed. Most made a man
   starving by setting his stamina to five, which read as starving only
