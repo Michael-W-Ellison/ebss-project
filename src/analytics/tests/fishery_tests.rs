@@ -716,3 +716,55 @@ fn a_thief_out_of_sight_is_no_danger() {
     simulation.population.agents[1].state.position = (40, 40, 0);
     assert!(!simulation.something_is_after_me(1), "and gone, the grudge is only a grudge");
 }
+
+/// What a larder short of the week reads as, for an adult of ordinary burn.
+fn a_larder_short_of_the_week(day_of_year: u32) -> crate::agents::provision::WhatIsPutBy {
+    crate::agents::provision::WhatIsPutBy::reckon(0.0, 1_440.0, 90.0, day_of_year)
+}
+
+/// Preparedness goes fishing (#370). A man who is not hungry, with nothing
+/// put by and a reach of fish at his feet, is sent to the water by the want
+/// of a store, as he was only ever sent by hunger; with a month put by in
+/// the spring he is not.
+#[test]
+fn a_short_larder_sends_a_fed_man_to_the_water() {
+    use crate::core::drives::DriveType;
+
+    let spring = Season::Spring.first_day() + 10;
+    let mut simulation = somebody_at_a_reach_holding(60);
+    simulation.world.climate.calendar.day_of_year = spring;
+    let agent = &mut simulation.population.agents[0];
+    agent.state.now_this_many_years_old(25);
+    if let Some(hunger) = agent.drives.get_mut(DriveType::Hunger) {
+        hunger.value = 0.0;
+    }
+    agent.state.what_the_larder_says = Some(a_larder_short_of_the_week(spring));
+
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.fishing_action(agent, (2, 1, 0)),
+        None,
+        "hunger does not send him: he is not hungry"
+    );
+    let going = simulation.going_out_for_food_to_put_by(agent, (2, 1, 0));
+    assert!(
+        matches!(going, Some(Action::Fish) | Some(Action::ForageShallows)),
+        "a store short of the week, and fish at his feet: {going:?}"
+    );
+    let offered = simulation.what_this_drive_offers(DriveType::Preparedness, agent, (2, 1, 0));
+    assert_eq!(offered, going, "and it is what Preparedness offers him");
+
+    let agent = &mut simulation.population.agents[0];
+    agent.state.what_the_larder_says = Some(crate::agents::provision::WhatIsPutBy::reckon(
+        1_440.0 * 40.0,
+        1_440.0,
+        90.0,
+        spring,
+    ));
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.going_out_for_food_to_put_by(agent, (2, 1, 0)),
+        None,
+        "with forty days put by in the spring there is nothing to go out for"
+    );
+}

@@ -662,8 +662,6 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
-        use crate::agents::practices::Undertaking;
-
         // Fishing is what an agent does when it wants food or wants a store of
         // it. Both, in a settlement beside a river, most of the year.
         let hunger = agent
@@ -687,6 +685,22 @@ impl Simulation {
         if Self::more_food_than_he_will_get_through(agent) {
             return None;
         }
+
+        self.going_fishing(agent, agent_position)
+    }
+
+    /// To the water: his own traps, somebody else's, a cast from where he
+    /// stands, or a walk to the best water about.
+    ///
+    /// What `fishing_action` does once hunger has said to go, and what
+    /// putting food by does when the store is short (`going_out_for_food_to_
+    /// put_by`): the river does not care which of them sent him.
+    pub(in crate::analytics) fn going_fishing(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
 
         // Fish in his own traps come first, whatever he has come to believe
         // about standing in a river: a catch is a catch.

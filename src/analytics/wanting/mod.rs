@@ -1432,7 +1432,11 @@ impl Simulation {
                 .or_else(|| self.lengthening_the_line(agent, agent_position))
                 // And the same in the water, with a trap that has to be made
                 // and carried there first.
-                .or_else(|| self.putting_traps_in_the_water(agent, agent_position)),
+                .or_else(|| self.putting_traps_in_the_water(agent, agent_position))
+                // And with nothing else to do about a short larder, go and
+                // get food for it: hunting and fishing are ways of putting
+                // food by too (#370).
+                .or_else(|| self.going_out_for_food_to_put_by(agent, agent_position)),
 
             // Nothing in the world is fine enough to want yet - see
             // ISSUES_FOUND.md #5. Until something is, this need has no answer

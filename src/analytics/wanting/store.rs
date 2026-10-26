@@ -738,9 +738,20 @@ impl Simulation {
             .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
             .is_some()
         {
-            return Some(Action::Gather {
-                resource_type: "food".to_string(),
-            });
+            // A beast in sight worth more than the best patch is the better
+            // load for the store; failing a patch worth the trip, the water
+            // or the game seen lately (#370).
+            if let Some(hunt) = self.a_hunt_that_beats_the_hedgerow(agent, agent_position) {
+                return Some(hunt);
+            }
+            if self.the_best_food_anywhere_and_its_worth(agent, agent_position).is_some() {
+                return Some(Action::Gather {
+                    resource_type: "food".to_string(),
+                });
+            }
+            if let Some(out) = self.going_out_for_food_to_put_by(agent, agent_position) {
+                return Some(out);
+            }
         }
 
         // No store anywhere, and the year turning. Dig one.
@@ -791,6 +802,87 @@ impl Simulation {
         }
 
         None
+    }
+
+    /// Going out for food to put by: a hunt or the water.
+    ///
+    /// "Preparedness should lead to hunting and fishing. These are methods of
+    /// getting food." The Preparedness arm could bury, dry, salt, dig, walk a
+    /// trapline and set traps in the water, and the only food it ever went
+    /// out for was a gather for the store in autumn - so somebody short of a
+    /// week's food in spring, with a river beside the camp and deer on the
+    /// hill, was moved by Preparedness to nothing at all (#266, #370).
+    ///
+    /// A beast in sight first, because a carcass is the most food a turn
+    /// buys; then the water; then a walk to where game was lately seen. Any
+    /// season the larder is short of the month, and in autumn whatever it is
+    /// short of. Only with room in the pack to bring it home, because what
+    /// comes home is what the drive is reckoned from: the catch in the pack
+    /// and in the pit is what makes Preparedness fall again.
+    ///
+    /// The lessons still have their say - somebody whose record says the
+    /// water never pays does not go to the water - and the hungry man's hunt
+    /// and fishing stay where they were, under hunger.
+    pub(in crate::analytics) fn going_out_for_food_to_put_by(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::provision::HowLongTheFoodLasts;
+
+        if agent.state.years_old() < crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT {
+            return None;
+        }
+        if !agent.could_i_take_another_handful(Self::WHAT_A_JOINT_WEIGHS) {
+            return None;
+        }
+
+        let short_of_the_month = agent.state.what_the_larder_says.is_some_and(|larder| {
+            matches!(
+                larder.rung,
+                HowLongTheFoodLasts::NotTheDay
+                    | HowLongTheFoodLasts::NotTheWeek
+                    | HowLongTheFoodLasts::NotTheMonth
+            )
+        });
+        let autumn = matches!(
+            self.world.climate.current_season(),
+            crate::environment::seasons::Season::Fall
+        );
+        if !short_of_the_month && !autumn {
+            return None;
+        }
+
+        let sight = Self::how_far_a_hunter_looks(agent) as i32;
+        if self.the_best_prey_to_eat(agent, agent_position, sight).is_some() {
+            if let Some(hunt) = self.going_after_meat(agent, agent_position) {
+                return Some(hunt);
+            }
+        }
+        if let Some(fishing) = self.going_fishing(agent, agent_position) {
+            return Some(fishing);
+        }
+        self.going_after_meat(agent, agent_position)
+    }
+
+    /// A beast in sight that is worth more than the best patch of food this
+    /// one knows of, in the coin `food_action` weighs them in (#330).
+    fn a_hunt_that_beats_the_hedgerow(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
+
+        if !agent.lessons.worth_trying(Undertaking::Hunting) {
+            return None;
+        }
+        let sight = Self::how_far_a_hunter_looks(agent) as i32;
+        let (_, _, hunt_worth) = self.the_best_prey_to_eat(agent, agent_position, sight)?;
+        let beats = self
+            .the_best_food_anywhere_and_its_worth(agent, agent_position)
+            .is_none_or(|(_, patch_worth)| hunt_worth > patch_worth);
+        beats.then(|| self.going_after_meat(agent, agent_position)).flatten()
     }
 
     /// A kill this one knows of with meat still on it, worth going for and

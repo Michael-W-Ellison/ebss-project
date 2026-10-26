@@ -412,12 +412,25 @@ impl Simulation {
             / crate::environment::seasons::TICKS_PER_DAY)
             % crate::environment::seasons::DAYS_PER_YEAR;
 
-        let in_the_ground: f32 = self
+        // And what is hanging on a rack, which is the camp's as much as a pit
+        // is and was counted by nobody: a rack of drying fish left the drive
+        // reading as though the catch had never come home (#370).
+        let on_the_racks: u32 = self
+            .world
+            .dropped
+            .iter()
+            .filter(|left| self.world.racks.contains(&left.where_it_is))
+            .filter(|left| left.item.quantity > 0 && crate::world::nutrition::is_this_food(&left.item.item_id))
+            .map(|left| left.item.quantity)
+            .sum();
+
+        let in_the_ground: f32 = (self
             .world
             .pits
             .iter()
             .map(|pit| pit.how_much_is_in_it() as f32)
             .sum::<f32>()
+            + on_the_racks as f32)
             * UNITS_IN_ONE_STORED_ITEM;
 
         let mouths = self
