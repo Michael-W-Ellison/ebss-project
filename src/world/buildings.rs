@@ -130,6 +130,9 @@ impl BuildingType {
             BuildingType::Windbreak => Cover { keeps_off_rain: false, keeps_off_wind: true, warmth: 0.0 },
             BuildingType::LeanTo => Cover { keeps_off_rain: true, keeps_off_wind: true, warmth: 0.3 },
             BuildingType::BrushHut => Cover { keeps_off_rain: true, keeps_off_wind: true, warmth: 0.45 },
+            // Walls daubed with earth and a hearth inside hold more than skins
+            // (#371)
+            BuildingType::SmallHouse => Cover { keeps_off_rain: true, keeps_off_wind: true, warmth: 0.8 },
             _ => Cover::FULL,
         }
     }
@@ -177,10 +180,9 @@ impl BuildingType {
                 Resource::new(ResourceType::Stone, 80),
                 Resource::new(ResourceType::Iron, 20),
             ],
-            BuildingType::SmallHouse => vec![
-                Resource::new(ResourceType::Wood, 50),
-                Resource::new(ResourceType::Stone, 30),
-            ],
+            // A framed hut: poles, wattle and bark, and the cord asked for
+            // by class (`tags::WHAT_A_HOUSE_TAKES`, #371)
+            BuildingType::SmallHouse => vec![Resource::new(ResourceType::Wood, 30)],
             BuildingType::MediumHouse => vec![
                 Resource::new(ResourceType::Wood, 80),
                 Resource::new(ResourceType::Stone, 50),
@@ -616,7 +618,7 @@ impl BuildingType {
             BuildingType::BrushHut => "A dome of bent poles thatched all round. Nearly as good as a tent, for no hides, and standing a season.",
             BuildingType::Longhouse => "Basic shared housing for up to 10 agents. Provides shelter and increases well-being.",
             BuildingType::UpgradedLonghouse => "Improved shared housing for up to 15 agents. Better comfort and amenities.",
-            BuildingType::SmallHouse => "Personal dwelling for 1-2 agents. Provides privacy and personal space.",
+            BuildingType::SmallHouse => "A framed hut: poles, wattle walls daubed with earth, a bark roof. The first house a settled household puts up.",
             BuildingType::MediumHouse => "Family home for up to 4 agents. Comfortable living space.",
             BuildingType::LargeHouse => "Spacious home for up to 6 agents. High-quality amenities.",
             BuildingType::Manor => "Luxury estate for up to 8 agents. Premium living conditions.",
@@ -914,6 +916,15 @@ pub struct Building {
     pub condition: f32, // Building condition 0.0-1.0, decays over time without maintenance
     pub production_timer: u32, // Turns until next production cycle
     pub pending_production: Vec<Resource>, // Resources produced but not yet collected
+    /// What the site still wants brought to it, class by class (#371).
+    ///
+    /// A tent's skins come one kill at a time and a house is thirty poles,
+    /// so neither goes up from one pack. The frame is started with what its
+    /// builder carries and the rest is owed; whoever of the household brings
+    /// some of it to the site hands it over (`take_what_it_still_wants`), and
+    /// no work is done on it until nothing is owed.
+    #[serde(default)]
+    pub owed: Vec<(crate::environment::tags::Tag, u32)>,
 }
 
 impl Building {
@@ -927,6 +938,7 @@ impl Building {
             condition: 1.0, // New buildings start in perfect condition
             production_timer: building_type.production_interval(),
             pending_production: Vec::new(),
+            owed: Vec::new(),
         }
     }
 
@@ -944,7 +956,47 @@ impl Building {
             condition: 1.0,
             production_timer: 0, // Timer starts when building is completed
             pending_production: Vec::new(),
+            owed: Vec::new(),
         }
+    }
+
+    /// Started with its frame, and owing the rest (#371).
+    pub fn owing(mut self, owed: Vec<(crate::environment::tags::Tag, u32)>) -> Self {
+        self.owed = owed;
+        self
+    }
+
+    /// What it still wants brought, class by class.
+    pub fn still_wants(&self) -> &[(crate::environment::tags::Tag, u32)] {
+        &self.owed
+    }
+
+    /// Hand over whatever of what it still wants these hands hold, and say
+    /// what was handed over, by name, for the pack to give up.
+    pub fn take_what_it_still_wants(
+        &mut self,
+        holding: &impl Fn(&str) -> u32,
+    ) -> Vec<(&'static str, u32)> {
+        let mut taken: Vec<(&'static str, u32)> = Vec::new();
+        for (tag, how_many) in self.owed.iter_mut() {
+            for called in crate::environment::tags::everything_that_is(*tag) {
+                if *how_many == 0 {
+                    break;
+                }
+                let already = taken
+                    .iter()
+                    .filter(|(name, _)| *name == called)
+                    .map(|(_, n)| *n)
+                    .sum::<u32>();
+                let to_hand = holding(called).saturating_sub(already).min(*how_many);
+                if to_hand > 0 {
+                    taken.push((called, to_hand));
+                    *how_many -= to_hand;
+                }
+            }
+        }
+        self.owed.retain(|(_, how_many)| *how_many > 0);
+        taken
     }
 
     /// What its builder carried to it, counted as delivered.
@@ -1035,6 +1087,9 @@ impl Building {
 
     /// Check if all required resources have been delivered
     pub fn has_all_resources(&self) -> bool {
+        if !self.owed.is_empty() {
+            return false;
+        }
         if let BuildingState::UnderConstruction { resources_delivered, .. } = &self.state {
             let requirements = self.building_type.requirements();
 
@@ -1246,11 +1301,11 @@ mod tests {
     #[test]
     fn test_building_requirements() {
         let reqs = BuildingType::SmallHouse.requirements();
-        assert!(reqs.len() >= 2);
+        assert!(!reqs.is_empty());
 
-        // Should have wood and stone
+        // A framed hut: timber and no stone (#371)
         assert!(reqs.iter().any(|r| r.resource_type == ResourceType::Wood));
-        assert!(reqs.iter().any(|r| r.resource_type == ResourceType::Stone));
+        assert!(!reqs.iter().any(|r| r.resource_type == ResourceType::Stone));
     }
 
     #[test]
@@ -1260,9 +1315,8 @@ mod tests {
 
         assert!(!building.is_completed());
 
-        // Deliver required resources (SmallHouse needs 50 Wood + 30 Stone)
-        building.deliver_resource(Resource::new(ResourceType::Wood, 50));
-        building.deliver_resource(Resource::new(ResourceType::Stone, 30));
+        // Deliver required resources (SmallHouse needs 30 Wood)
+        building.deliver_resource(Resource::new(ResourceType::Wood, 30));
         assert!(building.has_all_resources());
 
         // Add progress (work_amount, worker_skill)

@@ -372,6 +372,11 @@ impl Simulation {
                     .any(|other| {
                         (other.0 - position.0).abs().max((other.1 - position.1).abs()) <= 6
                     }),
+                without_a_roof_of_its_own: match self.the_roof_this_one_wants(agent) {
+                    Some(crate::world::BuildingType::SmallHouse) => Self::WANTING_A_HOUSE,
+                    Some(_) => Self::WANTING_A_TENT,
+                    None => 0.0,
+                },
             }));
         }
 
@@ -381,6 +386,11 @@ impl Simulation {
             }
         }
     }
+
+    /// How much a settled household with no house wants one, and anybody
+    /// grown wants a tent, as the Construction drive reads it (#371).
+    pub(in crate::analytics) const WANTING_A_HOUSE: f32 = 1.0;
+    pub(in crate::analytics) const WANTING_A_TENT: f32 = 0.5;
 
     /// How close a predator has to be to a child before its parent runs
     pub(in crate::analytics) const DANGER_TO_A_CHILD: i32 = 10;

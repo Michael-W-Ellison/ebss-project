@@ -374,8 +374,12 @@ impl DriveType {
                 let room = yes(ctx.around.somewhere_to_build, 0.4);
                 let neighbours = yes(ctx.around.neighbours_building, 0.25);
                 let synergy = ctx.shelter_pressing.clamp(0.0, 1.0) * 0.45;
+                // And having no roof of one's own: nothing else ever asked
+                // for one, so the drive sat under its threshold for a people
+                // who had never put up anything but brush (#371).
+                let roofless = ctx.around.without_a_roof_of_its_own.clamp(0.0, 1.0) * 0.5;
                 let means = if ctx.materials_put_by > 0 { 1.0 } else { 0.35 };
-                (room + neighbours + synergy) * means
+                (room + neighbours + synergy + roofless) * means
             }
 
             // Not in the specification - added when parents were given a
@@ -617,6 +621,11 @@ pub struct Surroundings {
     pub they_could_get_clear: bool,
     /// Anybody else within talking distance
     pub company: bool,
+    /// How much this one wants a roof of their own, nought to one: a house
+    /// for a household that farms here and has none, a tent less so for
+    /// anybody grown without one (#371).
+    #[serde(default)]
+    pub without_a_roof_of_its_own: f32,
     /// Somebody within earshot cried out under attack this turn.
     ///
     /// What hearing is for (#14): a man struck beyond the trees is not seen,

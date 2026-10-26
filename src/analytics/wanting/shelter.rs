@@ -339,64 +339,71 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
+        use crate::environment::tags::{what_starts_this_roof, what_this_roof_takes, what_would_be_used, Tag};
         use crate::world::BuildingType;
 
-        // A tent is what a stone-age people can raise. Anything grander needs
-        // stone they have no way to quarry.
-        // What the tent takes, asked the way the builder asks it: by class,
-        // so that leather (a deer's skin comes off as leather) and cord count
-        // as well as hides. Asked by name - eight wood and four hides - this
-        // never saw a deer hunter's leather as a covering, and never noticed
-        // the two cords the builder then refused for (#352).
+        // What a site of ours is still owed, and these hands are holding:
+        // take it there (#371). A tent's skins and a house's poles come in
+        // one trip at a time, and this is the trip.
+        if let Some(bringing) = self.bringing_to_a_site(agent, agent_position) {
+            return Some(bringing);
+        }
+
         let holding = |what: &str| agent.how_many_i_have(what);
-        let short_of = crate::environment::tags::what_this_roof_takes(BuildingType::SkinTent)
-            .and_then(|wants| crate::environment::tags::what_would_be_used(wants, &holding).err());
 
-        use crate::environment::tags::Tag;
-        match short_of {
-            None => Some(Action::Build {
-                structure_type: "tent".to_string(),
-                position: agent_position,
-            }),
+        // Which roof this one is after: a house for a household that farms
+        // here and has none, a tent for anybody with no roof of their own.
+        // With one already, the camp's jobs are the work (`digging_in`).
+        let Some(wanted) = self.the_roof_this_one_wants(agent) else {
+            return self.digging_in(agent, agent_position);
+        };
 
-            // Hides do not grow on bushes. Sending an agent to forage for them
-            // is a wild goose chase, and a measured one: eighteen thousand
-            // refusals of `No hides sources nearby` in a single world before
-            // this told the difference between what the ground gives and what
-            // has to be taken off an animal.
-            //
-            // And if there is nothing to hunt, dig in instead of standing
-            // there. A tent wants eight wood and four hides; hides come off
-            // animals and nothing else; and hunting was unreachable for the
-            // whole life of this project - three deadlocked things in a row,
-            // which is why `shelters built` was nought in every arm ever
-            // measured. A hole in the ground with turf over it needs none of
-            // them.
-            //
-            // And a hut of brush first, if the pack holds the poles and cord
-            // for one: the roof a people puts up when the hunt has not given
-            // them skins (#349).
-            //
-            // And skins for a tent are a reason to hunt by themselves: only a
-            // garment ever sent anybody after an animal, so a people dressed
-            // for the winter never took a skin for a roof (#352).
-            Some((Tag::FlexibleCovering, _)) => {
-                let a_hut = crate::environment::tags::what_this_roof_takes(BuildingType::BrushHut)
-                    .is_some_and(|wants| crate::environment::tags::what_would_be_used(wants, &holding).is_ok());
-                let here = crate::world::Position::new(agent_position.0, agent_position.1);
-                if a_hut && self.world.get_building_at(&here).is_none() {
-                    return Some(Action::Build {
-                        structure_type: "brushhut".to_string(),
-                        position: agent_position,
-                    });
-                }
-                // Only with an animal to take them from: going after skins
-                // starts with a spear, and nobody makes a spear for a roof
-                // with nothing in sight to throw it at.
-                self.the_best_prey_for_its_skin(agent, agent_position)
-                    .and_then(|_| self.going_after_skins(agent, agent_position))
-                    .or_else(|| self.digging_in(agent, agent_position))
+        // A site of ours for it, going up and owed something these hands do
+        // not hold: go and get it.
+        if let Some(site) = self.a_roof_of_our_own(agent, Some(wanted), false) {
+            if let Some((tag, _)) = site.still_wants().first().copied() {
+                return match tag {
+                    Tag::FlexibleCovering => self.skins_for_a_roof(agent, agent_position),
+                    Tag::Cordage if agent.how_many_i_have("wood") >= 1 => Some(Action::Craft {
+                        item_type: "lashing".to_string(),
+                    }),
+                    _ => Some(Action::Gather { resource_type: "wood".to_string() }),
+                };
             }
+            // Owed nothing and not finished: it is the job
+            return self.digging_in(agent, agent_position);
+        }
+
+        // No site yet, and not a skin to begin a tent with: the skins first,
+        // or cover meanwhile. A frame nobody can cover is eight poles spent
+        // on nothing, and the poles would have been tonight's brush hut.
+        let a_covering_in_hand = crate::environment::tags::everything_that_is(Tag::FlexibleCovering)
+            .any(|called| holding(called) > 0);
+        // In the tent's own order: its poles, then a skin, then the cord. An
+        // empty pack goes for wood; poles and no skin, for skins.
+        let poles_in_hand = what_starts_this_roof(wanted)
+            .and_then(|wants| what_would_be_used(&wants[..1], &holding).err())
+            .is_none();
+        if wanted == BuildingType::SkinTent && poles_in_hand && !a_covering_in_hand {
+            return self.skins_for_a_roof(agent, agent_position);
+        }
+
+        // Start one with the frame in hand.
+        let short_of = what_starts_this_roof(wanted)
+            .and_then(|wants| what_would_be_used(wants, &holding).err());
+
+        match short_of {
+            // A house goes up by the household's hearth, whoever is standing
+            // where; a tent where its builder is
+            None => Some(Action::Build {
+                structure_type: Self::what_they_call_this_roof(wanted).to_string(),
+                position: if wanted == BuildingType::SmallHouse {
+                    let home = Self::where_this_one_lives(agent);
+                    (home.0, home.1, agent_position.2)
+                } else {
+                    agent_position
+                },
+            }),
 
             // Cord is made from a branch's bark where a branch is to hand
             Some((Tag::Cordage, _)) if agent.how_many_i_have("wood") >= 1 => Some(Action::Craft {
@@ -408,17 +415,179 @@ impl Simulation {
             // person-days from 215,333 to 211,833 and settlements out of their
             // first winter from 22 of 64 to 20, and - the number that says
             // what happened - **burrows finished from 22 to 5 and the camp's
-            // larder from 30,745 items to 12,340.** A tent wants eight wood
-            // and four hides; a burrow wants nothing at all. Twenty paces
-            // spent on tent timber is twenty paces not spent digging the hole
-            // the store goes under. In this model the thing worth doing is
-            // nearly always the thing under his feet, and a walk displaces it.
-            // See ISSUES_FOUND #194.
-            Some((Tag::Pole, _)) | Some((Tag::Cordage, _)) => Some(Action::Gather {
-                resource_type: "wood".to_string(),
-            }),
+            // larder from 30,745 items to 12,340.** Twenty paces spent on
+            // timber is twenty paces not spent digging the hole the store goes
+            // under. In this model the thing worth doing is nearly always the
+            // thing under his feet, and a walk displaces it. See ISSUES_FOUND
+            // #194. `Gather` takes from what is within a forage.
+            //
+            // But a tent short of its frame with brush for a hut in the pack
+            // puts the hut up first: cover tonight, the tent when the poles
+            // come (#349).
+            Some((Tag::Pole, _)) | Some((Tag::Cordage, _)) => {
+                let a_hut = what_this_roof_takes(BuildingType::BrushHut)
+                    .is_some_and(|wants| what_would_be_used(wants, &holding).is_ok());
+                let here = crate::world::Position::new(agent_position.0, agent_position.1);
+                if wanted == BuildingType::SkinTent && a_hut && self.world.get_building_at(&here).is_none() {
+                    return Some(Action::Build {
+                        structure_type: "brushhut".to_string(),
+                        position: agent_position,
+                    });
+                }
+                Some(Action::Gather { resource_type: "wood".to_string() })
+            }
             Some(_) => self.digging_in(agent, agent_position),
         }
+    }
+
+    /// Skins for a roof, and cover meanwhile.
+    ///
+    /// Hides do not grow on bushes, so they are hunted for - and only with an
+    /// animal to take them from: going after skins starts with a spear, and
+    /// nobody makes a spear for a roof with nothing in sight to throw it at
+    /// (#352). Without one, a brush hut if the pack holds one, and failing
+    /// that, digging in: a roof tonight while the tent waits on its skins.
+    fn skins_for_a_roof(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::environment::tags::{what_this_roof_takes, what_would_be_used};
+        use crate::world::BuildingType;
+
+        if let Some(hunt) = self
+            .the_best_prey_for_its_skin(agent, agent_position)
+            .and_then(|_| self.going_after_skins(agent, agent_position))
+        {
+            return Some(hunt);
+        }
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let a_hut = what_this_roof_takes(BuildingType::BrushHut)
+            .is_some_and(|wants| what_would_be_used(wants, &holding).is_ok());
+        let here = crate::world::Position::new(agent_position.0, agent_position.1);
+        if a_hut && !agent.surroundings.under_shelter && self.world.get_building_at(&here).is_none() {
+            return Some(Action::Build {
+                structure_type: "brushhut".to_string(),
+                position: agent_position,
+            });
+        }
+        self.digging_in(agent, agent_position)
+    }
+
+    /// Whether a roof is this one's own, or their household's: their own,
+    /// their partner's, or - for somebody grown who has not paired - their
+    /// kin's, whose roof they still live under (#371).
+    pub(in crate::analytics) fn is_this_roof_ours(
+        agent: &crate::agents::Agent,
+        belongs: crate::world::Belongs,
+    ) -> bool {
+        match belongs {
+            crate::world::Belongs::To(whose) if whose == agent.id => true,
+            crate::world::Belongs::To(whose) => match agent.my_partner() {
+                Some(partner) => whose == partner,
+                None => agent.is_this_my_kin(whose),
+            },
+            _ => false,
+        }
+    }
+
+    /// A roof of this household's, of a kind if one is named: a finished one
+    /// when `finished`, and one still going up when not.
+    pub(in crate::analytics) fn a_roof_of_our_own(
+        &self,
+        agent: &crate::agents::Agent,
+        kind: Option<crate::world::BuildingType>,
+        finished: bool,
+    ) -> Option<&crate::world::Building> {
+        self.world.buildings.iter().find(|roof| {
+            kind.is_none_or(|kind| roof.building_type == kind)
+                && roof.is_completed() == finished
+                && Self::is_this_roof_ours(agent, roof.belongs())
+        })
+    }
+
+    /// The age at which somebody puts up a roof of their own.
+    pub(in crate::analytics) const OLD_ENOUGH_TO_RAISE_A_ROOF: u32 = 16;
+
+    /// Which roof this one is after, if any (#371).
+    ///
+    /// **A house** for a household tied to this ground - crops standing on
+    /// fields by its hearth - that has no house. That is the line the
+    /// construction path draws: a framed hut is what a people puts up once
+    /// it stays, and a people stays once it farms.
+    ///
+    /// **A tent** for anybody grown with no tent or house of their
+    /// household's. Brush is cover for a night or a season and not a roof of
+    /// one's own; a burrow is a hole.
+    pub(in crate::analytics) fn the_roof_this_one_wants(
+        &self,
+        agent: &crate::agents::Agent,
+    ) -> Option<crate::world::BuildingType> {
+        use crate::world::BuildingType;
+
+        if agent.state.years_old() < Self::OLD_ENOUGH_TO_RAISE_A_ROOF {
+            return None;
+        }
+        let a_house = |finished| self.a_roof_of_our_own(agent, Some(BuildingType::SmallHouse), finished);
+        if a_house(true).is_some() {
+            return None;
+        }
+        if self.tied_to_this_ground(agent) || a_house(false).is_some() {
+            return Some(BuildingType::SmallHouse);
+        }
+        let a_tent = |finished| self.a_roof_of_our_own(agent, Some(BuildingType::SkinTent), finished);
+        if a_tent(true).is_some() {
+            return None;
+        }
+        Some(BuildingType::SkinTent)
+    }
+
+    /// How far somebody walks to take a site what it is owed: a camp's
+    /// width, as for lending a hand.
+    pub(in crate::analytics) const HOW_FAR_TO_CARRY_TO_A_SITE: i32 = 2 * Self::HOW_FAR_TO_LEND_A_HAND;
+
+    /// A site of this household's, going up, owed something these hands
+    /// hold: hand it over standing on it, or walk there (#371).
+    ///
+    /// The household's, not the camp's: a tent or a house is somebody's, and
+    /// what is carried to it is carried for them. Behind the supper gate, as
+    /// any walk back to a roof is.
+    pub(in crate::analytics) fn bringing_to_a_site(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let here = crate::world::Position::new(agent_position.0, agent_position.1);
+        let holding = |what: &str| agent.how_many_i_have(what);
+        let site = self
+            .world
+            .buildings
+            .iter()
+            .filter(|roof| !roof.is_completed() && Self::is_this_roof_ours(agent, roof.belongs()))
+            .filter(|roof| {
+                (roof.position.x - here.x).abs().max((roof.position.y - here.y).abs())
+                    <= Self::HOW_FAR_TO_CARRY_TO_A_SITE
+            })
+            .filter(|roof| {
+                roof.still_wants().iter().any(|(tag, _)| {
+                    crate::environment::tags::everything_that_is(*tag).any(|called| holding(called) > 0)
+                })
+            })
+            .min_by_key(|roof| here.distance_to(&roof.position))?;
+
+        let there = (site.position.x, site.position.y, agent_position.2);
+        if there == agent_position {
+            return Some(Action::Build {
+                structure_type: Self::what_they_call_this_roof(site.building_type).to_string(),
+                position: agent_position,
+            });
+        }
+        if agent.state.what_the_larder_says.as_ref().is_some_and(|larder| {
+            larder.rung == crate::agents::provision::HowLongTheFoodLasts::NotTheDay
+        }) {
+            return None;
+        }
+        Some(Action::Move { target: there })
     }
 
     /// How far a man will walk to lend a hand to a job already going.
@@ -489,6 +658,11 @@ impl Simulation {
                 if roof.is_completed() || !agent.may_i_use(&roof.belongs()).is_mine_to_use() {
                     return None;
                 }
+                // A site still owed its materials wants carrying to, not
+                // hands (#371): `bringing_to_a_site`
+                if !roof.still_wants().is_empty() {
+                    return None;
+                }
 
                 // Furthest along first, nearest second. The ordering is the
                 // point; the distance only breaks a tie between two jobs at
@@ -536,6 +710,8 @@ impl Simulation {
         });
 
         match near {
+            // Owed materials: carrying, not digging (#371)
+            Some(roof) if !roof.is_completed() && !roof.still_wants().is_empty() => return None,
             Some(roof) if !roof.is_completed() => {
                 let there = (roof.position.x, roof.position.y, agent_position.2);
 

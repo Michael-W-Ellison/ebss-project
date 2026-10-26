@@ -80,7 +80,7 @@ use super::making::{Tool, EVERY_TOOL};
 /// ones that sound like drawbacks are as load-bearing as the ones that sound
 /// like virtues: `FragileContainer` is why a pot is not what you carry on a
 /// hunt.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Tag {
     // ---- containers ------------------------------------------------------
     /// Will hold food without it falling out or going over faster
@@ -957,6 +957,72 @@ pub const WHAT_A_BRUSH_HUT_TAKES: &[Wanted] = &[
     Wanted { is: Tag::Cordage, how_much: 1 },
 ];
 
+/// What a house takes: a Stage 1 framed hut (#371).
+///
+/// "Pole frames, wattle walls, thatch or bark roofing" - the first dwelling
+/// in the construction path that is not put up for a season. Poles for the
+/// frame, more poles split and woven for the walls, bark off them for the
+/// roof, and cord to tie the frame; the daub is earth and costs nothing. No
+/// stone: every house the table held wanted thirty of it at the least, and
+/// no stone-age people ever carried a block.
+///
+/// Far more than one pack holds. It is put up the way a house is: the frame
+/// first, with what one person can carry (`WHAT_STARTS_A_HOUSE`), and the
+/// rest brought to the site over as many trips as it takes, by whoever of
+/// the household brings it (`Building::still_wants`).
+pub const WHAT_A_HOUSE_TAKES: &[Wanted] = &[
+    Wanted { is: Tag::Pole, how_much: 30 },
+    Wanted { is: Tag::Cordage, how_much: 6 },
+];
+
+/// The frame of a house: what has to be in hand to start one.
+pub const WHAT_STARTS_A_HOUSE: &[Wanted] = &[
+    Wanted { is: Tag::Pole, how_much: 8 },
+    Wanted { is: Tag::Cordage, how_much: 2 },
+];
+
+/// The frame of a tent: its poles and cord. The skins can come after, one
+/// kill at a time (#371) - nobody ever held four at once.
+pub const WHAT_STARTS_A_TENT: &[Wanted] = &[
+    Wanted { is: Tag::Pole, how_much: 8 },
+    Wanted { is: Tag::Cordage, how_much: 2 },
+];
+
+/// What has to be in hand to start a roof of this kind: its frame, for the
+/// two that are built over many trips, and the whole of it for the rest.
+pub fn what_starts_this_roof(
+    building: crate::world::BuildingType,
+) -> Option<&'static [Wanted]> {
+    match building {
+        crate::world::BuildingType::SkinTent => Some(WHAT_STARTS_A_TENT),
+        crate::world::BuildingType::SmallHouse => Some(WHAT_STARTS_A_HOUSE),
+        other => what_this_roof_takes(other),
+    }
+}
+
+/// What a roof still wants once its start is in, class by class: the whole
+/// of it, less the start.
+pub fn what_is_owed_after_the_start(
+    building: crate::world::BuildingType,
+) -> Vec<(Tag, u32)> {
+    let Some(wants) = what_this_roof_takes(building) else {
+        return Vec::new();
+    };
+    let start = what_starts_this_roof(building).unwrap_or(&[]);
+    wants
+        .iter()
+        .filter_map(|want| {
+            let started = start
+                .iter()
+                .filter(|s| s.is == want.is)
+                .map(|s| s.how_much)
+                .sum::<u32>();
+            let owed = want.how_much.saturating_sub(started);
+            (owed > 0).then_some((want.is, owed))
+        })
+        .collect()
+}
+
 /// What it takes to put up a roof of this kind, where that is stated in
 /// classes rather than in named resources.
 ///
@@ -973,6 +1039,7 @@ pub fn what_this_roof_takes(
         crate::world::BuildingType::Windbreak => Some(WHAT_A_WINDBREAK_TAKES),
         crate::world::BuildingType::LeanTo => Some(WHAT_A_LEAN_TO_TAKES),
         crate::world::BuildingType::BrushHut => Some(WHAT_A_BRUSH_HUT_TAKES),
+        crate::world::BuildingType::SmallHouse => Some(WHAT_A_HOUSE_TAKES),
         _ => None,
     }
 }

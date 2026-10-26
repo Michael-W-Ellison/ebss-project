@@ -96,7 +96,7 @@ impl Simulation {
             "leanto" | "lean-to" => BuildingType::LeanTo,
             "brushhut" | "hut" => BuildingType::BrushHut,
             "shelter" => BuildingType::SkinTent,
-            "smallhouse" => BuildingType::SmallHouse,
+            "house" | "smallhouse" => BuildingType::SmallHouse,
             "mediumhouse" => BuildingType::MediumHouse,
             "largehouse" => BuildingType::LargeHouse,
             "workshop" => BuildingType::Workshop,
@@ -123,6 +123,9 @@ impl Simulation {
         // raised in this model was poles and air.** Four of the nine
         // requirements in the building table are for things that match no arm.
         let by_class = crate::environment::tags::what_this_roof_takes(building_type);
+        // And what starts one: the frame, for a tent or a house, whose
+        // covering and walls come after over many trips (#371)
+        let to_start = crate::environment::tags::what_starts_this_roof(building_type);
 
         let requirements = building_type.requirements();
         let mut taking: Vec<(&'static str, u32)> = Vec::new();
@@ -143,8 +146,52 @@ impl Simulation {
         });
 
         if carrying_on {
-            // Nothing more to take
-        } else if let Some(wants) = by_class {
+            // Nothing more to take, unless the site is still owed something
+            // and these hands hold some of it: it is handed over, and the
+            // turn is the walk and the handing (#371).
+            let here = Position::new(position.0, position.1);
+            let site = self
+                .world
+                .buildings
+                .iter()
+                .position(|roof| roof.position == here && !roof.is_completed());
+            if let Some(site) = site.filter(|&at| !self.world.buildings[at].still_wants().is_empty()) {
+                let holding = |what: &str| self.population.agents[agent_index].how_many_i_have(what);
+                let handed = self.world.buildings[site].take_what_it_still_wants(&holding);
+                let agent = &mut self.population.agents[agent_index];
+                for (what, how_many) in &handed {
+                    agent.inventory.remove_item(what, *how_many);
+                }
+                let who = agent.id;
+                let roof = &mut self.world.buildings[site];
+                roof.a_hand_on_it(who);
+                let still = roof
+                    .still_wants()
+                    .iter()
+                    .map(|(tag, n)| format!("{n} {}", tag.called()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if handed.is_empty() {
+                    return ActionResult::failure(format!(
+                        "The {building_type:?} still wants {still}"
+                    ));
+                }
+                let brought = handed
+                    .iter()
+                    .map(|(what, n)| format!("{n} {what}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if !still.is_empty() {
+                    return ActionResult::success()
+                        .with_drive_change(DriveType::Construction, -0.1)
+                        .with_energy_cost(5.0)
+                        .with_message(format!(
+                            "Brought {brought} to the {building_type:?}; it still wants {still}"
+                        ));
+                }
+                // All in: the work goes on below, this turn
+            }
+        } else if let Some(wants) = to_start.or(by_class) {
             let holding = |what: &str| agent.how_many_i_have(what);
 
             match crate::environment::tags::what_would_be_used(wants, &holding) {
@@ -370,8 +417,20 @@ impl Simulation {
         // and note that until this line the owner field was written by
         // nothing at all, so `owns_house` in the goal world-state has always
         // been false for everybody in every world.
-        let mut building = Building::new_under_construction(building_type, build_pos).with_what_was_brought();
-        building.now_belongs_to(if building_type.is_residential() {
+        let mut building = Building::new_under_construction(building_type, build_pos)
+            .with_what_was_brought()
+            .owing(crate::environment::tags::what_is_owed_after_the_start(building_type));
+        // And whatever else of it is in hand goes on with the frame: a man
+        // who has the skins as well does not carry them away to bring back
+        {
+            let agent = &mut self.population.agents[agent_index];
+            let handed = building.take_what_it_still_wants(&|what: &str| agent.how_many_i_have(what));
+            for (what, how_many) in &handed {
+                agent.inventory.remove_item(what, *how_many);
+            }
+        }
+        // A tent is the household's who put it up, as a house is (#371)
+        building.now_belongs_to(if building_type.is_residential() || building_type == BuildingType::SkinTent {
             crate::world::Belongs::To(self.population.agents[agent_index].id)
         } else {
             crate::world::Belongs::ToUsAll

@@ -500,6 +500,11 @@ fn puts_up_a_tent(simulation: &mut crate::analytics::Simulation) -> crate::envir
 }
 
 /// **The defect this test exists for.** Poles alone are not a tent.
+///
+/// Since #371 a tent's frame - poles and cord - can stand while its skins
+/// are brought one kill at a time, so the refusal moved: poles alone do not
+/// start one (the cord is short), and poles and cord stand as a frame that
+/// owes its covering and takes no work until it comes.
 #[test]
 fn a_tent_cannot_be_made_of_poles_and_air() {
     let mut simulation = somebody_on_open_ground();
@@ -509,7 +514,7 @@ fn a_tent_cannot_be_made_of_poles_and_air() {
 
     assert!(
         !result.success,
-        "twenty pieces of wood and nothing to stretch over them went up as a \
+        "twenty pieces of wood and nothing to tie them with went up as a \
          tent: {:?}",
         result.message
     );
@@ -518,10 +523,40 @@ fn a_tent_cannot_be_made_of_poles_and_air() {
             .message
             .as_deref()
             .unwrap_or_default()
-            .contains(Tag::FlexibleCovering.called()),
+            .contains(Tag::Cordage.called()),
         "and the refusal should say which class is short, because that is the \
          next job: {:?}",
         result.message
+    );
+
+    put_in_the_pack(&mut simulation, "lashing", 4);
+    let framed = puts_up_a_tent(&mut simulation);
+    assert!(framed.success, "{:?}", framed.message);
+    let site = simulation
+        .world
+        .buildings
+        .iter()
+        .find(|roof| roof.building_type == crate::world::BuildingType::SkinTent)
+        .expect("a frame");
+    assert!(
+        site.still_wants().iter().any(|(tag, _)| *tag == Tag::FlexibleCovering),
+        "and the frame owes its covering"
+    );
+    let at = (site.position.x, site.position.y, 0);
+    simulation.population.agents[0].state.position = at;
+    for _ in 0..6 {
+        simulation.execute_action(
+            &Action::Build { structure_type: "tent".to_string(), position: at },
+            0,
+        );
+    }
+    assert!(
+        !simulation
+            .world
+            .buildings
+            .iter()
+            .any(|roof| roof.building_type == crate::world::BuildingType::SkinTent && roof.is_completed()),
+        "and poles and air is never finished"
     );
 }
 
