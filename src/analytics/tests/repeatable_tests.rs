@@ -247,7 +247,8 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 6,624 for the third batch of ISSUES_FOUND: a tired man is not
     // starving, materials enough to fit in a pack, beliefs that settle where
     // the record puts them, and a weapon in the hand makes a man armed.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_624;
+    // Down to 6,612 for #370: Preparedness goes hunting and fishing.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_612;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -615,7 +616,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // the other ways at what it would put in, not taken first as in hand.
     // Down 6.7% to 867,309 for #369: curiosity fetches an untried material
     // only when there is room to carry it home.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 867_309;
+    // Up 9.7% to 951,495 for #370: Preparedness goes hunting and fishing
+    // for a larder short of the month, and food on a rack counts as put by.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 951_495;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
