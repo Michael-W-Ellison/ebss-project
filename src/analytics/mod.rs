@@ -596,8 +596,15 @@ impl Simulation {
             })
             .filter(|resource| here.distance_to(&resource.position) <= Self::AS_FAR_AS_CURIOSITY_WALKS)
             .filter_map(|resource| {
+                let each = Self::what_one_of_these_weighs(resource.resource_type);
                 Self::gathered_as(resource.resource_type)
                     .filter(|named| wanted.contains(named))
+                    // And only what there is room to carry home. A full body
+                    // with a full pack sent for berries to ferment ate them on
+                    // the bush, so the pack never held enough to try, and the
+                    // walk came round again: about two thousand seven hundred
+                    // turns a settlement-year in seeds 0 and 1 (#369).
+                    .filter(|_| agent.could_i_take_another_handful(each))
                     .map(|named| (named, here.distance_to(&resource.position)))
             })
             .min_by_key(|(_, apart)| *apart)

@@ -613,7 +613,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // and only a part of something is put in where a part goes.
     // Down 7.0% to 929,785 for #369: a bite off the ground is ranked with
     // the other ways at what it would put in, not taken first as in hand.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 929_785;
+    // Down 6.7% to 867,309 for #369: curiosity fetches an untried material
+    // only when there is room to carry it home.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 867_309;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -126,6 +126,35 @@ fn curiosity_fetches_a_material_nobody_has_tried() {
     );
 }
 
+/// But not with a pack that will not take it. A lump that will not go in
+/// the pack never reaches the fire, and the walk for it comes round again
+/// every turn curiosity wins (#369).
+#[test]
+fn curiosity_does_not_fetch_what_there_is_no_room_to_carry() {
+    let mut simulation = one_person();
+    let here = Position::new(25, 25);
+
+    simulation
+        .world
+        .resources
+        .push(ResourceNode::new(ResourceType::Clay, here, 50));
+
+    // A pack full of the kit, which nobody sets down
+    while simulation.population.agents[0].could_i_take_another_handful(1.0) {
+        simulation.population.agents[0]
+            .inventory
+            .add_item(InventoryItem::new_with_weight("handaxe".to_string(), 1, 1.0));
+    }
+
+    let position = simulation.population.agents[0].state.position;
+    assert!(
+        simulation
+            .something_nobody_has_tried_within_reach(&simulation.population.agents[0], position)
+            .is_none(),
+        "he went for clay with nowhere to put it"
+    );
+}
+
 /// And walks past it once there is nothing left to find out about it.
 #[test]
 fn somebody_who_has_tried_everything_walks_past_it() {
