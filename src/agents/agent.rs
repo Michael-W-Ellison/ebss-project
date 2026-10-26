@@ -11579,191 +11579,6 @@ impl Agent {
         })
     }
 
-    // ===== Trust and Lie Detection System =====
-
-    /// Get lie detection chance based on agent's traits
-    /// Returns a multiplier (1.0 = normal, higher = better detection)
-    pub fn get_lie_detection_bonus(&self) -> f32 {
-        use crate::core::traits::Trait;
-
-        let mut bonus: f32 = 1.0;
-
-        // Suspicious trait: +50% lie detection
-        if self.traits.has(Trait::Suspicious) {
-            bonus += 0.5;
-        }
-
-        // Paranoid trait: +80% lie detection (assumes malice)
-        if self.traits.has(Trait::Paranoid) {
-            bonus += 0.8;
-        }
-
-        // Honest agents are better at spotting dishonesty (they know what truth looks like)
-        if self.traits.has(Trait::Honest) {
-            bonus += 0.3;
-        }
-
-        // Skeptic trait: +40% lie detection
-        if self.traits.has(Trait::Skeptic) {
-            bonus += 0.4;
-        }
-
-        // Trusting trait: -40% lie detection (easily fooled)
-        if self.traits.has(Trait::Trusting) {
-            bonus -= 0.4;
-        }
-
-        bonus.max(0.1) // Minimum 10% detection chance
-    }
-
-    /// Verify a resource location claim against what this agent actually knows
-    /// Returns Some(true) if verified correct, Some(false) if verified wrong, None if unverifiable
-    pub fn verify_resource_claim(
-        &self,
-        claimed_resource: &str,
-        claimed_location: (i32, i32, i32),
-    ) -> Option<bool> {
-        use crate::world::Position;
-
-        let claimed_pos = Position::new(claimed_location.0, claimed_location.1);
-
-        // Check if we've explored this location
-        if !self.exploration_knowledge.is_explored(&claimed_pos) {
-            return None; // Can't verify - haven't been there
-        }
-
-        // Check what we actually know about this location
-        if let Some(actual_resource) = self.exploration_knowledge.known_resources.get(&claimed_pos) {
-            // We know what's at this location
-            let actual_name = format!("{:?}", actual_resource).to_lowercase();
-            let claimed_lower = claimed_resource.to_lowercase();
-
-            // Check if the claimed resource matches what we found
-            if actual_name.contains(&claimed_lower) || claimed_lower.contains(&actual_name) {
-                return Some(true); // Verified correct
-            } else {
-                return Some(false); // Verified wrong - different resource type
-            }
-        }
-
-        // We've been there but didn't find any resource
-        // If they claimed a resource exists there, they're likely wrong
-        Some(false)
-    }
-
-    /// Attempt to detect lies in received information based on personal knowledge
-    /// Returns a list of (info_id, source_id, was_lie) for detected lies
-    pub fn detect_lies_in_knowledge(&self, _current_turn: u32) -> Vec<(uuid::Uuid, uuid::Uuid, bool)> {
-        use super::gossip::InformationType;
-
-        let mut detections = Vec::new();
-        let detection_bonus = self.get_lie_detection_bonus();
-
-        // Check each piece of information we've received
-        for (info_id, info) in &self.knowledge.known_information {
-            // Skip if this is our own information
-            if info.original_source == self.id {
-                continue;
-            }
-
-            // Find the belief for this info to get the source
-            let source = self.knowledge.beliefs
-                .iter()
-                .find(|b| b.info_id == *info_id)
-                .map(|b| b.source);
-
-            if let Some(source_id) = source {
-                // Try to verify different types of information
-                match &info.info_type {
-                    InformationType::ResourceLocation { resource, location } => {
-                        if let Some(is_correct) = self.verify_resource_claim(resource, *location) {
-                            // Apply detection bonus - higher bonus means more likely to catch lies
-                            let base_detection_chance = if is_correct { 0.0 } else { 0.5 };
-                            let effective_chance = base_detection_chance * detection_bonus;
-
-                            // Simple probability check
-                            use rand::Rng;
-                            let roll: f32 = crate::core::dice::roll().gen();
-
-                            if roll < effective_chance || !is_correct {
-                                // We detected this information as incorrect
-                                if !info.ground_truth || !is_correct {
-                                    detections.push((*info_id, source_id, true)); // It was a lie
-                                } else {
-                                    detections.push((*info_id, source_id, false)); // It was true
-                                }
-                            }
-                        }
-                    }
-                    // Could add more verification types here (accusations, observations, etc.)
-                    _ => {}
-                }
-            }
-        }
-
-        detections
-    }
-
-    /// Process lie detection and update trust/relationships accordingly
-    /// Call this periodically (e.g., every 100 turns) to verify information
-    pub fn process_information_verification(&mut self, current_turn: u32) {
-        use super::EmotionSource;
-
-        let detections = self.detect_lies_in_knowledge(current_turn);
-
-        for (info_id, source_id, was_lie) in detections {
-            // Calculate info age for trust update (used by SocialNetwork methods)
-            let _info_age = if let Some(info) = self.knowledge.known_information.get(&info_id) {
-                current_turn.saturating_sub(info.timestamp as u32)
-            } else {
-                1000 // Default to old if not found
-            };
-
-            // Update knowledge base trust
-            self.knowledge.verify_information(&info_id, !was_lie);
-
-            // Update relationship
-            if was_lie {
-                // What it was about, so that a lie which sent this agent
-                // somewhere it needed to go costs more than one which did not
-                let about = self
-                    .knowledge
-                    .known_information
-                    .get(&info_id)
-                    .and_then(|info| match &info.info_type {
-                        super::gossip::InformationType::ResourceLocation { resource, .. } => {
-                            Some(resource.clone())
-                        }
-                        _ => None,
-                    });
-
-                self.found_out_i_was_lied_to(
-                    source_id,
-                    about.as_deref().unwrap_or(""),
-                    current_turn,
-                );
-            } else {
-                // Truth verified - strengthen trust and relationship
-                self.found_out_they_were_right(source_id);
-                let rel = self.relationships.get_or_create_relationship(source_id, current_turn);
-                rel.strengthen(0.05); // Small positive reinforcement
-                rel.settle_what_we_are();
-
-                // Small happiness from receiving accurate information
-                self.emotions.add_happiness(
-                    EmotionSource::Agent(source_id),
-                    0.02
-                );
-            }
-        }
-    }
-
-
-
-
-
-
-
     /// The most places an agent keeps in its head at once.
     ///
     /// Nothing bounded this before. It did not matter while the only way to
@@ -12116,10 +11931,14 @@ impl Agent {
 
     /// What happens when an agent finds out it was lied to.
     ///
-    /// One place, because it is reached from two: walking to a place somebody
-    /// named and finding bare ground, and the periodic sweep of remembered
-    /// claims. The first is where nearly all of it happens - a lie is found
-    /// out standing on the spot, not by review.
+    /// One place, because it is reached from two: the sight pass and the
+    /// arrival at a walk's end, both of which find bare ground where somebody
+    /// named something. A lie is found out standing on the spot, not by
+    /// review, and only by ground the teller could be held to
+    /// (`Hearsay::does_bare_ground_convict_him`): news that was old, or a
+    /// place somebody else stripped, is not a lie. The periodic review that
+    /// counted any wrong claim as one was retired from the turn long ago and
+    /// is gone now (#196).
     pub fn found_out_i_was_lied_to(
         &mut self,
         liar: uuid::Uuid,
