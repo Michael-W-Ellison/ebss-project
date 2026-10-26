@@ -2110,12 +2110,10 @@ impl Simulation {
                 })
                 .collect();
 
-            // Sort by modification time (newest first)
-            checkpoint_files.sort_by_cached_key(|path| {
-                fs::metadata(path)
-                    .and_then(|m| m.modified())
-                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-            });
+            // Newest first, by the turn in the name. The modification time
+            // ties for two saves made within the clock's resolution, and a
+            // tie kept whichever the directory listed first.
+            checkpoint_files.sort();
             checkpoint_files.reverse();
 
             // Remove old checkpoints beyond max_checkpoints
@@ -2150,12 +2148,9 @@ impl Simulation {
             ));
         }
 
-        // Sort by modification time (newest first)
-        checkpoint_files.sort_by_cached_key(|path| {
-            fs::metadata(path)
-                .and_then(|m| m.modified())
-                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-        });
+        // Newest first, by the zero-padded turn in the name - see
+        // `cleanup_old_checkpoints`
+        checkpoint_files.sort();
         checkpoint_files.reverse();
 
         Ok(checkpoint_files[0].clone())
