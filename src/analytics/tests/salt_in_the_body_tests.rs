@@ -78,6 +78,21 @@ fn the_salt_runs_out_of_a_body() {
         agent.turn_the_salt_in_the_body();
     }
     assert!(agent.state.health < health, "and it weakens");
+    // As a want in the diet, and not as a blow that opens a wound (#372)
+    assert!(
+        agent
+            .state
+            .what_has_taken_health
+            .iter()
+            .any(|(what, taken)| what == crate::agents::AgentState::A_POOR_DIET && *taken > 0.0),
+        "booked as a poor diet: {:?}",
+        agent.state.what_has_taken_health
+    );
+    assert!(
+        !agent.state.what_has_taken_health.iter().any(|(what, taken)| what == crate::agents::AgentState::A_BLOW && *taken > 0.0),
+        "and not as a blow"
+    );
+    assert_eq!(agent.state.an_open_wound, 0.0, "nor a wound");
 
     agent.state.life_stage = LifeStage::Infant;
     agent.turn_the_salt_in_the_body();

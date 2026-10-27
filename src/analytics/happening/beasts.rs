@@ -313,7 +313,14 @@ impl Simulation {
 
     /// It hunts, and its blow does something.
     pub(in crate::analytics) fn a_hunter(species: &crate::environment::fauna::AnimalSpecies) -> bool {
-        !species.prey_species.is_empty() && species.attack_damage > 0.0
+        // A meat-eater. A boar takes a rabbit when it finds one and lives by
+        // rooting, and reckoned a hunter for the rabbits it struck at grown
+        // people when it was hungry - twenty blows among the twelve dead of
+        // blows in forty settlements (#372). It still charges whoever comes
+        // into its ground (`would_it_charge`).
+        !species.prey_species.is_empty()
+            && species.attack_damage > 0.0
+            && species.diet == crate::environment::fauna::DietType::Carnivore
     }
 
     /// Several times smaller than a grown person.
@@ -502,7 +509,25 @@ impl Simulation {
         // mammoth was warned off 332 times in a year on seed 0 and walked
         // back each time.
         for (agent_index, what_it_was, called, at) in warnings {
+            // And backs off it. Warned, a person decided again but was not
+            // moved, so whatever they were about - a gather, a sleep, a site
+            // going up - kept them inside the ground for the rest of the half
+            // hour, and the beast is asked every minute: a quarter of a
+            // chance a minute is a blow nearly every time. Each boar's dead
+            // took four or five charges (#372).
+            let here = self.population.agents[agent_index].state.position;
+            let away = ((here.0 - at.0).signum(), (here.1 - at.1).signum());
+            let away = if away == (0, 0) { (1, 0) } else { away };
+            let off_its_ground = (Self::A_BEASTS_GROUND + 1..=Self::A_BEASTS_GROUND + 3)
+                .map(|step| (at.0 + away.0 * step, at.1 + away.1 * step, here.2))
+                .find(|to| {
+                    self.world.is_terrain_passable(*to)
+                        && self.world.can_walk_between((here.0, here.1), (to.0, to.1))
+                });
             let agent = &mut self.population.agents[agent_index];
+            if let Some(to) = off_its_ground {
+                agent.state.position = to;
+            }
             agent.busy_until = 0;
             agent.state.next_decision_at = agent.state.next_decision_at.min(current_turn);
             agent

@@ -383,8 +383,13 @@ fn a_beast_that_keeps_its_ground_is_feared_only_up_close() {
 /// How often this one is struck in so many passes of the strike, put back
 /// to full health before each.
 fn struck_in(simulation: &mut Simulation, passes: u32) -> u32 {
+    // Put back where they stood each pass: a warned person backs off the
+    // beast's ground (#372), and this asks what happens to somebody who keeps
+    // walking back into it.
+    let stood = simulation.population.agents[0].state.position;
     let mut struck = 0;
     for _ in 0..passes {
+        simulation.population.agents[0].state.position = stood;
         simulation.population.agents[0].state.health = 100.0;
         if let Some(beast) = simulation.world.animals.get_all_mut().first_mut() {
             beast.hunger = 0.0;
@@ -428,4 +433,44 @@ fn an_eagle_frightens_a_child_and_not_a_grown_person() {
     let mut child = one_person_beside("eagle", 4);
     child.feel_about_what_stands_in_the_way();
     assert!(afraid_or_angry_at_a_beast(&child), "but a child of four is meant to be afraid of it");
+}
+
+/// Warned off, a person backs out of the beast's ground (#372). Left standing
+/// there whatever they were about, they were struck nearly every time, since
+/// the beast is asked every minute: each boar's dead took four or five charges.
+#[test]
+fn a_warned_person_backs_off_the_beasts_ground() {
+    for kind in ["bear", "boar", "mammoth"] {
+        let mut simulation = one_person_beside(kind, 30);
+        simulation.population.agents[0].state.health = 100.0;
+        if let Some(beast) = simulation.world.animals.get_all_mut().first_mut() {
+            beast.hunger = 0.0;
+        }
+        let beast = simulation.world.animals.get_all()[0].position;
+        simulation.predators_try_their_luck_at(0);
+        let here = simulation.population.agents[0].state.position;
+        let apart = (here.0 - beast.0).abs().max((here.1 - beast.1).abs());
+        assert!(apart > Simulation::A_BEASTS_GROUND, "warned by a {kind} and still {apart} paces off it");
+        assert_eq!(simulation.population.agents[0].state.health, 100.0, "and not struck");
+        for _ in 0..30 {
+            simulation.predators_try_their_luck_at(0);
+        }
+        assert_eq!(
+            simulation.population.agents[0].state.health,
+            100.0,
+            "a {kind} struck somebody who had backed off its ground"
+        );
+    }
+}
+
+/// A boar roots for its living and takes a rabbit when it finds one: it
+/// charges whoever comes into its ground, and does not hunt people (#372).
+#[test]
+fn a_boar_charges_but_does_not_hunt_people() {
+    let simulation = one_person_beside("boar", 30);
+    let boar = simulation.world.animals.get_species("boar").expect("boars");
+    assert!(Simulation::would_it_charge(boar));
+    assert!(!Simulation::could_it_take(boar, 30), "a hungry boar stalking a grown man");
+    let wolf = simulation.world.animals.get_species("wolf").expect("wolves");
+    assert!(Simulation::could_it_take(wolf, 30), "a starving wolf still will");
 }

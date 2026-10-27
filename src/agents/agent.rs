@@ -4197,8 +4197,14 @@ impl Agent {
             self.inventory.remove_item("salt", 1);
             self.salt_in_the_body = (self.salt_in_the_body + Self::WHAT_A_PINCH_PUTS_BACK).min(1.0);
         }
+        // A want in the diet, booked as one. It went through `take_damage`,
+        // which is a blow: it was booked as "a blow" and opened a wound
+        // (#372).
         if self.salt_in_the_body <= 0.0 {
-            self.take_damage(Self::WHAT_GOING_WITHOUT_SALT_COSTS_A_DAY / a_half_hour);
+            self.state.lose_health(
+                Self::WHAT_GOING_WITHOUT_SALT_COSTS_A_DAY / a_half_hour,
+                AgentState::A_POOR_DIET,
+            );
         }
     }
 
