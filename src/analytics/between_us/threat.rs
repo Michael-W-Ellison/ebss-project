@@ -386,12 +386,26 @@ impl Simulation {
 
         let could_fight = agent.could_i_fight_at_all(coming);
 
+        // Whether it hunts people at all. A beast that only keeps its ground
+        // threatens nobody who steps back out of it, and everybody it warns
+        // does (#372): standing over a loved one in a camp, where somebody
+        // loved is always within two paces, set people against boars and
+        // mammoths, and it was a quarter of what the dead of blows lost.
+        let a_hunter_of_people = self
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .find(|animal| animal.id == which)
+            .and_then(|animal| self.world.animals.get_species(&animal.species_id))
+            .is_some_and(|species| Self::a_hunter(species));
+
         // Somebody of this agent's own, in the way of the thing, who cannot
         // deal with it themselves. A person does not run from a wolf that is
         // standing over their child, whatever the odds are - and the odds are
         // exactly what this sets aside. It is the one place in the model
         // where an agent knowingly takes the worse of two options.
-        if could_fight && self.somebody_of_mine_is_in_the_way(agent, where_it_is, coming) {
+        if could_fight && a_hunter_of_people && self.somebody_of_mine_is_in_the_way(agent, where_it_is, coming) {
             return (
                 "stands over one of its own",
                 Some(if paces <= Self::HUNT_REACH {

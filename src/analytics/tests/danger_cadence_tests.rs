@@ -474,3 +474,21 @@ fn a_boar_charges_but_does_not_hunt_people() {
     let wolf = simulation.world.animals.get_species("wolf").expect("wolves");
     assert!(Simulation::could_it_take(wolf, 30), "a starving wolf still will");
 }
+
+/// And does not walk back into it: a walk stops at the edge of a charging
+/// beast's ground (#372). Backed off, people walked straight back to what
+/// they had been about and were charged nine and twelve times over.
+#[test]
+fn a_walk_stops_short_of_a_beasts_ground() {
+    let mut simulation = one_person_beside("boar", 30);
+    simulation.population.agents[0].state.health = 100.0;
+    let boar = simulation.world.animals.get_all()[0].position;
+    simulation.population.agents[0].state.position = (boar.0 - 10, boar.1, 0);
+    simulation.execute_action(
+        &crate::environment::Action::Move { target: (boar.0 + 6, boar.1, 0) },
+        0,
+    );
+    let here = simulation.population.agents[0].state.position;
+    let apart = (here.0 - boar.0).abs().max((here.1 - boar.1).abs());
+    assert!(apart > Simulation::A_BEASTS_GROUND, "walked {apart} paces from a boar, inside its ground");
+}

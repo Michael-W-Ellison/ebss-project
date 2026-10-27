@@ -221,6 +221,11 @@ impl Simulation {
                     // route may end on its goal whatever the goal is; a walk
                     // to the water stops on the bank (#295).
                     Some(cell) if !self.is_passable_tile(cell.0, cell.1) => break,
+                    // **Nor into a beast's ground.** A boar or a mammoth seen
+                    // twenty metres off is walked round or waited out; warned
+                    // off and backed away, people walked straight back in and
+                    // were charged nine and twelve times over (#372).
+                    Some(cell) if self.walks_into_a_beasts_ground((here.0, here.1), cell) => break,
                     Some(cell) => {
                         let agent = &mut self.population.agents[agent_index];
                         agent.stepped_from = Some((here.0, here.1));
@@ -488,6 +493,14 @@ impl Simulation {
             // Legs too damaged, can't move
             return ActionResult::failure("Too injured to move (legs crippled)".to_string());
         };
+
+        // Not into a beast's ground (#372): the step is not taken
+        if self.walks_into_a_beasts_ground((current_pos.0, current_pos.1), (next_x, next_y)) {
+            let beast = self.whose_ground_is_this((next_x, next_y)).unwrap_or_default();
+            return ActionResult::success()
+                .with_energy_cost(0.0)
+                .with_message(format!("Stopped short of the {beast}'s ground"));
+        }
 
         // Update agent position (including Z-axis)
         let agent = &mut self.population.agents[agent_index];

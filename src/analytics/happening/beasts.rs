@@ -301,6 +301,29 @@ impl Simulation {
     /// How near a charging beast lets anybody come: twenty metres.
     pub(in crate::analytics) const A_BEASTS_GROUND: i32 = 2;
 
+    /// What beast's ground this cell is in, if any: within twenty metres of
+    /// a beast that charges (#372).
+    pub(in crate::analytics) fn whose_ground_is_this(&self, at: (i32, i32)) -> Option<String> {
+        self.world
+            .get_animals_in_radius(at, (Self::A_BEASTS_GROUND + 1) as f32)
+            .into_iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated && !animal.is_kept())
+            .filter(|animal| {
+                (animal.position.0 - at.0).abs().max((animal.position.1 - at.1).abs()) <= Self::A_BEASTS_GROUND
+            })
+            .find_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                Self::would_it_charge(species).then(|| species.name.clone())
+            })
+    }
+
+    /// Whether a step from here to there walks into a beast's ground: there
+    /// is somebody's ground and here is not (#372). Somebody already inside
+    /// - the beast came to them - is let out.
+    pub(in crate::analytics) fn walks_into_a_beasts_ground(&self, here: (i32, i32), there: (i32, i32)) -> bool {
+        self.whose_ground_is_this(there).is_some() && self.whose_ground_is_this(here).is_none()
+    }
+
     /// And how near before anybody is wary of it: fifty metres. A hunter
     /// worries anybody within `CLOSE_ENOUGH_TO_WORRY_ABOUT`, because it comes
     /// for them; a beast that only keeps its ground worries only somebody

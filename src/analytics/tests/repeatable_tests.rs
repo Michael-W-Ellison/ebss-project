@@ -627,7 +627,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Up 8.6% to 943,160 for #372: a warned person backs off a beast's
     // ground, a boar does not hunt people, and going without salt is a poor
     // diet rather than a blow.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 943_160;
+    // Up 30.1% to 1,226,871 for #372's second step: a walk stops short of a
+    // charging beast's ground, and standing over a loved one is for a beast
+    // that hunts people.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_226_871;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
