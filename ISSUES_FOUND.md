@@ -14083,6 +14083,9 @@ one. Deciding nothing costs nothing.
 
 ### And the map arm never fires in a live world
 
+**Resolved in #373:** flint lies in the ground now, in the hills and the river
+gravels, and a knapper who sees a bed of it puts it on his map by name.
+
 The prompt has two halves - the stuff in his pack, or the name on his map -
 and only the first of them does any work today. Over 8 worlds of 12 founders
 run 180 days, 5 of 8 worlds worked flint knapping out, first on days 32, 39,
@@ -28043,8 +28046,9 @@ later entry. These were not. Each line names the entry that left it.
 - Mining covers both quarrying and digging a hole (#204). Felling is not
   gated on a tool (#200). Making never breaks or wastes in the making
   (#200, #201). A better tool changes the yield, not the time (#345).
-- Knowing how is keyed on the product, not the recipe (#195, #199). There is
-  no flint in the ground, so the map arm cannot fire (#195).
+- Knowing how is keyed on the product, not the recipe (#195, #199). ~~There is
+  no flint in the ground, so the map arm cannot fire (#195).~~ Flint lies in
+  the ground since #373.
 - Several ways are still `Reach::NotYet`, and `RelocateTowardWater` says
   "moving camp never fires" though camps move (#193). ~~The prose is
   corrected (#369).~~
@@ -28573,4 +28577,69 @@ warned no longer stands there.
 **Full suite**: 2,974 passed, none failed.
 
 **Dice counts**: 6,612 (seed 4242, 120 turns) and 1,226,871 (seed 0, a
+year).
+
+### 373. Flint lies in the ground
+
+The user asked: "Resolve Flint (#195): flint doesn't lie in the ground, so
+learning it from a map can't happen."
+
+**What #195 left.** The innovation path finds out a sibling technique two
+ways:
+- the stuff in a person's pack;
+- the name on their map: a knapper who knows of flint somewhere knows it for
+  a stone like the ones he knaps.
+
+Only the first ever fired. Flint was made and never found: `SMASH_A_CORE`
+broke a stone into flakes and called them flint, and there was no
+`ResourceType::Flint`, so no sight pass could write it and no map could
+carry it.
+
+**What changed.**
+- **`ResourceType::Flint` and `ItemType::Flint`**, a mineral: beds in the
+  hills (six a world, 30 to 90 each) and nodules in the river gravels (four,
+  10 to 30). That is commoner than salt and far rarer than stone, and a
+  world with no hills and no rivers has none.
+- **Gathered by name**, "flint", the name a smashed core already gives what
+  it makes. A trip brings back two to four nodules. Weighed, counted and
+  priced with the other minerals.
+- **Named on a map** by anybody who knaps stone. That needed no change:
+  `do_i_know_what_this_is_for` already answers yes for a thing of a kind with
+  something known, and the sight pass names a resource by its kind.
+- The note in `somebody_puts_two_and_two_together` said the map half never
+  fires; it says why it does now.
+
+**Measured**, forty settlements, two years, against #372. Every world is
+drawn differently from its seed now, because world generation draws for the
+flint, so the worlds are not the same worlds:
+
+| | #372 | #373 | t |
+|---|---|---|---|
+| births | 172 | 168 | -0.33 |
+| deaths | 2 | 1 | -0.57 |
+| alive at two years | 650 | 647 | -0.23 |
+| worlds that worked out flint knapping | 40 | 40 | |
+| median first day | 29.5 | 31 | |
+| latest first day | 282 | 80 | |
+
+Every population column is within noise. Flint knapping was already found
+everywhere, by smashing cores; what the beds change is the stragglers. The
+slowest world worked it out by day 80 against day 282. The measurement does
+not tell which route taught whom.
+
+**Tests** (`innovation_tests`):
+- `a_flint_bank_seen_is_a_flint_bank_remembered_and_learned_from`: the sight
+  pass names a bed "flint" on a knapper's map, and the name alone teaches
+  flint knapping, with no flint in the pack.
+- `flint_lies_in_the_ground_and_can_be_picked_up`: a generated world has
+  flint beds, and a gather for "flint" picks some up.
+
+`curiosity_reaches_for_the_verb_it_has_tried_least` now accepts a swap with
+every part in hand. The new world draws moved the dice stream onto
+curiosity's roll for a swap, which the verb matrix does not list.
+
+**Full suite**: 2,973 passed. The two dice counts and that test failed, and
+are recorded and fixed.
+
+**Dice counts**: 7,150 (seed 4242, 120 turns) and 1,014,771 (seed 0, a
 year).
