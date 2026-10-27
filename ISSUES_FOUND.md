@@ -28478,3 +28478,99 @@ nothing writes it.
 **Full suite**: 2,970 passed; the year dice count failed and is recorded.
 
 **Dice counts**: 6,612 (seed 4242, 120 turns) and 868,427 (seed 0, a year).
+
+### 372. Why deaths by blows kept rising, and what stopped them
+
+The user asked: "Look into why deaths from blows keep rising."
+
+**They were not rising so much as never falling.** Over eleven measured runs,
+#363 to #371, deaths by blows over forty settlements in two years read 9, 6,
+8, 3, 10, 9, 6, 4, 13, 7, 12. That is noise about eight. Each "rise" I
+reported came after an unusually low run. But eight deaths in eighty
+settlement-years made blows the commonest cause of death, so the question
+was what dealt them.
+
+**A probe** logged every blow on every person, by source - a territorial
+charge, a hungry predator, a fight lost to a beast, a hunted beast turning,
+another person, going without salt - and printed the tally for everybody who
+died of blows.
+
+At #371, twelve died of blows:
+
+| source | health they lost | blows | in deaths |
+|---|---|---|---|
+| a charge (boar, mammoth) | 698 | 35 | 10 |
+| a fight lost to a boar or mammoth | 360 | 19 | 7 |
+| a boar striking as a hungry predator | 260 | 20 | 6 |
+| going without salt | 48 | 4,587 | 2 |
+| a hunted beast turning | 42 | 4 | 3 |
+| another person | 13 | 61 | 8 |
+
+Boars were in nine of the twelve deaths and mammoths in three.
+
+**Four faults, two steps.**
+
+*First step:*
+- **A warned person was not moved.** The charge (#368) warns first and
+  strikes somebody still there. Warned, people decided again, but whatever
+  they were about kept them inside the ground for the rest of the half hour,
+  and the beast is asked every minute. A quarter of a chance a minute is a
+  blow nearly every time. Each boar victim took four or five charges. Now a
+  warned person backs off the beast's ground.
+- **A boar hunted people.** `a_hunter` took anything with prey and teeth,
+  and a boar lists rabbits and squirrels, so a hungry boar struck grown
+  people as a wolf does. Only a meat-eater hunts people now. The boar still
+  charges.
+- **Going without salt was a blow.** It went through `take_damage`, so it
+  was booked as "a blow" and opened a wound. It is a poor diet now.
+
+That step measured worse: sixteen dead of blows against twelve. The probe,
+run again, found:
+
+| source | health they lost | blows | in deaths |
+|---|---|---|---|
+| a charge | 1,170 | 69 | 14 |
+| a fight lost (boar, mammoth, lion) | 848 | 34 | 13 |
+
+Predator strikes were gone, but charges were up, and victims were charged
+nine, eleven and twelve times. Backed off, they walked straight back to
+what they had been about.
+
+*Second step:*
+- **A walk stops at the edge of a charging beast's ground**
+  (`whose_ground_is_this`, `walks_into_a_beasts_ground`), in the route and
+  in the single step. Somebody the beast came to is let out.
+- **Standing over a loved one is for a beast that hunts people.** In a camp
+  somebody loved is always within two paces of whatever comes into it, so
+  people stood over them against boars and mammoths. A beast that only
+  keeps its ground threatens nobody who steps out of it, and everybody it
+  warns now does. A lion or a wolf still brings it out.
+
+**Measured**, forty settlements, two years:
+
+| | #371 | first step | second step |
+|---|---|---|---|
+| births | 173 | 171 | 172 |
+| deaths | 16 | 18 | **2** |
+| of a blow | 12 | 16 | **0** |
+| alive at two years | 637 | 633 | **650** |
+| hunts that told | 790 | 901 | 892 |
+| houses finished | 14 | 16 | 27 |
+
+Against the first step: deaths t -2.90, alive t +1.59. Both remaining
+deaths are hunger. Hunting is unchanged: hunting for the store had already
+been kept off boars and mammoths (#370).
+
+**Tests** (`danger_cadence_tests`):
+- `a_warned_person_backs_off_the_beasts_ground`;
+- `a_walk_stops_short_of_a_beasts_ground`;
+- `a_boar_charges_but_does_not_hunt_people`;
+- `the_salt_runs_out_of_a_body` now holds that it is booked as a poor diet.
+
+`struck_in` puts its person back where they stood each pass, since somebody
+warned no longer stands there.
+
+**Full suite**: 2,974 passed, none failed.
+
+**Dice counts**: 6,612 (seed 4242, 120 turns) and 1,226,871 (seed 0, a
+year).
