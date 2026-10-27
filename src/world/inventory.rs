@@ -52,6 +52,8 @@ pub enum ItemType {
     Salt,
     Sand,
     Coal,
+    /// Flint picked up where it lies, or struck off a core (#373)
+    Flint,
     Copper,
     Tin,
 
@@ -129,7 +131,7 @@ impl ItemType {
     /// three answers overlap where they should not. Held to the enum by
     /// `every_item_type_is_listed`, an exhaustive match that fails to compile
     /// if a variant is added and not put here.
-    pub fn all() -> [ItemType; 74] {
+    pub fn all() -> [ItemType; 75] {
         [
             ItemType::Wood,
             ItemType::Stone,
@@ -152,6 +154,7 @@ impl ItemType {
             ItemType::Salt,
             ItemType::Sand,
             ItemType::Coal,
+            ItemType::Flint,
             ItemType::Copper,
             ItemType::Tin,
             ItemType::Bronze,
@@ -623,6 +626,7 @@ mod every_item_type_tests {
             ItemType::Salt => {}
             ItemType::Sand => {}
             ItemType::Coal => {}
+            ItemType::Flint => {}
             ItemType::Copper => {}
             ItemType::Tin => {}
             ItemType::Bronze => {}

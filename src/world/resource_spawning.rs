@@ -99,6 +99,9 @@ impl TerrainResourceMapper {
                 TerrainType::Mountain,
                 TerrainType::Hills,
             ],
+            // Out of the chalk of the hills, and washed down into the river
+            // gravels below them (#373)
+            ResourceType::Flint => vec![TerrainType::Hills, TerrainType::Riverbank],
 
             // Agricultural
             ResourceType::Grain => vec![TerrainType::Plains, TerrainType::Meadow],

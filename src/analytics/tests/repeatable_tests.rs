@@ -248,7 +248,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // starving, materials enough to fit in a pack, beliefs that settle where
     // the record puts them, and a weapon in the hand makes a man armed.
     // Down to 6,612 for #370: Preparedness goes hunting and fishing.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_612;
+    // Up to 7,150 for #373: flint lies in the ground, which the world draws
+    // for when it is made.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_150;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -630,7 +632,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Up 30.1% to 1,226,871 for #372's second step: a walk stops short of a
     // charging beast's ground, and standing over a loved one is for a beast
     // that hunts people.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_226_871;
+    // Down 17.3% to 1,014,771 for #373: flint lies in the ground, so every
+    // world is drawn differently from its seed.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_014_771;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

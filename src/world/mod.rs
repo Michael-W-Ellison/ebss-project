@@ -2211,6 +2211,28 @@ impl World {
             }
         }
 
+        // Flint, weathered out of the chalk: beds of it in the hills, and
+        // nodules washed down into the gravels of the river banks (#373).
+        // Commoner than salt and nowhere near as common as stone - a people
+        // in chalk country walks past it daily and a people on a plain never
+        // sees any.
+        for (terrain, how_many, carrying) in [
+            (TerrainType::Hills, Self::HOW_MANY_FLINT_BEDS_IN_THE_HILLS, (30, 90)),
+            (TerrainType::Riverbank, Self::HOW_MANY_FLINT_GRAVELS, (10, 30)),
+        ] {
+            for _ in 0..how_many {
+                if !self.is_there_any_of_this_terrain(terrain) {
+                    continue;
+                }
+                let pos = self.find_random_terrain_position(terrain, taken);
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Flint,
+                    pos,
+                    rng.gen_range(carrying.0..carrying.1),
+                ));
+            }
+        }
+
         // Generate water sources (rivers, wells, springs)
         //
         // **Most of them where the water is.** A drink is taken at a source,
@@ -2393,6 +2415,11 @@ impl World {
 
     /// And how many seams there are in the hills, for a people with no coast.
     const HOW_MANY_SEAMS_IN_THE_HILLS: u32 = 2;
+
+    /// How many beds of flint the hills carry, and how many river gravels
+    /// hold nodules washed down from them (#373).
+    const HOW_MANY_FLINT_BEDS_IN_THE_HILLS: u32 = 6;
+    const HOW_MANY_FLINT_GRAVELS: u32 = 4;
 
     /// The ground that already has something standing on it.
     ///

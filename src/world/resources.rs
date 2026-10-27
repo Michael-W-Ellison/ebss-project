@@ -93,6 +93,17 @@ pub enum ResourceType {
     /// written, tested and unreachable.
     Salt,
 
+    /// Nodules of flint, weathered out of chalk and lying in the gravels of
+    /// the hills and the stream beds below them (#373).
+    ///
+    /// It was made and never found: `SMASH_A_CORE` broke a stone into flakes
+    /// and called them flint, and nothing lay in the ground, so no map ever
+    /// carried a flint bank and the innovation path's second half - "a man
+    /// who knows the job, looking at a thing of a kind with what he uses for
+    /// it" - could not fire (#195). A knapper who walks past a bank of it
+    /// knows it for a stone like the ones he knaps.
+    Flint,
+
     // === Processed Materials ===
     Flour,      // Grain → Miller → Flour
     Leather,    // Hides → Tanner → Leather
@@ -478,7 +489,7 @@ impl ResourceType {
     /// day of the year anything is bearing, for one. The exhaustive match in
     /// `every_resource_is_listed` below fails to compile if a variant is added
     /// and not put here, so this cannot quietly fall behind the enum.
-    pub fn all() -> [ResourceType; 45] {
+    pub fn all() -> [ResourceType; 46] {
         [
         ResourceType::Nuts,
         ResourceType::Legumes,
@@ -504,6 +515,7 @@ impl ResourceType {
         ResourceType::Sand,
         ResourceType::Coal,
         ResourceType::Salt,
+        ResourceType::Flint,
         ResourceType::Flour,
         ResourceType::Leather,
         ResourceType::Cloth,
@@ -692,6 +704,7 @@ impl ResourceType {
             ResourceType::Legumes => 'o',
             ResourceType::Roots => 'r',
             ResourceType::Salt => '*',
+            ResourceType::Flint => 'f',
 
             // Basic
             ResourceType::Wood => 't',
@@ -757,6 +770,7 @@ impl ResourceType {
             ResourceType::Legumes => "\x1b[38;5;107m",  // Pod green
             ResourceType::Roots => "\x1b[33m",         // Yellow/brown
             ResourceType::Salt => "\x1b[97m",          // Bright white
+            ResourceType::Flint => "\x1b[90m",         // Dark grey
 
             // Basic - Original colors
             ResourceType::Wood => "\x1b[33m",      // Yellow/Brown
@@ -865,7 +879,7 @@ impl ResourceType {
             ResourceType::Greens | ResourceType::Roots => "Agricultural",
             ResourceType::Hides | ResourceType::Wool | ResourceType::Meat | ResourceType::Milk => "Animal Product",
             ResourceType::Fish | ResourceType::Honey => "Animal Product",
-            ResourceType::Clay | ResourceType::Sand | ResourceType::Coal | ResourceType::Salt => "Mineral",
+            ResourceType::Clay | ResourceType::Sand | ResourceType::Coal | ResourceType::Salt | ResourceType::Flint => "Mineral",
             ResourceType::Flour | ResourceType::Leather | ResourceType::Cloth | ResourceType::Linen |
             ResourceType::Glass | ResourceType::Bricks | ResourceType::Charcoal | ResourceType::Rope |
             ResourceType::Paper | ResourceType::Dye => "Processed Material",
@@ -1775,6 +1789,7 @@ mod all_resources_tests {
             ResourceType::Sand => {}
             ResourceType::Coal => {}
             ResourceType::Salt => {}
+            ResourceType::Flint => {}
             ResourceType::Flour => {}
             ResourceType::Leather => {}
             ResourceType::Cloth => {}

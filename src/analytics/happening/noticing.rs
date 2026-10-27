@@ -260,21 +260,14 @@ impl Simulation {
 
                 // And can he point to the stuff? In his pack, or on his map.
                 //
-                // **The map half of this never fires today, and it is worth
-                // knowing why.** Flint is not a thing that lies in the
-                // ground - there is no `ResourceType::Flint`, it is made by
-                // smashing a stone core - so no sight pass can write it and
-                // no map can carry it. Measured over 8 worlds of 180 days,
-                // 5 of them worked flint knapping out and not one of the 96
-                // people who ever lived had flint on his map: every man who
-                // had the thought was holding the stuff.
-                //
-                // The one sibling that *does* lie in the ground is cotton,
-                // and it is on maps in quantity - so this arm would be
-                // load-bearing the moment `LASHING_FROM_COTTON` became a
-                // discovery, which is the run that cost 6 of 64 settlements
-                // their first winter. The cheap sibling is made rather than
-                // found and the found one is too dear. See ISSUES_FOUND #195.
+                // **The map half of this never fired until flint lay in the
+                // ground** (#373). Flint was only made, by smashing a stone
+                // core, so no sight pass could write it and no map carry it:
+                // measured over 8 worlds of 180 days, 5 worked flint knapping
+                // out and not one of the 96 people who ever lived had flint
+                // on his map (#195). There are beds of it in the hills and
+                // nodules in the river gravels now, and a knapper who sees
+                // one knows it for a stone like the ones he knaps.
                 let to_be_had = step.needs.iter().any(|(wants, _)| {
                     agent.how_many_i_have(wants) > 0
                         || agent

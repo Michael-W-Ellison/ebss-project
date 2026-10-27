@@ -634,6 +634,9 @@ impl Simulation {
 
             ResourceType::Clay => "clay",
             ResourceType::Salt => "salt",
+            // Picked up where it lies, under the name the knapper's pack
+            // already uses for what a smashed core gives (#373)
+            ResourceType::Flint => "flint",
             ResourceType::Sand => "sand",
             ResourceType::Coal => "coal",
             ResourceType::Flax => "flax",

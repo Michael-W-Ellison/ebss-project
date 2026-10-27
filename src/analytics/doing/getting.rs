@@ -297,6 +297,8 @@ impl Simulation {
                 // flax one stem per trip is a week's work
                 ResourceType::Flax | ResourceType::Cotton => rng.gen_range(1..=3),
                 ResourceType::Stone => rng.gen_range(1..=2),
+                // A few nodules picked out of the gravel (#373)
+                ResourceType::Flint => rng.gen_range(2..=4),
                 ResourceType::Iron => 1,
 
                 // Food by the armful too, which is the whole of
