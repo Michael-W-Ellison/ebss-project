@@ -72,6 +72,11 @@ fn zz_discovery_watch() {
         ("rotted", sim.world.food_that_rotted_in_the_ground),
         ("vermin", sim.world.food_the_vermin_took),
         ("scavengers", sim.world.food_the_scavengers_took),
+        ("meat_left_on_kills", sim.world.meat_left_on_kills),
+        ("meat_the_crows_had", sim.world.meat_the_crows_had),
+        ("carriers_taken_on", sim.world.carriers_taken_on),
+        ("joints_carried_for_a_share", sim.world.joints_carried_for_a_share),
+        ("joints_kept_as_pay", sim.world.joints_kept_as_pay),
     ] {
         println!("STORE {what} {how_many}");
     }

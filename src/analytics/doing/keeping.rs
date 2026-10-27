@@ -182,7 +182,14 @@ impl Simulation {
         // enough to be worth burying", because a settlement living
         // hand to mouth rarely holds more than three of anything.
         let keeping_back = Self::WHAT_A_PERSON_KEEPS_ON_THEM.min(mine.quantity);
-        let putting_by = (mine.quantity - keeping_back).min(room);
+        let mut putting_by = (mine.quantity - keeping_back).min(room);
+
+        // Meat carried here for somebody else goes in to the last joint
+        // owed, and the carrier's share stays in the pack (#374).
+        let owed = if what == "meat" { self.owed_to_this_store(agent_index, here) } else { None };
+        if let Some(owed) = owed {
+            putting_by = owed.min(mine.quantity).min(room);
+        }
 
         if putting_by == 0 {
             return ActionResult::failure("Not enough to be worth burying".to_string());
@@ -221,6 +228,13 @@ impl Simulation {
                     in_this,
                 },
             );
+        }
+
+        if owed.is_some() {
+            if let Some(hire) = self.population.agents[agent_index].working_for.as_mut() {
+                hire.handed_over += putting_by;
+            }
+            self.world.joints_carried_for_a_share += u64::from(putting_by);
         }
 
         {

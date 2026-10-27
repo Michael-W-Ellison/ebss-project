@@ -2178,6 +2178,11 @@ pub struct Agent {
     /// not move again for a while (`Simulation::A_CAMP_STAYS_AT_LEAST`).
     #[serde(default)]
     pub hearth_moved_at: u32,
+
+    /// Work this one has agreed to do for somebody else, for a share of what
+    /// it moves (`hire::Hire`, #374).
+    #[serde(default)]
+    pub working_for: Option<super::hire::Hire>,
 }
 
 impl Agent {
@@ -2259,6 +2264,7 @@ impl Agent {
             cached_defense_bonus: 1.0,
             hearth: None,
             hearth_moved_at: 0,
+            working_for: None,
         };
 
         // Initialize default behavior trees for each drive type

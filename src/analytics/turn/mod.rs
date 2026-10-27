@@ -165,6 +165,10 @@ impl Simulation {
         self.what_everybody_saw_that_frightened_them();
         self.who_everybody_saw();
 
+        // Whoever has a kill they cannot get home in time asks those about
+        // them for a hand with it, for a share (#374)
+        self.hands_for_the_carrying();
+
         self.what_the_beasts_make_of_us();
         self.the_beasts_act_on_it();
 

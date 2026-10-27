@@ -991,6 +991,11 @@ pub struct ResourceNode {
     /// on to breaking ground for a garden (ISSUES_FOUND #346).
     #[serde(default)]
     pub sown_by: Option<uuid::Uuid>,
+
+    /// Whose kill this carcass is, which is who may take people on to carry
+    /// it home (`agents::hire`, #374).
+    #[serde(default)]
+    pub killed_by: Option<uuid::Uuid>,
 }
 
 impl ResourceNode {
@@ -1052,6 +1057,7 @@ impl ResourceNode {
             asleep_since: None,
             killed_on: None,
             sown_by: None,
+            killed_by: None,
         }
     }
 

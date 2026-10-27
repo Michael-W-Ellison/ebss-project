@@ -696,6 +696,9 @@ impl Simulation {
                     }
                 }
                 let took = took;
+                if killed_on.is_some() {
+                    self.cut_for_somebody_else(agent_index, where_it_grew, took);
+                }
                 let went_in_the_pack = took > 0;
                 if it_is_food {
                     self.food_items_into_packs += took as u64;

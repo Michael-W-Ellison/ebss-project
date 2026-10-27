@@ -949,7 +949,8 @@ impl Simulation {
         self.take_what_fits(agent_index, &sinew);
 
         let left = joints_on_it - took;
-        if self.world.a_carcass_lies_here(where_it_fell, left, now).is_some() {
+        if let Some(carcass) = self.world.a_carcass_lies_here(where_it_fell, left, now) {
+            self.world.resources[carcass].killed_by = Some(self.population.agents[agent_index].id);
             let knows = &mut self.population.agents[agent_index].exploration_knowledge;
             knows.discover_resource(where_it_fell, crate::world::ResourceType::Meat, now);
             knows.saw_it_again(where_it_fell, left, now);
@@ -1209,7 +1210,39 @@ impl Simulation {
             let at = self.world.resources[number].position;
             self.world.can_walk_between(here, (at.x, at.y))
         });
+
+        // **Nor somebody else's kill** (#374), which is theirs to give away
+        // or pay to have carried and not anybody's who happens past it.
+        known.retain(|&number| self.may_i_cut_from(agent, &self.world.resources[number]));
         known
+    }
+
+    /// Whether this one may take meat off this carcass: it is their own kill
+    /// or their kin's, they were told where it is (which is the killer giving
+    /// it away), they are carrying it home for a share, or the one who killed
+    /// it is dead. Anything that is not a kill, anybody may.
+    pub(in crate::analytics) fn may_i_cut_from(
+        &self,
+        agent: &crate::agents::Agent,
+        node: &crate::world::ResourceNode,
+    ) -> bool {
+        let Some(whose) = node.killed_by else {
+            return true;
+        };
+        if agent.may_i_use(&crate::world::Belongs::To(whose)).is_mine_to_use()
+            || agent.exploration_knowledge.who_told_me.contains_key(&node.position)
+            || agent
+                .working_for
+                .as_ref()
+                .is_some_and(|hire| hire.from_and_to().0 == (node.position.x, node.position.y))
+        {
+            return true;
+        }
+        !self
+            .population
+            .agents
+            .iter()
+            .any(|other| other.id == whose && other.state.is_alive)
     }
 
     /// Bring every place this agent remembers up to today, before it makes up

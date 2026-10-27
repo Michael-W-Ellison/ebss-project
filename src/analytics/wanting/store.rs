@@ -467,6 +467,12 @@ impl Simulation {
 
         let here = Position::new(agent_position.0, agent_position.1);
 
+        // Work taken on for somebody else's store comes before one's own, and
+        // before cutting anything down: what was promised is joints (#374).
+        if let Some(carrying) = self.the_carrying_i_took_on(agent, agent_position) {
+            return Some(carrying);
+        }
+
         let spare = agent.what_food_i_can_spare();
 
         // Cut it down small before you do anything else with it.

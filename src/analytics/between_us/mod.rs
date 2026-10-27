@@ -9,6 +9,7 @@
 //! - [`threat`] - fear, anger, and the four answers to a thing in the way
 //! - [`seeing`] - what everybody saw, and what they made of it
 //! - [`exchange`] - trading, taking, and giving
+//! - [`hire`] - work done for somebody else, for a share of what it moves
 //! - [`asking`] - putting a question to somebody who might know
 //!
 //! This layer sits across the other three rather than beside them: it is
@@ -22,6 +23,7 @@
 
 pub mod asking;
 pub mod exchange;
+pub mod hire;
 pub mod seeing;
 pub mod threat;
 

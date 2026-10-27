@@ -258,6 +258,22 @@ pub struct World {
     #[serde(default)]
     pub food_the_vermin_took: u64,
 
+    /// Joints left on a kill when the hunter walked away from it, and
+    /// joints still on one when it went to the crows (#374).
+    #[serde(default)]
+    pub meat_left_on_kills: u64,
+    #[serde(default)]
+    pub meat_the_crows_had: u64,
+
+    /// People taken on to carry a kill home for a share, joints they put in
+    /// the owner's store, and joints they kept as their pay (#374).
+    #[serde(default)]
+    pub carriers_taken_on: u64,
+    #[serde(default)]
+    pub joints_carried_for_a_share: u64,
+    #[serde(default)]
+    pub joints_kept_as_pay: u64,
+
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
     pub food_the_scavengers_took: u64,
@@ -1107,6 +1123,7 @@ impl World {
         if joints == 0 {
             return None;
         }
+        self.meat_left_on_kills = self.meat_left_on_kills.saturating_add(u64::from(joints));
         Some(self.put_a_node_down(ResourceNode::a_carcass(where_it_fell, joints, killed_on)))
     }
 
@@ -1120,6 +1137,7 @@ impl World {
                 .is_some_and(|then| now.saturating_sub(then) >= Self::HOW_LONG_A_CARCASS_LIES)
                 && node.amount > 0
             {
+                self.meat_the_crows_had = self.meat_the_crows_had.saturating_add(u64::from(node.amount));
                 node.amount = 0;
                 any = true;
             }
@@ -1754,6 +1772,11 @@ impl World {
             food_that_rotted_where_it_lay: 0,
             food_that_rotted_in_the_ground: 0,
             food_the_vermin_took: 0,
+            meat_left_on_kills: 0,
+            meat_the_crows_had: 0,
+            carriers_taken_on: 0,
+            joints_carried_for_a_share: 0,
+            joints_kept_as_pay: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
