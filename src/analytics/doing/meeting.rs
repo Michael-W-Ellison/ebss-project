@@ -132,6 +132,8 @@ impl Simulation {
         };
         use crate::core::traits::Trait;
 
+        *self.population.stats.how_it_went.entry("a coupling tried".to_string()).or_insert(0) += 1;
+
         // Find the target agent
         let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
         if target_index.is_none() {
@@ -682,6 +684,7 @@ impl Simulation {
                     Some(crate::agents::Agent::the_cycle_at(current_turn));
             }
             if let Some(pregnancy) = got {
+                *self.population.stats.how_it_went.entry("a coupling conceived".to_string()).or_insert(0) += 1;
                 // Pregnancy started!
                 let female = &mut self.population.agents[female_index];
                 female.pregnancy = Some(pregnancy);

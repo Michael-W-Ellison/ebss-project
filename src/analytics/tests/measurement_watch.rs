@@ -80,6 +80,11 @@ fn zz_discovery_watch() {
     ] {
         println!("STORE {what} {how_many}");
     }
+    // How children came about, and how many tries it took (#375)
+    for what in ["a coupling tried", "a coupling conceived", "a pair conceived", "a pair did not take"] {
+        let how_many = sim.population.stats.how_it_went.get(what).copied().unwrap_or(0);
+        println!("STORE {} {}", what.replace(' ', "_"), how_many);
+    }
     println!(
         "BD D{:04} births {} deaths {} alive {}",
         days,
