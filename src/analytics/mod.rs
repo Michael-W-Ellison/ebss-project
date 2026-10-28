@@ -1217,26 +1217,22 @@ impl Simulation {
         known
     }
 
-    /// How long a kill is its killer's alone, unless somebody is carrying it
-    /// home for him: a day, which is time to get back to camp and take
-    /// people on.
-    ///
-    /// For the whole five days at first, and the crows had six times what
-    /// they had before: 324 joints in 1,060 over forty settlements in two
-    /// years, against about one in ten when anybody could cut from a kill.
-    /// The leftovers of a kill nobody is carrying had been feeding whoever
-    /// came past, and a claim on them fed nobody (#374).
-    pub(in crate::analytics) const A_KILL_IS_ITS_KILLERS_FOR: u32 =
-        crate::environment::seasons::TICKS_PER_DAY;
-
     /// Whether this one may take meat off this carcass.
     ///
-    /// Anything that is not a kill, anybody may. A kill, whoever killed it
-    /// or their kin; whoever was told where it is, which is the killer giving
-    /// it away; whoever is carrying it home for a share; anybody starving,
-    /// since a band feeds the man with nothing; and anybody at all once the
-    /// killer is dead, or once the first day is out
-    /// (`A_KILL_IS_ITS_KILLERS_FOR`) and nobody is carrying it for him.
+    /// Anybody may, as they always could, until its killer takes people on to
+    /// carry it home for a share. From then until the carrying is over it is
+    /// his: the killer and his kin, whoever he told of it (which is giving it
+    /// away), whoever is carrying it, and anybody starving, since a band feeds
+    /// the man with nothing.
+    ///
+    /// A claim from the moment of the kill was tried, for the five days a
+    /// carcass lies and for the first day, and both fed the crows. Measured
+    /// over forty settlements in two years, a quarter of the meat left on
+    /// kills went off with no claim (247 joints in 1,020) and a third with
+    /// one (324 in 1,060; 334 in 995 for the first day only): the leftovers
+    /// of a kill had been feeding whoever came past, in its first day most of
+    /// all. A claim made by having it carried costs the passer-by only what
+    /// is being carried home (#374).
     pub(in crate::analytics) fn may_i_cut_from(
         &self,
         agent: &crate::agents::Agent,
@@ -1246,30 +1242,17 @@ impl Simulation {
             return true;
         };
         let at = (node.position.x, node.position.y);
-        if agent.may_i_use(&crate::world::Belongs::To(whose)).is_mine_to_use()
+        let being_carried_for_him = self.population.agents.iter().any(|other| {
+            other
+                .working_for
+                .as_ref()
+                .is_some_and(|hire| hire.by == whose && hire.from_and_to().0 == at)
+        });
+        !being_carried_for_him
+            || agent.may_i_use(&crate::world::Belongs::To(whose)).is_mine_to_use()
             || agent.exploration_knowledge.who_told_me.contains_key(&node.position)
             || agent.working_for.as_ref().is_some_and(|hire| hire.from_and_to().0 == at)
             || agent.state.is_starving()
-        {
-            return true;
-        }
-        let kept_for_him = node
-            .killed_on
-            .is_some_and(|then| self.current_turn.saturating_sub(then) < Self::A_KILL_IS_ITS_KILLERS_FOR)
-            || self.population.agents.iter().any(|other| {
-                other
-                    .working_for
-                    .as_ref()
-                    .is_some_and(|hire| hire.by == whose && hire.from_and_to().0 == at)
-            });
-        if !kept_for_him {
-            return true;
-        }
-        !self
-            .population
-            .agents
-            .iter()
-            .any(|other| other.id == whose && other.state.is_alive)
     }
 
     /// Bring every place this agent remembers up to today, before it makes up

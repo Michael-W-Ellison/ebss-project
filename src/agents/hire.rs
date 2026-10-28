@@ -19,9 +19,10 @@
 //!   walking and cutting cost them, and is not hungry
 //!   (`Simulation::would_this_one_carry_for_a_share`).
 //!
-//! Trade needs something to be somebody's to trade, so a kill is its
-//! killer's: anybody else may cut from it only if they are kin, were told
-//! where it is (which is giving it away), or are carrying it for a share
+//! Trade needs something to be somebody's to trade. A kill becomes its
+//! killer's when he takes people on to carry it: until the carrying is over,
+//! anybody else may cut from it only if they are kin, were told where it is
+//! (which is giving it away), are carrying it, or are starving
 //! (`Simulation::may_i_cut_from`). Nobody tells of a kill being carried.
 //!
 //! The one kind of work so far is carrying a kill home: from the carcass to a

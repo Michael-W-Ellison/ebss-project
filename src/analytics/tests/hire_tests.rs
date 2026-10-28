@@ -6,8 +6,8 @@
 //! - the carrier cuts it, carries it to the owner's store, puts in all but
 //!   their share, and the two think better of each other for it
 //! - a hungry man, or one with no room in the pack, is not taken on
-//! - somebody else's kill is not food to whoever happens past it, for its
-//!   first day or while it is being carried
+//! - a kill being carried for its killer is not food to whoever happens
+//!   past it; one nobody is carrying is anybody's, as it always was
 //! - a kill being carried for a share is not given away by telling
 
 use crate::agents::hire::Hire;
@@ -189,23 +189,38 @@ fn nobody_with_a_full_pack_is_taken_on() {
     assert!(simulation.population.agents[1].working_for.is_none());
 }
 
-/// A kill of somebody else's, that one was not told of and is not carrying,
-/// is not food to whoever happens past it; told of it, it is.
+/// A kill nobody is carrying for its killer is anybody's, as it always was,
+/// so its leftovers feed whoever comes past rather than the crows. Once he
+/// has taken people on to carry it, it is his to give: a passer-by may not
+/// cut from it, and whoever he told of it may.
 #[test]
-fn somebody_elses_kill_is_theirs_to_give() {
-    // Killed this morning
-    let mut simulation = a_kill_and_a_neighbour(40, 4.75);
-    let neighbour = simulation.population.agents[1].clone();
+fn a_kill_being_carried_is_its_killers_to_give() {
     let here = Position::new(CAMP.0, CAMP.1);
-    let sees = simulation.nodes_this_one_knows_of(&neighbour, here, 25);
-    assert!(
-        sees.iter().all(|&n| !simulation.world.resources[n].is_a_carcass()),
-        "the hunter's kill is not the neighbour's to take"
-    );
+    let sees_it = |simulation: &Simulation, who: usize| {
+        let them = simulation.population.agents[who].clone();
+        simulation
+            .nodes_this_one_knows_of(&them, here, 25)
+            .iter()
+            .any(|&n| simulation.world.resources[n].is_a_carcass())
+    };
+
+    let mut simulation = a_kill_and_a_neighbour(40, 1.0);
+    let mut config = AgentConfig::default();
+    config.random_weights = false;
+    simulation.population.spawn_agent(config);
+    simulation.population.agents[2].state.position = (CAMP.0 + 40, CAMP.1, 0);
+    simulation.population.agents[2].inventory.max_weight = 0.0;
+    assert!(sees_it(&simulation, 1), "nobody carrying it, it is anybody's");
+
+    simulation.hands_for_the_carrying();
+    assert!(simulation.population.agents[1].working_for.is_some());
+    simulation.population.agents[2].state.position = (CAMP.0, CAMP.1, 0);
+    assert!(!sees_it(&simulation, 2), "being carried for him, a passer-by may not cut from it");
+    assert!(sees_it(&simulation, 1), "the carrier may");
 
     let hunter = simulation.population.agents[0].id;
     let now = simulation.current_turn;
-    let knows = &mut simulation.population.agents[1].exploration_knowledge;
+    let knows = &mut simulation.population.agents[2].exploration_knowledge;
     knows.discover_resource(KILL, crate::world::ResourceType::Meat, now);
     knows.who_told_me.insert(
         KILL,
@@ -216,32 +231,7 @@ fn somebody_elses_kill_is_theirs_to_give() {
             how_much_they_said: Some(40),
         },
     );
-    let neighbour = simulation.population.agents[1].clone();
-    let sees = simulation.nodes_this_one_knows_of(&neighbour, here, 25);
-    assert!(
-        sees.iter().any(|&n| simulation.world.resources[n].is_a_carcass()),
-        "told where it is, it is his to take"
-    );
-}
-
-/// A kill nobody is carrying is anybody's once its first day is out, so its
-/// leftovers feed whoever comes past rather than the crows.
-#[test]
-fn a_kill_nobody_is_carrying_is_anybodys_after_a_day() {
-    let here = Position::new(CAMP.0, CAMP.1);
-    let a_carcass_in_sight = |simulation: &Simulation| {
-        let neighbour = simulation.population.agents[1].clone();
-        simulation
-            .nodes_this_one_knows_of(&neighbour, here, 25)
-            .iter()
-            .any(|&n| simulation.world.resources[n].is_a_carcass())
-    };
-
-    let simulation = a_kill_and_a_neighbour(40, 3.0);
-    assert!(a_carcass_in_sight(&simulation), "two days on, nobody carrying it, it is anybody's");
-
-    let simulation = a_kill_and_a_neighbour(40, 4.75);
-    assert!(!a_carcass_in_sight(&simulation), "this morning's kill is still the hunter's");
+    assert!(sees_it(&simulation, 2), "told where it is, it is his to take");
 }
 
 /// A kill with people carrying it home for a share is not told about: the
