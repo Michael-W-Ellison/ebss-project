@@ -28055,7 +28055,8 @@ later entry. These were not. Each line names the entry that left it.
   "moving camp never fires" though camps move (#193). ~~The prose is
   corrected (#369).~~
 - Sling, travois and leather bag are never found out in two years (#345).
-- Mating is tried about 1.4 times a day per partnered adult (#338). Best
+- ~~Mating is tried about 1.4 times a day per partnered adult (#338).~~
+  Only on a day a child could come of it (#375). Best
   suited pairs stand no nearer than others (#339). Traits only a mutation
   can give never appear in an adult (#337).
 - ~~An ill person sleeps through their own hunger (#166, not settled)~~: no
@@ -28757,3 +28758,76 @@ fight fix.
 
 **Dice counts**: 7,126 (seed 4242, 120 turns) and 1,004,850 (seed 0, a
 year).
+
+### 375. Partners couple only on a day a child could come of it
+
+The user asked: "Resolve issue 338, Mating Rate, so that more turns are
+freed up."
+
+**What #338 left open.** Partnered adults coupled about 1.4 times a day,
+and a pair can conceive on one day in a cycle of thirty: the carrier's
+fertile day, once, with their chance for the cycle unspent
+(`Agent::could_conceive_now`). The Reproduction drive answered with `Mate`
+whenever the partner was within courting distance, and walked to the partner
+when not. After a try outside the window the wish was left a day short of
+asking again (`after_a_try_outside_the_window`, #311), so the same pair asked
+every day.
+
+Counted on two smooth worlds over 200 days, with every `Mate` sorted by
+whether a child could have come of it that day:
+
+| | seed 1 | seed 2 |
+|---|---|---|
+| couplings | 2,290 | 573 |
+| on a day either could conceive | 12 | 0 |
+| conceived | 1 | 0 |
+
+The pairing pass (`Population::process_reproduction`) makes most children
+anyway. It conceives for any pair on the carrier's fertile day whether or not
+they coupled, so the couplings were nearly all turns spent on nothing.
+
+**What changed.** The Reproduction arm couples, or walks halfway to the
+partner, only when a child could come of it today
+(`reproduction::could_these_two_conceive_today`): one of the two can carry,
+it is their fertile day, and their chance this cycle is not spent. On every
+other day the drive stands aside and the turn goes to whatever presses next.
+The same two worlds then coupled once each in 200 days, and both conceived
+more (5 against 3, and 2 against 0).
+
+**And a counter.** The coupling count added for this went into
+`socialising` first, the first function its edit matched, so the first two
+runs' `STORE a_coupling_tried` counted conversations. It is in `mating` now.
+The figures above are from a probe, not from those runs.
+
+**Measured**, forty settlements, two years, against #374 (the baseline run
+reproduces #374 exactly):
+
+| | #374 | #375 | t |
+|---|---|---|---|
+| births | 168 | 174 | +1.06 |
+| deaths | 5 | 10 | +1.09 |
+| of hunger | 1 | 6 | +1.40 |
+| of thirst | 1 | 3 | |
+| of a blow | 3 | 0 | |
+| alive at two years | 643 | 644 | +0.15 |
+| children conceived by the pairing pass | 169 | 191 | |
+| by a coupling | 47 | 20 | |
+
+Every column is within noise. The turns freed came to about 11 a day on
+smooth seed 1 and 3 on smooth seed 2, a settlement of twelve founders. Three of the six hunger deaths were on smooth
+seed 3, between days 675 and 680, at the end of the second winter. Whether
+the extra births or the freed turns had anything to do with that was not
+looked into.
+
+**Tests** (`coupling_tests`):
+- `nobody_goes_to_their_partner_on_a_day_nothing_could_come_of_it`: off the
+  fertile day the drive offers neither a coupling nor a walk. On the
+  carrier's day it couples, and once the cycle's chance is spent it waits for
+  the next.
+- `partners_apart_meet_rather_than_pass` now runs on a fertile day, the only
+  day they go.
+
+**Full suite**: 2,990 passed, 0 failed.
+
+**Dice counts**: 7,126 (seed 4242, 120 turns, unchanged) and 939,903 (seed
+0, a year).
