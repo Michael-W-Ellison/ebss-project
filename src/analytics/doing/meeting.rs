@@ -132,8 +132,6 @@ impl Simulation {
         };
         use crate::core::traits::Trait;
 
-        *self.population.stats.how_it_went.entry("a coupling tried".to_string()).or_insert(0) += 1;
-
         // Find the target agent
         let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
         if target_index.is_none() {
@@ -590,6 +588,8 @@ impl Simulation {
     pub(in crate::analytics) fn mating(&mut self, target_agent_id: &uuid::Uuid, agent_index: usize, rng: &mut rand::rngs::StdRng) -> ActionResult {
         use crate::agents::reproduction::{can_mate, MateSelectionCriteria};
         use crate::agents::gossip::{Information, InformationType};
+
+        *self.population.stats.how_it_went.entry("a coupling tried".to_string()).or_insert(0) += 1;
 
         // Find the target agent
         let target_index = self.population.agents.iter().position(|a| a.id == *target_agent_id);
