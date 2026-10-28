@@ -645,7 +645,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // its first day or while it is carried, then anybody's.
     // Up 3.5% to 1,004,850 for #374's second correction: a kill is anybody's
     // until it is being carried for its killer.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_004_850;
+    // Down 6.5% to 939,903 for #375: partners couple only on a day a child
+    // could come of it.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 939_903;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

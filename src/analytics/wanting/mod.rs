@@ -1242,6 +1242,23 @@ impl Simulation {
                 if !agent.should_attempt_reproduction() {
                     return None;
                 }
+
+                // **And only on a day a child could come of it** (#375).
+                // A pair can conceive on one day a cycle, the carrier's, and
+                // partnered adults coupled about 1.4 times a day every day of
+                // it (#338): twenty-nine days in thirty spent on a turn that
+                // could come to nothing. On the other days the wish waits,
+                // and the turn goes to whatever presses next.
+                let partner = agent.my_partner()?;
+                let them = self
+                    .population
+                    .agents
+                    .iter()
+                    .find(|them| them.id == partner && them.state.is_alive)?;
+                if !crate::agents::reproduction::could_these_two_conceive_today(agent, them, self.current_turn) {
+                    return None;
+                }
+
                 self.somebody_to_have_a_child_with(agent, agent_position)
                     .map(|them| Action::Mate {
                         target_agent_id: them,

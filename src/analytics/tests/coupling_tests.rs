@@ -281,7 +281,9 @@ fn a_wasting_body_does_not_try_for_a_child() {
 /// courting distance in a handful of walks.
 #[test]
 fn partners_apart_meet_rather_than_pass() {
-    let (mut simulation, _) = a_couple([1.0, 1.0]);
+    let (mut simulation, carrier) = a_couple([1.0, 1.0]);
+    // On a day a child could come of it, which is the only day they go (#375)
+    simulation.current_turn = simulation.population.agents[carrier].my_next_fertile_turn(0);
     simulation.population.agents[0].state.position = (20, 20, 0);
     simulation.population.agents[1].state.position = (100, 20, 0);
 
@@ -310,4 +312,52 @@ fn partners_apart_meet_rather_than_pass() {
         "two who go to each other end up together: {apart} apart after {walks} walks"
     );
     assert!(walks <= 8, "and in a handful of walks, not {walks}");
+}
+
+/// A pair can conceive on one day a cycle, and on the other days wanting a
+/// child neither couples nor walks to the partner: the turn goes to whatever
+/// presses next. Partnered adults coupled about 1.4 times a day, every day,
+/// and twenty-nine days in thirty it could come to nothing (#375).
+#[test]
+fn nobody_goes_to_their_partner_on_a_day_nothing_could_come_of_it() {
+    let (mut simulation, carrier) = a_couple([1.0, 1.0]);
+    let at = simulation.population.agents[0].state.position;
+
+    simulation.current_turn = neither_ones_day(&simulation);
+    let off_the_day = simulation.what_this_drive_offers(
+        DriveType::Reproduction,
+        &simulation.population.agents[0],
+        at,
+    );
+    assert_eq!(off_the_day, None, "off the fertile day the wish waits");
+
+    simulation.population.agents[1].state.position = (60, 20, 0);
+    assert_eq!(
+        simulation.what_this_drive_offers(DriveType::Reproduction, &simulation.population.agents[0], at),
+        None,
+        "and nobody walks to a partner for it either"
+    );
+    simulation.population.agents[1].state.position = at;
+
+    simulation.current_turn = simulation.population.agents[carrier].my_next_fertile_turn(0);
+    let on_the_day = simulation.what_this_drive_offers(
+        DriveType::Reproduction,
+        &simulation.population.agents[0],
+        at,
+    );
+    assert!(
+        matches!(on_the_day, Some(Action::Mate { .. })),
+        "on the carrier's fertile day they couple, not {on_the_day:?}"
+    );
+
+    // And once that cycle's chance is spent, not again until the next
+    let cycle = crate::agents::Agent::the_cycle_at(simulation.current_turn);
+    for agent in simulation.population.agents.iter_mut() {
+        agent.last_cycle_tried = Some(cycle);
+    }
+    assert_eq!(
+        simulation.what_this_drive_offers(DriveType::Reproduction, &simulation.population.agents[0], at),
+        None,
+        "the cycle's one chance spent, the wish waits for the next"
+    );
 }
