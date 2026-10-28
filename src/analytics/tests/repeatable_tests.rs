@@ -639,7 +639,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 5.1% to 963,252 for #374: a kill is its killer's, and somebody
     // with more on it than they can get home in time takes people on to
     // carry it for a share.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 963_252;
+    // Up 0.8% to 970,626 for #374's correction: a kill is its killer's for
+    // its first day or while it is carried, then anybody's.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 970_626;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

@@ -1217,10 +1217,26 @@ impl Simulation {
         known
     }
 
-    /// Whether this one may take meat off this carcass: it is their own kill
-    /// or their kin's, they were told where it is (which is the killer giving
-    /// it away), they are carrying it home for a share, or the one who killed
-    /// it is dead. Anything that is not a kill, anybody may.
+    /// How long a kill is its killer's alone, unless somebody is carrying it
+    /// home for him: a day, which is time to get back to camp and take
+    /// people on.
+    ///
+    /// For the whole five days at first, and the crows had six times what
+    /// they had before: 324 joints in 1,060 over forty settlements in two
+    /// years, against about one in ten when anybody could cut from a kill.
+    /// The leftovers of a kill nobody is carrying had been feeding whoever
+    /// came past, and a claim on them fed nobody (#374).
+    pub(in crate::analytics) const A_KILL_IS_ITS_KILLERS_FOR: u32 =
+        crate::environment::seasons::TICKS_PER_DAY;
+
+    /// Whether this one may take meat off this carcass.
+    ///
+    /// Anything that is not a kill, anybody may. A kill, whoever killed it
+    /// or their kin; whoever was told where it is, which is the killer giving
+    /// it away; whoever is carrying it home for a share; anybody starving,
+    /// since a band feeds the man with nothing; and anybody at all once the
+    /// killer is dead, or once the first day is out
+    /// (`A_KILL_IS_ITS_KILLERS_FOR`) and nobody is carrying it for him.
     pub(in crate::analytics) fn may_i_cut_from(
         &self,
         agent: &crate::agents::Agent,
@@ -1229,13 +1245,24 @@ impl Simulation {
         let Some(whose) = node.killed_by else {
             return true;
         };
+        let at = (node.position.x, node.position.y);
         if agent.may_i_use(&crate::world::Belongs::To(whose)).is_mine_to_use()
             || agent.exploration_knowledge.who_told_me.contains_key(&node.position)
-            || agent
-                .working_for
-                .as_ref()
-                .is_some_and(|hire| hire.from_and_to().0 == (node.position.x, node.position.y))
+            || agent.working_for.as_ref().is_some_and(|hire| hire.from_and_to().0 == at)
+            || agent.state.is_starving()
         {
+            return true;
+        }
+        let kept_for_him = node
+            .killed_on
+            .is_some_and(|then| self.current_turn.saturating_sub(then) < Self::A_KILL_IS_ITS_KILLERS_FOR)
+            || self.population.agents.iter().any(|other| {
+                other
+                    .working_for
+                    .as_ref()
+                    .is_some_and(|hire| hire.by == whose && hire.from_and_to().0 == at)
+            });
+        if !kept_for_him {
             return true;
         }
         !self

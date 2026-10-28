@@ -6,7 +6,8 @@
 //! - the carrier cuts it, carries it to the owner's store, puts in all but
 //!   their share, and the two think better of each other for it
 //! - a hungry man, or one with no room in the pack, is not taken on
-//! - somebody else's kill is not food to whoever happens past it
+//! - somebody else's kill is not food to whoever happens past it, for its
+//!   first day or while it is being carried
 //! - a kill being carried for a share is not given away by telling
 
 use crate::agents::hire::Hire;
@@ -192,7 +193,8 @@ fn nobody_with_a_full_pack_is_taken_on() {
 /// is not food to whoever happens past it; told of it, it is.
 #[test]
 fn somebody_elses_kill_is_theirs_to_give() {
-    let mut simulation = a_kill_and_a_neighbour(40, 1.0);
+    // Killed this morning
+    let mut simulation = a_kill_and_a_neighbour(40, 4.75);
     let neighbour = simulation.population.agents[1].clone();
     let here = Position::new(CAMP.0, CAMP.1);
     let sees = simulation.nodes_this_one_knows_of(&neighbour, here, 25);
@@ -220,6 +222,26 @@ fn somebody_elses_kill_is_theirs_to_give() {
         sees.iter().any(|&n| simulation.world.resources[n].is_a_carcass()),
         "told where it is, it is his to take"
     );
+}
+
+/// A kill nobody is carrying is anybody's once its first day is out, so its
+/// leftovers feed whoever comes past rather than the crows.
+#[test]
+fn a_kill_nobody_is_carrying_is_anybodys_after_a_day() {
+    let here = Position::new(CAMP.0, CAMP.1);
+    let a_carcass_in_sight = |simulation: &Simulation| {
+        let neighbour = simulation.population.agents[1].clone();
+        simulation
+            .nodes_this_one_knows_of(&neighbour, here, 25)
+            .iter()
+            .any(|&n| simulation.world.resources[n].is_a_carcass())
+    };
+
+    let simulation = a_kill_and_a_neighbour(40, 3.0);
+    assert!(a_carcass_in_sight(&simulation), "two days on, nobody carrying it, it is anybody's");
+
+    let simulation = a_kill_and_a_neighbour(40, 4.75);
+    assert!(!a_carcass_in_sight(&simulation), "this morning's kill is still the hunter's");
 }
 
 /// A kill with people carrying it home for a share is not told about: the
