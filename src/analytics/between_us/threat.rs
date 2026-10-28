@@ -474,8 +474,14 @@ impl Simulation {
                 let armed = agent
                     .what_i_have_to_work_with(crate::agents::SkillType::MeleeCombat)
                     .is_some();
+                // And in what shape. The beast's worth is scaled by its wounds
+                // and a person's was not, so a man at a sixth of his health
+                // stood up to a boar as if whole: every death by a blow traced
+                // in #374 was somebody at seventeen or eighteen standing their
+                // ground against a boar by a fold.
                 let i_am_worth = Self::WHAT_A_PERSON_IS_WORTH_TO_A_BEAST
-                    * if armed { Self::WHAT_A_SPEAR_ADDS } else { 1.0 };
+                    * if armed { Self::WHAT_A_SPEAR_ADDS } else { 1.0 }
+                    * Self::what_shape_i_am_in(agent);
                 let worth = Self::what_a_beast_is_worth_in_a_fight(
                     animal.current_health,
                     species.health,
@@ -502,6 +508,12 @@ impl Simulation {
             // Neither. This is the case the decision never had an answer for.
             (_, false, false) => ("freezes", Some(Action::Freeze)),
         }
+    }
+
+    /// How much of a whole body this one has left to fight with: health on
+    /// the scale it starts at, never less than a tenth.
+    pub(in crate::analytics) fn what_shape_i_am_in(agent: &crate::agents::Agent) -> f32 {
+        (agent.state.health / 100.0).clamp(0.1, 1.0)
     }
 
     /// Whether somebody this agent loves is in the way of the thing, and could
