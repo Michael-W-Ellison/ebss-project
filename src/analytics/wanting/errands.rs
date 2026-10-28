@@ -387,7 +387,7 @@ impl Simulation {
                 None => far.get(&at).copied(),
             }
         };
-        let mut reach = |near: &mut Vec<u8>,
+        let reach = |near: &mut Vec<u8>,
                          far: &mut BTreeMap<(i32, i32), (i32, i32)>,
                          at: (i32, i32),
                          from: (i32, i32)| {
@@ -770,10 +770,7 @@ impl Simulation {
                     }
                     None => true,
                 };
-            let a_long_walk = crate::world::pace::whole_turns_to_walk(errand.how_far_it_was(here))
-                .max(crate::agents::Errand::AT_LEAST_THIS_MANY_TURNS)
-                * crate::agents::Errand::HOW_LONG_A_WALK_IS_WORTH;
-            let given_up = errand.turns_on_it > a_long_walk;
+            let given_up = errand.turns_on_it > errand.how_long_it_is_worth();
 
             // A making errand is finished when the thing is in the pack, and
             // is carried on with by taking the next step towards it. This is
@@ -888,15 +885,12 @@ impl Simulation {
                         .or_insert(0) += 1;
                     return first;
                 }
-                let pressed_this_hard =
-                    self.population.agents[agent_index].how_hard_it_presses(for_drive);
                 let set_out_from = self.population.agents[agent_index].state.position;
                 self.population.agents[agent_index].errand = Some(crate::agents::Errand {
                     going_to: target,
                     set_out_from,
                     to_make: None,
                     for_drive,
-                    pressed_this_hard,
                     turns_on_it: 1,
                 set_aside: 0,
                 });
@@ -1599,15 +1593,12 @@ impl Simulation {
             .or_insert(0) += 1;
 
         if let Some(for_drive) = self.population.agents[agent_index].what_presses_hardest() {
-            let pressed_this_hard =
-                self.population.agents[agent_index].how_hard_it_presses(for_drive);
             let here = self.population.agents[agent_index].state.position;
             self.population.agents[agent_index].errand = Some(crate::agents::Errand {
                 going_to: here,
                 set_out_from: here,
                 to_make: Some(better.called.to_string()),
                 for_drive,
-                pressed_this_hard,
                 turns_on_it: 1,
                 set_aside: 0,
             });
@@ -1859,8 +1850,6 @@ impl Simulation {
             return;
         };
 
-        let pressed_this_hard =
-            self.population.agents[agent_index].how_hard_it_presses(for_drive);
         let here = self.population.agents[agent_index].state.position;
 
         self.population.agents[agent_index].errand = Some(crate::agents::Errand {
@@ -1868,7 +1857,6 @@ impl Simulation {
             set_out_from: here,
             to_make: Some(wanted.to_string()),
             for_drive,
-            pressed_this_hard,
             turns_on_it: 1,
                 set_aside: 0,
         });

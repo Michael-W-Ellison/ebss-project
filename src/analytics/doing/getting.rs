@@ -265,7 +265,7 @@ impl Simulation {
 
     /// `Action::Gather`.
     pub(in crate::analytics) fn gathering(&mut self, resource_type: &String, agent_index: usize, rng: &mut rand::rngs::StdRng, turn_now: u32) -> ActionResult {
-        use crate::world::{ResourceType, Position};
+        use crate::world::ResourceType;
         use crate::agents::InventoryItem;
 
         let resource_type_enum = Self::what_a_gather_asks_for(resource_type);
@@ -275,14 +275,6 @@ impl Simulation {
         }
         let resource_type_enum = resource_type_enum.unwrap();
 
-        // Get agent position
-        let agent = &self.population.agents[agent_index];
-        let agent_pos = Position::new(
-            agent.state.position.0,
-            agent.state.position.1
-        );
-
-        let gathering_food = resource_type_enum == ResourceType::Food;
         let nearest_resource = self.the_node_this_gather_takes(agent_index, resource_type_enum);
 
         if let Some((resource_index, _)) = nearest_resource {
@@ -305,6 +297,8 @@ impl Simulation {
                 // flax one stem per trip is a week's work
                 ResourceType::Flax | ResourceType::Cotton => rng.gen_range(1..=3),
                 ResourceType::Stone => rng.gen_range(1..=2),
+                // A few nodules picked out of the gravel (#373)
+                ResourceType::Flint => rng.gen_range(2..=4),
                 ResourceType::Iron => 1,
 
                 // Food by the armful too, which is the whole of
@@ -702,6 +696,9 @@ impl Simulation {
                     }
                 }
                 let took = took;
+                if killed_on.is_some() {
+                    self.cut_for_somebody_else(agent_index, where_it_grew, took);
+                }
                 let went_in_the_pack = took > 0;
                 if it_is_food {
                     self.food_items_into_packs += took as u64;
@@ -1278,11 +1275,9 @@ impl Simulation {
 
         debug!("Agent {} dug a pit at {here:?}", agent.id);
 
-        // And what it cost, which depends on what was in the hand.
-        //
-        // A flat twenty-two whether the agent dug with a shovel or with
-        // its fingers - which is most of a turn's work either way, and
-        // a settlement that cannot dig cheaply cannot keep a larder.
+        // And what it cost, which depends on what was in the hand: the verb
+        // matrix will not let a hole be dug without something to dig with,
+        // and a better one digs it for less.
         let shovel = self.population.agents[agent_index]
             .how_fast_my_tools_make_this_go(crate::agents::SkillType::Mining);
         if shovel > 1.0 {

@@ -467,6 +467,12 @@ impl Simulation {
 
         let here = Position::new(agent_position.0, agent_position.1);
 
+        // Work taken on for somebody else's store comes before one's own, and
+        // before cutting anything down: what was promised is joints (#374).
+        if let Some(carrying) = self.the_carrying_i_took_on(agent, agent_position) {
+            return Some(carrying);
+        }
+
         let spare = agent.what_food_i_can_spare();
 
         // Cut it down small before you do anything else with it.
@@ -681,7 +687,9 @@ impl Simulation {
             // ninety-eight turns spent trying to dig a hole in a lake.
             if !self.is_there_a_hole_going_spare(here) {
                 if self.is_ground_a_pit_will_go_in(here) {
-                    return Some(Action::Excavate);
+                    if let Some(dig) = self.a_dig_or_what_it_wants_first(agent) {
+                        return Some(dig);
+                    }
                 }
                 if self.a_cairn_would_go_here(agent, here) {
                     return Some(Action::Cache);
@@ -736,9 +744,20 @@ impl Simulation {
             .nearest_pit_with_room(here, Self::WORTH_WALKING_TO_THE_STORE)
             .is_some()
         {
-            return Some(Action::Gather {
-                resource_type: "food".to_string(),
-            });
+            // A beast in sight worth more than the best patch is the better
+            // load for the store; failing a patch worth the trip, the water
+            // or the game seen lately (#370).
+            if let Some(hunt) = self.a_hunt_that_beats_the_hedgerow(agent, agent_position) {
+                return Some(hunt);
+            }
+            if self.the_best_food_anywhere_and_its_worth(agent, agent_position).is_some() {
+                return Some(Action::Gather {
+                    resource_type: "food".to_string(),
+                });
+            }
+            if let Some(out) = self.going_out_for_food_to_put_by(agent, agent_position) {
+                return Some(out);
+            }
         }
 
         // No store anywhere, and the year turning. Dig one.
@@ -753,7 +772,9 @@ impl Simulation {
         //
         // Autumn with nowhere to put anything is reason enough to dig.
         if self.is_ground_a_pit_will_go_in(here) {
-            return Some(Action::Excavate);
+            if let Some(dig) = self.a_dig_or_what_it_wants_first(agent) {
+                return Some(dig);
+            }
         }
         if self.a_cairn_would_go_here(agent, here) {
             return Some(Action::Cache);
@@ -787,6 +808,129 @@ impl Simulation {
         }
 
         None
+    }
+
+    /// Going out for food to put by: a hunt or the water.
+    ///
+    /// "Preparedness should lead to hunting and fishing. These are methods of
+    /// getting food." The Preparedness arm could bury, dry, salt, dig, walk a
+    /// trapline and set traps in the water, and the only food it ever went
+    /// out for was a gather for the store in autumn - so somebody short of a
+    /// week's food in spring, with a river beside the camp and deer on the
+    /// hill, was moved by Preparedness to nothing at all (#266, #370).
+    ///
+    /// A beast in sight first, because a carcass is the most food a turn
+    /// buys, and then the water (`a_hunt_for_the_store` says what game). Any
+    /// season the larder is short of the month, and in autumn whatever it is
+    /// short of. Only with room in the pack to bring it home, because what
+    /// comes home is what the drive is reckoned from: the catch in the pack
+    /// and in the pit is what makes Preparedness fall again.
+    ///
+    /// The lessons still have their say - somebody whose record says the
+    /// water never pays does not go to the water - and the hungry man's hunt
+    /// and fishing stay where they were, under hunger.
+    pub(in crate::analytics) fn going_out_for_food_to_put_by(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::provision::HowLongTheFoodLasts;
+
+        if agent.state.years_old() < crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT {
+            return None;
+        }
+        if !agent.could_i_take_another_handful(Self::WHAT_A_JOINT_WEIGHS) {
+            return None;
+        }
+
+        let short_of_the_month = agent.state.what_the_larder_says.is_some_and(|larder| {
+            matches!(
+                larder.rung,
+                HowLongTheFoodLasts::NotTheDay
+                    | HowLongTheFoodLasts::NotTheWeek
+                    | HowLongTheFoodLasts::NotTheMonth
+            )
+        });
+        let autumn = matches!(
+            self.world.climate.current_season(),
+            crate::environment::seasons::Season::Fall
+        );
+        if !short_of_the_month && !autumn {
+            return None;
+        }
+
+        if let Some(hunt) = self.a_hunt_for_the_store(agent, agent_position) {
+            return Some(hunt);
+        }
+        self.going_fishing(agent, agent_position)
+    }
+
+    /// The health below which nobody goes hunting for the store: three
+    /// quarters of a whole body.
+    const FIT_TO_HUNT_FOR_THE_STORE: f32 = 75.0;
+
+    /// A hunt for the store, which is a more careful thing than a hungry
+    /// man's.
+    ///
+    /// Hunger takes what is there; putting by can wait for better odds.
+    /// Wired to the hungry man's hunt it doubled the hunts and the deaths by
+    /// blows rose from three to thirteen over forty settlements in two years
+    /// (#370): goats turned on hunters a dozen times in a fortnight, health
+    /// running down five a blow, and a long walk to where game was last seen
+    /// put people among the beasts that strike. So:
+    /// - nothing that comes after you - no boar, bear or mammoth;
+    /// - nothing that fights back unless the body is three quarters whole;
+    /// - only game in sight, not a walk to where it was lately seen.
+    fn a_hunt_for_the_store(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
+        use crate::environment::AnimalBehavior;
+
+        if !agent.lessons.worth_trying(Undertaking::Hunting) {
+            return None;
+        }
+        let sight = Self::how_far_a_hunter_looks(agent) as i32;
+        let (animal_id, at, _) = self.the_best_prey_to_eat(agent, agent_position, sight)?;
+        let species = self
+            .world
+            .animals
+            .get(&animal_id)
+            .and_then(|animal| self.world.animals.get_species(&animal.species_id))?;
+        if matches!(species.behavior, AnimalBehavior::Aggressive | AnimalBehavior::Territorial) {
+            return None;
+        }
+        if Self::fights_back(species) && agent.state.health < Self::FIT_TO_HUNT_FOR_THE_STORE {
+            return None;
+        }
+        if let Some(getting_one) = self.what_a_hunt_wants_first(agent) {
+            return Some(getting_one);
+        }
+        let reach = (at.0 - agent_position.0).abs().max((at.1 - agent_position.1).abs());
+        if reach <= Self::HUNT_REACH {
+            return Some(Action::Hunt {
+                animal_id,
+                weapon: agent.equipment.get_weapon().map(|weapon| weapon.name.clone()),
+            });
+        }
+        Some(Action::Move { target: (at.0, at.1, agent_position.2) })
+    }
+
+    /// A beast in sight that is worth more than the best patch of food this
+    /// one knows of, in the coin `food_action` weighs them in (#330).
+    fn a_hunt_that_beats_the_hedgerow(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        let sight = Self::how_far_a_hunter_looks(agent) as i32;
+        let (_, _, hunt_worth) = self.the_best_prey_to_eat(agent, agent_position, sight)?;
+        let beats = self
+            .the_best_food_anywhere_and_its_worth(agent, agent_position)
+            .is_none_or(|(_, patch_worth)| hunt_worth > patch_worth);
+        beats.then(|| self.a_hunt_for_the_store(agent, agent_position)).flatten()
     }
 
     /// A kill this one knows of with meat still on it, worth going for and
@@ -870,7 +1014,6 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
-        use crate::world::Position;
 
         // Somebody with a proper meal about them does not open the store.
         //
@@ -1103,11 +1246,17 @@ impl Simulation {
     /// try them.
     ///
     /// The same order `nearest_pit_i_remember` takes the head of, and for the
-    /// same reasons - whose hole it is before how far off it is. It exists
+    /// same reasons - how far off it is, with somebody else's hole counted
+    /// further. It exists
     /// because the nearest remembered pit is not always the one that answers:
     /// a memory is a record of what *was* there, and a hole somebody has
     /// since emptied stops the whole branch when it is the only one asked.
     /// See `something_out_of_the_store` and ISSUES_FOUND #228.
+    /// How much further a pit that is not one's own counts for, in paces:
+    /// three hundred metres. A man goes to his own, his kin's or the
+    /// settlement's first, and to somebody else's when it saves him that.
+    pub(in crate::analytics) const A_STRANGERS_HOLE_IS_FURTHER_BY: u32 = 30;
+
     pub(in crate::analytics) fn pits_i_remember(
         &self,
         agent: &crate::agents::Agent,
@@ -1146,8 +1295,19 @@ impl Simulation {
             })
             .collect::<Vec<_>>();
 
+        // Whose it is counts as a walk, not as a wall. Sorted on whose it
+        // was before how far, a man walked past a stranger's full pit at his
+        // elbow to his own across the country, however far (#252): a pit
+        // that is not his counts as `A_STRANGERS_HOLE_IS_FURTHER_BY` further
+        // off than it is, so his own wins unless the other is a long way
+        // nearer.
         let mut remembered = remembered;
-        remembered.sort_by_key(|(_, paces, somebody_elses)| (*somebody_elses, *paces));
+        remembered.sort_by_key(|(_, paces, somebody_elses)| {
+            (
+                *paces + if *somebody_elses { Self::A_STRANGERS_HOLE_IS_FURTHER_BY } else { 0 },
+                *somebody_elses,
+            )
+        });
         remembered
             .into_iter()
             .map(|(there, paces, _)| (there, paces))
@@ -1258,6 +1418,26 @@ impl Simulation {
     }
 
     /// Salt water close enough to dip a pot in.
+    /// A dig, by somebody with something to dig with; the next step towards
+    /// a digging stick, by somebody without; or nothing, by somebody who can
+    /// take no step towards one (#126).
+    ///
+    /// The verb matrix has always wanted a digging tool for `excavate`, and
+    /// the store offered the dig without asking, so the matrix refused it and
+    /// the turn went - 73 to 99 per cent of digs, measured across later
+    /// entries. The executor's note that a hole can be dug with the fingers
+    /// was from before the matrix.
+    pub(in crate::analytics) fn a_dig_or_what_it_wants_first(
+        &self,
+        agent: &crate::agents::Agent,
+    ) -> Option<Action> {
+        use crate::agents::skills::SkillType;
+        if agent.what_i_have_to_work_with(SkillType::Mining).is_some() {
+            return Some(Action::Excavate);
+        }
+        self.what_this_trade_wants_first(agent, SkillType::Mining)
+    }
+
     pub(in crate::analytics) fn salt_water_within_reach(&self, from: (i32, i32, i32)) -> Option<crate::world::Position> {
         use crate::world::Position;
 

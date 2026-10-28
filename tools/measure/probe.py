@@ -5,7 +5,8 @@
 Adds eprintln! lines the run script greps for: DEATH (each death and its
 cause), MOVECAMP (each camp move), and one line per successful action of
 interest (KEEPX food keeping, SHELX shelter, CAREX care and water, GAPX
-salt, bowls, boiling, FISHX fishing, LEATHX hides and garments, HERDX kept beasts, POTX pots, SALTX salt, SANX waste and stores), plus GAPX windburn per turn of it.
+salt, bowls, boiling, FISHX fishing, LEATHX hides and garments, HERDX kept beasts, POTX pots, SALTX salt, SANX waste and stores, ISSX the ISSUES_FOUND fixes of
+#363-#364), plus GAPX windburn per turn of it.
 Each patch is skipped with a note where the tree does not have its anchor,
 so the same script serves older builds.
 """
@@ -110,9 +111,22 @@ edit(
 
 edit(
     "src/analytics/happening/herds.rs",
-    "    fn turned_loose(animal: &mut crate::environment::fauna::Animal) {\n",
-    "    fn turned_loose(animal: &mut crate::environment::fauna::Animal) {\n"
-    "        eprintln!(\"HERDX lost {}\", if animal.is_domesticated { \"tame\" } else { \"raising\" });\n",
+    "    fn turned_loose(animal: &mut crate::environment::fauna::Animal, _why: &str) {\n",
+    "    fn turned_loose(animal: &mut crate::environment::fauna::Animal, _why: &str) {\n"
+    "        eprintln!(\"HERDX lost {} {}\", if animal.is_domesticated { \"tame\" } else { \"raising\" }, _why.replace(' ', \"_\"));\n",
+)
+
+edit(
+    "src/environment/fauna.rs",
+    "                        offspring.owner_id = kept_by;\n",
+    "                        offspring.owner_id = kept_by;\n"
+    "                        eprintln!(\"HERDX born {}\", species_id);\n",
+)
+
+edit(
+    "src/analytics/happening/herds.rs",
+    "            if !animal.is_alive() {\n                continue;\n            }\n            animal.in_the_fold = false;\n",
+    "            if !animal.is_alive() {\n                if animal.owner_id.take().is_some() { eprintln!(\"HERDX died {}\", animal.species_id); }\n                continue;\n            }\n            animal.in_the_fold = false;\n",
 )
 
 edit(
@@ -190,4 +204,42 @@ edit(
     "                    self.world.stores_robbed.insert(here, (me, already + taking));\n",
     "                    self.world.stores_robbed.insert(here, (me, already + taking));\n"
     "                    eprintln!(\"SANX store_theft\");\n",
+)
+
+# ISSX: what the ISSUES_FOUND fixes of #363-#364 do in a running settlement.
+edit(
+    "src/analytics/doing/ground.rs",
+    "        debug!(\n            \"Agent {} broke ground at {:?} and sowed {:?}\",\n",
+    "        eprintln!(\"ISSX sowed {:?}\", sown);\n"
+    "        debug!(\n            \"Agent {} broke ground at {:?} and sowed {:?}\",\n",
+)
+edit(
+    "src/analytics/doing/making.rs",
+    "            .record_particular(&called, worked);\n",
+    "            .record_particular(&called, worked);\n"
+    "        eprintln!(\"ISSX swap {}\", if worked { \"worked\" } else { \"failed\" });\n",
+)
+edit(
+    "src/analytics/happening/senses.rs",
+    "                    agent.senses.hearing.hear_sound(Sound {\n",
+    "                    eprintln!(\"ISSX cry_heard\");\n"
+    "                    agent.senses.hearing.hear_sound(Sound {\n",
+)
+edit(
+    "src/world/mod.rs",
+    "                self.zone_manager.add_zone(zone, at, Self::GROUND_LAID_OUT_FOR_A_KIND);\n",
+    "                eprintln!(\"ISSX zone {:?}\", zone);\n"
+    "                self.zone_manager.add_zone(zone, at, Self::GROUND_LAID_OUT_FOR_A_KIND);\n",
+)
+edit(
+    "src/world/mod.rs",
+    "                let _ = self\n                    .territory_manager\n                    .claim_territory(*whose, at, Self::A_HOUSE_PLOT);\n",
+    "                let claimed = self\n                    .territory_manager\n                    .claim_territory(*whose, at, Self::A_HOUSE_PLOT);\n"
+    "                eprintln!(\"ISSX plot {}\", if matches!(claimed, territory::TerritoryClaimResult::Success(_)) { \"claimed\" } else { \"refused\" });\n",
+)
+edit(
+    "src/analytics/wanting/ground.rs",
+    "            if seed.x == agent_position.0 && seed.y == agent_position.1 {\n",
+    "            eprintln!(\"ISSX seed_errand\");\n"
+    "            if seed.x == agent_position.0 && seed.y == agent_position.1 {\n",
 )

@@ -100,6 +100,8 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
 
         // Mineral
         "clay" => Some(ItemType::Clay),
+        // Flint picked up off the ground, or struck off a core (#373)
+        "flint" => Some(ItemType::Flint),
         // Salt, greens and roots all existed as `ItemType`s - salt has had a
         // trade value of twelve since the economy was written - and none of
         // the three was in this table, which is the one place that turns a
@@ -133,7 +135,7 @@ pub fn id_to_item_type(id: &str) -> Option<ItemType> {
         // poison mushrooms are not supper.
         "apples" | "bananas" | "baobab_fruit" | "berries" | "cherries"
         | "coconut" | "mushrooms" | "olives" | "oranges" | "pears"
-        | "pumpkin" | "tomatoes" | "rose_hips" | "nuts" | "fruit" => {
+        | "pumpkin" | "tomatoes" | "rose_hips" | "fruit" => {
             Some(ItemType::Food)
         }
         "barley" | "corn" | "rice" | "wheat" => Some(ItemType::Grain),
@@ -242,6 +244,8 @@ pub fn item_weight(item_type: ItemType) -> f32 {
 
         // Heavy items
         ItemType::Stone | ItemType::Clay | ItemType::Bricks => 2.0,
+        // A nodule or two, not a load of stone
+        ItemType::Flint => 1.0,
         ItemType::Iron | ItemType::Coal | ItemType::Charcoal => 2.5,
 
         // Tools - medium-heavy
@@ -370,6 +374,7 @@ pub fn count_resources_in_inventory(inventory: &Inventory) -> u32 {
         ItemType::Clay,
         ItemType::Sand,
         ItemType::Coal,
+        ItemType::Flint,
     ];
 
     resource_types.iter()

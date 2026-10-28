@@ -1,5 +1,5 @@
 // src/analytics/happening/senses.rs
-//! What can be smelled, and what stops being worth remembering.
+//! What can be smelled and heard, and what stops being worth remembering.
 //!
 //! Part of what happens whether or not anybody decides anything - see
 //! [`super`]. Called from [`crate::analytics::turn`], in the order argued over
@@ -140,6 +140,55 @@ impl Simulation {
             }
         }
     }
+
+    /// Let the cries of anybody struck this turn carry to whoever can hear
+    /// them.
+    ///
+    /// Hearing was never fed (#14): every sound-derived percept was a dead
+    /// path. A cry is the sound that matters most to people living among
+    /// wolves, and it is the one fed here. Somebody struck within the last
+    /// turn cries out where they stand; everybody else alive whose ears reach
+    /// that far hears it as a fight, which the percept pass remembers as a
+    /// place of danger and `Surroundings::heard_a_cry` makes frightening.
+    pub(in crate::analytics) fn let_the_cries_carry(&mut self) {
+        use crate::agents::senses::{Sound, SoundType};
+
+        let now = self.current_turn;
+        let cries: Vec<(uuid::Uuid, (i32, i32, i32))> = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive)
+            .filter(|agent| {
+                agent.emotions.last_attack_turn > 0
+                    && now.saturating_sub(agent.emotions.last_attack_turn)
+                        < crate::environment::seasons::TICKS_BETWEEN_PLANS
+            })
+            .map(|agent| (agent.id, agent.state.position))
+            .collect();
+
+        for agent in &mut self.population.agents {
+            if !agent.state.is_alive {
+                continue;
+            }
+            for (who, at) in &cries {
+                if *who == agent.id {
+                    continue;
+                }
+                if agent.senses.hearing.can_hear(agent.state.position, *at, Self::HOW_LOUD_A_CRY_IS) {
+                    agent.senses.hearing.hear_sound(Sound {
+                        source_position: *at,
+                        loudness: Self::HOW_LOUD_A_CRY_IS,
+                        sound_type: SoundType::Combat,
+                        age: 0,
+                    });
+                }
+            }
+        }
+    }
+
+    /// As loud as a voice gets: the whole of an ear's range.
+    pub(in crate::analytics) const HOW_LOUD_A_CRY_IS: f32 = 1.0;
 
     /// What lies on the ground within `reach` of somewhere, giving off a
     /// smell, in list order.

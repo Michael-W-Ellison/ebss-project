@@ -2555,12 +2555,22 @@ impl Population {
         // else comes for it. Packs run full - a hunter has room for a joint
         // or two, and some have none.
         let room_for = self.agents[speaker].inventory.weight_capacity_remaining() / 2.0;
+        // And not a kill anybody is carrying home for a share, his or one he
+        // is carrying himself: that meat is promised, and telling it about
+        // would give away the carriers' pay and the owner's store (#374)
+        let being_carried: Vec<(i32, i32)> = self
+            .agents
+            .iter()
+            .filter_map(|agent| agent.working_for.as_ref())
+            .map(|hire| hire.from_and_to().0)
+            .collect();
         let knows = &self.agents[speaker].exploration_knowledge;
         knows
             .known_resources
             .iter()
             .filter(|(_, what)| **what == crate::world::ResourceType::Meat)
             .filter(|(where_it_is, _)| !knows.who_told_me.contains_key(*where_it_is))
+            .filter(|(where_it_is, _)| !being_carried.contains(&(where_it_is.x, where_it_is.y)))
             .map(|(where_it_is, what)| (*where_it_is, *what))
             .filter(|(where_it_is, _)| {
                 knows.when_i_saw_it(where_it_is).is_some_and(|then| {
@@ -2747,13 +2757,13 @@ impl Population {
         let mut rng = crate::core::dice::roll();
 
         for i in 0..self.agents.len() {
-            let (agent_i_id, pos_i, alive_i) = agent_positions[i];
+            let (_agent_i_id, pos_i, alive_i) = agent_positions[i];
             if !alive_i {
                 continue;
             }
 
             for j in (i + 1)..self.agents.len() {
-                let (agent_j_id, pos_j, alive_j) = agent_positions[j];
+                let (_agent_j_id, pos_j, alive_j) = agent_positions[j];
                 if !alive_j {
                     continue;
                 }
@@ -3003,7 +3013,7 @@ impl Population {
             .collect();
 
         // Process Romantic trait - happiness from partner proximity
-        for (i, agent_id, pos_i, traits_i) in &agent_data {
+        for (i, _agent_id, pos_i, traits_i) in &agent_data {
             if traits_i.has(Trait::Romantic) {
                 // Check if any romantic partner is nearby
                 for (j, other_id, pos_j, _) in &agent_data {
@@ -3033,7 +3043,7 @@ impl Population {
         }
 
         // Process Mediator trait - reduces nearby negative emotions
-        for (i, agent_id, pos_i, traits_i) in &agent_data {
+        for (i, _agent_id, pos_i, traits_i) in &agent_data {
             if traits_i.has(Trait::Mediator) {
                 // Find nearby agents and reduce their negative emotions
                 for (j, _, pos_j, _) in &agent_data {
@@ -3058,7 +3068,7 @@ impl Population {
         }
 
         // Process Intolerant trait - affection penalty with strangers
-        for (i, agent_id, pos_i, traits_i) in &agent_data {
+        for (i, _agent_id, pos_i, traits_i) in &agent_data {
             if traits_i.has(Trait::Intolerant) {
                 // Check nearby agents for strangers
                 for (j, other_id, pos_j, _) in &agent_data {
@@ -3088,7 +3098,7 @@ impl Population {
         }
 
         // Process Insecure trait - anxiety when partner socializes with others
-        for (i, agent_id, pos_i, traits_i) in &agent_data {
+        for (i, _agent_id, _pos_i, traits_i) in &agent_data {
             if traits_i.has(Trait::Insecure) {
                 // Find partner
                 let partner_id: Option<uuid::Uuid> = self.agents[*i].relationships
@@ -3110,7 +3120,7 @@ impl Population {
 
                         if let Some(ppos) = partner_pos {
                             // Check if partner is near other agents (not us)
-                            for (k, other_id, pos_k, _) in &agent_data {
+                            for (k, _other_id, pos_k, _) in &agent_data {
                                 if *k == p_idx || *k == *i { continue; }
 
                                 let dx = (ppos.0 - pos_k.0) as f32;

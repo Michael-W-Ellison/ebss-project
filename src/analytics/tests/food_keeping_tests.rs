@@ -288,3 +288,34 @@ fn a_pit_oven_cooks_most_of_a_pack_at_once() {
     );
     assert_eq!(agent.how_many_i_have("wood"), 0, "the wood is burnt");
 }
+
+/// Food on a rack is food put by: the drive that sent it there falls for it
+/// (#370). It was counted by nobody, so a rack of drying fish left
+/// Preparedness reading as though the catch had never come home.
+#[test]
+fn food_on_a_rack_eases_preparedness() {
+    use crate::core::DriveType;
+
+    let preparedness_with = |on_the_rack: u32| {
+        let mut simulation = one_person_on(TerrainType::Plains);
+        simulation.world.racks.push(Position::new(25, 25));
+        if on_the_rack > 0 {
+            simulation.world.dropped.push(crate::world::Dropped {
+                item: a_meal(ItemType::Fish, "fishstrips", on_the_rack),
+                where_it_is: Position::new(25, 25),
+                since: 0,
+                dried_in_the_sun: 0,
+            });
+        }
+        simulation.reckon_what_is_put_by();
+        simulation.population.agents[0]
+            .drives
+            .get(DriveType::Preparedness)
+            .map(|drive| drive.value)
+            .unwrap_or(0.0)
+    };
+
+    let bare = preparedness_with(0);
+    let stocked = preparedness_with(200);
+    assert!(stocked < bare, "two hundred strips on the rack and no easier: {bare:.2} against {stocked:.2}");
+}

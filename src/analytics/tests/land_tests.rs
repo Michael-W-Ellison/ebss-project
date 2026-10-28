@@ -395,31 +395,13 @@ fn stocking_a_map_leaves_no_two_things_on_a_tile() {
     crate::core::dice::seed(17);
     let world = World::new(WorldConfig::default().with_size(80, 80));
 
-    // What the register covers is the ground the two spawners that consult it
-    // put things on. The naturalistic spawner works off its own list and has
-    // never asked, so its clusters land on top of each other and on top of
-    // everything else - see ISSUES_FOUND.md #130. Held out here rather than
-    // quietly folded in, because a test that passes by lowering its sights is
-    // worse than no test.
-    let cluster_kinds = [
-        ResourceType::Clay,
-        ResourceType::Sand,
-        ResourceType::Coal,
-        ResourceType::Grain,
-        ResourceType::Flax,
-        ResourceType::Herbs,
-        ResourceType::Cotton,
-        ResourceType::Honey,
-        ResourceType::Fish,
-    ];
-
+    // All three spawners consult the register now, the naturalistic one
+    // included, which put its clusters on top of each other and everything
+    // else until #130 was fixed.
     let mut seen: BTreeSet<(i32, i32)> = BTreeSet::new();
     let mut doubled = Vec::new();
 
     for resource in &world.resources {
-        if cluster_kinds.contains(&resource.resource_type) {
-            continue;
-        }
         if !seen.insert((resource.position.x, resource.position.y)) {
             doubled.push((resource.position.x, resource.position.y, resource.resource_type));
         }

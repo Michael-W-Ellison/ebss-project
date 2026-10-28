@@ -221,6 +221,11 @@ impl Simulation {
                     // route may end on its goal whatever the goal is; a walk
                     // to the water stops on the bank (#295).
                     Some(cell) if !self.is_passable_tile(cell.0, cell.1) => break,
+                    // **Nor into a beast's ground.** A boar or a mammoth seen
+                    // twenty metres off is walked round or waited out; warned
+                    // off and backed away, people walked straight back in and
+                    // were charged nine and twelve times over (#372).
+                    Some(cell) if self.walks_into_a_beasts_ground((here.0, here.1), cell) => break,
                     Some(cell) => {
                         let agent = &mut self.population.agents[agent_index];
                         agent.stepped_from = Some((here.0, here.1));
@@ -489,6 +494,14 @@ impl Simulation {
             return ActionResult::failure("Too injured to move (legs crippled)".to_string());
         };
 
+        // Not into a beast's ground (#372): the step is not taken
+        if self.walks_into_a_beasts_ground((current_pos.0, current_pos.1), (next_x, next_y)) {
+            let beast = self.whose_ground_is_this((next_x, next_y)).unwrap_or_default();
+            return ActionResult::success()
+                .with_energy_cost(0.0)
+                .with_message(format!("Stopped short of the {beast}'s ground"));
+        }
+
         // Update agent position (including Z-axis)
         let agent = &mut self.population.agents[agent_index];
         agent.stepped_from = Some((current_pos.0, current_pos.1));
@@ -538,9 +551,19 @@ impl Simulation {
             .unwrap_or(false);
 
         if in_building || in_forest {
-            // Already in shelter - recover from exposure
+            // Already in shelter - recover from exposure, and huddle.
+            //
+            // The huddle is what makes the turn worth spending. A roof warms
+            // a body at the sheltered rate wherever it stands, and this did
+            // nothing beyond that, so it could never end the cold that
+            // chose it: a cold man stood under his roof turn after turn,
+            // 28% of every turn in the hungry gap, until the weather turned
+            // (#233). Curled up and shivering, and against others doing the
+            // same, a body warms faster than standing - the weather pass
+            // gives it back (`WHAT_HUDDLING_IS_WORTH`).
             let agent = &mut self.population.agents[agent_index];
             agent.exposure_status.recover(0.05);
+            agent.state.huddled = true;
 
             return ActionResult::success()
                 .with_drive_change(DriveType::Safety, -0.3)
@@ -824,7 +847,6 @@ impl Simulation {
             }
         }
 
-        let _agent = &mut self.population.agents[agent_index];
 
         // Construct message about exploration results
         let mut message = format!(

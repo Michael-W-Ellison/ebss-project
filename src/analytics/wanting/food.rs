@@ -814,7 +814,6 @@ impl Simulation {
                     _ => crate::world::ResourceType::Food,
                 };
 
-                let here = crate::world::Position::new(agent_position.0, agent_position.1);
                 let looking_for_food = wanted == crate::world::ResourceType::Food;
 
                 // And whether the thing remembered can be bearing today.
@@ -1175,6 +1174,46 @@ impl Simulation {
         })
     }
 
+    /// How much of a sitting a bite off the ground here would come to.
+    ///
+    /// An armful off the richest patch in foraging reach, at what a unit of
+    /// it is worth, as a share of what a sitting aims at. A bush in fruit
+    /// gives eight to fourteen handfuls and one out of season one to three
+    /// (`what_a_trip_brings_back`), so leaf in leaf comes to two thirds of a
+    /// supper, and roots out of season to a mouthful. Nought when there is
+    /// nothing in reach.
+    pub(in crate::analytics) fn what_a_bite_off_the_ground_comes_to(
+        &self,
+        agent: &crate::agents::Agent,
+        position: (i32, i32, i32),
+    ) -> f32 {
+        use crate::agents::physiology;
+
+        let here = crate::world::Position::new(position.0, position.1);
+        let today = self.world.climate.calendar.day_of_year;
+        self.nodes_this_one_knows_of(agent, here, Self::FORAGE_RADIUS)
+            .into_iter()
+            .map(|i| &self.world.resources[i])
+            .filter(|resource| resource.anything_to_take() && !resource.is_a_carcass())
+            .filter_map(|resource| {
+                let kind = Self::edible_item_for(resource.resource_type)?;
+                let energy = self
+                    .food_database
+                    .get(&kind)
+                    .map(|t| t.base_nutrition.energy)
+                    .unwrap_or(physiology::ENERGY_OF_ORDINARY_FOOD);
+                let an_armful = if resource.resource_type.is_it_bearing(today) { 11 } else { 2 };
+                let handfuls = an_armful.min(resource.what_can_be_taken()) as f32;
+                Some(
+                    handfuls * physiology::UNITS_IN_ONE_ITEM
+                        * physiology::what_a_unit_of_this_is_worth(energy)
+                        / physiology::WHAT_A_SITTING_AIMS_AT,
+                )
+            })
+            .fold(0.0f32, f32::max)
+            .min(1.0)
+    }
+
     /// The nearest thing to eat that this particular agent would actually
     /// walk to.
     ///
@@ -1186,6 +1225,10 @@ impl Simulation {
     /// Falls back to the plain answer when everything within reach is bad
     /// ground: hunger outlasts a fright, and a settlement that starves rather
     /// than walk past a wood is not being careful.
+    ///
+    /// Only the tests ask this now: the live hunger path weighs danger in
+    /// `the_best_food_anywhere_and_its_worth` instead.
+    #[cfg(test)]
     pub(in crate::analytics) fn nearest_edible_this_one_would_go_to(
         &self,
         agent: &crate::agents::Agent,
@@ -1237,7 +1280,7 @@ impl Simulation {
     ///
     /// Foraging accepts everything that smells of food, so an agent does not
     /// starve standing in a grain field because only berries counted as edible.
-    pub(in crate::analytics) fn edible_resources() -> [(crate::world::ResourceType, crate::world::ItemType); 8] {
+    pub(in crate::analytics) fn edible_resources() -> [(crate::world::ResourceType, crate::world::ItemType); 9] {
         use crate::world::{ItemType, ResourceType};
 
         [
@@ -1253,6 +1296,8 @@ impl Simulation {
             (ResourceType::Legumes, ItemType::Legumes),
             (ResourceType::Fish, ItemType::Fish),
             (ResourceType::Meat, ItemType::Meat),
+            // Wild honey, in its season (#120)
+            (ResourceType::Honey, ItemType::Honey),
         ]
     }
 

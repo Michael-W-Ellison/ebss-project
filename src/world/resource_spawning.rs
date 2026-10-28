@@ -99,6 +99,9 @@ impl TerrainResourceMapper {
                 TerrainType::Mountain,
                 TerrainType::Hills,
             ],
+            // Out of the chalk of the hills, and washed down into the river
+            // gravels below them (#373)
+            ResourceType::Flint => vec![TerrainType::Hills, TerrainType::Riverbank],
 
             // Agricultural
             ResourceType::Grain => vec![TerrainType::Plains, TerrainType::Meadow],
@@ -283,6 +286,10 @@ pub struct NaturalisticSpawner<'a> {
     /// The day of the year the world opens on, which decides what is standing
     /// on the plants when anybody first walks past them.
     today: u32,
+    /// The ground already taken by what the other spawners put down, and by
+    /// what this one has put down so far (#130). A cluster never lands on a
+    /// tile with something on it.
+    taken: std::collections::BTreeSet<(i32, i32)>,
 }
 
 impl<'a> NaturalisticSpawner<'a> {
@@ -291,7 +298,14 @@ impl<'a> NaturalisticSpawner<'a> {
             grid,
             rng: crate::core::dice::roll(),
             today,
+            taken: std::collections::BTreeSet::new(),
         }
+    }
+
+    /// The ground already taken, which this spawner then keeps clear of (#130).
+    pub fn with_ground_taken(mut self, taken: &std::collections::BTreeSet<(i32, i32)>) -> Self {
+        self.taken = taken.clone();
+        self
     }
 
     /// Spawn all resources according to configuration
@@ -398,6 +412,9 @@ impl<'a> NaturalisticSpawner<'a> {
                     let Some(pos) = pos else {
                         continue;
                     };
+                    if !self.taken.insert((pos.x, pos.y)) {
+                        continue;
+                    }
 
                     let (min_amount, max_amount) = TerrainResourceMapper::amount_range(resource_type);
                     let amount = self.rng.gen_range(min_amount..=max_amount);

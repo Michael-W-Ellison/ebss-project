@@ -349,19 +349,75 @@ fn afraid_or_angry_at_a_beast(simulation: &Simulation) -> bool {
     emotions.what_frightens_me_most().is_some() || emotions.what_angers_me_most().is_some()
 }
 
-/// A beast that hunts nothing frightens nobody, and nobody fights it.
+/// A beast that never strikes frightens nobody, and nobody fights it.
 ///
-/// Nothing that does not hunt strikes anybody of its own accord, and a
-/// frightened man with a loved one two paces from a mammoth stood over them
-/// and fought it, at forty a blow; nine fought it at once, and one died of it
-/// (#327).
+/// An elk turns on a man who hunts it and on nobody else, and a frightened
+/// man with a loved one two paces from a beast that would never have touched
+/// them stood over them and fought it; nine fought a mammoth at once, and one
+/// died of it (#327). The mammoth was the case then; it keeps its ground now
+/// (#368), and the elk is the beast that never strikes.
 #[test]
 fn a_beast_that_never_strikes_frightens_nobody() {
-    let mut simulation = one_person_beside("mammoth", 30);
+    let mut simulation = one_person_beside("elk", 30);
     simulation.feel_about_what_stands_in_the_way();
 
-    assert!(!afraid_or_angry_at_a_beast(&simulation), "a hurt man beside a mammoth");
+    assert!(!afraid_or_angry_at_a_beast(&simulation), "a hurt man beside an elk");
     assert!(!simulation.something_is_after_me(0));
+}
+
+/// A beast that keeps its ground is something to be wary of up close, and
+/// nothing from across the field (#368).
+#[test]
+fn a_beast_that_keeps_its_ground_is_feared_only_up_close() {
+    let mut beside = one_person_beside("mammoth", 30);
+    beside.feel_about_what_stands_in_the_way();
+    assert!(afraid_or_angry_at_a_beast(&beside), "a hurt man a pace from a mammoth");
+
+    let mut across = one_person_beside("mammoth", 30);
+    across.population.agents[0].state.position =
+        (30 + Simulation::NEAR_ENOUGH_TO_BE_WARY_OF_IT + 3, 31, 0);
+    across.feel_about_what_stands_in_the_way();
+    assert!(!afraid_or_angry_at_a_beast(&across), "nor across the field from one");
+}
+
+/// How often this one is struck in so many passes of the strike, put back
+/// to full health before each.
+fn struck_in(simulation: &mut Simulation, passes: u32) -> u32 {
+    // Put back where they stood each pass: a warned person backs off the
+    // beast's ground (#372), and this asks what happens to somebody who keeps
+    // walking back into it.
+    let stood = simulation.population.agents[0].state.position;
+    let mut struck = 0;
+    for _ in 0..passes {
+        simulation.population.agents[0].state.position = stood;
+        simulation.population.agents[0].state.health = 100.0;
+        if let Some(beast) = simulation.world.animals.get_all_mut().first_mut() {
+            beast.hunger = 0.0;
+        }
+        simulation.predators_try_their_luck_at(0);
+        if simulation.population.agents[0].state.health < 100.0 {
+            struck += 1;
+        }
+    }
+    struck
+}
+
+/// A bear or a boar charges whoever walks into its ground, fed or not; a
+/// cow does not, and nobody is charged from outside the ground (#368).
+#[test]
+fn a_beast_charges_whoever_comes_too_near() {
+    for kind in ["bear", "boar", "mammoth"] {
+        let mut simulation = one_person_beside(kind, 30);
+        assert!(struck_in(&mut simulation, 40) > 0, "a {kind} a pace off, fed, never charged");
+
+        let mut simulation = one_person_beside(kind, 30);
+        simulation.population.agents[0].state.position =
+            (30 + Simulation::A_BEASTS_GROUND + 2, 31, 0);
+        assert_eq!(struck_in(&mut simulation, 40), 0, "a {kind} charged from outside its ground");
+    }
+
+    let mut simulation = one_person_beside("cow", 30);
+    assert_eq!(struck_in(&mut simulation, 40), 0, "a cow charged");
 }
 
 /// And a hunter too small to take a grown person frightens only the small.
@@ -377,4 +433,62 @@ fn an_eagle_frightens_a_child_and_not_a_grown_person() {
     let mut child = one_person_beside("eagle", 4);
     child.feel_about_what_stands_in_the_way();
     assert!(afraid_or_angry_at_a_beast(&child), "but a child of four is meant to be afraid of it");
+}
+
+/// Warned off, a person backs out of the beast's ground (#372). Left standing
+/// there whatever they were about, they were struck nearly every time, since
+/// the beast is asked every minute: each boar's dead took four or five charges.
+#[test]
+fn a_warned_person_backs_off_the_beasts_ground() {
+    for kind in ["bear", "boar", "mammoth"] {
+        let mut simulation = one_person_beside(kind, 30);
+        simulation.population.agents[0].state.health = 100.0;
+        if let Some(beast) = simulation.world.animals.get_all_mut().first_mut() {
+            beast.hunger = 0.0;
+        }
+        let beast = simulation.world.animals.get_all()[0].position;
+        simulation.predators_try_their_luck_at(0);
+        let here = simulation.population.agents[0].state.position;
+        let apart = (here.0 - beast.0).abs().max((here.1 - beast.1).abs());
+        assert!(apart > Simulation::A_BEASTS_GROUND, "warned by a {kind} and still {apart} paces off it");
+        assert_eq!(simulation.population.agents[0].state.health, 100.0, "and not struck");
+        for _ in 0..30 {
+            simulation.predators_try_their_luck_at(0);
+        }
+        assert_eq!(
+            simulation.population.agents[0].state.health,
+            100.0,
+            "a {kind} struck somebody who had backed off its ground"
+        );
+    }
+}
+
+/// A boar roots for its living and takes a rabbit when it finds one: it
+/// charges whoever comes into its ground, and does not hunt people (#372).
+#[test]
+fn a_boar_charges_but_does_not_hunt_people() {
+    let simulation = one_person_beside("boar", 30);
+    let boar = simulation.world.animals.get_species("boar").expect("boars");
+    assert!(Simulation::would_it_charge(boar));
+    assert!(!Simulation::could_it_take(boar, 30), "a hungry boar stalking a grown man");
+    let wolf = simulation.world.animals.get_species("wolf").expect("wolves");
+    assert!(Simulation::could_it_take(wolf, 30), "a starving wolf still will");
+}
+
+/// And does not walk back into it: a walk stops at the edge of a charging
+/// beast's ground (#372). Backed off, people walked straight back to what
+/// they had been about and were charged nine and twelve times over.
+#[test]
+fn a_walk_stops_short_of_a_beasts_ground() {
+    let mut simulation = one_person_beside("boar", 30);
+    simulation.population.agents[0].state.health = 100.0;
+    let boar = simulation.world.animals.get_all()[0].position;
+    simulation.population.agents[0].state.position = (boar.0 - 10, boar.1, 0);
+    simulation.execute_action(
+        &crate::environment::Action::Move { target: (boar.0 + 6, boar.1, 0) },
+        0,
+    );
+    let here = simulation.population.agents[0].state.position;
+    let apart = (here.0 - boar.0).abs().max((here.1 - boar.1).abs());
+    assert!(apart > Simulation::A_BEASTS_GROUND, "walked {apart} paces from a boar, inside its ground");
 }

@@ -834,8 +834,21 @@ impl Simulation {
     /// no experiment to run on them, and passing over one to go and try
     /// something else is not curiosity, it is starving with your dinner in
     /// your hand.
-    fn is_it_already_in_his_hand(doing: &Action) -> bool {
-        matches!(doing, Action::Eat { .. } | Action::CheckSnares | Action::CheckFishTraps)
+    ///
+    /// A meal is in his hand when it is in his pack. A bite off the ground
+    /// is `Eat` too, and was taken first on that word, before a two-turn
+    /// walk to a pit and whatever the bite was worth: the dying of seed 1's
+    /// ninth spring ate leaf within reach while their larder share read six
+    /// thousand units (#301). It is ranked with the other ways now, at what
+    /// it would put in.
+    fn is_it_already_in_his_hand(doing: &Action, agent: &crate::agents::Agent) -> bool {
+        match doing {
+            Action::Eat { .. } => {
+                agent.find_best_food_to_eat().is_some() || agent.could_pull_apart_by_hand()
+            }
+            Action::CheckSnares | Action::CheckFishTraps => true,
+            _ => false,
+        }
     }
 
     /// How long a need goes unanswered before an agent stops taking its own
@@ -1183,6 +1196,7 @@ impl Simulation {
                 .or_else(|| self.farming_action(agent, agent_position))
                 .or_else(|| self.sowing_action(agent, agent_position))
                 .or_else(|| self.transplanting_action(agent, agent_position))
+                .or_else(|| self.a_young_one_to_catch(agent, agent_position))
                 .or_else(|| self.moving_on(agent, agent_position))
                 .or_else(|| self.fishing_action(agent, agent_position)),
 
@@ -1418,7 +1432,11 @@ impl Simulation {
                 .or_else(|| self.lengthening_the_line(agent, agent_position))
                 // And the same in the water, with a trap that has to be made
                 // and carried there first.
-                .or_else(|| self.putting_traps_in_the_water(agent, agent_position)),
+                .or_else(|| self.putting_traps_in_the_water(agent, agent_position))
+                // And with nothing else to do about a short larder, go and
+                // get food for it: hunting and fishing are ways of putting
+                // food by too (#370).
+                .or_else(|| self.going_out_for_food_to_put_by(agent, agent_position)),
 
             // Nothing in the world is fine enough to want yet - see
             // ISSUES_FOUND.md #5. Until something is, this need has no answer

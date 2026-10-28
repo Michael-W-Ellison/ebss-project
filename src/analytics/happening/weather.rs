@@ -278,7 +278,32 @@ impl Simulation {
         }
     }
 
+    /// What a half hour curled up under cover gives back to a cold body, in
+    /// degrees, beyond what standing there would.
+    ///
+    /// Not insulation. Under cover the body already makes as much heat as it
+    /// loses, and comes back a twentieth of the way to where it should be
+    /// each turn: about ten turns from 34 degrees, five hours of standing
+    /// under a roof. Curled up and shivering it takes two or three.
+    pub(in crate::analytics) const WHAT_HUDDLING_IS_WORTH: f32 = 0.3;
+
+    /// And each other body huddled under the same cover.
+    pub(in crate::analytics) const WHAT_ANOTHER_BODY_IS_WORTH: f32 = 0.15;
+
+    /// The most that others huddled close add: three of them.
+    pub(in crate::analytics) const AS_MUCH_AS_OTHERS_GIVE: f32 = 0.45;
+
     pub(in crate::analytics) fn update_agent_exposure(&mut self) {
+        // Who huddled under cover last turn, and where
+        let huddled_at: Vec<(uuid::Uuid, crate::world::Position)> = self
+            .population
+            .agents
+            .iter()
+            .filter(|agent| agent.state.is_alive && agent.state.huddled)
+            .map(|agent| {
+                (agent.id, crate::world::Position::new(agent.state.position.0, agent.state.position.1))
+            })
+            .collect();
         let weather = self.world.climate.weather.clone();
         let time_of_day = self.world.climate.calendar.time_of_day;
         let now = self.current_turn;
@@ -378,6 +403,20 @@ impl Simulation {
             };
             let bedding = if agent.fatigue.is_sleeping { self.world.bedding_worth_at(&agent_pos) } else { 0.0 };
             agent.update_temperature_under(&climate, cover, bedding);
+
+            // Huddled under cover last turn: curled up and shivering, and
+            // against whoever else is huddled there, a body warms faster than
+            // it would standing (#233). Never past where it should be.
+            if std::mem::take(&mut agent.state.huddled) {
+                let others = huddled_at
+                    .iter()
+                    .filter(|(who, at)| *who != agent.id && *at == agent_pos)
+                    .count() as f32;
+                let warmth = Self::WHAT_HUDDLING_IS_WORTH
+                    + (others * Self::WHAT_ANOTHER_BODY_IS_WORTH).min(Self::AS_MUCH_AS_OTHERS_GIVE);
+                let short = (agent.body_temperature.ideal - agent.body_temperature.current).max(0.0);
+                agent.body_temperature.current += warmth.min(short);
+            }
 
             // Behind a windbreak the wind does not get at anybody
             let out_of_the_wind = cover.is_some_and(|cover| cover.keeps_off_wind);

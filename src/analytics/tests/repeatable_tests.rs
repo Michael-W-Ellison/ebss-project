@@ -241,7 +241,20 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 8,095 for #353: hides rot unless scraped, rawhide is tanned over
     // a fire, skins make cloaks, wraps and foot-wraps, and a spare hide is
     // slept on.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 8_095;
+    // Down to 6,440 for the loose ends after #361: clusters kept off taken
+    // ground, a dig asked for only with something to dig with, honey eaten,
+    // and burnt food thrown away.
+    // Up to 6,624 for the third batch of ISSUES_FOUND: a tired man is not
+    // starving, materials enough to fit in a pack, beliefs that settle where
+    // the record puts them, and a weapon in the hand makes a man armed.
+    // Down to 6,612 for #370: Preparedness goes hunting and fishing.
+    // Up to 7,150 for #373: flint lies in the ground, which the world draws
+    // for when it is made.
+    // Down to 7,138 for #374: a kill is its killer's, to give away or to pay
+    // to have carried home.
+    // Down to 7,126 for #374's correction: a kill is its killer's only while
+    // it is being carried for him.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_126;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -569,7 +582,70 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // from a kill is tended without fodder when there is none to give it.
     // Up 2.1% to 965,120 for #358's second husbandry correction: a young
     // one taken in waits two days for its keeper before it drifts.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 965_120;
+    // Up 1.0% to 974,352 for #358's third husbandry correction: a young
+    // one takes to whoever it stays beside.
+    // Down 2.2% to 952,602 for #358's fourth husbandry correction: a kept
+    // beast does not wander off its keeper.
+    // Up 0.3% to 955,483 for #360: somebody who has raised one catches
+    // young ones for a herd.
+    // Up 0.5% to 960,743 for #360: a kept beast does not bolt from what
+    // frightens it.
+    // Up 0.1% to 961,553 for #360: a tame beast by its sleeping keeper does
+    // not stray, and two of a kind keep a keeper to that kind.
+    // Down 0.3% to 958,337 for #361: watching a keeper at work teaches
+    // keeping.
+    // Up 6.5% to 1,021,041 for the loose ends after #361: the same, and food
+    // eaten where it grew counted, salt and all.
+    // Down 4.0% to 979,878 for the third batch of ISSUES_FOUND: the same.
+    // Down 0.6% to 974,158 for the fourth and fifth: cries carry, the first
+    // building of a kind lays out ground and a house claims its plot, a
+    // worn-out field is not counted, a swap is tried once, and seed is
+    // fetched before ground is broken.
+    // Up 3.2% to 1,005,752 for the swaps record: a swap tried is never tried
+    // again, where the lesson of it faded in a season.
+    // Down 3.0% to 975,942 for #366: a meal does not give back stamina,
+    // work takes it, sleep gives it back, and a tired man goes to rest.
+    // Down 0.9% to 967,028 for #366's correction: rest at thirty, clear of
+    // what it takes to run, and a small child mends its stamina as it sleeps.
+    // Down 0.6% to 961,599 for #366: a spent body rests where it is.
+    // Down 3.5% to 927,965 for #368: a bear, a boar or a mammoth warns off
+    // whoever walks into its ground, and strikes whoever stays.
+    // Up 6.1% to 984,436 for #369: a huddle under cover warms a cold body,
+    // so the turns spent sheltering end the cold that chose them.
+    // Down 7.2% to 913,295 for #369: "eat the food you are carrying" eats
+    // from the pack when the meal would be kept.
+    // Down 3.8% to 878,290 for #369: a stranger's pit counts as three
+    // hundred metres further, not as last.
+    // Up 13.8% to 999,301 for #369: a failed swap gives back what went in,
+    // and only a part of something is put in where a part goes.
+    // Down 7.0% to 929,785 for #369: a bite off the ground is ranked with
+    // the other ways at what it would put in, not taken first as in hand.
+    // Down 6.7% to 867,309 for #369: curiosity fetches an untried material
+    // only when there is room to carry it home.
+    // Up 9.7% to 951,495 for #370: Preparedness goes hunting and fishing
+    // for a larder short of the month, and food on a rack counts as put by.
+    // Down 4.1% to 912,614 for #370's correction: a hunt for the store takes
+    // nothing that comes after you, nothing that fights back unless the body
+    // is three quarters whole, and only game in sight.
+    // Down 4.8% to 868,427 for #371: tents and houses go up on their frames
+    // and are brought what they owe, and lacking a roof of one's own presses
+    // on the Construction drive.
+    // Up 8.6% to 943,160 for #372: a warned person backs off a beast's
+    // ground, a boar does not hunt people, and going without salt is a poor
+    // diet rather than a blow.
+    // Up 30.1% to 1,226,871 for #372's second step: a walk stops short of a
+    // charging beast's ground, and standing over a loved one is for a beast
+    // that hunts people.
+    // Down 17.3% to 1,014,771 for #373: flint lies in the ground, so every
+    // world is drawn differently from its seed.
+    // Down 5.1% to 963,252 for #374: a kill is its killer's, and somebody
+    // with more on it than they can get home in time takes people on to
+    // carry it for a share.
+    // Up 0.8% to 970,626 for #374's correction: a kill is its killer's for
+    // its first day or while it is carried, then anybody's.
+    // Up 3.5% to 1,004,850 for #374's second correction: a kill is anybody's
+    // until it is being carried for its killer.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_004_850;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

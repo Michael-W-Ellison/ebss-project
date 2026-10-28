@@ -13,9 +13,6 @@ pub const MAX_CAREGIVER_DISTANCE: f32 = 10.0;
 /// Health loss per turn when not nursed
 pub const UNNURSED_HEALTH_LOSS: f32 = 0.5;
 
-/// Energy restored per nursing turn
-pub const NURSING_ENERGY_GAIN: f32 = 5.0;
-
 /// Developmental nutrition tracking for early life stages
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DevelopmentalNutrition {

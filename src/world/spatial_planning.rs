@@ -243,7 +243,7 @@ impl<'a> SpatialPlanner<'a> {
         building_type: BuildingType,
         agent_pos: Position,
         strategy: PlacementStrategy,
-        agent_id: u32,
+        agent_id: crate::world::territory::AgentId,
     ) -> Option<Position> {
         let criteria = self.infer_criteria_from_building(building_type);
         let mut best_pos: Option<Position> = None;
@@ -377,7 +377,7 @@ impl<'a> SpatialPlanner<'a> {
         pos: Position,
         building_type: BuildingType,
         criteria: PlacementCriteria,
-        agent_id: Option<u32>,
+        agent_id: Option<crate::world::territory::AgentId>,
     ) -> f32 {
         // Get base score from placement criteria
         let mut score = self.score_location(pos, building_type, criteria.clone());

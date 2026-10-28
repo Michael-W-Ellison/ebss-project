@@ -51,7 +51,7 @@ impl Simulation {
         let agent = &mut self.population.agents[agent_index];
 
         agent.nutrition.consume(&nutrition);
-        agent.state.eat(now, nutrition.energy);
+        agent.state.eat(now);
 
         let worth = physiology::what_a_unit_of_this_is_worth(nutrition.energy);
         let mut eaten = 0u32;
@@ -340,7 +340,7 @@ impl Simulation {
                     .unwrap_or_else(|| NutritionalContent::new(20.0, 5.0, 35.0, 0.8));
 
                 agent.nutrition.consume(&nutrition);
-                agent.state.eat(self.current_turn, nutrition.energy);
+                agent.state.eat(self.current_turn);
 
                 // A sitting down to eat off the armful, and how much
                 // of it that is depends on what it is: four fish or
@@ -363,6 +363,19 @@ impl Simulation {
                 }
                 if eaten_here == 0 {
                     eaten_here = 1;
+                }
+
+                // Counted as eaten, and what it carries into the body, as a
+                // meal out of the pack is (#113): food eaten where it grew
+                // was never counted, nor its salt, nor flesh off a carcass
+                // as meat.
+                let as_carried = format!("{foraged_item:?}").to_lowercase();
+                agent.food_i_ate = agent.food_i_ate.saturating_add(eaten_here);
+                agent.salt_in_the_body = (agent.salt_in_the_body
+                    + eaten_here as f32 * crate::agents::Agent::salt_in_a_mouthful_of(&as_carried))
+                    .min(1.0);
+                if foraged_item == crate::world::ItemType::Meat {
+                    agent.last_ate_meat = Some(self.current_turn);
                 }
 
                 *self

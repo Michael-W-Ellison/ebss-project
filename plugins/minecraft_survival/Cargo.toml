@@ -2,7 +2,7 @@
 name = "minecraft_survival"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Michael W. Ellison"]
 description = "Minecraft-style survival environment plugin for EBSS"
 
 [dependencies]

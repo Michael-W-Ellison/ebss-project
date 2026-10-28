@@ -426,13 +426,17 @@ impl Strategy {
                     modelled, so there is nowhere to sink one")
             }
             Strategy::RelocateTowardWater => {
-                Reach::NotYet("moving camp never fires - see ISSUES_FOUND #237")
+                Reach::NotYet("camps move for water, but the camp decides it \
+                    (`go_and_live_where_it_is`, when thirst keeps going \
+                    short) and not one person's thirst this turn; a way here \
+                    would be a second spelling of that (#193)")
             }
             Strategy::TradeForWater => {
-                Reach::NotYet("there is nothing to carry water in, so nobody \
-                    ever has a surplus of it to trade - and `TradeForFood`, \
-                    which has every piece of machinery it needs, is measured \
-                    as never once firing anyway")
+                Reach::NotYet("water is carried now, in bowls, skins and pots, \
+                    but nobody carries more than a walk's worth, so nobody \
+                    has any to spare - and `TradeForFood`, which has every \
+                    piece of machinery it needs, is measured as never once \
+                    firing anyway")
             }
             Strategy::StealFood => {
                 Reach::NotYet("theft exists but sits at the tail of a chain \
@@ -780,7 +784,7 @@ impl crate::analytics::Simulation {
         // 1. What is already in his hand.
         if let Some(at) = open
             .iter()
-            .position(|(_, doing, _)| Self::is_it_already_in_his_hand(doing))
+            .position(|(_, doing, _)| Self::is_it_already_in_his_hand(doing, agent))
         {
             return take(&mut open, at);
         }
@@ -868,6 +872,17 @@ impl crate::analytics::Simulation {
         // than the way - the ways differ in what they cost, not in what water
         // does once it is drunk.
         let mut worth = Utility::a_sure_thing(agent.how_hard_it_presses(need).min(1.0));
+
+        // Except a bite off the ground, which is a mouthful of whatever grows
+        // in reach: an armful of leaf is two thirds of a supper, and roots
+        // out of season a handful. Every other way fills a sitting, so this
+        // is the one that is not a mouthful like any other (#301).
+        if way == Strategy::GatherWildFood
+            && matches!(doing, Action::Eat { .. })
+            && !Self::is_it_already_in_his_hand(doing, agent)
+        {
+            worth.relief *= self.what_a_bite_off_the_ground_comes_to(agent, agent.state.position);
+        }
 
         // The walk. This is the term #193 is about: an errand costs the walk as
         // well as the work, and until it was priced a trip across the map
@@ -994,7 +1009,23 @@ impl crate::analytics::Simulation {
             }
 
             // ---- hunger -----------------------------------------------
-            Strategy::EatCarriedFood => self.a_catch_at_my_feet(agent, agent_position),
+            // What it says, when the meal would be kept. Wired to the pack
+            // outright it cost 7.8% of a settlement's life and most of its
+            // births (#235, #241): eaten at a full reserve a meal is thrown
+            // away, and what is eaten in early summer is not in a pit in
+            // winter. A body that can bank it eats from the pack; one that
+            // cannot leaves the pack as the store it is, and this way stays
+            // the snare check it was.
+            Strategy::EatCarriedFood => {
+                if agent.state.physiology.would_a_sitting_be_banked()
+                    && agent.find_best_food_to_eat().is_some()
+                    && agent.state.physiology.room_for_another_mouthful()
+                {
+                    Some(Action::Eat { food_type: "generic".to_string() })
+                } else {
+                    self.a_catch_at_my_feet(agent, agent_position)
+                }
+            }
             Strategy::EatStoredFood => self.something_out_of_the_store(agent, agent_position),
             // Whether he is desperate is a fact about the man, so it is asked
             // here rather than passed in from four levels up.

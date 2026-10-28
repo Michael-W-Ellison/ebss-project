@@ -100,6 +100,8 @@ impl Simulation {
             for agent in self.population.agents.iter_mut() {
                 if agent.state.is_alive {
                     agent.forget_what_does_not_matter(now);
+                    // And a farmer keeps seed back from the pot (#365)
+                    agent.keep_seed_back();
                 }
             }
         }
@@ -132,6 +134,10 @@ impl Simulation {
         // Update exposure damage for all agents
         self.update_agent_exposure();
 
+        // Anybody struck, by a beast just now or a man last turn, cries out,
+        // and whoever is in earshot hears it before reading the situation
+        self.let_the_cries_carry();
+
         // Tell each agent what the world around it is doing, so that next
         // turn its drives rise on the conditions the design document gives
         // them rather than on a clock
@@ -158,6 +164,10 @@ impl Simulation {
         // wolves there at all.
         self.what_everybody_saw_that_frightened_them();
         self.who_everybody_saw();
+
+        // Whoever has a kill they cannot get home in time asks those about
+        // them for a hand with it, for a share (#374)
+        self.hands_for_the_carrying();
 
         self.what_the_beasts_make_of_us();
         self.the_beasts_act_on_it();

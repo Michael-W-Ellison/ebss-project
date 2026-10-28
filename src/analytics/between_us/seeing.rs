@@ -50,8 +50,9 @@ impl Simulation {
             .filter_map(|animal| {
                 let species = self.world.animals.get_species(&animal.species_id)?;
                 let menace = species.behavior.how_much_it_menaces_you();
-                // Nothing that would never touch them (#327)
-                if menace <= 0.0 || !Self::could_it_take(species, years_old) {
+                // Nothing that would never touch them (#327): what would hunt
+                // them, or charge them off its ground
+                if menace <= 0.0 || !Self::could_it_harm(species, years_old) {
                     return None;
                 }
                 let worth = Self::what_a_beast_is_worth_in_a_fight(
@@ -82,8 +83,11 @@ impl Simulation {
             .filter_map(|animal| {
                 let species = self.world.animals.get_species(&animal.species_id)?;
                 let menace = species.behavior.how_much_it_menaces_you();
-                // Only a hunter means anybody harm (#327)
-                if menace <= 0.0 || !Self::a_hunter(species) {
+                // Only what strikes means anybody harm (#327): a hunter, or a
+                // beast that charges anybody on its ground, whose ground is a
+                // place to remember
+                let charges = Self::would_it_charge(species);
+                if menace <= 0.0 || !(Self::a_hunter(species) || charges) {
                     return None;
                 }
                 let worth = Self::what_a_beast_is_worth_in_a_fight(
@@ -96,7 +100,7 @@ impl Simulation {
                     worth,
                     menace,
                     species.name.clone(),
-                    Self::too_small_for_the_grown(species),
+                    Self::too_small_for_the_grown(species) && !charges,
                 ))
             })
             .collect();

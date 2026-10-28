@@ -357,6 +357,10 @@ impl Simulation {
                     .iter()
                     .any(|building| building.position == here && building.is_a_roof()),
                 recently_hurt: agent.emotions.recent_attacker(current_turn).is_some(),
+                heard_a_cry: agent.senses.hearing.heard_sounds.iter().any(|sound| {
+                    sound.age == 0
+                        && sound.sound_type == crate::agents::senses::SoundType::Combat
+                }),
                 crop_near: crop_at(position),
                 somewhere_to_build: crate::world::Terrain::new(ground).can_be_tilled(),
                 neighbours_building: building_sites.iter().any(|spot| near(spot, 12)),
@@ -368,6 +372,11 @@ impl Simulation {
                     .any(|other| {
                         (other.0 - position.0).abs().max((other.1 - position.1).abs()) <= 6
                     }),
+                without_a_roof_of_its_own: match self.the_roof_this_one_wants(agent) {
+                    Some(crate::world::BuildingType::SmallHouse) => Self::WANTING_A_HOUSE,
+                    Some(_) => Self::WANTING_A_TENT,
+                    None => 0.0,
+                },
             }));
         }
 
@@ -377,6 +386,11 @@ impl Simulation {
             }
         }
     }
+
+    /// How much a settled household with no house wants one, and anybody
+    /// grown wants a tent, as the Construction drive reads it (#371).
+    pub(in crate::analytics) const WANTING_A_HOUSE: f32 = 1.0;
+    pub(in crate::analytics) const WANTING_A_TENT: f32 = 0.5;
 
     /// How close a predator has to be to a child before its parent runs
     pub(in crate::analytics) const DANGER_TO_A_CHILD: i32 = 10;
@@ -408,12 +422,25 @@ impl Simulation {
             / crate::environment::seasons::TICKS_PER_DAY)
             % crate::environment::seasons::DAYS_PER_YEAR;
 
-        let in_the_ground: f32 = self
+        // And what is hanging on a rack, which is the camp's as much as a pit
+        // is and was counted by nobody: a rack of drying fish left the drive
+        // reading as though the catch had never come home (#370).
+        let on_the_racks: u32 = self
+            .world
+            .dropped
+            .iter()
+            .filter(|left| self.world.racks.contains(&left.where_it_is))
+            .filter(|left| left.item.quantity > 0 && crate::world::nutrition::is_this_food(&left.item.item_id))
+            .map(|left| left.item.quantity)
+            .sum();
+
+        let in_the_ground: f32 = (self
             .world
             .pits
             .iter()
             .map(|pit| pit.how_much_is_in_it() as f32)
             .sum::<f32>()
+            + on_the_racks as f32)
             * UNITS_IN_ONE_STORED_ITEM;
 
         let mouths = self

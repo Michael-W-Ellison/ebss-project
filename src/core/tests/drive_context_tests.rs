@@ -79,7 +79,10 @@ fn a_drive_with_every_reason_climbs() {
             ..Surroundings::default()
         },
         food_put_by: 0,
-        materials_put_by: 4,
+        // Next to none. This was four, which was next to none against the
+        // thirty `ENOUGH_MATERIALS` used to be and is half of the eight it is
+        // now (#173).
+        materials_put_by: 1,
         tools_to_hand: 0,
         broken_tools: 3,
         fine_things: 0,

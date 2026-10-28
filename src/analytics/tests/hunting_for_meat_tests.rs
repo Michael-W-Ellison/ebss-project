@@ -131,3 +131,67 @@ fn the_game_is_noted_and_an_empty_place_forgotten() {
     simulation.the_hunters_note_the_game();
     assert!(simulation.population.agents[0].game_seen.is_empty());
 }
+
+/// Preparedness goes hunting (#370): a deer in sight is gone after for the
+/// store by somebody who neither craves meat nor is hungry, when the larder
+/// is short of the week.
+#[test]
+fn a_short_larder_sends_a_hunter_after_the_deer_in_sight() {
+    let mut simulation = a_hunter();
+    a_deer(&mut simulation, (120, 100));
+    let day = simulation.world.climate.calendar.day_of_year;
+    let agent = &mut simulation.population.agents[0];
+    agent.state.what_the_larder_says =
+        Some(crate::agents::provision::WhatIsPutBy::reckon(0.0, 1_440.0, 90.0, day));
+    let agent = simulation.population.agents[0].clone();
+    assert!(!agent.craves_meat(simulation.current_turn), "he does not crave it");
+    assert_eq!(simulation.hunting_action(&agent, (100, 100, 0)), None, "so hunger's hunt does not send him");
+
+    let going = simulation.going_out_for_food_to_put_by(&agent, (100, 100, 0));
+    assert!(
+        matches!(going, Some(Action::Move { target }) if (target.0, target.1) == (120, 100)),
+        "the store sends him after the deer: {going:?}"
+    );
+}
+
+/// But a hunt for the store is a careful one (#370). Hunger takes what is
+/// there; putting by can wait for better odds. No boar, whatever the
+/// larder says; and a goat, which turns on whoever spears it, is left
+/// alone by somebody already hurt.
+#[test]
+fn the_store_does_not_send_a_hunter_after_what_fights_back() {
+    let short = |simulation: &mut Simulation| {
+        let day = simulation.world.climate.calendar.day_of_year;
+        simulation.population.agents[0].state.what_the_larder_says =
+            Some(crate::agents::provision::WhatIsPutBy::reckon(0.0, 1_440.0, 90.0, day));
+    };
+
+    let mut simulation = a_hunter();
+    short(&mut simulation);
+    let id = simulation.world.spawn_animal("boar".to_string(), (120, 100)).expect("a boar");
+    simulation.world.animals.get_mut(&id).unwrap().age = 100_000;
+    let agent = simulation.population.agents[0].clone();
+    let going = simulation.going_out_for_food_to_put_by(&agent, (100, 100, 0));
+    assert!(
+        !matches!(going, Some(Action::Move { target }) if (target.0, target.1) == (120, 100)),
+        "nobody goes after a boar to fill a pit: {going:?}"
+    );
+
+    let mut simulation = a_hunter();
+    short(&mut simulation);
+    let id = simulation.world.spawn_animal("goat".to_string(), (120, 100)).expect("a goat");
+    simulation.world.animals.get_mut(&id).unwrap().age = 100_000;
+    let agent = simulation.population.agents[0].clone();
+    let going = simulation.going_out_for_food_to_put_by(&agent, (100, 100, 0));
+    assert!(
+        matches!(going, Some(Action::Move { target }) if (target.0, target.1) == (120, 100)),
+        "a whole man goes after the goat: {going:?}"
+    );
+    simulation.population.agents[0].state.health = 60.0;
+    let agent = simulation.population.agents[0].clone();
+    let going = simulation.going_out_for_food_to_put_by(&agent, (100, 100, 0));
+    assert!(
+        !matches!(going, Some(Action::Move { target }) if (target.0, target.1) == (120, 100)),
+        "and a hurt one does not: {going:?}"
+    );
+}

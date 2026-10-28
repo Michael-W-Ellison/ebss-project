@@ -386,12 +386,26 @@ impl Simulation {
 
         let could_fight = agent.could_i_fight_at_all(coming);
 
+        // Whether it hunts people at all. A beast that only keeps its ground
+        // threatens nobody who steps back out of it, and everybody it warns
+        // does (#372): standing over a loved one in a camp, where somebody
+        // loved is always within two paces, set people against boars and
+        // mammoths, and it was a quarter of what the dead of blows lost.
+        let a_hunter_of_people = self
+            .world
+            .animals
+            .get_all()
+            .iter()
+            .find(|animal| animal.id == which)
+            .and_then(|animal| self.world.animals.get_species(&animal.species_id))
+            .is_some_and(|species| Self::a_hunter(species));
+
         // Somebody of this agent's own, in the way of the thing, who cannot
         // deal with it themselves. A person does not run from a wolf that is
         // standing over their child, whatever the odds are - and the odds are
         // exactly what this sets aside. It is the one place in the model
         // where an agent knowingly takes the worse of two options.
-        if could_fight && self.somebody_of_mine_is_in_the_way(agent, where_it_is, coming) {
+        if could_fight && a_hunter_of_people && self.somebody_of_mine_is_in_the_way(agent, where_it_is, coming) {
             return (
                 "stands over one of its own",
                 Some(if paces <= Self::HUNT_REACH {
@@ -407,7 +421,14 @@ impl Simulation {
             );
         }
 
-        let could_run = agent.could_i_run_at_all(Self::WHAT_RUNNING_COSTS)
+        // Anything left in the legs will do. This asked for what a run costs,
+        // fourteen, which nobody ever lacked while every meal refilled
+        // stamina. Once a day's work could tire a man (#70), people at the end
+        // of a long day stood and were struck: blows went from one death in
+        // forty worlds to eight, and about nine tenths of the health they took
+        // came off people under fourteen (#366). Fear finds the legs a tired
+        // man did not know he had; the run still costs what it costs.
+        let could_run = agent.could_i_run_at_all(Self::NOTHING_LEFT)
             && self.is_there_anywhere_to_run(
                 &agent.exploration_knowledge,
                 agent_position,
@@ -453,8 +474,14 @@ impl Simulation {
                 let armed = agent
                     .what_i_have_to_work_with(crate::agents::SkillType::MeleeCombat)
                     .is_some();
+                // And in what shape. The beast's worth is scaled by its wounds
+                // and a person's was not, so a man at a sixth of his health
+                // stood up to a boar as if whole: every death by a blow traced
+                // in #374 was somebody at seventeen or eighteen standing their
+                // ground against a boar by a fold.
                 let i_am_worth = Self::WHAT_A_PERSON_IS_WORTH_TO_A_BEAST
-                    * if armed { Self::WHAT_A_SPEAR_ADDS } else { 1.0 };
+                    * if armed { Self::WHAT_A_SPEAR_ADDS } else { 1.0 }
+                    * Self::what_shape_i_am_in(agent);
                 let worth = Self::what_a_beast_is_worth_in_a_fight(
                     animal.current_health,
                     species.health,
@@ -481,6 +508,12 @@ impl Simulation {
             // Neither. This is the case the decision never had an answer for.
             (_, false, false) => ("freezes", Some(Action::Freeze)),
         }
+    }
+
+    /// How much of a whole body this one has left to fight with: health on
+    /// the scale it starts at, never less than a tenth.
+    pub(in crate::analytics) fn what_shape_i_am_in(agent: &crate::agents::Agent) -> f32 {
+        (agent.state.health / 100.0).clamp(0.1, 1.0)
     }
 
     /// Whether somebody this agent loves is in the way of the thing, and could
@@ -763,12 +796,16 @@ impl Simulation {
                     return None;
                 }
 
-                // **Only a hunter menaces anybody.** A mammoth, an elk or a
-                // cow never strikes anybody of its own accord - nothing that
-                // does not hunt does - and a man frightened of a mammoth,
-                // with a loved one two paces from it, stood over them and
-                // fought it, at forty a blow (#327).
-                if !Self::a_hunter(species) {
+                // **Only what strikes menaces anybody.** An elk or a cow
+                // never strikes anybody of its own accord, and a man
+                // frightened of a mammoth, with a loved one two paces from
+                // it, stood over them and fought it, at forty a blow (#327).
+                // A beast that keeps its ground does strike, but only
+                // somebody who walks into it, so it menaces only somebody
+                // about to.
+                let hunts = Self::a_hunter(species);
+                let charges = Self::would_it_charge(species);
+                if !hunts && !charges {
                     return None;
                 }
 
@@ -781,7 +818,12 @@ impl Simulation {
                     name: species.name.clone(),
                     species: animal.species_id.clone(),
                     damage: species.attack_damage,
-                    only_takes_the_small: Self::too_small_for_the_grown(species),
+                    only_takes_the_small: Self::too_small_for_the_grown(species) && !charges,
+                    reach: if hunts {
+                        Self::CLOSE_ENOUGH_TO_WORRY_ABOUT
+                    } else {
+                        Self::NEAR_ENOUGH_TO_BE_WARY_OF_IT
+                    },
                 })
             })
             .collect();
@@ -821,7 +863,7 @@ impl Simulation {
             .iter()
             .filter(|menace| !(grown && menace.only_takes_the_small))
             .filter(|menace| {
-                (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= Self::CLOSE_ENOUGH_TO_WORRY_ABOUT
+                (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= menace.reach
             })
             .map(|menace| &menace.name)
             .collect();
@@ -869,12 +911,11 @@ impl Simulation {
                 let strength =
                     strength * (1.0 - agent.familiar_with.get(what).copied().unwrap_or(0.0));
                 let paces = (hx - x).abs().max((hy - y).abs());
-                if paces > Self::CLOSE_ENOUGH_TO_WORRY_ABOUT {
+                if paces > menace.reach {
                     return None;
                 }
 
-                let nearness = 1.0
-                    - (paces as f32 / (Self::CLOSE_ENOUGH_TO_WORRY_ABOUT as f32 + 1.0));
+                let nearness = 1.0 - (paces as f32 / (menace.reach as f32 + 1.0));
 
                 Some((strength * nearness, what))
             })

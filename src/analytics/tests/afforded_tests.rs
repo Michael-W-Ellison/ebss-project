@@ -463,11 +463,21 @@ fn curiosity_reaches_for_the_verb_it_has_tried_least() {
     // And what it offers is a thing the matrix says he could do here.
     let named = crate::agents::Agent::what_was_tried(&offered);
     let family = named.split(':').next().unwrap_or(&named);
+    // A swap is not a verb the matrix lists, and is offered only with every
+    // part of it in hand (`what_i_would_swap`): whether curiosity rolls one
+    // depends on where the dice stream stands, which moves with the world.
+    let a_swap_in_hand = matches!(
+        &offered,
+        crate::environment::Action::TrySwapping { instead_of_making, instead_of, put_in }
+            if agent.what_i_would_swap()
+                == Some((instead_of_making.clone(), instead_of.clone(), put_in.clone()))
+    );
     assert!(
-        simulation
-            .what_i_could_do_here_now(&agent)
-            .iter()
-            .any(|verb| verb.done_by == Some(family)),
+        a_swap_in_hand
+            || simulation
+                .what_i_could_do_here_now(&agent)
+                .iter()
+                .any(|verb| verb.done_by == Some(family)),
         "curiosity offered {named}, which the matrix does not say is open here"
     );
 }

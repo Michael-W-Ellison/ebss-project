@@ -292,6 +292,10 @@ self-correcting. The cost of all this is issue #3.
 
 ### 3. The nutrient loop does not keep up with a settlement that works
 
+**Fixed since, by replacing the loop:** the soil ladder of #246 replaced the
+nutrient loop, and `the_farmed_ground_holds_up_longer` went with it, along with
+the other tests of the loop. A field now rests back towards what it was.
+
 `the_farmed_ground_holds_up_longer` asks that farmed ground keep at least half
 its fertility over ten thousand ticks of a settlement working it. It passed
 three times in three before the work of issue #2 and passes about three times
@@ -327,6 +331,10 @@ something real and the number it is measuring has genuinely changed.
 
 ### 4. No error recovery around a tick
 
+**Fixed in #364.** A person's turn that panics is caught outside the tests,
+logged, counted (`Simulation::turns_lost_to_a_fault`) and skipped; everybody
+else goes on.
+
 One panicking agent ends the whole run and loses everything since the last
 autosave. There is no isolation of per-agent failure and no attempt to
 continue after an error. This mattered concretely: a probability bug in
@@ -338,6 +346,10 @@ crash took the entire simulation with it.
 ## Design gaps that show up as odd behaviour
 
 ### 5. A settlement that overshoots slides instead of settling back
+
+**The spent-field half is fixed in #364:** `fields_within` no longer counts an
+exhausted field towards `FIELDS_WANTED`. The soil has since become a ladder
+that rests back (#246), which answers the rest of this entry's mechanism.
 
 Traced over six worlds to thirty thousand ticks. A settlement grows, strips the
 ground it farms, and then slides — it does not find a smaller level and hold
@@ -547,6 +559,11 @@ not break new ground while exhausted ones sit inside its radius, and nobody has
 still ever died of hunger.
 
 ### 6. Winter is not cold: the tile temperature is frozen at first touch
+
+**Fixed since, in #129:** the biome is cached by the kind of ground and the
+calendar, and worked out again when the hour or the day moves on, and its
+season is a `Season` rather than a fraction that always cast to spring.
+`the_ground_gets_colder_as_the_year_turns` holds it.
 
 `ClimateManager::get_biome` builds a `Biome` for a position the first time
 anybody asks about it, stamps the current season and hour into it, and caches
@@ -772,6 +789,10 @@ means the multipliers are only worth having if a people can keep a stock of
 tools, and nothing yet makes one ahead of needing it.
 
 ### 10. Farming is learned now, and the plant nobody can reach
+
+**Grain is sown now (#364, #365).** Farmers fetch seed from wild grain they
+know of and keep a handful back from the pot as seed. Grain went into 449
+fields of 6,363 in forty worlds, where it had gone into 28 of 7,048.
 
 Breaking ground used to be something every founder was born knowing, and a
 field was sown and then forgotten: nothing came on in it, nothing took it, and
@@ -1128,12 +1149,21 @@ on the best ground it knows of.
 
 ### 14. Agents still cannot hear anything
 
+**Fixed in #364.** Somebody struck cries out, everybody in earshot hears it,
+and a cry heard is frightening as the dark is (`Surroundings::heard_a_cry`).
+
 Sight discovers terrain, resources and buildings, and agents now see one
 another — `vision.visible_agents` is populated each tick, which is what
 observational learning is gated on. Hearing is unfed entirely, so every
 sound-derived percept is still a dead path. See SIMULATION_AUDIT.md.
 
 ### 15. Zoning and territory are never established
+
+**Wired in #364, seen working since #371.** The first building of a kind
+lays out ground for more of its kind, and a house claims the plot round it
+for whoever put it up. Nobody in forty two-year settlements put up anything
+but brush until #371 gave a settled household a house it could build; 129
+were started in 32 of 40 settlements.
 
 Building placement scoring reads zone and territory bonuses from
 `World::zone_manager` and `World::territory_manager`, but nothing outside the
@@ -1142,6 +1172,9 @@ always empty in a live run and every bonus they contribute is zero, so
 settlements have no planned structure and agents claim no ground.
 
 ### 16. Agents carry food they will never eat
+
+**Fixed in #362:** food burnt past eating is thrown away with the spoiled, as
+waste.
 
 Food that has turned is correctly refused, but stays in the inventory until
 its freshness decays to zero and spoilage removes it — or until the agent takes
@@ -2196,6 +2229,9 @@ rather than lives at this timescale. Tents are unchanged — the burrow does not
 replace the better shelter, it fills in underneath it.
 
 ### 33. An agent could only ever learn about a situation somebody had named
+
+**The floor everything reached is fixed in #363:** `Lessons` move a share of
+the way rather than a flat step, so a belief settles where the record puts it.
 
 `Lessons` has recorded what works since it was written, keyed on the thing
 attempted: `dry`, `gather:greens`, `fire:claypot`, `hunt`. Every one of those
@@ -3725,6 +3761,9 @@ Filed as #188.
 
 ### 68. A place, a date, and how much was on it — and being right, which nothing recorded
 
+**The pick by distance it left took the furthest place; #364 takes the nearest
+worth the walk.**
+
 Everything one agent could tell another was a position, a resource type and a
 date. A listener already weighed the age of a claim - "a seam I passed last
 week" against "one I passed this morning" - and had no way at all to weigh
@@ -3841,6 +3880,11 @@ is not explained.
 remembered amount would belong, if anything reached it. Recorded, not fixed.
 
 ### 69. Every man knew how to make an axe and one in thirty-five owned one
+
+**`TrySwapping` (#191) since: a swap tried is never tried again (#364,
+#365).** Each person keeps a record of the swaps they have tried, apart from
+the fading lessons. Failed swaps fell from 54,879 to 18,031 in forty
+two-year settlements.
 
 "They struggle to complete simple tasks." So the first thing built was an
 instrument for where a settlement's day actually goes, and the first thing it
@@ -3971,6 +4015,10 @@ being equipped is upstream of everything the model is for.
   it has already learned nothing from. Filed as #192.
 
 ### 70. The effort economy is decorative: nobody in this model is ever tired
+
+**Fixed in #366:** a meal no longer refills stamina. Work takes it, sleep gives
+it back, and a tired man rests while he can still run. `is_starving` stopped
+reading tiredness as hunger in #363.
 
 A specification arrived describing an efficiency architecture - tools that make
 work faster, an agent weighing "eight hours with this axe, or two hours making
@@ -4228,6 +4276,9 @@ a people can *do* - which is what it is really about - but nobody should expect
 it to show up in how many of them there are until #203 is answered.
 
 ### 73. Four spellings of one clock, and rebasing it kills every settlement
+
+**The fourth spelling is fixed in #363:** the nutrition deficit onsets are a
+day and three days of half-hour turns.
 
 `AgentState::is_starving` read `ticks_without_food > 1440`. The comment beside
 it said "after a day". `TICKS_PER_DAY` is twelve. The clock was a hundred and
@@ -5514,6 +5565,12 @@ level up, and it is the honest remaining cost of the half-hour turn.
 
 ### 169. The one store nothing reads, and why capping it cost thirteen times the running time
 
+~~**It has a reader now:** `verify_resource_claim` asks it whether a claim is
+about ground the listener has seen.~~ **Open again (#371):** that reader was
+in the retired lie review, deleted under #369, and nothing in a live run
+writes the store either (`explore_tile` is called only by its own test), so
+it is dead at both ends. `exploration_behavior`'s readers are never called.
+
 `ExplorationKnowledge::explored_tiles` is a `BTreeSet<Position>` with no
 ceiling and nothing ever taken out of it: every tile anybody has stood within
 sight of, for as long as they live, on a map of a hundred square kilometres.
@@ -5558,6 +5615,10 @@ appear anywhere else somebody caps a set that is written far more often than
 it is read.
 
 ### 93. Fourteen per cent of the public surface had no caller
+
+**What was left of the slot vocabulary was read in four places; #363 has those
+read the tool vocabulary.** A dozen unused stat helpers remain on `Equipment`,
+which nothing fills.
 
 A sweep for `pub fn` definitions whose identifier appears nowhere else in
 `src`, `plugins`, `examples`, `benches` or `tests` - not "no call site", *no
@@ -5848,6 +5909,9 @@ commits back, which at the time looked like housekeeping.
 
 ### 98. The third layer, and the parts of it that had never been next to each other
 
+**`process_information_verification`, left behind here, was removed in #362:**
+the live verification sweep never called it.
+
 What happens whether or not anybody decides anything: the ground coming up, the
 weather on a body, the beasts, birth and nursing, what a person finds out by
 being somewhere at the time. It was the last big cluster in `analytics/mod.rs`
@@ -5906,6 +5970,8 @@ that #93 deleted the rest of. It is left where it is rather than given a home in
 sweep.
 
 ### 99. What one agent makes of another, which is not a layer but a seam
+
+**`process_information_verification` was removed in #362.**
 
 The last big cluster, and the one that would not sit in any of the three:
 being afraid of somebody, angry at somebody, willing to trade with them,
@@ -5971,6 +6037,9 @@ who wanted to check would have had to hold two places four thousand lines apart
 in their head. It took ten seconds once they were forty lines apart.
 
 ### 100. A man with a spear fought a wolf exactly as he would have fought it empty-handed
+
+**The rest is fixed in #363:** `own_strength` no longer carries a slot bonus,
+and `armed` means a weapon in the hand.
 
 `Action::Fight` carried a `weapon` and never read it. That was the finding the
 `execute_action` split turned up (#95), and it was worse than it looked: not one
@@ -6200,10 +6269,16 @@ wrong day.
 
 ### 105. Build warnings
 
+**Fixed in #362:** `cargo check --lib` reports no warnings.
+
 15 warnings on `cargo build`, all unused variables and imports. `cargo fix`
 handles most.
 
 ### 106. Placeholder package metadata
+
+**Fixed:** `authors` is Michael W. Ellison, on the user's word, and
+`repository` is the project's GitHub repository. The same placeholders went
+out of the plugin's `Cargo.toml`, `README.md` and `SETUP.md`.
 
 `Cargo.toml` still declares `authors = ["Your Name <your.email@example.com>"]`
 and `repository = "https://github.com/yourusername/ebss-project"`.
@@ -6404,6 +6479,10 @@ he is there before asking how he is.
 
 ### 109. Seven items for a winter, and a larder anybody could open in July
 
+**The room in the ground is answered since:** digging asks whether what is put
+by and the room left reach a winter for the mouths about
+(`enough_hole_for_the_winter` in `wanting/store.rs`).
+
 Two things, and the second is the one in the title.
 
 #### The target was a hundred and sixty-five times too small
@@ -6531,6 +6610,11 @@ store fills in autumn and nobody is alive by then. Sixteen worlds average
 settlement that no longer exists is still the right larder.
 
 ### 110. A six-year-old who carried what his father carried
+
+**The question it left is settled: a child starves first.** The user
+confirmed it, and the model already does so through #227's Kleiber scaling,
+which gives a body of an eight-year-old about 0.82 of a grown man's days
+without food. `a_hungry_year_takes_the_children_first` holds it.
 
 Three things the lifecycle described and nothing read, and two defects found
 underneath them that were worth more than any of the three.
@@ -6834,6 +6918,9 @@ requires that every grown pair be allowed and every child pair refused.
 ---
 
 ### 113. Why they still starve: a trickle that never fails, and a pack that holds two days
+
+**The forage branch of `Eat` is fixed in #362:** food eaten where it grew is
+counted and carries its salt into the body.
 
 The food year was rebalanced (#107), the world stopped being seeded with
 summer fruit in winter (#108), and the store was given a real target (#109).
@@ -7400,6 +7487,8 @@ person to think twelve looks arbitrary finds out that it is not.
 
 ### 120. The signal to leave fired, and a bare patch a pace away outbid it
 
+**The honey filed in passing is fixed in #362:** wild honey is food.
+
 #229 said a starving settlement never picks itself up and moves. The obvious
 reading is that the signal never reaches its threshold, and that reading is
 wrong. Measured over six worlds and 45,732 agent-ticks, hunger's `denied_ticks`
@@ -7581,6 +7670,9 @@ settlements in sixty-four, and the next entry is about why.
 
 ### 173. Every settlement dies in its first winter, and it is not the pack
 
+**The unreachable materials threshold is fixed in #363:** `ENOUGH_MATERIALS`
+is eight.
+
 "Get the agents to the point where they can survive sustainably" starts from a
 measurement, and the measurement is stark. Thirty-two seeded worlds, twelve
 founders, two years: **every settlement is emptied, and the days they empty on
@@ -7746,6 +7838,8 @@ the two lists happened to agree.
 ---
 
 ### 122. Going for a drink was a change of mind, and it emptied the larder
+
+**The dormant `Errand::pressed_this_hard` was removed in #362.**
 
 #239 was filed on the reading that undertakings are dropped because two needs
 of the same standing trade places, which is the case
@@ -8112,6 +8206,9 @@ pack that holds forty-odd.
 ---
 
 ### 126. Every pack in the world was half as much again over its own limit, so no food would go in one
+
+**The refused `Excavate` is fixed in #362:** a dig is offered only with
+something to dig with, and otherwise the way to a digging tool.
 
 #241 asked what caps the winter store, and named drying as the suspect: it was
 a discovery an agent had to watch, it wants a clear sky, it wants the food cut
@@ -8499,6 +8596,9 @@ against it. No test failed that was not already failing;
 
 ### 130. The naturalistic spawner puts two clusters on one tile
 
+**Fixed in #362:** the spawner is told what ground is taken and keeps its
+clusters off it.
+
 `NaturalisticSpawner::spawn_all` builds its own list and never asks what is
 already standing where it is putting things, so its clusters land on top of
 each other and on top of what the basic spawner placed: eighty by eighty gives
@@ -8609,6 +8709,9 @@ two rolls a pass that were not there before. A test that cannot survive a new
 seed like the rest. Filed as #132.
 
 ### 132. A test that fails when anything else draws a random number
+
+**Fixed since:** the test runs a block of seeded worlds and asserts about the
+block.
 
 `survival_loop_tests::population_feeds_itself_over_a_long_run` runs 4,000
 ticks of a twelve-person settlement on an unseeded world and asserts that
@@ -8834,6 +8937,9 @@ which is a settlement that died out, not a thermal fault.
 
 ### 135. Shrubs go out of a country that nobody is managing
 
+**Still open (checked for #364).** It wants a run of a century and a half to
+measure, and was left.
+
 Left alone for a hundred and fifty years, a hundred and twenty by a hundred
 and twenty takes its bushes from 524 to 71 and keeps going down, while its
 trees hold and its grass holds. Woody middling growth - `PlantSize::Medium`
@@ -8976,6 +9082,8 @@ any change at all to world generation moves every draw after it:
   is a draw.
 
 ### 137. There is no such thing in this world as a small predator
+
+**Still open (checked for #364).** It wants new species rather than a fix.
 
 The chain this model can build runs grass, grazer, fox, wolf, and skips a
 rung. Of thirty-three species in `FaunaRegistry`, eighteen eat plants, nine
@@ -13974,6 +14082,9 @@ candidates are built first now and the dice are not touched unless there is
 one. Deciding nothing costs nothing.
 
 ### And the map arm never fires in a live world
+
+**Resolved in #373:** flint lies in the ground now, in the hills and the river
+gravels, and a knapper who sees a bed of it puts it on his map by name.
 
 The prompt has two halves - the stuff in his pack, or the name on his map -
 and only the first of them does any work today. Over 8 worlds of 12 founders
@@ -27359,3 +27470,1290 @@ salt, sanitation and hunting):
 `keeping_beasts_tests` gains `a_young_one_tended_without_fodder_stays`.
 
 **Dice counts**: 8,095 (seed 4242, 120 turns) and 945,540 (seed 0, a year).
+
+### 359. Raising a young one from a kill: four corrections, and where it still fails
+
+#358's measurement found sixteen young taken from kills in ten worlds and
+none raised. Each correction below was measured over forty settlements for
+two years before the next.
+
+| | taken | ran off | tamed | births | deaths |
+|---|---|---|---|---|---|
+| #358 as measured | 16 | 16 | 0 | 164 | 3 |
+| tended without fodder | 16 | 16 | 0 | 163 | 3 |
+| two days' grace | 16 | 15 | 0 | 164 | 3 |
+| takes to its keeper | 11 | 11 | 0 | 162 | 3 |
+| kept beasts do not wander | 13 | 10 | 2 | 167 | 3 |
+
+1. **Never fed.** Feeding wanted plant food in the pack, and by supper it was
+   eaten. A young one with nothing to give it is now led to graze and handled
+   (`WHAT_TENDING_TAMES`).
+2. **Gone in four days.** Its keepers were mostly hunters, at home of an
+   evening one time in three. It now waits two days after it was taken or last
+   seen to before it begins to drift (`A_YOUNG_ONE_WAITS`).
+3. **Tending was too rare to tame it.** A young one now takes to whoever it
+   stays beside, 0.03 a day, tame in a month untended
+   (`WHAT_A_DAY_BESIDE_ITS_KEEPER_TAMES`); it drifts only when apart.
+4. **It was never beside them.** The animal pass wandered kept beasts as wild
+   ones, up to fifty cells a turn, so the keeper's pass rarely found a young
+   one by its keeper. A kept beast is now left where its keeper's pass puts
+   it, though fright still moves it.
+
+**Where it stands.** Two young were tamed, in two worlds, and a fold was put
+up; both tame beasts were lost again before the end. Ten of thirteen young
+still ran off. That the chain can now complete at all is the change; a herd is
+not yet raised anywhere. Not yet diagnosed:
+- what still separates a young one from its keeper - flight from a predator,
+  or a keeper sleeping away from it;
+- whether the two tame beasts strayed from outside a fold or were killed.
+
+Births, deaths and survivors did not move beyond noise across the four
+corrections.
+
+**Tests.** `keeping_beasts_tests` gains
+`a_young_one_tended_without_fodder_stays` and
+`a_young_one_takes_to_its_keeper`; `a_young_one_fed_every_day_stays` folds
+its tame lamb for the week its keeper sleeps.
+
+**Dice counts**: 8,095 (seed 4242, 120 turns) and 952,602 (seed 0, a year).
+
+### 360. Herds form: keepers catch young ones, kept beasts stay put, pairs breed
+
+The user asked: "Keep working on husbandry until herds actually form." After
+#359, two young were tamed in forty worlds and both were lost again.
+
+**Diagnosed**, ten worlds with young taken from kills, instrumented:
+- 29 kills of keepable kinds (reindeer 13, goat 8, sheep 4, elk 3, camel 1);
+  13 young taken in.
+- **Every young one lost was a bolt's distance from its keeper** (110 to
+  530 cells) when its tameness ran out. A kept beast still took flight from a
+  predator it had seen, and the keeper's pass found it apart.
+- And one beast is not a herd: nothing but the occasional kill ever added to
+  a keeper's beasts.
+
+**What changed.**
+1. **Somebody who has raised one catches young ones** (`a_young_one_to_catch`):
+   a young one of a kind that can be kept, in sight and nobody's, closed on
+   and caught, until they keep eight. Offered under the Sustenance drive and
+   among the evening chores.
+2. **A kept beast does not bolt** from what frightens it. It bunches by its
+   people, and a young one a walk off from a keeper who is awake counts as
+   beside them.
+3. **A tame beast by its sleeping keeper does not stray**; only one left
+   apart does, one night in 120 (was one in 30 for any beast out of a fold).
+4. **Two of a kind keep a keeper to that kind**, so what is kept is a pair
+   that breeds.
+
+**Measured**, forty settlements, two years, each step against the one before:
+
+| | caught | tamed | tame lost | born to kept | tame at the end | worlds keeping |
+|---|---|---|---|---|---|---|
+| #359 | 0 | 2 | 2 | 0 | 0 | 0 |
+| catching, no bolting | 63 | 36 | 44 | - | 12 | 5 |
+| no straying by the fire, one kind | 33 | 24 | 2 | 9 | 45 | 9 |
+
+- **Herds at the end of two years**:
+  - 12 beasts (9 sheep, 3 boar) and 11 (9 sheep) on two scattered worlds;
+  - 7 (6 reindeer) and 6 (4 goats) on two more;
+  - 5 on a smooth world;
+  - one beast on each of four others.
+- **Products**: milk drawn 48 times and wool plucked 11; 667 folds put up and
+  288 loads of dung carried out; one beast slaughtered; one camp moved to
+  fresh grazing. 9 young born to kept mothers (7 sheep, 2 goats): the herds are
+  starting to breed.
+- Births, deaths and survivors did not move (165, 4, 641).
+- **Still limited by the first beast.** Husbandry starts only where a young one
+  is left by a kill, in ten worlds of forty over two years; nothing teaches
+  it to anybody else.
+
+**Tests.** `keeping_beasts_tests` gains
+`a_keeper_catches_young_ones_for_a_herd`.
+
+**Dice counts**: 8,095 (seed 4242, 120 turns) and 961,553 (seed 0, a year).
+
+### 361. Campmates learn keeping by watching a keeper
+
+The user asked: "Let campmates learn taming by watching a keeper." After
+#360 husbandry went no further than the one who found a young one by a kill.
+
+**What changed.** Somebody who sees a keeper feed, lead, handle or catch a
+young one five times knows how to raise one (`do:Tame`), and from there
+catches young ones of their own (`a_young_one_to_catch`). Seeing dung carried
+out of a fold teaches what it is good for (`do:MuckOut`). Both go through the
+observation path sowing already used (`watch_a_practice`).
+
+**Measured**, forty settlements, two years, against #360:
+
+| | #360 | #361 |
+|---|---|---|
+| young caught | 33 | 182 |
+| tamed | 24 | 91 |
+| tame at the end | 45 | 157 |
+| born to kept mothers | 9 | 21 |
+| milk drawn | 48 | 231 |
+| wool plucked | 11 | 23 |
+| folds put up | 667 | 1,732 |
+| dung carried out | 288 | 1,271 |
+| camps moved to fresh grazing | 1 | 14 |
+| tame lost | 2 | 22 |
+| births | 165 | 163 |
+| deaths | 4 | 4 |
+| alive at day 720 | 641 | 639 |
+
+- **Herds at the end of two years**:
+  - 55 beasts on scattered 12 (21 sheep, 12 reindeer, 8 boar, 7 goats);
+  - 38 on scattered 4 (15 goats);
+  - 26 on scattered 2 (11 sheep);
+  - 18 on smooth 4;
+  - 9, 6 and 3 on three more, and one beast on each of two others.
+- **Still nine worlds in forty.** Watching spreads keeping through the bands of
+  a world that has a keeper; it does not start husbandry anywhere else, which
+  still waits on a young one by a kill.
+- Of the 22 tame beasts lost, 19 strayed at night apart from a sleeping keeper
+  and 3 lost their keeper to death.
+
+**Tests.** `keeping_beasts_tests` gains `watching_a_keeper_teaches_keeping`.
+
+**Dice counts**: 8,095 (seed 4242, 120 turns) and 958,337 (seed 0, a year).
+
+### 362. Loose ends from the open sections: dead code, digs, honey, burnt food
+
+The user asked: "Work on resolving the issues listed in ISSUES_FOUND.md". The
+open sections were triaged first. Most of what they hold was fixed by later
+entries and is now marked where it stands. This entry and the next two record
+what was left.
+
+**Dead code and warnings (#98, #99, #105).** `cargo check --lib` reported 39
+warnings and now reports none. Removed, because nothing called them:
+`process_information_verification`, `trapping_action` and `a_catch_waiting`,
+reproduction's `offspring_position`, and the plugin's `FurnaceState`. The
+dice counts did not move, so behaviour did not either.
+
+**Concrete defects:**
+- **A dig offered with nothing to dig with (#126).** `Excavate` was offered to
+  people the verb matrix would refuse. They are now offered the way to a
+  digging tool instead (`a_dig_or_what_it_wants_first`).
+- **Two clusters on one tile (#130).** The spawner is told what ground is
+  taken and keeps its clusters off it.
+- **A dormant field (#122).** `Errand::pressed_this_hard` was written and
+  never read. It is removed.
+- **Food eaten where it grew (#113).** The forage branch of `Eat` did not
+  count the meal or put its salt into the body. It does both now.
+- **Honey (#120).** Wild honey was not food. It is now.
+- **Burnt food (#16).** Food burnt past eating was carried for ever. It is
+  thrown away with the spoiled, as waste.
+
+**Measured**, forty settlements, two years, the loose ends against #361:
+
+| | #361 | #362 |
+|---|---|---|
+| births | 163 | 165 |
+| deaths | 4 | 6 |
+| alive at day 720 | 639 | 639 |
+| camp moves | 404 | 433 |
+| turns without salt | 2,114,299 | 1,679,647 |
+| shallows foraged | 15,306 | 23,143 |
+| food rotted in store | 39,660 | 54,572 |
+| food lost to vermin | 208,180 | 285,085 |
+| thefts from a store | 1,018 | 549 |
+
+- None of the population columns moved beyond noise (t under 1 for each).
+- **Salt.** A fifth fewer turns went without salt, because food eaten where
+  it grew now brings its salt in.
+- **Stores.** More went into stores and more of it was lost to rot and
+  vermin. Honey is food now, and so is the forage counted as eaten.
+
+**Tests.** New `loose_ends_tests`: `a_dig_is_offered_only_with_something_to_dig_with`,
+`food_eaten_where_it_grew_is_counted`, `wild_honey_is_food`,
+`burnt_food_is_thrown_away`. `land_tests`'
+`stocking_a_map_leaves_no_two_things_on_a_tile` now checks every kind.
+
+**Dice counts**: 6,440 (seed 4242, 120 turns) and 1,021,041 (seed 0, a year).
+
+### 363. Clocks, thresholds and dead vocabulary
+
+The second of three entries resolving what the open sections still held.
+
+**What changed:**
+- **The nutrition clock (#73).** Wasting began after 1,440 turns of going
+  short of protein, and scurvy after 4,320. Those were a day and three days
+  counted in minutes, and they were counted in half-hour turns, so they meant
+  a month and three months. They are a day and three days of turns now.
+- **Materials enough (#173).** `ENOUGH_MATERIALS` was thirty, counted in a
+  pack that holds about thirteen, so Industry never came down. It is eight.
+- **Tired is not starving (#70).** `AgentState::is_starving` also fired when
+  stamina fell under twenty, so a man worn out by a day's digging read as
+  starving with a full belly. It is the body's own reckoning now.
+- **Weapons in the tool vocabulary (#100).**
+  - `have_i_a_weapon` asks the pack as well as the old equipment slot.
+  - `armed` is a weapon out in the hand (`a_weapon_in_my_hand`).
+  - Dangerous game is hunted only with a hunting weapon carried.
+  - `own_strength` loses its slot bonus. That bonus never fired, and the
+    weapon is already counted where it works, in the throw and the fight.
+  - A first cut counted the pack for `armed` and for strength. Every founder
+    carries a handaxe, so every founder became armed and half as frightened,
+    and men who would fight one wolf stood against four. Nineteen tests said
+    so before anything was measured.
+- **Beliefs that settle (#33).** `Lessons` moved a flat 0.06 up and 0.10
+  down. That is a walk with a drift, so anything that worked less than five
+  times in eight went to nought. It now moves a share of the way, and settles
+  where the two pulls balance: `p·0.06 / (p·0.06 + (1-p)·0.10)` for a thing
+  that works with chance `p`. That is still gloomier than the record, but a
+  thing that works half the time is now believed more than one that works a
+  tenth of it.
+
+**Measured**, forty settlements, two years, against #362:
+
+| | #362 | #363 |
+|---|---|---|
+| births | 165 | 168 |
+| deaths | 6 | 3 |
+| alive at day 720 | 639 | 645 |
+| camp moves | 433 | 412 |
+| shallows foraged | 23,143 | 46,053 |
+| fish caught | 17,041 | 27,437 |
+| hunts that told | 246 | 397 |
+| young caught to keep | 181 | 304 |
+| tamed | 93 | 163 |
+| worlds keeping beasts | 8 | 11 |
+| latrines dug | 275 | 421 |
+| brush huts finished | 4,218 | 3,544 |
+
+- **Population.** None of the population columns moved beyond noise (t under
+  1 for each, and -1.8 for deaths on smooth worlds, 4 to 1).
+- **What people do.** Fishing, hunting and keeping beasts all rose. They are
+  the work that fails more often than it pays, and under the flat step their
+  beliefs sat on the floor.
+- **Fixtures.** The fixtures that made a man starving by tiring him now
+  starve his body (`Physiology::four_days_without_food`).
+
+**Tests.** `loose_ends_tests` gains `wasting_begins_after_a_day_short`,
+`enough_materials_fits_in_a_pack`, `tired_is_not_starving`,
+`a_spear_in_the_pack_is_a_weapon` and `a_belief_follows_how_often_it_works`.
+
+**Dice counts**: 6,624 (seed 4242, 120 turns) and 979,878 (seed 0, a year).
+
+### 364. Dead subsystems fed, and behaviour gaps closed
+
+The last of three entries resolving what the open sections still held.
+
+**Dead subsystems:**
+- **Hearing (#14).** Hearing was never fed. Somebody struck within the last
+  turn now cries out, and everybody alive in earshot hears it as a fight. The
+  percept pass remembers the place as dangerous, and
+  `Surroundings::heard_a_cry` adds to Safety as the dark does.
+- **Zoning and territory (#15).** Both managers were empty in every live run.
+  `World::add_building` now lays a zone of a building's kind round the first
+  of its kind (not for brush), and claims a plot round a house for whoever put
+  it up. Building goes through `find_optimal_location_with_territory`.
+  Territory ids are the agents' `Uuid`s, where they were a `u32` nothing
+  could supply.
+- **A turn that panics (#4).** Outside the tests, a person's turn that panics
+  is caught, logged, counted in `turns_lost_to_a_fault` and skipped. Under
+  test it still fails loudly.
+- **Two that needed no code.** `explored_tiles` (#169) has a reader now in
+  `verify_resource_claim`. The equipment wear model of #93 went in #93
+  itself.
+
+**Behaviour gaps:**
+- **Spent fields (#5).** `fields_within` no longer counts an exhausted field
+  towards `FIELDS_WANTED`.
+- **Leaving for food.** `migration_action` took the furthest remembered place
+  worth the walk (`max_by_key`). It takes the nearest.
+- **Swaps (#69).** `what_i_would_swap` skips a swap already tried, because a
+  swap comes out the same every time.
+- **Seed (#10).** A farmer about to break ground with no grain on them fetches
+  some from wild grain they know of within `A_WALK_FOR_SEED`.
+
+**Measured**, forty settlements, two years, against #363:
+
+| | #363 | #364 |
+|---|---|---|
+| births | 168 | 174 |
+| deaths | 3 | 4 |
+| alive at day 720 | 645 | 650 |
+| camp moves | 412 | 378 |
+| turns without salt | 1,824,602 | 1,541,209 |
+| latrines dug | 421 | 727 |
+| hunts that told | 397 | 379 |
+| young caught to keep | 304 | 214 |
+
+The probe's new ISSX counters, which #363 did not carry:
+
+| | |
+|---|---|
+| cries heard | 159, in 13 worlds |
+| fields sown with food / pods / grain | 6,609 / 411 / 28 |
+| seed errands (turns) | 908, in 17 worlds |
+| swaps failed / worked | 54,879 / 3 |
+| zones laid, plots claimed | 0, 0 |
+
+- **Population.** None of the population columns moved beyond noise.
+- **Grain is still not sown.** The errand fires in seventeen worlds, but grain
+  went into 28 fields of 7,048 (0.4%), about the share #246 measured (4 in
+  690). What it fetches is probably eaten before the next field is broken.
+  Keeping seed back from the pot is the next lever.
+- **Swaps are still tried over and over.** A try fades from a head in about a
+  season, and a head holds 48 lessons, so "not twice" lasts a season.
+  Per world-year that is about 690 failed swaps, against 830 to 1,400 in
+  the older measurements, which counted differently.
+- **Zoning and territory are wired and have not fired.** Nobody in forty
+  two-year settlements put up anything but brush.
+
+**Tests.**
+- New `dead_subsystems_tests`: `a_cry_carries_to_whoever_is_in_earshot`,
+  `an_old_blow_is_not_cried_over`, `a_cry_heard_is_frightening`,
+  `the_first_house_lays_out_ground_for_more`, `a_house_claims_its_plot`.
+- New `behaviour_gaps_tests`: `a_worn_out_field_is_not_counted`,
+  `a_hungry_man_leaves_for_the_nearest_food_he_knows`,
+  `a_swap_tried_is_not_tried_again`,
+  `a_farmer_fetches_grain_before_breaking_ground`,
+  `gathering_wild_grain_puts_seed_in_the_pack`.
+
+**Dice counts**: 6,624 (seed 4242, 120 turns) and 974,158 (seed 0, a year).
+
+### 365. Seed kept back from the pot, and swaps tried once for good
+
+The user asked: "Keep seed back for sowing, then the swaps record." Both were
+left open by #364.
+
+**Where the grain went.** A probe tagged every grain taken out of a pack with
+the action taking it. In six scattered settlements over a year, 3,231 grain
+went into packs and none went into a field:
+
+| taken by | grain |
+|---|---|
+| eating | 1,264 |
+| drying | 1,007 |
+| putting down | 554 |
+| between actions | 203 |
+| cooking | 140 |
+| brining, burying, working, giving | 63 |
+
+Guarding each of those would mean a guard in each of them, and the next one
+written would leak. So the seed is taken out of all of them at once.
+
+**What changed:**
+- **Seed.** Somebody who knows how to break ground sets up to three grain
+  aside every turn as `seedgrain` (`Agent::keep_seed_back`). It is not food,
+  so nothing that eats, dries, cooks or stores food sees it. It stays in a
+  full pack (`what_stays_in_the_pack`), and it is the first thing
+  `what_can_be_sown` offers. Somebody starving puts it back with the food.
+- **Swaps.** Each person keeps a record of every swap they have tried
+  (`Agent::swaps_tried`), kept apart from the lessons as `times_laid_up` is.
+  A swap comes out the same every time, so once settles it for good. The
+  lessons fade in a season and hold 48, which is why #364's version wore off.
+
+**Measured**, forty settlements, two years, against #364:
+
+| | #364 | #365 |
+|---|---|---|
+| births | 174 | 170 |
+| deaths | 4 | 4 |
+| alive at day 720 | 650 | 646 |
+| fields sown with grain | 28, in 15 worlds | 449, in 24 worlds |
+| fields sown with food / pods | 6,609 / 411 | 5,661 / 253 |
+| seed errands (turns) | 908 | 322 |
+| swaps failed | 54,879 | 18,031 |
+| swaps that worked | 3 | 3 |
+
+- **Population.** None of the population columns moved beyond noise.
+- **Grain.** Grain is now 7% of what is sown, up from 0.4%. Seed errands fell
+  by two thirds, because a farmer with seed kept back has no need to fetch
+  any.
+- **Swaps.** Failed swaps fell by two thirds, and the three that worked
+  still work.
+
+**Tests.** `behaviour_gaps_tests` gains `a_farmer_keeps_seed_back_and_sows_it`
+and `trying_a_swap_notes_it_for_good`; `a_swap_tried_is_not_tried_again` now
+also checks that the swap stays known after the lesson has faded.
+
+**Dice counts**: 6,624 (seed 4242, 120 turns) and 1,005,752 (seed 0, a year).
+The seed changes neither: nobody in those two worlds breaks ground in time.
+
+### 366. Stamina is tiredness: a meal does not refill it
+
+The user asked: "Make eating stop refilling stamina (#70)."
+
+**What stamina was.** Three things refilled it:
+- a meal, which put its food energy straight in;
+- a pull a fiftieth of the way towards the food reserve, every turn;
+- milk, for nursing infants.
+
+One thing drained it: 0.05 a turn, whatever anybody did. The work itself was
+priced in the body's food (`Physiology::advance_at`) and never in stamina. So
+cutting the meal alone would have changed nothing. The reserve pull kept
+stamina near full, and the drain needed forty days to empty a pool.
+
+**What it is now:**
+- **Food leaves it alone.** The meal, the legacy flat refill, the reserve
+  pull and the milk are all gone.
+- **Work takes it** (`WHAT_A_UNIT_OF_WORK_TIRES`): a turn's effort and its
+  walking. An ordinary day takes a quarter of a pool, and a day of digging
+  takes all of it.
+- **Sleep gives it back** (`A_TURN_OF_SLEEP_RESTORES`, by sleep quality). It
+  was a tenth of a point a turn, which never had to be more.
+- **The Rest drive answers it.** The drive never sits below how spent the
+  stamina is (`STAMINA_TO_SPARE`), so it reaches its threshold at thirty.
+
+**Four measurements to get there**, forty settlements, two years each,
+against #365 (4 deaths, 646 alive):
+
+| | deaths | of exhaustion | of blows | alive |
+|---|---|---|---|---|
+| first cut | 19 | 8 | 9 | 627 |
+| infants mend, rest at thirty | 11 | 4 | 6 | 647 |
+| a spent body rests | 12 | 0 | 8 | 630 |
+| a tired man can run | 7 | 0 | 3 | 637 |
+
+- **First cut.**
+  - Six of the eight exhaustion deaths were infants. A child under six
+    takes no turn, so it never sleeps through `Action::Sleep`; the milk had
+    been topping it up, and illness drained it with nothing to give it back.
+    It now mends as a sleeper does every turn.
+  - The Rest drive reached its threshold at twenty, below the fourteen a
+    run cost.
+- **Second.** The four exhaustion deaths left were grown people in their
+  first winter. Probed, one spent fifteen days with Rest and Hunger both at
+  their ceiling, cold, never asleep. Hunger outranks rest by day, and the
+  night lets the cold and the hungry be. `what_a_spent_body_does` makes a
+  turn at empty a rest, unless the body is running for it or doing something
+  that costs nothing.
+- **Third.** Blows were left. About nine tenths of the health they took
+  came off people under fourteen stamina. One man faced the thing sixteen
+  times over two days with somewhere to run. Running asks only that the
+  body is not empty now.
+- **Last.** Every population column is within noise of #365: deaths 4 to
+  7 (t 0.77), alive 646 to 637 (t -0.64). Stamina dips through the day and
+  comes back overnight.
+
+**What it costs.** Tired people do less of the work that fails most often.
+Against #365:
+
+| | #365 | #366 |
+|---|---|---|
+| hunts that told | 429 | 238 |
+| young caught to keep | 235 | 154 |
+| fish caught | 30,805 | 23,540 |
+
+**Tests.** New `stamina_tests`:
+- `a_meal_does_not_give_back_stamina`
+- `work_takes_stamina`
+- `a_nights_sleep_gives_back_a_days_work`
+- `a_tired_man_wants_rest`
+- `a_spent_body_rests`
+
+Fixtures that made a man starving by tiring him had already been moved to
+starving his body in #363.
+
+**Dice counts**: 6,624 (seed 4242, 120 turns) and 961,599 (seed 0, a year).
+
+### 367. What the log left open: a sweep of #154 to #366
+
+The user asked for the log's loose ends to be swept. Many entries end by
+naming what they did not do: "filed", "left open", "the next lever", "wants
+its own arm". Every such item in #154-#366 was checked against everything
+written after it and against the code as it stands. Most were settled by a
+later entry. These were not. Each line names the entry that left it.
+
+**Dead code and state nothing reads:**
+- `Population::process_gossip` is called only by tests (#337).
+- `apply_starvation_damage` and `update_starvation` are called only by
+  tests (#208, #209).
+- `what_last_took_health` is written and read only by tests (#209).
+- `Relationship::verify_information`, `incorrect_information` and
+  `SharedKnowledge::cleanup_stale` have no live callers. The
+  `SimulationController` counter is read by nothing (#218).
+- The `DRINKING_THE_SEA` lesson is written and never consulted (#181).
+- `Rhythm::still_finding_it` has no caller, and only trapping keeps a
+  rhythm (#185).
+- The category tier of memory (`what_sort_i_could_say_it_was`) has no
+  caller. Nothing in the decision layer acts on a
+  `SpatialMemoryType::Resource` memory (#196, #197).
+- The place readers (`somewhere_that_answered`) still return nothing
+  (#186, #259).
+- The catalogue's `drive` field is read only by its own tests, so the luxury
+  drive is tagged and drives nothing (#345).
+- The `Event` arm of `process_drive_source_loss_with_cause` has no caller
+  (#210).
+- Placement criteria are worked out twice and the first is only logged
+  (#220).
+- Goal-planner plans are laid down with a hard-coded (50, 50, 0) and never
+  executed (#187).
+- `stage.rs` is read only by tests now that the catalogue gives born
+  knowledge (#199).
+- `TradeForWater` is declared with no dispatch, and the `FILL` verb's doc is
+  stale since #351 (#204).
+- A dozen unused stat helpers remain on `Equipment` (#93).
+
+**Records and bookkeeping:**
+- `DeathCause` cannot name the weather, illness, a wound or a mishap.
+  `Exposure` exists and is never mapped (#209). "A blow" does not tell a
+  beast's from a person's (#212). An empty ledger still falls back to
+  "unknown cause" (#211).
+- About a dozen `add_item` callers ignore the refusal, among them a fishing
+  catch and several gather paths (#180).
+- A save does not carry shared knowledge, the technology registry, the dead
+  and what they left, and more, and a resumed run does not continue the dice
+  stream (#305).
+- How a meal was come by is recorded (`by_what_way`); how water or shelter
+  was is not (#192, #259).
+
+**Behaviour:**
+- ~~Territorial beasts never charge people who come too near; `could_it_take`
+  counts only hunters (#327).~~ They warn, then strike (#368).
+- ~~`SeekShelter` cannot end the cold that chose it, because `recover` never
+  touches body temperature (#233, #241).~~ A huddle under cover warms (#369).
+- ~~The `EatCarriedFood` way checks for a snare at the feet, not the pack
+  (#235).~~ It eats from the pack when the meal would be banked (#369).
+- A full reserve spills 17-22% of what is eaten, and burying gets no claim
+  on the turn when the body is full and the pack is not (#235, #237, #240).
+- ~~`pits_i_remember` walks past a nearer stranger's pit to one's own or
+  kin's, however far (#252).~~ A stranger's pit counts as 300 m further (#369).
+- ~~Famine: a bite off the ground is taken before the walk to a pit, and every
+  way of answering hunger is ranked as the same relief (#301). The larder
+  branch made 10,589 walks for 2,276 handfuls (#303).~~ A bite is ranked at
+  what it puts in; larder walks arrive (#369).
+- The patience of a long walk is reckoned from what is left of it, so it
+  shrinks near the end (#179). ~~Fixed (#369).~~
+- ~~Some walks still go nowhere, and "already there" costs nothing (#234).~~
+  None found in sixty days of seed 0 (#369).
+- ~~The Construction drive almost never wins a turn (#175). No tent is ever
+  built (#205, #349, #353). No house is ever built, so zoning and plots
+  have never fired (#364).~~ Houses go up over many trips, and zone and
+  claim their ground; tents are still rare for want of skins (#371).
+- `explored_tiles` is written and read by nothing in a live run (#169,
+  reopened in #371).
+- Husbandry starts only where a kill leaves a young one (#360, #361).
+- `wants_to_hunt` answers only a want for hides, and ~~Preparedness never
+  leads to hunting or fishing~~ (#266; the hungry hunt is priced since
+  #330). Preparedness hunts and fishes for the store since #370.
+- ~~Nobody carries meat home for a share (#331).~~ Carriers are taken on
+  for a third of each load when it brings more home (#374). Meat by the
+  beast's mass was tried and not kept (#257, #330).
+- A wounded person still goes back to fight a boar, often by a fold (#374).
+- A failed swap destroys the substitute, and swaps the world cannot supply
+  are still offered once (#206). ~~Fixed (#369).~~
+- ~~`what_i_would_work_on` has no "is the output worth having" filter (#199).~~
+  It has one, which today turns nothing away (#369).
+- Telling where things are was reverted, and lie detection still counts any
+  wrong claim as a lie (#196). ~~The lie half: that review was dead and is
+  gone (#369).~~
+- Lessons: an undertaking's record never fades, a way is judged by its
+  success rate and not its yield, `worth_trying` still drops a way at 0.2,
+  and `A_FAIR_GO` is twelve (#184, #266-#269). The flat step itself became
+  proportional in #363.
+- Rotation cannot be learned, because lessons are keyed on the crop and not
+  the ground (#165), and a field is read only from a full stand (#246).
+- Mining covers both quarrying and digging a hole (#204). Felling is not
+  gated on a tool (#200). Making never breaks or wastes in the making
+  (#200, #201). A better tool changes the yield, not the time (#345).
+- Knowing how is keyed on the product, not the recipe (#195, #199). ~~There is
+  no flint in the ground, so the map arm cannot fire (#195).~~ Flint lies in
+  the ground since #373.
+- Several ways are still `Reach::NotYet`, and `RelocateTowardWater` says
+  "moving camp never fires" though camps move (#193). ~~The prose is
+  corrected (#369).~~
+- Sling, travois and leather bag are never found out in two years (#345).
+- Mating is tried about 1.4 times a day per partnered adult (#338). Best
+  suited pairs stand no nearer than others (#339). Traits only a mutation
+  can give never appear in an adult (#337).
+- ~~An ill person sleeps through their own hunger (#166, not settled)~~: no
+  ill person was ever wasting in three seeded years (#369). The ill walk for
+  herbs rather than stooping for what they pass (#166).
+
+**Ecology and the world:**
+- Every hunter gets the same head count of small life whatever its size
+  (#159). Small-life fish and `fish_run` are two fisheries (#159).
+- The region is not passed to flora and fauna; they use the temperate
+  default (#162).
+- Kestrels and small raptors starve, and the small-life larder was never
+  looked at with them (#282, #285). Herds grow about a fifth a year (#285,
+  #306).
+- Mast years are an independent hash per year, with no streaks (#164).
+- No coarse model for herds far from people (#248).
+- The 51 plant growth and regrowth figures were never authored in real
+  time (#217). `WHAT_A_GROUND_GIVES_A_LINE` and `HOW_FAST_THE_GRAZERS_COME_BACK`
+  still assume a twelve-turn day (#183). The plant's `id` and field widths
+  were never cut (#244).
+- Shrubs decline (#135), there are no small predators (#137), and the wild
+  does not settle in every world (#8, #141).
+
+**Content never built:**
+- Six specified herbs, a split of grain, orchards (#163, #166).
+- Cold-hammered native copper, and catalogue links for writing, governance,
+  measurement, masonry, boats and water systems (#343). Boats, a carried
+  ember, animals following camp and leadership at stage 0 (#199).
+- The memory specification's salience, seasonal places, what was told
+  against what was seen, and a refresh that is not flat (#196). Exploring
+  unfamiliar orders of acts (#186).
+
+**Never traced:**
+- Why an edge in the kit made food be carried rather than stored, and births
+  came apart from the store (#332, #333).
+- Why taking want's extra minutes cost no thirst deaths in #326 when it cost
+  four in #325; why brush shelter doubled burrow starts (#350).
+- A "blow" with no attacker on smooth seed 8 (#325); hunger deaths bunching
+  late in the second winter (#346, #347, #350); seed 2's thin years (#313).
+- Whether the 600-cell camp search can strand a camp from its pits (#275).
+  The 468 wasted giving turns on the barter path (#230). How tight packs
+  are now (#175). The winter-test flake (#191).
+
+**And two the sweep turned up that had quietly come right.** The
+multi-generation tests `a_settlement_still_raises_children_late_on` and
+`the_children_of_a_settlement_live_past_infancy` were filed as failing until
+the put-by gate of #264 opened (#219-#228, #250, #278, #279). #307 opened it
+and nothing re-ran them. Run now in release, both pass, in 2,406 seconds for
+the pair. They stay ignored only for their length, and STANDING_FAILURES says
+so.
+
+### 368. Territorial beasts keep their ground: they warn, then strike
+
+The user asked: "Fix the behaviour gaps first, starting with territorial
+beasts." #327 found that nothing but a hungry hunter ever struck anybody. It
+took away the fear of mammoths to match, and left beasts charging people who
+come too near as a behaviour still to be written.
+
+**What charges** (`would_it_charge`): a beast that can do harm and is either
+territorial, or aggressive without living by hunting. That is the bear, the
+mammoth and the boar. The boar hunts rabbits and squirrels, so a rule on "not
+a hunter" missed it; the rule is on the diet.
+
+**What a charge is**, in `predators_try_their_luck`:
+- Within two cells (`A_BEASTS_GROUND`, twenty metres) the beast comes at a
+  person and stops short. They are frightened and decide again at once. The
+  beast is recorded as what went for them, and the place goes on their map as
+  somewhere it went badly.
+- Somebody it has warned within this half hour and who is still there, it
+  strikes, a quarter of the time (`HOW_OFTEN_IT_CHARGES`). Hunger plays no
+  part, and it takes nothing.
+- The hungry hunter's path is unchanged.
+
+**Fear goes with it.** A `Menace` now carries its reach. People are wary of a
+beast that keeps its ground within five cells (`NEAR_ENOUGH_TO_BE_WARY_OF_IT`)
+and not across a field, so #327's mammoth fights do not come back. Sight
+(`what_would_frighten`), appraisal (`feel_about_what_stands_in_the_way`) and
+the turn's own checks all ask `could_it_harm` and use the reach.
+
+**The steps, on seed 0's year:**
+
+| | struck | alive at the year's end |
+|---|---|---|
+| before | 0 | 12 of 12 |
+| struck on sight | 62, all by mammoths | 4 of 12 |
+| warned first, remembered | about 15, after about 300 warnings | 11 of 12 |
+
+**Measured**, forty settlements over two years, against #367:
+
+| | #367 | #368 | t |
+|---|---|---|---|
+| births | 164 | 157 | -0.68 |
+| deaths | 7 | 15 | 1.07 |
+| of a blow | 3 | 10 | |
+| of hunger | 2 | 5 | 1.00 |
+| alive | 637 | 622 | -1.05 |
+
+Every column is within noise. The direction is the cost of the change: seven
+more people over eighty settlement-years died of blows, about one death per
+eleven settlement-years. A bear, a boar or a mammoth that people walk into
+the ground of does sometimes kill one of them, and that is what was asked
+for. If it proves too dear, the first lever is that a warned person decides
+again but is not made to leave the ground.
+
+**Tests** (`danger_cadence_tests`):
+- `a_beast_charges_whoever_comes_too_near`: bear, boar and mammoth inside the
+  ground are charged, none outside it; a cow never charges.
+- `a_beast_that_keeps_its_ground_is_feared_only_up_close`.
+- `a_beast_that_never_strikes_frightens_nobody` now uses an elk, because
+  the mammoth it used does strike.
+
+**Dice count**: 927,965 (seed 0, a year).
+
+### 369. The rest of the behaviour gaps: warmth, the pack, the pit, swaps, and a bite of leaf
+
+The user asked: "Fix the behaviour gaps first, starting with territorial
+beasts." #368 was the beasts. This is what followed, in the order it was
+done, from the behaviour list in #367.
+
+**A huddle under cover warms a cold body** (#233, #241). `recover` never
+touched body temperature, so the turns spent sheltering could not end the
+cold that chose them. Treated as insulation it did nothing: under cover,
+cooling roughly matches the body's own warming, so insulation changes
+nothing and recovery ran at 5% a turn. A huddled body is now warmed
+directly, by `WHAT_HUDDLING_IS_WORTH` (0.3) and 0.15 for each other body
+under the same cover, up to 0.45 more, and never past the ideal. Test:
+`a_huddle_under_cover_warms_a_cold_body` (midwinter, a blizzard, a wood).
+
+**"Eat the food you are carrying" eats it, when the meal would be kept**
+(#235). The way checked for a snare at the feet, not the pack. Wired to the
+pack outright it cost 7.8% of a settlement's life (#235, #241), because a
+meal eaten at a full reserve is thrown away. It now eats from the pack only
+when `Physiology::would_a_sitting_be_banked`, and otherwise stays the snare
+check it was. Test: `eating_what_you_carry_waits_for_room_to_keep_it`.
+
+**A stranger's pit counts as a longer walk, not as last** (#252).
+`pits_i_remember` sorted one's own and kin's pits ahead of a stranger's
+however far. A stranger's now sorts as three hundred metres further
+(`A_STRANGERS_HOLE_IS_FURTHER_BY`, 30 cells). Test:
+`a_strangers_hole_beats_ones_own_a_long_way_off`.
+
+**A walk is worth as long at its end as at its start** (#179). The patience
+of an errand was reckoned from what was left of the walk, so it shrank as
+the walker neared the end and gave up in sight of it.
+`Errand::how_long_it_is_worth` reckons it from where the walk set out. Test:
+`a_walk_is_worth_as_long_at_its_end_as_at_its_start`.
+
+**Walks that go nowhere** (#234). Probed over sixty days of seed 0, 30,349
+turns: no "move: already there" at all. #301's fix to the pit underfoot
+took the last of them.
+
+**A failed swap gives the substitute back; only parts are put in** (#206).
+`trying_a_swap` spent what went in whether or not the swap worked. It is now
+used up only when the swap makes something; the makings are spent either
+way. `what_i_would_swap` offered every stack in the pack, food and pots
+among them, and cord in place of flax to make cord. It now offers only what
+some step takes as a part (`making::is_this_a_part_of_anything`), and never
+what the step makes. Test: `only_a_part_of_something_is_put_in_where_a_part_goes`.
+
+**A bite off the ground is ranked at what it would put in** (#301).
+`the_way_to_answer` took any `Eat` first as already in hand, so a bite of
+leaf beat a two-turn walk to a full pit. An `Eat` is in hand now only when
+the food is in the pack, or a joint to pull apart. A bite off the ground is
+ranked with the other ways, its relief scaled by what an armful of the
+richest patch in reach comes to as a share of a sitting
+(`what_a_bite_off_the_ground_comes_to`): leaf in season is two thirds of a
+supper, anything out of season a mouthful. #301's other claim, that a
+stomach of leaf ranks with one of dried meat, no longer holds: the stomach
+is charged in energy, so a full one is a full one. Tests:
+`a_starving_man_walks_to_the_larder_past_a_bite_of_leaf`,
+`a_bush_in_fruit_underfoot_still_beats_the_larder_by_the_ways`.
+
+**The larder walks are not a fault any more** (#303). Instrumented over seed
+0's first year: 1,141 of 1,288 walks the larder branch chose arrived in one
+turn, and 692 of 743 handfuls taken out of a pit went into the pack (the
+other 51 were "No room for it"). #303's 10,589 walks for 2,276 handfuls were
+the leash that #303 itself fixed.
+
+**What a working makes has to be worth having** (#199). Something to eat,
+to carry or keep things in, or that serves for something; failing those, a
+part some step or working this person knows takes. A thing no recipe takes
+is used somewhere the tables do not reach and is left alone. Today it turns
+nothing away - claypots keep food and hold water now - so it is a guard.
+Tests: `every_working_a_people_is_born_to_makes_something_worth_having`,
+`a_part_nobody_here_can_use_is_not_worth_making`.
+
+**Curiosity fetches an untried material only with room to carry it.** Found
+while asking what a full body with spare food does instead of burying it
+(#237, #240). A body at a full reserve with a full pack chose `Gather` for
+food about 7,500 times over seeds 0 and 1's first years, and 5,500 of those
+came from `something_nobody_has_tried_within_reach`: an untried working
+wanted "food" the pack lacked, the berries could not go in the pack and were
+eaten on the bush, and the walk came round every turn curiosity won. It now
+asks `could_i_take_another_handful`. Test:
+`curiosity_does_not_fetch_what_there_is_no_room_to_carry`.
+
+**Smaller things.**
+- **#166.** In three seeded years no ill person was ever wasting; the ill
+  ate (6,318 turns) about as often as they slept (5,964). "An ill person
+  sleeps through their own hunger" is no longer so. Stooping for herbs was
+  not done: the ill fetch herbs and treat themselves (1,266 times), and a
+  detour would add little.
+- **#193.** `RelocateTowardWater` and `TradeForWater` said camps never move
+  and nothing carries water. Camps move for water (`go_and_live_where_it_is`)
+  and bowls, skins and pots carry it; the prose says so.
+- **#196.** The periodic lie review, which counted any wrong claim as a lie
+  and read `ground_truth` to decide, had been out of the turn for a long
+  time and nothing called it. It is deleted. Lies are found out on the spot,
+  by ground the teller could be held to.
+- **Autosave.** Checkpoints were ordered by file time, which ties on a loaded
+  machine; `test_autosave_cleanup_old_checkpoints` loaded turn 120 as the
+  latest of 120 and 150. They are ordered by the turn in the name.
+- **#345.** "A better tool changes the yield, not the time" is left: in
+  whole turns, more per turn and fewer turns per unit are the same rate.
+
+**Measured**, forty settlements (smooth 1–24, scattered 1–16), two years
+each. The container was reclaimed twice mid-queue, so the steps after the
+pack were measured together rather than one at a time:
+
+| | #368 | huddle | the pack | the rest |
+|---|---|---|---|---|
+| births | 157 | 167 | 173 | 163 |
+| deaths | 15 | 11 | 10 | 5 |
+| of hunger | 5 | 1 | 2 | 1 |
+| alive at two years | 622 | 636 | 643 | 638 |
+| camps moved | 336 | 437 | 389 | 365 |
+
+- **Huddle against #368**: hunger deaths 5 to 1 (t -2.08), camps moved 336 to
+  437 (t +2.52); alive and births up, within noise.
+- **The pack against the huddle**: every column within noise (alive t
+  +0.56). The way that cost 7.8% wired outright costs nothing gated on the
+  meal being kept.
+- **The rest against the pack** (stranger's pit, walk patience, swaps, the
+  bite of leaf, the worth filter, curiosity's room): every column within
+  noise (births t -0.90, alive t -0.39). What moved is what people did:
+
+| | the pack | the rest |
+|---|---|---|
+| swaps that failed | 17,244 | 5,135 |
+| swaps that worked | 5 | 2 |
+| buried | 193,185 | 214,562 |
+| dried | 145,953 | 162,086 |
+| fish caught | 27,182 | 32,422 |
+| hunts that told | 343 | 434 |
+| things found out | 1,336 | 1,395 |
+
+Seven in ten failed swaps are gone; the turns went to burying, drying,
+fishing and hunting.
+
+**Full suite**, at the curiosity fix: 2,962 passed, 2 failed - the year dice
+count, recorded, and the autosave tie, fixed after it.
+
+**Dice counts**: 6,624 (seed 4242, 120 turns, unchanged throughout) and
+867,309 (seed 0, a year).
+
+### 370. Preparedness goes hunting and fishing; a rack counts as put by
+
+The user asked: "Preparedness should lead to hunting and fishing. These are
+methods of getting food. More food should mean a decreased preparedness
+drive."
+
+**What was there.** The Preparedness arm buried, dried, salted, dug, walked
+a trapline and set traps in the water. The only food it ever went out for
+was a gather for the store, in autumn. Hunting answered a want of hides
+(`wants_to_hunt`) or a craving for meat (#358), and fishing answered hunger
+or Sustenance (`fishing_action`). Somebody short of a week's food in spring,
+with a river beside the camp and deer on the hill, was moved by
+Preparedness to nothing at all (#266).
+
+**The drive already fell with food.** `reckon_what_is_put_by` sets it every
+half hour from the pack, a share of the camp's pits, and what is in the
+body. So the catch coming home is what eases it. One store was missing:
+food hung on a rack lay on the ground at the rack and was counted by
+nobody, so a rack of drying fish read as though the catch had never come
+home. It is counted with the pits now.
+
+**What changed.**
+- `going_out_for_food_to_put_by`, last in the Preparedness arm: a hunt for
+  the store, else the water (`going_fishing`, split out of
+  `fishing_action`). Any season the larder is short of the month, and in
+  autumn whatever it is short of. Only with room in the pack to bring it
+  home, and only where the lessons still say the way is worth trying.
+- In autumn's gather for the store, a beast in sight worth more than the
+  best patch is gone after instead. With no patch worth the trip, the store
+  sends the person to the water or after game.
+- **A hunt for the store is a careful one** (`a_hunt_for_the_store`). It
+  takes nothing aggressive or territorial, nothing that fights back unless
+  the body is three quarters whole, and only game in sight. The hungry
+  man's hunt is unchanged.
+
+**Measured**, forty settlements, two years, against #369:
+
+| | #369 | wired to the hungry hunt | careful |
+|---|---|---|---|
+| births | 163 | 167 | 171 |
+| deaths | 5 | 14 | 9 |
+| of a blow | 4 | 13 | 7 |
+| alive at two years | 638 | 633 | 642 |
+| hunts that told | 434 | 1,006 | 889 |
+| fish speared | 32,422 | 36,497 | 32,373 |
+| shallows picked over | 29,402 | 41,179 | 46,827 |
+| food rotted in store | 47,445 | 45,908 | 42,021 |
+
+- **Wired to the hungry man's hunt**, deaths by blows rose from four to
+  thirteen (deaths t +1.71, all on the smooth maps, t +2.20). A probe on
+  one settlement found goats turning on the same hunter a dozen times in a
+  fortnight, five health a blow. Long walks to where game was last seen
+  also put people among the beasts that strike, at fifteen a blow.
+- **Careful**, every population column is within noise of #369: births t
+  +0.66, alive t +0.32, deaths t +1.00. Hunts that told doubled, picking
+  over the shallows rose by three fifths, and less food rotted in store.
+
+**Tests:**
+- `a_short_larder_sends_a_fed_man_to_the_water` (`fishery_tests`): not
+  hungry, nothing put by, fish at his feet. Preparedness sends him to the
+  water, and with forty days put by in spring it does not.
+- `a_short_larder_sends_a_hunter_after_the_deer_in_sight`
+  (`hunting_for_meat_tests`): no craving, so hunger's hunt does not send
+  him, but the store does.
+- `the_store_does_not_send_a_hunter_after_what_fights_back`: no boar; a goat
+  for a whole man and not for a hurt one.
+- `food_on_a_rack_eases_preparedness` (`food_keeping_tests`).
+
+**Full suite**: 2,967 passed; the year dice count failed and is recorded.
+
+**Dice counts**: 6,612 (seed 4242, 120 turns) and 912,614 (seed 0, a year).
+
+### 371. Tents and houses go up over many trips
+
+The user asked: "Resolve Construction: tents and houses are never built. But
+I am not sure what is meant by 'zoning'."
+
+**What zoning is here.** `World::zone_manager` holds areas of the map set
+aside for a kind of building - residential, industrial, agricultural,
+commercial. The first building of a kind marks the ground round it (six
+cells) for more of its kind. The placement planner scores a site higher
+inside a zone for its kind and lower inside one for another, so houses
+cluster and workshops cluster. Alongside it, `territory_manager` holds
+plots: a house claims the ground round it for whoever put it up, and the
+planner keeps other people's buildings off it. Both were wired in #364, but
+only for buildings nobody could build: brush lays out nothing, and a house
+wanted stone.
+
+**Why nothing was built:**
+- **A tent** wanted eight poles, four hides and two cords in one pack at
+  once. Hides come one kill at a time, rot, and go into fur garments first.
+  One tent was started in forty settlements over two years, and none was
+  finished.
+- **Every house** in the table wanted stone - thirty for the smallest - and
+  the larger ones iron. No stone-age people ever carried a block.
+- **Nothing let a site be brought its materials over time.**
+  `deliver_resource` existed and nothing called it, and the builder had to
+  hold everything when he started.
+- **Nothing made anybody want a roof of their own.** The Construction
+  drive read room to build, neighbours building and the weather, and sat
+  under its threshold.
+
+**What changed.**
+- **A site owes what its frame did not bring** (`Building::owed`, by class).
+  A tent or a house is started with its frame - eight poles and two cords -
+  and whatever else of it is in hand. Whoever of the household holds
+  something it still wants takes it there and hands it over
+  (`bringing_to_a_site`, `take_what_it_still_wants`). No work is done on it
+  until nothing is owed.
+- **A house is a Stage 1 framed hut**, as the construction path puts it:
+  pole frame, wattle walls, bark roof, earth daub. It takes thirty poles and
+  six cords and no stone, and is warmer than a tent (0.8 of a heated space's
+  warmth against 0.6). It goes up by the household's hearth, claims its plot
+  and lays out the residential zone.
+- **Which roof** (`the_roof_this_one_wants`):
+  - a house for a household tied to this ground - crops standing on fields
+    by its hearth - that has none;
+  - a tent for anybody sixteen or over with no roof of their household's.
+
+  A household is the person and their partner, or, for somebody unpaired,
+  their kin. A tent's frame is started only with a skin in hand. With
+  poles and no skin, the skins are hunted for, and brush or a burrow serves
+  meanwhile, as before.
+- **The Construction drive reads it**
+  (`Surroundings::without_a_roof_of_its_own`): a settled household without a
+  house adds half again to the drive, and a tent less.
+
+**Measured**, forty settlements, two years, against #370:
+
+| | #370 | #371 | t |
+|---|---|---|---|
+| births | 171 | 173 | +0.18 |
+| deaths | 9 | 16 | +1.10 |
+| of a blow | 7 | 12 | |
+| alive at two years | 642 | 637 | -0.39 |
+| houses started / finished | 0 / 0 | 129 / 14 (in 32 / 11 worlds) | |
+| tents started / finished | 1 / 0 | 5 / 1 | |
+| burrows started / finished | 281 / 67 | 1,032 / 615 | |
+| brush huts | 3,092 | 5,732 | |
+
+- **Houses are built.** A house is about a dozen visits of work and
+  hand-over, and most were started late, once the fields came in; 14 were
+  finished inside two years. The zones and plots they lay are the first to
+  appear in a live run.
+- **Tents stay rare.** Skins still go into garments first. Kills went up
+  with #370, but not enough to roof a band.
+- **The Construction drive now wins turns**, and much of what it does is dig
+  in and put up brush: burrows finished went from 67 to 615.
+- **Population** is within noise. Deaths by blows rose again, from seven to
+  twelve (t +1.10, all on the smooth maps). That is not significant, but
+  it is the third change in a row to move them up, and the next thing to
+  look at if it holds.
+
+**Tests** (`roof_tests`):
+- `a_tent_goes_up_on_its_frame_and_waits_for_its_skins`;
+- `a_household_that_farms_here_puts_up_a_house_over_many_trips`: its plot,
+  its zone, at least three trips;
+- `a_house_wants_no_stone`.
+
+Existing tests moved with the change:
+- `a_tent_cannot_be_made_of_poles_and_air` now also holds that a frame with
+  no covering stands and is never finished, and its refusal names the cord a
+  start lacks.
+- `test_building_requirements` and `test_building_construction` state the
+  house without stone.
+
+**Found on the way.** `explored_tiles` (#169) is dead at both ends.
+Deleting the retired lie review under #369 took its only reader, and
+nothing writes it.
+
+**Full suite**: 2,970 passed; the year dice count failed and is recorded.
+
+**Dice counts**: 6,612 (seed 4242, 120 turns) and 868,427 (seed 0, a year).
+
+### 372. Why deaths by blows kept rising, and what stopped them
+
+The user asked: "Look into why deaths from blows keep rising."
+
+**They were not rising so much as never falling.** Over eleven measured runs,
+#363 to #371, deaths by blows over forty settlements in two years read 9, 6,
+8, 3, 10, 9, 6, 4, 13, 7, 12. That is noise about eight. Each "rise" I
+reported came after an unusually low run. But eight deaths in eighty
+settlement-years made blows the commonest cause of death, so the question
+was what dealt them.
+
+**A probe** logged every blow on every person, by source - a territorial
+charge, a hungry predator, a fight lost to a beast, a hunted beast turning,
+another person, going without salt - and printed the tally for everybody who
+died of blows.
+
+At #371, twelve died of blows:
+
+| source | health they lost | blows | in deaths |
+|---|---|---|---|
+| a charge (boar, mammoth) | 698 | 35 | 10 |
+| a fight lost to a boar or mammoth | 360 | 19 | 7 |
+| a boar striking as a hungry predator | 260 | 20 | 6 |
+| going without salt | 48 | 4,587 | 2 |
+| a hunted beast turning | 42 | 4 | 3 |
+| another person | 13 | 61 | 8 |
+
+Boars were in nine of the twelve deaths and mammoths in three.
+
+**Four faults, two steps.**
+
+*First step:*
+- **A warned person was not moved.** The charge (#368) warns first and
+  strikes somebody still there. Warned, people decided again, but whatever
+  they were about kept them inside the ground for the rest of the half hour,
+  and the beast is asked every minute. A quarter of a chance a minute is a
+  blow nearly every time. Each boar victim took four or five charges. Now a
+  warned person backs off the beast's ground.
+- **A boar hunted people.** `a_hunter` took anything with prey and teeth,
+  and a boar lists rabbits and squirrels, so a hungry boar struck grown
+  people as a wolf does. Only a meat-eater hunts people now. The boar still
+  charges.
+- **Going without salt was a blow.** It went through `take_damage`, so it
+  was booked as "a blow" and opened a wound. It is a poor diet now.
+
+That step measured worse: sixteen dead of blows against twelve. The probe,
+run again, found:
+
+| source | health they lost | blows | in deaths |
+|---|---|---|---|
+| a charge | 1,170 | 69 | 14 |
+| a fight lost (boar, mammoth, lion) | 848 | 34 | 13 |
+
+Predator strikes were gone, but charges were up, and victims were charged
+nine, eleven and twelve times. Backed off, they walked straight back to
+what they had been about.
+
+*Second step:*
+- **A walk stops at the edge of a charging beast's ground**
+  (`whose_ground_is_this`, `walks_into_a_beasts_ground`), in the route and
+  in the single step. Somebody the beast came to is let out.
+- **Standing over a loved one is for a beast that hunts people.** In a camp
+  somebody loved is always within two paces of whatever comes into it, so
+  people stood over them against boars and mammoths. A beast that only
+  keeps its ground threatens nobody who steps out of it, and everybody it
+  warns now does. A lion or a wolf still brings it out.
+
+**Measured**, forty settlements, two years:
+
+| | #371 | first step | second step |
+|---|---|---|---|
+| births | 173 | 171 | 172 |
+| deaths | 16 | 18 | **2** |
+| of a blow | 12 | 16 | **0** |
+| alive at two years | 637 | 633 | **650** |
+| hunts that told | 790 | 901 | 892 |
+| houses finished | 14 | 16 | 27 |
+
+Against the first step: deaths t -2.90, alive t +1.59. Both remaining
+deaths are hunger. Hunting is unchanged: hunting for the store had already
+been kept off boars and mammoths (#370).
+
+**Tests** (`danger_cadence_tests`):
+- `a_warned_person_backs_off_the_beasts_ground`;
+- `a_walk_stops_short_of_a_beasts_ground`;
+- `a_boar_charges_but_does_not_hunt_people`;
+- `the_salt_runs_out_of_a_body` now holds that it is booked as a poor diet.
+
+`struck_in` puts its person back where they stood each pass, since somebody
+warned no longer stands there.
+
+**Full suite**: 2,974 passed, none failed.
+
+**Dice counts**: 6,612 (seed 4242, 120 turns) and 1,226,871 (seed 0, a
+year).
+
+### 373. Flint lies in the ground
+
+The user asked: "Resolve Flint (#195): flint doesn't lie in the ground, so
+learning it from a map can't happen."
+
+**What #195 left.** The innovation path finds out a sibling technique two
+ways:
+- the stuff in a person's pack;
+- the name on their map: a knapper who knows of flint somewhere knows it for
+  a stone like the ones he knaps.
+
+Only the first ever fired. Flint was made and never found: `SMASH_A_CORE`
+broke a stone into flakes and called them flint, and there was no
+`ResourceType::Flint`, so no sight pass could write it and no map could
+carry it.
+
+**What changed.**
+- **`ResourceType::Flint` and `ItemType::Flint`**, a mineral: beds in the
+  hills (six a world, 30 to 90 each) and nodules in the river gravels (four,
+  10 to 30). That is commoner than salt and far rarer than stone, and a
+  world with no hills and no rivers has none.
+- **Gathered by name**, "flint", the name a smashed core already gives what
+  it makes. A trip brings back two to four nodules. Weighed, counted and
+  priced with the other minerals.
+- **Named on a map** by anybody who knaps stone. That needed no change:
+  `do_i_know_what_this_is_for` already answers yes for a thing of a kind with
+  something known, and the sight pass names a resource by its kind.
+- The note in `somebody_puts_two_and_two_together` said the map half never
+  fires; it says why it does now.
+
+**Measured**, forty settlements, two years, against #372. Every world is
+drawn differently from its seed now, because world generation draws for the
+flint, so the worlds are not the same worlds:
+
+| | #372 | #373 | t |
+|---|---|---|---|
+| births | 172 | 168 | -0.33 |
+| deaths | 2 | 1 | -0.57 |
+| alive at two years | 650 | 647 | -0.23 |
+| worlds that worked out flint knapping | 40 | 40 | |
+| median first day | 29.5 | 31 | |
+| latest first day | 282 | 80 | |
+
+Every population column is within noise. Flint knapping was already found
+everywhere, by smashing cores; what the beds change is the stragglers. The
+slowest world worked it out by day 80 against day 282. The measurement does
+not tell which route taught whom.
+
+**Tests** (`innovation_tests`):
+- `a_flint_bank_seen_is_a_flint_bank_remembered_and_learned_from`: the sight
+  pass names a bed "flint" on a knapper's map, and the name alone teaches
+  flint knapping, with no flint in the pack.
+- `flint_lies_in_the_ground_and_can_be_picked_up`: a generated world has
+  flint beds, and a gather for "flint" picks some up.
+
+`curiosity_reaches_for_the_verb_it_has_tried_least` now accepts a swap with
+every part in hand. The new world draws moved the dice stream onto
+curiosity's roll for a swap, which the verb matrix does not list.
+
+**Full suite**: 2,973 passed. The two dice counts and that test failed, and
+are recorded and fixed.
+
+**Dice counts**: 7,150 (seed 4242, 120 turns) and 1,014,771 (seed 0, a
+year).
+
+### 374. Carrying a kill home for a share: work traded for goods
+
+The user asked: "Resolve issue 331, carrying meat for a share. There should
+be trading mechanism which enables the trading of work for other goods.
+Agents will need to calculate if giving something in trade will result in a
+larger return. If meat would spoil, but giving some away would result in more
+meat being stored as food, then this should be capable of occurring."
+
+**What was there.** Barter only (`between_us::exchange`): one thing in hand
+for another. A hunter with more on a kill than he could carry could tell
+people where it was (#331), which gave it away. Nothing let him pay somebody
+to carry it to his store.
+
+**How often a kill goes to waste.** Counted over forty settlements in two
+years on #373's code (`STORE meat_left_on_kills`, `meat_the_crows_had`, new):
+1,029 joints were left on kills and 250 of them, a quarter, went to the
+crows. A deer is 8 to 12 joints and two hands hold six, so most kills are
+carried home in a trip or two. What rots is mostly the big beasts and the
+kills nobody went back to.
+
+**The trade** (`agents::hire`, `analytics::between_us::hire`):
+- **The offer.** Each turn, for every kill with half a day or more left, its
+  killer reckons what he alone brings home before it goes: what he has room
+  for in his pack, one load a day (`what_one_pair_of_hands_brings_home`). He
+  asks whoever is within talking distance to carry it to a pit he may use as
+  his own, for a third of every load (`Hire::A_CARRIERS_SHARE`). He takes a
+  carrier on only while what comes home to him after the pay is more than
+  without them (`is_another_pair_of_hands_worth_it`). A kill he can carry
+  alone is never shared out, because a carrier would only take a share of
+  what was coming home anyway.
+- **The acceptance.** The one asked agrees if they are not hungry and the pay
+  is worth more than the walking and cutting cost them, every turn of the job
+  counted (`would_this_one_carry_for_a_share`). That is the bar a kill one
+  fetches for oneself has to clear (`a_kill_worth_fetching`).
+- **The work.** The carrier walks out, cuts a load, walks it to the pit and
+  puts in everything but the share (`the_carrying_i_took_on`, ahead of
+  everything else in `putting_food_by`; `Cover` holds the share back). They go
+  back while there is meat and time. When the kill is gone or rotten and
+  nothing is owed, the job is let go and the two think better of each other
+  (`WHAT_A_FAIR_DEAL_IS_WORTH`).
+- **The claim.** While a kill is being carried for its killer, only the
+  killer, his kin, whoever he told of it, the carriers and anybody starving
+  may cut from it (`Simulation::may_i_cut_from`, `ResourceNode::killed_by`).
+  Nobody tells of a kill being carried. Otherwise a kill is anybody's, as it
+  always was.
+
+**What did not work first.**
+- *A load as a full pack.* Reckoned on an empty pack a day, every hunter
+  could carry every kill home alone, and nobody was ever asked: 1,878
+  reckonings on one world in a year, all "alone is enough". Packs run full,
+  so a load is the room there is.
+- *Pay against the best food anywhere.* The first bar for accepting was the
+  best patch the carrier could go to instead, and nobody cleared it: 818
+  askings, all refused. A share came to 0–250 a turn against 1,000–4,600 for
+  a berry patch, because a patch is a basket a turn and a carcass two
+  joints. Carrying meat loses to picking even for the whole load. The bar is
+  now the cost of the work.
+- *A claim from the kill.* Without a claim, the neighbour asked to carry
+  could take the meat for nothing. A claim for the five days a carcass lies,
+  and then for its first day, both left more to the crows: 324 of 1,060 and
+  334 of 995, against 250 of 1,029. Per world that was within noise (t 0.70
+  and 0.85). The claim now starts when the carrying does, which takes nothing
+  from a passer-by but what is being carried home. The commit for that
+  change says the earlier claims fed the crows; per world they did not
+  measurably.
+
+**And a fight fix, from tracing the deaths.** Deaths went up after the trade
+went in. Every death by a blow traced was somebody at 17 or 18 health
+standing up to a boar, mostly by a fold, and none was carrying. Whether a
+beast outweighs somebody scaled the beast's worth by its wounds and not the
+person's, so a man at a sixth of his health fought as if whole. His worth in
+a fight is now scaled by his health, never below a tenth
+(`what_shape_i_am_in`). It did not save the one on smooth seed 4, who still
+dies around day 284. What sends a wounded person back to a boar is not yet
+found.
+
+**Measured**, forty settlements, two years, against #373 (with the counters,
+same worlds as #373):
+
+| | #373 | #374 | t |
+|---|---|---|---|
+| births | 168 | 168 | 0.00 |
+| deaths | 1 | 5 | +2.08 |
+| of them by a blow | 1 | 3 | |
+| alive at two years | 647 | 643 | −0.64 |
+| carriers taken on | | 124 | |
+| joints put in an owner's store | | 129 | |
+| joints kept as pay | | 89 | |
+| meat left on kills | 1,029 | 978 | −0.34 |
+| of it to the crows | 250 | 290 | +0.50 |
+
+Carriers were taken on in most worlds. Population is within noise. Deaths are
+up from 1 to 5 (#372 measured 2). The blows are the boar fights above, not
+carrying. Of the other two, one
+death is from hunger and one from thirst.
+
+**Tests**: `agents::hire::tests` (5) for the reckoning; `hire_tests` (7):
+- a kill too big to get home in time takes somebody on;
+- one its owner can carry alone is never shared out;
+- the carrier carries it home and keeps a share;
+- a hungry man, or one with a full pack, is not taken on;
+- a kill being carried is its killer's to give;
+- a kill being carried is not given away by telling.
+
+`threat_tests::a_wounded_man_does_not_stand_his_ground` fails without the
+fight fix.
+
+**Full suite**: 2,989 passed, 0 failed.
+
+**Dice counts**: 7,126 (seed 4242, 120 turns) and 1,004,850 (seed 0, a
+year).

@@ -25,7 +25,7 @@ fn a_meal_leaves_something_to_come_out() {
     let mut agent = Agent::new(AgentConfig::default());
     assert_eq!(agent.state.waste_carried, 0.0);
 
-    agent.state.eat(100, 20.0);
+    agent.state.eat(100);
 
     assert!(
         agent.state.waste_carried > 0.0,

@@ -195,7 +195,14 @@ impl DriveType {
     /// point. Fear about a need has to press in the same direction as the
     /// need, not in front of it.
     const WHAT_DREAD_IS_WORTH: f32 = 0.4;
-    pub const ENOUGH_MATERIALS: f32 = 30.0;
+
+    /// Materials enough to stop Industry pressing: eight.
+    ///
+    /// Counted in what is carried, and a pack holds about thirteen items of
+    /// material by weight, so the thirty this used to be could never be
+    /// reached and Industry never came down (#173). Eight is a load with room
+    /// left in the pack for food and tools.
+    pub const ENOUGH_MATERIALS: f32 = 8.0;
     pub const ENOUGH_TOOLS: f32 = 3.0;
     const ENOUGH_FINERY: f32 = 2.0;
 
@@ -265,7 +272,8 @@ impl DriveType {
                 // *is* that, weighed rather than counted, and having both was
                 // the same fact twice.
                 let about = yes(ctx.around.recently_hurt, 0.5)
-                    + yes(ctx.around.night, 0.35);
+                    + yes(ctx.around.night, 0.35)
+                    + yes(ctx.around.heard_a_cry, 0.35);
 
                 let cover = yes(ctx.around.under_shelter, 0.5) + yes(ctx.armed, 0.5);
 
@@ -366,8 +374,12 @@ impl DriveType {
                 let room = yes(ctx.around.somewhere_to_build, 0.4);
                 let neighbours = yes(ctx.around.neighbours_building, 0.25);
                 let synergy = ctx.shelter_pressing.clamp(0.0, 1.0) * 0.45;
+                // And having no roof of one's own: nothing else ever asked
+                // for one, so the drive sat under its threshold for a people
+                // who had never put up anything but brush (#371).
+                let roofless = ctx.around.without_a_roof_of_its_own.clamp(0.0, 1.0) * 0.5;
                 let means = if ctx.materials_put_by > 0 { 1.0 } else { 0.35 };
-                (room + neighbours + synergy) * means
+                (room + neighbours + synergy + roofless) * means
             }
 
             // Not in the specification - added when parents were given a
@@ -609,6 +621,16 @@ pub struct Surroundings {
     pub they_could_get_clear: bool,
     /// Anybody else within talking distance
     pub company: bool,
+    /// How much this one wants a roof of their own, nought to one: a house
+    /// for a household that farms here and has none, a tent less so for
+    /// anybody grown without one (#371).
+    #[serde(default)]
+    pub without_a_roof_of_its_own: f32,
+    /// Somebody within earshot cried out under attack this turn.
+    ///
+    /// What hearing is for (#14): a man struck beyond the trees is not seen,
+    /// and everybody in earshot knows something is about all the same.
+    pub heard_a_cry: bool,
 }
 
 /// Everything a drive can consult when working out how much the situation

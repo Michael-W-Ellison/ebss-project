@@ -283,17 +283,17 @@ fn a_starving_man_is_still_held_down_to_his_broken_body() {
     // moving. A body with an empty reserve dies of hunger inside one turn and
     // takes the whole hundred with it, which tells you nothing about the cap.
     //
-    // `is_starving()` is `physiology.is_starving() || energy < 20.0`, and that
-    // second half is the action-energy pool - tiredness, not starvation. So a
-    // well-fed, well-watered, tired man reads as suffering to the old gate and
-    // loses no health to anything. That is the over-reach and the instrument
-    // for measuring it at once.
+    // `is_starving()` was `physiology.is_starving() || energy < 20.0`, and
+    // that second half is the action-energy pool - tiredness, not starvation.
+    // So a well-fed, well-watered, tired man read as suffering to the old
+    // gate and lost no health to anything. The clause is gone (#70): a tired
+    // man is not starving, and the cap holds him down all the same.
     agent.state.physiology.reserve = agent.state.physiology.reserve_capacity;
     agent.state.physiology.hydration = 1.0;
     agent.state.energy = 5.0;
     assert!(
-        agent.state.is_starving(),
-        "the fixture meant him to read as starving on the tiredness clause"
+        !agent.state.is_starving(),
+        "tiredness no longer reads as starving"
     );
     assert!(
         !agent.state.physiology.is_starving(),

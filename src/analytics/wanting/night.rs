@@ -259,6 +259,45 @@ impl Simulation {
     /// supper is eaten, cooked or a fire lit for it, and somebody hungry with
     /// food on them eats before they lie down. An infant is wherever its
     /// people are and is not asked.
+    /// What a body with nothing left in it does: it stops where it is.
+    ///
+    /// The night lets be anybody too cold or hungry with nothing to eat, and
+    /// hunger outranks rest by day, so in a lean winter a cold, hungry man
+    /// never slept. While every meal refilled stamina that did not matter.
+    /// Once it stopped (#70), he worked on at empty for fifteen days, Rest
+    /// and Hunger both at their ceiling, until exhaustion killed him. That
+    /// was four deaths in forty worlds. A spent body cannot dig or walk to the
+    /// next bush, whatever it wants: it rests a turn, which gives a little
+    /// back, and goes on in fits.
+    ///
+    /// Running for it is let through, and so is anything that costs a body
+    /// nothing: eating, sleeping, resting, and pressing on a wound.
+    pub(in crate::analytics) fn what_a_spent_body_does(
+        &self,
+        agent_index: usize,
+        action: Action,
+        running_away: bool,
+    ) -> Action {
+        let agent = &self.population.agents[agent_index];
+        if running_away || agent.state.energy > Self::NOTHING_LEFT {
+            return action;
+        }
+        if matches!(
+            action,
+            Action::Wait
+                | Action::Sleep { .. }
+                | Action::Eat { .. }
+                | Action::PressOnWound { .. }
+                | Action::Bandage { .. }
+        ) {
+            return action;
+        }
+        Action::Wait
+    }
+
+    /// As near empty as a body works at.
+    pub(in crate::analytics) const NOTHING_LEFT: f32 = 1.0;
+
     pub(in crate::analytics) fn what_the_night_asks(
         &mut self,
         agent_index: usize,

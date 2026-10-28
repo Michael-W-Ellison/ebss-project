@@ -883,12 +883,14 @@ impl Simulation {
         // near enough to walk to in the ordinary way has already been tried by
         // the code above, and found wanting.
         //
-        // Somewhere it remembers food that is not on this doorstep. Anything
-        // near enough to walk to in the ordinary way has already been tried by
-        // the code above, and found wanting.
+        // The nearest of those, which is the shortest walk to something that
+        // might answer. This took the *furthest* - `max_by_key` - so a hungry
+        // man set off for the remotest thing he had ever seen, across ground
+        // he remembered nearer food on, and spent the walk he could least
+        // afford on the longest one he knew of.
         //
-        // Which of them is decided by distance, which is unsatisfying and is
-        // staying that way for now. A memory carries how much was standing
+        // Which is decided by distance, which is unsatisfying and is staying
+        // that way for now. A memory carries how much was standing
         // there, and choosing the richest instead - with and without weighing
         // it by how long ago he saw it - produced a rare world in which a
         // settlement refused for want of water 3,092, 851 and 13,004 times
@@ -902,7 +904,7 @@ impl Simulation {
             .filter(|memory| std::mem::discriminant(&memory.memory_type) == worth_walking_to)
             .map(|memory| (memory.position.0, memory.position.1, agent_position.2))
             .filter(|candidate| far_off(candidate) >= Self::FAR_ENOUGH_TO_BE_WORTH_THE_WALK)
-            .max_by_key(far_off);
+            .min_by_key(far_off);
 
         if let Some(target) = remembered {
             return Some(Action::Move { target });

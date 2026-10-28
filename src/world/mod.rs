@@ -258,6 +258,22 @@ pub struct World {
     #[serde(default)]
     pub food_the_vermin_took: u64,
 
+    /// Joints left on a kill when the hunter walked away from it, and
+    /// joints still on one when it went to the crows (#374).
+    #[serde(default)]
+    pub meat_left_on_kills: u64,
+    #[serde(default)]
+    pub meat_the_crows_had: u64,
+
+    /// People taken on to carry a kill home for a share, joints they put in
+    /// the owner's store, and joints they kept as their pay (#374).
+    #[serde(default)]
+    pub carriers_taken_on: u64,
+    #[serde(default)]
+    pub joints_carried_for_a_share: u64,
+    #[serde(default)]
+    pub joints_kept_as_pay: u64,
+
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
     pub food_the_scavengers_took: u64,
@@ -1107,6 +1123,7 @@ impl World {
         if joints == 0 {
             return None;
         }
+        self.meat_left_on_kills = self.meat_left_on_kills.saturating_add(u64::from(joints));
         Some(self.put_a_node_down(ResourceNode::a_carcass(where_it_fell, joints, killed_on)))
     }
 
@@ -1120,6 +1137,7 @@ impl World {
                 .is_some_and(|then| now.saturating_sub(then) >= Self::HOW_LONG_A_CARCASS_LIES)
                 && node.amount > 0
             {
+                self.meat_the_crows_had = self.meat_the_crows_had.saturating_add(u64::from(node.amount));
                 node.amount = 0;
                 any = true;
             }
@@ -1754,6 +1772,11 @@ impl World {
             food_that_rotted_where_it_lay: 0,
             food_that_rotted_in_the_ground: 0,
             food_the_vermin_took: 0,
+            meat_left_on_kills: 0,
+            meat_the_crows_had: 0,
+            carriers_taken_on: 0,
+            joints_carried_for_a_share: 0,
+            joints_kept_as_pay: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
@@ -2211,6 +2234,28 @@ impl World {
             }
         }
 
+        // Flint, weathered out of the chalk: beds of it in the hills, and
+        // nodules washed down into the gravels of the river banks (#373).
+        // Commoner than salt and nowhere near as common as stone - a people
+        // in chalk country walks past it daily and a people on a plain never
+        // sees any.
+        for (terrain, how_many, carrying) in [
+            (TerrainType::Hills, Self::HOW_MANY_FLINT_BEDS_IN_THE_HILLS, (30, 90)),
+            (TerrainType::Riverbank, Self::HOW_MANY_FLINT_GRAVELS, (10, 30)),
+        ] {
+            for _ in 0..how_many {
+                if !self.is_there_any_of_this_terrain(terrain) {
+                    continue;
+                }
+                let pos = self.find_random_terrain_position(terrain, taken);
+                self.resources.push(ResourceNode::new(
+                    ResourceType::Flint,
+                    pos,
+                    rng.gen_range(carrying.0..carrying.1),
+                ));
+            }
+        }
+
         // Generate water sources (rivers, wells, springs)
         //
         // **Most of them where the water is.** A drink is taken at a source,
@@ -2339,12 +2384,11 @@ impl World {
         };
 
         // Use naturalistic spawner
-        let mut spawner = NaturalisticSpawner::new(&self.grid, today);
+        let mut spawner = NaturalisticSpawner::new(&self.grid, today).with_ground_taken(&taken);
         let new_resources = spawner.spawn_all(&nat_config);
 
-        // Add spawned resources. The spawner chooses its own ground and does
-        // not ask about what is already there, so the register hears about
-        // what it put down rather than the other way about.
+        // Add spawned resources. The spawner keeps clear of the ground
+        // already taken (#130), and the register hears about what it put down.
         for resource in &new_resources {
             taken.insert((resource.position.x, resource.position.y));
         }
@@ -2394,6 +2438,11 @@ impl World {
 
     /// And how many seams there are in the hills, for a people with no coast.
     const HOW_MANY_SEAMS_IN_THE_HILLS: u32 = 2;
+
+    /// How many beds of flint the hills carry, and how many river gravels
+    /// hold nodules washed down from them (#373).
+    const HOW_MANY_FLINT_BEDS_IN_THE_HILLS: u32 = 6;
+    const HOW_MANY_FLINT_GRAVELS: u32 = 4;
 
     /// The ground that already has something standing on it.
     ///
@@ -2597,7 +2646,7 @@ impl World {
         use rand::seq::SliceRandom;
         let mut rng = crate::core::dice::roll();
 
-        let mut claim = |pos: Position, taken: &mut std::collections::BTreeSet<(i32, i32)>| {
+        let claim = |pos: Position, taken: &mut std::collections::BTreeSet<(i32, i32)>| {
             taken.insert((pos.x, pos.y));
             pos
         };
@@ -2679,8 +2728,53 @@ impl World {
     }
 
     pub fn add_building(&mut self, building: Building) {
+        let at = (building.position.x, building.position.y, 0);
+        let kind = building.building_type;
+
+        // The settlement's plan grows out of what it has built (#15). The
+        // first building of a kind lays out ground for more of its kind round
+        // it, and the planner, which has always read zones, draws the next
+        // one there and keeps other kinds out of it. Brush that falls down
+        // in a season lays out nothing: it is a night's cover, not a plan.
+        if !kind.falls_apart() {
+            let zoned_for_it = self
+                .zone_manager
+                .get_zones_at_position(at)
+                .iter()
+                .any(|zone| zone.is_appropriate_for_building(kind));
+            let its_kind = [
+                zoning::ZoneType::Residential,
+                zoning::ZoneType::Industrial,
+                zoning::ZoneType::Agricultural,
+                zoning::ZoneType::Commercial,
+            ]
+            .into_iter()
+            .find(|zone| zone.is_appropriate_for_building(kind));
+            if let (false, Some(zone)) = (zoned_for_it, its_kind) {
+                self.zone_manager.add_zone(zone, at, Self::GROUND_LAID_OUT_FOR_A_KIND);
+            }
+        }
+
+        // And a man who puts up a house claims the plot round it, so that
+        // nobody else builds in his yard. A claim on ground somebody else
+        // holds is refused, and the house stands without a plot.
+        if kind.is_residential() {
+            if let crate::world::Belongs::To(whose) = &building.belongs {
+                let _ = self
+                    .territory_manager
+                    .claim_territory(*whose, at, Self::A_HOUSE_PLOT);
+            }
+        }
+
         self.buildings.push(building);
     }
+
+    /// How far round the first building of a kind the ground is laid out for
+    /// more of it: a few houses, or a yard of workshops.
+    pub const GROUND_LAID_OUT_FOR_A_KIND: i32 = 6;
+
+    /// How far round his house a man's plot runs.
+    pub const A_HOUSE_PLOT: i32 = 2;
 
     pub fn get_resource_at(&self, pos: &Position) -> Option<&ResourceNode> {
         self.nodes_on(*pos).next()

@@ -19,8 +19,6 @@ impl Simulation {
         agent: &crate::agents::Agent,
         animal: &crate::environment::Animal,
     ) -> bool {
-        use crate::environment::AnimalBehavior;
-
         if !animal.is_alive() || animal.is_domesticated || animal.is_kept() {
             return false;
         }
@@ -72,7 +70,13 @@ impl Simulation {
             species.behavior,
             AnimalBehavior::Aggressive | AnimalBehavior::Territorial
         );
-        if dangerous && agent.equipment.get_weapon().is_none() {
+        // A hunting weapon, carried: the old question asked the equipment
+        // slot, which nothing fills, so nobody ever went after one (#100).
+        let a_hunting_weapon = agent.equipment.get_weapon().is_some()
+            || agent
+                .what_i_have_to_work_with(crate::agents::skills::SkillType::Hunting)
+                .is_some();
+        if dangerous && !a_hunting_weapon {
             return false;
         }
 
@@ -513,9 +517,17 @@ impl Simulation {
         &self,
         agent: &crate::agents::Agent,
     ) -> Option<Action> {
-        use crate::agents::skills::SkillType;
+        self.what_this_trade_wants_first(agent, crate::agents::skills::SkillType::Hunting)
+    }
 
-        if agent.what_i_have_to_work_with(SkillType::Hunting).is_some() {
+    /// The next step towards the humblest tool of a trade this one has none
+    /// of, or `None` when they have one already - or no step can be taken.
+    pub(in crate::analytics) fn what_this_trade_wants_first(
+        &self,
+        agent: &crate::agents::Agent,
+        trade: crate::agents::skills::SkillType,
+    ) -> Option<Action> {
+        if agent.what_i_have_to_work_with(trade).is_some() {
             return None;
         }
 
@@ -534,7 +546,7 @@ impl Simulation {
         // the next rung reachable later; `would_a_better_tool_pay` is what
         // climbs.
         let mut ladder: Vec<&'static crate::environment::making::Tool> =
-            crate::environment::making::what_helps_with(SkillType::Hunting)
+            crate::environment::making::what_helps_with(trade)
                 .filter(|tool| agent.knows_how_to_make(tool.called))
                 .collect();
         ladder.sort_by(|a, b| {
@@ -650,8 +662,6 @@ impl Simulation {
         agent: &crate::agents::Agent,
         agent_position: (i32, i32, i32),
     ) -> Option<Action> {
-        use crate::agents::practices::Undertaking;
-
         // Fishing is what an agent does when it wants food or wants a store of
         // it. Both, in a settlement beside a river, most of the year.
         let hunger = agent
@@ -675,6 +685,22 @@ impl Simulation {
         if Self::more_food_than_he_will_get_through(agent) {
             return None;
         }
+
+        self.going_fishing(agent, agent_position)
+    }
+
+    /// To the water: his own traps, somebody else's, a cast from where he
+    /// stands, or a walk to the best water about.
+    ///
+    /// What `fishing_action` does once hunger has said to go, and what
+    /// putting food by does when the store is short (`going_out_for_food_to_
+    /// put_by`): the river does not care which of them sent him.
+    pub(in crate::analytics) fn going_fishing(
+        &self,
+        agent: &crate::agents::Agent,
+        agent_position: (i32, i32, i32),
+    ) -> Option<Action> {
+        use crate::agents::practices::Undertaking;
 
         // Fish in his own traps come first, whatever he has come to believe
         // about standing in a river: a catch is a catch.
@@ -945,39 +971,6 @@ impl Simulation {
     /// further off is a snare you will come across when you come across it.
     /// It was a hundred and fifty metres while a walk was a cell a turn.
     pub(in crate::analytics) const AS_FAR_AS_A_LINE_IS_WORTH_WALKING: i32 = 15 * crate::world::pace::HOW_MUCH_FURTHER_IS_WORTH_WALKING as i32;
-
-    /// Trapping: set a line, and go round it.
-    ///
-    /// The way in to the lower tiers of the food web now those are a
-    /// population rather than records - see
-    /// [`crate::environment::SmallLife`]. Three things in order, which is the
-    /// order a trapper does them in: take what is in reach, walk to what is
-    /// waiting, and set another where you are standing.
-    pub(in crate::analytics) fn trapping_action(
-        &self,
-        agent: &crate::agents::Agent,
-        agent_position: (i32, i32, i32),
-    ) -> Option<Action> {
-        self.a_catch_waiting(agent, agent_position)
-            .or_else(|| self.lengthening_the_line(agent, agent_position))
-    }
-
-    /// A catch already in a snare: take it, or go to it.
-    ///
-    /// Split out from setting string, and placed *ahead* of ordinary
-    /// foraging, because a catch in a snare is use-it-or-lose-it in a way a
-    /// berry on a bush is not - something else is walking towards it. Behind
-    /// the berries it was worth almost nothing: a settlement of twelve caught
-    /// 213 in a year and carried home 28, because by the time anybody had a
-    /// reason to walk out there the fox had been.
-    pub(in crate::analytics) fn a_catch_waiting(
-        &self,
-        agent: &crate::agents::Agent,
-        agent_position: (i32, i32, i32),
-    ) -> Option<Action> {
-        self.a_catch_at_my_feet(agent, agent_position)
-            .or_else(|| self.walking_to_a_catch(agent, agent_position))
-    }
 
     /// A catch in a snare the agent is standing on. Free: no walk, no
     /// weighing, take it.

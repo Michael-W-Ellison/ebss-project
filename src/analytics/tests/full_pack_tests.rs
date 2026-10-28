@@ -388,7 +388,7 @@ fn a_starving_man_on_a_pit_of_roots(room: f32) -> crate::analytics::Simulation {
     {
         hunger.value = 1.0;
     }
-    simulation.population.agents[0].state.energy = 5.0;
+    simulation.population.agents[0].state.physiology.four_days_without_food();
 
     simulation
 }

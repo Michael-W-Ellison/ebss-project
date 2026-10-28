@@ -23,6 +23,7 @@ pub mod patterns;
 pub mod physiology;
 pub mod rhythm;
 pub mod provision;
+pub mod hire;
 
 pub use agent::{Agent, AgentConfig, AgentState, Ailment, Errand, Inventory, InventoryItem, Journey, LifeStage};
 pub use senses::{Senses, Vision, Hearing, Speech, Sound, SoundType, Utterance};

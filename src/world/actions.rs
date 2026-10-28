@@ -651,6 +651,7 @@ impl World {
                     ResourceType::Salt => ItemType::Salt,
                     ResourceType::Sand => ItemType::Sand,
                     ResourceType::Coal => ItemType::Coal,
+                    ResourceType::Flint => ItemType::Flint,
 
                     // Processed
                     ResourceType::Flour => ItemType::Flour,

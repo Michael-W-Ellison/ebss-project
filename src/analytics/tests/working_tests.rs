@@ -604,3 +604,58 @@ fn something_in_the_world_now_makes_a_vessel() {
         "the container machinery was written long ago and nothing ever made one"
     );
 }
+
+/// Nothing anybody is born knowing how to work makes a thing of no use to
+/// somebody who knows only what they were born knowing (#199). The filter in
+/// `what_i_would_work_on` is a guard, and today it turns nothing away.
+#[test]
+fn every_working_a_people_is_born_to_makes_something_worth_having() {
+    let simulation = a_person();
+    let agent = &simulation.population.agents[0];
+
+    for working in making::EVERY_WORKING.iter().filter(|working| working.born_known()) {
+        assert!(
+            agent.is_what_this_makes_worth_having(working),
+            "{} {} makes {}, and nothing a newcomer knows has a use for it",
+            working.verb,
+            working.to,
+            working.makes
+        );
+    }
+}
+
+/// And a part is worth making only to somebody who knows what takes it.
+#[test]
+fn a_part_nobody_here_can_use_is_not_worth_making() {
+    let mut simulation = a_person();
+
+    // Flax soaked for the cord it makes. Anybody can use that.
+    let soaking = *making::EVERY_WORKING
+        .iter()
+        .find(|working| working.makes == "rettedflax")
+        .expect("retting is in the table");
+    assert!(simulation.population.agents[0].is_what_this_makes_worth_having(&soaking));
+
+    // A wheel is wanted only by a cart, and nobody arrives knowing carts.
+    let wheels = making::Working { makes: "wheel", ..soaking };
+    assert!(
+        !simulation.population.agents[0].is_what_this_makes_worth_having(&wheels),
+        "a wheel is nothing to a people with no cart to put it on"
+    );
+
+    // Until somebody works out the cart.
+    let takers: Vec<&'static str> = making::EVERY_STEP
+        .iter()
+        .filter(|step| step.needs.iter().any(|(part, _)| *part == "wheel"))
+        .map(|step| step.makes)
+        .collect();
+    assert!(!takers.is_empty());
+    for cart in takers {
+        simulation.population.agents[0].found_out_how_to(cart);
+    }
+    assert!(simulation.population.agents[0].is_what_this_makes_worth_having(&wheels));
+
+    // And a thing no recipe takes is used somewhere the tables do not reach.
+    let elsewhere = making::Working { makes: "something-for-a-wall", ..soaking };
+    assert!(simulation.population.agents[0].is_what_this_makes_worth_having(&elsewhere));
+}

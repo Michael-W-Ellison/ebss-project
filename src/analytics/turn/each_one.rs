@@ -75,7 +75,7 @@ impl Simulation {
             .map(|a| a.id)
             .collect();
         for agent_id in due {
-            self.the_next_decision(agent_id, now, agent_positions);
+            self.the_next_decision_kept_apart(agent_id, now, agent_positions);
         }
 
         // "The minute-to-minute decision making was meant to occur when a
@@ -112,6 +112,38 @@ impl Simulation {
     /// being added to it - so somebody walking to the stream who comes into
     /// sight of a wolf stops where they are, and takes what is left of the
     /// half hour a minute at a time.
+    /// One person's turn, kept apart from everybody else's.
+    ///
+    /// A fault in one person's turn used to end the whole run and lose
+    /// everything since the last save; a probability slip in conception did
+    /// that to one run in twenty-five while it stood (#4). Outside the tests a
+    /// turn that panics is caught, written to the log and counted, and that
+    /// person loses their half hour; everybody else goes on. Under test it is
+    /// left to fail loudly, because a test is where a fault should be seen.
+    fn the_next_decision_kept_apart(
+        &mut self,
+        agent_id: uuid::Uuid,
+        now: u32,
+        agent_positions: &[(uuid::Uuid, (i32, i32, i32))],
+    ) {
+        #[cfg(test)]
+        self.the_next_decision(agent_id, now, agent_positions);
+
+        #[cfg(not(test))]
+        {
+            let went = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                self.the_next_decision(agent_id, now, agent_positions)
+            }));
+            if went.is_err() {
+                self.turns_lost_to_a_fault += 1;
+                log::error!("a turn of {agent_id} at {now} failed and was skipped");
+                if let Some(agent) = self.population.agents.iter_mut().find(|a| a.id == agent_id) {
+                    agent.state.next_decision_at = now + crate::environment::seasons::MINUTES_PER_TURN;
+                }
+            }
+        }
+    }
+
     fn the_next_decision(
         &mut self,
         agent_id: uuid::Uuid,
@@ -202,7 +234,7 @@ impl Simulation {
             .iter()
             .filter(|menace| !(grown && menace.only_takes_the_small))
             .filter(|menace| {
-                (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= Self::CLOSE_ENOUGH_TO_WORRY_ABOUT
+                (menace.at.0 - x).abs().max((menace.at.1 - y).abs()) <= menace.reach
             })
             .map(|menace| agent.what_a_blow_costs_me(menace.damage))
             .fold(0.0_f32, f32::max);
@@ -863,6 +895,9 @@ impl Simulation {
 
         // And at night, sleep (#299).
         let action = self.what_the_night_asks(agent_index, action, running_away);
+
+        // And a body with nothing left in it rests, night or day (#366).
+        let action = self.what_a_spent_body_does(agent_index, action, running_away);
 
         // Drop travel plans toward places the agent cannot reach
         let action = self.retarget_unreachable_move(agent_index, action);

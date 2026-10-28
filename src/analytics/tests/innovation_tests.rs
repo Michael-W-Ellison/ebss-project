@@ -273,3 +273,61 @@ fn a_thing_with_no_likeness_teaches_nothing() {
          thing the family table is drawn narrowly to prevent"
     );
 }
+
+/// Flint lies in the ground (#373), and the whole path runs in a live world:
+/// a knapper who sees a bank of it puts it on his map by name, and the name
+/// on his map is what teaches him to knap it. Before, flint was only ever
+/// made, by smashing a stone core, so no map could carry it and this half of
+/// the innovation path could not fire (#195).
+#[test]
+fn a_flint_bank_seen_is_a_flint_bank_remembered_and_learned_from() {
+    use crate::world::{Position, ResourceNode, ResourceType};
+
+    let mut simulation = one_curious_person();
+    simulation
+        .world
+        .resources
+        .push(ResourceNode::new(ResourceType::Flint, Position::new(27, 25), 40));
+    assert_eq!(simulation.population.agents[0].how_many_i_have("flint"), 0);
+
+    simulation.population.process_exploration_with_world(&mut simulation.world);
+    let named = simulation.population.agents[0]
+        .memory
+        .spatial_memories
+        .iter()
+        .any(|place| place.what_it_is.as_deref() == Some("flint"));
+    assert!(named, "a knapper looked at a flint bank and did not know it for a stone");
+
+    for _ in 0..400 {
+        simulation.somebody_puts_two_and_two_together();
+        if simulation.population.agents[0].knows_how_to(&KNAPPED_TIP_FROM_FLINT) {
+            return;
+        }
+    }
+    panic!("a flint bank on his map four hundred times, and never the thought");
+}
+
+/// And it is in the world to be seen: beds in the hills and nodules in the
+/// river gravels, and a gather for "flint" picks some up (#373).
+#[test]
+fn flint_lies_in_the_ground_and_can_be_picked_up() {
+    use crate::environment::Action;
+    use crate::world::{Position, ResourceNode, ResourceType, WorldConfig};
+
+    let world = World::new(WorldConfig { size: (200, 200), ..WorldConfig::default() });
+    let beds = world
+        .resources
+        .iter()
+        .filter(|node| node.resource_type == ResourceType::Flint)
+        .count();
+    assert!(beds > 0, "no flint anywhere in a world with hills and rivers");
+
+    let mut simulation = one_curious_person();
+    simulation
+        .world
+        .resources
+        .push(ResourceNode::new(ResourceType::Flint, Position::new(25, 25), 40));
+    let picked = simulation.execute_action(&Action::Gather { resource_type: "flint".to_string() }, 0);
+    assert!(picked.success, "{:?}", picked.message);
+    assert!(simulation.population.agents[0].how_many_i_have("flint") > 0);
+}

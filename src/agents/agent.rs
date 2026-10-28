@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use crate::core::{BehaviorTree, BehaviorNode, NodeType, DriveState, DriveType, Memory, GoalManager, Preferences, GoalWorldState};
 use crate::core::planning::{ActionPlan, PlanActionType, Planner, PlanStep, ActionOutcome};
 use crate::environment::{Action, ActionResult};
-use std::collections::BTreeMap;
 
 use super::senses::Senses;
 use super::body::Body;
@@ -1102,6 +1101,11 @@ pub struct AgentState {
     /// the body reads it.
     #[serde(default)]
     pub effort_this_turn: f32,
+    /// Huddled under cover this turn, curled up against the cold, which the
+    /// weather pass reads as warmth (`WHAT_HUDDLING_IS_WORTH`). See
+    /// `Simulation::seeking_shelter`.
+    #[serde(default)]
+    pub huddled: bool,
     /// How much of this half hour is still to spend, in minutes.
     ///
     /// A turn is half an hour, and a walk costs the minutes it takes rather
@@ -1208,8 +1212,9 @@ pub struct AgentState {
 
 impl AgentState {
     pub fn new() -> Self {
-        use rand::Rng;
-        let mut rng = crate::core::dice::roll();
+        // A draw nothing reads any more, kept because removing it would move
+        // every roll after it and with them every recorded run.
+        let _rng = crate::core::dice::roll();
         // Max age varies between 9000-11000 turns
         // Seventy years, and that is the end of it. There is no spread: the
         // specification says "Age 70: Death from old age", and everything
@@ -1233,6 +1238,7 @@ impl AgentState {
             winters_seen: provision::WintersSeen::default(),
             what_the_larder_says: None,
             effort_this_turn: 0.0,
+            huddled: false,
             minutes_left_this_turn: 0.0,
             minutes_walked: 0.0,
             walking_effort: 0.0,
@@ -1358,13 +1364,32 @@ impl AgentState {
         // year, once its food and its water had both been seen to. The cost
         // is not waived so much as moved - it is the carrier who is spending
         // the turn, and who is short a hand for it.
+        //
+        // And what the turn's work took, which is the half of tiredness the
+        // food never paid for. The work was priced in the body's food and
+        // nowhere else, so stamina ran down at a fiftieth a turn whatever
+        // anybody did and was filled again at every meal (#70). Walking counts
+        // as ordinary work for the minutes walked.
+        let work = effort
+            + walked / turn * Self::WHAT_AN_ORDINARY_TURN_OF_WORK_COSTS;
         let energy_loss = if self.years_old() < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL {
             0.0
         } else {
-            Self::WHAT_A_TURN_OF_LIVING_COSTS * energy_multiplier
+            (Self::WHAT_A_TURN_OF_LIVING_COSTS + work * Self::WHAT_A_UNIT_OF_WORK_TIRES)
+                * energy_multiplier
                 / self.physiology.capability().max(0.25)
         };
         self.energy = (self.energy - energy_loss).max(0.0);
+
+        // And a small child, carried and asleep most of the day, gets back
+        // what an illness takes out of it as a sleeper does. It takes no turn
+        // and so never sleeps through `Action::Sleep`; it was topped up by the
+        // milk instead, and when a meal stopped refilling stamina (#70) six
+        // infants in forty worlds died of exhaustion in their first year,
+        // drained by illness with nothing to give it back.
+        if self.years_old() < crate::agents::LifeStage::KEPT_WITH_A_PARENT_UNTIL {
+            self.energy = (self.energy + Agent::A_TURN_OF_SLEEP_RESTORES).min(100.0);
+        }
 
         // When energy is depleted, health starts decreasing too
         if self.energy <= 0.0 {
@@ -1433,6 +1458,19 @@ impl AgentState {
     /// measured year came out as exhaustion once the food and the water had
     /// been seen to - the third clock, found the same way as the other two.
     pub const WHAT_A_TURN_OF_LIVING_COSTS: f32 = 0.05;
+
+    /// What an ordinary turn of work is priced at in the action matrix, the
+    /// same figure `physiology::what_the_work_costs` reckons from.
+    pub const WHAT_AN_ORDINARY_TURN_OF_WORK_COSTS: f32 = 5.0;
+
+    /// How much stamina a unit of work takes.
+    ///
+    /// A waking day is about thirty-two turns. At an ordinary turn's five,
+    /// this takes a quarter off a full pool, and a day of digging, priced at
+    /// four times as much, takes all of it. What settlements actually do runs
+    /// well above five a turn: at a quarter of a point they were empty by
+    /// noon. Sleep gives it back - see `Agent::A_TURN_OF_SLEEP_RESTORES`.
+    pub const WHAT_A_UNIT_OF_WORK_TIRES: f32 = 0.15;
     pub const THIRST: &'static str = "thirst";
     pub const A_BLOW: &'static str = "a blow";
     pub const A_FALL: &'static str = "a fall";
@@ -1576,8 +1614,13 @@ impl AgentState {
     }
 
     /// Eat food and restore energy
-    pub fn eat(&mut self, current_turn: u32, energy_restored: f32) {
-        self.energy = (self.energy + energy_restored).min(100.0);
+    /// A meal: the clocks reset and the body has something to pass.
+    ///
+    /// It does not touch stamina. A meal used to put its food energy straight
+    /// into `energy`, so a meal of five refilled the whole pool and nobody in
+    /// this model was ever tired (#70). Food goes into the body - see
+    /// `agents::physiology` - and stamina comes back with rest and sleep.
+    pub fn eat(&mut self, current_turn: u32) {
         self.took_a_meal(current_turn, crate::world::Soil::WASTE_PER_MEAL);
     }
 
@@ -1649,8 +1692,8 @@ impl AgentState {
             // from a full skin says every agent alive is a couple of thousand
             // turns from dying of tiredness, which had Rest winning four turns
             // in five and a settlement doing nothing but sleep and forage.
-            // Energy is topped up by every meal; it is not a clock that only
-            // runs down.
+            // Stamina comes back with sleep; it is not a clock that only runs
+            // down.
             DriveType::Rest => {
                 const NEARLY_SPENT: f32 = 25.0;
 
@@ -1671,8 +1714,13 @@ impl AgentState {
     }
 
     /// Check if agent is starving (critical survival state)
+    ///
+    /// The body's own reckoning and nothing else. This used to be true as
+    /// well whenever stamina fell under twenty, so somebody worn out by a day's
+    /// digging read as starving to everything that asks, with a full belly
+    /// (#70).
     pub fn is_starving(&self) -> bool {
-        self.physiology.is_starving() || self.energy < 20.0
+        self.physiology.is_starving()
     }
 
     /// How old this body is, in years.
@@ -1916,6 +1964,15 @@ pub struct Agent {
     /// knowing - see `environment::making::Making::obvious`.
     #[serde(default)]
     found_out: std::collections::BTreeSet<String>,
+    /// Every swap this one has tried, by `what_that_swap_is_called`.
+    ///
+    /// Kept apart from `lessons` for the same reason as `times_laid_up`. A
+    /// swap comes out the same every time, so one try settles it for good;
+    /// but a lesson fades in about a season and a head holds forty-eight of
+    /// them, so the same dead swaps were made again every season at the cost
+    /// of their makings, about 690 a world-year (#364).
+    #[serde(default)]
+    swaps_tried: std::collections::BTreeSet<String>,
     /// What this one makes of each field it has seen a crop on.
     ///
     /// Nobody is told the grade of a piece of ground. What a farmer has is
@@ -2029,6 +2086,8 @@ pub struct Agent {
     /// fed anybody. Nothing in this project had ever counted that, so every
     /// preservation change had to be judged on how much was *in* the store
     /// rather than on how much of what was got was ever any use.
+    ///
+    /// Out of the pack and where it grew alike, in items (#113).
     #[serde(default)]
     pub food_i_ate: u32,
     #[serde(default)]
@@ -2119,6 +2178,11 @@ pub struct Agent {
     /// not move again for a while (`Simulation::A_CAMP_STAYS_AT_LEAST`).
     #[serde(default)]
     pub hearth_moved_at: u32,
+
+    /// Work this one has agreed to do for somebody else, for a share of what
+    /// it moves (`hire::Hire`, #374).
+    #[serde(default)]
+    pub working_for: Option<super::hire::Hire>,
 }
 
 impl Agent {
@@ -2159,6 +2223,7 @@ impl Agent {
             exploration_knowledge: super::exploration::ExplorationKnowledge::default(),
             times_laid_up: std::collections::BTreeMap::new(),
             found_out: Self::what_anybody_is_born_knowing(),
+            swaps_tried: std::collections::BTreeSet::new(),
             what_i_make_of_the_fields: std::collections::BTreeMap::new(),
             wonderings: Vec::new(),
             food_i_ate: 0,
@@ -2199,6 +2264,7 @@ impl Agent {
             cached_defense_bonus: 1.0,
             hearth: None,
             hearth_moved_at: 0,
+            working_for: None,
         };
 
         // Initialize default behavior trees for each drive type
@@ -2412,7 +2478,7 @@ impl Agent {
             tools_to_hand: tools,
             broken_tools: broken,
             fine_things: finery,
-            armed: self.equipment.get_weapon().is_some(),
+            armed: self.a_weapon_in_my_hand(),
             exposed: !self.exposure_status.active_exposures.is_empty()
                 || self.body_temperature.is_too_cold(),
             chilly: self.body_temperature.current
@@ -2606,6 +2672,8 @@ impl Agent {
             "wood" => Self::ENOUGH_WOOD_TO_HAND,
             // The cord for the next knife - see `what_my_kit_is_short_of`
             "lashing" => 2,
+            // Next year's field - see `keep_seed_back`
+            Self::SEED => Self::A_HANDFUL_OF_SEED,
             _ => 0,
         }
     }
@@ -2814,7 +2882,7 @@ impl Agent {
         self.inventory
             .get_all_items()
             .iter()
-            .filter(|(name, item)| {
+            .filter(|(_name, item)| {
                 item.quantity > Self::WHAT_IS_NOT_WORTH_A_TRIP && item.is_food()
             })
             // What keeps worst is what most wants burying
@@ -4020,6 +4088,13 @@ impl Agent {
     /// And how many questions anybody keeps open at once.
     const AS_MANY_QUESTIONS_AS_ANYBODY_HOLDS: usize = 4;
 
+    /// What watching a keeper at work with a beast is counted under (#361).
+    pub const A_KEEPER_SEEN_AT_WORK: &'static str = "a keeper seen at work";
+
+    /// How many times somebody watches a keeper at work before they know how
+    /// to raise a beast themselves (#361).
+    pub const KEEPERS_WATCHED_BEFORE_KEEPING: u32 = 5;
+
     /// How long without meat before the body wants it (#358).
     pub const A_WEEK_WITHOUT_MEAT: u32 = 7 * crate::environment::seasons::TICKS_PER_DAY;
 
@@ -4128,8 +4203,14 @@ impl Agent {
             self.inventory.remove_item("salt", 1);
             self.salt_in_the_body = (self.salt_in_the_body + Self::WHAT_A_PINCH_PUTS_BACK).min(1.0);
         }
+        // A want in the diet, booked as one. It went through `take_damage`,
+        // which is a blow: it was booked as "a blow" and opened a wound
+        // (#372).
         if self.salt_in_the_body <= 0.0 {
-            self.take_damage(Self::WHAT_GOING_WITHOUT_SALT_COSTS_A_DAY / a_half_hour);
+            self.state.lose_health(
+                Self::WHAT_GOING_WITHOUT_SALT_COSTS_A_DAY / a_half_hour,
+                AgentState::A_POOR_DIET,
+            );
         }
     }
 
@@ -4156,6 +4237,60 @@ impl Agent {
     pub fn fuel_i_carry(&self) -> u32 {
         let dung = if self.knows_how_to_do("MuckOut") { self.how_many_i_have("dung") } else { 0 };
         self.how_many_i_have("wood") + dung
+    }
+
+    /// Grain set aside to sow, which is not food.
+    ///
+    /// Grain in a pack was eaten, dried, cooked or put down before anybody
+    /// broke ground with it. Of 3,231 grain picked up in six settlement-years,
+    /// none went into a field: 1,264 were eaten, 1,007 dried, 554 put down and
+    /// 140 cooked (#365). Seed under its own name is not food to any of
+    /// those, and sowing takes it first.
+    pub const SEED: &'static str = "seedgrain";
+
+    /// How much seed a farmer keeps back: a few fields' worth.
+    pub const A_HANDFUL_OF_SEED: u32 = 3;
+
+    /// Set grain aside as seed, or give it back to the pot.
+    ///
+    /// Somebody who knows how to break ground keeps a handful of grain back
+    /// from the pot for the next field. Somebody starving eats the seed corn,
+    /// as people always have in the end. Returns whether anything moved.
+    pub fn keep_seed_back(&mut self) -> bool {
+        let seed = self.how_many_i_have(Self::SEED);
+
+        if self.state.is_starving() {
+            if seed == 0 {
+                return false;
+            }
+            self.inventory.remove_item(Self::SEED, seed);
+            self.inventory
+                .add_item(InventoryItem::new_with_weight("grain".to_string(), seed, 1.0));
+            return true;
+        }
+
+        if seed >= Self::A_HANDFUL_OF_SEED || !self.knows_how_to_do("TillSoil") {
+            return false;
+        }
+        let grain = self.how_many_i_have("grain");
+        let setting_aside = grain.min(Self::A_HANDFUL_OF_SEED - seed);
+        if setting_aside == 0 {
+            return false;
+        }
+        let weight = self
+            .inventory
+            .get_item("grain")
+            .map(|item| item.weight_per_unit)
+            .unwrap_or(1.0);
+        self.inventory.remove_item("grain", setting_aside);
+        self.inventory
+            .add_item(InventoryItem::new_with_weight(Self::SEED.to_string(), setting_aside, weight));
+        true
+    }
+
+    /// Note a swap as tried, for good - see `swaps_tried`.
+    pub fn tried_this_swap(&mut self, called: &str) {
+        self.swaps_tried.insert(called.to_string());
     }
 
     pub fn found_out_how_to(&mut self, what: &str) -> bool {
@@ -4428,6 +4563,7 @@ impl Agent {
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
             .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
             .filter(|working| self.how_many_i_have(working.makes) < making::A_FEW_SPARE)
+            .filter(|working| self.is_what_this_makes_worth_having(working))
             .filter(|working| {
                 self.lessons
                     .will_try_this_again(&format!("{}:{}", working.verb, working.to))
@@ -4459,6 +4595,51 @@ impl Agent {
             .map(|working| (working.verb.to_string(), working.to.to_string()))
     }
 
+    /// Whether what this working makes is any use to this agent (#199).
+    ///
+    /// Something he can eat, carry or keep things in, or that serves for
+    /// something - a roof, an edge, a vessel. Failing those, a part: and a
+    /// part is worth making only to somebody who knows a step that takes it.
+    /// A shape in unfired clay is nothing to a people who have never fired
+    /// one, and when shaping was born knowledge before firing was, they spent
+    /// their winters shaping clay. A thing no recipe takes at all is used
+    /// somewhere the making tables do not reach - a fire, a garment, a wall -
+    /// and is left alone.
+    pub fn is_what_this_makes_worth_having(
+        &self,
+        working: &crate::environment::making::Working,
+    ) -> bool {
+        use crate::environment::{making, tags};
+
+        let makes = working.makes;
+        if working.feeds.is_some()
+            || working.holds.is_some()
+            || Self::is_this_part_of_the_kit(makes)
+            || tags::EVERYTHING_THAT_SERVES.iter().any(|serves| serves.called == makes)
+            || tags::EVERYTHING_THAT_KEEPS.iter().any(|keeps| keeps.called == makes)
+        {
+            return true;
+        }
+
+        let steps_take_it: Vec<&making::Making> = making::EVERY_STEP
+            .iter()
+            .filter(|step| step.needs.iter().any(|(part, _)| *part == makes))
+            .collect();
+        let workings_take_it: Vec<&making::Working> = making::EVERY_WORKING
+            .iter()
+            .filter(|next| next.to == makes)
+            .collect();
+
+        if steps_take_it.is_empty() && workings_take_it.is_empty() {
+            return true;
+        }
+
+        steps_take_it.iter().any(|step| self.knows_how_to(step))
+            || workings_take_it
+                .iter()
+                .any(|next| next.born_known() || self.found_out.contains(next.makes))
+    }
+
     /// A carcass in the pack that has to come apart before it is supper.
     ///
     /// "How are agents eating meat? Can they just absorb an entire side of
@@ -4471,8 +4652,6 @@ impl Agent {
     /// this is a step on the way to a meal and answers to Hunger, so it does
     /// not wait on anything. Everybody is born knowing a carcass comes apart.
     pub fn what_flesh_i_should_cut_up(&self) -> Option<(String, String)> {
-        use crate::environment::making;
-        use crate::world::nutrition::Piece;
 
         // Only bother if there is nothing already cut that would do. A man
         // with a joint in his hand does not stop to quarter the rest of the
@@ -4708,9 +4887,12 @@ impl Agent {
 
                     let put_in = stack.item_id.as_str();
 
-                    // Not a thing the step already wants, and not the part
-                    // that is missing
-                    if step.needs.iter().any(|(what, _)| *what == put_in) {
+                    // Not a thing the step already wants, not the part
+                    // that is missing, and not the thing it makes: cord
+                    // twisted out of cord was being offered
+                    if step.needs.iter().any(|(what, _)| *what == put_in)
+                        || step.makes == put_in
+                    {
                         continue;
                     }
 
@@ -4727,10 +4909,32 @@ impl Agent {
                         continue;
                     }
 
+                    // And a part of something: "substitute known
+                    // sub-components". A man short of a flake tries the
+                    // other things that go into tools - a thong, a lump of
+                    // flint, a blade - and not his dinner. Every food and
+                    // every vessel was offered once a person, which was
+                    // most of the eighteen thousand swaps a run that came
+                    // to nothing (#206).
+                    if !making::is_this_a_part_of_anything(put_in) {
+                        continue;
+                    }
+
                     let called =
                         making::what_that_swap_is_called(step.makes, left_out, put_in);
 
-                    if !self.lessons.will_try_this_again(&called) {
+                    // A swap comes out the same every time: the same thing
+                    // in the same place makes the same thing or nothing. So
+                    // once is enough to know, and one tried already is not
+                    // tried again. Left to `will_try_this_again`, which gives
+                    // anything a dozen goes before it listens, each dead swap
+                    // was made a dozen times over at the cost of its makings,
+                    // and swapping was refused six thousand times a year for
+                    // two successes (#69).
+                    //
+                    // Asked of `swaps_tried`, which is never forgotten, and
+                    // not of the lessons, which are (#364).
+                    if self.swaps_tried.contains(&called) {
                         continue;
                     }
 
@@ -4936,6 +5140,34 @@ impl Agent {
             .filter(|item| item.durability_percentage() > 0.0)
             .map(|item| item.quantity)
             .unwrap_or(0)
+    }
+
+    /// Whether this one has a weapon with them: a spear or a club in the
+    /// pack, or anything in the old equipment slot.
+    ///
+    /// Weapons are made and carried in the tool vocabulary and nothing puts
+    /// one in the equipment slot any more, so a question that asked only the
+    /// slot never counted the spear an agent was carrying (#100).
+    pub fn have_i_a_weapon(&self) -> bool {
+        self.equipment.get_weapon().is_some()
+            || self.what_i_have_to_work_with(super::SkillType::Hunting).is_some()
+            || self.what_i_have_to_work_with(super::SkillType::MeleeCombat).is_some()
+    }
+
+    /// Whether a weapon is out in this one's hand, rather than in the pack.
+    ///
+    /// What makes somebody feel armed. A founder carries a handaxe, which is
+    /// a club at a pinch, and counting the pack made every founder armed and
+    /// half as frightened of anything; a man who has taken his spear up is
+    /// the one who is ready for what is coming.
+    pub fn a_weapon_in_my_hand(&self) -> bool {
+        use crate::environment::making;
+        self.equipment.get_weapon().is_some()
+            || self.what_is_in_my_hands().any(|held| {
+                making::what_helps_with(super::SkillType::Hunting)
+                    .chain(making::what_helps_with(super::SkillType::MeleeCombat))
+                    .any(|tool| tool.called == held)
+            })
     }
 
     /// The tool in this agent's pack that helps most with a kind of work.
@@ -6364,6 +6596,14 @@ impl Agent {
                 // Rest drive increases with fatigue level
                 let rest_increase = self.fatigue.level * 0.02;
                 rest_drive.increase(rest_increase);
+
+                // And never below how spent the stamina is, which is the
+                // tiredness a day's work brings and a night's sleep takes
+                // away (#70). Nothing above `STAMINA_TO_SPARE`; at thirty the
+                // drive is at its threshold, so a tired man stops while he
+                // can still run, rather than working on into exhaustion.
+                let spent = (1.0 - self.state.energy / Self::STAMINA_TO_SPARE).clamp(0.0, 1.0);
+                rest_drive.value = rest_drive.value.max(spent);
             }
 
             // Apply fatigue-induced happiness penalty
@@ -6417,17 +6657,9 @@ impl Agent {
             self.state.lose_health(penalty, AgentState::A_POOR_DIET);
         }
 
-        // Couple state energy to nutritional reserves.
-        //
-        // Reserves are the long-term store; `state.energy` is short-term felt
-        // energy that eating and sleeping move directly. Drifting gradually
-        // toward reserves keeps the two systems consistent without erasing the
-        // effect of a meal or a rest on the very next turn, which is what a
-        // straight average between the two used to do.
-        const ENERGY_SYNC_RATE: f32 = 0.02;
-        let reserve_delta = self.nutrition.energy_reserves - self.state.energy;
-        self.state.energy =
-            (self.state.energy + reserve_delta * ENERGY_SYNC_RATE).clamp(0.0, 100.0);
+        // Stamina is not pulled towards the food reserve any more. It drifted
+        // a fiftieth of the way there every turn, which was eating refilling
+        // stamina by a second road (#70).
     }
 
     /// What this one's food is being kept in, and what that is worth.
@@ -6466,11 +6698,13 @@ impl Agent {
             item.goes_off(current_turn, kept_in);
         }
 
-        // Remove completely spoiled food (freshness <= 0)
+        // Remove completely spoiled food (freshness <= 0), and food burnt past
+        // eating, which nobody will ever eat and which was carried for ever
+        // (#16)
         let spoiled_items: Vec<String> = self.inventory.get_all_items().iter()
             .filter(|(_, item)| {
                 item.food_data.as_ref()
-                    .map(|f| f.freshness <= 0.0)
+                    .map(|f| f.freshness <= 0.0 || f.is_ruined())
                     .unwrap_or(false)
             })
             .map(|(id, _)| id.clone())
@@ -6718,7 +6952,11 @@ impl Agent {
         let body_factor = self.body.movement_speed_multiplier();
 
         let armor_bonus = self.equipment.total_armor() / 100.0;
-        let weapon_bonus = if self.equipment.get_weapon().is_some() { 0.3 } else { 0.0 };
+        // No weapon in this. It added 0.3 for anything in the old equipment
+        // slot, which nothing fills, so it never once fired (#100); and the
+        // weapon is counted where it does its work - the point in a throw
+        // (`what_a_throw_takes_off`) and the spear in a fight - so counting
+        // it here as well would count it twice.
 
         let combat_skill = self
             .skills
@@ -6739,7 +6977,7 @@ impl Agent {
         // out of a fight altogether; this is what separates a thirteen-year-old
         // from his father, and his father from his grandfather.
         let base_strength = health_factor * body_factor * self.state.what_i_can_do_for_my_age();
-        let equipment_bonus = armor_bonus * 0.3 + weapon_bonus;
+        let equipment_bonus = armor_bonus * 0.3;
         let built = (base_strength + equipment_bonus + skill_bonus * 0.2) * bravery_modifier;
 
         built * self.what_fighting_has_taught_me()
@@ -9214,10 +9452,6 @@ impl Agent {
                     thirst.increase(-to_thirst);
                 }
             }
-        } else {
-            // Legacy: no food data, use old flat rate
-            let energy_restored = (amount as f32) * 20.0;
-            self.state.energy = (self.state.energy + energy_restored).min(100.0);
         }
 
         // Reset starvation (use current age as approximation of turn)
@@ -9643,6 +9877,23 @@ impl Agent {
         }
     }
 
+    /// What a turn of sleep gives back, at the best sleep there is.
+    ///
+    /// A night is sixteen turns. At an ordinary night's quality that gives
+    /// back what an ordinary day takes out - see
+    /// `AgentState::WHAT_A_UNIT_OF_WORK_TIRES` - and a good night more.
+    pub const A_TURN_OF_SLEEP_RESTORES: f32 = 5.0;
+
+    /// Stamina above which nobody feels tired: three quarters of a pool.
+    ///
+    /// The Rest drive is at its threshold of 0.6 at 0.4 of this, which is
+    /// thirty: well clear of the fourteen it takes to run from something
+    /// (`WHAT_RUNNING_COSTS`). At half a pool the drive crossed at twenty, a
+    /// day's end often found people under fourteen, and blows went from one
+    /// death in forty worlds to nine (#366).
+    pub const STAMINA_TO_SPARE: f32 = 75.0;
+
+
     /// Rest and restore energy, satisfy rest drive
     pub fn rest(&mut self, amount: f32) {
         self.state.energy = (self.state.energy + amount).min(100.0);
@@ -9663,8 +9914,11 @@ impl Agent {
         let recovery_modifier = self.sleep_recovery_modifier();
         let fatigue_decrease = self.fatigue.turn_sleeping_with_modifier(sleep_quality, current_turn, recovery_modifier);
 
-        // Also restore energy based on fatigue recovery
-        let energy_restored = fatigue_decrease * 30.0;
+        // And stamina, which is what sleep is for now that a meal does not
+        // give it back (#70). This was the fatigue recovered times thirty, a
+        // tenth of a point a turn, which never had to be more while every
+        // meal refilled the pool.
+        let energy_restored = Self::A_TURN_OF_SLEEP_RESTORES * sleep_quality * recovery_modifier;
         self.state.energy = (self.state.energy + energy_restored).min(100.0);
 
         // Satisfy rest drive
@@ -11337,191 +11591,6 @@ impl Agent {
         })
     }
 
-    // ===== Trust and Lie Detection System =====
-
-    /// Get lie detection chance based on agent's traits
-    /// Returns a multiplier (1.0 = normal, higher = better detection)
-    pub fn get_lie_detection_bonus(&self) -> f32 {
-        use crate::core::traits::Trait;
-
-        let mut bonus: f32 = 1.0;
-
-        // Suspicious trait: +50% lie detection
-        if self.traits.has(Trait::Suspicious) {
-            bonus += 0.5;
-        }
-
-        // Paranoid trait: +80% lie detection (assumes malice)
-        if self.traits.has(Trait::Paranoid) {
-            bonus += 0.8;
-        }
-
-        // Honest agents are better at spotting dishonesty (they know what truth looks like)
-        if self.traits.has(Trait::Honest) {
-            bonus += 0.3;
-        }
-
-        // Skeptic trait: +40% lie detection
-        if self.traits.has(Trait::Skeptic) {
-            bonus += 0.4;
-        }
-
-        // Trusting trait: -40% lie detection (easily fooled)
-        if self.traits.has(Trait::Trusting) {
-            bonus -= 0.4;
-        }
-
-        bonus.max(0.1) // Minimum 10% detection chance
-    }
-
-    /// Verify a resource location claim against what this agent actually knows
-    /// Returns Some(true) if verified correct, Some(false) if verified wrong, None if unverifiable
-    pub fn verify_resource_claim(
-        &self,
-        claimed_resource: &str,
-        claimed_location: (i32, i32, i32),
-    ) -> Option<bool> {
-        use crate::world::Position;
-
-        let claimed_pos = Position::new(claimed_location.0, claimed_location.1);
-
-        // Check if we've explored this location
-        if !self.exploration_knowledge.is_explored(&claimed_pos) {
-            return None; // Can't verify - haven't been there
-        }
-
-        // Check what we actually know about this location
-        if let Some(actual_resource) = self.exploration_knowledge.known_resources.get(&claimed_pos) {
-            // We know what's at this location
-            let actual_name = format!("{:?}", actual_resource).to_lowercase();
-            let claimed_lower = claimed_resource.to_lowercase();
-
-            // Check if the claimed resource matches what we found
-            if actual_name.contains(&claimed_lower) || claimed_lower.contains(&actual_name) {
-                return Some(true); // Verified correct
-            } else {
-                return Some(false); // Verified wrong - different resource type
-            }
-        }
-
-        // We've been there but didn't find any resource
-        // If they claimed a resource exists there, they're likely wrong
-        Some(false)
-    }
-
-    /// Attempt to detect lies in received information based on personal knowledge
-    /// Returns a list of (info_id, source_id, was_lie) for detected lies
-    pub fn detect_lies_in_knowledge(&self, _current_turn: u32) -> Vec<(uuid::Uuid, uuid::Uuid, bool)> {
-        use super::gossip::InformationType;
-
-        let mut detections = Vec::new();
-        let detection_bonus = self.get_lie_detection_bonus();
-
-        // Check each piece of information we've received
-        for (info_id, info) in &self.knowledge.known_information {
-            // Skip if this is our own information
-            if info.original_source == self.id {
-                continue;
-            }
-
-            // Find the belief for this info to get the source
-            let source = self.knowledge.beliefs
-                .iter()
-                .find(|b| b.info_id == *info_id)
-                .map(|b| b.source);
-
-            if let Some(source_id) = source {
-                // Try to verify different types of information
-                match &info.info_type {
-                    InformationType::ResourceLocation { resource, location } => {
-                        if let Some(is_correct) = self.verify_resource_claim(resource, *location) {
-                            // Apply detection bonus - higher bonus means more likely to catch lies
-                            let base_detection_chance = if is_correct { 0.0 } else { 0.5 };
-                            let effective_chance = base_detection_chance * detection_bonus;
-
-                            // Simple probability check
-                            use rand::Rng;
-                            let roll: f32 = crate::core::dice::roll().gen();
-
-                            if roll < effective_chance || !is_correct {
-                                // We detected this information as incorrect
-                                if !info.ground_truth || !is_correct {
-                                    detections.push((*info_id, source_id, true)); // It was a lie
-                                } else {
-                                    detections.push((*info_id, source_id, false)); // It was true
-                                }
-                            }
-                        }
-                    }
-                    // Could add more verification types here (accusations, observations, etc.)
-                    _ => {}
-                }
-            }
-        }
-
-        detections
-    }
-
-    /// Process lie detection and update trust/relationships accordingly
-    /// Call this periodically (e.g., every 100 turns) to verify information
-    pub fn process_information_verification(&mut self, current_turn: u32) {
-        use super::EmotionSource;
-
-        let detections = self.detect_lies_in_knowledge(current_turn);
-
-        for (info_id, source_id, was_lie) in detections {
-            // Calculate info age for trust update (used by SocialNetwork methods)
-            let _info_age = if let Some(info) = self.knowledge.known_information.get(&info_id) {
-                current_turn.saturating_sub(info.timestamp as u32)
-            } else {
-                1000 // Default to old if not found
-            };
-
-            // Update knowledge base trust
-            self.knowledge.verify_information(&info_id, !was_lie);
-
-            // Update relationship
-            if was_lie {
-                // What it was about, so that a lie which sent this agent
-                // somewhere it needed to go costs more than one which did not
-                let about = self
-                    .knowledge
-                    .known_information
-                    .get(&info_id)
-                    .and_then(|info| match &info.info_type {
-                        super::gossip::InformationType::ResourceLocation { resource, .. } => {
-                            Some(resource.clone())
-                        }
-                        _ => None,
-                    });
-
-                self.found_out_i_was_lied_to(
-                    source_id,
-                    about.as_deref().unwrap_or(""),
-                    current_turn,
-                );
-            } else {
-                // Truth verified - strengthen trust and relationship
-                self.found_out_they_were_right(source_id);
-                let rel = self.relationships.get_or_create_relationship(source_id, current_turn);
-                rel.strengthen(0.05); // Small positive reinforcement
-                rel.settle_what_we_are();
-
-                // Small happiness from receiving accurate information
-                self.emotions.add_happiness(
-                    EmotionSource::Agent(source_id),
-                    0.02
-                );
-            }
-        }
-    }
-
-
-
-
-
-
-
     /// The most places an agent keeps in its head at once.
     ///
     /// Nothing bounded this before. It did not matter while the only way to
@@ -11874,10 +11943,14 @@ impl Agent {
 
     /// What happens when an agent finds out it was lied to.
     ///
-    /// One place, because it is reached from two: walking to a place somebody
-    /// named and finding bare ground, and the periodic sweep of remembered
-    /// claims. The first is where nearly all of it happens - a lie is found
-    /// out standing on the spot, not by review.
+    /// One place, because it is reached from two: the sight pass and the
+    /// arrival at a walk's end, both of which find bare ground where somebody
+    /// named something. A lie is found out standing on the spot, not by
+    /// review, and only by ground the teller could be held to
+    /// (`Hearsay::does_bare_ground_convict_him`): news that was old, or a
+    /// place somebody else stripped, is not a lie. The periodic review that
+    /// counted any wrong claim as one was retired from the turn long ago and
+    /// is gone now (#196).
     pub fn found_out_i_was_lied_to(
         &mut self,
         liar: uuid::Uuid,
@@ -12199,7 +12272,7 @@ impl Agent {
         // something, because the victim always knows.
         let seen = 1.0 + watching as f32 * Self::WHAT_ANOTHER_PAIR_OF_EYES_ADDS;
 
-        let mut cost = bonds.clamp(0.0, 1.0) * seen * Self::WHAT_A_BOND_IS_WORTH_KEEPING;
+        let cost = bonds.clamp(0.0, 1.0) * seen * Self::WHAT_A_BOND_IS_WORTH_KEEPING;
 
         // Temperament does not decide this, but it weighs it: an honest man
         // sees far more at stake in being a thief, and a greedy or callous one
@@ -12528,9 +12601,6 @@ pub struct Errand {
     pub to_make: Option<String>,
     /// Which drive it set out to answer
     pub for_drive: DriveType,
-    /// How hard that drive was pressing when it set out, so that a drive going
-    /// quiet - because somebody handed this one a meal, say - ends the errand
-    pub pressed_this_hard: f32,
     /// How many turns it has been walking
     pub turns_on_it: u32,
     /// And how many turns it has been standing waiting while its owner dealt
@@ -12578,6 +12648,19 @@ impl Errand {
     }
 
     /// How far off it was set out from
+    /// How many turns this errand is worth before it is given up: so many
+    /// times the turns the whole walk takes, and a few at least.
+    ///
+    /// The whole walk, from where it set out. Reckoned from where it had got
+    /// to, the budget shrank with every step while the turns spent on it
+    /// grew, so a man was likeliest to give up just short of the place
+    /// (#179).
+    pub fn how_long_it_is_worth(&self) -> u32 {
+        crate::world::pace::whole_turns_to_walk(self.how_far_it_was(self.set_out_from))
+            .max(Self::AT_LEAST_THIS_MANY_TURNS)
+            * Self::HOW_LONG_A_WALK_IS_WORTH
+    }
+
     pub fn how_far_it_was(&self, from: (i32, i32, i32)) -> u32 {
         (self.going_to.0 - from.0).abs().max((self.going_to.1 - from.1).abs()) as u32
     }

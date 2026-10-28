@@ -202,6 +202,10 @@ pub struct Simulation {
     /// fires looks exactly like a run without it. See
     /// `Simulation::everybody_takes_a_turn`.
     pub minutes_spent_in_danger: u64,
+    /// Turns somebody lost because their turn failed and was caught rather
+    /// than allowed to end the run - see `the_next_decision_kept_apart`.
+    /// Nought in a sound run.
+    pub turns_lost_to_a_fault: u64,
     /// Ground a route search has already found to be shut off from where it
     /// was going. See `wanting::errands::ShutIn` (#293).
     pub(crate) shut_in: std::cell::RefCell<wanting::errands::ShutIn>,
@@ -239,6 +243,9 @@ pub(crate) struct Menace {
     pub(crate) damage: f32,
     /// Too small to take a grown person; see `Simulation::could_it_take`.
     pub(crate) only_takes_the_small: bool,
+    /// How near before it matters: a hunter comes for you, and a beast that
+    /// only keeps its ground does not (`NEAR_ENOUGH_TO_BE_WARY_OF_IT`).
+    pub(crate) reach: i32,
 }
 
 /// Flat tables for the route search, the size of the map, cleared by stamp.
@@ -426,6 +433,7 @@ impl Simulation {
             how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
+            turns_lost_to_a_fault: 0,
             shut_in: Default::default(),
             camp_move_proposed: Default::default(),
             route_scratch: Default::default(),
@@ -588,8 +596,15 @@ impl Simulation {
             })
             .filter(|resource| here.distance_to(&resource.position) <= Self::AS_FAR_AS_CURIOSITY_WALKS)
             .filter_map(|resource| {
+                let each = Self::what_one_of_these_weighs(resource.resource_type);
                 Self::gathered_as(resource.resource_type)
                     .filter(|named| wanted.contains(named))
+                    // And only what there is room to carry home. A full body
+                    // with a full pack sent for berries to ferment ate them on
+                    // the bush, so the pack never held enough to try, and the
+                    // walk came round again: about two thousand seven hundred
+                    // turns a settlement-year in seeds 0 and 1 (#369).
+                    .filter(|_| agent.could_i_take_another_handful(each))
                     .map(|named| (named, here.distance_to(&resource.position)))
             })
             .min_by_key(|(_, apart)| *apart)
@@ -619,6 +634,9 @@ impl Simulation {
 
             ResourceType::Clay => "clay",
             ResourceType::Salt => "salt",
+            // Picked up where it lies, under the name the knapper's pack
+            // already uses for what a smashed core gives (#373)
+            ResourceType::Flint => "flint",
             ResourceType::Sand => "sand",
             ResourceType::Coal => "coal",
             ResourceType::Flax => "flax",
@@ -931,7 +949,8 @@ impl Simulation {
         self.take_what_fits(agent_index, &sinew);
 
         let left = joints_on_it - took;
-        if self.world.a_carcass_lies_here(where_it_fell, left, now).is_some() {
+        if let Some(carcass) = self.world.a_carcass_lies_here(where_it_fell, left, now) {
+            self.world.resources[carcass].killed_by = Some(self.population.agents[agent_index].id);
             let knows = &mut self.population.agents[agent_index].exploration_knowledge;
             knows.discover_resource(where_it_fell, crate::world::ResourceType::Meat, now);
             knows.saw_it_again(where_it_fell, left, now);
@@ -1191,7 +1210,48 @@ impl Simulation {
             let at = self.world.resources[number].position;
             self.world.can_walk_between(here, (at.x, at.y))
         });
+
+        // **Nor somebody else's kill** (#374), which is theirs to give away
+        // or pay to have carried and not anybody's who happens past it.
+        known.retain(|&number| self.may_i_cut_from(agent, &self.world.resources[number]));
         known
+    }
+
+    /// Whether this one may take meat off this carcass.
+    ///
+    /// Anybody may, as they always could, until its killer takes people on to
+    /// carry it home for a share. From then until the carrying is over it is
+    /// his: the killer and his kin, whoever he told of it (which is giving it
+    /// away), whoever is carrying it, and anybody starving, since a band feeds
+    /// the man with nothing.
+    ///
+    /// A claim from the moment of the kill was tried, for the five days a
+    /// carcass lies and for the first day. Over forty settlements in two
+    /// years the crows had 324 joints of 1,060 and 334 of 995, against 247 of
+    /// 1,020 with no claim - more, but within what one world differs from
+    /// another (t 0.70 and 0.85, paired by world). A claim made by having it
+    /// carried is kept because it takes nothing from a passer-by but what is
+    /// being carried home: 290 of 978, t 0.50 (#374).
+    pub(in crate::analytics) fn may_i_cut_from(
+        &self,
+        agent: &crate::agents::Agent,
+        node: &crate::world::ResourceNode,
+    ) -> bool {
+        let Some(whose) = node.killed_by else {
+            return true;
+        };
+        let at = (node.position.x, node.position.y);
+        let being_carried_for_him = self.population.agents.iter().any(|other| {
+            other
+                .working_for
+                .as_ref()
+                .is_some_and(|hire| hire.by == whose && hire.from_and_to().0 == at)
+        });
+        !being_carried_for_him
+            || agent.may_i_use(&crate::world::Belongs::To(whose)).is_mine_to_use()
+            || agent.exploration_knowledge.who_told_me.contains_key(&node.position)
+            || agent.working_for.as_ref().is_some_and(|hire| hire.from_and_to().0 == at)
+            || agent.state.is_starving()
     }
 
     /// Bring every place this agent remembers up to today, before it makes up
@@ -1902,19 +1962,6 @@ impl Simulation {
         true
     }
 
-    /// Process information verification and lie detection
-    /// Agents periodically verify information they've received against their knowledge
-    fn process_information_verification(&mut self) {
-        for agent in &mut self.population.agents {
-            if !agent.state.is_alive {
-                continue;
-            }
-
-            // Call the agent's lie detection processing
-            agent.process_information_verification(self.current_turn);
-        }
-    }
-
     /// Log simulation statistics
     fn log_statistics(&self) {
         info!("--- Turn {} Statistics ---", self.current_turn);
@@ -2016,6 +2063,7 @@ impl Simulation {
             how_often_curiosity_reached_for_something_new: std::cell::Cell::new(0),
             what_a_threat_came_to: std::collections::BTreeMap::new(),
             minutes_spent_in_danger: 0,
+            turns_lost_to_a_fault: 0,
             shut_in: Default::default(),
             camp_move_proposed: Default::default(),
             route_scratch: Default::default(),
@@ -2107,12 +2155,10 @@ impl Simulation {
                 })
                 .collect();
 
-            // Sort by modification time (newest first)
-            checkpoint_files.sort_by_cached_key(|path| {
-                fs::metadata(path)
-                    .and_then(|m| m.modified())
-                    .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-            });
+            // Newest first, by the turn in the name. The modification time
+            // ties for two saves made within the clock's resolution, and a
+            // tie kept whichever the directory listed first.
+            checkpoint_files.sort();
             checkpoint_files.reverse();
 
             // Remove old checkpoints beyond max_checkpoints
@@ -2147,12 +2193,9 @@ impl Simulation {
             ));
         }
 
-        // Sort by modification time (newest first)
-        checkpoint_files.sort_by_cached_key(|path| {
-            fs::metadata(path)
-                .and_then(|m| m.modified())
-                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-        });
+        // Newest first, by the zero-padded turn in the name - see
+        // `cleanup_old_checkpoints`
+        checkpoint_files.sort();
         checkpoint_files.reverse();
 
         Ok(checkpoint_files[0].clone())

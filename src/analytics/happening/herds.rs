@@ -9,6 +9,10 @@ impl Simulation {
     /// further, and comes to hand from here.
     pub(in crate::analytics) const A_KEPT_BEAST_GRAZES_WITHIN: i32 = 3;
 
+    /// What a day at its keeper's side does to a young one's tameness:
+    /// tame in about a month untended.
+    pub(in crate::analytics) const WHAT_A_DAY_BESIDE_ITS_KEEPER_TAMES: f32 = 0.03;
+
     /// How long a young one being raised waits for its keeper before it
     /// begins to go back to the wild: two days.
     pub(in crate::analytics) const A_YOUNG_ONE_WAITS: u32 = 2 * crate::environment::seasons::TICKS_PER_DAY;
@@ -18,9 +22,10 @@ impl Simulation {
     /// gone four days after that.
     pub(in crate::analytics) const WHAT_A_DAY_UNFED_TAKES_OFF: f32 = 0.05;
 
-    /// How often a tame beast left out of a fold strays in the night: about
-    /// one night in thirty.
-    pub(in crate::analytics) const A_NIGHT_OUT_STRAYS: f64 = 1.0 / 30.0;
+    /// How often a tame beast left out of a fold, and apart from its
+    /// sleeping keeper, strays in the night: about one night in a hundred
+    /// and twenty.
+    pub(in crate::analytics) const A_NIGHT_OUT_STRAYS: f64 = 1.0 / 120.0;
 
     /// How much dung lies in a fold before its keeper sees what it is good
     /// for (`do:MuckOut`).
@@ -51,6 +56,8 @@ impl Simulation {
             .collect();
         let edge = (self.world.grid.width as i32 - 1, self.world.grid.height as i32 - 1);
         let now = self.current_turn;
+        let a_turn_beside_its_keeper = Self::WHAT_A_DAY_BESIDE_ITS_KEEPER_TAMES
+            / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
         let a_turn_unfed = Self::WHAT_A_DAY_UNFED_TAKES_OFF
             / crate::environment::seasons::PLANNING_PERIODS_PER_DAY as f32;
         let a_night_out = Self::A_NIGHT_OUT_STRAYS
@@ -96,20 +103,35 @@ impl Simulation {
                 continue;
             };
             let Some(&(at, asleep)) = keepers.get(&keeper) else {
-                Self::turned_loose(animal);
+                Self::turned_loose(animal, "its keeper is dead");
                 continue;
             };
 
-            // Two days' grace since it was last seen to before a young one
-            // begins to drift back to the wild: it has taken to its keeper,
-            // and keepers who were out hunting saw to it one evening in
-            // three. Without it, all sixteen taken in forty worlds ran off.
-            let seen_to = animal.fed_at.unwrap_or(0).max(animal.taken_at);
-            if !animal.is_domesticated && now.saturating_sub(seen_to) > Self::A_YOUNG_ONE_WAITS {
-                animal.tame_level -= a_turn_unfed;
-                if animal.tame_level <= 0.0 {
-                    Self::turned_loose(animal);
-                    continue;
+            // A young one being raised takes to whoever it stays beside, a
+            // little each day, whether or not they have anything to give it;
+            // tending it speeds that (`taming`). Apart from its keeper it
+            // waits two days and then begins to drift back to the wild.
+            //
+            // **Feeding alone was not enough.** Its keepers were mostly
+            // hunters, at home of an evening one time in three: tended or
+            // not, fifteen of sixteen young taken in forty worlds ran off.
+            if !animal.is_domesticated {
+                // Beside its keeper, or a walk off with its keeper awake to
+                // bring it in this turn
+                let apart = (animal.position.0 - at.0).abs().max((animal.position.1 - at.1).abs());
+                let by_its_keeper = apart <= near || (!asleep && apart <= a_walk + near);
+                let seen_to = animal.fed_at.unwrap_or(0).max(animal.taken_at);
+                if by_its_keeper {
+                    animal.tame(a_turn_beside_its_keeper);
+                    if animal.is_domesticated {
+                        seen.push((keeper, "do:Tame"));
+                    }
+                } else if now.saturating_sub(seen_to) > Self::A_YOUNG_ONE_WAITS {
+                    animal.tame_level -= a_turn_unfed;
+                    if animal.tame_level <= 0.0 {
+                        Self::turned_loose(animal, "drifted from its keeper");
+                        continue;
+                    }
                 }
             } else {
                 let gives = what_it_gives.get(&animal.species_id);
@@ -129,9 +151,14 @@ impl Simulation {
                     animal.in_the_fold = true;
                     fold.dung += crate::world::Fold::WHAT_A_BEAST_LEAVES_IN_A_HALF_HOUR;
                 } else if animal.is_domesticated
+                    && (animal.position.0 - at.0).abs().max((animal.position.1 - at.1).abs()) > near
                     && rng.get_or_insert_with(crate::core::dice::roll).gen_bool(a_night_out)
                 {
-                    Self::turned_loose(animal);
+                    // Only one left apart from its sleeping keeper strays: one
+                    // lying by the fire with its people does not (#360). At
+                    // one night in thirty for every beast out of a fold,
+                    // forty-four tame beasts of fifty-odd were lost.
+                    Self::turned_loose(animal, "strayed in the night");
                 }
                 continue;
             }
@@ -162,7 +189,7 @@ impl Simulation {
 
         for (keeper, what) in seen {
             if let Some(agent) = self.population.agents.iter_mut().find(|agent| agent.id == keeper) {
-                if agent.found_out_how_to(what) && what != "do:MuckOut" {
+                if agent.found_out_how_to(what) && matches!(what, "milk" | "wool") {
                     agent.found_out_how_to("do:CollectAnimalProduct");
                 }
             }
@@ -170,7 +197,7 @@ impl Simulation {
     }
 
     /// A kept beast nobody keeps any more goes back to the wild.
-    fn turned_loose(animal: &mut crate::environment::fauna::Animal) {
+    fn turned_loose(animal: &mut crate::environment::fauna::Animal, _why: &str) {
         animal.owner_id = None;
         animal.is_domesticated = false;
         animal.tame_level = 0.0;

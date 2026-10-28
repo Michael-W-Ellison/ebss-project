@@ -203,7 +203,7 @@ impl Marketplace {
             ItemType::Milk | ItemType::Fish | ItemType::Honey => 4,
 
             // Minerals
-            ItemType::Clay | ItemType::Sand | ItemType::Coal => 3,
+            ItemType::Clay | ItemType::Sand | ItemType::Coal | ItemType::Flint => 3,
             // Dear, because it comes from one or two places in a whole
             // country and it is the difference between eating in February
             // and not
@@ -403,7 +403,7 @@ impl ItemType {
             ItemType::Fish, ItemType::Honey,
 
             // Minerals
-            ItemType::Clay, ItemType::Sand, ItemType::Coal,
+            ItemType::Clay, ItemType::Sand, ItemType::Coal, ItemType::Flint,
 
             // Processed materials
             ItemType::Flour, ItemType::Leather, ItemType::Cloth, ItemType::Linen,

@@ -72,15 +72,64 @@ fn one_bush_and_a_full_pit(bush_at: (i32, i32)) -> crate::analytics::Simulation 
     {
         hunger.value = 1.0;
     }
-    // `is_starving` is the body's own reckoning, and energy is the half of
-    // it a fixture can set without waiting a fortnight.
-    simulation.population.agents[0].state.energy = 5.0;
+    // `is_starving` is the body's own reckoning, so the body is starved.
+    simulation.population.agents[0].state.physiology.four_days_without_food();
 
     simulation
 }
 
 /// Near enough that nobody would walk past it, far enough to be a walk.
 const PACES_TO_THE_PIT: i32 = 5;
+
+/// The same larder, with this growing where he stands instead of a bush.
+fn a_patch_underfoot_and_a_full_pit(what: ResourceType) -> crate::analytics::Simulation {
+    let mut simulation = one_bush_and_a_full_pit((0, 0));
+    simulation.world.resources[0].resource_type = what;
+    // In its season, which is the best a patch underfoot ever is
+    simulation.world.climate.calendar.day_of_year = (0..365)
+        .find(|day| what.is_it_bearing(*day))
+        .expect("everything bears some time");
+    simulation
+}
+
+/// What a starving man does about it, by the ways and not by the food arm.
+fn the_way_he_answers(simulation: &crate::analytics::Simulation) -> (String, Action) {
+    let agent = simulation.population.agents[0].clone();
+    let done = simulation
+        .the_way_to_answer(DriveType::Hunger, &agent, agent.state.position)
+        .expect("a starving man with a pit five paces off has a way to answer");
+    (done.by.called().to_string(), done.doing)
+}
+
+/// A bite of leaf is not supper, and it does not come before the larder
+/// because it is underfoot (#301).
+#[test]
+fn a_starving_man_walks_to_the_larder_past_a_bite_of_leaf() {
+    let simulation = a_patch_underfoot_and_a_full_pit(ResourceType::Greens);
+    let agent = simulation.population.agents[0].clone();
+    let here = agent.state.position;
+
+    let bite = simulation.what_a_bite_off_the_ground_comes_to(&agent, here);
+    assert!(bite < 0.75, "an armful of leaf is not a supper: {bite:.2} of one");
+
+    let (by, doing) = the_way_he_answers(&simulation);
+    assert_eq!(by, "eat-stored", "he ate leaf beside ten days of food: {doing:?}");
+}
+
+/// And a bush in fruit underfoot is a supper, and still beats the walk.
+#[test]
+fn a_bush_in_fruit_underfoot_still_beats_the_larder_by_the_ways() {
+    let simulation = a_patch_underfoot_and_a_full_pit(ResourceType::Food);
+    let agent = simulation.population.agents[0].clone();
+    let here = agent.state.position;
+
+    let bite = simulation.what_a_bite_off_the_ground_comes_to(&agent, here);
+    let (by, doing) = the_way_he_answers(&simulation);
+    assert!(
+        matches!(doing, Action::Eat { .. }),
+        "he walked to the larder off a bush worth {bite:.2} of a supper, by {by}: {doing:?}"
+    );
+}
 
 /// The bush is across the valley and the pit is at hand: he opens the pit.
 #[test]

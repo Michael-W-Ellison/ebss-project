@@ -131,18 +131,18 @@ fn a_young_one_fed_every_day_stays() {
     }
     assert!(simulation.population.agents[0].what_i_found_out().contains("do:Tame"));
 
-    // And one nobody feeds runs off
-    let other = a_beast(&mut simulation, "goat", (31, 31), false);
-    {
-        let animal = simulation.world.animals.get_mut(&other).unwrap();
-        animal.owner_id = Some(keeper);
-        animal.tame_level = Simulation::HOW_TAME_A_YOUNG_ONE_TAKEN_IS;
-    }
-    let half_hours = 5 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
-    for _ in 0..half_hours {
+    // And it stays, folded at night with its keeper asleep (a young one
+    // apart from its keeper is `a_young_one_takes_to_its_keeper`)
+    simulation.population.agents[0].fatigue.is_sleeping = true;
+    simulation.world.folds.push(crate::world::Fold {
+        at: Position::new(30, 30),
+        put_up: simulation.current_turn,
+        dung: 0.0,
+    });
+    for _ in 0..(7 * crate::environment::seasons::PLANNING_PERIODS_PER_DAY) {
+        simulation.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
         simulation.the_kept_stay_by_their_keepers();
     }
-    assert_eq!(simulation.world.animals.get(&other).unwrap().owner_id, None);
     assert_eq!(simulation.world.animals.get(&lamb).unwrap().owner_id, Some(keeper), "the tame one stays");
 }
 
@@ -333,27 +333,113 @@ fn a_young_one_tended_without_fodder_stays() {
     }
 }
 
-/// A young one taken in waits two days for its keeper before it begins to
-/// drift back to the wild.
+/// A young one taken in grows tamer at its keeper's side, untended, and is
+/// tame within about a month; apart from its keeper it waits two days and
+/// then drifts back to the wild.
 #[test]
-fn a_young_one_waits_two_days_for_its_keeper() {
+fn a_young_one_takes_to_its_keeper() {
     let mut simulation = a_keeper();
     let keeper = simulation.population.agents[0].id;
     let species = simulation.world.animals.get_species("sheep").unwrap().clone();
     let lamb = a_beast(&mut simulation, "sheep", (35, 30), false);
     assert!(simulation.a_young_one_left_behind(0, &species, (35, 30)));
-    let start = simulation.world.animals.get(&lamb).unwrap().tame_level;
     let half_hours = crate::environment::seasons::PLANNING_PERIODS_PER_DAY;
+    let mut days = 0;
+    while !simulation.world.animals.get(&lamb).unwrap().is_domesticated {
+        days += 1;
+        assert!(days <= 30, "a month beside its keeper");
+        for _ in 0..half_hours {
+            simulation.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
+            simulation.the_kept_stay_by_their_keepers();
+        }
+    }
+    assert!(days >= 20, "and not at once: {days} days");
+    assert!(simulation.population.agents[0].what_i_found_out().contains("do:Tame"));
+
+    // Apart: two days waiting, then drifting
+    let kid = a_beast(&mut simulation, "goat", (90, 90), false);
+    {
+        let animal = simulation.world.animals.get_mut(&kid).unwrap();
+        animal.owner_id = Some(keeper);
+        animal.taken_at = simulation.current_turn;
+        animal.tame_level = Simulation::HOW_TAME_A_YOUNG_ONE_TAKEN_IS;
+    }
+    simulation.population.agents[0].fatigue.is_sleeping = true;
     for _ in 0..(2 * half_hours) {
         simulation.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
         simulation.the_kept_stay_by_their_keepers();
     }
-    let lamb_now = simulation.world.animals.get(&lamb).unwrap();
-    assert_eq!(lamb_now.owner_id, Some(keeper));
-    assert_eq!(lamb_now.tame_level, start, "two days and it has not begun to drift");
+    assert_eq!(simulation.world.animals.get(&kid).unwrap().tame_level, Simulation::HOW_TAME_A_YOUNG_ONE_TAKEN_IS);
     for _ in 0..(5 * half_hours) {
         simulation.current_turn += crate::environment::seasons::TICKS_BETWEEN_PLANS;
         simulation.the_kept_stay_by_their_keepers();
     }
-    assert_eq!(simulation.world.animals.get(&lamb).unwrap().owner_id, None, "a week untended and it is gone");
+    assert_eq!(simulation.world.animals.get(&kid).unwrap().owner_id, None, "a week apart and it is gone");
+}
+
+/// Somebody who has raised one goes after more: a young one of a kind that
+/// can be kept, in sight, closed on and caught, the kinds already kept first;
+/// and no more once there is a herd.
+#[test]
+fn a_keeper_catches_young_ones_for_a_herd() {
+    let mut simulation = a_keeper();
+    let here = (30, 30, 0);
+    let ask = |simulation: &Simulation| simulation.a_young_one_to_catch(&simulation.population.agents[0], here);
+    let kid = a_beast(&mut simulation, "goat", (45, 30), false);
+    assert_eq!(ask(&simulation), None, "nobody here has raised one");
+
+    simulation.population.agents[0].found_out_how_to("do:Tame");
+    assert!(matches!(ask(&simulation), Some(Action::Move { target }) if (target.0, target.1) == (45, 30)));
+
+    // A kind already kept comes first
+    a_kept_beast(&mut simulation, "sheep", true);
+    let lamb = a_beast(&mut simulation, "sheep", (50, 30), false);
+    assert!(matches!(ask(&simulation), Some(Action::Move { target }) if (target.0, target.1) == (50, 30)));
+
+    // To hand, it is caught
+    simulation.world.animals.get_mut(&lamb).unwrap().position = (31, 31);
+    let catch = ask(&simulation);
+    assert!(matches!(catch, Some(Action::Tame { animal_id, .. }) if animal_id == lamb), "got {catch:?}");
+    assert!(simulation.execute_action(&catch.unwrap(), 0).success);
+    assert_eq!(simulation.world.animals.get(&lamb).unwrap().owner_id, Some(simulation.population.agents[0].id));
+
+    // A grown one is not caught, and a herd wants no more
+    simulation.world.animals.get_mut(&kid).unwrap().age = 1_000_000;
+    assert_eq!(ask(&simulation), None);
+    a_beast(&mut simulation, "goat", (40, 30), false);
+    for _ in 0..6 {
+        a_kept_beast(&mut simulation, "goat", true);
+    }
+    assert_eq!(ask(&simulation), None, "eight is a herd");
+}
+
+/// Somebody who watches a keeper at work with a beast often enough knows how
+/// to raise one; seeing it once or twice is not enough.
+#[test]
+fn watching_a_keeper_teaches_keeping() {
+    use crate::agents::observation_processing::{process_observations, BroadcastAction};
+    use crate::agents::ActionType;
+
+    let mut population = Population::new();
+    population.spawn_agent(AgentConfig::default());
+    population.spawn_agent(AgentConfig::default());
+    let keeper = population.agents[0].id;
+    for agent in population.agents.iter_mut() {
+        agent.state.position = (30, 30, 0);
+    }
+    population.agents[1].senses.vision.visible_agents.insert(keeper);
+    let tending = BroadcastAction::new(
+        keeper,
+        (30, 31, 0),
+        ActionType::Social,
+        true,
+        format!("{:?}", Action::Tame { animal_id: uuid::Uuid::nil(), food_type: None }),
+        0,
+    );
+    for seen in 1..=crate::agents::Agent::KEEPERS_WATCHED_BEFORE_KEEPING {
+        assert!(!population.agents[1].knows_how_to_do("Tame"), "after {} sightings", seen - 1);
+        process_observations(&mut population.agents, &tending);
+    }
+    assert!(population.agents[1].knows_how_to_do("Tame"));
+    assert!(!population.agents[0].knows_how_to_do("Tame"), "the keeper does not learn from himself");
 }

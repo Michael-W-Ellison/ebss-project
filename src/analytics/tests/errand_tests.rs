@@ -157,7 +157,6 @@ fn an_errand_left_too_long_is_let_go() {
         set_out_from: (0, 0, 0),
         to_make: None,
         for_drive: crate::core::DriveType::Preparedness,
-        pressed_this_hard: 1.0,
         turns_on_it: 3,
         set_aside: Errand::HOW_LONG_AN_ERRAND_KEEPS,
     };
@@ -178,7 +177,6 @@ fn even_the_shortest_errand_gets_a_few_turns() {
         set_out_from: (0, 0, 0),
         to_make: None,
         for_drive: crate::core::DriveType::Thirst,
-        pressed_this_hard: 1.0,
         turns_on_it: 0,
         set_aside: 0,
     };
@@ -209,7 +207,6 @@ fn a_walk_nearly_finished_is_harder_to_abandon_than_one_just_begun() {
         set_out_from: (0, 0, 0),
         to_make: None,
         for_drive: crate::core::DriveType::Hunger,
-        pressed_this_hard: 1.0,
         turns_on_it: 1,
         set_aside: 0,
     };
@@ -219,7 +216,6 @@ fn a_walk_nearly_finished_is_harder_to_abandon_than_one_just_begun() {
         set_out_from: (0, 0, 0),
         to_make: None,
         for_drive: crate::core::DriveType::Hunger,
-        pressed_this_hard: 1.0,
         turns_on_it: 19,
         set_aside: 0,
     };
@@ -238,5 +234,27 @@ fn a_walk_nearly_finished_is_harder_to_abandon_than_one_just_begun() {
     assert!(
         at_the_end < 10.0,
         "sunk cost is a thumb on the scale, not a lock: {at_the_end:.2}"
+    );
+}
+
+/// How long a walk is worth is a fact about the whole walk, so it does not
+/// run short as the place comes near (#179).
+#[test]
+fn a_walk_is_worth_as_long_at_its_end_as_at_its_start() {
+    let set_out = Errand {
+        // Fifteen kilometres: a day's walking, well above the floor
+        going_to: (1_500, 0, 0),
+        set_out_from: (0, 0, 0),
+        to_make: None,
+        for_drive: crate::core::DriveType::Hunger,
+        turns_on_it: 0,
+        set_aside: 0,
+    };
+    let nearly_there = Errand { turns_on_it: 12, ..set_out.clone() };
+    assert_eq!(set_out.how_long_it_is_worth(), nearly_there.how_long_it_is_worth());
+    assert!(
+        set_out.how_long_it_is_worth()
+            > Errand { going_to: (20, 0, 0), ..set_out.clone() }.how_long_it_is_worth(),
+        "a long walk is worth more turns than a short one"
     );
 }

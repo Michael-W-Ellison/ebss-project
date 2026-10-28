@@ -313,6 +313,29 @@ fn a_man_who_can_win_stands_his_ground() {
     );
 }
 
+/// The same man at a sixth of his health backs away from the same wolf: a
+/// beast's worth in a fight is scaled by its wounds, and so is his (#374).
+#[test]
+fn a_wounded_man_does_not_stand_his_ground() {
+    let mut world = an_empty_country();
+    world
+        .spawn_animal("wolf".to_string(), (31, 30))
+        .expect("a wolf should spawn");
+    let mut simulation = one_person(world);
+    angry_at(&mut simulation, "wolf");
+    simulation.population.agents[0].state.health = 17.0;
+
+    let here = simulation.population.agents[0].state.position;
+    let answer = simulation
+        .how_this_one_answers_a_threat(&simulation.population.agents[0], here)
+        .expect("a wolf one pace off wants an answer");
+
+    assert!(
+        matches!(answer, Action::FleeFrom { .. }),
+        "a man at seventeen should back off, not {answer:?}"
+    );
+}
+
 /// Cannot overcome it: run.
 #[test]
 fn a_man_who_cannot_win_runs() {

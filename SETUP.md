@@ -27,7 +27,7 @@ cd ebss-project
 
 If cloning from GitHub:
 ```bash
-git clone https://github.com/yourusername/ebss-project.git
+git clone https://github.com/Michael-W-Ellison/ebss-project.git
 cd ebss-project
 ```
 
