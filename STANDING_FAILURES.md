@@ -28,12 +28,10 @@ cells south-west a turn (#225), and three people in twelve standing in the sea
 
 ## Open
 
-**Last full run** (ISSUES_FOUND #373, at flint in the ground):
-`cargo test --lib` in one piece, 2,982 tests: 2,973 passed, 3 failed, 6
-ignored. The three were the two dice counts and
-`curiosity_reaches_for_the_verb_it_has_tried_least`, recorded and fixed
-since; the afforded and repeatable groups were green after.
-- The dice counts are 7,150 (seed 4242, 120 turns) and 1,014,771 (seed 0, a
+**Last full run** (ISSUES_FOUND #374, at carrying a kill for a share):
+`cargo test --lib` in one piece, 2,995 tests: 2,989 passed, 0 failed, 6
+ignored.
+- The dice counts are 7,126 (seed 4242, 120 turns) and 1,004,850 (seed 0, a
   year).
 - #363 turned nineteen tests red that leaned on what it fixed. Most made a man
   starving by setting his stamina to five, which read as starving only

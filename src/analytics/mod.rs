@@ -1226,13 +1226,12 @@ impl Simulation {
     /// the man with nothing.
     ///
     /// A claim from the moment of the kill was tried, for the five days a
-    /// carcass lies and for the first day, and both fed the crows. Measured
-    /// over forty settlements in two years, a quarter of the meat left on
-    /// kills went off with no claim (247 joints in 1,020) and a third with
-    /// one (324 in 1,060; 334 in 995 for the first day only): the leftovers
-    /// of a kill had been feeding whoever came past, in its first day most of
-    /// all. A claim made by having it carried costs the passer-by only what
-    /// is being carried home (#374).
+    /// carcass lies and for the first day. Over forty settlements in two
+    /// years the crows had 324 joints of 1,060 and 334 of 995, against 247 of
+    /// 1,020 with no claim - more, but within what one world differs from
+    /// another (t 0.70 and 0.85, paired by world). A claim made by having it
+    /// carried is kept because it takes nothing from a passer-by but what is
+    /// being carried home: 290 of 978, t 0.50 (#374).
     pub(in crate::analytics) fn may_i_cut_from(
         &self,
         agent: &crate::agents::Agent,

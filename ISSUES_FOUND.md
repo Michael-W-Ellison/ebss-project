@@ -28028,8 +28028,10 @@ later entry. These were not. Each line names the entry that left it.
 - `wants_to_hunt` answers only a want for hides, and ~~Preparedness never
   leads to hunting or fishing~~ (#266; the hungry hunt is priced since
   #330). Preparedness hunts and fishes for the store since #370.
-- Nobody carries meat home for a share (#331). Meat by the beast's mass was
-  tried and not kept (#257, #330).
+- ~~Nobody carries meat home for a share (#331).~~ Carriers are taken on
+  for a third of each load when it brings more home (#374). Meat by the
+  beast's mass was tried and not kept (#257, #330).
+- A wounded person still goes back to fight a boar, often by a fold (#374).
 - A failed swap destroys the substitute, and swaps the world cannot supply
   are still offered once (#206). ~~Fixed (#369).~~
 - ~~`what_i_would_work_on` has no "is the output worth having" filter (#199).~~
@@ -28642,4 +28644,116 @@ curiosity's roll for a swap, which the verb matrix does not list.
 are recorded and fixed.
 
 **Dice counts**: 7,150 (seed 4242, 120 turns) and 1,014,771 (seed 0, a
+year).
+
+### 374. Carrying a kill home for a share: work traded for goods
+
+The user asked: "Resolve issue 331, carrying meat for a share. There should
+be trading mechanism which enables the trading of work for other goods.
+Agents will need to calculate if giving something in trade will result in a
+larger return. If meat would spoil, but giving some away would result in more
+meat being stored as food, then this should be capable of occurring."
+
+**What was there.** Barter only (`between_us::exchange`): one thing in hand
+for another. A hunter with more on a kill than he could carry could tell
+people where it was (#331), which gave it away. Nothing let him pay somebody
+to carry it to his store.
+
+**How often a kill goes to waste.** Counted over forty settlements in two
+years on #373's code (`STORE meat_left_on_kills`, `meat_the_crows_had`, new):
+1,029 joints were left on kills and 250 of them, a quarter, went to the
+crows. A deer is 8 to 12 joints and two hands hold six, so most kills are
+carried home in a trip or two. What rots is mostly the big beasts and the
+kills nobody went back to.
+
+**The trade** (`agents::hire`, `analytics::between_us::hire`):
+- **The offer.** Each turn, for every kill with half a day or more left, its
+  killer reckons what he alone brings home before it goes: what he has room
+  for in his pack, one load a day (`what_one_pair_of_hands_brings_home`). He
+  asks whoever is within talking distance to carry it to a pit he may use as
+  his own, for a third of every load (`Hire::A_CARRIERS_SHARE`). He takes a
+  carrier on only while what comes home to him after the pay is more than
+  without them (`is_another_pair_of_hands_worth_it`). A kill he can carry
+  alone is never shared out, because a carrier would only take a share of
+  what was coming home anyway.
+- **The acceptance.** The one asked agrees if they are not hungry and the pay
+  is worth more than the walking and cutting cost them, every turn of the job
+  counted (`would_this_one_carry_for_a_share`). That is the bar a kill one
+  fetches for oneself has to clear (`a_kill_worth_fetching`).
+- **The work.** The carrier walks out, cuts a load, walks it to the pit and
+  puts in everything but the share (`the_carrying_i_took_on`, ahead of
+  everything else in `putting_food_by`; `Cover` holds the share back). They go
+  back while there is meat and time. When the kill is gone or rotten and
+  nothing is owed, the job is let go and the two think better of each other
+  (`WHAT_A_FAIR_DEAL_IS_WORTH`).
+- **The claim.** While a kill is being carried for its killer, only the
+  killer, his kin, whoever he told of it, the carriers and anybody starving
+  may cut from it (`Simulation::may_i_cut_from`, `ResourceNode::killed_by`).
+  Nobody tells of a kill being carried. Otherwise a kill is anybody's, as it
+  always was.
+
+**What did not work first.**
+- *A load as a full pack.* Reckoned on an empty pack a day, every hunter
+  could carry every kill home alone, and nobody was ever asked: 1,878
+  reckonings on one world in a year, all "alone is enough". Packs run full,
+  so a load is the room there is.
+- *Pay against the best food anywhere.* The first bar for accepting was the
+  best patch the carrier could go to instead, and nobody cleared it: 818
+  askings, all refused. A share came to 0–250 a turn against 1,000–4,600 for
+  a berry patch, because a patch is a basket a turn and a carcass two
+  joints. Carrying meat loses to picking even for the whole load. The bar is
+  now the cost of the work.
+- *A claim from the kill.* Without a claim, the neighbour asked to carry
+  could take the meat for nothing. A claim for the five days a carcass lies,
+  and then for its first day, both left more to the crows: 324 of 1,060 and
+  334 of 995, against 250 of 1,029. Per world that was within noise (t 0.70
+  and 0.85). The claim now starts when the carrying does, which takes nothing
+  from a passer-by but what is being carried home. The commit for that
+  change says the earlier claims fed the crows; per world they did not
+  measurably.
+
+**And a fight fix, from tracing the deaths.** Deaths went up after the trade
+went in. Every death by a blow traced was somebody at 17 or 18 health
+standing up to a boar, mostly by a fold, and none was carrying. Whether a
+beast outweighs somebody scaled the beast's worth by its wounds and not the
+person's, so a man at a sixth of his health fought as if whole. His worth in
+a fight is now scaled by his health, never below a tenth
+(`what_shape_i_am_in`). It did not save the one on smooth seed 4, who still
+dies around day 284. What sends a wounded person back to a boar is not yet
+found.
+
+**Measured**, forty settlements, two years, against #373 (with the counters,
+same worlds as #373):
+
+| | #373 | #374 | t |
+|---|---|---|---|
+| births | 168 | 168 | 0.00 |
+| deaths | 1 | 5 | +2.08 |
+| of them by a blow | 1 | 3 | |
+| alive at two years | 647 | 643 | −0.64 |
+| carriers taken on | | 124 | |
+| joints put in an owner's store | | 129 | |
+| joints kept as pay | | 89 | |
+| meat left on kills | 1,029 | 978 | −0.34 |
+| of it to the crows | 250 | 290 | +0.50 |
+
+Carriers were taken on in most worlds. Population is within noise. Deaths are
+up from 1 to 5 (#372 measured 2). The blows are the boar fights above, not
+carrying. Of the other two, one
+death is from hunger and one from thirst.
+
+**Tests**: `agents::hire::tests` (5) for the reckoning; `hire_tests` (7):
+- a kill too big to get home in time takes somebody on;
+- one its owner can carry alone is never shared out;
+- the carrier carries it home and keeps a share;
+- a hungry man, or one with a full pack, is not taken on;
+- a kill being carried is its killer's to give;
+- a kill being carried is not given away by telling.
+
+`threat_tests::a_wounded_man_does_not_stand_his_ground` fails without the
+fight fix.
+
+**Full suite**: 2,989 passed, 0 failed.
+
+**Dice counts**: 7,126 (seed 4242, 120 turns) and 1,004,850 (seed 0, a
 year).
