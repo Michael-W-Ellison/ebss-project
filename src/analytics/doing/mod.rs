@@ -79,6 +79,7 @@ impl Simulation {
             Action::Store { item_type, amount } => self.storing(item_type, amount, agent_index),
             Action::Retrieve { item_type, amount } => self.retrieving(item_type, amount, agent_index),
             Action::Hunt { animal_id, weapon } => self.hunting(animal_id, weapon, agent_index, &mut rng, turn_now),
+            Action::DriveOff { animal_id } => self.driving_off(animal_id, agent_index),
             Action::Fight { animal_id, weapon } => self.fighting_a_beast(animal_id, weapon, agent_index, &mut rng, turn_now),
             Action::Tame { animal_id, food_type } => self.taming(animal_id, food_type, agent_index, turn_now),
             Action::CollectAnimalProduct { animal_id } => self.collecting_from_a_beast(animal_id, agent_index, turn_now),

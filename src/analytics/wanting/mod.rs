@@ -477,6 +477,13 @@ impl Simulation {
             return (action, false);
         }
 
+        // And a beast settled on the camp's ground, which those about could
+        // drive off together (#377). Not a want either: nobody gets on with
+        // their evening with a boar lying by the fire.
+        if let Some(action) = self.a_beast_on_our_ground(agent, agent_position) {
+            return (action, false);
+        }
+
         // A child of one's own that is hungry, and food to spare in the pack.
         //
         // Not a want either, and the ordinary counterpart of the sacrifice

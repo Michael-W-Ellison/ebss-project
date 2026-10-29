@@ -511,7 +511,7 @@ impl Simulation {
             Action::ScatterSeed => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
             Action::TakeFrom { .. } | Action::RobFishTrap { .. } => Some(ActionType::Social),
-            Action::FleeFrom { .. } => Some(ActionType::Combat),
+            Action::FleeFrom { .. } | Action::DriveOff { .. } => Some(ActionType::Combat),
             Action::Examine { .. } => Some(ActionType::Crafting),
             Action::PickUp { .. } | Action::PutDown { .. } => Some(ActionType::Mining),
             Action::Trade { .. } | Action::GiveTo { .. } => Some(ActionType::Social),

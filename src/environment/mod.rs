@@ -214,6 +214,11 @@ pub enum Action {
         animal_id: uuid::Uuid,
         weapon: Option<String>,
     },
+    /// Drive a beast off the camp's ground: everybody about shouting,
+    /// waving brands and closing in together, not a fight (#377).
+    DriveOff {
+        animal_id: uuid::Uuid,
+    },
     /// Tame a wild animal
     Tame {
         animal_id: uuid::Uuid,
@@ -436,6 +441,8 @@ impl Action {
             Action::CollectAnimalProduct { .. } => Some(DriveType::Industry), // Resource gathering
             Action::PutUpFold | Action::MuckOut => Some(DriveType::Utility),
             Action::StartMidden | Action::DigLatrine => Some(DriveType::Protection),
+            // Keeping the camp's ground for its people (#377)
+            Action::DriveOff { .. } => Some(DriveType::Protection),
             Action::Slaughter { .. } => Some(DriveType::Hunger),
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather

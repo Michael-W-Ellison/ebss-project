@@ -10758,6 +10758,8 @@ name = "People protect or cull animals informally"
 path = "animal_husbandry"
 stage = 0
 role = "technique"
+model = ["do:DriveOff"]
+note = "Driving a beast off the camp's ground, everybody about together (#377). Culling is the hunt."
 
 [[tech]]
 id = "animal_husbandry.0.proto_dogs_from_scavenging_canids"

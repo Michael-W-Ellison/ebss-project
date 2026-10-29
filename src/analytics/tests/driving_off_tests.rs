@@ -1,0 +1,110 @@
+// src/analytics/tests/driving_off_tests.rs
+//! Driving a beast off the camp's ground (ISSUES_FOUND #377).
+//!
+//! - a boar lying by the hearth is driven off by those about, together
+//! - one man alone does not try it, and it stands if he does
+//! - a brand from a burning fire is what tips a small band over
+//! - a boar off away from the camp is left alone
+
+use crate::agents::{AgentConfig, Population};
+use crate::analytics::Simulation;
+use crate::environment::Action;
+use crate::world::{World, WorldConfig};
+
+const HEARTH: (i32, i32) = (30, 30);
+
+/// `people` grown and well at camp, four cells from a boar lying on the
+/// hearth, which is everybody's home.
+fn a_boar_on_the_hearth(people: usize) -> (Simulation, uuid::Uuid) {
+    let mut world = World::new(WorldConfig::default());
+    world.animals.get_all_mut().clear();
+    world.buildings.clear();
+    let boar = world.spawn_animal("boar".to_string(), HEARTH).expect("a boar should spawn");
+    let mut population = Population::new();
+    for _ in 0..people {
+        population.spawn_agent(AgentConfig::default());
+    }
+    let mut simulation = Simulation::new(world, population);
+    for (i, agent) in simulation.population.agents.iter_mut().enumerate() {
+        agent.state.now_this_many_years_old(30);
+        agent.state.health = 100.0;
+        agent.state.position = (HEARTH.0 - 4, HEARTH.1 + i as i32 % 2, 0);
+        agent.hearth = Some(HEARTH);
+        agent.inventory.get_all_items_mut().clear();
+    }
+    (simulation, boar)
+}
+
+fn how_far_it_is_from_the_hearth(simulation: &Simulation, boar: uuid::Uuid) -> i32 {
+    let at = simulation.world.animals.get(&boar).expect("the boar").position;
+    (at.0 - HEARTH.0).abs().max((at.1 - HEARTH.1).abs())
+}
+
+/// Four grown people outweigh a boar together, and it bolts from the camp
+/// as far as a frightened beast gets, or the edge of the country allows.
+#[test]
+fn a_boar_on_the_hearth_is_driven_off_by_those_about() {
+    let (mut simulation, boar) = a_boar_on_the_hearth(4);
+    let agent = simulation.population.agents[0].clone();
+    let offered = simulation.a_beast_on_our_ground(&agent, agent.state.position);
+    assert_eq!(offered, Some(Action::DriveOff { animal_id: boar }));
+
+    let result = simulation.execute_action(&Action::DriveOff { animal_id: boar }, 0);
+    assert!(result.success, "{result:?}");
+    assert!(
+        how_far_it_is_from_the_hearth(&simulation, boar) > Simulation::ON_THE_CAMPS_GROUND + Simulation::A_BEASTS_GROUND,
+        "the boar should be far off the camp's ground, not {} cells",
+        how_far_it_is_from_the_hearth(&simulation, boar)
+    );
+    assert_eq!(simulation.world.beasts_driven_off, 1);
+}
+
+/// One man alone is no match for a boar, so he does not try; and if he does,
+/// it stands its ground.
+#[test]
+fn one_man_alone_does_not_try_and_it_stands_if_he_does() {
+    let (mut simulation, boar) = a_boar_on_the_hearth(1);
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.a_beast_on_our_ground(&agent, agent.state.position), None);
+
+    let result = simulation.execute_action(&Action::DriveOff { animal_id: boar }, 0);
+    assert!(!result.success);
+    assert!(how_far_it_is_from_the_hearth(&simulation, boar) <= 1, "the boar should not have moved");
+}
+
+/// Two are not enough with bare hands, and are with brands from a fire
+/// burning beside them.
+#[test]
+fn brands_from_a_fire_tip_a_small_band_over() {
+    let (mut simulation, boar) = a_boar_on_the_hearth(2);
+    let agent = simulation.population.agents[0].clone();
+    let here = agent.state.position;
+    let animal = simulation.world.animals.get(&boar).unwrap().clone();
+    let bare = simulation.would_it_be_driven_off(&animal, (here.0, here.1));
+
+    let fire = simulation
+        .world
+        .build_heat_source(crate::environment::HeatSourceType::Campfire, (here.0, here.1 + 1, 0), None)
+        .expect("a fire");
+    let _ = simulation.world.add_fuel_to_heat_source(&fire, "wood".to_string(), 200.0);
+    let _ = simulation.world.light_heat_source(&fire);
+    let with_brands = simulation.would_it_be_driven_off(&animal, (here.0, here.1));
+
+    assert!(
+        simulation.what_those_about_are_worth((here.0, here.1)) > 0.0,
+        "two grown people are worth something to a boar"
+    );
+    assert!(!bare || with_brands, "brands never make it harder");
+    assert!(with_brands, "two people with brands should drive a boar off");
+}
+
+/// A boar off in the wood, away from anybody's hearth, is nobody's business.
+#[test]
+fn a_boar_away_from_the_camp_is_left_alone() {
+    let (mut simulation, _) = a_boar_on_the_hearth(4);
+    for agent in simulation.population.agents.iter_mut() {
+        agent.hearth = Some((HEARTH.0 - 40, HEARTH.1));
+    }
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.a_beast_on_our_ground(&agent, agent.state.position), None);
+}

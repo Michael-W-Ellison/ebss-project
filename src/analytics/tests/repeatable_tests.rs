@@ -254,7 +254,8 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // to have carried home.
     // Down to 7,126 for #374's correction: a kill is its killer's only while
     // it is being carried for him.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_126;
+    // Up to 7,332 for #377: those about drive a beast off the camp's ground.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_332;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 

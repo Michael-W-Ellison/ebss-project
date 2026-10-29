@@ -274,6 +274,10 @@ pub struct World {
     #[serde(default)]
     pub joints_kept_as_pay: u64,
 
+    /// Beasts driven off a camp's ground (#377).
+    #[serde(default)]
+    pub beasts_driven_off: u64,
+
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
     pub food_the_scavengers_took: u64,
@@ -1777,6 +1781,7 @@ impl World {
             carriers_taken_on: 0,
             joints_carried_for_a_share: 0,
             joints_kept_as_pay: 0,
+            beasts_driven_off: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
