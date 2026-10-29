@@ -219,6 +219,9 @@ pub enum Action {
     DriveOff {
         animal_id: uuid::Uuid,
     },
+    /// Lay the brush in hand into the thorn ring round this one's camp
+    /// (#378).
+    PutUpThornHedge,
     /// Tame a wild animal
     Tame {
         animal_id: uuid::Uuid,
@@ -442,7 +445,7 @@ impl Action {
             Action::PutUpFold | Action::MuckOut => Some(DriveType::Utility),
             Action::StartMidden | Action::DigLatrine => Some(DriveType::Protection),
             // Keeping the camp's ground for its people (#377)
-            Action::DriveOff { .. } => Some(DriveType::Protection),
+            Action::DriveOff { .. } | Action::PutUpThornHedge => Some(DriveType::Protection),
             Action::Slaughter { .. } => Some(DriveType::Hunger),
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather

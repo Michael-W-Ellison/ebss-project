@@ -100,6 +100,8 @@ fn zz_discovery_watch() {
         ("joints_carried_for_a_share", sim.world.joints_carried_for_a_share),
         ("joints_kept_as_pay", sim.world.joints_kept_as_pay),
         ("beasts_driven_off", sim.world.beasts_driven_off),
+        ("thorn_hedges_closed", sim.world.thorn_hedges_closed),
+        ("beasts_the_thorns_turned", sim.world.beasts_the_thorns_turned),
     ] {
         println!("STORE {what} {how_many}");
     }

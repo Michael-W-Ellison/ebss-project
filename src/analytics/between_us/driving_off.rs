@@ -189,11 +189,142 @@ impl Simulation {
             beast.use_stamina(Self::WHAT_BOLTING_COSTS_A_BEAST);
         }
         self.world.beasts_driven_off += 1;
+
+        // And everybody who was about knows a beast came onto the camp, which
+        // is what sets a camp thinking of a ring of thorn (#378)
+        let now = self.current_turn;
+        let called = self
+            .world
+            .animals
+            .get_species(&animal.species_id)
+            .map(|species| species.name.clone())
+            .unwrap_or_default();
+        for them in self.population.agents.iter_mut().filter(|them| {
+            them.state.is_alive
+                && Self::within((them.state.position.0, them.state.position.1), here, Self::WITHIN_TALKING_DISTANCE)
+        }) {
+            them.exploration_knowledge.saw_danger(
+                crate::world::Position::new(animal.position.0, animal.position.1),
+                &called,
+                1.0,
+                now,
+            );
+        }
         *self.what_a_threat_came_to.entry("drive off: it bolted".to_string()).or_insert(0) += 1;
 
         ActionResult::success()
             .with_drive_change(crate::core::DriveType::Protection, -0.3)
             .with_energy_cost(10.0)
             .with_message("Drove it off".to_string())
+    }
+}
+
+impl Simulation {
+    /// How bad a camp has to remember it going, a beast on its ground or
+    /// near it, before anybody rings it with thorn: a warning from a boar
+    /// is the whole of the scale and fades over the weeks after.
+    pub(in crate::analytics) const A_CAMP_TROUBLED_ENOUGH_FOR_THORNS: f32 = 0.3;
+
+    /// The next of laying a thorn ring round this one's camp (#378): brush
+    /// laid if there is any in hand and the ring is not closed, or fetched
+    /// from within a forage. Only at a camp this one remembers a beast
+    /// troubling, or where a ring is already begun.
+    pub(in crate::analytics) fn a_thorn_hedge_to_lay(
+        &self,
+        agent: &crate::agents::Agent,
+        here: (i32, i32, i32),
+    ) -> Option<Action> {
+        if agent.state.years_old() < crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT
+            || !agent.knows_how_to_do("PutUpThornHedge")
+        {
+            return None;
+        }
+        let home = Self::where_this_one_lives(agent);
+        let now = self.current_turn;
+        let begun = self.world.thorn_hedge_round(home).map(|which| &self.world.thorn_hedges[which]);
+        if begun.is_some_and(|hedge| hedge.closed_on.is_some()) {
+            return None;
+        }
+        // Anywhere on the camp's ground, which a remembered danger covers in
+        // patches three cells wide
+        let troubled = [-3, 0, 3]
+            .iter()
+            .flat_map(|dx| [-3, 0, 3].iter().map(move |dy| (*dx, *dy)))
+            .map(|(dx, dy)| {
+                agent
+                    .exploration_knowledge
+                    .how_bad_is_it_there(crate::world::Position::new(home.0 + dx, home.1 + dy), now)
+            })
+            .fold(0.0f32, f32::max)
+            >= Self::A_CAMP_TROUBLED_ENOUGH_FOR_THORNS;
+        if begun.is_none() && !troubled {
+            return None;
+        }
+        if agent.how_many_i_have("wood") > 0 {
+            return Some(Action::PutUpThornHedge);
+        }
+        self.nearest_resource_within(agent, here, Self::FORAGE_RADIUS, |resource| {
+            resource.resource_type == crate::world::ResourceType::Wood
+        })
+        .map(|_| Action::Gather { resource_type: "wood".to_string() })
+    }
+
+    /// `Action::PutUpThornHedge`: the brush in hand laid into the ring round
+    /// this one's camp, begun if it was not, and closed when it holds what a
+    /// ring takes.
+    pub(in crate::analytics) fn laying_a_thorn_hedge(&mut self, agent_index: usize, turn_now: u32) -> crate::environment::ActionResult {
+        use crate::environment::ActionResult;
+        use crate::world::ThornHedge;
+
+        let agent = &self.population.agents[agent_index];
+        if !agent.knows_how_to_do("PutUpThornHedge") {
+            return ActionResult::failure("Nobody here has hedged a camp".to_string());
+        }
+        let home = Self::where_this_one_lives(agent);
+        let here = (agent.state.position.0, agent.state.position.1);
+        if !Self::within(here, home, ThornHedge::HOW_FAR_IT_GOES_ROUND) {
+            return ActionResult::failure("Not at the camp".to_string());
+        }
+        let wood = agent.how_many_i_have("wood");
+        if wood == 0 {
+            return ActionResult::failure("No brush in hand".to_string());
+        }
+
+        let which = match self.world.thorn_hedge_round(home) {
+            Some(which) => which,
+            None => {
+                self.world.thorn_hedges.push(ThornHedge {
+                    around: crate::world::Position::new(home.0, home.1),
+                    started: turn_now,
+                    laid: 0,
+                    closed_on: None,
+                });
+                self.world.thorn_hedges.len() - 1
+            }
+        };
+        let hedge = &mut self.world.thorn_hedges[which];
+        if hedge.closed_on.is_some() {
+            return ActionResult::failure("The camp is hedged already".to_string());
+        }
+        let laying = wood.min(ThornHedge::WHAT_IT_TAKES - hedge.laid);
+        hedge.laid += laying;
+        let closed = hedge.laid >= ThornHedge::WHAT_IT_TAKES;
+        if closed {
+            hedge.closed_on = Some(turn_now);
+            self.world.thorn_hedges_closed += 1;
+        }
+
+        let agent = &mut self.population.agents[agent_index];
+        agent.inventory.remove_item("wood", laying);
+        agent.skills.practise(crate::agents::skills::SkillType::Construction, 3, turn_now);
+
+        ActionResult::success()
+            .with_drive_change(crate::core::DriveType::Protection, -0.2)
+            .with_energy_cost(6.0)
+            .with_message(if closed {
+                "Closed the thorn ring round the camp".to_string()
+            } else {
+                format!("Laid {laying} of brush into the thorn ring")
+            })
     }
 }

@@ -5,6 +5,8 @@
 //! - one man alone does not try it, and it stands if he does
 //! - a brand from a burning fire is what tips a small band over
 //! - a boar off away from the camp is left alone
+//! - a camp a beast has troubled is ringed with thorn, over several trips
+//! - a closed ring turns a boar and not a hare, and shuts nothing in
 
 use crate::agents::{AgentConfig, Population};
 use crate::analytics::Simulation;
@@ -155,4 +157,118 @@ fn a_beast_with_nowhere_to_go_is_not_driven() {
     let result = simulation.execute_action(&Action::DriveOff { animal_id: boar }, 0);
     assert!(!result.success);
     assert_eq!(simulation.world.beasts_driven_off, 0);
+}
+
+// --------------------------------------------------------------------------
+// A ring of thorn round the camp (#378)
+// --------------------------------------------------------------------------
+
+fn give_wood(simulation: &mut Simulation, who: usize, how_many: u32) {
+    simulation.population.agents[who]
+        .inventory
+        .add_item(crate::agents::InventoryItem::new_with_weight("wood".to_string(), how_many, 0.1));
+}
+
+/// Nobody hedges a camp no beast has troubled; one that remembers a beast on
+/// its ground lays brush, and enough of it closes the ring.
+#[test]
+fn a_troubled_camp_is_ringed_with_thorn() {
+    let (mut simulation, _) = a_boar_on_the_hearth(4);
+    simulation.world.animals.get_all_mut().clear();
+    for agent in simulation.population.agents.iter_mut() {
+        agent.state.position = (HEARTH.0, HEARTH.1, 0);
+    }
+    give_wood(&mut simulation, 0, 30);
+    let here = simulation.population.agents[0].state.position;
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.a_thorn_hedge_to_lay(&agent, here), None, "an untroubled camp is not hedged");
+
+    let now = simulation.current_turn;
+    simulation.population.agents[0]
+        .exploration_knowledge
+        .saw_danger(crate::world::Position::new(HEARTH.0 + 1, HEARTH.1), "Wild Boar", 1.0, now);
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.a_thorn_hedge_to_lay(&agent, here), Some(Action::PutUpThornHedge));
+
+    let result = simulation.execute_action(&Action::PutUpThornHedge, 0);
+    assert!(result.success, "{result:?}");
+    let hedge = &simulation.world.thorn_hedges[0];
+    assert_eq!(hedge.laid, crate::world::ThornHedge::WHAT_IT_TAKES);
+    assert!(hedge.is_closed(simulation.world.turn), "a full ring of brush is closed");
+    assert_eq!(simulation.world.thorn_hedges_closed, 1);
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.a_thorn_hedge_to_lay(&agent, here), None, "and is not laid again");
+}
+
+/// Several people bring brush to the same ring until it is closed.
+#[test]
+fn a_ring_is_laid_by_several_trips() {
+    let (mut simulation, _) = a_boar_on_the_hearth(2);
+    for agent in simulation.population.agents.iter_mut() {
+        agent.state.position = (HEARTH.0, HEARTH.1 + 1, 0);
+    }
+    let half = crate::world::ThornHedge::WHAT_IT_TAKES / 2;
+    give_wood(&mut simulation, 0, half);
+    give_wood(&mut simulation, 1, half);
+    assert!(simulation.execute_action(&Action::PutUpThornHedge, 0).success);
+    assert!(simulation.world.thorn_hedges[0].closed_on.is_none(), "half a ring keeps nothing out");
+    assert!(simulation.execute_action(&Action::PutUpThornHedge, 1).success);
+    assert_eq!(simulation.world.thorn_hedges.len(), 1, "one ring, not two");
+    assert!(simulation.world.thorn_hedges[0].closed_on.is_some());
+}
+
+/// A boar that wanders up to a closed ring goes no further; a hare goes
+/// under it; and a boar already inside when it was closed is not shut in.
+#[test]
+fn a_closed_ring_turns_a_boar_and_not_a_hare() {
+    let (mut simulation, boar) = a_boar_on_the_hearth(1);
+    let hare = simulation.world.spawn_animal("rabbit".to_string(), (HEARTH.0 + 10, HEARTH.1 + 3)).expect("a rabbit");
+    let outside = (HEARTH.0 + 10, HEARTH.1 + 2);
+    if let Some(animal) = simulation.world.animals.get_mut(&boar) {
+        animal.position = outside;
+    }
+    let now = simulation.world.turn;
+    simulation.world.thorn_hedges.push(crate::world::ThornHedge {
+        around: crate::world::Position::new(HEARTH.0, HEARTH.1),
+        started: now,
+        laid: crate::world::ThornHedge::WHAT_IT_TAKES,
+        closed_on: Some(now),
+    });
+
+    let stood = simulation.world.where_the_thorns_would_turn_them();
+    for animal in [boar, hare] {
+        if let Some(animal) = simulation.world.animals.get_mut(&animal) {
+            animal.position = (HEARTH.0 + 1, HEARTH.1);
+        }
+    }
+    simulation.world.the_thorns_turn_them(stood);
+
+    assert_eq!(simulation.world.animals.get(&boar).unwrap().position, outside, "the boar is turned");
+    assert_eq!(simulation.world.animals.get(&hare).unwrap().position, (HEARTH.0 + 1, HEARTH.1), "the hare goes under");
+    assert_eq!(simulation.world.beasts_the_thorns_turned, 1);
+
+    // Inside when the ring closed, and moving about inside it: let be
+    if let Some(animal) = simulation.world.animals.get_mut(&boar) {
+        animal.position = (HEARTH.0 + 2, HEARTH.1);
+    }
+    let stood_inside = simulation.world.where_the_thorns_would_turn_them();
+    if let Some(animal) = simulation.world.animals.get_mut(&boar) {
+        animal.position = (HEARTH.0 + 3, HEARTH.1);
+    }
+    simulation.world.the_thorns_turn_them(stood_inside);
+    assert_eq!(simulation.world.animals.get(&boar).unwrap().position, (HEARTH.0 + 3, HEARTH.1), "one inside is not stopped moving");
+}
+
+/// Driving a beast off the camp leaves those who did it remembering a beast
+/// on the camp's ground, which is what sets them hedging it.
+#[test]
+fn a_beast_driven_off_sets_the_camp_hedging() {
+    let (mut simulation, boar) = a_boar_on_the_hearth(4);
+    assert!(simulation.execute_action(&Action::DriveOff { animal_id: boar }, 0).success);
+    for agent in simulation.population.agents.iter_mut() {
+        agent.state.position = (HEARTH.0, HEARTH.1, 0);
+    }
+    give_wood(&mut simulation, 1, 5);
+    let agent = simulation.population.agents[1].clone();
+    assert_eq!(simulation.a_thorn_hedge_to_lay(&agent, agent.state.position), Some(Action::PutUpThornHedge));
 }

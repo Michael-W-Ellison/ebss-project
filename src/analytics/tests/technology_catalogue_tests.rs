@@ -136,6 +136,7 @@ fn every_action() -> BTreeSet<String> {
         Action::CheckSnares,
         Action::Treat { who: None },
         Action::DriveOff { animal_id: nobody },
+        Action::PutUpThornHedge,
     ]
     .into_iter()
     .map(|a| variant_name(format!("{a:?}")))

@@ -6323,6 +6323,8 @@ name = "Thorn barriers"
 path = "defensive_infrastructure"
 stage = 0
 role = "technique"
+model = ["do:PutUpThornHedge"]
+note = "A ring of cut brush round a camp that beasts have troubled, which no beast a fox's size or more pushes through (#378)."
 
 [[tech]]
 id = "defensive_infrastructure.0.night_watches"

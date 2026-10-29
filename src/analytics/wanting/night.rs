@@ -153,6 +153,10 @@ impl Simulation {
         {
             return Some(Action::DigLatrine);
         }
+        // A ring of thorn round a camp that beasts have troubled (#378)
+        if let Some(work) = self.a_thorn_hedge_to_lay(agent, here) {
+            return Some(work);
+        }
         // The skins, which will not wait a week (#353)
         if let Some(work) = self.a_hide_to_work(agent, here) {
             return Some(work);

@@ -194,6 +194,10 @@ pub struct World {
     #[serde(default)]
     pub folds: Vec<Fold>,
 
+    /// Rings of thorn brush round camps, laid and standing (#378).
+    #[serde(default)]
+    pub thorn_hedges: Vec<ThornHedge>,
+
     /// A camp's middens: one place set aside for its refuse, away from where
     /// it sleeps and draws water (#357).
     #[serde(default)]
@@ -277,6 +281,12 @@ pub struct World {
     /// Beasts driven off a camp's ground (#377).
     #[serde(default)]
     pub beasts_driven_off: u64,
+
+    /// Thorn rings closed round camps, and beasts they turned (#378).
+    #[serde(default)]
+    pub thorn_hedges_closed: u64,
+    #[serde(default)]
+    pub beasts_the_thorns_turned: u64,
 
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
@@ -396,6 +406,53 @@ impl Bedding {
     pub fn what_it_is_worth(&self) -> f32 {
         let boughs = crate::agents::Agent::WHAT_BEDDING_IS_WORTH;
         if self.of_hide { 2.0 * boughs } else { boughs }
+    }
+}
+
+/// A ring of cut thorn brush laid round a camp, which no beast a fox's size
+/// or bigger pushes through (#378): "Thorn barriers", stage 0 of the
+/// defensive path.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThornHedge {
+    /// The hearth it goes round.
+    pub around: Position,
+    /// When the first brush was laid.
+    pub started: u32,
+    /// How much brush is in it so far.
+    pub laid: u32,
+    /// When the ring was closed, after which it keeps beasts out.
+    pub closed_on: Option<u32>,
+}
+
+impl ThornHedge {
+    /// How far out from the hearth the ring goes: the camp's ground,
+    /// sixty metres (`Simulation::ON_THE_CAMPS_GROUND`).
+    pub const HOW_FAR_IT_GOES_ROUND: i32 = 6;
+
+    /// How much cut brush closes the ring, in armfuls of wood. Several trips
+    /// for one person, a morning for a camp.
+    pub const WHAT_IT_TAKES: u32 = 24;
+
+    /// How long a closed ring of cut thorn keeps beasts out before it has
+    /// dried, sagged and been pushed through: a season.
+    pub const HOW_LONG_IT_STANDS: u32 = 90 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// And how long one begun and not closed is kept at before it is given
+    /// up: a month.
+    pub const HOW_LONG_ONE_IS_KEPT_AT: u32 = 30 * crate::environment::seasons::TICKS_PER_DAY;
+
+    /// The smallest beast a ring of thorn turns: anything a fox's size or
+    /// bigger. A hare goes under it.
+    pub const THE_SMALLEST_IT_TURNS_KG: f32 = 6.0;
+
+    /// Whether a place is inside the ring.
+    pub fn takes_in(&self, at: (i32, i32)) -> bool {
+        (at.0 - self.around.x).abs().max((at.1 - self.around.y).abs()) <= Self::HOW_FAR_IT_GOES_ROUND
+    }
+
+    /// Whether it keeps anything out: closed, and still standing.
+    pub fn is_closed(&self, now: u32) -> bool {
+        self.closed_on.is_some_and(|then| now.saturating_sub(then) < Self::HOW_LONG_IT_STANDS)
     }
 }
 
@@ -1767,6 +1824,7 @@ impl World {
             racks: Vec::new(),
             bedding: Vec::new(),
             folds: Vec::new(),
+            thorn_hedges: Vec::new(),
             middens: Vec::new(),
             latrines: Vec::new(),
             fish_traps: Vec::new(),
@@ -1782,6 +1840,8 @@ impl World {
             joints_carried_for_a_share: 0,
             joints_kept_as_pay: 0,
             beasts_driven_off: 0,
+            thorn_hedges_closed: 0,
+            beasts_the_thorns_turned: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
@@ -2892,6 +2952,65 @@ impl World {
     }
 
     /// The fold within reach of a place, if one is standing (#354).
+    /// The thorn ring round the hearth at `hearth`, closed or not.
+    pub fn thorn_hedge_round(&self, hearth: (i32, i32)) -> Option<usize> {
+        self.thorn_hedges.iter().position(|hedge| {
+            (hedge.around.x - hearth.0).abs().max((hedge.around.y - hearth.1).abs()) <= 2
+        })
+    }
+
+    /// Whether a closed thorn ring takes this place in.
+    pub fn inside_a_thorn_hedge(&self, at: (i32, i32)) -> bool {
+        self.thorn_hedges.iter().any(|hedge| hedge.is_closed(self.turn) && hedge.takes_in(at))
+    }
+
+    /// Where every wild beast big enough for thorn to turn stands, by id,
+    /// while any ring is closed: what `the_thorns_turn_them` puts them back
+    /// to.
+    pub(crate) fn where_the_thorns_would_turn_them(&self) -> Vec<(uuid::Uuid, (i32, i32))> {
+        if !self.thorn_hedges.iter().any(|hedge| hedge.is_closed(self.turn)) {
+            return Vec::new();
+        }
+        let mut stood: Vec<(uuid::Uuid, (i32, i32))> = self
+            .animals
+            .get_all()
+            .iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated && !animal.is_kept())
+            .filter(|animal| {
+                self.animals
+                    .get_species(&animal.species_id)
+                    .is_some_and(|species| species.mass_kg >= ThornHedge::THE_SMALLEST_IT_TURNS_KG)
+            })
+            .map(|animal| (animal.id, animal.position))
+            .collect();
+        stood.sort_unstable_by_key(|(id, _)| *id);
+        stood
+    }
+
+    /// A beast that has come inside a closed thorn ring it was outside goes
+    /// back to where it stood (#378). One already inside when the ring was
+    /// closed may leave, and is not shut in.
+    pub(crate) fn the_thorns_turn_them(&mut self, stood: Vec<(uuid::Uuid, (i32, i32))>) {
+        if stood.is_empty() {
+            return;
+        }
+        let now = self.turn;
+        let closed: Vec<ThornHedge> = self.thorn_hedges.iter().filter(|hedge| hedge.is_closed(now)).cloned().collect();
+        let inside = |at: (i32, i32)| closed.iter().any(|hedge| hedge.takes_in(at));
+        let mut turned = 0u64;
+        for animal in self.animals.get_all_mut().iter_mut() {
+            let Ok(found) = stood.binary_search_by_key(&animal.id, |(id, _)| *id) else {
+                continue;
+            };
+            let was = stood[found].1;
+            if inside(animal.position) && !inside(was) {
+                animal.position = was;
+                turned += 1;
+            }
+        }
+        self.beasts_the_thorns_turned += turned;
+    }
+
     pub fn fold_near(&self, pos: &Position) -> Option<usize> {
         let reach = Fold::HOW_FAR_IT_REACHES;
         self.folds
@@ -3447,6 +3566,10 @@ impl World {
             .retain(|laid| now.saturating_sub(laid.laid) < laid.how_long_it_lasts());
         self.folds
             .retain(|fold| now.saturating_sub(fold.put_up) < Fold::HOW_LONG_IT_STANDS);
+        self.thorn_hedges.retain(|hedge| match hedge.closed_on {
+            Some(_) => hedge.is_closed(now),
+            None => now.saturating_sub(hedge.started) < ThornHedge::HOW_LONG_ONE_IS_KEPT_AT,
+        });
 
         // Update heat sources (fuel consumption, heating)
         self.heat_sources.turn_all();
@@ -3496,12 +3619,15 @@ impl World {
             now: self.turn,
             season: self.climate.current_season(),
         };
+        // Where the beasts a thorn ring turns stood before they moved
+        let before_the_beasts_moved = self.where_the_thorns_would_turn_them();
         self.animals.turn_in_world(
             &mut self.grid,
             &mut self.plants,
             grazing_passes,
             weather,
         );
+        self.the_thorns_turn_them(before_the_beasts_moved);
 
         // And what a camp leaves lying draws what eats such things (#357)
         self.what_draws_the_scavengers();
