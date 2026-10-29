@@ -395,6 +395,19 @@ impl Simulation {
             return action;
         }
 
+        // **Nobody goes to bed with a beast on the camp** that those about
+        // could drive off (#379). Driving off was weighed with the day's
+        // decisions and bed came first, so a boar lay by the hearth inside a
+        // closed thorn ring and struck a camp of twelve as they slept: the
+        // warned backed off and walked back to bed beside it.
+        if let Some(drive) = {
+            let agent = &self.population.agents[agent_index];
+            self.a_beast_on_our_ground(agent, agent.state.position)
+        } {
+            *self.what_a_threat_came_to.entry("night: drove a beast off".to_string()).or_insert(0) += 1;
+            return drive;
+        }
+
         // **Somebody keeps watch** at a camp a beast has troubled (#379):
         // three blows in four from a beast came at night, nearly all on
         // somebody asleep.

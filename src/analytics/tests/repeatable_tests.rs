@@ -261,7 +261,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // and those who drove one off remember it.
     // Down to 7,015 for #379: a troubled camp of three keeps a watch through
     // the night, in turns.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_015;
+    // Down to 6,757 for #379's correction: nobody goes to bed with a beast on
+    // the camp, and a thorn ring turns the scavengers too.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_757;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 

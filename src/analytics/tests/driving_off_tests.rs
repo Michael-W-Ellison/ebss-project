@@ -377,3 +377,79 @@ fn the_watch_wakes_whoever_sleeps_near_a_beast_it_cannot_drive() {
     );
     assert!(simulation.world.woken_by_the_watch >= 1);
 }
+
+/// Nobody goes to bed with a boar lying by the hearth that the camp could
+/// drive off: the night sends them to drive it off first (#379).
+#[test]
+fn nobody_goes_to_bed_with_a_boar_by_the_hearth() {
+    let mut simulation = a_troubled_camp_at_night(4);
+    let boar = simulation.world.spawn_animal("boar".to_string(), (HEARTH.0 + 4, HEARTH.1)).expect("a boar");
+    let asked = simulation.what_the_night_asks(0, Action::Wait, false);
+    assert_eq!(asked, Action::DriveOff { animal_id: boar });
+}
+
+/// And at night the camp's ground is wherever its people sleep: a boar
+/// fifteen cells from the hearth, beside a sleeper, is the camp's business.
+#[test]
+fn by_night_the_camps_ground_is_where_its_people_sleep() {
+    let mut simulation = a_troubled_camp_at_night(4);
+    for agent in simulation.population.agents.iter_mut() {
+        agent.state.position = (HEARTH.0 - 15, HEARTH.1, 0);
+    }
+    let boar = simulation.world.spawn_animal("boar".to_string(), (HEARTH.0 - 11, HEARTH.1)).expect("a boar");
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(
+        simulation.a_beast_on_our_ground(&agent, agent.state.position),
+        Some(Action::DriveOff { animal_id: boar })
+    );
+    simulation.world.climate.calendar.time_of_day = 12.0;
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.a_beast_on_our_ground(&agent, agent.state.position), None, "by day it is out of the camp");
+}
+
+/// A closed ring saves the camp its watch, unless a beast is inside it: one
+/// inside when the ring closed is not shut out.
+#[test]
+fn a_ring_with_a_beast_inside_it_is_still_watched() {
+    let mut simulation = a_troubled_camp_at_night(3);
+    let now = simulation.world.turn;
+    simulation.world.thorn_hedges.push(crate::world::ThornHedge {
+        around: crate::world::Position::new(HEARTH.0, HEARTH.1),
+        started: now,
+        laid: crate::world::ThornHedge::WHAT_IT_TAKES,
+        closed_on: Some(now),
+    });
+    assert!(who_is_on_watch(&simulation).is_empty());
+    simulation.world.spawn_animal("boar".to_string(), (HEARTH.0 + 1, HEARTH.1)).expect("a boar");
+    assert_eq!(who_is_on_watch(&simulation).len(), 1, "a boar inside the ring is watched for");
+}
+
+/// A hungry boar drawn to meat lying inside the thorn ring does not walk
+/// through it to get at it, as scavengers drawn to a camp's refuse did
+/// (#379).
+#[test]
+fn the_ring_turns_a_scavenger_drawn_to_meat_inside_it() {
+    let (mut simulation, boar) = a_boar_on_the_hearth(1);
+    let outside = (HEARTH.0 + 10, HEARTH.1);
+    let meat = crate::world::Position::new(HEARTH.0 + 3, HEARTH.1);
+    if let Some(animal) = simulation.world.animals.get_mut(&boar) {
+        animal.position = outside;
+        animal.hunger = animal.max_hunger;
+    }
+    let now = simulation.world.turn;
+    simulation.world.a_carcass_lies_here(meat, 20, now);
+    simulation.world.thorn_hedges.push(crate::world::ThornHedge {
+        around: crate::world::Position::new(HEARTH.0, HEARTH.1),
+        started: now,
+        laid: crate::world::ThornHedge::WHAT_IT_TAKES,
+        closed_on: Some(now),
+    });
+    for _ in 0..10 {
+        simulation.take_a_turn();
+    }
+    let at = simulation.world.animals.get(&boar).map(|animal| animal.position).unwrap_or(outside);
+    assert!(
+        !simulation.world.thorn_hedges[0].takes_in(at),
+        "a boar drawn to the meat is inside the ring at {at:?}"
+    );
+}

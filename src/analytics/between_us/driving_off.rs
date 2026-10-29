@@ -50,12 +50,20 @@ impl Simulation {
         let home = Self::where_this_one_lives(agent);
         let here = (agent_position.0, agent_position.1);
 
+        // By night the camp's ground is wherever its people sleep, which is
+        // further out than the hearth's sixty metres (#379)
+        let reach = if self.where_in_the_night_it_is().0 {
+            Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS
+        } else {
+            Self::ON_THE_CAMPS_GROUND
+        };
+
         self.world
-            .get_animals_in_radius(home, (Self::ON_THE_CAMPS_GROUND + 1) as f32)
+            .get_animals_in_radius(home, (reach + 1) as f32)
             .into_iter()
             .filter(|animal| animal.is_alive() && !animal.is_domesticated && !animal.is_kept())
             .filter(|animal| {
-                Self::within(animal.position, home, Self::ON_THE_CAMPS_GROUND)
+                Self::within(animal.position, home, reach)
                     && Self::within(animal.position, here, Self::AS_FAR_AS_A_BEAST_LOOKS)
                     && !Self::within(animal.position, here, Self::A_BEASTS_GROUND)
             })
@@ -360,10 +368,15 @@ impl Simulation {
             return false;
         }
         let home = Self::where_this_one_lives(agent);
+        // A closed ring keeps beasts out, so nobody need sit up behind one -
+        // unless a beast is inside it. One that was inside when the ring
+        // closed was not shut out, and lay by the hearth striking a camp of
+        // twelve while they slept (#379).
         if self
             .world
             .thorn_hedge_round(home)
             .is_some_and(|which| self.world.thorn_hedges[which].is_closed(self.world.turn))
+            && !self.a_beast_inside_the_ring_round(home)
         {
             return false;
         }
@@ -386,6 +399,22 @@ impl Simulation {
         let night = self.current_turn / crate::environment::seasons::TICKS_PER_DAY;
         let watch = turns_left / Self::A_WATCH;
         camp[((night + watch) as usize) % camp.len()] == agent.id
+    }
+
+    /// Whether a beast that would charge is inside the thorn ring round this
+    /// hearth.
+    pub(in crate::analytics) fn a_beast_inside_the_ring_round(&self, home: (i32, i32)) -> bool {
+        self.world
+            .get_animals_in_radius(home, (crate::world::ThornHedge::HOW_FAR_IT_GOES_ROUND + 1) as f32)
+            .into_iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated && !animal.is_kept())
+            .filter(|animal| Self::within(animal.position, home, crate::world::ThornHedge::HOW_FAR_IT_GOES_ROUND))
+            .any(|animal| {
+                self.world
+                    .animals
+                    .get_species(&animal.species_id)
+                    .is_some_and(Self::would_it_charge)
+            })
     }
 
     /// What somebody on watch does: drives off a beast on the camp's ground

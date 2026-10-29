@@ -3649,10 +3649,15 @@ impl World {
             grazing_passes,
             weather,
         );
-        self.the_thorns_turn_them(before_the_beasts_moved);
 
         // And what a camp leaves lying draws what eats such things (#357)
         self.what_draws_the_scavengers();
+
+        // And a thorn ring turns whatever came at it, the scavengers drawn
+        // to a camp's midden, pits and meat with the rest. Asked before the
+        // scavengers came, it let a hungry boar walk through to the refuse
+        // and lie by the hearth: most blows by night were that (#379).
+        self.the_thorns_turn_them(before_the_beasts_moved);
 
         // And what has gone into the snares, and what has come out of them
         // again. Taken and put back because the snares are the world's and
