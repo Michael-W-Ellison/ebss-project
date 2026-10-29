@@ -28034,8 +28034,9 @@ later entry. These were not. Each line names the entry that left it.
 - A wounded person still goes back to fight a boar, often by a fold (#374).
 - A walk at a target inside a beast's ground stops short and is decided again
   every minute, until the walker is starving or parched (#376). On the camp's
-  own ground those about now drive the beast off together (#377); thorn
-  barriers and night watches are still to come.
+  own ground those about now drive the beast off together (#377), and a
+  troubled camp is ringed with thorn (#378); night watches are still to
+  come.
 - The Utility working is chosen from a fixed place in the list, so a working
   refused for any reason comes back every turn Utility wins (#376).
 - A failed swap destroys the substitute, and swaps the world cannot supply
@@ -29004,4 +29005,65 @@ the camp still stops short of a beast's ground until the walker is desperate
 **Full suite**: 2,999 passed, 0 failed.
 
 **Dice counts**: 7,388 (seed 4242, 120 turns) and 948,917 (seed 0, a year,
+unchanged).
+
+### 378. A ring of thorn round a troubled camp
+
+The user asked: "Yes, go on to thorn barriers." The second of the three
+listings in the first recommendation of #377: "Thorn barriers"
+(defensive_infrastructure, stage 0).
+
+**What changed** (`Action::PutUpThornHedge`, `do:PutUpThornHedge` in the
+catalogue, born knowledge as a stage-0 listing; `world::ThornHedge`):
+- **When.** In the evening at home (`the_evening_at_home`, after the midden
+  and latrine), somebody grown lays brush into a ring round their hearth
+  (`a_thorn_hedge_to_lay`). They do it if they remember a beast on the
+  camp's ground, or a ring there is already begun. Remembering means a
+  danger anywhere within the camp's sixty metres at three tenths or more
+  (`A_CAMP_TROUBLED_ENOUGH_FOR_THORNS`). A boar's warning marks one; so now
+  does driving a beast off, for everybody who was there.
+- **The work.** Every armful of wood in hand goes in, by whoever brings it.
+  Twenty-four close the ring (`ThornHedge::WHAT_IT_TAKES`). With none in
+  hand, wood within a forage is fetched.
+- **What it does.** Closed, it stands a season (`HOW_LONG_IT_STANDS`); one
+  begun and left is given up after a month. After the beasts move each turn,
+  any wild beast of six kilograms or more that has come inside a closed ring
+  it was outside goes back to where it stood
+  (`World::the_thorns_turn_them`). One already inside when the ring closed is
+  not shut in, a hare goes under it, and kept beasts pass.
+
+**Measured**, forty settlements, two years, against #377:
+
+| | #377 | #378 | t |
+|---|---|---|---|
+| births | 182 | 181 | −0.19 |
+| deaths | 4 | 2 | −1.00 |
+| of hunger | 2 | 1 | −0.57 |
+| of a blow | 2 | 1 | |
+| alive at two years | 658 | 659 | +0.16 |
+| person-days wasting | 383 | 326 | |
+| thorn rings closed | | 246, in 34 worlds | |
+| beasts turned at a ring | | 2,518 | |
+| beasts driven off | 61 | 63 | |
+
+Within noise. A camp that has been troubled re-rings itself about every
+season, about seven rings a world in two years, at twenty-four armfuls each.
+Against #374, before the mating change, alive is 643 to 659 (t +1.25) and
+deaths 5 to 2.
+
+**Tests** (`driving_off_tests`):
+- an untroubled camp is not hedged, a troubled one is, and a closed ring is
+  not laid again;
+- two people's brush closes one ring;
+- a closed ring turns a boar and not a hare, and does not shut in one
+  already inside;
+- driving a beast off sets the camp hedging.
+
+**Still to do from the same item:** night watches. A walk to water or
+anything else outside the camp still stops short of a beast's ground until
+the walker is desperate (#376).
+
+**Full suite**: 3,003 passed, 0 failed.
+
+**Dice counts**: 7,793 (seed 4242, 120 turns) and 948,917 (seed 0, a year,
 unchanged).
