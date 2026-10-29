@@ -81,6 +81,7 @@ impl Simulation {
             Action::Hunt { animal_id, weapon } => self.hunting(animal_id, weapon, agent_index, &mut rng, turn_now),
             Action::DriveOff { animal_id } => self.driving_off(animal_id, agent_index),
             Action::PutUpThornHedge => self.laying_a_thorn_hedge(agent_index, turn_now),
+            Action::KeepWatch => self.keeping_watch(agent_index, turn_now),
             Action::Fight { animal_id, weapon } => self.fighting_a_beast(animal_id, weapon, agent_index, &mut rng, turn_now),
             Action::Tame { animal_id, food_type } => self.taming(animal_id, food_type, agent_index, turn_now),
             Action::CollectAnimalProduct { animal_id } => self.collecting_from_a_beast(animal_id, agent_index, turn_now),

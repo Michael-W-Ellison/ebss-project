@@ -7,6 +7,9 @@
 //! - a boar off away from the camp is left alone
 //! - a camp a beast has troubled is ringed with thorn, over several trips
 //! - a closed ring turns a boar and not a hare, and shuts nothing in
+//! - a troubled camp of three keeps a watch through the night, in turns;
+//!   the watch drives off what it can and wakes whoever sleeps near what it
+//!   cannot
 
 use crate::agents::{AgentConfig, Population};
 use crate::analytics::Simulation;
@@ -271,4 +274,106 @@ fn a_beast_driven_off_sets_the_camp_hedging() {
     give_wood(&mut simulation, 1, 5);
     let agent = simulation.population.agents[1].clone();
     assert_eq!(simulation.a_thorn_hedge_to_lay(&agent, agent.state.position), Some(Action::PutUpThornHedge));
+}
+
+// --------------------------------------------------------------------------
+// A watch through the night (#379)
+// --------------------------------------------------------------------------
+
+/// The middle of the night, and a camp of `people` that remembers a beast on
+/// its ground, all asleep by the hearth, with nothing about.
+fn a_troubled_camp_at_night(people: usize) -> Simulation {
+    let (mut simulation, _) = a_boar_on_the_hearth(people);
+    simulation.world.animals.get_all_mut().clear();
+    simulation.world.climate.calendar.time_of_day = 1.0;
+    let now = simulation.current_turn;
+    for agent in simulation.population.agents.iter_mut() {
+        agent.state.position = (HEARTH.0, HEARTH.1 + 1, 0);
+        agent
+            .exploration_knowledge
+            .saw_danger(crate::world::Position::new(HEARTH.0 + 1, HEARTH.1), "Wild Boar", 1.0, now);
+    }
+    assert!(simulation.where_in_the_night_it_is().0, "one in the morning is night");
+    simulation
+}
+
+fn who_is_on_watch(simulation: &Simulation) -> Vec<usize> {
+    (0..simulation.population.agents.len()).filter(|&i| simulation.on_watch_now(i)).collect()
+}
+
+/// One of a troubled camp of three is on watch at any hour of the night,
+/// and the watch goes round them.
+#[test]
+fn one_of_a_troubled_camp_keeps_watch() {
+    let mut simulation = a_troubled_camp_at_night(3);
+    let first = who_is_on_watch(&simulation);
+    assert_eq!(first.len(), 1, "one on watch, not {first:?}");
+    assert_eq!(simulation.what_the_watch_does(first[0]), Action::KeepWatch);
+
+    // Later in the night, and the next night, somebody else
+    let mut watchers = std::collections::BTreeSet::new();
+    for night in 0..3u32 {
+        for hour in [23.0f32, 1.0, 3.0] {
+            simulation.current_turn = night * crate::environment::seasons::TICKS_PER_DAY;
+            simulation.world.climate.calendar.time_of_day = hour;
+            watchers.extend(who_is_on_watch(&simulation));
+        }
+    }
+    assert_eq!(watchers.len(), 3, "the watch goes round all three: {watchers:?}");
+}
+
+/// No watch at a camp of two, at an untroubled camp, by day, or inside a
+/// closed thorn ring.
+#[test]
+fn no_watch_where_none_is_wanted() {
+    let simulation = a_troubled_camp_at_night(2);
+    assert!(who_is_on_watch(&simulation).is_empty(), "two are too few to keep a watch");
+
+    let (mut untroubled, _) = a_boar_on_the_hearth(3);
+    untroubled.world.climate.calendar.time_of_day = 1.0;
+    assert!(who_is_on_watch(&untroubled).is_empty(), "nobody watches an untroubled camp");
+
+    let mut by_day = a_troubled_camp_at_night(3);
+    by_day.world.climate.calendar.time_of_day = 12.0;
+    assert!(who_is_on_watch(&by_day).is_empty(), "nobody keeps a night watch at noon");
+
+    let mut ringed = a_troubled_camp_at_night(3);
+    let now = ringed.world.turn;
+    ringed.world.thorn_hedges.push(crate::world::ThornHedge {
+        around: crate::world::Position::new(HEARTH.0, HEARTH.1),
+        started: now,
+        laid: crate::world::ThornHedge::WHAT_IT_TAKES,
+        closed_on: Some(now),
+    });
+    assert!(who_is_on_watch(&ringed).is_empty(), "a closed ring keeps the beasts out without a watch");
+}
+
+/// A boar coming onto the camp in the night is driven off by the watch with
+/// the camp behind it.
+#[test]
+fn the_watch_drives_off_a_boar_with_the_camp_behind_it() {
+    let mut simulation = a_troubled_camp_at_night(4);
+    let boar = simulation.world.spawn_animal("boar".to_string(), (HEARTH.0 + 4, HEARTH.1)).expect("a boar");
+    let watcher = who_is_on_watch(&simulation)[0];
+    assert_eq!(simulation.what_the_watch_does(watcher), Action::DriveOff { animal_id: boar });
+}
+
+/// A mammoth the camp could not drive off: the watch wakes whoever is asleep
+/// near it, frightened of it, so they get out of its way.
+#[test]
+fn the_watch_wakes_whoever_sleeps_near_a_beast_it_cannot_drive() {
+    let mut simulation = a_troubled_camp_at_night(3);
+    simulation.world.spawn_animal("mammoth".to_string(), (HEARTH.0 + 3, HEARTH.1 + 1)).expect("a mammoth");
+    let watcher = who_is_on_watch(&simulation)[0];
+    let sleeper = (watcher + 1) % 3;
+    simulation.population.agents[sleeper].busy_until = simulation.current_turn + 100;
+
+    let result = simulation.execute_action(&Action::KeepWatch, watcher);
+    assert!(result.success, "{result:?}");
+    assert_eq!(simulation.population.agents[sleeper].busy_until, 0, "the sleeper is woken");
+    assert!(
+        simulation.population.agents[sleeper].emotions.what_frightens_me_most().is_some(),
+        "and frightened of it"
+    );
+    assert!(simulation.world.woken_by_the_watch >= 1);
 }

@@ -259,7 +259,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // cannot cross, and one with nowhere to go is not driven.
     // Up to 7,793 for #378: a camp a beast has troubled is ringed with thorn,
     // and those who drove one off remember it.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_793;
+    // Down to 7,015 for #379: a troubled camp of three keeps a watch through
+    // the night, in turns.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 7_015;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 

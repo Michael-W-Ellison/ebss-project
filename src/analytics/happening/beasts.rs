@@ -556,6 +556,15 @@ impl Simulation {
         // about fighting from it. Without the memory a settlement beside a
         // mammoth was warned off 332 times in a year on seed 0 and walked
         // back each time.
+        // By night or by day, for the measurement (#379)
+        let (night, _, _) = self.where_in_the_night_it_is();
+        if night {
+            self.world.beasts_warned_by_night += warnings.len() as u64;
+            self.world.beasts_struck_by_night += strikes.len() as u64;
+        } else {
+            self.world.beasts_warned_by_day += warnings.len() as u64;
+            self.world.beasts_struck_by_day += strikes.len() as u64;
+        }
         for (agent_index, what_it_was, called, at) in warnings {
             // And backs off it. Warned, a person decided again but was not
             // moved, so whatever they were about - a gather, a sleep, a site

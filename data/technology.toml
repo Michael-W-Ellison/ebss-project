@@ -6332,6 +6332,8 @@ name = "Night watches"
 path = "defensive_infrastructure"
 stage = 0
 role = "technique"
+model = ["do:KeepWatch"]
+note = "Turns through the night at a camp a beast has troubled, with no thorn ring closed round it (#379)."
 
 [[tech]]
 id = "defensive_infrastructure.0.hidden_stores"

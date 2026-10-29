@@ -288,6 +288,22 @@ pub struct World {
     #[serde(default)]
     pub beasts_the_thorns_turned: u64,
 
+    /// Watches of the night kept, and sleepers woken near a beast (#379).
+    #[serde(default)]
+    pub watches_kept: u64,
+    #[serde(default)]
+    pub woken_by_the_watch: u64,
+
+    /// Blows and warnings from beasts, by night and by day (#379).
+    #[serde(default)]
+    pub beasts_struck_by_night: u64,
+    #[serde(default)]
+    pub beasts_struck_by_day: u64,
+    #[serde(default)]
+    pub beasts_warned_by_night: u64,
+    #[serde(default)]
+    pub beasts_warned_by_day: u64,
+
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
     pub food_the_scavengers_took: u64,
@@ -1842,6 +1858,12 @@ impl World {
             beasts_driven_off: 0,
             thorn_hedges_closed: 0,
             beasts_the_thorns_turned: 0,
+            watches_kept: 0,
+            woken_by_the_watch: 0,
+            beasts_struck_by_night: 0,
+            beasts_struck_by_day: 0,
+            beasts_warned_by_night: 0,
+            beasts_warned_by_day: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),

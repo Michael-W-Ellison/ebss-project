@@ -222,6 +222,8 @@ pub enum Action {
     /// Lay the brush in hand into the thorn ring round this one's camp
     /// (#378).
     PutUpThornHedge,
+    /// Sit up through a watch of the night for the camp (#379).
+    KeepWatch,
     /// Tame a wild animal
     Tame {
         animal_id: uuid::Uuid,
@@ -445,7 +447,7 @@ impl Action {
             Action::PutUpFold | Action::MuckOut => Some(DriveType::Utility),
             Action::StartMidden | Action::DigLatrine => Some(DriveType::Protection),
             // Keeping the camp's ground for its people (#377)
-            Action::DriveOff { .. } | Action::PutUpThornHedge => Some(DriveType::Protection),
+            Action::DriveOff { .. } | Action::PutUpThornHedge | Action::KeepWatch => Some(DriveType::Protection),
             Action::Slaughter { .. } => Some(DriveType::Hunger),
             Action::HarvestPlant { .. } => Some(DriveType::Industry), // Resource gathering
             Action::SeekShelter => Some(DriveType::Safety), // Seeking safety from weather

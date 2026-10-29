@@ -395,6 +395,14 @@ impl Simulation {
             return action;
         }
 
+        // **Somebody keeps watch** at a camp a beast has troubled (#379):
+        // three blows in four from a beast came at night, nearly all on
+        // somebody asleep.
+        if self.on_watch_now(agent_index) {
+            *self.what_a_threat_came_to.entry("night: kept watch".to_string()).or_insert(0) += 1;
+            return self.what_the_watch_does(agent_index);
+        }
+
         // **Nobody lies down in it.** The Rest drive's own way to bed steps
         // off foul ground first (see `somewhere_that_does_not_stink`); sent
         // to bed by the clock, everybody slept where they stood, which was

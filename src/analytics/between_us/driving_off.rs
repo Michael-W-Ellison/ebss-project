@@ -225,6 +225,24 @@ impl Simulation {
     /// is the whole of the scale and fades over the weeks after.
     pub(in crate::analytics) const A_CAMP_TROUBLED_ENOUGH_FOR_THORNS: f32 = 0.3;
 
+    /// Whether this one remembers a beast anywhere on their camp's ground
+    /// lately: a danger at three tenths or more within sixty metres of the
+    /// hearth, which a remembered danger covers in patches three cells wide.
+    pub(in crate::analytics) fn is_my_camp_troubled(&self, agent: &crate::agents::Agent) -> bool {
+        let home = Self::where_this_one_lives(agent);
+        let now = self.current_turn;
+        [-3, 0, 3]
+            .iter()
+            .flat_map(|dx| [-3, 0, 3].iter().map(move |dy| (*dx, *dy)))
+            .map(|(dx, dy)| {
+                agent
+                    .exploration_knowledge
+                    .how_bad_is_it_there(crate::world::Position::new(home.0 + dx, home.1 + dy), now)
+            })
+            .fold(0.0f32, f32::max)
+            >= Self::A_CAMP_TROUBLED_ENOUGH_FOR_THORNS
+    }
+
     /// The next of laying a thorn ring round this one's camp (#378): brush
     /// laid if there is any in hand and the ring is not closed, or fetched
     /// from within a forage. Only at a camp this one remembers a beast
@@ -240,24 +258,11 @@ impl Simulation {
             return None;
         }
         let home = Self::where_this_one_lives(agent);
-        let now = self.current_turn;
         let begun = self.world.thorn_hedge_round(home).map(|which| &self.world.thorn_hedges[which]);
         if begun.is_some_and(|hedge| hedge.closed_on.is_some()) {
             return None;
         }
-        // Anywhere on the camp's ground, which a remembered danger covers in
-        // patches three cells wide
-        let troubled = [-3, 0, 3]
-            .iter()
-            .flat_map(|dx| [-3, 0, 3].iter().map(move |dy| (*dx, *dy)))
-            .map(|(dx, dy)| {
-                agent
-                    .exploration_knowledge
-                    .how_bad_is_it_there(crate::world::Position::new(home.0 + dx, home.1 + dy), now)
-            })
-            .fold(0.0f32, f32::max)
-            >= Self::A_CAMP_TROUBLED_ENOUGH_FOR_THORNS;
-        if begun.is_none() && !troubled {
+        if begun.is_none() && !self.is_my_camp_troubled(agent) {
             return None;
         }
         if agent.how_many_i_have("wood") > 0 {
@@ -326,5 +331,128 @@ impl Simulation {
             } else {
                 format!("Laid {laying} of brush into the thorn ring")
             })
+    }
+}
+
+impl Simulation {
+    /// How long one watch of the night is, in turns: two hours.
+    pub(in crate::analytics) const A_WATCH: u32 = 4;
+
+    /// How many grown people a camp has to have before it keeps a watch:
+    /// with fewer, one watching is most of the night's sleep lost to one
+    /// person.
+    pub(in crate::analytics) const ENOUGH_TO_KEEP_A_WATCH: usize = 3;
+
+    /// Whether this one is on watch now (#379): it is night; their camp is
+    /// one a beast has troubled, with no thorn ring closed round it; three
+    /// or more grown people sleep there; and of them, it is this one's turn.
+    /// The night is cut into watches of two hours, and the turns go round
+    /// the camp in a different place each night.
+    pub(in crate::analytics) fn on_watch_now(&self, agent_index: usize) -> bool {
+        let agent = &self.population.agents[agent_index];
+        if agent.state.years_old() < crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT
+            || !agent.knows_how_to_do("KeepWatch")
+        {
+            return false;
+        }
+        let (asleep, _, turns_left) = self.where_in_the_night_it_is();
+        if !asleep {
+            return false;
+        }
+        let home = Self::where_this_one_lives(agent);
+        if self
+            .world
+            .thorn_hedge_round(home)
+            .is_some_and(|which| self.world.thorn_hedges[which].is_closed(self.world.turn))
+        {
+            return false;
+        }
+        if !self.is_my_camp_troubled(agent) {
+            return false;
+        }
+        let mut camp: Vec<uuid::Uuid> = self
+            .population
+            .agents
+            .iter()
+            .filter(|them| them.state.is_alive)
+            .filter(|them| them.state.years_old() >= crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT)
+            .filter(|them| Self::within(Self::where_this_one_lives(them), home, 2))
+            .map(|them| them.id)
+            .collect();
+        if camp.len() < Self::ENOUGH_TO_KEEP_A_WATCH {
+            return false;
+        }
+        camp.sort_unstable();
+        let night = self.current_turn / crate::environment::seasons::TICKS_PER_DAY;
+        let watch = turns_left / Self::A_WATCH;
+        camp[((night + watch) as usize) % camp.len()] == agent.id
+    }
+
+    /// What somebody on watch does: drives off a beast on the camp's ground
+    /// if the camp together could, and otherwise keeps watch by the hearth.
+    pub(in crate::analytics) fn what_the_watch_does(&self, agent_index: usize) -> Action {
+        let agent = &self.population.agents[agent_index];
+        if let Some(drive) = self.a_beast_on_our_ground(agent, agent.state.position) {
+            return drive;
+        }
+        // By the hearth, which is where a watch is kept from
+        let home = Self::where_this_one_lives(agent);
+        let here = agent.state.position;
+        if !Self::within((here.0, here.1), home, 2) && self.world.can_walk_between((here.0, here.1), home) {
+            return Action::Move { target: (home.0, home.1, here.2) };
+        }
+        Action::KeepWatch
+    }
+
+    /// `Action::KeepWatch`: sitting up through a watch of the night. Anybody
+    /// of the camp asleep near a beast that would charge is woken and warned
+    /// of it, so they get out of its way rather than lie in it (#379).
+    pub(in crate::analytics) fn keeping_watch(&mut self, agent_index: usize, turn_now: u32) -> crate::environment::ActionResult {
+        use crate::environment::ActionResult;
+
+        let watcher = &self.population.agents[agent_index];
+        let home = Self::where_this_one_lives(watcher);
+        let beasts: Vec<((i32, i32), String, crate::agents::EmotionSource)> = self
+            .world
+            .get_animals_in_radius(home, (Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS + Self::AS_FAR_AS_A_BEAST_LOOKS) as f32)
+            .into_iter()
+            .filter(|animal| animal.is_alive() && !animal.is_domesticated && !animal.is_kept())
+            .filter_map(|animal| {
+                let species = self.world.animals.get_species(&animal.species_id)?;
+                Self::would_it_charge(species).then(|| {
+                    (
+                        animal.position,
+                        species.name.clone(),
+                        crate::agents::EmotionSource::Creature(species.name.clone()),
+                    )
+                })
+            })
+            .collect();
+
+        let mut woken = 0u64;
+        for (at, called, source) in beasts {
+            for them in self.population.agents.iter_mut() {
+                let asleep = them.busy_until > turn_now || them.fatigue.is_sleeping;
+                if !them.state.is_alive
+                    || !asleep
+                    || !Self::within(Self::where_this_one_lives(them), home, 2)
+                    || !Self::within((them.state.position.0, them.state.position.1), at, Self::AS_FAR_AS_A_BEAST_LOOKS)
+                {
+                    continue;
+                }
+                them.busy_until = 0;
+                them.state.next_decision_at = them.state.next_decision_at.min(turn_now);
+                them.emotions.set_fear(source.clone(), 0.6);
+                them.exploration_knowledge.saw_danger(crate::world::Position::new(at.0, at.1), &called, 1.0, turn_now);
+                woken += 1;
+            }
+        }
+        self.world.watches_kept += 1;
+        self.world.woken_by_the_watch += woken;
+
+        ActionResult::success()
+            .with_drive_change(crate::core::DriveType::Protection, -0.1)
+            .with_energy_cost(1.0)
+            .with_message(if woken > 0 { format!("Woke {woken} near a beast") } else { "Kept watch".to_string() })
     }
 }

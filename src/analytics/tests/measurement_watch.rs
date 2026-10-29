@@ -102,6 +102,12 @@ fn zz_discovery_watch() {
         ("beasts_driven_off", sim.world.beasts_driven_off),
         ("thorn_hedges_closed", sim.world.thorn_hedges_closed),
         ("beasts_the_thorns_turned", sim.world.beasts_the_thorns_turned),
+        ("watches_kept", sim.world.watches_kept),
+        ("woken_by_the_watch", sim.world.woken_by_the_watch),
+        ("beasts_struck_by_night", sim.world.beasts_struck_by_night),
+        ("beasts_struck_by_day", sim.world.beasts_struck_by_day),
+        ("beasts_warned_by_night", sim.world.beasts_warned_by_night),
+        ("beasts_warned_by_day", sim.world.beasts_warned_by_day),
     ] {
         println!("STORE {what} {how_many}");
     }
