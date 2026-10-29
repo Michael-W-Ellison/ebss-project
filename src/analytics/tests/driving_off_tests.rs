@@ -108,3 +108,51 @@ fn a_boar_away_from_the_camp_is_left_alone() {
     let agent = simulation.population.agents[0].clone();
     assert_eq!(simulation.a_beast_on_our_ground(&agent, agent.state.position), None);
 }
+
+/// Every tile `keep` does not keep made water.
+fn water_beyond(simulation: &mut Simulation, keep: impl Fn(i32, i32) -> bool) {
+    let (width, height) = (simulation.world.grid.width as i32, simulation.world.grid.height as i32);
+    for x in 0..width {
+        for y in 0..height {
+            if !keep(x, y) {
+                if let Some(tile) = simulation.world.grid.get_tile_mut(&crate::world::Position::new(x, y)) {
+                    tile.terrain = crate::world::Terrain::new(crate::world::TerrainType::Water);
+                }
+            }
+        }
+    }
+}
+
+/// With a lake straight behind it, a boar driven off goes the other way
+/// round it rather than standing where it was. Straight away and nowhere
+/// else, a mammoth with water behind it was driven off every turn for two
+/// years (#377).
+#[test]
+fn a_beast_with_water_behind_it_goes_round() {
+    let (mut simulation, boar) = a_boar_on_the_hearth(4);
+    water_beyond(&mut simulation, |x, _| x <= HEARTH.0 + 3);
+
+    let result = simulation.execute_action(&Action::DriveOff { animal_id: boar }, 0);
+    assert!(result.success, "{result:?}");
+    let at = simulation.world.animals.get(&boar).unwrap().position;
+    assert!(
+        how_far_it_is_from_the_hearth(&simulation, boar) > Simulation::ON_THE_CAMPS_GROUND + Simulation::A_BEASTS_GROUND,
+        "it should be off the camp's ground, at {at:?}"
+    );
+    let tile = simulation.world.grid.get_tile(&crate::world::Position::new(at.0, at.1)).unwrap();
+    assert!(tile.terrain.is_walkable(), "and on ground it can stand on");
+}
+
+/// And with nowhere at all to go, nobody tries it: it is not driven off by
+/// being shouted at where it stands.
+#[test]
+fn a_beast_with_nowhere_to_go_is_not_driven() {
+    let (mut simulation, boar) = a_boar_on_the_hearth(4);
+    water_beyond(&mut simulation, |x, y| (x - HEARTH.0).abs().max((y - HEARTH.1).abs()) <= 6);
+
+    let agent = simulation.population.agents[0].clone();
+    assert_eq!(simulation.a_beast_on_our_ground(&agent, agent.state.position), None);
+    let result = simulation.execute_action(&Action::DriveOff { animal_id: boar }, 0);
+    assert!(!result.success);
+    assert_eq!(simulation.world.beasts_driven_off, 0);
+}

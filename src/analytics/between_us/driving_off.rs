@@ -65,8 +65,39 @@ impl Simulation {
                     .get_species(&animal.species_id)
                     .is_some_and(Self::would_it_charge)
             })
-            .find(|animal| self.would_it_be_driven_off(animal, here))
+            .find(|animal| self.would_it_be_driven_off(animal, here) && self.where_it_would_bolt_to(animal, here).is_some())
             .map(|animal| Action::DriveOff { animal_id: animal.id })
+    }
+
+    /// Where a beast driven from `here` would bolt to: as far as a frightened
+    /// beast gets, the way most nearly away from those driving it that has
+    /// ground to stand on at the end, and as far short of that as it has to.
+    ///
+    /// Straight away and nowhere else, a mammoth with a lake behind it on
+    /// smooth seed 10 could not go, stood where it was, and was driven off
+    /// again every turn: 7,781 times in two years (#377).
+    pub(in crate::analytics) fn where_it_would_bolt_to(
+        &self,
+        animal: &crate::environment::fauna::Animal,
+        here: (i32, i32),
+    ) -> Option<(i32, i32)> {
+        let (dx, dy) = (animal.position.0 - here.0, animal.position.1 - here.1);
+        let away = (dy as f32).atan2(dx as f32);
+        let (width, height) = (self.world.grid.width as i32, self.world.grid.height as i32);
+        // Straight away first, then a little to either side, then more
+        [0.0f32, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5]
+            .iter()
+            .flat_map(|turn| (1..=4).rev().map(move |quarter| (*turn, quarter)))
+            .find_map(|(turn, quarter)| {
+                let bolt = (Self::HOW_FAR_A_FRIGHTENED_BEAST_GETS * quarter / 4) as f32;
+                let heading = away + turn;
+                let to = (
+                    ((animal.position.0 as f32 + heading.cos() * bolt) as i32).clamp(0, width - 1),
+                    ((animal.position.1 as f32 + heading.sin() * bolt) as i32).clamp(0, height - 1),
+                );
+                let off_the_camp = !Self::within(to, animal.position, Self::ON_THE_CAMPS_GROUND + Self::A_BEASTS_GROUND);
+                (off_the_camp && self.is_passable_tile(to.0, to.1)).then_some(to)
+            })
     }
 
     /// Whether the grown people about `here`, all together, would drive this
@@ -143,19 +174,11 @@ impl Simulation {
             return ActionResult::failure("It stood its ground".to_string()).with_energy_cost(5.0);
         }
 
-        // Away from whoever drove it, as far as a frightened beast goes, or
-        // as far short of that as there is ground to stand on
-        let (dx, dy) = (animal.position.0 - here.0, animal.position.1 - here.1);
-        let span = (((dx * dx + dy * dy) as f32).sqrt()).max(1.0);
-        let (width, height) = (self.world.grid.width as i32, self.world.grid.height as i32);
-        let landed = (1..=4).rev().find_map(|quarter| {
-            let bolt = (Self::HOW_FAR_A_FRIGHTENED_BEAST_GETS * quarter / 4) as f32;
-            let to = (
-                ((animal.position.0 as f32 + dx as f32 / span * bolt) as i32).clamp(0, width - 1),
-                ((animal.position.1 as f32 + dy as f32 / span * bolt) as i32).clamp(0, height - 1),
-            );
-            self.is_passable_tile(to.0, to.1).then_some(to)
-        });
+        let landed = self.where_it_would_bolt_to(&animal, here);
+        if landed.is_none() {
+            *self.what_a_threat_came_to.entry("drive off: nowhere for it to go".to_string()).or_insert(0) += 1;
+            return ActionResult::failure("It had nowhere to go".to_string()).with_energy_cost(5.0);
+        }
 
         if let Some(beast) = self.world.animals.get_mut(animal_id) {
             beast.state = AnimalState::Fleeing { from_position: here };
