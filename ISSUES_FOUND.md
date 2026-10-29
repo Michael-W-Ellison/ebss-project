@@ -28033,7 +28033,9 @@ later entry. These were not. Each line names the entry that left it.
   beast's mass was tried and not kept (#257, #330).
 - A wounded person still goes back to fight a boar, often by a fold (#374).
 - A walk at a target inside a beast's ground stops short and is decided again
-  every minute, until the walker is starving or parched (#376).
+  every minute, until the walker is starving or parched (#376). On the camp's
+  own ground those about now drive the beast off together (#377); thorn
+  barriers and night watches are still to come.
 - The Utility working is chosen from a fixed place in the list, so a working
   refused for any reason comes back every turn Utility wins (#376).
 - A failed swap destroys the substitute, and swaps the world cannot supply
@@ -28925,3 +28927,81 @@ Each fails without its fix.
 **Full suite**: 2,993 passed, 0 failed.
 
 **Dice counts**: 7,126 (seed 4242, 120 turns) and 948,917 (seed 0, a year).
+
+### 377. Driving a beast off the camp's ground
+
+The user asked: "What technology discoveries should be added next from the
+list?" and then "Go ahead and start with the first." The first was driving a
+beast off the camp: "People protect or cull animals informally"
+(animal_husbandry, stage 0), with "Thorn barriers" and "Night watches"
+(defensive_infrastructure, stage 0). This entry is the first of the three.
+
+**What was there.** A beast that charges (a boar, a bear, a mammoth) keeps
+the ground two cells about it, and a walk stops short of that ground (#372).
+One that settled by a hearth could only be waited out. On smooth seed 3 two
+people starved outside a boar's ground three cells from home (#376).
+
+A beast sizes people up one at a time (`what_the_beasts_make_of_us`), and a
+boar outweighs any one person. So a camp full of people faced it one at a
+time.
+
+**What changed** (`analytics::between_us::driving_off`, `Action::DriveOff`,
+`do:DriveOff` in the catalogue, born knowledge as a stage-0 listing):
+- **The decision** (`a_beast_on_our_ground`, ahead of every want). It applies
+  to a grown person outside a charging beast's ground, with the beast within
+  sixty metres of their hearth (`ON_THE_CAMPS_GROUND`). They reckon what the
+  grown people within earshot are worth together (`what_those_about_are_worth`):
+  - each at what a person is worth to a beast, more with a weapon, less for
+    being hurt (`what_shape_i_am_in`);
+  - half as much again with brands from a fire burning within three cells
+    (`WHAT_A_BRAND_ADDS`).
+
+  That is set against what the beast would need to stand up to them: its
+  worth, times its nerve, times `WHAT_IT_TAKES_TO_TURN_AND_FACE`, the same
+  sum a beast makes. Nobody tries it when the sum says it would stand.
+- **The act.** The same reckoning again. The beast bolts as far as a
+  frightened beast gets, the way most nearly away from the drivers that has
+  ground off the camp to stand on (`where_it_would_bolt_to`). If it has
+  nowhere to go, it is not driven and nobody tries.
+
+**What did not work first.** Driven straight away and nowhere else, a
+mammoth with a lake behind it on smooth seed 10 had no ground to bolt to. It
+stood where it was, and the drive-off counted as done: 7,781 of the first
+run's 7,838 drive-offs were that one world, every turn for two years. It
+moved no population column, but it was turns spent on nothing.
+
+**Measured**, forty settlements, two years, against #376:
+
+| | #376 | #377 | t |
+|---|---|---|---|
+| births | 178 | 182 | +1.00 |
+| deaths | 5 | 4 | −0.44 |
+| of a blow | 4 | 2 | |
+| of hunger | 1 | 2 | +0.57 |
+| alive at two years | 653 | 658 | +1.22 |
+| person-days wasting | 574 | 383 | |
+| beasts driven off | | 61, in 19 worlds | |
+
+All within noise. Against #374, before the mating change, alive is 643 to
+658 (t +1.30).
+
+**Tests** (`driving_off_tests`):
+- four grown people drive a boar off the hearth, and it ends off the camp's
+  ground;
+- one alone does not try it, and it stands if he does;
+- brands from a burning fire make two enough;
+- a boar away from the camp is left alone;
+- with water straight behind it, a boar goes round (fails with the
+  straight-away rule);
+- with nowhere at all to go, it is not driven.
+
+**Still to do from the same item.** Thorn barriers, which keep beasts from
+coming onto the camp's ground at all, and night watches, which would see
+one coming while the camp sleeps. A walk to water or anything else outside
+the camp still stops short of a beast's ground until the walker is desperate
+(#376).
+
+**Full suite**: 2,999 passed, 0 failed.
+
+**Dice counts**: 7,388 (seed 4242, 120 turns) and 948,917 (seed 0, a year,
+unchanged).
