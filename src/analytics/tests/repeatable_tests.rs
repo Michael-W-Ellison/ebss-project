@@ -647,7 +647,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // until it is being carried for its killer.
     // Down 6.5% to 939,903 for #375: partners couple only on a day a child
     // could come of it.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 939_903;
+    // Up 2.6% to 963,961 for #376: partners far apart go to each other any
+    // day, and somebody starving walks into a beast's ground.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 963_961;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

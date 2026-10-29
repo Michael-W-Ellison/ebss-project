@@ -315,8 +315,8 @@ fn partners_apart_meet_rather_than_pass() {
 }
 
 /// A pair can conceive on one day a cycle, and on the other days wanting a
-/// child neither couples nor walks to the partner: the turn goes to whatever
-/// presses next. Partnered adults coupled about 1.4 times a day, every day,
+/// child neither couples nor walks to a partner who is near: the turn goes
+/// to whatever presses next. Partnered adults coupled about 1.4 times a day, every day,
 /// and twenty-nine days in thirty it could come to nothing (#375).
 #[test]
 fn nobody_goes_to_their_partner_on_a_day_nothing_could_come_of_it() {
@@ -331,11 +331,19 @@ fn nobody_goes_to_their_partner_on_a_day_nothing_could_come_of_it() {
     );
     assert_eq!(off_the_day, None, "off the fertile day the wish waits");
 
-    simulation.population.agents[1].state.position = (60, 20, 0);
+    simulation.population.agents[1].state.position = (30, 20, 0);
     assert_eq!(
         simulation.what_this_drive_offers(DriveType::Reproduction, &simulation.population.agents[0], at),
         None,
-        "and nobody walks to a partner for it either"
+        "nor walks to a partner a short way off"
+    );
+    // But a partner far off is gone to, any day: the walk is what keeps a
+    // pair in one place (#376)
+    simulation.population.agents[1].state.position = (100, 20, 0);
+    assert_eq!(
+        simulation.what_this_drive_offers(DriveType::Reproduction, &simulation.population.agents[0], at),
+        Some(Action::Move { target: (60, 20, 0) }),
+        "a partner eighty cells off is gone halfway to"
     );
     simulation.population.agents[1].state.position = at;
 

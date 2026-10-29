@@ -186,6 +186,11 @@ impl Simulation {
     /// How far apart two people can be and still come to anything.
     pub(in crate::analytics) const CLOSE_ENOUGH_TO_COURT: i32 = 3;
 
+    /// How far off a partner has to be, on a day nothing could come of
+    /// meeting, before the other goes halfway to them: 250 metres, about
+    /// twice how far apart partners were on an ordinary day (#376).
+    pub(in crate::analytics) const A_PARTNER_IS_MISSED_FROM: i32 = 25;
+
     /// The whole of a route from `from` to `target`, round whatever is in the
     /// way.
     ///

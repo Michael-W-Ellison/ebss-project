@@ -50,12 +50,34 @@ fn zz_discovery_watch() {
     let at_start: Vec<String> = first.keys().cloned().collect();
     println!("START {}", at_start.join(","));
 
+    // How far apart partners are, and how many days people spend living
+    // off their own reserve, once a day (#376)
+    let (mut partner_days, mut partners_apart, mut partners_far, mut wasting_days) = (0u64, 0u64, 0u64, 0u64);
     for day in 0..days {
         for _ in 0..PLANNING_PERIODS_PER_DAY {
             sim.take_a_turn();
         }
         note(&sim, &mut first, day + 1);
+        for agent in sim.population.agents.iter().filter(|a| a.state.is_alive) {
+            if agent.state.physiology.is_wasting() {
+                wasting_days += 1;
+            }
+            let Some(partner) = agent.my_partner() else { continue };
+            let Some(them) = sim.population.agents.iter().find(|a| a.id == partner && a.state.is_alive) else { continue };
+            let apart = (agent.state.position.0 - them.state.position.0)
+                .abs()
+                .max((agent.state.position.1 - them.state.position.1).abs()) as u64;
+            partner_days += 1;
+            partners_apart += apart;
+            if apart > 50 {
+                partners_far += 1;
+            }
+        }
     }
+    println!("STORE partner_days {partner_days}");
+    println!("STORE partner_cells_apart {partners_apart}");
+    println!("STORE partner_days_far_apart {partners_far}");
+    println!("STORE wasting_person_days {wasting_days}");
 
     let alive: Vec<_> = sim.population.agents.iter().filter(|a| a.state.is_alive).collect();
     for animal in sim.world.animals.get_all().iter().filter(|a| a.is_alive() && a.is_kept()) {

@@ -324,6 +324,19 @@ impl Simulation {
         self.whose_ground_is_this(there).is_some() && self.whose_ground_is_this(here).is_none()
     }
 
+    /// Whether this one stops short of a beast's ground on the way from here
+    /// to there: anybody does, except somebody starving.
+    ///
+    /// A boar that settled on a camp's hearth kept everybody outside its
+    /// ground out of their own camp, and their store with it. The walk home
+    /// stopped short and called itself done, so the same walk was decided
+    /// again every minute: two people on smooth seed 3 starved three cells
+    /// from their hearth, walking at it two hundred and eighty times a day
+    /// for two days (#376). Starving, a person goes in and takes the chance.
+    pub(in crate::analytics) fn does_this_one_stop_short(&self, agent_index: usize, here: (i32, i32), there: (i32, i32)) -> bool {
+        !self.population.agents[agent_index].state.is_starving() && self.walks_into_a_beasts_ground(here, there)
+    }
+
     /// And how near before anybody is wary of it: fifty metres. A hunter
     /// worries anybody within `CLOSE_ENOUGH_TO_WORRY_ABOUT`, because it comes
     /// for them; a beast that only keeps its ground worries only somebody

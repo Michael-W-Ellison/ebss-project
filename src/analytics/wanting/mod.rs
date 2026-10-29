@@ -1249,6 +1249,15 @@ impl Simulation {
                 // it (#338): twenty-nine days in thirty spent on a turn that
                 // could come to nothing. On the other days the wish waits,
                 // and the turn goes to whatever presses next.
+                //
+                // **But partners still go to each other when they are far
+                // apart** (#376). The walk halfway came with the wish, and the
+                // wish came about daily, so it was what kept a pair in one
+                // place. Kept to the fertile day, partners were twice as far
+                // apart (28 cells against 14 over eight settlement-pairs) and
+                // more than fifty cells apart on 6,758 days against 2,910;
+                // the two who starved on smooth seed 3 had partners two
+                // hundred cells off.
                 let partner = agent.my_partner()?;
                 let them = self
                     .population
@@ -1256,7 +1265,13 @@ impl Simulation {
                     .iter()
                     .find(|them| them.id == partner && them.state.is_alive)?;
                 if !crate::agents::reproduction::could_these_two_conceive_today(agent, them, self.current_turn) {
-                    return None;
+                    let (x, y, _) = them.state.position;
+                    let paces = (x - agent_position.0).abs().max((y - agent_position.1).abs());
+                    if paces <= Self::A_PARTNER_IS_MISSED_FROM {
+                        return None;
+                    }
+                    let halfway = ((x + agent_position.0).div_euclid(2), (y + agent_position.1).div_euclid(2));
+                    return Some(Action::Move { target: (halfway.0, halfway.1, agent_position.2) });
                 }
 
                 self.somebody_to_have_a_child_with(agent, agent_position)

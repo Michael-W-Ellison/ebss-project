@@ -225,7 +225,7 @@ impl Simulation {
                     // twenty metres off is walked round or waited out; warned
                     // off and backed away, people walked straight back in and
                     // were charged nine and twelve times over (#372).
-                    Some(cell) if self.walks_into_a_beasts_ground((here.0, here.1), cell) => break,
+                    Some(cell) if self.does_this_one_stop_short(agent_index, (here.0, here.1), cell) => break,
                     Some(cell) => {
                         let agent = &mut self.population.agents[agent_index];
                         agent.stepped_from = Some((here.0, here.1));
@@ -495,7 +495,7 @@ impl Simulation {
         };
 
         // Not into a beast's ground (#372): the step is not taken
-        if self.walks_into_a_beasts_ground((current_pos.0, current_pos.1), (next_x, next_y)) {
+        if self.does_this_one_stop_short(agent_index, (current_pos.0, current_pos.1), (next_x, next_y)) {
             let beast = self.whose_ground_is_this((next_x, next_y)).unwrap_or_default();
             return ActionResult::success()
                 .with_energy_cost(0.0)
