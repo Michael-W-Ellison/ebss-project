@@ -4555,10 +4555,24 @@ impl Agent {
     /// What the verb wants in the hand is not asked here. That is the verb
     /// matrix's business, and it is asked once, before the action runs.
     pub fn what_i_would_work_on(&self) -> Option<(String, String)> {
+        self.what_i_would_work_on_with(true)
+    }
+
+    /// The same, standing where there is a fire to hand or not.
+    ///
+    /// Asked without a fire, a working done over one was still offered, and
+    /// refused when it was tried: on smooth seed 18, "No fire here to fire
+    /// claypot over" 6,467 times in 399 days against 359 pots fired, the
+    /// same person every Utility turn, because where a person starts in the
+    /// list is fixed (#376). The turns freed from coupling in #375 went
+    /// there, and two people wasting through a winter spent forty turns a day
+    /// trying to fire a pot with no fire.
+    pub fn what_i_would_work_on_with(&self, a_fire_to_hand: bool) -> Option<(String, String)> {
         use crate::environment::making;
 
         let could: Vec<&'static making::Working> = making::EVERY_WORKING
             .iter()
+            .filter(|working| a_fire_to_hand || !working.over_a_fire)
             .filter(|working| working.born_known() || self.found_out.contains(working.makes))
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)
             .filter(|working| self.how_much_water_i_carry() >= working.wants_water)
@@ -4972,12 +4986,20 @@ impl Agent {
     /// the cost and the water is free, so a person who owns something to carry
     /// it in pays that cost once and drinks for days.
     pub fn what_vessel_i_would_rather_have(&self) -> Option<(&'static str, &'static str)> {
+        self.what_vessel_i_would_rather_have_with(true)
+    }
+
+    /// The same, where there is a fire to hand or not: a fired pot holds the
+    /// most, so without this it was the vessel chosen with no fire to fire it
+    /// in, and refused (#376).
+    pub fn what_vessel_i_would_rather_have_with(&self, a_fire_to_hand: bool) -> Option<(&'static str, &'static str)> {
         if self.what_i_can_hold_water_in() > 0 {
             return None;
         }
 
         crate::environment::making::EVERY_WORKING
             .iter()
+            .filter(|working| a_fire_to_hand || !working.over_a_fire)
             .filter(|working| working.holds.is_some_and(|held| held > 0.0))
             .filter(|working| working.born_known() || self.found_out.contains(working.makes))
             .filter(|working| self.how_many_i_have(working.to) >= working.how_much)

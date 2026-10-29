@@ -132,7 +132,8 @@ impl Simulation {
         // turn, which it rarely does - 1.2% of agent-days had one.
         if agent.what_i_can_hold_water_in() == 0 {
             if agent.what_i_have_to_work_with(crate::agents::SkillType::Crafting).is_some() {
-                if let Some((verb, to)) = agent.what_vessel_i_would_rather_have() {
+                let a_fire_to_hand = self.nearest_fire_from(here, Self::FIRE_REACH, true).is_some();
+                if let Some((verb, to)) = agent.what_vessel_i_would_rather_have_with(a_fire_to_hand) {
                     return Action::Work { verb: verb.to_string(), to: to.to_string() };
                 }
             }

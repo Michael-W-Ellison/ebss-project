@@ -470,3 +470,45 @@ fn a_bright_stone_beside_the_pots_runs_in_the_pot_fire() {
 fn a_pot_fire_with_no_ore_in_it_shows_nothing_but_pots() {
     assert!(!fire_pots(false, 200));
 }
+
+/// Nobody sets out to fire a pot with no fire to fire it in. The Utility
+/// drive offered it anyway, and it was refused: 6,467 times in 399 days on
+/// one world, the same person every time, while two people wasting through a
+/// winter spent forty turns a day on it (#376).
+#[test]
+fn nobody_sets_out_to_fire_a_pot_with_no_fire() {
+    let mut simulation = one_person();
+    simulation.population.agents[0]
+        .inventory
+        .add_item(InventoryItem::new_with_weight("claypot".to_string(), 1, 1.0));
+    simulation.population.agents[0].found_out_how_to("claypot");
+    simulation.population.agents[0].found_out_how_to("stoneware");
+
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        agent.what_i_would_work_on_with(true),
+        Some(("fire".to_string(), "claypot".to_string())),
+        "with a fire, the shaped pot goes in it"
+    );
+    assert_eq!(agent.what_i_would_work_on_with(false), None, "with none, it waits");
+    assert_ne!(
+        agent.what_vessel_i_would_rather_have_with(false),
+        Some(("fire", "claypot")),
+        "nor is a fired pot the vessel wanted with no fire"
+    );
+
+    let here = agent.state.position;
+    let offered = simulation.what_this_drive_offers(crate::core::DriveType::Utility, agent, here);
+    assert!(
+        !matches!(offered, Some(Action::Work { ref verb, .. }) if verb == "fire"),
+        "no fire about, and the Utility drive offered {offered:?}"
+    );
+
+    a_lit_fire_at(&mut simulation, here);
+    let agent = &simulation.population.agents[0];
+    assert_eq!(
+        simulation.what_this_drive_offers(crate::core::DriveType::Utility, agent, here),
+        Some(Action::Work { verb: "fire".to_string(), to: "claypot".to_string() }),
+        "a fire lit beside it, and the pot is fired"
+    );
+}

@@ -512,3 +512,22 @@ fn somebody_starving_walks_into_a_beasts_ground() {
     let apart = (here.0 - boar.0).abs().max((here.1 - boar.1).abs());
     assert!(apart <= Simulation::A_BEASTS_GROUND, "a starving man stopped {apart} paces off, short of his supper");
 }
+
+/// And somebody down to the last of their water, for the same reason: two
+/// people died of thirst three cells from a stream with a boar's ground
+/// between (#376).
+#[test]
+fn somebody_dying_of_thirst_walks_into_a_beasts_ground() {
+    let mut simulation = one_person_beside("boar", 30);
+    simulation.population.agents[0].state.health = 100.0;
+    simulation.population.agents[0].state.physiology.hydration = 0.1;
+    let boar = simulation.world.animals.get_all()[0].position;
+    simulation.population.agents[0].state.position = (boar.0 - 10, boar.1, 0);
+    simulation.execute_action(
+        &crate::environment::Action::Move { target: (boar.0 + 1, boar.1, 0) },
+        0,
+    );
+    let here = simulation.population.agents[0].state.position;
+    let apart = (here.0 - boar.0).abs().max((here.1 - boar.1).abs());
+    assert!(apart <= Simulation::A_BEASTS_GROUND, "a man dying of thirst stopped {apart} paces off");
+}

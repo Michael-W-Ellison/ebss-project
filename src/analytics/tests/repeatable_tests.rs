@@ -649,7 +649,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // could come of it.
     // Up 2.6% to 963,961 for #376: partners far apart go to each other any
     // day, and somebody starving walks into a beast's ground.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 963_961;
+    // Down 1.6% to 948,917 for #376's second step: nobody sets out to fire a
+    // pot with no fire, and the parched go past a beast for water too.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 948_917;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);

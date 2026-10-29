@@ -1338,13 +1338,17 @@ impl Simulation {
             // step that cannot be taken, and getting the hammerstone out
             // before trying to use it.
             DriveType::Utility => agent
-                .what_i_would_work_on()
+                .what_i_would_work_on_with(
+                    self.nearest_fire_from(agent_position, Self::FIRE_REACH, true).is_some(),
+                )
                 .map(|(verb, to)| Action::Work { verb, to })
                 .or_else(|| {
                     agent
                         .what_i_have_to_work_with(crate::agents::SkillType::Crafting)?;
                     agent
-                        .what_vessel_i_would_rather_have()
+                        .what_vessel_i_would_rather_have_with(
+                            self.nearest_fire_from(agent_position, Self::FIRE_REACH, true).is_some(),
+                        )
                         .map(|(verb, to)| Action::Work {
                             verb: verb.to_string(),
                             to: to.to_string(),

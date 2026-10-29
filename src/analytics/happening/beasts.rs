@@ -325,7 +325,8 @@ impl Simulation {
     }
 
     /// Whether this one stops short of a beast's ground on the way from here
-    /// to there: anybody does, except somebody starving.
+    /// to there: anybody does, except somebody starving or down to the last
+    /// quarter of their water.
     ///
     /// A boar that settled on a camp's hearth kept everybody outside its
     /// ground out of their own camp, and their store with it. The walk home
@@ -333,9 +334,20 @@ impl Simulation {
     /// again every minute: two people on smooth seed 3 starved three cells
     /// from their hearth, walking at it two hundred and eighty times a day
     /// for two days (#376). Starving, a person goes in and takes the chance.
+    ///
+    /// And the same at the water: on smooth seed 24 two people died of thirst
+    /// walking at a stream three cells off a thousand times a day, a boar's
+    /// ground between them and it.
     pub(in crate::analytics) fn does_this_one_stop_short(&self, agent_index: usize, here: (i32, i32), there: (i32, i32)) -> bool {
-        !self.population.agents[agent_index].state.is_starving() && self.walks_into_a_beasts_ground(here, there)
+        let body = &self.population.agents[agent_index].state;
+        let desperate = body.is_starving() || body.physiology.hydration <= Self::DESPERATE_FOR_WATER;
+        !desperate && self.walks_into_a_beasts_ground(here, there)
     }
+
+    /// How low the water in a body has to run before its owner walks past a
+    /// beast to get more: the last of the four bands, where everything the
+    /// body does is at a quarter (`Physiology::capability`).
+    pub(in crate::analytics) const DESPERATE_FOR_WATER: f32 = 0.25;
 
     /// And how near before anybody is wary of it: fifty metres. A hunter
     /// worries anybody within `CLOSE_ENOUGH_TO_WORRY_ABOUT`, because it comes
