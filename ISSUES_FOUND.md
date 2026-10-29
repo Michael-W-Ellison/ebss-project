@@ -28032,6 +28032,10 @@ later entry. These were not. Each line names the entry that left it.
   for a third of each load when it brings more home (#374). Meat by the
   beast's mass was tried and not kept (#257, #330).
 - A wounded person still goes back to fight a boar, often by a fold (#374).
+- A walk at a target inside a beast's ground stops short and is decided again
+  every minute, until the walker is starving or parched (#376).
+- The Utility working is chosen from a fixed place in the list, so a working
+  refused for any reason comes back every turn Utility wins (#376).
 - A failed swap destroys the substitute, and swaps the world cannot supply
   are still offered once (#206). ~~Fixed (#369).~~
 - ~~`what_i_would_work_on` has no "is the output worth having" filter (#199).~~
@@ -28831,3 +28835,93 @@ looked into.
 
 **Dice counts**: 7,126 (seed 4242, 120 turns, unchanged) and 939,903 (seed
 0, a year).
+
+### 376. Why hunger deaths went up after #375, and what stopped them
+
+The user asked: "Look into why hunger deaths went up."
+
+After #375 hunger deaths went from 1 to 6 in forty settlements over two
+years, and thirst from 1 to 3. Earlier runs in this series had 0 to 3. Each
+death was traced: a person's last few weeks of actions, reserve, health and
+water, what took their health, food carried, and where their partner and
+hearth were. Four causes turned up, two from #375 and two older faults that
+the freed turns ran into.
+
+**1. Partners drifted apart.** The Reproduction drive used to walk a person
+halfway to their partner whenever the wish for a child was up, which was about
+daily. That walk was what kept a pair in one place. #375 kept it to the
+fertile day. Eight settlements run both ways for two years:
+
+| | every day (#374) | fertile day only (#375) |
+|---|---|---|
+| partners' mean distance apart | 14 cells | 28 cells |
+| partner-days over fifty cells apart | 2,910 | 6,758 |
+
+The two traced on smooth seed 3 had partners two hundred cells away. A partner
+more than 25 cells off (`A_PARTNER_IS_MISSED_FROM`) is now gone halfway to on
+any day. Coupling stays on the fertile day.
+
+**2. A boar on the hearth.** The #372 rule stops a walk short of a beast's
+ground. A boar settled on smooth seed 3's camp, and the two people outside
+its ground could not get back to their hearth or their store. The walk
+stopped short and called itself done, so it was decided again every minute,
+about 280 times a day. They starved three cells from home over two days.
+Somebody starving now walks in and takes the chance
+(`does_this_one_stop_short`).
+
+**3. The same at the water.** On smooth seed 24, two people died of thirst
+three cells from a stream with a boar's ground between them and it. Each
+walked at it 870 to 1,040 times on their last day. Somebody down to the last
+quarter of their water (`DESPERATE_FOR_WATER`) now walks in as well.
+
+**4. Firing a pot with no fire.** On scattered seed 8 and smooth seed 18,
+people wasting through a winter spent 34 to 48 turns a day on
+`Work { verb: "fire", to: "claypot" }` and nothing else. The Utility drive
+offered any working the person knew, whether or not it is done over a fire
+(`what_i_would_work_on`). Each person always takes the same entry from that
+list, chosen by their id. So the same refused job came back every turn
+Utility won: "No fire here to fire claypot over" 6,467 times in 399 days on
+smooth seed 18, against 359 pots fired. The turns freed from coupling went
+there. A working over a fire, and the fired pot as the vessel wanted
+(`what_vessel_i_would_rather_have`), are now offered only with a lit fire to
+hand (`what_i_would_work_on_with`, `what_vessel_i_would_rather_have_with`).
+
+**Measured**, forty settlements, two years:
+
+| | #374 | #375 | #376 first step (1, 2) | #376 (1–4) |
+|---|---|---|---|---|
+| births | 168 | 174 | 178 | 178 |
+| deaths | 5 | 10 | 12 | 5 |
+| of hunger | 1 | 6 | 4 | 1 |
+| of thirst | 1 | 3 | 3 | 0 |
+| of a blow | 3 | 0 | 5 | 4 |
+| alive at two years | 643 | 644 | 646 | 653 |
+| person-days wasting | | | 939 | 574 |
+| couplings tried | | | 155 | 128 |
+
+Against #374, the last column is t +0.82 for births and alive, and 0.00 for
+deaths and hunger deaths. Partners are 17.6 cells apart on average, and over
+fifty apart on 4.7% of partner-days.
+
+**Still open.** Somebody who is not desperate still walks at a target inside
+a beast's ground, stops short and decides the same walk again, turn after
+turn. The decision layer should not pick such a target, but many of the walks
+come from overrides that never ask (`can_this_be_got_to`). The same fixed
+starting place in the Utility list means one person can still repeat any
+working that keeps being refused for some other reason.
+
+**Tests**:
+- `coupling_tests::nobody_goes_to_their_partner_on_a_day_nothing_could_come_of_it`
+  now also checks that a partner eighty cells off is gone halfway to.
+- `danger_cadence_tests::somebody_starving_walks_into_a_beasts_ground` and
+  `somebody_dying_of_thirst_walks_into_a_beasts_ground`.
+- `clay_tests::nobody_sets_out_to_fire_a_pot_with_no_fire`.
+
+Each fails without its fix.
+
+**And to the measurement**: partner distance and person-days wasting, as
+`STORE` lines.
+
+**Full suite**: 2,993 passed, 0 failed.
+
+**Dice counts**: 7,126 (seed 4242, 120 turns) and 948,917 (seed 0, a year).
