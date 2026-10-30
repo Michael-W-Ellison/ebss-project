@@ -3885,8 +3885,10 @@ impl Agent {
     /// - A rack (Stage 2 of storage) by being rained off drying, often
     ///   enough.
     /// - A pit oven (Stage 1 of cooking) by enough suppers over a fire.
-    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 5] =
-        ["ScatterSeed", "TillSoil", "Smoke", "PutUpRack", "PitOven"];
+    /// - Burning the country off (Stage 1 of the agricultural path) by
+    ///   gathering, often enough, on ground a fire went over (#381).
+    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 6] =
+        ["ScatterSeed", "TillSoil", "Smoke", "PutUpRack", "PitOven", "BurnOff"];
 
     /// What the practice record calls food dried within reach of a burning
     /// hearth, and how much of it before somebody notices that what hung in
@@ -8217,6 +8219,7 @@ impl Agent {
             Action::Cook { .. } => "cook".to_string(),
             Action::LightFire => "lightfire".to_string(),
             Action::ScatterSeed => "scatterseed".to_string(),
+            Action::BurnOff => "burnoff".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),
@@ -8365,6 +8368,7 @@ impl Agent {
             Action::Cook { .. } | Action::LightFire => Undertaking::Cooking,
             Action::TillSoil
             | Action::ScatterSeed
+            | Action::BurnOff
             | Action::SpreadMuck
             | Action::TendField
             | Action::TakeCutting

@@ -193,6 +193,12 @@ fn watch_a_practice(watcher: &mut Agent, broadcast: &BroadcastAction) {
         watcher.practices.learn_from_watching(Practice::Sowing);
     }
 
+    // And seeing somebody set the dry growth alight on purpose, and keep it
+    // to a patch, is how burning the country off is passed on (#381)
+    if broadcast.details.contains("BurnOff") {
+        watcher.found_out_how_to("do:BurnOff");
+    }
+
     if broadcast.details.contains("TillSoil") && watcher.knows_how_to_do("ScatterSeed") {
         watcher.found_out_how_to("do:TillSoil");
         watcher.practices.learn_from_watching(Practice::Farming);

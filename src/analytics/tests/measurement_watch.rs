@@ -113,6 +113,9 @@ fn zz_discovery_watch() {
             "stands_kept",
             sim.world.resources.iter().filter(|node| node.tended >= 0.5).count() as u64,
         ),
+        ("wildfires", sim.world.wildfires),
+        ("burns_set", sim.world.burns_set),
+        ("stands_burnt", sim.world.stands_burnt),
     ] {
         println!("STORE {what} {how_many}");
     }

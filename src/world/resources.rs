@@ -1006,6 +1006,16 @@ pub struct ResourceNode {
     /// whenever anybody passes. Fades when nobody keeps it.
     #[serde(default)]
     pub tended: f32,
+
+    /// How fresh the growth is that a fire brought on here, from nothing to
+    /// one, one the day it burnt (#381).
+    ///
+    /// "Controlled burning", stage 1 of the agricultural path: old growth
+    /// burnt off in the dry season comes back as a flush of young shoots,
+    /// seed and fruit, the ash feeding it, which is why people who lived by
+    /// gathering set fire to the country round them. Fades over a year.
+    #[serde(default)]
+    pub burnt: f32,
 }
 
 impl ResourceNode {
@@ -1069,6 +1079,7 @@ impl ResourceNode {
             sown_by: None,
             killed_by: None,
             tended: 0.0,
+            burnt: 0.0,
         }
     }
 
@@ -1309,7 +1320,7 @@ impl ResourceNode {
         ((self.max_amount as f32)
             * Self::WHAT_ORDINARY_WILD_GROUND_CARRIES
             * what_the_ground_yields.max(0.0)
-            * self.what_keeping_it_does())
+            * self.what_is_done_for_it())
         .round() as u32
     }
 
@@ -1333,6 +1344,50 @@ impl ResourceNode {
     /// for one kept as well as it can be.
     pub fn what_keeping_it_does(&self) -> f32 {
         1.0 + self.tended.clamp(0.0, 1.0) * Self::A_KEPT_STAND_CARRIES
+    }
+
+    /// How much more a stand carries, and how much faster it comes back, the
+    /// season after a fire went over it: twice, fresh from the burn (#381).
+    pub const WHAT_A_BURN_BRINGS_ON: f32 = 1.0;
+
+    /// How fast the flush a fire brought on goes, a day: a year from the burn
+    /// to the old growth again.
+    pub const HOW_FAST_A_BURN_FADES_A_DAY: f32 = 1.0 / 365.0;
+
+    /// What the last fire to go over it does for this stand: one long after,
+    /// up to twice the day after it burnt.
+    pub fn what_the_fire_did(&self) -> f32 {
+        1.0 + self.burnt.clamp(0.0, 1.0) * Self::WHAT_A_BURN_BRINGS_ON
+    }
+
+    /// Everything done for this stand: how well it is kept, and how lately a
+    /// fire went over it.
+    pub fn what_is_done_for_it(&self) -> f32 {
+        self.what_keeping_it_does() * self.what_the_fire_did()
+    }
+
+    /// A day gone by for what was done for this stand: the keeping and the
+    /// flush both go back towards the wild.
+    pub fn a_day_since_it_was_seen_to(&mut self) {
+        if self.tended > 0.0 {
+            self.tended = (self.tended - Self::HOW_FAST_KEEPING_FADES_A_DAY).max(0.0);
+        }
+        if self.burnt > 0.0 {
+            self.burnt = (self.burnt - Self::HOW_FAST_A_BURN_FADES_A_DAY).max(0.0);
+        }
+    }
+
+    /// Whether a fire through the grass and the brush burns this and brings
+    /// it on: a wild stand of something people eat, but not the nut trees,
+    /// which a ground fire passes under.
+    pub fn is_brought_on_by_fire(&self) -> bool {
+        self.is_a_wild_food_stand() && self.resource_type != ResourceType::Nuts
+    }
+
+    /// A fire goes over it: what stood is burnt off, and the flush begins.
+    pub fn goes_up_in_flames(&mut self) {
+        self.amount = 0;
+        self.burnt = 1.0;
     }
 
     /// Whether this is a wild stand of something people eat, which is what
@@ -1731,7 +1786,7 @@ impl ResourceNode {
             * season_modifier
             * ground_factor
             * kept
-            * self.what_keeping_it_does();
+            * self.what_is_done_for_it();
 
         // Carry the fraction over rather than rounding it away: wild food
         // regrows slowly enough that rounding to whole units each pass loses most

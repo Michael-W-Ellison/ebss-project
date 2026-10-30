@@ -308,6 +308,16 @@ pub struct World {
     #[serde(default)]
     pub sparing_harvests: u64,
 
+    /// Fires of the country's own, lit by lightning on a dry day (#381).
+    #[serde(default)]
+    pub wildfires: u64,
+    /// Fires somebody set on purpose to bring the stands on (#381).
+    #[serde(default)]
+    pub burns_set: u64,
+    /// Stands a fire went over, either sort (#381).
+    #[serde(default)]
+    pub stands_burnt: u64,
+
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
     pub food_the_scavengers_took: u64,
@@ -1869,6 +1879,9 @@ impl World {
             beasts_warned_by_night: 0,
             beasts_warned_by_day: 0,
             sparing_harvests: 0,
+            wildfires: 0,
+            burns_set: 0,
+            stands_burnt: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
@@ -3907,6 +3920,10 @@ impl World {
             return false;
         }
 
+        // A kept stand nobody keeps goes back to the wild (#380), and the
+        // flush after a fire goes back to old growth (#381), asleep or not
+        resource.a_day_since_it_was_seen_to();
+
         // A hedgerow out of season carries nothing. Growth was seasonal
         // from the beginning and what was *standing* was not, so a berry
         // bush that had grown all summer still had its berries on it in
@@ -4048,6 +4065,66 @@ impl World {
         }
     }
 
+    /// Whether this is a day dry country burns on: no rain, in the summer or
+    /// the autumn, when the growth has dried off standing (#381).
+    pub fn is_it_a_day_for_burning(season: crate::environment::seasons::Season, precipitation: f32) -> bool {
+        use crate::environment::seasons::Season;
+        precipitation <= 0.0 && matches!(season, Season::Summer | Season::Fall)
+    }
+
+    /// The chance, on a day for burning, that lightning sets the country
+    /// alight somewhere: a few fires a dry season (#381).
+    pub const A_WILDFIRE_ON_A_DRY_DAY: f32 = 0.03;
+
+    /// How far a fire of the country's own runs before it goes out, cells.
+    pub const HOW_FAR_A_WILDFIRE_RUNS: u32 = 6;
+
+    /// Lightning on a dry day, now and then, among the stands that burn. The
+    /// climate's own lightning is not set down anywhere on the map, so this
+    /// is where it strikes.
+    fn the_dry_country_burns(&mut self, day: &sleeping::AGrowingDay) {
+        use rand::Rng;
+        if !Self::is_it_a_day_for_burning(day.season, day.precipitation) {
+            return;
+        }
+        let mut rng = crate::core::dice::roll();
+        if rng.gen::<f32>() >= Self::A_WILDFIRE_ON_A_DRY_DAY {
+            return;
+        }
+        let what_burns: Vec<Position> = self
+            .resources
+            .iter()
+            .filter(|node| node.is_brought_on_by_fire())
+            .map(|node| node.position)
+            .collect();
+        if what_burns.is_empty() {
+            return;
+        }
+        let struck = what_burns[rng.gen_range(0..what_burns.len())];
+        self.wildfires += 1;
+        self.burn_over(struck, Self::HOW_FAR_A_WILDFIRE_RUNS);
+    }
+
+    /// A fire over the ground within `reach` of `at`: every stand it brings
+    /// on is burnt off, and its flush begins (#381). Whatever is asleep there
+    /// is brought up to today first, so the days it slept through are lived
+    /// before the fire and not after. Returns how many stands burnt.
+    pub fn burn_over(&mut self, at: Position, reach: u32) -> usize {
+        self.wake_the_nodes_near(at, reach);
+        let mut burnt = 0;
+        let reach_squared = (reach as i64) * (reach as i64);
+        for number in self.node_numbers_near(at, reach) {
+            let node = &mut self.resources[number];
+            let (dx, dy) = ((node.position.x - at.x) as i64, (node.position.y - at.y) as i64);
+            if dx * dx + dy * dy <= reach_squared && node.is_brought_on_by_fire() {
+                node.goes_up_in_flames();
+                burnt += 1;
+            }
+        }
+        self.stands_burnt += burnt as u64;
+        burnt
+    }
+
     /// How many nodes are asleep.
     pub fn how_many_are_asleep(&self) -> usize {
         self.resources.iter().filter(|r| r.asleep_since.is_some()).count()
@@ -4056,6 +4133,10 @@ impl World {
     fn regenerate_resources(&mut self) {
         let day = self.todays_growing_day();
         let today = self.days_gone_by;
+
+        // The country burns now and then of itself, before today's growing
+        // (#381)
+        self.the_dry_country_burns(&day);
 
         // Who is near what. A world nobody has told where its people are
         // keeps everything awake - see `where_people_are`.
@@ -4106,11 +4187,6 @@ impl World {
                 self.first_day_logged,
                 today,
             );
-
-            // A kept stand nobody keeps goes back to the wild (#380)
-            if resource.tended > 0.0 {
-                resource.tended = (resource.tended - ResourceNode::HOW_FAST_KEEPING_FADES_A_DAY).max(0.0);
-            }
 
             let kept = if cultivated {
                 let Some(tile) = self.grid.get_tile_mut(&resource.position) else {

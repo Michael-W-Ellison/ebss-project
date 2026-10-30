@@ -508,7 +508,7 @@ impl Simulation {
             Action::Cache | Action::PutUpRack | Action::LayBedding => Some(ActionType::Building),
             Action::MakeClothing { .. } => Some(ActionType::Crafting),
             Action::TillSoil => Some(ActionType::Farming),
-            Action::ScatterSeed => Some(ActionType::Farming),
+            Action::ScatterSeed | Action::BurnOff => Some(ActionType::Farming),
             Action::TendField => Some(ActionType::Farming),
             Action::TakeFrom { .. } | Action::RobFishTrap { .. } => Some(ActionType::Social),
             Action::FleeFrom { .. } | Action::DriveOff { .. } => Some(ActionType::Combat),

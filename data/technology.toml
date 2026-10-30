@@ -9939,6 +9939,8 @@ name = "Controlled burning"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["do:BurnOff"]
+note = "A patch near home burnt off in the dry season, off the camp's own ground, where what stands is less than the flush would add; the flush carries up to twice and comes back up to twice as fast, fading over a year. Found out by gathering often enough on ground a fire went over (lightning fires, World::the_dry_country_burns), or by watching it done (#381)."
 
 [[tech]]
 id = "agricultural.1.coppicing_and_pruning_of_useful_trees"

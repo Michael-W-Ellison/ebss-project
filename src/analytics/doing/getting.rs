@@ -412,6 +412,8 @@ impl Simulation {
                 (harvest_amount, false)
             };
             let a_stand_near_home = self.is_this_a_stand_near_home(agent_index, resource_index);
+            let on_burnt_ground =
+                self.world.resources[resource_index].burnt >= Self::BURNT_WITHIN_THE_YEAR;
 
             // Harvest resource
             let where_it_grew = self.world.resources[resource_index].position;
@@ -501,6 +503,18 @@ impl Simulation {
                     && agent.found_out_how_to("know:selective_harvest")
                 {
                     debug!("Agent {} thought of leaving the young plants standing", agent.id);
+                }
+            }
+
+            // Gathering often enough where a fire went over, in the flush that
+            // came up after, is how anybody thinks to set one (#381)
+            if harvested > 0 && on_burnt_ground {
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.made_one(Self::GATHERED_ON_BURNT_GROUND);
+                if agent.skills.times_made(Self::GATHERED_ON_BURNT_GROUND) >= Self::BURNT_GROUND_GATHERED_BEFORE_BURNING
+                    && agent.found_out_how_to("do:BurnOff")
+                {
+                    debug!("Agent {} thought of setting the dry growth alight", agent.id);
                 }
             }
 

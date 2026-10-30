@@ -106,6 +106,7 @@ fn every_action() -> BTreeSet<String> {
         Action::MakeClothing { garment: s() },
         Action::WearClothing { garment: s() },
         Action::ScatterSeed,
+        Action::BurnOff,
         Action::TillSoil,
         Action::TendField,
         Action::Dry { what: s() },
