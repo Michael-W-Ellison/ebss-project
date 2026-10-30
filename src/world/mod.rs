@@ -4078,6 +4078,20 @@ impl World {
         precipitation <= 0.0 && matches!(season, Season::Summer | Season::Fall)
     }
 
+    /// Whether this is a day somebody sets a fire on (#381): any day the
+    /// country burns of itself, and besides those the dry days of early
+    /// spring, when last year's dead growth is burnt off before the new comes
+    /// through. Winter has stripped the stands by then, so a fire takes
+    /// little; through the summer and the autumn they bear, and a patch near
+    /// home was worth more standing than burnt nearly every day of it.
+    pub fn is_it_a_day_for_setting_a_fire(day_of_year: u32, precipitation: f32) -> bool {
+        use crate::environment::seasons::{Season, DAYS_PER_SEASON};
+        let season = Season::from_day_of_year(day_of_year);
+        let early_spring = season == Season::Spring
+            && day_of_year < Season::Spring.first_day() + DAYS_PER_SEASON / 2;
+        Self::is_it_a_day_for_burning(season, precipitation) || (precipitation <= 0.0 && early_spring)
+    }
+
     /// The chance, on a day for burning, that lightning sets the country
     /// alight at any one stand that burns (#381).
     ///

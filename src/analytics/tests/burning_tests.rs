@@ -108,6 +108,19 @@ fn the_country_burns_only_on_a_dry_day_in_summer_or_autumn() {
     assert!(!World::is_it_a_day_for_burning(Season::Spring, 0.0));
 }
 
+/// Fires are set on those days, and on the dry days of early spring, when
+/// last year's dead growth is burnt off before the new comes through.
+#[test]
+fn fires_are_set_in_early_spring_as_well() {
+    let early_spring = Season::Spring.first_day() + 10;
+    let late_spring = Season::Summer.first_day() - 5;
+    assert!(World::is_it_a_day_for_setting_a_fire(early_spring, 0.0));
+    assert!(!World::is_it_a_day_for_setting_a_fire(early_spring, 0.5));
+    assert!(!World::is_it_a_day_for_setting_a_fire(late_spring, 0.0));
+    assert!(World::is_it_a_day_for_setting_a_fire(Season::Fall.first_day() + 3, 0.0));
+    assert!(!World::is_it_a_day_for_setting_a_fire(Season::Winter.first_day() + 3, 0.0));
+}
+
 /// Somebody who knows how walks to a picked-over patch near home, sets it
 /// alight standing in it, and every stand there is burnt off for the flush.
 #[test]

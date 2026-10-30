@@ -8,7 +8,8 @@
 //! lightning (`World::the_dry_country_burns`), and somebody who gathers often
 //! enough on ground a fire went over finds out that it can be done on purpose.
 //!
-//! Somebody who knows how picks a patch near home, off the camp's own ground,
+//! Somebody who knows how, on a dry day in early spring, the summer or the
+//! autumn, picks a patch near home, off the camp's own ground,
 //! where what stands now is less than what the flush would add, walks to it
 //! with embers, and sets it alight.
 
@@ -138,7 +139,7 @@ impl Simulation {
             return None;
         }
         let precipitation = self.world.climate.weather.weather_type.precipitation_intensity();
-        if !World::is_it_a_day_for_burning(self.world.climate.current_season(), precipitation) {
+        if !World::is_it_a_day_for_setting_a_fire(self.world.climate.calendar.day_of_year, precipitation) {
             return None;
         }
         let home = Self::where_this_one_lives(agent);
@@ -160,7 +161,7 @@ impl Simulation {
             return ActionResult::failure("Nobody here has burnt the country off".to_string());
         }
         let precipitation = self.world.climate.weather.weather_type.precipitation_intensity();
-        if !World::is_it_a_day_for_burning(self.world.climate.current_season(), precipitation) {
+        if !World::is_it_a_day_for_setting_a_fire(self.world.climate.calendar.day_of_year, precipitation) {
             return ActionResult::failure("Too wet to burn".to_string());
         }
         let here = Position::new(agent.state.position.0, agent.state.position.1);
