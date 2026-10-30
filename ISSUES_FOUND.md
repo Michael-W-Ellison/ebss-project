@@ -28036,8 +28036,8 @@ later entry. These were not. Each line names the entry that left it.
   every minute, until the walker is starving or parched (#376). On the camp's
   own ground those about now drive the beast off together (#377), a
   troubled camp is ringed with thorn (#378) and keeps a watch at night
-  (#379). Beasts still strike more by night than by day (35 against 18
-  at #381).
+  (#379). Beasts still strike more by night than by day (75 against 41
+  at #382).
 - The Utility working is chosen from a fixed place in the list, so a working
   refused for any reason comes back every turn Utility wins (#376).
 - A failed swap destroys the substitute, and swaps the world cannot supply
@@ -28054,9 +28054,10 @@ later entry. These were not. Each line names the entry that left it.
 - Rotation cannot be learned, because lessons are keyed on the crop and not
   the ground (#165), and a field is read only from a full stand (#246).
 - Of agriculture's first stage, selective harvesting keeps the wild stands
-  near home larger (#380), and controlled burning brings them on (#381).
-  Coppicing and small-scale water diversion are still to do. A fire never
-  gets away into a camp, and game is not drawn to burnt ground (#381).
+  near home larger (#380), controlled burning brings them on (#381), and
+  the wood near home is coppiced (#382). Small-scale water diversion is
+  still to do. A fire never gets away into a camp, and game is not drawn to
+  burnt ground (#381). Poles are not a thing apart from wood (#382).
 - Mining covers both quarrying and digging a hole (#204). Felling is not
   gated on a tool (#200). Making never breaks or wastes in the making
   (#200, #201). A better tool changes the yield, not the time (#345).
@@ -29329,4 +29330,68 @@ game drawn to the green pick on burnt ground; the smoke.
 **Full suite**: 3,025 passed, 0 failed, 6 ignored.
 
 **Dice counts**: 6,757 (seed 4242, 120 turns, unchanged) and 954,540 (seed
+0, a year).
+
+### 382. Coppicing the wood near home
+
+The user asked: "go on to coppicing." The third of agriculture's stage-1
+listings, after selective harvesting (#380) and controlled burning (#381):
+"Coppicing and pruning of useful trees/shrubs".
+
+**What changed.**
+- **A coppice** (`ResourceNode::coppiced`, nothing to one). Wood cut back to
+  the stool sends up a crown of straight poles: a stand coppiced as well as
+  it can be carries up to twice and comes back up to twice as fast
+  (`A_COPPICE_CARRIES`), and it multiplies with keeping and burning
+  (`what_is_done_for_it`). Uncut, it grows out over about three years
+  (`HOW_FAST_A_COPPICE_GROWS_OUT_A_DAY`), far slower than a kept food stand
+  goes wild, because overstood coppice is still coppice for years.
+- **Cut to the stool** (in the gather executor). Somebody who knows to,
+  cutting wood within a forage of home (`is_this_wood_near_home`), coppices
+  the stand a twentieth better (`WHAT_A_CUT_TO_THE_STOOL_DOES`). It costs
+  nothing and takes no more of the wood than before; far from home nobody
+  comes back to it.
+- **Found out** by cutting wood near home three hundred times
+  (`Agent::CUTS_BEFORE_COPPICING`), about six months, so a stump has had a
+  growing season to sprout in. At sixty the first in each world knew it
+  inside a month.
+- **The catalogue** gets a second way of doing a thing,
+  `know:coppice` (`Agent::WAYS_A_THING_IS_DONE`). The listing names it and
+  `know:selective_harvest` both: the pruning of fruit and nut shrubs is
+  what selective harvesting already does for them.
+
+**Measured**, forty settlements, two years, against #381:
+
+| | #381 | #382 | t |
+|---|---|---|---|
+| births | 185 | 187 | +0.36 |
+| deaths | 1 | 5 | +0.94 |
+| of a blow | 0 | 4 | |
+| of hunger | 1 | 1 | |
+| alive at two years | 664 | 662 | -0.24 |
+| camp moves | 303 | 338 | +1.22 |
+| worlds that found it out | | 40 | |
+| median first day | | 176 | |
+| cuts to the stool | | 294,053 | |
+| stools coppiced half or better, at the end | | 1,258 | |
+| person-days wasting | 328 | 311 | |
+| blows by night and by day | 53 | 116 | +1.46 |
+
+Within noise throughout. The blows fell mostly in two worlds (smooth seeds
+18 and 4, 31 and 30 of them), and against #380 they stand at t +0.63; #381
+was the low draw. Wood was never short in two years, so a faster coppice
+shows in nothing measured yet; it is there for camps that stay.
+
+**Not modelled**: poles as a different thing from wood, for building or
+hafting; a coppice cut on a cycle, standing years between cuttings.
+
+**Tests** (`coppicing_tests`):
+- a coppice carries twice, and grows out in three years;
+- wood near home is cut to the stool by somebody who knows to, and not far
+  from home or by somebody who does not;
+- cutting wood near home is how it is found out.
+
+**Full suite**: 3,028 passed, 0 failed, 6 ignored.
+
+**Dice counts**: 6,757 (seed 4242, 120 turns, unchanged) and 961,864 (seed
 0, a year).
