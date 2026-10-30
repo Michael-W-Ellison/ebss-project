@@ -4112,13 +4112,21 @@ impl World {
     /// this is where it strikes. A fire where nobody is within reach of it is
     /// not burnt at all: its flush would be gone before anybody came near
     /// enough to see it, and the world has eighty thousand stands, most of
-    /// them a long way from anybody. Where everything is awake, all of it is
+    /// them a long way from anybody. Near is the reach that puts ground to
+    /// sleep, but it is read off where the people are and not off whether
+    /// anything sleeps, so a world that sleeps burns the same as one that
+    /// never does. A world nobody has told where its people are is all of it
     /// country somebody is near.
-    fn the_dry_country_burns(&mut self, day: &sleeping::AGrowingDay, awake: Option<&sleeping::WhoIsAwake>) {
+    fn the_dry_country_burns(&mut self, day: &sleeping::AGrowingDay) {
         use rand::Rng;
         if !Self::is_it_a_day_for_burning(day.season, day.precipitation) {
             return;
         }
+        let near = self
+            .where_people_are
+            .as_ref()
+            .map(|people| sleeping::WhoIsAwake::round(people, self.grid.width, self.grid.height));
+        let awake = near.as_ref();
         let what_burns: Vec<Position> = self
             .resources
             .iter()
@@ -4199,7 +4207,7 @@ impl World {
 
         // The country burns now and then of itself, before today's growing
         // (#381)
-        self.the_dry_country_burns(&day, awake.as_ref());
+        self.the_dry_country_burns(&day);
 
         let mut oldest_sleep = today;
 
