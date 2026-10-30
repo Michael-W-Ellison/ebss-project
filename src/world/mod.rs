@@ -322,6 +322,9 @@ pub struct World {
     /// map on a pair in JSON, so it is kept as a list.
     #[serde(default)]
     pub fires_set_from: Vec<((i32, i32), u32)>,
+    /// Stands of wood cut back to the stool (#382).
+    #[serde(default)]
+    pub cuts_to_the_stool: u64,
 
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
@@ -1888,6 +1891,7 @@ impl World {
             burns_set: 0,
             stands_burnt: 0,
             fires_set_from: Vec::new(),
+            cuts_to_the_stool: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
@@ -3926,8 +3930,9 @@ impl World {
             return false;
         }
 
-        // A kept stand nobody keeps goes back to the wild (#380), and the
-        // flush after a fire goes back to old growth (#381), asleep or not
+        // A kept stand nobody keeps goes back to the wild (#380), the flush
+        // after a fire goes back to old growth (#381), and a coppice nobody
+        // cuts grows out (#382), asleep or not
         resource.a_day_since_it_was_seen_to();
 
         // A hedgerow out of season carries nothing. Growth was seasonal

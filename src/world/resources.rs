@@ -1016,6 +1016,16 @@ pub struct ResourceNode {
     /// gathering set fire to the country round them. Fades over a year.
     #[serde(default)]
     pub burnt: f32,
+
+    /// How well this stand of wood is coppiced, from nothing to one (#382).
+    ///
+    /// "Coppicing and pruning of useful trees/shrubs", stage 1 of the
+    /// agricultural path: wood cut back to the stool, near home, again and
+    /// again, sends up a crown of straight poles that comes back far faster
+    /// than a tree grows from seed. A stool left uncut grows out, slowly:
+    /// overstood coppice is still coppice for years.
+    #[serde(default)]
+    pub coppiced: f32,
 }
 
 impl ResourceNode {
@@ -1080,6 +1090,7 @@ impl ResourceNode {
             killed_by: None,
             tended: 0.0,
             burnt: 0.0,
+            coppiced: 0.0,
         }
     }
 
@@ -1360,20 +1371,47 @@ impl ResourceNode {
         1.0 + self.burnt.clamp(0.0, 1.0) * Self::WHAT_A_BURN_BRINGS_ON
     }
 
-    /// Everything done for this stand: how well it is kept, and how lately a
-    /// fire went over it.
-    pub fn what_is_done_for_it(&self) -> f32 {
-        self.what_keeping_it_does() * self.what_the_fire_did()
+    /// How much more a stand of wood carries, and how much faster it comes
+    /// back, coppiced: twice, cut to the stool as often as it will bear
+    /// (#382).
+    pub const A_COPPICE_CARRIES: f32 = 1.0;
+
+    /// How much one cut to the stool does for how well a stand is coppiced:
+    /// a stool is made over a few seasons of cutting, not at one.
+    pub const WHAT_A_CUT_TO_THE_STOOL_DOES: f32 = 0.05;
+
+    /// How fast a coppice nobody cuts grows out, a day: about three years
+    /// from as well coppiced as it gets.
+    pub const HOW_FAST_A_COPPICE_GROWS_OUT_A_DAY: f32 = 1.0 / (3.0 * 365.0);
+
+    /// What being coppiced does for this stand: one for wood never cut to the
+    /// stool, up to twice for a coppice cut as often as it will bear.
+    pub fn what_coppicing_does(&self) -> f32 {
+        1.0 + self.coppiced.clamp(0.0, 1.0) * Self::A_COPPICE_CARRIES
     }
 
-    /// A day gone by for what was done for this stand: the keeping and the
-    /// flush both go back towards the wild.
+    /// Everything done for this stand: how well it is kept, how lately a
+    /// fire went over it, and how well it is coppiced.
+    pub fn what_is_done_for_it(&self) -> f32 {
+        self.what_keeping_it_does() * self.what_the_fire_did() * self.what_coppicing_does()
+    }
+
+    /// Whether this is a stand of wood, which is what can be coppiced.
+    pub fn is_a_stand_of_wood(&self) -> bool {
+        !self.on_a_field && self.resource_type == ResourceType::Wood
+    }
+
+    /// A day gone by for what was done for this stand: the keeping, the
+    /// flush and the coppice all go back towards the wild.
     pub fn a_day_since_it_was_seen_to(&mut self) {
         if self.tended > 0.0 {
             self.tended = (self.tended - Self::HOW_FAST_KEEPING_FADES_A_DAY).max(0.0);
         }
         if self.burnt > 0.0 {
             self.burnt = (self.burnt - Self::HOW_FAST_A_BURN_FADES_A_DAY).max(0.0);
+        }
+        if self.coppiced > 0.0 {
+            self.coppiced = (self.coppiced - Self::HOW_FAST_A_COPPICE_GROWS_OUT_A_DAY).max(0.0);
         }
     }
 

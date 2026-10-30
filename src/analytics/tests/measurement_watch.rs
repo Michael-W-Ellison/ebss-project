@@ -116,6 +116,11 @@ fn zz_discovery_watch() {
         ("wildfires", sim.world.wildfires),
         ("burns_set", sim.world.burns_set),
         ("stands_burnt", sim.world.stands_burnt),
+        ("cuts_to_the_stool", sim.world.cuts_to_the_stool),
+        (
+            "stools_kept",
+            sim.world.resources.iter().filter(|node| node.coppiced >= 0.5).count() as u64,
+        ),
     ] {
         println!("STORE {what} {how_many}");
     }

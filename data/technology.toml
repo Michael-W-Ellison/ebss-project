@@ -9948,6 +9948,8 @@ name = "Coppicing and pruning of useful trees/shrubs"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["know:coppice", "know:selective_harvest"]
+note = "Wood near home cut back to the stool, which comes back up to twice as fast and carries up to twice, growing out over about three years uncut. Found out by cutting wood near home often enough (Agent::CUTS_BEFORE_COPPICING) (#382). The fruit and nut shrubs are kept by selective harvesting (#380)."
 
 [[tech]]
 id = "agricultural.1.water_diversion_on_a_very_small"

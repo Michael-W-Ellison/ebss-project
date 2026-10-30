@@ -412,6 +412,8 @@ impl Simulation {
                 (harvest_amount, false)
             };
             let a_stand_near_home = self.is_this_a_stand_near_home(agent_index, resource_index);
+            let wood_near_home = self.is_this_wood_near_home(agent_index, resource_index);
+            let to_the_stool = wood_near_home && self.population.agents[agent_index].knows_the_way("coppice");
             let on_burnt_ground =
                 self.world.resources[resource_index].burnt >= Self::BURNT_WITHIN_THE_YEAR;
 
@@ -427,6 +429,12 @@ impl Simulation {
                 if sparing && taken > 0 {
                     node.tended = (node.tended + crate::world::ResourceNode::WHAT_A_SPARING_HARVEST_KEEPS).min(1.0);
                     self.world.sparing_harvests += 1;
+                }
+                // Cut back to the stool, by somebody who knows to, near home
+                // (#382)
+                if to_the_stool && taken > 0 {
+                    node.coppiced = (node.coppiced + crate::world::ResourceNode::WHAT_A_CUT_TO_THE_STOOL_DOES).min(1.0);
+                    self.world.cuts_to_the_stool += 1;
                 }
 
                 // A spring down to its springline still gives a drink:
@@ -503,6 +511,19 @@ impl Simulation {
                     && agent.found_out_how_to("know:selective_harvest")
                 {
                     debug!("Agent {} thought of leaving the young plants standing", agent.id);
+                }
+            }
+
+            // Coming back to cut the same wood near home is how anybody sees
+            // the stumps sprout, and thinks to cut to the stool (#382)
+            if harvested > 0 && wood_near_home {
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.made_one(crate::agents::Agent::WOOD_CUT_NEAR_HOME);
+                if agent.skills.times_made(crate::agents::Agent::WOOD_CUT_NEAR_HOME)
+                    >= crate::agents::Agent::CUTS_BEFORE_COPPICING
+                    && agent.found_out_how_to("know:coppice")
+                {
+                    debug!("Agent {} thought of cutting to the stool", agent.id);
                 }
             }
 
@@ -1989,6 +2010,14 @@ impl Simulation {
         let home = Self::where_this_one_lives(&self.population.agents[agent_index]);
         node.is_a_wild_food_stand()
             && Self::within((node.position.x, node.position.y), home, Self::FORAGE_RADIUS as i32)
+    }
+
+    /// Whether this node is a stand of wood within a forage of this one's
+    /// home: wood they come back to cut (#382).
+    pub(in crate::analytics) fn is_this_wood_near_home(&self, agent_index: usize, resource_index: usize) -> bool {
+        let node = &self.world.resources[resource_index];
+        let home = Self::where_this_one_lives(&self.population.agents[agent_index]);
+        node.is_a_stand_of_wood() && Self::within((node.position.x, node.position.y), home, Self::FORAGE_RADIUS as i32)
     }
 
     /// Whether this one takes from this stand sparingly (#380): they know

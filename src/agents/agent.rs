@@ -3938,7 +3938,7 @@ impl Agent {
     /// The ways of doing a thing that are not a thing done: known, and then
     /// the same action goes differently (#380). What a catalogue `know:` link
     /// names.
-    pub const WAYS_A_THING_IS_DONE: [&'static str; 1] = ["selective_harvest"];
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 2] = ["selective_harvest", "coppice"];
 
     /// What the practice record calls a gather from a wild stand within a
     /// forage of home, and how many before somebody notices that the stands
@@ -3949,6 +3949,13 @@ impl Agent {
     /// twelve founders knew it inside six weeks.
     pub const A_STAND_NEAR_HOME_GATHERED: &'static str = "gatherednearhome";
     pub const RETURNS_BEFORE_SPARING: u32 = 300;
+
+    /// What the practice record calls wood cut within a forage of home, and
+    /// how much of it before somebody notices that what was cut low sends up
+    /// a crown of straight poles from the stump, and cuts the next to the
+    /// stool on purpose: coppicing (#382).
+    pub const WOOD_CUT_NEAR_HOME: &'static str = "woodcutnearhome";
+    pub const CUTS_BEFORE_COPPICING: u32 = 60;
 
     /// Whether this one knows a way of doing a thing (`WAYS_A_THING_IS_DONE`):
     /// born knowing it, or found it out.
