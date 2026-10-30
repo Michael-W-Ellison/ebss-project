@@ -28036,8 +28036,8 @@ later entry. These were not. Each line names the entry that left it.
   every minute, until the walker is starving or parched (#376). On the camp's
   own ground those about now drive the beast off together (#377), a
   troubled camp is ringed with thorn (#378) and keeps a watch at night
-  (#379). Beasts still strike more by night than by day (64 against 27
-  at #380).
+  (#379). Beasts still strike more by night than by day (35 against 18
+  at #381).
 - The Utility working is chosen from a fixed place in the list, so a working
   refused for any reason comes back every turn Utility wins (#376).
 - A failed swap destroys the substitute, and swaps the world cannot supply
@@ -28053,9 +28053,10 @@ later entry. These were not. Each line names the entry that left it.
   proportional in #363.
 - Rotation cannot be learned, because lessons are keyed on the crop and not
   the ground (#165), and a field is read only from a full stand (#246).
-- Of agriculture's first stage only selective harvesting is modelled: the
-  wild stands near home are kept larger (#380). Controlled burning, coppicing
-  and small-scale water diversion are still to do.
+- Of agriculture's first stage, selective harvesting keeps the wild stands
+  near home larger (#380), and controlled burning brings them on (#381).
+  Coppicing and small-scale water diversion are still to do. A fire never
+  gets away into a camp, and game is not drawn to burnt ground (#381).
 - Mining covers both quarrying and digging a hole (#204). Felling is not
   gated on a tool (#200). Making never breaks or wastes in the making
   (#200, #201). A better tool changes the yield, not the time (#345).
@@ -29222,4 +29223,110 @@ and 18). Night blows stand where they were: 64 against 60.
 **Full suite**: 3,015 passed, 0 failed.
 
 **Dice counts**: 6,757 (seed 4242, 120 turns, unchanged) and 959,558 (seed
+0, a year).
+
+### 381. Controlled burning, and the country burning of itself
+
+The user asked: "Implement controlled burning." The second of agriculture's
+stage-1 listings, after selective harvesting (#380).
+
+**What changed.**
+- **The flush after a fire** (`ResourceNode::burnt`, nothing to one, one the
+  day it burnt). A stand a fire went over has what stood on it burnt off,
+  then carries up to twice what it did and comes back up to twice as fast
+  (`WHAT_A_BURN_BRINGS_ON`), fading over a year
+  (`HOW_FAST_A_BURN_FADES_A_DAY`). Nut trees and timber are passed under
+  (`is_brought_on_by_fire`). It multiplies with keeping (#380)
+  (`what_is_done_for_it`).
+- **Fading in a node's day** (`a_day_since_it_was_seen_to`, from
+  `a_day_for_a_node`). The keeping of #380 faded only in the awake pass, so a
+  kept stand that fell asleep kept its keeping; the flush and the keeping now
+  fade asleep or awake alike.
+- **Lightning** (`World::the_dry_country_burns`). On a dry day in the summer
+  or the autumn, each stand that burns has the same small chance of being
+  where a fire starts (`A_WILDFIRE_AT_A_STAND_ON_A_DRY_DAY`), which runs six
+  cells. Only country within the sleeping reach of somebody burns, read off
+  where the people are and not off whether anything sleeps
+  (`the_dry_country_burns`). The climate's own lightning was never set down
+  on the map, and is still not.
+- **Found out** by gathering twelve times on ground a fire went over within
+  the year (`GATHERED_ON_BURNT_GROUND`, `BURNT_WITHIN_THE_YEAR`), or by
+  watching it done. It is one of the actions found out by themselves.
+- **Setting a fire** (`Action::BurnOff`, `a_patch_to_burn`, `burning_off`).
+  Somebody grown who knows how, and how to make a fire, with nothing
+  pressing, on a day for setting one, walks to the patch near home most
+  worth burning and sets it alight; it runs five cells
+  (`HOW_FAR_A_BURN_GOES`). A patch is worth it when the flush, at half what
+  a burn brings on for its fading, would add more than what stands
+  (`what_a_burn_here_comes_to`). Not within the camp's own ground plus the
+  fire's reach, not where three stands do not burn, not where the last fire
+  is under half a year old, and not within a fortnight of the camp's last
+  (`World::fires_set_from`). Days for setting one are the dry days of the
+  summer and the autumn, and of early spring
+  (`is_it_a_day_for_setting_a_fire`).
+
+**How it got there**, each found by probing a live world:
+1. A strike at one stand anywhere: on a map a thousand cells square, with
+   eighty thousand stands, it landed within a forage of the people less than
+   one time in a hundred, and nobody ever gathered on burnt ground. Now per
+   stand, in country somebody is near.
+2. The flush counted as seen only while over half fresh: a summer's fire was
+   below that by midwinter, before the stands bore again. Now within the year.
+3. At twice the present rate lightning burnt two stands in five near home
+   within the year.
+4. A camp's fortnight was read off any ground burnt near home, so a wildfire
+   stopped it burning its own. Now the day each camp last set one.
+5. A brand from the camp's fire: the fire was out most days by noon. Making
+   fire is born knowledge (carrying embers), and dry grass is its own tinder.
+6. A patch of three cells held fewer than three stands most places; five.
+7. Through the summer and the autumn the stands bear, so every patch was
+   worth more standing than burnt until the dry season was over. Early
+   spring, burning last year's dead growth off before the new comes through,
+   is when winter has left little to lose.
+8. A world that never slept counted all its ground as near somebody and
+   burnt it all, so an empty world woke from a year asleep different from
+   one kept awake (`an_empty_world_sleeps_a_year_and_wakes_the_same`).
+
+**Measured**, forty settlements, two years, against #380:
+
+| | #380 | #381 | t |
+|---|---|---|---|
+| births | 187 | 185 | -0.23 |
+| deaths | 5 | 1 | -1.27 |
+| of hunger | 1 | 1 | |
+| alive at two years | 662 | 664 | +0.20 |
+| camp moves | 374 | 303 | -1.76 |
+| worlds that found it out | | 40 | |
+| median first day | | 120 | |
+| fires set | | 1,082 | |
+| lightning fires | | 6,438 | |
+| stands burnt, either sort | | 182,582 | |
+| person-days wasting | 424 | 328 | |
+| rotted | 43,349 | 46,093 | |
+| vermin | 266,882 | 293,415 | |
+| blows by night / by day | 64 / 27 | 35 / 18 | |
+
+Within noise throughout. The latest world to find it out did on day 469; a
+world set between 4 and 54 fires. Fewer moves and fewer days wasting fit
+heavier stands near home; more of what is gathered rots and is lost to
+vermin.
+
+**Not modelled**: a fire getting away into a camp, its stores or its people;
+game drawn to the green pick on burnt ground; the smoke.
+
+**Tests** (`burning_tests`):
+- burnt ground carries twice, and the flush is gone in a year;
+- a fire burns what it brings on within its reach, not nut trees or timber;
+- the country burns only on a dry day in summer or autumn, and fires are set
+  in early spring as well;
+- a picked-over patch near home is walked to and set alight, and not burnt
+  again straight off;
+- a patch hung with fruit is not burnt;
+- nobody sets a fire near the camp;
+- no burning in the wet or the winter;
+- gathering on burnt ground is how it is found out.
+
+**Full suite**: 3,025 passed, 0 failed, 6 ignored.
+
+**Dice counts**: 6,757 (seed 4242, 120 turns, unchanged) and 954,540 (seed
 0, a year).
