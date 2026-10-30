@@ -662,7 +662,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // pot with no fire, and the parched go past a beast for water too.
     // Up 1.1% to 959,558 for #380: selective harvesting, found out by coming
     // back to the stands near home, keeps them larger.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 959_558;
+    // Down 0.5% to 954,540 for #381: lightning burns the dry country near
+    // people now and then, and those who gather in the flush set fires of
+    // their own.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 954_540;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
