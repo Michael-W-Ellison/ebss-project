@@ -29158,3 +29158,64 @@ the walker is desperate (#376).
 
 **Dice counts**: 6,757 (seed 4242, 120 turns) and 948,917 (seed 0, a year,
 unchanged).
+
+### 380. Selective harvesting, and the larger stands it keeps
+
+The user asked: "go on to agriculture stage 1." Of the five unmodelled
+listings at that stage, this entry is "Selective harvesting" and "Larger
+stands of desired grains, nuts, berries, and tubers", which are one thing:
+the second is what the first comes to. Still to do: controlled burning,
+coppicing and small-scale water diversion.
+
+**What changed.**
+- **A kept stand** (`ResourceNode::tended`, nothing to one). Kept as well as
+  it can be, a wild food stand carries twice what it did wild
+  (`how_heavy_a_crop_it_carries`) and grows back twice as fast
+  (`regenerate_in_ground`): `A_KEPT_STAND_CARRIES`. It goes back to the wild
+  over about two hundred days when nobody keeps it
+  (`HOW_FAST_KEEPING_FADES_A_DAY`, in the day's pass for stands somebody is
+  near).
+- **Taking sparingly** (`would_this_one_harvest_sparingly`, in the gather
+  executor). Somebody who knows selective harvesting, gathering at a wild
+  stand within a forage of home (`is_this_a_stand_near_home`) and not
+  starving, leaves a quarter of what stands (`WHAT_A_SPARING_HARVEST_LEAVES`).
+  Each such harvest keeps the stand a twentieth better
+  (`WHAT_A_SPARING_HARVEST_KEEPS`). Far from home, or starving, a person
+  strips it as before.
+- **Found out** by coming back to the stands near home: three hundred gathers
+  there (`RETURNS_BEFORE_SPARING`), about five months of ordinary gathering,
+  so a season has turned. At thirty, all twelve founders knew it inside six
+  weeks.
+- **The catalogue** gains a `know:` link, for a way of doing a thing that is
+  not a separate act (`Agent::WAYS_A_THING_IS_DONE`, `Agent::knows_the_way`).
+  Both listings point at `know:selective_harvest`.
+
+**Measured**, forty settlements, two years, against #379:
+
+| | #379 | #380 | t |
+|---|---|---|---|
+| births | 173 | 187 | +1.54 |
+| deaths | 1 | 5 | +1.27 |
+| of a blow | 1 | 4 | |
+| of hunger | 0 | 1 | |
+| alive at two years | 652 | 661 | +1.02 |
+| worlds that found it out | | 40 | |
+| median first day | | 129 | |
+| harvests taken sparingly | | 1,331,769 | |
+| stands kept at half or better, at the end | | 2,227 | |
+
+All within noise. Births and the living are up, which is what the stands
+were for, and the four deaths by a blow fell in two worlds (smooth seeds 4
+and 18). Night blows stand where they were: 64 against 60.
+
+**Tests** (`keeping_stands_tests`):
+- a kept stand carries twice the wild one;
+- a sparing harvest leaves a quarter and keeps the stand, where somebody who
+  does not know to keeps nothing;
+- nobody harvests sparingly far from home, or starving;
+- coming back to the stands near home is how it is found out.
+
+**Full suite**: 3,015 passed, 0 failed.
+
+**Dice counts**: 6,757 (seed 4242, 120 turns, unchanged) and 959,558 (seed
+0, a year).
