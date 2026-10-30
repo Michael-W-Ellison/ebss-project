@@ -7,9 +7,9 @@
 //!   under the nut trees
 //! - the country burns only on a dry day in summer or autumn
 //! - somebody who knows how walks to a picked-over patch near home and sets
-//!   it alight, with a fire at the camp to take a brand from
-//! - not a patch hung with fruit, not near the camp, not without a fire at
-//!   the camp, not on a wet day or in winter
+//!   it alight
+//! - not a patch hung with fruit, not near the camp, not on a wet day or in
+//!   winter
 //! - gathering often enough on burnt ground is how it is found out
 
 use crate::agents::{AgentConfig, Population};
@@ -20,8 +20,8 @@ use crate::world::{Position, ResourceNode, ResourceType, TerrainType, World, Wor
 
 const HOME: (i32, i32) = (25, 25);
 
-/// One grown person at home on open plains, on a dry summer's day, with a
-/// fire burning at the camp and nothing else about.
+/// One grown person at home on open plains, on a dry summer's day, with
+/// nothing else about.
 fn at_home_in_summer() -> Simulation {
     let mut world = World::new(WorldConfig::default().with_size(80, 50));
     world.animals.get_all_mut().clear();
@@ -36,14 +36,6 @@ fn at_home_in_summer() -> Simulation {
     }
     world.climate.calendar.day_of_year = Season::Summer.first_day() + 20;
     world.climate.weather.weather_type = WeatherType::Clear;
-    let mut hearth = crate::environment::HeatSource::new(
-        crate::environment::HeatSourceType::Campfire,
-        (HOME.0, HOME.1, 0),
-        0,
-    );
-    hearth.add_fuel("wood".to_string(), 1.0, 100);
-    assert!(hearth.light());
-    world.heat_sources.add(hearth);
 
     let mut population = Population::new();
     population.spawn_agent(AgentConfig::default());
@@ -170,17 +162,9 @@ fn nobody_sets_a_fire_near_the_camp() {
     assert!(simulation.world.resources.iter().all(|stand| stand.burnt == 0.0));
 }
 
-/// No fire at the camp to take a brand from, a wet day, or the winter: no
-/// burning.
+/// A wet day, or the winter: no burning.
 #[test]
-fn no_burning_without_a_fire_at_camp_or_in_the_wet_or_the_winter() {
-    let mut cold_camp = at_home_in_summer();
-    cold_camp.world.heat_sources = crate::environment::HeatSourceRegistry::new();
-    a_patch_of_berries(&mut cold_camp, (40, 25), 0);
-    knows_how(&mut cold_camp);
-    let agent = cold_camp.population.agents[0].clone();
-    assert_eq!(cold_camp.a_patch_to_burn(&agent, agent.state.position), None, "no fire at the camp");
-
+fn no_burning_in_the_wet_or_the_winter() {
     let mut wet = at_home_in_summer();
     wet.world.climate.weather.weather_type = WeatherType::Rain;
     a_patch_of_berries(&mut wet, (40, 25), 0);

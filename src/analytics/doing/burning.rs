@@ -10,7 +10,7 @@
 //!
 //! Somebody who knows how picks a patch near home, off the camp's own ground,
 //! where what stands now is less than what the flush would add, walks to it
-//! with a brand from the camp's fire, and sets it alight.
+//! with embers, and sets it alight.
 
 use super::super::Simulation;
 use crate::core::DriveType;
@@ -19,8 +19,10 @@ use crate::world::{Position, ResourceNode, World};
 
 impl Simulation {
     /// How far a fire set on purpose runs, cells: a patch, burnt on a still
-    /// day and let go out against what was burnt before.
-    pub(in crate::analytics) const HOW_FAR_A_BURN_GOES: u32 = 3;
+    /// day and let go out against what was burnt before. Eight or so stands
+    /// about a camp; at three it took in fewer than three most places, and
+    /// nobody found a patch worth the fire.
+    pub(in crate::analytics) const HOW_FAR_A_BURN_GOES: u32 = 5;
 
     /// How few stands that burn make a patch worth setting alight.
     pub(in crate::analytics) const A_PATCH_WORTH_THE_FIRE: usize = 3;
@@ -120,8 +122,9 @@ impl Simulation {
 
     /// The next of burning off a patch near home (#381): set alight where
     /// this one stands if it is the patch, else walked to. Only by somebody
-    /// grown who knows how, with nothing pressing, on a day for burning, with
-    /// a fire burning at the camp to take a brand from.
+    /// grown who knows how, and how to make a fire, with nothing pressing, on
+    /// a day for burning. The dry grass is its own tinder: the camp's fire
+    /// is out most days by noon, and waiting on it nobody burnt anything.
     pub(in crate::analytics) fn a_patch_to_burn(
         &self,
         agent: &crate::agents::Agent,
@@ -129,6 +132,7 @@ impl Simulation {
     ) -> Option<Action> {
         if agent.state.years_old() < crate::agents::Agent::OLD_ENOUGH_TO_KEEP_A_KIT
             || !agent.knows_how_to_do("BurnOff")
+            || !agent.knows_how_to_do("LightFire")
             || !agent.immediate_needs_met()
         {
             return None;
@@ -138,7 +142,6 @@ impl Simulation {
             return None;
         }
         let home = Self::where_this_one_lives(agent);
-        self.nearest_fire_from((home.0, home.1, 0), Self::NEAR_ENOUGH_TO_SLEEP_WITH_THE_OTHERS, true)?;
         let patch = self.the_ground_worth_burning(home)?;
         if Self::within((here.0, here.1), (patch.x, patch.y), 1) {
             Some(Action::BurnOff)
