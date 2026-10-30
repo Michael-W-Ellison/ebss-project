@@ -28034,9 +28034,9 @@ later entry. These were not. Each line names the entry that left it.
 - A wounded person still goes back to fight a boar, often by a fold (#374).
 - A walk at a target inside a beast's ground stops short and is decided again
   every minute, until the walker is starving or parched (#376). On the camp's
-  own ground those about now drive the beast off together (#377), and a
-  troubled camp is ringed with thorn (#378); night watches are still to
-  come.
+  own ground those about now drive the beast off together (#377), a
+  troubled camp is ringed with thorn (#378) and keeps a watch at night
+  (#379). Beasts still strike more by night than by day (60 against 36).
 - The Utility working is chosen from a fixed place in the list, so a working
   refused for any reason comes back every turn Utility wins (#376).
 - A failed swap destroys the substitute, and swaps the world cannot supply
@@ -29066,4 +29066,95 @@ the walker is desperate (#376).
 **Full suite**: 3,003 passed, 0 failed.
 
 **Dice counts**: 7,793 (seed 4242, 120 turns) and 948,917 (seed 0, a year,
+unchanged).
+
+### 379. A watch through the night, and what the first one missed
+
+The user asked: "go on to night watches." The last of the three listings in
+the first recommendation of #377: "Night watches"
+(defensive_infrastructure, stage 0).
+
+**What the night was costing.** Probed over eight settlements for two years,
+with drive-offs and thorn rings in: beasts struck people nine times at night,
+eight of them asleep, against three by day. Three quarters of the damage from
+beasts came at night. Every blow was a boar's, and no hungry predator struck
+anybody.
+
+**The watch** (`Action::KeepWatch`, `do:KeepWatch` in the catalogue, born
+knowledge as a stage-0 listing):
+- **Who.** A camp keeps one when it remembers a beast on its ground
+  (`is_my_camp_troubled`, shared with the thorn ring) and has three or more
+  grown people (`ENOUGH_TO_KEEP_A_WATCH`). The night is cut into two-hour
+  watches (`A_WATCH`) that go round the camp, starting in a different place
+  each night (`on_watch_now`).
+- **What.** The one on watch sits up by the hearth instead of sleeping
+  (`what_the_watch_does`, in `what_the_night_asks`). They drive off a beast
+  the camp together outweighs. If they can't, they wake and frighten anybody
+  of the camp asleep near it, so they get out of its way (`keeping_watch`).
+
+**What the first measurement found.** Watches were kept, 9,163 of them, and
+810 sleepers woken. But night blows did not fall: 76 against 26 by day over
+forty settlements, and deaths went from 2 to 4. Traced
+(`victim_from_home`, ring, watch, whether the camp could have driven it off),
+most of them were one thing. A boar lay by the hearth inside a closed thorn
+ring, striking a camp of ten or twelve as they slept, a beast the camp could
+easily have driven off. Three faults:
+1. **The ring was asked before the scavengers moved.** Hungry scavengers
+   are drawn to a camp's meat, open pits and midden (`what_draws_the_scavengers`).
+   That pass ran after the ring had already turned the beasts that moved, so a
+   boar drawn to meat inside the ring walked straight through. The ring is
+   asked after it now. Rings turned beasts 4,465 times in the corrected run
+   against 2,107.
+2. **Bed came before driving off.** Driving a beast off is weighed with the
+   day's decisions, and the night sends people to bed first, so it was never
+   asked. Nobody now goes to bed with a beast on the camp that those about
+   could drive off. By night, too, the camp's ground is where its people
+   sleep, twenty cells and not six.
+3. **A closed ring stood the watch down** even with a beast inside it. It does
+   not now (`a_beast_inside_the_ring_round`).
+
+**Measured**, forty settlements, two years:
+
+| | #378 | #379 first | #379 | t (against first) |
+|---|---|---|---|---|
+| births | 181 | 185 | 173 | −1.39 |
+| deaths | 2 | 4 | 1 | −1.36 |
+| of a blow | 1 | 3 | 1 | |
+| of hunger | 1 | 1 | 0 | |
+| alive at two years | 659 | 661 | 652 | −1.05 |
+| beasts struck people by night | | 76 | 60 | |
+| beasts struck people by day | | 26 | 36 | |
+| beasts driven off | 63 | 63 | 154 | |
+| beasts turned at a ring | 2,107 | 2,107 | 4,465 | |
+| watches kept | | 9,163 | 7,787 | |
+| person-days wasting | 326 | 510 | 416 | |
+
+Every column is within noise. Against #374, before the mating change, deaths
+went from 5 to 1 (t −1.43) and alive from 643 to 652. Blows by night fell by
+a fifth, and are still the larger part.
+
+**Tests** (`driving_off_tests`):
+- one of a troubled camp of three is on watch at any hour, and the watch goes
+  round all three;
+- no watch at a camp of two, an untroubled camp, by day, or inside a closed
+  ring;
+- the watch drives off a boar with the camp behind it, and wakes whoever
+  sleeps near a mammoth it cannot drive;
+- nobody goes to bed with a boar by the hearth;
+- by night the camp's ground is where its people sleep;
+- a ring with a beast inside it is still watched;
+- a ring turns a scavenger drawn to meat inside it. This fails with the ring
+  asked before the scavengers.
+
+**And to the measurement**: blows and warnings from beasts by night and by
+day.
+
+**Still open.** Sixty blows by night in forty settlements. Somebody asleep
+does not decide again until woken, so only the watch and whoever is still up
+can act. A walk outside the camp still stops short of a beast's ground until
+the walker is desperate (#376).
+
+**Full suite**: 3,011 passed, 0 failed.
+
+**Dice counts**: 6,757 (seed 4242, 120 turns) and 948,917 (seed 0, a year,
 unchanged).
