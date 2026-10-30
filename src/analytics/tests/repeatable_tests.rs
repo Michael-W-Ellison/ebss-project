@@ -665,7 +665,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 0.5% to 954,540 for #381: lightning burns the dry country near
     // people now and then, and those who gather in the flush set fires of
     // their own.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 954_540;
+    // Up 0.8% to 961,864 for #382: coppicing, found out by cutting wood near
+    // home, brings the wood there back faster.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 961_864;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
