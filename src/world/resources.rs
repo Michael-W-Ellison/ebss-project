@@ -996,6 +996,16 @@ pub struct ResourceNode {
     /// it home (`agents::hire`, #374).
     #[serde(default)]
     pub killed_by: Option<uuid::Uuid>,
+
+    /// How well kept this wild stand is, from nothing to one (#380).
+    ///
+    /// "Selective harvesting" and "Larger stands of desired grains, nuts,
+    /// berries, and tubers", stage 1 of the agricultural path: a stand
+    /// picked sparingly, the young plants and the seed left, season after
+    /// season, comes to carry more and come back faster than one stripped
+    /// whenever anybody passes. Fades when nobody keeps it.
+    #[serde(default)]
+    pub tended: f32,
 }
 
 impl ResourceNode {
@@ -1058,6 +1068,7 @@ impl ResourceNode {
             killed_on: None,
             sown_by: None,
             killed_by: None,
+            tended: 0.0,
         }
     }
 
@@ -1297,8 +1308,47 @@ impl ResourceNode {
     pub fn how_heavy_a_crop_it_carries(&self, what_the_ground_yields: f32) -> u32 {
         ((self.max_amount as f32)
             * Self::WHAT_ORDINARY_WILD_GROUND_CARRIES
-            * what_the_ground_yields.max(0.0))
+            * what_the_ground_yields.max(0.0)
+            * self.what_keeping_it_does())
         .round() as u32
+    }
+
+    /// How much more a stand carries, and how much faster it comes back, for
+    /// being well kept: twice, kept as well as a stand can be (#380).
+    pub const A_KEPT_STAND_CARRIES: f32 = 1.0;
+
+    /// How much one sparing harvest does for how well a stand is kept: a
+    /// season of somebody coming back to it every few days.
+    pub const WHAT_A_SPARING_HARVEST_KEEPS: f32 = 0.05;
+
+    /// How much of what stands a sparing harvest leaves: a quarter, the young
+    /// plants and the seed.
+    pub const WHAT_A_SPARING_HARVEST_LEAVES: f32 = 0.25;
+
+    /// How fast a kept stand goes back to the wild when nobody keeps it, a
+    /// day: about two hundred days from as kept as it gets.
+    pub const HOW_FAST_KEEPING_FADES_A_DAY: f32 = 0.005;
+
+    /// What being kept does for this stand: one for the wild, up to twice
+    /// for one kept as well as it can be.
+    pub fn what_keeping_it_does(&self) -> f32 {
+        1.0 + self.tended.clamp(0.0, 1.0) * Self::A_KEPT_STAND_CARRIES
+    }
+
+    /// Whether this is a wild stand of something people eat, which is what
+    /// can be kept by harvesting it sparingly.
+    pub fn is_a_wild_food_stand(&self) -> bool {
+        !self.on_a_field
+            && matches!(
+                self.resource_type,
+                ResourceType::Food
+                    | ResourceType::Greens
+                    | ResourceType::Roots
+                    | ResourceType::Nuts
+                    | ResourceType::Legumes
+                    | ResourceType::Grain
+                    | ResourceType::Herbs
+            )
     }
 
     /// How fast this water refills, given the ground it sits on and the
@@ -1680,7 +1730,8 @@ impl ResourceNode {
             * precip_modifier
             * season_modifier
             * ground_factor
-            * kept;
+            * kept
+            * self.what_keeping_it_does();
 
         // Carry the fraction over rather than rounding it away: wild food
         // regrows slowly enough that rounding to whole units each pass loses most

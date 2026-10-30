@@ -399,6 +399,20 @@ impl Simulation {
             // see how heavy it stands
             self.looking_at_the_crop(agent_index, resource_index);
 
+            // Taken sparingly from a stand somebody comes back to, if they
+            // know to (#380): a quarter of what stands is left, and the stand
+            // is the better kept for it
+            let sparing = self.would_this_one_harvest_sparingly(agent_index, resource_index);
+            let (harvest_amount, sparing) = if sparing {
+                let node = &self.world.resources[resource_index];
+                let leave = (node.amount as f32 * crate::world::ResourceNode::WHAT_A_SPARING_HARVEST_LEAVES).ceil() as u32;
+                let spared = harvest_amount.min(node.amount.saturating_sub(leave));
+                if spared > 0 { (spared, true) } else { (harvest_amount, false) }
+            } else {
+                (harvest_amount, false)
+            };
+            let a_stand_near_home = self.is_this_a_stand_near_home(agent_index, resource_index);
+
             // Harvest resource
             let where_it_grew = self.world.resources[resource_index].position;
             let killed_on = self.world.resources[resource_index].killed_on;
@@ -408,6 +422,10 @@ impl Simulation {
             let harvested = {
                 let node = &mut self.world.resources[resource_index];
                 let taken = node.harvest(harvest_amount);
+                if sparing && taken > 0 {
+                    node.tended = (node.tended + crate::world::ResourceNode::WHAT_A_SPARING_HARVEST_KEEPS).min(1.0);
+                    self.world.sparing_harvests += 1;
+                }
 
                 // A spring down to its springline still gives a drink:
                 // you take it from the water coming out of the ground
@@ -469,6 +487,20 @@ impl Simulation {
                             .exploration_knowledge
                             .found_none_at(where_it_grew, now);
                     }
+                }
+            }
+
+            // Coming back to the same stands near home, season after season,
+            // is how anybody notices that the ones not stripped come back best
+            // (#380)
+            if harvested > 0 && a_stand_near_home {
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.made_one(crate::agents::Agent::A_STAND_NEAR_HOME_GATHERED);
+                if agent.skills.times_made(crate::agents::Agent::A_STAND_NEAR_HOME_GATHERED)
+                    >= crate::agents::Agent::RETURNS_BEFORE_SPARING
+                    && agent.found_out_how_to("know:selective_harvest")
+                {
+                    debug!("Agent {} thought of leaving the young plants standing", agent.id);
                 }
             }
 
@@ -1932,5 +1964,26 @@ impl Simulation {
             .with_drive_change(DriveType::Sustenance, -0.1)
             .with_energy_cost(Self::WHAT_A_ROUND_COSTS)
             .with_message(format!("Took {carrying} out of the snares"))
+    }
+}
+
+impl Simulation {
+    /// Whether this node is a wild food stand within a forage of this one's
+    /// home: a stand they come back to (#380).
+    pub(in crate::analytics) fn is_this_a_stand_near_home(&self, agent_index: usize, resource_index: usize) -> bool {
+        let node = &self.world.resources[resource_index];
+        let home = Self::where_this_one_lives(&self.population.agents[agent_index]);
+        node.is_a_wild_food_stand()
+            && Self::within((node.position.x, node.position.y), home, Self::FORAGE_RADIUS as i32)
+    }
+
+    /// Whether this one takes from this stand sparingly (#380): they know
+    /// selective harvesting, it is a stand near home they come back to, and
+    /// they are not starving, when a man takes what is there.
+    pub(in crate::analytics) fn would_this_one_harvest_sparingly(&self, agent_index: usize, resource_index: usize) -> bool {
+        let agent = &self.population.agents[agent_index];
+        agent.knows_the_way("selective_harvest")
+            && !agent.state.is_starving()
+            && self.is_this_a_stand_near_home(agent_index, resource_index)
     }
 }

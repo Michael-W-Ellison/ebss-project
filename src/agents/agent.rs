@@ -3933,6 +3933,28 @@ impl Agent {
     /// your own scattered seed come back as food.
     pub const GATHERED_FROM_SOWN_BEFORE_GARDENS: u32 = 12;
 
+    /// The ways of doing a thing that are not a thing done: known, and then
+    /// the same action goes differently (#380). What a catalogue `know:` link
+    /// names.
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 1] = ["selective_harvest"];
+
+    /// What the practice record calls a gather from a wild stand within a
+    /// forage of home, and how many before somebody notices that the stands
+    /// they come back to come back best where they were not stripped:
+    /// "seasonal return to productive patches" turning into "selective
+    /// harvesting", stage 0 into stage 1 (#380). About five months of
+    /// ordinary gathering, so a season has turned first: at thirty, all
+    /// twelve founders knew it inside six weeks.
+    pub const A_STAND_NEAR_HOME_GATHERED: &'static str = "gatherednearhome";
+    pub const RETURNS_BEFORE_SPARING: u32 = 300;
+
+    /// Whether this one knows a way of doing a thing (`WAYS_A_THING_IS_DONE`):
+    /// born knowing it, or found it out.
+    pub fn knows_the_way(&self, way: &str) -> bool {
+        let link = format!("know:{way}");
+        crate::environment::catalogue::is_born_knowledge(&link) || self.found_out.contains(&link)
+    }
+
     /// Whether this agent knows any way to a product of the making chain, by
     /// a making or by a working: retted flax and a needle are both workings,
     /// which `knows_how_to_make` does not look at.

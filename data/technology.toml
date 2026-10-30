@@ -9912,6 +9912,8 @@ name = "Selective harvesting"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["know:selective_harvest"]
+note = "Taking from a wild stand near home and leaving a quarter of it, the young plants and the seed, which keeps the stand. Found out by coming back to the stands near home often enough (Agent::RETURNS_BEFORE_SPARING) (#380)."
 
 [[tech]]
 id = "agricultural.1.broadcast_sowing_of_gathered_seed"
@@ -9958,6 +9960,9 @@ name = "Larger stands of desired grains, nuts, berries, and tubers"
 path = "agricultural"
 stage = 1
 role = "product"
+model = ["know:selective_harvest"]
+same_as = ["agricultural.1.selective_harvesting"]
+note = "What selective harvesting comes to: a kept stand carries up to twice what the wild one did and comes back as much faster (ResourceNode::tended, #380)."
 
 [[tech]]
 id = "agricultural.2.digging_sticks_and_hoes"

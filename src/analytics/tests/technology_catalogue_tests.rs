@@ -155,6 +155,7 @@ fn names_something_real(link: &str) -> Result<(), String> {
         "build" => every_building().contains(what),
         "do" => every_action().contains(what),
         "born" => Agent::what_anybody_is_born_knowing().contains(what),
+        "know" => Agent::WAYS_A_THING_IS_DONE.contains(&what),
         _ => return Err(format!("{link}: no such kind as {kind}")),
     };
     if real {

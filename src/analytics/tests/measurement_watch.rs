@@ -108,6 +108,11 @@ fn zz_discovery_watch() {
         ("beasts_struck_by_day", sim.world.beasts_struck_by_day),
         ("beasts_warned_by_night", sim.world.beasts_warned_by_night),
         ("beasts_warned_by_day", sim.world.beasts_warned_by_day),
+        ("sparing_harvests", sim.world.sparing_harvests),
+        (
+            "stands_kept",
+            sim.world.resources.iter().filter(|node| node.tended >= 0.5).count() as u64,
+        ),
     ] {
         println!("STORE {what} {how_many}");
     }

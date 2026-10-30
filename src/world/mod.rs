@@ -304,6 +304,10 @@ pub struct World {
     #[serde(default)]
     pub beasts_warned_by_day: u64,
 
+    /// Gathers taken sparingly from a wild stand (#380).
+    #[serde(default)]
+    pub sparing_harvests: u64,
+
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
     pub food_the_scavengers_took: u64,
@@ -1864,6 +1868,7 @@ impl World {
             beasts_struck_by_day: 0,
             beasts_warned_by_night: 0,
             beasts_warned_by_day: 0,
+            sparing_harvests: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
@@ -4101,6 +4106,11 @@ impl World {
                 self.first_day_logged,
                 today,
             );
+
+            // A kept stand nobody keeps goes back to the wild (#380)
+            if resource.tended > 0.0 {
+                resource.tended = (resource.tended - ResourceNode::HOW_FAST_KEEPING_FADES_A_DAY).max(0.0);
+            }
 
             let kept = if cultivated {
                 let Some(tile) = self.grid.get_tile_mut(&resource.position) else {
