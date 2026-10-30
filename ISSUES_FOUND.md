@@ -28036,7 +28036,8 @@ later entry. These were not. Each line names the entry that left it.
   every minute, until the walker is starving or parched (#376). On the camp's
   own ground those about now drive the beast off together (#377), a
   troubled camp is ringed with thorn (#378) and keeps a watch at night
-  (#379). Beasts still strike more by night than by day (60 against 36).
+  (#379). Beasts still strike more by night than by day (64 against 27
+  at #380).
 - The Utility working is chosen from a fixed place in the list, so a working
   refused for any reason comes back every turn Utility wins (#376).
 - A failed swap destroys the substitute, and swaps the world cannot supply
@@ -28052,6 +28053,9 @@ later entry. These were not. Each line names the entry that left it.
   proportional in #363.
 - Rotation cannot be learned, because lessons are keyed on the crop and not
   the ground (#165), and a field is read only from a full stand (#246).
+- Of agriculture's first stage only selective harvesting is modelled: the
+  wild stands near home are kept larger (#380). Controlled burning, coppicing
+  and small-scale water diversion are still to do.
 - Mining covers both quarrying and digging a hole (#204). Felling is not
   gated on a tool (#200). Making never breaks or wastes in the making
   (#200, #201). A better tool changes the yield, not the time (#345).
