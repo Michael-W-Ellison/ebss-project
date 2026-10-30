@@ -31,7 +31,7 @@ impl Simulation {
 
     /// How long a camp leaves between one burn and the next, days: the fire
     /// is watched out before another is set.
-    pub(in crate::analytics) const DAYS_BETWEEN_A_CAMPS_BURNS: f32 = 14.0;
+    pub(in crate::analytics) const DAYS_BETWEEN_A_CAMPS_BURNS: u32 = 14;
 
     /// Ground a fire went over within the year, which anybody gathering there
     /// can see by the char on the old stems: what a summer's fire burnt still
@@ -83,12 +83,18 @@ impl Simulation {
 
     /// The patch near this home most worth burning, if any is worth it: the
     /// middle of it. Only off the camp's own ground, within a forage, and not
-    /// where the camp burnt within the last fortnight.
+    /// when the camp set a fire within the last fortnight.
     pub(in crate::analytics) fn the_ground_worth_burning(&self, home: (i32, i32)) -> Option<Position> {
+        if self
+            .world
+            .days_since_this_camp_set_a_fire(home)
+            .is_some_and(|days| days < Self::DAYS_BETWEEN_A_CAMPS_BURNS)
+        {
+            return None;
+        }
         let near_home = self
             .world
             .node_numbers_near(Position::new(home.0, home.1), Self::FORAGE_RADIUS);
-        let lately = 1.0 - Self::DAYS_BETWEEN_A_CAMPS_BURNS * ResourceNode::HOW_FAST_A_BURN_FADES_A_DAY;
         let mut best: Option<(f32, Position)> = None;
         for &number in &near_home {
             let node = &self.world.resources[number];
@@ -98,9 +104,6 @@ impl Simulation {
             let at = (node.position.x, node.position.y);
             if !Self::within(at, home, Self::FORAGE_RADIUS as i32) {
                 continue;
-            }
-            if node.burnt > lately {
-                return None;
             }
             if Self::would_it_reach_the_camp(node.position, home) {
                 continue;
@@ -158,7 +161,8 @@ impl Simulation {
             return ActionResult::failure("Too wet to burn".to_string());
         }
         let here = Position::new(agent.state.position.0, agent.state.position.1);
-        if Self::would_it_reach_the_camp(here, Self::where_this_one_lives(agent)) {
+        let home = Self::where_this_one_lives(agent);
+        if Self::would_it_reach_the_camp(here, home) {
             return ActionResult::failure("Too near the camp to set a fire".to_string());
         }
         let burnt = self.world.burn_over(here, Self::HOW_FAR_A_BURN_GOES);
@@ -166,6 +170,7 @@ impl Simulation {
             return ActionResult::failure("Nothing here that a fire would bring on".to_string());
         }
         self.world.burns_set += 1;
+        self.world.this_camp_set_a_fire(home);
 
         ActionResult::success()
             .with_drive_change(DriveType::Sustenance, -0.2)

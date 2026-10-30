@@ -317,6 +317,11 @@ pub struct World {
     /// Stands a fire went over, either sort (#381).
     #[serde(default)]
     pub stands_burnt: u64,
+    /// The day each camp last set a fire on purpose, by where it is, so it
+    /// watches one out before setting the next (#381). Serde cannot key a
+    /// map on a pair in JSON, so it is kept as a list.
+    #[serde(default)]
+    pub fires_set_from: Vec<((i32, i32), u32)>,
 
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
@@ -1882,6 +1887,7 @@ impl World {
             wildfires: 0,
             burns_set: 0,
             stands_burnt: 0,
+            fires_set_from: Vec::new(),
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
@@ -4077,10 +4083,11 @@ impl World {
     ///
     /// Lightning falls evenly over the land, so how many fires start is a
     /// matter of how much country there is. This puts each stand under a fire
-    /// about once in eight years: a fire takes in eight or nine stands at the
-    /// world's density, and there are about a hundred and twenty days for
-    /// burning in a year.
-    pub const A_WILDFIRE_AT_A_STAND_ON_A_DRY_DAY: f32 = 1.2e-4;
+    /// about once in ten years: a fire takes in ten or so stands about a camp,
+    /// and there are about a hundred and fifty days for burning in a year.
+    /// Twice this burnt two stands in five near home within the year, which
+    /// left a camp little of its own to burn.
+    pub const A_WILDFIRE_AT_A_STAND_ON_A_DRY_DAY: f32 = 6e-5;
 
     /// How far a fire of the country's own runs before it goes out, cells.
     pub const HOW_FAR_A_WILDFIRE_RUNS: u32 = 6;
@@ -4136,6 +4143,24 @@ impl World {
         }
         self.stands_burnt += burnt as u64;
         burnt
+    }
+
+    /// How many days since the camp at `home` last set a fire on purpose, if
+    /// it ever has (#381).
+    pub fn days_since_this_camp_set_a_fire(&self, home: (i32, i32)) -> Option<u32> {
+        self.fires_set_from
+            .iter()
+            .find(|(camp, _)| *camp == home)
+            .map(|(_, day)| self.days_gone_by.saturating_sub(*day))
+    }
+
+    /// The camp at `home` set a fire today.
+    pub fn this_camp_set_a_fire(&mut self, home: (i32, i32)) {
+        let today = self.days_gone_by;
+        match self.fires_set_from.iter_mut().find(|(camp, _)| *camp == home) {
+            Some((_, day)) => *day = today,
+            None => self.fires_set_from.push((home, today)),
+        }
     }
 
     /// How many nodes are asleep.
