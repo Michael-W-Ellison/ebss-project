@@ -3953,9 +3953,11 @@ impl Agent {
     /// What the practice record calls wood cut within a forage of home, and
     /// how much of it before somebody notices that what was cut low sends up
     /// a crown of straight poles from the stump, and cuts the next to the
-    /// stool on purpose: coppicing (#382).
+    /// stool on purpose: coppicing (#382). About six months of ordinary
+    /// cutting, so a stump has had a growing season to sprout in: at sixty,
+    /// the first knew it inside a month.
     pub const WOOD_CUT_NEAR_HOME: &'static str = "woodcutnearhome";
-    pub const CUTS_BEFORE_COPPICING: u32 = 60;
+    pub const CUTS_BEFORE_COPPICING: u32 = 300;
 
     /// Whether this one knows a way of doing a thing (`WAYS_A_THING_IS_DONE`):
     /// born knowing it, or found it out.
