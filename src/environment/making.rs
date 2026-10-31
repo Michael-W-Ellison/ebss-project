@@ -267,8 +267,8 @@ pub const DIGGING_STICK: Making = Making {
 /// stick breaks ground point first; a hoe chops it and draws the weeds out
 /// between the rows, which is most of what keeping a garden is. The same
 /// three parts as a shovel, set the other way. Its listing is stage 2, so
-/// nobody arrives knowing it: it occurs to somebody who has broken a good
-/// deal of ground with a stick (`GROUND_BROKEN_WITH_A_STICK`).
+/// nobody arrives knowing it: it is found out by breaking a season's ground
+/// for a garden (`GROUND_BROKEN_FOR_A_GARDEN`).
 pub const HOE: Making = Making {
     makes: "hoe",
     how_many: 1,
@@ -277,7 +277,7 @@ pub const HOE: Making = Making {
     effort: 9.0,
     obvious: true,
     over_a_fire: false,
-    wants_in_hand: Some("diggingstick"),
+    wants_in_hand: Some("handaxe"),
 };
 
 /// Cord and a pouch of stone: what a people hunts with when it has no spear.
@@ -1441,15 +1441,17 @@ pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
 pub fn how_practised_first(what: &str) -> &'static [(&'static str, u32)] {
     match what {
         "shinylump" => &[(ORE_WATCHED_IN_A_FIRE, TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS)],
-        "hoe" => &[(GROUND_BROKEN_WITH_A_STICK, TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE)],
         _ => &[],
     }
 }
 
-/// What the practice record calls ground broken for a garden with a digging
-/// stick in hand, and how often before a hoe can occur to somebody: a
-/// season's gardening (#385).
-pub const GROUND_BROKEN_WITH_A_STICK: &str = "ground broken with a stick";
+/// What the practice record calls ground broken for a garden, and how often
+/// before somebody thinks of a blade set across a haft to chop it and weed
+/// it with: a season's gardening (#385). First it was counted only with a
+/// digging stick in hand, and left to the noticing that wants the makings
+/// in the pack; gardeners seldom carried a stick, never all three makings at
+/// once, and the most anybody broke with a stick in a year was three.
+pub const GROUND_BROKEN_FOR_A_GARDEN: &str = "ground broken for a garden";
 pub const TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE: u32 = 20;
 
 /// What the practice record calls an evening spent at a fire with ore in the

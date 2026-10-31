@@ -1,8 +1,7 @@
 // src/analytics/tests/hoe_tests.rs
 //! Digging sticks and hoes (ISSUES_FOUND #385).
 //!
-//! - a hoe cannot occur to anybody who has not broken a season's ground with
-//!   a digging stick, and can to somebody who has
+//! - breaking a season's ground for a garden is how the hoe is found out
 //! - somebody who keeps a garden wants a tool for it, somebody who does not
 //!   does not, and a gardener who knows the hoe would rather have one than a
 //!   stick
@@ -11,7 +10,7 @@
 
 use crate::agents::{AgentConfig, InventoryItem, Population, SkillType};
 use crate::analytics::Simulation;
-use crate::environment::making::{GROUND_BROKEN_WITH_A_STICK, TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE};
+use crate::environment::making::{GROUND_BROKEN_FOR_A_GARDEN, TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE};
 use crate::environment::Action;
 use crate::world::soil::Soil;
 use crate::world::{Position, Terrain, TerrainType, World, WorldConfig};
@@ -37,38 +36,31 @@ fn give(simulation: &mut Simulation, called: &str) {
         .add_item(InventoryItem::new(called.to_string(), 1));
 }
 
-/// A hoe occurs only to somebody who has broken a season's ground with a
-/// digging stick.
+/// Breaking ground for a garden often enough is how the hoe is found out.
 #[test]
-fn a_hoe_occurs_only_to_somebody_who_has_broken_ground_with_a_stick() {
+fn breaking_ground_often_enough_is_how_the_hoe_is_found_out() {
     let mut simulation = a_farmer_on_a_field(Position::new(25, 25));
-    let could = |simulation: &Simulation| {
-        simulation.population.agents[0].what_i_could_find_out().any(|step| step.makes == "hoe")
-    };
-    assert!(!could(&simulation), "not to somebody who never broke ground");
-    for _ in 0..TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE {
-        simulation.population.agents[0].skills.made_one(GROUND_BROKEN_WITH_A_STICK);
-    }
-    assert!(could(&simulation), "and to somebody who has");
-}
-
-/// Breaking ground with a stick in hand is counted towards it.
-#[test]
-fn breaking_ground_with_a_stick_is_counted() {
-    let where_it_is = Position::new(25, 25);
-    let mut simulation = a_farmer_on_a_field(where_it_is);
-    if let Some(tile) = simulation.world.grid.get_tile_mut(&where_it_is) {
-        tile.terrain = Terrain::new(TerrainType::Plains);
-    }
     simulation.population.agents[0].found_out_how_to("do:ScatterSeed");
     simulation.population.agents[0].found_out_how_to("do:TillSoil");
-    give(&mut simulation, "diggingstick");
-    simulation.population.agents[0]
-        .inventory
-        .add_item(InventoryItem::new_with_weight("grain".to_string(), 3, 1.0));
-    let result = simulation.execute_action(&Action::TillSoil, 0);
-    assert!(result.success, "{:?}", result.message);
-    assert_eq!(simulation.population.agents[0].skills.times_made(GROUND_BROKEN_WITH_A_STICK), 1);
+    for x in 0..TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE as i32 {
+        assert!(!simulation.population.agents[0].knows_how_to_make("hoe"));
+        let at = Position::new(30 + x, 30);
+        simulation.world.resources.retain(|resource| resource.position != at);
+        if let Some(tile) = simulation.world.grid.get_tile_mut(&at) {
+            tile.terrain = Terrain::new(TerrainType::Plains);
+        }
+        simulation.population.agents[0].state.position = (at.x, at.y, 0);
+        simulation.population.agents[0]
+            .inventory
+            .add_item(InventoryItem::new_with_weight("grain".to_string(), 3, 1.0));
+        let result = simulation.execute_action(&Action::TillSoil, 0);
+        assert!(result.success, "{:?}", result.message);
+    }
+    assert_eq!(
+        simulation.population.agents[0].skills.times_made(GROUND_BROKEN_FOR_A_GARDEN),
+        TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE
+    );
+    assert!(simulation.population.agents[0].knows_how_to_make("hoe"));
 }
 
 /// A gardener wants a tool for the garden; somebody who keeps none does not;

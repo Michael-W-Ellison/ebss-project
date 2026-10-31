@@ -237,9 +237,13 @@ impl Simulation {
         agent
             .skills
             .practise(crate::agents::SkillType::Farming, 25, turn_now);
-        // Ground broken with a stick is how a hoe comes to mind (#385)
-        if agent.how_many_i_have("diggingstick") > 0 {
-            agent.skills.made_one(crate::environment::making::GROUND_BROKEN_WITH_A_STICK);
+        // Breaking ground often enough is how a hoe comes to mind (#385)
+        agent.skills.made_one(crate::environment::making::GROUND_BROKEN_FOR_A_GARDEN);
+        if agent.skills.times_made(crate::environment::making::GROUND_BROKEN_FOR_A_GARDEN)
+            >= crate::environment::making::TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE
+            && agent.found_out_how_to("hoe")
+        {
+            debug!("Agent {} thought of a blade set across a haft", agent.id);
         }
 
         debug!(

@@ -9977,7 +9977,7 @@ path = "agricultural"
 stage = 2
 role = "technique"
 model = ["make:diggingstick", "make:hoe"]
-note = "The stick is born knowledge (tool.0.digging_sticks). The hoe, a blade lashed across a haft, occurs to somebody who has broken ground with a stick often enough (making::GROUND_BROKEN_WITH_A_STICK), and weeds a garden twice as fast as bare hands (#385)."
+note = "The stick is born knowledge (tool.0.digging_sticks). The hoe, a blade lashed across a haft, is found out by breaking ground for a garden often enough (making::GROUND_BROKEN_FOR_A_GARDEN), and weeds a garden twice as fast as bare hands (#385)."
 
 [[tech]]
 id = "agricultural.2.small_garden_plots_near_dwellings"
