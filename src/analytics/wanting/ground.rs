@@ -17,7 +17,7 @@ impl Simulation {
     /// Seed is not a separate thing an agent carries: a handful of the grain
     /// in the pack is next year's field, which is exactly the choice a hungry
     /// people has to make.
-    pub(in crate::analytics) fn what_can_be_sown() -> [(&'static str, crate::world::ResourceType, bool); 8] {
+    pub(in crate::analytics) fn what_can_be_sown() -> [(&'static str, crate::world::ResourceType, bool); 9] {
         use crate::world::ResourceType;
 
         // The flag is whether it is worth breaking ground for when the thing
@@ -29,11 +29,16 @@ impl Simulation {
         // and for nothing else (#365). And first in the list is the name a
         // grain field's lesson is recorded under, so the lesson and the
         // choice of seed are the same lesson.
+        //
+        // Roots go in as a piece of the tuber, or the top of one put back
+        // in the hole it came out of, which is how growing them began
+        // (#384): "propagation from cuttings, tubers, and saved seed".
         [
             (crate::agents::Agent::SEED, ResourceType::Grain, true),
             ("sproutedgrain", ResourceType::Grain, true),
             ("grain", ResourceType::Grain, true),
             ("legumes", ResourceType::Legumes, true),
+            ("roots", ResourceType::Roots, true),
             ("food", ResourceType::Food, true),
             ("flax", ResourceType::Flax, false),
             ("cotton", ResourceType::Cotton, false),

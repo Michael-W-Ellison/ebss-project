@@ -9995,6 +9995,7 @@ stage = 2
 role = "technique"
 model = ["do:TakeCutting", "do:PlantCutting"]
 needs = ["agricultural.2.small_garden_plots_near_dwellings"]
+note = "A slip of a plant lifted from a stand far off and put in beside the camp; roots go in as a piece of the tuber (#384), and saved seed is what sowing takes first (#365)."
 
 [[tech]]
 id = "agricultural.2.composting_and_midden_enrichment"
