@@ -28058,7 +28058,11 @@ later entry. These were not. Each line names the entry that left it.
   them on (#381), the wood near home is coppiced (#382), and ditches water
   stands on dry ground (#383). Ground never dries out in a dry spell, so a
   ditch helps only on hills, mountain, desert and salt flat, where few camps
-  are (#383). A fire never gets away into a camp, and game is not drawn to
+  are (#383).
+- Agriculture's second stage is modelled throughout: gardens, cuttings,
+  tubers (#384), saved seed, the hoe (#385), and muck and compost from the
+  midden (#386). Nobody made a hoe inside two years in probes: a farming
+  tool comes last among the tools a pair of hands wants (#385). A fire never gets away into a camp, and game is not drawn to
   burnt ground (#381). Poles are not a thing apart from wood (#382).
 - Mining covers both quarrying and digging a hole (#204). Felling is not
   gated on a tool (#200). Making never breaks or wastes in the making
@@ -29465,3 +29469,102 @@ leading; water carried by hand to a stand.
 
 **Dice counts**: unchanged, 6,757 (seed 4242, 120 turns) and 961,864 (seed
 0, a year).
+
+### 384. Propagation from tubers
+
+The user asked: "go on to agriculture stage 2." Stage 2 was mostly in
+already: gardens (`do:TillSoil`, found out by gathering from stands sown
+yourself), cuttings (`do:TakeCutting`, `do:PlantCutting`), saved seed
+(#365) and muck (`do:SpreadMuck`). A probe at three worlds found it working
+where a settlement got there: in two smooth worlds gardens were found out on
+days 338 and 474, and by two years each had 120 to 190 cells of field, with
+cuttings taken and planted, fields tended and muck spread; the scattered
+world never got past sowing. What was missing was a listing with no model
+(digging sticks and hoes, #385), a listing whose model left a part out
+(composting, #386), and this: roots could be neither sown nor lifted.
+
+**What changed.** Roots are on the list of what can be put in the ground
+(`what_can_be_sown`), as a piece of the tuber or a dug top put back, which
+is how growing them began: a field can be sown with them, and a piece lifted
+from a stand far off and planted by the camp, as a cutting is.
+
+**Tests** (`tubers_tests`): a piece of tuber is lifted from a stand of
+roots; roots go in when roots are what there is.
+
+### 385. Digging sticks and hoes
+
+**What changed.**
+- **The hoe** (`making::HOE`, `HOE_FOR_FARMING`): a blade lashed across a
+  haft, the same three parts as a shovel set the other way, helping at
+  farming twice what bare hands do where the stick helps 1.4. Its listing is
+  stage 2, so nobody arrives knowing it. It is found out by breaking ground
+  for a garden twenty times (`GROUND_BROKEN_FOR_A_GARDEN`), and the same
+  count gates it by any other road (`how_practised_first`).
+- **A gardener wants a tool for the garden**
+  (`Agent::trades_i_want_tools_for`): farming joins the trades a pair of
+  hands wants a tool for, for somebody who keeps a garden only. For
+  everybody, a people that never broke ground would be cutting digging
+  sticks for gardens it does not keep.
+- **A tool weeds more** (`tending_a_field`): what a turn's tending clears is
+  multiplied by the farming tool in hand, never below bare hands.
+- The listing names `make:diggingstick` and `make:hoe`; the stage-2 product
+  listing points at gardens.
+
+**How it got there.**
+1. Counted only with a digging stick in hand and left to the general
+   noticing, which wants the makings in the pack: gardeners seldom carried a
+   stick, never wood, a knapped tip and a lashing at once, and the most
+   anybody broke with a stick in a year was three. Now any ground broken for
+   a garden, and found out directly, as thirst finds the water skin.
+2. With no practice gate, the hoe was noticed on day six, before anybody had
+   a garden, as a likeness of the shovel. The gate came back.
+
+**Not reached**: in probes, nobody who knew the hoe made one before two
+years were out, and gardeners seldom carried even a digging stick. Wanting
+a farming tool reaches the making errands last, after every other trade's
+tool, and the blade and the lashing were not gathered for it.
+
+**Tests** (`hoe_tests`): breaking ground often enough is how the hoe is
+found out; it cannot occur to anybody who has not gardened; a gardener wants
+a tool for it and would rather a hoe than a stick; a hoe weeds more than a
+stick and a stick more than hands.
+
+### 386. Compost from the midden
+
+**What changed.** Muck was fold dung and what went off in a pack; what went
+onto a camp's midden stayed there, fouling its ground. A midden now keeps
+what goes onto it (`Midden::holds`) - spoiled food, offal, rotten hides, what
+a body leaves - which rots down over about two months
+(`HOW_FAST_IT_ROTS_DOWN_A_DAY`, `Midden::rotted`). A gardener at a camp
+with a garden walks to the midden and digs out what has rotted, four loads
+a trip (`Action::DigOutMidden`, `compost_to_dig`), and it goes on the field
+as muck, worth what dung is. It comes with gardens, as muck does.
+
+**Tests** (`composting_tests`): a midden rots down into compost, nothing
+lost on the way; a gardener digs out the midden for the garden and not
+again while carrying it; nobody digs without a garden, compost or gardening;
+compost goes on a field as muck.
+
+**Measured**, #384 to #386 together, forty settlements, two years, against
+#383:
+
+| | #383 | #386 | t |
+|---|---|---|---|
+| births | 190 | 190 | 0 |
+| deaths | 5 | 1 | -1.00 |
+| alive at two years | 665 | 669 | +0.39 |
+| camp moves | 342 | 364 | +1.15 |
+| worlds that gardened | | 35 | |
+| loads of compost dug out | | 5,939, in 35 worlds | |
+| worlds that found out the hoe | | 30, days 103 to 720 | |
+| person-days wasting | 314 | 273 | |
+| rotted | 44,767 | 44,613 | |
+| vermin | 294,979 | 305,316 | |
+
+Within noise throughout. Gardens come in the second year, so two years show
+the first season of what stage 2 adds and no more.
+
+**Full suite**: 3,042 passed, 0 failed, 6 ignored.
+
+**Dice counts**: unchanged, 6,757 (seed 4242, 120 turns) and 961,864 (seed
+0, a year); seed 0 does not reach gardens within its year.
