@@ -63,6 +63,21 @@ fn breaking_ground_often_enough_is_how_the_hoe_is_found_out() {
     assert!(simulation.population.agents[0].knows_how_to_make("hoe"));
 }
 
+/// Nobody who has not broken a season's ground can come to the hoe any
+/// other way, as a likeness of the shovel it shares its makings with.
+#[test]
+fn the_hoe_cannot_occur_to_anybody_who_has_not_gardened() {
+    let mut simulation = a_farmer_on_a_field(Position::new(25, 25));
+    let could = |simulation: &Simulation| {
+        simulation.population.agents[0].what_i_could_find_out().any(|step| step.makes == "hoe")
+    };
+    assert!(!could(&simulation));
+    for _ in 0..TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE {
+        simulation.population.agents[0].skills.made_one(GROUND_BROKEN_FOR_A_GARDEN);
+    }
+    assert!(could(&simulation));
+}
+
 /// A gardener wants a tool for the garden; somebody who keeps none does not;
 /// and a gardener who knows the hoe would rather have it than a stick.
 #[test]

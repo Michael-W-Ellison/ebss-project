@@ -1441,6 +1441,9 @@ pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
 pub fn how_practised_first(what: &str) -> &'static [(&'static str, u32)] {
     match what {
         "shinylump" => &[(ORE_WATCHED_IN_A_FIRE, TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS)],
+        // Without this the hoe was noticed on day six, before anybody had a
+        // garden, as a likeness of the shovel it shares its makings with
+        "hoe" => &[(GROUND_BROKEN_FOR_A_GARDEN, TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE)],
         _ => &[],
     }
 }
