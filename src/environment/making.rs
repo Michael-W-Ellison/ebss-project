@@ -261,6 +261,25 @@ pub const DIGGING_STICK: Making = Making {
     wants_in_hand: Some("handaxe"),
 };
 
+/// A blade lashed across the end of a haft: a hoe (#385).
+///
+/// "Digging sticks and hoes", stage 2 of the agricultural path. A digging
+/// stick breaks ground point first; a hoe chops it and draws the weeds out
+/// between the rows, which is most of what keeping a garden is. The same
+/// three parts as a shovel, set the other way. Its listing is stage 2, so
+/// nobody arrives knowing it: it occurs to somebody who has broken a good
+/// deal of ground with a stick (`GROUND_BROKEN_WITH_A_STICK`).
+pub const HOE: Making = Making {
+    makes: "hoe",
+    how_many: 1,
+    needs: &[("wood", 1), ("knappedtip", 1), ("lashing", 1)],
+    hands: SkillType::Farming,
+    effort: 9.0,
+    obvious: true,
+    over_a_fire: false,
+    wants_in_hand: Some("diggingstick"),
+};
+
 /// Cord and a pouch of stone: what a people hunts with when it has no spear.
 ///
 /// Arrived-with, like the sling, the rod and the shovel below it. The line
@@ -1366,6 +1385,7 @@ pub const EVERY_STEP: &[Making] = &[
     KNAPPED_TIP,
     KNAPPED_TIP_FROM_FLINT,
     DIGGING_STICK,
+    HOE,
     BASKET,
     TRAVOIS,
     WHEEL,
@@ -1421,9 +1441,16 @@ pub fn what_has_to_be_known_first(what: &str) -> &'static [&'static str] {
 pub fn how_practised_first(what: &str) -> &'static [(&'static str, u32)] {
     match what {
         "shinylump" => &[(ORE_WATCHED_IN_A_FIRE, TIMES_ORE_IS_WATCHED_BEFORE_IT_RUNS)],
+        "hoe" => &[(GROUND_BROKEN_WITH_A_STICK, TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE)],
         _ => &[],
     }
 }
+
+/// What the practice record calls ground broken for a garden with a digging
+/// stick in hand, and how often before a hoe can occur to somebody: a
+/// season's gardening (#385).
+pub const GROUND_BROKEN_WITH_A_STICK: &str = "ground broken with a stick";
+pub const TIMES_GROUND_IS_BROKEN_BEFORE_A_HOE: u32 = 20;
 
 /// What the practice record calls an evening spent at a fire with ore in the
 /// pack, counted once a day however long it ran.
@@ -1848,6 +1875,15 @@ pub const STICK_FOR_FARMING: Tool = Tool {
     how_long_it_lasts: 30.0,
 };
 
+/// A hoe at a garden: chopping the weeds out between the rows, where a stick
+/// only pries at them (#385). Lasts as a shovel does, being made as one is.
+pub const HOE_FOR_FARMING: Tool = Tool {
+    called: "hoe",
+    helps: SkillType::Farming,
+    how_much_better: 2.0,
+    how_long_it_lasts: 45.0,
+};
+
 /// A point burnt into a stick: enough to bring a deer down, several throws in.
 pub const STICK_FOR_HUNTING: Tool = Tool {
     called: "sharpenedstick",
@@ -2064,6 +2100,7 @@ pub const EVERY_TOOL: &[Tool] = &[
     AXE_FOR_BUTCHERING,
     STICK_FOR_DIGGING,
     STICK_FOR_FARMING,
+    HOE_FOR_FARMING,
     STICK_FOR_HUNTING,
     SLING_FOR_HUNTING,
     BOW_FOR_HUNTING,

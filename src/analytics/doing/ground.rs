@@ -237,6 +237,10 @@ impl Simulation {
         agent
             .skills
             .practise(crate::agents::SkillType::Farming, 25, turn_now);
+        // Ground broken with a stick is how a hoe comes to mind (#385)
+        if agent.how_many_i_have("diggingstick") > 0 {
+            agent.skills.made_one(crate::environment::making::GROUND_BROKEN_WITH_A_STICK);
+        }
 
         debug!(
             "Agent {} broke ground at {:?} and sowed {:?}",
@@ -478,6 +482,12 @@ impl Simulation {
         let hand = self.population.agents[agent_index]
             .skills
             .hand_for(crate::agents::SkillType::Farming);
+        // And what it is done with: a stick pries a weed out, a hoe chops a
+        // row of them (#385). Only ever more: bare hands weed as they did.
+        let tool = self.population.agents[agent_index]
+            .how_much_my_tools_bring_back(crate::agents::SkillType::Farming)
+            .max(1.0);
+        let hand = hand * tool;
 
         let cleared = {
             let Some(tile) = self.world.grid.get_tile_mut(&tile_position) else {

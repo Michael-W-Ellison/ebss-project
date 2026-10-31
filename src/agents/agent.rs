@@ -4456,6 +4456,17 @@ impl Agent {
         super::SkillType::Mining,
     ];
 
+    /// The kinds of work this one wants a tool for: what every pair of hands
+    /// wants (`WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO`), and farming for somebody
+    /// who keeps a garden (#385). Not farming for everybody: a stick for it
+    /// is born knowledge, and the whole of a people that never broke ground
+    /// would be off cutting digging sticks for gardens it does not keep.
+    pub fn trades_i_want_tools_for(&self) -> impl Iterator<Item = super::SkillType> + '_ {
+        Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
+            .into_iter()
+            .chain(self.knows_how_to_do("TillSoil").then_some(super::SkillType::Farming))
+    }
+
     /// The best tool this agent knows how to make for a kind of work, if it
     /// would be an improvement on what it already carries.
     pub fn what_i_would_rather_have(
@@ -5067,9 +5078,8 @@ impl Agent {
         // tool gets taken in hand on the way - see `get_the_tool_out_for`.
         let in_hand = |what: &str| self.how_many_i_have(what) > 0;
 
-        Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
-            .iter()
-            .filter_map(|trade| self.what_i_would_rather_have(*trade))
+        self.trades_i_want_tools_for()
+            .filter_map(|trade| self.what_i_would_rather_have(trade))
             .find_map(|want| {
                 // Only a step that could actually be carried out. Asking for
                 // one that could not is worse than a wasted turn: the refusal
@@ -5171,9 +5181,8 @@ impl Agent {
         let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
         let in_hand = |what: &str| self.how_many_i_have(what) > 0;
 
-        Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
-            .iter()
-            .filter_map(|trade| self.what_i_would_rather_have(*trade))
+        self.trades_i_want_tools_for()
+            .filter_map(|trade| self.what_i_would_rather_have(trade))
             .find(|want| {
                 crate::environment::making::what_to_do_first_that_can_be_done(
                     want.called,
@@ -5844,9 +5853,8 @@ impl Agent {
 
         let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
 
-        let wanting: Vec<&'static str> = Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
-            .iter()
-            .filter_map(|trade| self.what_i_would_rather_have(*trade))
+        let wanting: Vec<&'static str> = self.trades_i_want_tools_for()
+            .filter_map(|trade| self.what_i_would_rather_have(trade))
             .flat_map(|want| {
                 crate::environment::making::everything_wanting_knowing(
                     want.called,
@@ -11717,9 +11725,8 @@ impl Agent {
             let holding_none = |_: &str| 0;
             let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
             let mut makings: std::collections::BTreeSet<crate::world::ResourceType> =
-                Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
-                    .iter()
-                    .flat_map(|trade| crate::environment::making::what_helps_with(*trade))
+                self.trades_i_want_tools_for()
+                    .flat_map(crate::environment::making::what_helps_with)
                     .filter(|tool| self.knows_how_to_make(tool.called))
                     .flat_map(|tool| {
                         crate::environment::making::everything_wanting_knowing(tool.called, &holding_none, &knows)

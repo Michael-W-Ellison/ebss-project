@@ -9976,6 +9976,8 @@ name = "Digging sticks and hoes"
 path = "agricultural"
 stage = 2
 role = "technique"
+model = ["make:diggingstick", "make:hoe"]
+note = "The stick is born knowledge (tool.0.digging_sticks). The hoe, a blade lashed across a haft, occurs to somebody who has broken ground with a stick often enough (making::GROUND_BROKEN_WITH_A_STICK), and weeds a garden twice as fast as bare hands (#385)."
 
 [[tech]]
 id = "agricultural.2.small_garden_plots_near_dwellings"
@@ -10012,6 +10014,9 @@ name = "Reliable vegetables, legumes, tubers, herbs, and small grains"
 path = "agricultural"
 stage = 2
 role = "product"
+model = ["do:TillSoil"]
+same_as = ["agricultural.2.small_garden_plots_near_dwellings"]
+note = "What the gardens come to: a field sown with grain, legumes, roots (#384), berries or herbs."
 
 [[tech]]
 id = "agricultural.3.deliberate_seed_saving"
