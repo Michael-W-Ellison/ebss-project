@@ -28053,10 +28053,12 @@ later entry. These were not. Each line names the entry that left it.
   proportional in #363.
 - Rotation cannot be learned, because lessons are keyed on the crop and not
   the ground (#165), and a field is read only from a full stand (#246).
-- Of agriculture's first stage, selective harvesting keeps the wild stands
-  near home larger (#380), controlled burning brings them on (#381), and
-  the wood near home is coppiced (#382). Small-scale water diversion is
-  still to do. A fire never gets away into a camp, and game is not drawn to
+- Agriculture's first stage is modelled throughout: selective harvesting
+  keeps the wild stands near home larger (#380), controlled burning brings
+  them on (#381), the wood near home is coppiced (#382), and ditches water
+  stands on dry ground (#383). Ground never dries out in a dry spell, so a
+  ditch helps only on hills, mountain, desert and salt flat, where few camps
+  are (#383). A fire never gets away into a camp, and game is not drawn to
   burnt ground (#381). Poles are not a thing apart from wood (#382).
 - Mining covers both quarrying and digging a hole (#204). Felling is not
   gated on a tool (#200). Making never breaks or wastes in the making
@@ -29394,4 +29396,72 @@ hafting; a coppice cut on a cycle, standing years between cuttings.
 **Full suite**: 3,028 passed, 0 failed, 6 ignored.
 
 **Dice counts**: 6,757 (seed 4242, 120 turns, unchanged) and 961,864 (seed
+0, a year).
+
+### 383. Water diversion on a very small scale
+
+The user asked: "Continue with small-scale water diversion." The last of
+agriculture's stage-1 listings, after #380 to #382.
+
+**What changed.**
+- **Watered ground** (`ResourceNode::watered`, nothing to one). What a plant
+  has to drink is what the ground holds of itself, by terrain, and a little
+  for rain (`Soil::humidity`); plains, meadow, forest and riverbank already
+  hold as much as a plant does best on, whatever the sky does. Hills,
+  mountain, desert and salt flat do not (`DRIER_THAN_A_PLANT_LIKES`). A ditch
+  brings what a stand on such ground has to drink up towards the middle of
+  what a plant does best on (`WHAT_A_DITCH_BRINGS`, `what_it_has_to_drink`),
+  and does nothing on ground wet enough already. It silts up over half a year
+  (`HOW_FAST_A_DITCH_SILTS_A_DAY`), asleep or awake.
+- **Digging** (`Action::DigDitch`, `a_ditch_to_dig`, `digging_a_ditch`).
+  Somebody grown who knows how, with nothing pressing, in the spring or the
+  summer, walks to the patch near home that a ditch would water most, with
+  water within four cells to lead from (`HOW_FAR_A_DITCH_RUNS`) and at least
+  two stands on dry ground about its end not watered already, and digs. Every
+  such stand within two cells is watered. A camp digs one a week at most
+  (`World::ditches_dug_from`).
+- **Found out** by gathering forty times from stands near home on dry ground
+  with water close by (`GATHERED_DRY_BY_WATER`), or by watching it done. It is
+  one of the actions found out by themselves.
+
+**Where camps are.** A probe at three worlds found camps sitting in well
+watered country: of 215 to 276 wild stands within a forage of home, 4 to 20
+were on dry ground (all of them hills), and 0 to 9 of those had water near
+enough to lead to them. People settle by water among green country, and a
+forager's ditch belonged to dry places; this world has few camps in them, so
+this does little in most.
+
+**Measured**, forty settlements, two years, against #382:
+
+| | #382 | #383 | t |
+|---|---|---|---|
+| births | 187 | 190 | +1.00 |
+| deaths | 5 | 5 | 0 |
+| alive at two years | 662 | 665 | +1.00 |
+| worlds that found it out | | 7 | |
+| first days | | 234 to 625 | |
+| ditches dug | | 12, in 3 worlds | |
+| stands watered at the end | | 0 | |
+
+The smooth worlds came out the same to the person. Smooth seed 1 found it
+out and dug nothing, and ran the same until then; the three scattered births
+are within noise. Ditches are dug in the spring and summer and silt up in
+half a year, so none was still watering at two years, which ends in winter.
+
+**Not modelled**: ground that dries out in a dry spell, which is where a
+ditch would matter on ordinary ground (`Soil::humidity` holds no memory of
+the weather, only today's rain); flooding a patch by damming rather than
+leading; water carried by hand to a stand.
+
+**Tests** (`ditching_tests`):
+- a ditch waters dry ground, leaves wet ground as it is, and silts up in
+  half a year;
+- a dry patch near water is walked to and watered, and not dug again
+  straight off;
+- no ditch on wet ground, away from water, or in the winter;
+- gathering from stands on dry ground by water is how it is found out.
+
+**Full suite**: 3,032 passed, 0 failed, 6 ignored.
+
+**Dice counts**: unchanged, 6,757 (seed 4242, 120 turns) and 961,864 (seed
 0, a year).
