@@ -1199,6 +1199,7 @@ impl Simulation {
             DriveType::Sustenance => self
                 .cooking_action(agent, agent_position)
                 .or_else(|| self.muck_action(agent, agent_position))
+                .or_else(|| self.compost_to_dig(agent, agent_position))
                 .or_else(|| self.moving_to_farmland(agent, agent_position))
                 .or_else(|| self.farming_action(agent, agent_position))
                 .or_else(|| self.sowing_action(agent, agent_position))

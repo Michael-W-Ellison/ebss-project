@@ -29,6 +29,7 @@
 
 pub mod burning;
 pub mod caring;
+pub mod composting;
 pub mod ditching;
 pub mod eating;
 pub mod fighting;
@@ -107,6 +108,7 @@ impl Simulation {
             Action::ScatterSeed => self.scattering_seed(agent_index),
             Action::BurnOff => self.burning_off(agent_index),
             Action::DigDitch => self.digging_a_ditch(agent_index),
+            Action::DigOutMidden => self.digging_out_the_midden(agent_index),
             Action::TrySwapping { instead_of_making, instead_of, put_in } => self.trying_a_swap(instead_of_making, instead_of, put_in, agent_index, turn_now),
             Action::TakeFrom { from } => self.taking_from(from, agent_index, turn_now),
             Action::Equip { what } => self.equipping(what, agent_index),

@@ -8241,6 +8241,7 @@ impl Agent {
             Action::ScatterSeed => "scatterseed".to_string(),
             Action::BurnOff => "burnoff".to_string(),
             Action::DigDitch => "digditch".to_string(),
+            Action::DigOutMidden => "digoutmidden".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),
@@ -8391,6 +8392,7 @@ impl Agent {
             | Action::ScatterSeed
             | Action::BurnOff
             | Action::DigDitch
+            | Action::DigOutMidden
             | Action::SpreadMuck
             | Action::TendField
             | Action::TakeCutting

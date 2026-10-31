@@ -278,7 +278,9 @@ impl Simulation {
             // And dung from a fold, when there is wood enough not to need it
             // on the fire (#354)
             || (agent.how_many_i_have("dung") > 0
-                && agent.how_many_i_have("wood") >= Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD);
+                && agent.how_many_i_have("wood") >= Self::FIRE_BUILD_WOOD + Self::FIRE_FUEL_WOOD)
+            // And compost dug out of the midden for it (#386)
+            || agent.how_many_i_have(Self::COMPOST) > 0;
 
         if !carrying_refuse {
             return None;

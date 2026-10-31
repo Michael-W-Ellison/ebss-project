@@ -287,6 +287,10 @@ pub enum Action {
     /// the stands on dry ground about it: Stage 1 of the agricultural path,
     /// "water diversion on a very small scale" (#383)
     DigDitch,
+    /// Dig out what has rotted down on the camp's midden, to carry to a
+    /// garden: Stage 2 of the agricultural path, "composting and midden
+    /// enrichment" (#386)
+    DigOutMidden,
     /// Break the grass where the agent stands into a field, and sow it
     TillSoil,
     /// Go over a standing field pulling weeds out of it and picking pests off
@@ -464,6 +468,7 @@ impl Action {
             Action::ScatterSeed => Some(DriveType::Sustenance), // A stand is next season's food
             Action::BurnOff => Some(DriveType::Sustenance), // A burn is next season's flush
             Action::DigDitch => Some(DriveType::Sustenance), // Watered stands bear in the dry
+            Action::DigOutMidden => Some(DriveType::Sustenance), // Compost is next year's crop
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
             Action::TakeFrom { .. } => Some(DriveType::Utility),

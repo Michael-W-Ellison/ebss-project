@@ -302,6 +302,8 @@ impl Simulation {
                 if let Some(which) = self.world.midden_serving(home) {
                     let there = self.world.middens[which].at;
                     self.world.grid.somebody_voided_on(&there, waste);
+                    // And it is kept there to rot down (#386)
+                    self.world.middens[which].holds += waste;
                     continue;
                 }
             }

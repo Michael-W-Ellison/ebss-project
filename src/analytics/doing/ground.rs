@@ -539,6 +539,7 @@ impl Simulation {
                 .filter(|item| item.quantity > 0)
                 .filter(|item| {
                     item.item_id == "dung"
+                        || item.item_id == Self::COMPOST
                         || item
                             .food_data
                             .as_ref()
@@ -567,8 +568,9 @@ impl Simulation {
                 // worth many times as much to a field on that account
                 // alone.
                 worth += *quantity as f32
-                    * if item_id == "dung" {
-                        // What a beast has already made of the grass (#354)
+                    * if item_id == "dung" || item_id == Self::COMPOST {
+                        // What a beast has already made of the grass (#354),
+                        // or the midden of the camp's refuse (#386)
                         2.0 * Self::MUCK_PER_UNIT
                     } else if crate::world::Soil::came_out_of_the_water(item_id) {
                         Self::MUCK_PER_FISH

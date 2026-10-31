@@ -10005,8 +10005,9 @@ name = "Composting and midden enrichment"
 path = "agricultural"
 stage = 2
 role = "technique"
-model = ["do:SpreadMuck"]
+model = ["do:SpreadMuck", "do:DigOutMidden"]
 needs = ["agricultural.2.small_garden_plots_near_dwellings"]
+note = "Fold dung and what went off in a pack go on a field as muck; what goes onto the camp's midden rots down over two months and is dug out and carried to the garden as compost (Midden::rotted) (#386)."
 
 [[tech]]
 id = "agricultural.2.reliable_vegetables_legumes_tubers_herbs_and"

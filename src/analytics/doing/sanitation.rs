@@ -65,7 +65,7 @@ impl Simulation {
         let Some(there) = self.where_the_midden_goes(home) else {
             return ActionResult::failure("Nowhere clean to put a midden".to_string());
         };
-        self.world.middens.push(Midden { at: there, started: turn_now });
+        self.world.middens.push(Midden { at: there, started: turn_now, holds: 0.0, rotted: 0.0 });
         ActionResult::success()
             .with_energy_cost(3.0)
             .with_message(format!("Set aside a midden at {:?}", (there.x, there.y)))

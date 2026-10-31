@@ -331,6 +331,9 @@ pub struct World {
     /// The day each camp last dug a ditch, by where it is (#383).
     #[serde(default)]
     pub ditches_dug_from: Vec<((i32, i32), u32)>,
+    /// Loads of compost dug out of a midden for a garden (#386).
+    #[serde(default)]
+    pub compost_dug: u64,
 
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
@@ -532,9 +535,33 @@ impl Fold {
 pub struct Midden {
     pub at: Position,
     pub started: u32,
+    /// What has gone onto it and is still rotting down (#386).
+    #[serde(default)]
+    pub holds: f32,
+    /// What has rotted down into compost, ready to be dug out and carried to
+    /// a garden (#386).
+    #[serde(default)]
+    pub rotted: f32,
 }
 
 impl Midden {
+    /// How fast what goes onto a midden rots down, a day: about two months
+    /// from refuse to something a garden takes (#386).
+    pub const HOW_FAST_IT_ROTS_DOWN_A_DAY: f32 = 1.0 / 60.0;
+
+    /// How much of what went onto a midden one load of compost is.
+    pub const WHAT_A_LOAD_OF_COMPOST_IS: f32 = 1.0;
+
+    /// How many loads one trip to the midden carries away.
+    pub const LOADS_DUG_OUT_AT_ONCE: u32 = 4;
+
+    /// A day rotting down: a share of what it holds turns to compost.
+    pub fn a_day_rotting_down(&mut self) {
+        let turning = self.holds * Self::HOW_FAST_IT_ROTS_DOWN_A_DAY;
+        self.holds -= turning;
+        self.rotted += turning;
+    }
+
     /// How far from where a camp sleeps its midden is put.
     pub const HOW_FAR_FROM_THE_HEARTH: i32 = 8;
 
@@ -1900,6 +1927,7 @@ impl World {
             cuts_to_the_stool: 0,
             ditches_dug: 0,
             ditches_dug_from: Vec::new(),
+            compost_dug: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
@@ -3809,6 +3837,10 @@ impl World {
     fn a_day_goes_by_for_the_ground(&mut self) {
         let precipitation = self.climate.weather.weather_type.precipitation_intensity();
         self.grid.a_day_of_air_for_the_middens(precipitation);
+        // And what is on a midden rots down into compost (#386)
+        for midden in &mut self.middens {
+            midden.a_day_rotting_down();
+        }
         self.what_came_off_the_fields();
         self.grid.a_day_goes_by_for_the_fields(self.turn);
     }
