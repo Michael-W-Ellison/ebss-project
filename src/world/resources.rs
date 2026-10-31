@@ -1026,6 +1026,15 @@ pub struct ResourceNode {
     /// overstood coppice is still coppice for years.
     #[serde(default)]
     pub coppiced: f32,
+
+    /// How well a ditch waters this stand, from nothing to one (#383).
+    ///
+    /// "Water diversion on a very small scale", stage 1 of the agricultural
+    /// path: a ditch scratched from a stream or a spring to a patch of wild
+    /// seed and roots on dry ground, as the Paiute watered the wild grasses
+    /// of Owens Valley. Silts up over half a year unless it is dug out again.
+    #[serde(default)]
+    pub watered: f32,
 }
 
 impl ResourceNode {
@@ -1091,6 +1100,7 @@ impl ResourceNode {
             tended: 0.0,
             burnt: 0.0,
             coppiced: 0.0,
+            watered: 0.0,
         }
     }
 
@@ -1396,13 +1406,38 @@ impl ResourceNode {
         self.what_keeping_it_does() * self.what_the_fire_did() * self.what_coppicing_does()
     }
 
+    /// What the ground under a stand holds when a ditch waters it as well as
+    /// a ditch can: the middle of what a plant does best on (#383).
+    pub const WHAT_A_DITCH_BRINGS: f32 = 0.6;
+
+    /// Below this, the ground is drier than a plant does best on: hills,
+    /// mountain, desert and salt flat, whatever the sky does - see
+    /// `regenerate_in_ground`.
+    pub const DRIER_THAN_A_PLANT_LIKES: f32 = 0.4;
+
+    /// How fast a ditch nobody digs out silts up, a day: half a year from
+    /// new.
+    pub const HOW_FAST_A_DITCH_SILTS_A_DAY: f32 = 1.0 / 180.0;
+
+    /// What this stand has to drink, from what the ground holds of itself:
+    /// a ditch brings dry ground up towards `WHAT_A_DITCH_BRINGS`, by how
+    /// well it waters it, and does nothing for ground already wet enough.
+    pub fn what_it_has_to_drink(&self, ground_water: f32) -> f32 {
+        let brought = Self::WHAT_A_DITCH_BRINGS - ground_water;
+        if brought <= 0.0 {
+            return ground_water;
+        }
+        ground_water + brought * self.watered.clamp(0.0, 1.0)
+    }
+
     /// Whether this is a stand of wood, which is what can be coppiced.
     pub fn is_a_stand_of_wood(&self) -> bool {
         !self.on_a_field && self.resource_type == ResourceType::Wood
     }
 
     /// A day gone by for what was done for this stand: the keeping, the
-    /// flush and the coppice all go back towards the wild.
+    /// flush and the coppice all go back towards the wild, and the ditch
+    /// silts up.
     pub fn a_day_since_it_was_seen_to(&mut self) {
         if self.tended > 0.0 {
             self.tended = (self.tended - Self::HOW_FAST_KEEPING_FADES_A_DAY).max(0.0);
@@ -1412,6 +1447,9 @@ impl ResourceNode {
         }
         if self.coppiced > 0.0 {
             self.coppiced = (self.coppiced - Self::HOW_FAST_A_COPPICE_GROWS_OUT_A_DAY).max(0.0);
+        }
+        if self.watered > 0.0 {
+            self.watered = (self.watered - Self::HOW_FAST_A_DITCH_SILTS_A_DAY).max(0.0);
         }
     }
 

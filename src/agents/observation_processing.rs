@@ -199,6 +199,11 @@ fn watch_a_practice(watcher: &mut Agent, broadcast: &BroadcastAction) {
         watcher.found_out_how_to("do:BurnOff");
     }
 
+    // And seeing a ditch led from the water to a stand (#383)
+    if broadcast.details.contains("DigDitch") {
+        watcher.found_out_how_to("do:DigDitch");
+    }
+
     if broadcast.details.contains("TillSoil") && watcher.knows_how_to_do("ScatterSeed") {
         watcher.found_out_how_to("do:TillSoil");
         watcher.practices.learn_from_watching(Practice::Farming);

@@ -9957,6 +9957,8 @@ name = "Water diversion on a very small scale"
 path = "agricultural"
 stage = 1
 role = "technique"
+model = ["do:DigDitch"]
+note = "A ditch from water within four cells to a patch of wild stands near home on ground drier than a plant likes (hills, mountain, desert, salt flat), which brings what the ground holds up to the middle of what a plant does best on, silting up over half a year. Found out by gathering often enough from such stands with water close by, or by watching it done (#383)."
 
 [[tech]]
 id = "agricultural.1.larger_stands_of_desired_grains_nuts"

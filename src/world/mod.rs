@@ -325,6 +325,12 @@ pub struct World {
     /// Stands of wood cut back to the stool (#382).
     #[serde(default)]
     pub cuts_to_the_stool: u64,
+    /// Ditches dug to water a patch of stands on dry ground (#383).
+    #[serde(default)]
+    pub ditches_dug: u64,
+    /// The day each camp last dug a ditch, by where it is (#383).
+    #[serde(default)]
+    pub ditches_dug_from: Vec<((i32, i32), u32)>,
 
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
@@ -1892,6 +1898,8 @@ impl World {
             stands_burnt: 0,
             fires_set_from: Vec::new(),
             cuts_to_the_stool: 0,
+            ditches_dug: 0,
+            ditches_dug_from: Vec::new(),
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
@@ -3931,8 +3939,9 @@ impl World {
         }
 
         // A kept stand nobody keeps goes back to the wild (#380), the flush
-        // after a fire goes back to old growth (#381), and a coppice nobody
-        // cuts grows out (#382), asleep or not
+        // after a fire goes back to old growth (#381), a coppice nobody cuts
+        // grows out (#382), and a ditch nobody digs out silts up (#383),
+        // asleep or not
         resource.a_day_since_it_was_seen_to();
 
         // A hedgerow out of season carries nothing. Growth was seasonal
@@ -3949,7 +3958,8 @@ impl World {
 
         // What a plant drinks is what the ground holds, not whether it
         // happens to be raining on it this hour
-        let ground_water = crate::world::soil::Soil::humidity(terrain, day.precipitation);
+        let ground_water =
+            resource.what_it_has_to_drink(crate::world::soil::Soil::humidity(terrain, day.precipitation));
 
         // A pass stands for exactly the ground it covers: however long it
         // has been since the last one. The rates inside are per-pass
@@ -4188,6 +4198,39 @@ impl World {
             Some((_, day)) => *day = today,
             None => self.fires_set_from.push((home, today)),
         }
+    }
+
+    /// How many days since the camp at `home` last dug a ditch, if it ever
+    /// has (#383).
+    pub fn days_since_this_camp_dug_a_ditch(&self, home: (i32, i32)) -> Option<u32> {
+        self.ditches_dug_from
+            .iter()
+            .find(|(camp, _)| *camp == home)
+            .map(|(_, day)| self.days_gone_by.saturating_sub(*day))
+    }
+
+    /// The camp at `home` dug a ditch today.
+    pub fn this_camp_dug_a_ditch(&mut self, home: (i32, i32)) {
+        let today = self.days_gone_by;
+        match self.ditches_dug_from.iter_mut().find(|(camp, _)| *camp == home) {
+            Some((_, day)) => *day = today,
+            None => self.ditches_dug_from.push((home, today)),
+        }
+    }
+
+    /// What the ground at `at` holds of itself, with no rain on it: what a
+    /// plant there has to drink before any ditch (#383).
+    pub fn how_wet_the_ground_is_of_itself(&self, at: &Position) -> f32 {
+        let terrain = self.grid.get_tile(at).map(|t| t.terrain.terrain_type).unwrap_or(TerrainType::Plains);
+        crate::world::soil::Soil::humidity(terrain, 0.0)
+    }
+
+    /// Whether there is water within `reach` of `at` that a ditch could be
+    /// led from (#383).
+    pub fn is_there_water_to_lead_from(&self, at: Position, reach: u32) -> bool {
+        self.node_numbers_near(at, reach)
+            .into_iter()
+            .any(|number| self.resources[number].resource_type == ResourceType::Water)
     }
 
     /// How many nodes are asleep.

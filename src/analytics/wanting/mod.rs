@@ -1203,6 +1203,7 @@ impl Simulation {
                 .or_else(|| self.farming_action(agent, agent_position))
                 .or_else(|| self.sowing_action(agent, agent_position))
                 .or_else(|| self.a_patch_to_burn(agent, agent_position))
+                .or_else(|| self.a_ditch_to_dig(agent, agent_position))
                 .or_else(|| self.transplanting_action(agent, agent_position))
                 .or_else(|| self.a_young_one_to_catch(agent, agent_position))
                 .or_else(|| self.moving_on(agent, agent_position))

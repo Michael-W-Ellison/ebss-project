@@ -283,6 +283,10 @@ pub enum Action {
     /// that comes up after: Stage 1 of the agricultural path, "controlled
     /// burning" (#381)
     BurnOff,
+    /// Lead water from a stream or a spring near where the agent stands to
+    /// the stands on dry ground about it: Stage 1 of the agricultural path,
+    /// "water diversion on a very small scale" (#383)
+    DigDitch,
     /// Break the grass where the agent stands into a field, and sow it
     TillSoil,
     /// Go over a standing field pulling weeds out of it and picking pests off
@@ -459,6 +463,7 @@ impl Action {
             Action::Cook { .. } => Some(DriveType::Sustenance), // Preparing food, not eating it
             Action::ScatterSeed => Some(DriveType::Sustenance), // A stand is next season's food
             Action::BurnOff => Some(DriveType::Sustenance), // A burn is next season's flush
+            Action::DigDitch => Some(DriveType::Sustenance), // Watered stands bear in the dry
             Action::TillSoil => Some(DriveType::Sustenance), // A field is next year's food
             Action::TendField => Some(DriveType::Sustenance), // A field left alone is no field
             Action::TakeFrom { .. } => Some(DriveType::Utility),

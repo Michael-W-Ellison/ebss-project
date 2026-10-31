@@ -3887,8 +3887,11 @@ impl Agent {
     /// - A pit oven (Stage 1 of cooking) by enough suppers over a fire.
     /// - Burning the country off (Stage 1 of the agricultural path) by
     ///   gathering, often enough, on ground a fire went over (#381).
-    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 6] =
-        ["ScatterSeed", "TillSoil", "Smoke", "PutUpRack", "PitOven", "BurnOff"];
+    /// - Leading water to a stand (Stage 1 of the agricultural path) by
+    ///   gathering, often enough, from stands on dry ground with water close
+    ///   by (#383).
+    pub const ACTIONS_FOUND_OUT_BY_THEMSELVES: [&'static str; 7] =
+        ["ScatterSeed", "TillSoil", "Smoke", "PutUpRack", "PitOven", "BurnOff", "DigDitch"];
 
     /// What the practice record calls food dried within reach of a burning
     /// hearth, and how much of it before somebody notices that what hung in
@@ -8229,6 +8232,7 @@ impl Agent {
             Action::LightFire => "lightfire".to_string(),
             Action::ScatterSeed => "scatterseed".to_string(),
             Action::BurnOff => "burnoff".to_string(),
+            Action::DigDitch => "digditch".to_string(),
             Action::TillSoil => "tillsoil".to_string(),
             Action::TendField => "tendfield".to_string(),
             Action::TakeFrom { .. } => "takefrom".to_string(),
@@ -8378,6 +8382,7 @@ impl Agent {
             Action::TillSoil
             | Action::ScatterSeed
             | Action::BurnOff
+            | Action::DigDitch
             | Action::SpreadMuck
             | Action::TendField
             | Action::TakeCutting

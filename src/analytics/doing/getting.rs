@@ -414,6 +414,8 @@ impl Simulation {
             let a_stand_near_home = self.is_this_a_stand_near_home(agent_index, resource_index);
             let wood_near_home = self.is_this_wood_near_home(agent_index, resource_index);
             let to_the_stool = wood_near_home && self.population.agents[agent_index].knows_the_way("coppice");
+            let dry_by_water =
+                a_stand_near_home && self.would_a_ditch_water_this(&self.world.resources[resource_index]);
             let on_burnt_ground =
                 self.world.resources[resource_index].burnt >= Self::BURNT_WITHIN_THE_YEAR;
 
@@ -524,6 +526,19 @@ impl Simulation {
                     && agent.found_out_how_to("know:coppice")
                 {
                     debug!("Agent {} thought of cutting to the stool", agent.id);
+                }
+            }
+
+            // Gathering often enough from stands near home on dry ground, with
+            // the water right there, is how anybody thinks to lead it to them
+            // (#383)
+            if harvested > 0 && dry_by_water {
+                let agent = &mut self.population.agents[agent_index];
+                agent.skills.made_one(Self::GATHERED_DRY_BY_WATER);
+                if agent.skills.times_made(Self::GATHERED_DRY_BY_WATER) >= Self::GATHERED_DRY_BY_WATER_BEFORE_DITCHING
+                    && agent.found_out_how_to("do:DigDitch")
+                {
+                    debug!("Agent {} thought of leading the water to the stands", agent.id);
                 }
             }
 
