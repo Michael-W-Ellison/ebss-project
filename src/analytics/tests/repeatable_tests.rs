@@ -266,9 +266,10 @@ fn a_fixed_world_rolls_a_recorded_number_of_times() {
     // Up to 6,783 for #388: the young are taught what their camp knows, a
     // chance a day each. (#389's pace rolls nothing at the development pace:
     // with teaching off, both counts were as before.)
-    // Down to 6,767 for #391 to #393: clean water chosen, and stores lined and
-    // sealed by those who know to.
-    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_767;
+    // 6,767 for #391 to #393 as first made, and back to 6,783 with the
+    // sealed basket only a way of lining a store: nothing in the first 120
+    // turns now differs from before them.
+    const WHAT_SEED_4242_ROLLS_IN_120_TURNS: u64 = 6_783;
 
     let (_, rolled) = a_world_from(4_242, LONG_ENOUGH_TO_TELL);
 
@@ -681,9 +682,11 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // Down 6.7% to 940,615 for #390: the stubborn and the traditional may see
     // a thing done and leave it, and taking it up, or being taught it, warms
     // people to each other.
-    // Down 10.5% to 841,953 for #391 to #393: clean water chosen over foul,
-    // and stores lined, and sealed, by those who know to.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 841_953;
+    // Down 10.5% to 841,953 for #391 to #393 as first made, when people
+    // turned their foraging baskets into sealed baskets; 954,243, up 1.4% on
+    // #390, with sealing only as a store is lined and the forager's basket
+    // kept.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 954_243;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
