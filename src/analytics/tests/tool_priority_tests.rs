@@ -7,6 +7,8 @@
 //! - somebody with no work recorded keeps the list's order
 //! - a gardener whose days go to the garden wants a farming tool first, and a
 //!   hunter whose days go to hunting a hunting tool first
+//! - a tool that would not repay its making for the work done is not wanted
+//! - somebody whose days go to gathering wants a tool for it first
 //! - weeding a field is counted as work at farming
 
 use crate::agents::{Agent, AgentConfig, SkillType};
@@ -37,7 +39,7 @@ fn somebody_with_no_work_recorded_keeps_the_lists_order() {
     let agent = a_gardener();
     let order = agent.trades_i_want_tools_for();
     assert_eq!(&order[..Agent::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO.len()], &Agent::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO);
-    assert_eq!(order.last(), Some(&SkillType::Farming));
+    assert_eq!(order.len(), Agent::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO.len(), "gathering and gardening once done");
 }
 
 /// A gardener whose days go to the garden wants a tool for it before a
@@ -50,6 +52,10 @@ fn the_trade_the_days_go_to_comes_first() {
     }
     gardener.a_turn_at(SkillType::Hunting, 40);
     assert_eq!(gardener.trades_i_want_tools_for().first(), Some(&SkillType::Farming));
+    assert!(
+        !gardener.trades_i_want_tools_for().contains(&SkillType::Hunting),
+        "a spear for one turn's hunting would never repay its making"
+    );
 
     let mut hunter = a_gardener();
     for turn in 0..40 {
@@ -57,6 +63,23 @@ fn the_trade_the_days_go_to_comes_first() {
     }
     hunter.a_turn_at(SkillType::Farming, 40);
     assert_eq!(hunter.trades_i_want_tools_for().first(), Some(&SkillType::Hunting));
+}
+
+/// Gathering is most of a forager's day, and a digging stick the first tool
+/// worth making for it.
+#[test]
+fn a_forager_wants_a_tool_for_gathering_first() {
+    let mut forager = Agent::new(AgentConfig::default());
+    forager.state.now_this_many_years_old(30);
+    forager.inventory.get_all_items_mut().clear();
+    for turn in 0..60 {
+        forager.a_turn_at(SkillType::Herbalism, turn);
+    }
+    assert_eq!(forager.trades_i_want_tools_for().first(), Some(&SkillType::Herbalism));
+    assert_eq!(
+        forager.what_i_would_rather_have(SkillType::Herbalism).map(|tool| tool.called),
+        Some("diggingstick")
+    );
 }
 
 /// Weeding a field is a turn at farming.

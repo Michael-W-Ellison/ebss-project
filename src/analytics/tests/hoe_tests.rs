@@ -89,6 +89,10 @@ fn a_gardener_wants_a_tool_for_it_and_would_rather_a_hoe() {
 
     simulation.population.agents[0].found_out_how_to("do:ScatterSeed");
     simulation.population.agents[0].found_out_how_to("do:TillSoil");
+    assert!(!wants_for_farming(&simulation), "nor before any of it is done (#387)");
+    for turn in 0..40 {
+        simulation.population.agents[0].a_turn_at(SkillType::Farming, turn);
+    }
     assert!(wants_for_farming(&simulation));
     assert_eq!(
         simulation.population.agents[0].what_i_would_rather_have(SkillType::Farming).map(|tool| tool.called),

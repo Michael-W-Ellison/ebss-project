@@ -4498,39 +4498,74 @@ impl Agent {
     }
 
     /// What the best tool this one knows how to make for a trade would save
-    /// of their time, for the work that goes to it now (#387): the turns at
-    /// it, times how much faster the better tool would get through each.
-    /// Nothing where they know of nothing better, or do none of the work.
-    pub fn what_a_better_tool_would_save(&self, trade: super::SkillType, now: u32) -> f32 {
-        let Some(better) = self.what_i_would_rather_have(trade) else {
-            return 0.0;
-        };
+    /// of their time, less what making it costs, in turns (#387).
+    ///
+    /// The saving is the work that goes to the trade now - about a season and
+    /// a half of it, the record fading by half a season - or the tool's whole
+    /// working life if that is shorter, each turn of it at the difference the
+    /// tool makes. The cost is the turns along the chain to it
+    /// (`making::how_many_turns_to_make`). `None` where they know of nothing
+    /// better, or cannot make it at all.
+    ///
+    /// The first cut ordered by the saving alone, and asked nothing about the
+    /// cost: in a scattered world all twelve people put woodcutting first from
+    /// day 120, each was out looking for wood for its making every day for
+    /// months, and the making never began. Births across forty worlds fell
+    /// from 190 to 165 and days wasting went from 273 to 788.
+    pub fn what_a_better_tool_would_save(&self, trade: super::SkillType, now: u32) -> Option<f32> {
+        let better = self.what_i_would_rather_have(trade)?;
         let rate_now = self.how_fast_my_tools_make_this_go(trade).max(0.01);
         let rate_after = better.how_much_better.max(rate_now);
-        self.how_much_work_goes_to(trade, now) * (1.0 - rate_now / rate_after)
+        let work = self.how_much_work_goes_to(trade, now).min(better.how_long_it_lasts);
+        let saving = work * (1.0 - rate_now / rate_after);
+        let holding = |what: &str| self.how_many_i_have(what);
+        let knows = |step: &crate::environment::making::Making| self.knows_how_to(step);
+        let costs = crate::environment::making::how_many_turns_to_make(better.called, &holding, &knows)?;
+        Some(saving - costs as f32)
     }
 
     /// The kinds of work this one wants a tool for, the one a better tool
-    /// would save them most time at first (#387): what every pair of hands
-    /// wants (`WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO`), and farming for somebody
-    /// who keeps a garden (#385). Not farming for everybody: a stick for it
-    /// is born knowledge, and the whole of a people that never broke ground
-    /// would be off cutting digging sticks for gardens it does not keep.
+    /// would save them most time at, net of its making, first (#387).
     ///
-    /// The order was the list's own, so a gardener reached the hoe only after
-    /// every hunting, cutting, skinning, carving and digging tool they could
-    /// want, however little of their day went to any of those. Somebody with
-    /// no work recorded at anything keeps the list's order.
+    /// What every pair of hands wants (`WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO`);
+    /// gathering, which is most of anybody's day; and farming for somebody who
+    /// keeps a garden (#385). Not farming for everybody: a stick for it is
+    /// born knowledge, and the whole of a people that never broke ground would
+    /// be off cutting digging sticks for gardens it does not keep.
+    ///
+    /// A trade this one works at comes in only if the tool would save more
+    /// than it costs, best first. A trade of the list's they have done no
+    /// work at keeps its place after those, which is where a founder with no
+    /// record yet starts; gathering and gardening come in only once done. The order was the list's own throughout, so a gardener reached
+    /// the hoe only after every hunting, cutting, skinning, carving and
+    /// digging tool they could want, and nobody ever wanted a tool for
+    /// gathering at all.
     pub fn trades_i_want_tools_for(&self) -> Vec<super::SkillType> {
         let now = self.time_of_my_last_turn();
-        let mut trades: Vec<(super::SkillType, f32)> = Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
+        let candidates = Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO
             .into_iter()
-            .chain(self.knows_how_to_do("TillSoil").then_some(super::SkillType::Farming))
-            .map(|trade| (trade, self.what_a_better_tool_would_save(trade, now)))
-            .collect();
+            .chain(std::iter::once(super::SkillType::Herbalism))
+            .chain(self.knows_how_to_do("TillSoil").then_some(super::SkillType::Farming));
+        let mut worth_it: Vec<(super::SkillType, f32)> = Vec::new();
+        let mut not_yet_worked = Vec::new();
+        for trade in candidates {
+            if self.how_much_work_goes_to(trade, now) < 1.0 {
+                // Only the list's own: gathering and gardening come in when
+                // they are done
+                if Self::WHAT_A_PAIR_OF_HANDS_WANTS_TO_DO.contains(&trade) {
+                    not_yet_worked.push(trade);
+                }
+                continue;
+            }
+            if let Some(net) = self.what_a_better_tool_would_save(trade, now) {
+                if net > 0.0 {
+                    worth_it.push((trade, net));
+                }
+            }
+        }
         // Stable, so equal savings keep the list's order
-        trades.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        trades.into_iter().map(|(trade, _)| trade).collect()
+        worth_it.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        worth_it.into_iter().map(|(trade, _)| trade).chain(not_yet_worked).collect()
     }
 
     /// The tick of the latest work on this one's record, which is as near to
