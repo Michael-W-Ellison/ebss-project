@@ -192,15 +192,39 @@ impl Simulation {
         // end up at the sea because the sea was closer.
         let would_drink_the_sea =
             self.population.agents[agent_index].would_i_drink_the_sea();
+        // And whether it is foul about, to somebody who knows to choose
+        // their water (#391), when they know of clean water within reach:
+        // with nothing clean to go to, a drink is a drink.
+        let fouled = |resource: &crate::world::ResourceNode| {
+            self.world
+                .how_foul_about((resource.position.x, resource.position.y), Self::WHAT_SEEPS_INTO_WATER)
+                > 0.0
+        };
+        let passes_by_foul_water = resource_type_enum == ResourceType::Water
+            && self.population.agents[agent_index].knows_the_way("clean_water")
+            && self
+                .nodes_this_one_knows_of(&self.population.agents[agent_index], agent_pos, Self::FORAGE_RADIUS)
+                .into_iter()
+                .any(|i| {
+                    let resource = &self.world.resources[i];
+                    resource.resource_type == ResourceType::Water
+                        && resource.anything_to_take()
+                        && agent_pos.distance_to(&resource.position) <= Self::FORAGE_RADIUS
+                        && !fouled(resource)
+                });
         let a_drink_this_one_would_take = |resource: &crate::world::ResourceNode| {
-            if resource.resource_type != ResourceType::Water || would_drink_the_sea {
+            if resource.resource_type != ResourceType::Water {
                 return true;
             }
-            !self
-                .world
-                .grid
-                .get_tile(&resource.position)
-                .is_some_and(|tile| tile.terrain.is_the_water_salt())
+            if passes_by_foul_water && fouled(resource) {
+                return false;
+            }
+            would_drink_the_sea
+                || !self
+                    .world
+                    .grid
+                    .get_tile(&resource.position)
+                    .is_some_and(|tile| tile.terrain.is_the_water_salt())
         };
 
         for i in self.nodes_this_one_knows_of(

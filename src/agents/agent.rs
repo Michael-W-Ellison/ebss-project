@@ -3516,6 +3516,11 @@ impl Agent {
     /// from and keeps the refuse in one place away from the camp (#357).
     pub const ILL_FROM_FILTH_BEFORE_A_MIDDEN: u32 = 2;
 
+    /// How many times laid up by foul water before somebody chooses where
+    /// they drink: water with fouled ground about it passed by for clean
+    /// (#391), "selection of preferred springs over surface water".
+    pub const ILL_FROM_FOUL_WATER_BEFORE_CHOOSING: u32 = 2;
+
     /// What being laid up by filth teaches (#357): enough of it, and a
     /// midden; with a midden and a people settled, a latrine.
     pub fn what_filth_teaches(&mut self) {
@@ -3523,6 +3528,12 @@ impl Agent {
             + self.times_laid_up.get(Self::OFF_FOUL_WATER).copied().unwrap_or(0);
         if laid_up >= Self::ILL_FROM_FILTH_BEFORE_A_MIDDEN {
             self.it_comes_to_me("do:StartMidden", Self::ILL_FROM_FILTH_BEFORE_A_MIDDEN);
+        }
+        // And laid up from the water itself, twice, and somebody thinks to
+        // look at what is round a spring before drinking from it (#391)
+        let off_the_water = self.times_laid_up.get(Self::OFF_FOUL_WATER).copied().unwrap_or(0);
+        if off_the_water >= Self::ILL_FROM_FOUL_WATER_BEFORE_CHOOSING {
+            self.it_comes_to_me("know:clean_water", Self::ILL_FROM_FOUL_WATER_BEFORE_CHOOSING);
         }
         if self.found_out.contains("do:StartMidden")
             && self.practices.is_established(crate::agents::practices::Practice::Farming)
@@ -3957,7 +3968,7 @@ impl Agent {
     /// The ways of doing a thing that are not a thing done: known, and then
     /// the same action goes differently (#380). What a catalogue `know:` link
     /// names.
-    pub const WAYS_A_THING_IS_DONE: [&'static str; 2] = ["selective_harvest", "coppice"];
+    pub const WAYS_A_THING_IS_DONE: [&'static str; 3] = ["selective_harvest", "coppice", "clean_water"];
 
     /// What the practice record calls a gather from a wild stand within a
     /// forage of home, and how many before somebody notices that the stands

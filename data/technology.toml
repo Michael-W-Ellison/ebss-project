@@ -9028,6 +9028,8 @@ name = "Selection of preferred springs over surface water"
 path = "water_system"
 stage = 1
 role = "technique"
+model = ["know:clean_water"]
+note = "Water with fouled ground about it passed by for clean, when clean is known within reach. Found out by being laid up from foul water twice (Agent::ILL_FROM_FOUL_WATER_BEFORE_CHOOSING) (#391)."
 
 [[tech]]
 id = "water_system.2.spring_boxing"
