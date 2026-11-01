@@ -33,4 +33,5 @@ pub mod noticing;
 pub mod senses;
 pub mod situation;
 pub mod soil;
+pub mod teaching;
 pub mod weather;

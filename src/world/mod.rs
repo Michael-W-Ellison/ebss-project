@@ -334,6 +334,10 @@ pub struct World {
     /// Loads of compost dug out of a midden for a garden (#386).
     #[serde(default)]
     pub compost_dug: u64,
+    /// Things a child was taught that a grown person of their camp knew
+    /// (#388).
+    #[serde(default)]
+    pub lessons_taught: u64,
 
     /// What scavengers have taken out of open stores (#357).
     #[serde(default)]
@@ -1928,6 +1932,7 @@ impl World {
             ditches_dug: 0,
             ditches_dug_from: Vec::new(),
             compost_dug: 0,
+            lessons_taught: 0,
             food_the_scavengers_took: 0,
             vermin_owed: BTreeMap::new(),
             stores_robbed: BTreeMap::new(),
