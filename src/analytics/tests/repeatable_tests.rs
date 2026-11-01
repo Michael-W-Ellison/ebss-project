@@ -667,7 +667,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // their own.
     // Up 0.8% to 961,864 for #382: coppicing, found out by cutting wood near
     // home, brings the wood there back faster.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 961_864;
+    // Down 3.2% to 931,132 for #387: tools are made in the order of the time
+    // they would save, from a record of the work that goes to each trade.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 931_132;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
