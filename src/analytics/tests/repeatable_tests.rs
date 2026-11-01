@@ -674,7 +674,9 @@ fn a_fixed_world_rolls_a_recorded_number_of_times_over_a_whole_year() {
     // they would save, from a record of the work that goes to each trade.
     // Up 6.8% to 994,553 for #388: the young are taught what their camp
     // knows.
-    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 994_553;
+    // Up 1.4% to 1,008,543 for #387's correction: a tool is wanted for a trade
+    // only if it would save more than its making costs, and gathering is one.
+    const WHAT_SEED_0_ROLLS_IN_A_YEAR: u64 = 1_008_543;
 
     let a_year = crate::environment::seasons::PLANNING_PERIODS_PER_YEAR as usize;
     let (_, rolled) = a_world_from(0, a_year);
